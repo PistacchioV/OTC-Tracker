@@ -841,7 +841,12 @@ document.addEventListener('DOMContentLoaded', function () {
     // ── Derived rows (Trade Level ← NDF Cockpit; Settlement Summary ← net per
     //    counterparty). Cells are plain text so the column filters/sorting work;
     //    the Add-row modal still appends inline-editable manual rows.
+    // TRÊS estados, como todo veredito desta casa: OK, Check e "não há o que
+    // conferir" (`null`) — a recompra não tem resgate na B3 do outro lado, e
+    // pintá-la de Check mandaria a mesa procurar uma divergência que não existe.
     function statusBadge(ok) {
+        if (ok === null || ok === undefined)
+            return '<span class="badge text-bg-secondary bg-gradient rounded-pill">—</span>';
         return ok ? '<span class="badge text-bg-success bg-gradient rounded-pill">OK</span>'
                   : '<span class="badge text-bg-danger bg-gradient rounded-pill">Check</span>';
     }
@@ -863,8 +868,10 @@ document.addEventListener('DOMContentLoaded', function () {
         var cb = '<input type="checkbox" class="form-check-input ops-cb">';
         dtTrade.clear();
         (j.trade || []).forEach(function (r) {
-            var icon = r.ok ? '<i class="ti ti-check text-success fs-5 align-middle"></i>'
-                            : '<i class="ti ti-x text-danger fs-5 align-middle"></i>';
+            var icon = (r.ok === null || r.ok === undefined)
+                ? '<i class="ti ti-minus text-secondary fs-5 align-middle" title="No B3 leg to reconcile"></i>'
+                : (r.ok ? '<i class="ti ti-check text-success fs-5 align-middle"></i>'
+                        : '<i class="ti ti-x text-danger fs-5 align-middle"></i>');
             var diff = (r.diff !== '' ? esc(r.diff) + ' ' : '') + icon;
             dtTrade.row.add([cb, actionsCell(), statusBadge(r.ok)]
                 .concat((r.cells || []).map(esc)).concat([diff]));

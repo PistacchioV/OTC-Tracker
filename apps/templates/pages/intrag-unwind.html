@@ -1,0 +1,497 @@
+{% extends "layouts/vertical.html" %}
+
+{% block title %}Intrag — Unwind{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
+<style>
+  @keyframes ti-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+  i.ti-spin, .ti-spin, i.ti-loader-2 { display: inline-block !important; animation: ti-spin 0.8s linear infinite !important; }
+
+  .badge.badge-sent { background-color: #17a2b8 !important; color: #fff !important; }
+  .nd-deal-card { border-left: 3px solid #0066cc !important; }
+
+  div.dt-button-collection { opacity: 1 !important; background-color: var(--ins-dropdown-bg, var(--ins-secondary-bg, #fff)) !important; border: var(--ins-border-width, 1px) solid var(--ins-border-color, rgba(0,0,0,.1)) !important; border-radius: var(--ins-dropdown-border-radius, 0.6875rem) !important; box-shadow: 0 8px 24px rgba(0,0,0,.12) !important; }
+  div.dt-button-collection .dropdown-item { opacity: 1 !important; color: var(--ins-dropdown-link-color, var(--ins-body-color)) !important; }
+
+  .card-body { padding: 5px; }
+  .dt-scroll-head, .dataTables_scrollHead { padding-top: 8px; }
+  .dt-scroll-body thead, .dataTables_scrollBody thead { display: none !important; }
+  .dt-scroll-headInner table, .dataTables_scrollHeadInner table,
+  .dt-scroll-body > table, .dataTables_scrollBody > table { table-layout: fixed !important; }
+  /* Centralizada (§7): th .7rem, td .8rem; com scrollX o clone do cabeçalho
+     perde o id da tabela, por isso as mesmas regras com !important nos clones. */
+  #iuw-table th { white-space: normal; padding: 8px 10px; overflow: hidden; text-overflow: ellipsis; text-align: center !important; vertical-align: middle !important; font-size: 0.7rem; }
+  .dt-scroll-head thead th, .dt-scroll-headInner thead th,
+  .dataTables_scrollHead thead th, .dataTables_scrollHeadInner thead th { white-space: normal !important; overflow: hidden; text-overflow: ellipsis; text-align: center !important; vertical-align: middle !important; font-size: 0.7rem !important; }
+  #iuw-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8rem; text-align: center; vertical-align: middle; font-variant-numeric: tabular-nums; }
+  #iuw-table th, #iuw-table td,
+  #iuw-table_wrapper .dt-scroll-head thead th, #iuw-table_wrapper .dataTables_scrollHead thead th { width: 130px; min-width: 130px; }
+  #iuw-table th:nth-child(1), #iuw-table td:nth-child(1),
+  #iuw-table_wrapper .dt-scroll-head thead th:nth-child(1), #iuw-table_wrapper .dataTables_scrollHead thead th:nth-child(1) { width: 50px; min-width: 50px; }
+  #iuw-table th:nth-child(2), #iuw-table td:nth-child(2),
+  #iuw-table_wrapper .dt-scroll-head thead th:nth-child(2), #iuw-table_wrapper .dataTables_scrollHead thead th:nth-child(2) { width: 150px; min-width: 150px; }
+  #iuw-table th:nth-child(3), #iuw-table td:nth-child(3),
+  #iuw-table_wrapper .dt-scroll-head thead th:nth-child(3), #iuw-table_wrapper .dataTables_scrollHead thead th:nth-child(3) { width: 110px; min-width: 110px; }
+  /* A Situação é a coluna que a Intrag lê para saber o que fazer com o
+     contrato — cortá-la obriga a abrir a linha para ver o que já devia estar
+     na grade. */
+  #iuw-table th:nth-child(11), #iuw-table td:nth-child(11),
+  #iuw-table_wrapper .dt-scroll-head thead th:nth-child(11), #iuw-table_wrapper .dataTables_scrollHead thead th:nth-child(11) { width: 190px; min-width: 190px; }
+
+  #iuw-table td .btn-sm.rounded-circle { width: 32px; height: 32px; padding: 0 !important; border-radius: 10px !important; display: inline-flex; align-items: center; justify-content: center; }
+  #iuw-table td .btn-sm.rounded-circle i { font-size: 1rem; }
+  #iuw-table td input.iuw-edit { width: 100%; font-size: 0.78rem; text-align: center; padding: 2px 4px; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" data-content="">
+    <div class="page-title-head d-flex align-items-center">
+        <div class="flex-grow-1">
+            <h4 class="fs-xl fw-bold m-0 d-flex align-items-center gap-2">
+                <i class="ti ti-rotate-2" style="color:#0066cc;font-size:22px;flex-shrink:0;"></i>
+                <span data-lang="iuw-title">Intrag — Unwind</span>
+            </h4>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="javascript: void(0);" data-lang="nav-intrag">Intrag</a></li>
+                <li class="breadcrumb-item active" data-lang="unwinds">Unwind</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card nd-deal-card">
+                <div class="card-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="form-label mb-0" data-lang="b3-show">Show</label>
+                        <select class="form-select form-select-sm" style="width: 80px;" data-table-set-rows-per-page>
+                            <option value="50" selected>50</option>
+                            <option value="100">100</option>
+                            <option value="150">150</option>
+                            <option value="200">200</option>
+                        </select>
+                        <label class="form-label mb-0" data-lang="b3-entries">entries</label>
+                        <span class="text-muted fs-xs ms-auto d-none d-lg-inline" data-lang="iuw-hint">The line is created when the unwind is sent to B3 and the fund is one of the legs.</span>
+                    </div>
+                </div>
+
+                <div class="card-body" style="padding-top: 10px;">
+                    <div>
+                        <table class="table table-striped dt-responsive align-middle mb-0" id="iuw-table">
+                            <thead class="thead-sm text-uppercase fs-xxs">
+                                <tr class="text-uppercase fs-xxs" id="iuwHead">
+                                    <th class="ps-3" style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" id="selectAll"></th>
+                                    <th data-lang="nd-col-actions">Actions</th>
+                                    <th data-lang="iuw-col-status">Status</th>
+                                    <!-- as onze colunas entram por JS (IUW_COLS) -->
+                                </tr>
+                                <tr class="column-search-input-bar" id="column-search-inputs">
+                                    <th></th><th></th><th></th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.responsive.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.select.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
+<script>
+// ── Contrato com o servidor (intrag.domain.INTRAG_UNWIND_FIELDS, na ordem) ──
+// As ONZE colunas da planilha da Intrag — as mesmas para todos os produtos; o
+// que muda de um para o outro é a carteira. O servidor manda `fields` no GET e
+// eles VENCEM esta cópia, que é só o fallback da primeira pintura.
+var IUW_COLS = [
+    ['carteira','Carteira'], ['b3_id','ID B3'], ['data_inicio','Data Início'],
+    ['data_vencimento','Data Vencimento'], ['data_recompra','Data da Recompra'],
+    ['valor_base_original','Valor Base Original'], ['valor_base_recomprado','Valor Base Recomprado'],
+    ['situacao','Situação'], ['data_liquidacao','Data da Liquidação'],
+    ['sentido','Sentido (Visão do Fundo)'], ['valor_liquidacao','Valor de Liquidação']
+];
+var IUW_FIELDS = IUW_COLS.map(function (c) { return c[0]; });
+var IUW_MONEY = { valor_base_original: 1, valor_base_recomprado: 1, valor_liquidacao: 1 };
+// [0]=checkbox [1]=actions [2]=Status [3..]=IUW_FIELDS. A chave é o `_deal`
+// (o Athena ID da recompra), que não é coluna da planilha.
+var C_OFF = 3;
+var ENTRIES = [], ROWS = {}, selected = new Set();
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function _todayDmy(){var d=new Date();return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();}
+function fmtMoney(v){var n=parseFloat(String(v==null?'':v).replace(/[^\d.\-]/g,''));if(isNaN(n))return v==null?'':String(v);return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+var STATUS_META = { 'New': { cls: 'bg-secondary text-white' }, 'Pending': { cls: 'bg-warning text-dark' },
+                    'Approved': { cls: 'bg-success text-white' }, 'Sent': { cls: 'badge-sent' } };
+function statusBadge(status) {
+    var txt = String(status == null ? '' : status).replace(/<[^>]*>/g, '').trim() || 'New';
+    var m = STATUS_META[txt] || STATUS_META['New'];
+    return '<span class="badge ' + m.cls + ' bg-gradient">' + esc(txt) + '</span>';
+}
+
+(function buildHead() {
+    var h = document.getElementById('iuwHead'), f = document.getElementById('column-search-inputs');
+    IUW_COLS.forEach(function (c) {
+        var th = document.createElement('th');
+        th.setAttribute('data-lang', 'iuw-col-' + c[0].replace(/_/g, '-'));
+        th.textContent = c[1];
+        h.appendChild(th);
+        var tf = document.createElement('th');
+        tf.innerHTML = '<input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="' + esc(c[1]) + '">';
+        f.appendChild(tf);
+    });
+})();
+
+$(document).ready(function () {
+    if (typeof JSZip !== 'undefined') {
+        window.JSZip = JSZip;
+        if ($.fn.dataTable && $.fn.dataTable.Buttons && typeof $.fn.dataTable.Buttons.jszip === 'function') $.fn.dataTable.Buttons.jszip(JSZip);
+    }
+    // Célula em edição sai pelo VALUE do campo (§7): o texto de um <input> é
+    // vazio, e a coluna sairia em branco no export.
+    function fmtExport(data, row, col, node) {
+        if (node) { var inp = $(node).find('input[type!="checkbox"]'); if (inp.length) return inp.val() || ''; }
+        return (data == null ? '' : String(data)).replace(/<[^>]*>/g, '').trim();
+    }
+    function range(a, b) { var o = []; for (var i = a; i <= b; i++) o.push(i); return o; }
+    var EXPORT_COLS = range(2, C_OFF + IUW_FIELDS.length - 1);
+    var PAGINATE = { paginate: { first:'<i class="ti ti-chevrons-left"></i>', previous:'<i class="ti ti-chevron-left"></i>', next:'<i class="ti ti-chevron-right"></i>', last:'<i class="ti ti-chevrons-right"></i>' } };
+    function exportName() { return 'Intrag-Unwind-' + (refDateIso() || '').replace(/-/g, ''); }
+
+    var columnDefs = [{ orderable: false, targets: [0, 1] },
+                      { targets: 2, render: function (d, type) { return type === 'display' ? statusBadge(d) : (d || 'New'); } }];
+    IUW_FIELDS.forEach(function (f, i) {
+        if (IUW_MONEY[f]) columnDefs.push({ targets: i + C_OFF, render: function (d, type) { return type === 'display' ? fmtMoney(d) : (d || ''); } });
+    });
+
+    var table = window.iuwTable = $('#iuw-table').DataTable({
+        responsive: false, scrollX: true, scrollY: '52vh', scrollCollapse: true, autoWidth: false, pageLength: 50,
+        orderCellsTop: true, order: [],
+        select: { style: 'os', items: 'cell', selector: 'td:not(:nth-child(1)):not(:nth-child(2))' },
+        columnDefs: columnDefs,
+        dom: "<'d-md-flex justify-content-between align-items-center my-2'" +
+            "<'btn-toolbar d-flex flex-wrap align-items-center'" +
+            "<'columnToggleWrapper me-2'>" +
+            "B" +
+            "<'refDateWrap ms-2 d-flex align-items-center'>" +
+            "<'clearFiltersBtn ms-2 me-2'>" +
+            "<'conditionalActions ms-2 d-flex align-items-center gap-2'>" +
+            ">" +
+            "<'ms-auto'>" +
+            ">" +
+            "<'row'<'col-sm-12'tr>>" +
+            "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+        buttons: [{
+            extend: 'collection', text: '<i class="ti ti-download me-1"></i> Export',
+            className: 'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all', autoClose: true, fade: 0,
+            buttons: [
+                { extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', title: exportName, exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
+                { extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV', className:'dropdown-item', bom:true, fieldSeparator:';', title: exportName, exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
+                { extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', title: exportName, exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
+                { extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', title: exportName, exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
+                { extend:'pdf',   text:'<i class="ti ti-file-text me-1"></i> PDF', className:'dropdown-item', title: exportName, orientation:'landscape', pageSize:'A3', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} }
+            ]
+        }],
+        language: PAGINATE,
+        drawCallback: function () {
+            var api = this.api();
+            api.rows().every(function () {
+                var d = this.data(), node = this.node();
+                if (!node || !d) return;
+                var id = $(node).attr('data-deal');
+                $(node).find('input[type="checkbox"]').prop('checked', !!(id && selected.has(id)));
+                var st = (ROWS[id] || {}).status || 'New';
+                $(node).find('.btn-row-approve').toggleClass('d-none', st !== 'Pending');
+                $(node).find('.btn-row-send').toggleClass('d-none', !(st === 'New' || st === 'Approved'));
+                $(node).find('.btn-row-edit').toggleClass('d-none', st === 'Sent');
+                $(node).find('.btn-row-delete').toggleClass('d-none', st === 'Sent');
+            });
+            syncSelectAll();
+            setTimeout(function () { api.columns.adjust(); }, 0);
+        },
+        initComplete: function () {
+            var api = this.api();
+
+            // Filtro por coluna delegado no CONTAINER (§462): com scrollX o
+            // cabeçalho é CLONADO e é no clone que a pessoa digita.
+            var $c = $(api.table().container());
+            $c.on('click', '.column-search-input-bar th, .column-search-input-bar th input', function (e) { e.stopPropagation(); });
+            $c.on('keyup input change', '.column-search-input-bar th input', function () {
+                var ci = $(this).closest('th').index();
+                if (api.column(ci).search() !== this.value) api.column(ci).search(this.value).draw();
+            });
+
+            var columnToggleWrapper = document.querySelector('.columnToggleWrapper');
+            if (columnToggleWrapper) {
+                var dd = document.createElement('div'); dd.className = 'dropdown';
+                dd.innerHTML = '<button class="btn btn-sm btn-soft-primary dropdown-toggle btn-toolbar-all" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside"><i class="ti ti-columns me-1"></i> Columns</button>' +
+                    '<ul class="dropdown-menu" id="columnToggleMenu" style="max-height:60vh;overflow-y:auto;">' +
+                    IUW_COLS.map(function (c, i) {
+                        return '<li class="dropdown-item"><div class="form-check">' +
+                            '<input class="form-check-input form-check-input-light fs-14 mt-0 toggle-vis" type="checkbox" data-column="' + (i + C_OFF) + '" id="colToggle' + i + '" checked>' +
+                            '<label class="form-check-label fw-medium" for="colToggle' + i + '">' + esc(c[1]) + '</label></div></li>';
+                    }).join('') + '</ul>';
+                columnToggleWrapper.appendChild(dd);
+                document.getElementById('columnToggleMenu').addEventListener('change', function (e) {
+                    if (e.target.classList.contains('toggle-vis')) api.column(parseInt(e.target.dataset.column, 10)).visible(e.target.checked);
+                });
+            }
+
+            var refDateWrap = document.querySelector('.refDateWrap');
+            if (refDateWrap && !document.getElementById('iuwRefDate')) {
+                refDateWrap.innerHTML =
+                    '<label for="iuwRefDate" class="form-label fs-xs text-muted mb-0 me-1 text-nowrap" data-lang="b3-reference-date">Reference Date</label>' +
+                    '<input type="text" id="iuwRefDate" class="form-control form-control-sm otc-datefield" style="width:130px" value="' + _todayDmy() + '" placeholder="dd/mm/yyyy">';
+                var el = document.getElementById('iuwRefDate');
+                if (el && typeof flatpickr !== 'undefined') flatpickr(el, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
+                if (el) el.addEventListener('change', load);
+            }
+
+            var clearWrap = document.querySelector('.clearFiltersBtn');
+            if (clearWrap && !document.getElementById('clearFiltersBtn')) {
+                var cb2 = document.createElement('button');
+                cb2.id = 'clearFiltersBtn'; cb2.type = 'button';
+                cb2.className = 'btn btn-sm btn-outline-secondary btn-toolbar-all';
+                cb2.innerHTML = '<i class="ti ti-filter-off me-1"></i><span data-lang="btn-clear-filters">Clear Filters</span>';
+                clearWrap.appendChild(cb2);
+                cb2.addEventListener('click', function () {
+                    // As DUAS cópias do cabeçalho (original e clone do scrollX).
+                    $(api.table().container()).find('.column-search-input-bar th input').val('');
+                    api.columns().search('').draw();
+                });
+            }
+
+            var actions = document.querySelector('.conditionalActions');
+            if (actions) {
+                actions.innerHTML =
+                    '<button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all d-none" id="btnSend" type="button" data-table-send-selected><i class="ti ti-brand-telegram me-1"></i> Send</button>' +
+                    '<button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="btnDel" type="button" data-table-delete-selected><i class="ti ti-trash me-1"></i> Delete</button>';
+                document.getElementById('btnSend').addEventListener('click', function () { sendRows(Array.from(selected)); });
+                document.getElementById('btnDel').addEventListener('click', function () { deleteRows(Array.from(selected)); });
+            }
+
+            setTimeout(function () { api.columns.adjust(); }, 150);
+            load();
+        }
+    });
+    $(window).on('resize', function () { table.columns.adjust(); });
+
+    function refDateIso() {
+        var el = document.getElementById('iuwRefDate');
+        var v = (el && el.value) || '';
+        var m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        return m ? (m[3] + '-' + m[2] + '-' + m[1]) : v;
+    }
+
+    // Ordem do §7: Confirm → Edit → Delete → Send; na edição, Save + Cancel.
+    function _actionsCell() {
+        return '<div class="d-flex justify-content-center gap-1">' +
+            '<a class="btn btn-success btn-sm rounded-circle btn-row-approve d-none" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Approve" data-bs-custom-class="tooltip-success"><i class="ti ti-check"></i></a>' +
+            '<a class="btn btn-warning btn-sm rounded-circle btn-row-edit" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Edit" data-bs-custom-class="tooltip-warning"><i class="ti ti-edit"></i></a>' +
+            '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Delete" data-bs-custom-class="tooltip-danger"><i class="ti ti-trash"></i></a>' +
+            '<a class="btn btn-primary btn-sm rounded-circle btn-row-send" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Send" data-bs-custom-class="tooltip-primary"><i class="ti ti-brand-telegram"></i></a></div>';
+    }
+    function _editCell() {
+        return '<div class="d-flex justify-content-center gap-1">' +
+            '<a class="btn btn-success btn-sm rounded-circle btn-row-save" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Save" data-bs-custom-class="tooltip-success"><i class="ti ti-device-floppy"></i></a>' +
+            '<a class="btn btn-secondary btn-sm rounded-circle btn-row-cancel" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Cancel" data-bs-custom-class="tooltip-secondary"><i class="ti ti-x"></i></a></div>';
+    }
+    // Tooltip colorido no primeiro hover (os <td> são reescritos a cada redraw).
+    $('#iuw-table tbody').on('mouseenter', '[data-bs-toggle="tooltip"]', function () {
+        if (window.bootstrap && !bootstrap.Tooltip.getInstance(this)) new bootstrap.Tooltip(this).show();
+    });
+
+    function rowOf(e) {
+        var row = ['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">',
+                   _actionsCell(), e.status || 'New'];
+        IUW_FIELDS.forEach(function (f) { row.push(e[f] != null ? String(e[f]) : ''); });
+        return row;
+    }
+    function renderAll() {
+        table.clear(); ROWS = {};
+        ENTRIES.forEach(function (e) {
+            if (!e || !e._deal) return;
+            ROWS[e._deal] = e;
+            var node = table.row.add(rowOf(e)).node();
+            $(node).attr('data-deal', e._deal);
+        });
+        table.draw(false);
+        // O `data-deal` é reescrito a cada draw: sem isto a linha perde a chave
+        // na primeira ordenação, e o Save iria para a recompra errada.
+        setTimeout(function () { table.columns.adjust(); }, 100);
+    }
+    table.on('draw', function () {
+        table.rows().every(function () {
+            var d = this.data(), node = this.node();
+            if (!node || !d) return;
+            var id = Object.keys(ROWS).filter(function (k) {
+                var e = ROWS[k];
+                return IUW_FIELDS.every(function (f, i) { return String(e[f] == null ? '' : e[f]) === String(d[i + C_OFF]); });
+            })[0];
+            if (id) $(node).attr('data-deal', id);
+        });
+    });
+
+    function load() {
+        selected.clear();
+        fetch('/api/intrag/unwind?date=' + encodeURIComponent(refDateIso()), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.success) { ENTRIES = []; renderAll(); return; }
+                ENTRIES = res.entries || [];
+                renderAll();
+            })
+            .catch(function () { ENTRIES = []; renderAll(); });
+    }
+    window.iuwReload = load;
+
+    // ── Edição inline ──────────────────────────────────────────────────────
+    $('#iuw-table tbody').on('click', '.btn-row-edit', function (e) {
+        e.preventDefault();
+        var tr = $(this).closest('tr'), id = tr.attr('data-deal'), row = ROWS[id];
+        if (!row) return;
+        tr.find('td').each(function (i) {
+            if (i < C_OFF) return;
+            var f = IUW_FIELDS[i - C_OFF];
+            $(this).html('<input class="form-control form-control-sm iuw-edit" data-f="' + f + '" value="' + esc(row[f] == null ? '' : row[f]) + '">');
+        });
+        tr.find('td').eq(1).html(_editCell());
+    });
+    $('#iuw-table tbody').on('click', '.btn-row-cancel', function (e) { e.preventDefault(); load(); });
+    $('#iuw-table tbody').on('click', '.btn-row-save', function (e) {
+        e.preventDefault();
+        var tr = $(this).closest('tr'), id = tr.attr('data-deal'), row = ROWS[id];
+        if (!row) return;
+        var fields = {};
+        tr.find('input.iuw-edit').each(function () { fields[$(this).data('f')] = this.value; });
+        fetch('/api/intrag/unwind/edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+                                           body: JSON.stringify({ deal_id: id, trade_date: row.data_recompra, fields: fields }) })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.success) { Swal.fire({ icon: 'error', title: 'Not saved', text: (res && res.message) || 'Edit failed' }); return; }
+                load();
+            })
+            .catch(function (err) { Swal.fire({ icon: 'error', title: 'Error', text: String(err) }); });
+    });
+
+    $('#iuw-table tbody').on('click', '.btn-row-approve', function (e) {
+        e.preventDefault();
+        var tr = $(this).closest('tr'), id = tr.attr('data-deal'), row = ROWS[id];
+        if (!row) return;
+        fetch('/api/intrag/unwind/approve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+                                              body: JSON.stringify({ deal_id: id, trade_date: row.data_recompra }) })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.success) { Swal.fire({ icon: 'warning', title: 'Not approved', text: (res && res.message) || 'Approve failed' }); return; }
+                load();
+            });
+    });
+
+    $('#iuw-table tbody').on('click', '.btn-row-send', function (e) {
+        e.preventDefault(); sendRows([$(this).closest('tr').attr('data-deal')]);
+    });
+    $('#iuw-table tbody').on('click', '.btn-row-delete', function (e) {
+        e.preventDefault(); deleteRows([$(this).closest('tr').attr('data-deal')]);
+    });
+
+    function sendRows(ids) {
+        ids = (ids || []).filter(Boolean);
+        if (!ids.length) return;
+        Swal.fire({
+            icon: 'question', title: 'Send to Intrag?',
+            html: ids.length + ' row' + (ids.length === 1 ? '' : 's') + ' will be written to the Intrag folder.',
+            showCancelButton: true, confirmButtonText: 'Send', confirmButtonColor: '#0066cc'
+        }).then(function (r) {
+            if (!r.isConfirmed) return;
+            var items = ids.map(function (id) {
+                var e = ROWS[id] || {};
+                return { deal_id: id, cells: IUW_FIELDS.map(function (f) { return e[f] == null ? '' : String(e[f]); }) };
+            });
+            fetch('/api/intrag/unwind/send-file', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+                                                    body: JSON.stringify({ items: items }) })
+                .then(function (rr) { return rr.json(); })
+                .then(function (res) {
+                    if (!res || !res.success) { Swal.fire({ icon: 'error', title: 'Nothing sent', text: (res && res.message) || 'Send failed' }); return; }
+                    if (window.fetchNotifications) window.fetchNotifications();
+                    load();
+                    Swal.fire({ icon: 'success', title: 'Sent', html: (res.files || []).map(esc).join('<br>'), timer: 2600 });
+                })
+                .catch(function (err) { Swal.fire({ icon: 'error', title: 'Error', text: String(err) }); });
+        });
+    }
+
+    function deleteRows(ids) {
+        ids = (ids || []).filter(Boolean);
+        if (!ids.length) return;
+        Swal.fire({ icon: 'warning', title: 'Delete?', text: ids.length + ' row(s) will be removed from the day file.',
+                    showCancelButton: true, confirmButtonText: 'Delete', confirmButtonColor: '#dc3545' })
+            .then(function (r) {
+                if (!r.isConfirmed) return;
+                var items = ids.map(function (id) { return { deal_id: id, trade_date: (ROWS[id] || {}).data_recompra || '' }; });
+                fetch('/api/intrag/unwind/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+                                                     body: JSON.stringify({ items: items }) })
+                    .then(function (rr) { return rr.json(); })
+                    .then(function () { load(); })
+                    .catch(function (err) { Swal.fire({ icon: 'error', title: 'Error', text: String(err) }); });
+            });
+    }
+
+    // ── Seleção ────────────────────────────────────────────────────────────
+    function toggleActionButtons(show) {
+        $('[data-table-send-selected],[data-table-delete-selected]').toggleClass('d-none', !show);
+    }
+    function syncSelectAll() {
+        var total = Object.keys(ROWS).length, sel = selected.size;
+        $('#selectAll').each(function () {
+            if (sel === 0) { this.checked = false; this.indeterminate = false; }
+            else if (sel >= total) { this.checked = true; this.indeterminate = false; }
+            else { this.checked = false; this.indeterminate = true; }
+        });
+        toggleActionButtons(sel >= 1);
+    }
+    $('[data-table-set-rows-per-page]').on('change', function () { table.page.len(parseInt(this.value, 10)).draw(); });
+    $(table.table().container()).on('change', '#selectAll', function () {
+        var on = this.checked;
+        selected.clear();
+        if (on) Object.keys(ROWS).forEach(function (k) { selected.add(k); });
+        table.draw(false);
+    });
+    $('#iuw-table tbody').on('change', 'input[type="checkbox"]', function () {
+        var id = $(this).closest('tr').attr('data-deal');
+        if (!id) return;
+        if (this.checked) selected.add(id); else selected.delete(id);
+        syncSelectAll();
+    });
+
+    // Seleção de célula em TODA tabela (§7).
+    if (window.otcCellCopy) otcCellCopy('#iuw-table', { skip: [0, 1] });
+});
+</script>
+{% endblock extra_javascript %}

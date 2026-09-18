@@ -487,8 +487,12 @@ from apps.pages import routes as R                                # noqa: E402
 # 'SWAP' e 'SWAP CORPORATE' entraram em 16/09/2026 (§481) pelo Swap Bullet
 # contra cliente com B3 ID: SWAP com Opção de Arrependimento, SWAP CORPORATE
 # sem ela (`swap_bullet.domain.confirmation_source`).
-check('os sete produtos', sorted(R._MC_CONFIRMATION_SOURCES),
-      ['NDF COMM', 'NDF FWD START', 'NDF VANILLA', 'OPTION', 'OPTION COMM', 'SWAP', 'SWAP CORPORATE'])
+# 'UNWIND NDF' entrou em 18/09/2026 (§488) pela recompra de termo de moeda: o
+# Produto é o mesmo valor do Product Type do Pending Confirmation, e o
+# documento dele é o Termo de Resilição (o `confirmation_type` traduz).
+check('os oito produtos', sorted(R._MC_CONFIRMATION_SOURCES),
+      ['NDF COMM', 'NDF FWD START', 'NDF VANILLA', 'OPTION', 'OPTION COMM', 'SWAP',
+       'SWAP CORPORATE', 'UNWIND NDF'])
 # As três páginas genéricas de NDF gravam o MESMO Product Type: o recorte tem de
 # ser pelo `source`, senão Vanilla e Other Publisher entrariam junto.
 check('as três páginas de NDF gravam o mesmo Product Type',

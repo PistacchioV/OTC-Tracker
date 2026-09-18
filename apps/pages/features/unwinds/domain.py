@@ -735,3 +735,141 @@ def _codigos(avisos):
             vistos.add(c)
             out.append(c)
     return out
+
+
+# ==============================================================================
+#  O TERMO DE RESILIÇÃO  (o distrato da operação recomprada)
+# ==============================================================================
+# O documento que as duas Partes assinam pela recompra. O corpo é texto fixo
+# (o Word que a mesa redigiu); o que muda é o **Anexo I**, uma linha por
+# operação resilida com sete colunas:
+#
+#   Confirmação nº            -> o **Athena ID** (decisão da mesa, 18/09/2026):
+#                                é por ele que a confirmação da operação
+#                                original se identifica, e é o número que chega
+#                                no aviso de recompra
+#   Registro CETIP nº         -> o contrato na B3, que a ponte do identificador
+#                                achou na posição
+#   Resilição                 -> Total ou Parcial, pela comparação do
+#                                recomprado com o SALDO da posição
+#   Valor Base Liquidado      -> o nocional recomprado, em moeda ESTRANGEIRA
+#                                (é o campo 9 do TER 0014 — o mesmo número que
+#                                foi para a B3, e não o nocional original)
+#   Valor de Resilição        -> o resultado apurado, em REAIS, em módulo: a
+#                                coluna ao lado é que diz quem paga
+#   Pagador do Valor de Res.  -> Parte A (nós) ou Parte B (a contraparte), pelo
+#                                SINAL do resultado, nunca pelo `Direction` do
+#                                e-mail (§488)
+#   Novo Valor Base           -> o que sobra do saldo depois desta recompra;
+#                                na resilição TOTAL não se aplica
+#
+# Nada aqui se inventa: o que a recompra não responde sai VAZIO e entra nos
+# avisos — um documento assinado com um número plausível e errado é pior que um
+# campo que a mesa tem de preencher.
+RESILICAO_TOTAL = 'Total'
+RESILICAO_PARCIAL = 'Parcial'
+NAO_APLICAVEL = 'Não Aplicável'
+# Um centavo de moeda estrangeira: o saldo da posição e o recomprado vêm de
+# arredondamentos diferentes (a posição imprime 2 casas), e uma recompra que
+# zera o contrato pode fechar em 587.224,31 contra 587.224,3099.
+TOL_SALDO = 0.01
+
+PAGADOR_PARTE_A = 'Parte A'
+PAGADOR_PARTE_B = 'Parte B'
+
+
+def num_br(valor, casas=2):
+    """Número no formato do documento (milhar '.', decimal ','). Irmão do
+    `_conf_fmt_num` da platform, repetido aqui porque o `domain` é puro e não
+    importa camada de fora por cinco linhas — como o `conta8` acima."""
+    if valor is None or (isinstance(valor, str) and not valor.strip()):
+        return ''
+    v = valor if isinstance(valor, (int, float)) else numero_flex(valor)
+    if v is None:
+        return str(valor).strip()
+    s = '{:,.{d}f}'.format(v, d=casas)
+    return s.replace(',', '\x00').replace('.', ',').replace('\x00', '.')
+
+
+def recompra_total(linha):
+    """A recompra encerra o contrato? True / False / **None** (não dá para
+    dizer, porque a posição não trouxe o saldo).
+
+    A resposta serve o Termo de Resilição (Total × Parcial) E a planilha da
+    Intrag (a Situação), e por isso mora numa função só."""
+    recomprado = numero_flex((linha or {}).get('UnwoundNotional'))
+    saldo = numero_flex((linha or {}).get('Balance'))
+    if recomprado is None or saldo is None:
+        return None
+    return recomprado >= saldo - TOL_SALDO
+
+
+def termo_linha(linha):
+    """Uma linha do Anexo I a partir da linha da recompra. -> (row, avisos)."""
+    avisos = []
+    athena_id = str((linha or {}).get('AthenaID') or '').strip()
+    contrato = str((linha or {}).get('Contract') or '').strip()
+    if not contrato:
+        avisos.append({'code': 'unwind_termo_sem_contrato',
+                       'params': {'athena_id': athena_id},
+                       'text': 'Recompra sem contrato da B3 — a coluna Registro CETIP nº '
+                               'sai vazia'})
+    moeda = str((linha or {}).get('Currency') or '').strip()
+    recomprado = numero_flex((linha or {}).get('UnwoundNotional'))
+    saldo = numero_flex((linha or {}).get('Balance'))
+    resultado = numero_flex((linha or {}).get('Result'))
+    direcao = str((linha or {}).get('Direction') or '').strip().upper()
+
+    # Total x Parcial: o saldo da posição é o que ainda está aberto ANTES desta
+    # recompra. A pergunta é UMA (`recompra_total`) porque a resposta vai em
+    # dois lugares — a cláusula do Termo e a Situação da planilha da Intrag —,
+    # e duas leituras do mesmo saldo é como os dois documentos passariam a
+    # discordar sobre o contrato estar encerrado.
+    total = recompra_total(linha)
+    if total is None:
+        tipo, novo_base = '', ''
+        avisos.append({'code': 'unwind_termo_sem_saldo',
+                       'params': {'athena_id': athena_id},
+                       'text': 'Sem o saldo da posição não dá para dizer se a resilição é '
+                               'total ou parcial — preencha a coluna no painel'})
+    elif total:
+        tipo, novo_base = RESILICAO_TOTAL, NAO_APLICAVEL
+    else:
+        tipo = RESILICAO_PARCIAL
+        novo_base = '{} {}'.format(moeda, num_br(saldo - recomprado)).strip()
+
+    # O pagador é o SINAL do resultado: recebemos -> paga a Parte B.
+    if direcao == 'RECEIVE':
+        pagador = PAGADOR_PARTE_B
+    elif direcao == 'PAY':
+        pagador = PAGADOR_PARTE_A
+    else:
+        pagador = ''
+        avisos.append({'code': 'unwind_termo_sem_direcao',
+                       'params': {'athena_id': str((linha or {}).get('AthenaID') or '')},
+                       'text': 'Resultado sem sinal apurado — preencha o pagador no painel'})
+
+    return {
+        # Confirmação nº é o Athena ID, não o B3 ID: é o número pelo qual a
+        # confirmação da operação original se identifica (decisão da mesa).
+        'numConf':        athena_id,
+        'registroCetip':  contrato,
+        'resilicao':      tipo,
+        'valorBaseLiq':   '{} {}'.format(moeda, num_br(recomprado)).strip() if recomprado is not None else '',
+        # O Valor de Resilição vai em MÓDULO: quem paga está na coluna ao lado,
+        # e um valor negativo ali leria como se a Parte pagasse um valor
+        # negativo — que é o mesmo que receber.
+        'valorResilicao': 'R$ {}'.format(num_br(abs(resultado))) if resultado is not None else '',
+        'pagador':        pagador,
+        'novoValorBase':  novo_base,
+    }, avisos
+
+
+def termo_rows(linhas):
+    """As linhas do Anexo I de um grupo de recompras. -> (rows, avisos)."""
+    rows, avisos = [], []
+    for l in linhas or []:
+        row, av = termo_linha(l)
+        rows.append(row)
+        avisos.extend(av)
+    return rows, avisos

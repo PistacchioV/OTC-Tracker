@@ -143,6 +143,29 @@ check('nenhum campo lido fica fora de _DASH_DEAL_FIELDS', _faltando, [])
 check('e a tupla nao tem campo a mais',
       sorted(set(R._DASH_DEAL_FIELDS) - _lidas), [])
 
+print('\n== 4b. a quebra do Swap e da recompra no grafico ==')
+# A mesa le o painel por MESA (Swap EDG x Swap CEM) e por PRODUTO de recompra
+# (Unwind NDF FX), nao por um 'Swap'/'Unwinds' que soma tudo. Quem quebra o
+# swap e a LOB do proprio deal — a nomenclatura da mesa ja esta no dado, e por
+# isso NAO ha de-para novo no codigo; a recompra quebra pela arvore do cache.
+check('a LOB entra na projecao (sem ela o rotulo cai na pasta)',
+      'LOB' in R._DASH_DEAL_FIELDS, True)
+_swap_src = ''
+for _n in ast.walk(_tree):
+    if isinstance(_n, ast.FunctionDef) and _n.name == 'api_dashboard_stats':
+        _swap_src = '\n'.join(_src.split('\n')[_n.lineno - 1:_n.end_lineno])
+check('o rotulo do swap sai da LOB', "'Swap ' + lob" in _swap_src, True)
+check('e o payload leva as duas quebras',
+      ("'swap_products'" in _swap_src, "'unwind_products'" in _swap_src), (True, True))
+# A soma das quebras TEM de bater com o total do card — sao o mesmo numero
+# dito de dois jeitos, e a tela mostra os dois lado a lado.
+from apps.pages.features.unwinds import queries as _unw_q                      # noqa: E402
+check('a contagem da recompra devolve a quebra por produto',
+      'products' in _unw_q.dashboard_counts('all', datetime(2026, 9, 18)), True)
+check('o rotulo da recompra sai dos dois niveis do caminho',
+      _unw_q._rotulo_do_caminho('/x/unwinds', '/x/unwinds/NDF/FX/2026/09/a.json'),
+      'Unwind NDF FX')
+
 print('\n== 5. o aquecimento do memo ==')
 check('o aquecimento sobe com o APP',
       any(l == 'dashboard-warm' for l, _ in R._SCHEDULERS), True)

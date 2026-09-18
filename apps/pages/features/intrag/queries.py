@@ -252,3 +252,44 @@ def _find_intrag_dce_swap_entry(deal_id, trade_date):
         if idx is not None:
             return fp, entries, idx
     return None, None, None
+
+
+def _find_intrag_entry(cache_dir, suffix, deal_id, trade_date):
+    """(caminho, lista, indice) da entrada `_deal` num day-file da Intrag.
+
+    A forma generica dos finders acima — `cache_dir` e `suffix` sao a unica
+    coisa que muda entre eles. Os seis anteriores ficaram como estao: cada um
+    e citado por nome em teste e no `_INTRAG_FINDERS`, e reescreve-los junto
+    com uma feature nova e mexer em seis caminhos para provar um."""
+    if not deal_id:
+        return None, None, None
+    ref = _R()._parse_date_any(trade_date) if trade_date else None
+    candidatos = []
+    if ref is not None:
+        fp = os.path.join(cache_dir, ref.strftime('%Y'), ref.strftime('%m'),
+                          ref.strftime('%Y%m%d') + suffix)
+        if _store.isfile(fp):
+            candidatos.append(fp)
+    if not candidatos and _store.isdir(cache_dir):
+        for root, _dirs, files in _store.walk(cache_dir):
+            for fname in files:
+                if fname.endswith(suffix):
+                    candidatos.append(os.path.join(root, fname))
+    for fp in candidatos:
+        try:
+            from apps.pages import duck_read       # DB-only (fase 3)
+            entries = duck_read.day_records(fp)
+            if not isinstance(entries, list):
+                continue
+        except (json.JSONDecodeError, ValueError, OSError):
+            continue
+        idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
+        if idx is not None:
+            return fp, entries, idx
+    return None, None, None
+
+
+def _find_intrag_unwind_entry(deal_id, trade_date):
+    """A recompra na visao do fundo, pelo Athena ID (+ a Data da Recompra)."""
+    return _find_intrag_entry(persistence.INTRAG_UNWIND_CACHE_DIR,
+                              '_intrag_unwind.json', deal_id, trade_date)

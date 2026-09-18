@@ -21559,3 +21559,91 @@ da lista de salvos —, então o que mudou foi só o anexo e a frase que o anunc
 Rede: `check_cetip_dominio.py` (novo, 11 seções, com a rotina inteira rodando
 num tmp e o envio interceptado), `check_cetip_bacc`, `check_soc_layers`,
 `check_duck_writers`.
+
+## §493 — A Fase 1 da recompra fecha: Termo de Resilição, Intrag, esteira e Summary (2026-09-18)
+
+O §488 levou a recompra de NDF de moeda do e-mail do Athena ao arquivo da B3.
+Faltavam quatro coisas, e elas fecham o ciclo do produto: o **documento** que as
+partes assinam, a **visão do fundo**, a **cobrança** do documento e a
+**liquidação** na tela do dia.
+
+**1. O Termo de Resilição.** O `termo-resilicao-unwind.html` era HTML cru do
+Word, sem uma tag Jinja. Foi instrumentado no molde dos outros editores de
+confirmação (§453): painel lateral fora do `doc_only`, `<span class="dyn">` nos
+campos e a linha do Anexo I clonada do próprio Word (reconstruir os `<td>` em
+HTML simples apagaria bordas e larguras). A rota é PRÓPRIA
+(`/confirmation/unwind/termo-resilicao`, três segmentos) e o Save grava Word +
+PDF na pasta do TIPO do Electronic Inventory.
+
+As decisões do Anexo I, que não se leem no documento:
+
+- **Confirmação nº é o ATHENA ID** e Registro CETIP nº é o contrato da B3 (a
+  mesa, 18/09/2026): são dois números, não o mesmo repetido;
+- **Total × Parcial sai do SALDO da posição** (`recompra_total`, com um centavo
+  de tolerância — a posição imprime duas casas e a conta da recompra não), e é a
+  MESMA função que responde a Situação da planilha da Intrag. A cláusula 1 e a 2
+  do Termo dizem coisas diferentes, então sem saldo NENHUMA das duas se escolhe:
+  a célula fica vazia e o painel avisa;
+- **o pagador é o SINAL do resultado** (§488), nunca o `Direction` do e-mail, e
+  o Valor de Resilição vai em MÓDULO — quem paga está na coluna ao lado;
+- **a Parte A sai da CONTA** pelo `b3-accounts`, não de um campo LE que a
+  recompra não tem. Lawton e Atacama não têm Parte A cadastrada: o campo fica em
+  branco AVISANDO, e o Save recusa — um default afirmaria uma entidade errada
+  num documento assinado.
+
+**Não há XML** neste documento, e não é esquecimento: o XML das confirmações é o
+registro da operação no FepWeb, e um distrato não é operação nova.
+
+**2. A Intrag.** A planilha da mesa são **onze colunas, as mesmas para todos os
+produtos** — só a CARTEIRA muda (Lawton `INTRAGJP552`, Atacama `INTRAGJP633`).
+Por isso o layout mora na Intrag (`intrag.domain.intrag_unwind_entry`) e a
+recompra entrega só os VALORES: a recompra de opção e a de swap entram pela
+mesma porta sem reescrever de-para nenhum. O **Sentido é na visão do FUNDO**, e
+com ele na CONTRAPARTE o sinal inverte — a `Direction` da linha é a da parte.
+Situação, Sentido e Carteira que não se sabem ficam em BRANCO e avisam.
+
+A página é `/intrag-unwind`, com card próprio no Monitor (`intrag-unwind`,
+`done: ('Sent',)` — a Intrag não devolve id que faça a linha virar Success) e o
+arquivo `Intrag-Unwind-AAAAMMDD.txt`, uma linha por recompra, campos por `;`.
+
+**3. A esteira.** O Product Type do Pending Confirmation é **`UNWIND NDF`** — a
+tela classifica por produto RECOMPRADO —, e o TIPO do documento é um só para
+todas as recompras: `TERMO DE RESILICAO`. Quem traduz é o `PRODUCT_FOLDER` do
+`manual_conf` (`UNWIND NDF`, `UNWIND SWAP`, `UNWIND OPTION`… → o mesmo tipo e a
+mesma pasta). Sem essas linhas o `confirmation_type` devolveria `UNWIND NDF`
+como se fosse um tipo, e a linha cairia no `DEFAULT_RULE` da validação sem
+ninguém ter decidido nada. O Generate do Confirmations Monitor abre o Termo pela
+segregação nova (`_conf_unwind_groups`, contraparte × moeda), que a platform lê
+pelo gancho `routes._unwind_engine()` — platform não importa feature.
+
+**O gatilho da esteira E da Intrag é o SEND para a B3**, nunca o import: antes
+disso a recompra ainda pode ser corrigida ou apagada, e linha na esteira por uma
+recompra que não aconteceu é cobrança de trabalho que não existe. As linhas vão
+CARIMBADAS (`Sent`) porque é esse status que a segregação lê como elegível — por
+isso o `marcar_enviadas` passou a devolver o que gravou.
+
+**4. O Summary.** A recompra entra no Trade Level e no Settlement Summary de NDF
+(`_ndfsum_collect`) com o veredito **`None`**: não há resgate da B3 do outro lado
+para conferir, e "não há o que conferir" não é "diverge" — a tela ganhou o
+terceiro estado. Ela entra ANTES do bloco de IR, e portanto participa do imposto
+do dia pela regra do piso MENSAL, que é o certo: a recompra da tarde tem de ver
+o que a liquidação da manhã reteve. E fica **fora do `email_trades`**: o aviso em
+lote sai de manhã e a recompra chega durante o dia — o e-mail dela é processo
+separado, e ainda não existe.
+
+**De passagem — o painel passou a quebrar Swap e recompra.** A mesa lê o
+dashboard por MESA (Swap EDG × Swap CEM) e por produto de recompra (Unwind NDF
+FX), não por um `Swap`/`Unwinds` que soma tudo. **A quebra do swap sai da LOB do
+próprio deal** — a nomenclatura da mesa já está no dado, e por isso não há
+de-para novo no código; a da recompra sai dos dois níveis do caminho do cache,
+a mesma leitura que o Monitor faz da árvore. A `LOB` entrou no
+`_DASH_DEAL_FIELDS`: campo fora dessa tupla não existe para o painel, e era por
+isso que o Swap Bullet saía como 'Swap Bullet' (a pasta) na primeira versão. Os
+totais dos cards continuam sendo a SOMA — o gráfico usa a quebra, os cards o
+total, e a soma das barras tem de bater com o card.
+
+Rede: `check_unwind_termo.py` (novo, 12 seções), `check_unwind_summary.py`
+(novo, 4), `check_intrag_unwind.py` (novo, 5), `check_dashboard_walk` (seção 4b
+nova), `check_manual_conf` (a lista de sources virou oito), `check_mc_backfill`,
+`check_ndm_cards`, `check_notif_page_url`, `check_soc_layers`,
+`check_unwind_notification`, `check_unwind_ter_file`, `check_unwind_page`.

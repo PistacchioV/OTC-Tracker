@@ -1262,6 +1262,17 @@ TYPE_FOLDER_LEGACY = {
 PRODUCT_FOLDER = dict(TYPE_FOLDER, **{
     'OPTION':          'FXO',
     'OTHER PUBLISHER': 'NDF OTHER PUBLISHER',
+    # As RECOMPRAS (§488). O Pending Confirmation as classifica por produto
+    # recomprado ('UNWIND NDF', 'UNWIND SWAP'…, os valores do Product Type
+    # daquela tela), mas o DOCUMENTO de todas é um só — o Termo de Resilição —,
+    # e por isso todas caem no mesmo tipo e na mesma pasta. Sem estas linhas o
+    # `confirmation_type` devolveria 'UNWIND NDF' como se fosse um tipo, e a
+    # linha cairia no DEFAULT_RULE da validação, sem ninguém ter decidido nada.
+    'UNWIND NDF':         'TERMO DE RESILICAO',
+    'UNWIND NDF COMM':    'TERMO DE RESILICAO',
+    'UNWIND OPTION':      'TERMO DE RESILICAO',
+    'UNWIND OPTION COMM': 'TERMO DE RESILICAO',
+    'UNWIND SWAP':        'TERMO DE RESILICAO',
 })
 
 _MONTH_EN = {1: 'January', 2: 'February', 3: 'March', 4: 'April', 5: 'May',

@@ -150,6 +150,23 @@ def _save_intrag_swap_entry(entry, start_dt=None):
     persistence._intrag_swap_persist(dict(entry), start_dt)
 
 
+def _save_intrag_unwind_entry(**kwargs):
+    """A recompra na visão do FUNDO → o day-file da Intrag Unwind.
+
+    Recebe os valores em forma de DADO (datas como `date`, valores como
+    número, `total`/`credor` como sim-ou-não) e a linha é montada pelo
+    `domain.intrag_unwind_entry`, que é o dono do layout — as onze colunas são
+    as mesmas para todos os produtos, e só a carteira muda entre Lawton e
+    Atacama. Devolve (entry, avisos).
+
+    O dia é a **Data da Recompra**, que é como a planilha da mesa se organiza."""
+    entry, avisos = domain.intrag_unwind_entry(**kwargs)
+    if not entry.get('_deal'):
+        raise ValueError('intrag unwind entry without _deal')
+    persistence._intrag_unwind_persist(entry, kwargs.get('data_recompra'))
+    return entry, avisos
+
+
 def _save_intrag_ndf_moeda_entry(deal):
     """NDF de moeda (Vanilla / Other Publisher contra o Lawton) → entrada na
     Intrag NDF no layout do arquivo "Instrucao NDF Moeda" (NDF - TERMO DE
@@ -847,6 +864,7 @@ _INTRAG_DELETE_FAMILIES = {
     'dce-opt':  queries._find_intrag_dce_opt_entry,
     'dce-ndf':  queries._find_intrag_dce_ndf_entry,
     'dce-swap': queries._find_intrag_dce_swap_entry,
+    'unwind':   queries._find_intrag_unwind_entry,
 }
 
 

@@ -41,8 +41,8 @@ from apps.pages import manual_conf as _mc_mod
 from apps.pages.platform.confirmations import (
     _conf_ndfcomm_groups, _conf_optcomm_groups, _conf_optfxo_groups,
     _conf_fwdstart_groups, _conf_mgt_groups, _conf_fwdstart_moeda,
-    _conf_swap_groups,
-    _CONF_FAMILY_TEMPLATES,
+    _conf_swap_groups, _conf_unwind_groups,
+    _CONF_FAMILY_TEMPLATES, _CONF_UNWIND_FAMILY_TEMPLATES,
     _CONF_OPT_FAMILY_TEMPLATES, _CONF_FXO_FAMILY_TEMPLATES,
     _CONF_FWDSTART_FAMILY_TEMPLATES, _CONF_MGT_FAMILY_TEMPLATES,
     _CONF_SWAP_FAMILY_TEMPLATES,
@@ -66,7 +66,16 @@ log = logging.getLogger('otc_tracker')
 # Arrependimento e SWAP CORPORATE sem ela — regra da mesa, e é o tipo que
 # escolhe a regra de validação e a pasta do Inventory.
 _MC_CONFIRMATION_SOURCES = {'NDF COMM', 'OPTION COMM', 'OPTION', 'NDF FWD START', 'NDF VANILLA',
-                            'SWAP', 'SWAP CORPORATE'}
+                            'SWAP', 'SWAP CORPORATE',
+                            # A RECOMPRA de termo de moeda (§488): o documento
+                            # dela é o Termo de Resilição, e o Produto da
+                            # esteira é o mesmo valor que o Pending
+                            # Confirmation mostra no Product Type. Os outros
+                            # unwinds entram quando as fases deles existirem —
+                            # source aqui sem família no backfill deixa as
+                            # operações ANTIGAS invisíveis para sempre
+                            # (`check_mc_backfill.py`).
+                            'UNWIND NDF'}
 
 
 # LOB da linha espelhada. As duas telas gravavam 'CEM' para tudo, e a mesa de
@@ -831,6 +840,11 @@ _MC_GENERATE_PRODUCTS = {
     # template — o Generate diz isso em vez de abrir a tela errada.
     'SWAP':           (lambda ref: _conf_swap_groups(ref),     lambda: _CONF_SWAP_FAMILY_TEMPLATES),
     'SWAP CORPORATE': (lambda ref: _conf_swap_groups(ref),     lambda: _CONF_SWAP_FAMILY_TEMPLATES),
+    # A recompra (§488): o TIPO é um só — Termo de Resilição —, venha ela de
+    # termo, opção ou swap. A chave aqui é o tipo, e é para lá que o
+    # `confirmation_type` traduz todo `UNWIND …` do Product Type.
+    'TERMO DE RESILICAO': (lambda ref: _conf_unwind_groups(ref),
+                           lambda: _CONF_UNWIND_FAMILY_TEMPLATES),
 }
 # O FWD Start da JPMORGAN CHASE (MGT) contra cliente também sai pela família
 # MGT — o documento é outro. A linha da esteira diz a entidade na coluna Legal

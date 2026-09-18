@@ -12,6 +12,7 @@ import traceback
 from flask import jsonify, render_template, request, session
 
 from apps.pages import blueprint
+from apps.pages import data_store as _store
 from apps.pages.features.unwinds import commands, domain, queries
 
 
@@ -157,3 +158,77 @@ def api_unwinds_ndf_fx_delete():
     if not apagou:
         return jsonify({'success': False, 'message': 'Entry not found'}), 404
     return jsonify({'success': True})
+
+
+# ── O Termo de Resilição (o distrato da recompra) ────────────────────────────
+@blueprint.route('/confirmation/unwind/termo-resilicao')
+def confirmation_unwind_termo():
+    """Termo de Resilição pré-preenchido para um grupo contraparte × moeda da
+    data. Rota PRÓPRIA (três segmentos), como a página da recompra."""
+    from datetime import datetime
+
+    from flask import redirect, url_for
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    ds = (request.args.get('date') or '').strip()
+    acr = (request.args.get('acronym') or '').strip()
+    moeda = (request.args.get('mercadoria') or '').strip().upper()
+    ref = _R()._parse_date_any(ds) or datetime.now()
+    linhas = queries.termo_grupo(ref.strftime('%Y-%m-%d'), acr, moeda)
+    aid = (request.args.get('athena_id') or '').strip().upper()
+    if aid:
+        # O botão da grade abre o termo de UMA recompra; sem ele vale o grupo
+        # inteiro (contraparte × moeda), que é o que a esteira gera.
+        linhas = [l for l in linhas
+                  if str(l.get('AthenaID') or '').strip().upper() == aid] or linhas
+    if not linhas:
+        return ('Nenhuma recompra para esse termo (contraparte {} × {} em {}).'
+                .format(acr or '(todas)', moeda or '(todas)', ref.strftime('%d/%m/%Y')), 404)
+    conf, _ = commands.termo_conf(ref, acr, moeda, linhas,
+                                  sid=session.get('user_sid', ''))
+    return render_template(commands.TERMO_TEMPLATE, conf=conf)
+
+
+@blueprint.route('/api/unwinds/ndf/fx/termo-resilicao/save', methods=['POST'])
+def api_unwinds_termo_save():
+    """Grava o Termo (Word + PDF) no Electronic Inventory e carimba a linha."""
+    err = _auth()
+    if err:
+        return err
+    payload = request.get_json(silent=True) or {}
+    try:
+        out = commands.termo_salvar(payload, sid=session.get('user_sid', ''))
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except ImportError:
+        return jsonify({'success': False,
+                        'message': 'reportlab is not installed — run pip install -r requirements.txt.'}), 500
+    except Exception as exc:                                # noqa: BLE001
+        _R().log.error('[UNWIND NDF FX] termo save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False,
+                        'message': 'Could not write to the Inventory share: %s: %s'
+                                   % (type(exc).__name__, exc)}), 500
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                              'Confirmation Saved', PAGE,
+                              '%s · Termo de Resilição' % (payload.get('acronym') or ''))
+    out['success'] = True
+    return jsonify(out)
+
+
+@blueprint.route('/api/unwinds/ndf/fx/termo-resilicao/pdf')
+def api_unwinds_termo_pdf():
+    """Preview inline do PDF do Termo já salvo (o caminho está na linha)."""
+    from flask import send_file
+    err = _auth()
+    if err:
+        return err
+    fp, lst, idx = queries.find(request.args.get('athena_id'),
+                                str(request.args.get('date') or ''))
+    if idx is None:
+        return ('Recompra não encontrada.', 404)
+    pdf = str(lst[idx].get('TermoPdf') or '')
+    if not pdf or not _store.isfile(pdf):
+        return ('Termo ainda não gerado para esta recompra.', 404)
+    import os as _os
+    return send_file(pdf, mimetype='application/pdf', as_attachment=False,
+                     download_name=_os.path.basename(pdf))

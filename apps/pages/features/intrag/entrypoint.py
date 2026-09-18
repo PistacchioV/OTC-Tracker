@@ -1497,3 +1497,179 @@ def api_intrag_dce_swap_send_file():
                               'Intrag Sent', 'Intrag DCE Swap',
                               str(len(alvos)) + ' deal' + ('' if len(alvos) == 1 else 's') + ' sent')
     return jsonify({'success': True, 'files': written, 'count': len(alvos)})
+
+
+# ── Intrag — Unwind (a recompra na visão do fundo) ───────────────────────────
+# Onze colunas, as mesmas para todos os produtos: só a carteira muda entre
+# Lawton e Atacama (a mesa, 18/09/2026). A linha nasce no **Send da recompra**
+# para a B3 (a vertical `features/unwinds`) e daqui segue o ciclo de sempre da
+# Intrag: New → Pending (edição) → Approved (4 olhos) → Sent.
+_UNWIND_SUFFIX = '_intrag_unwind.json'
+
+
+@blueprint.route('/api/intrag/unwind')
+def api_intrag_unwind():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    date_str = request.args.get('date', '').strip()
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
+    raiz = persistence.INTRAG_UNWIND_CACHE_DIR
+    entries = []
+    if date_from or date_to:
+        d_from = _R()._parse_date_any(date_from)
+        d_to = _R()._parse_date_any(date_to)
+        _dias = list(_R()._day_files(raiz, _UNWIND_SUFFIX, d_from, d_to))
+        _R()._day_prefetch(_dias)          # UMA abertura de banco para todos os dias (§4)
+        for fp, fname, mtime, size in _dias:
+            fdate = _R()._parse_date_any(fname[:8])
+            if fdate is None or (d_from and fdate < d_from) or (d_to and fdate > d_to):
+                continue
+            entries.extend(_R()._day_json(fp, mtime, size))
+    elif date_str:
+        try:
+            ref = datetime.strptime(date_str, '%Y-%m-%d')
+            fp = os.path.join(raiz, ref.strftime('%Y'), ref.strftime('%m'),
+                              ref.strftime('%Y%m%d') + _UNWIND_SUFFIX)
+            if _store.isfile(fp):
+                from apps.pages import duck_read       # DB-only (fase 3)
+                entries = duck_read.day_records(fp)
+                if not isinstance(entries, list):
+                    entries = []
+        except Exception as exc:                        # noqa: BLE001
+            _R().log.warning('[INTRAG UNWIND] date load error date=%r: %s', date_str, exc)
+    else:
+        _dias = list(_R()._day_files(raiz, _UNWIND_SUFFIX))
+        _R()._day_prefetch(_dias)
+        for fp, _fname, mtime, size in _dias:
+            entries.extend(_R()._day_json(fp, mtime, size))
+    return jsonify({'success': True, 'entries': entries,
+                    'fields': list(domain.INTRAG_UNWIND_FIELDS)})
+
+
+@blueprint.route('/api/intrag/unwind/send-file', methods=['POST'])
+def api_intrag_unwind_send_file():
+    """O arquivo da Intrag das recompras selecionadas: uma linha por recompra,
+    campos separados por ';', agrupadas pela **Data da Recompra** (coluna 5 dos
+    dados) — um arquivo por data, `Intrag-Unwind-AAAAMMDD.txt`, na pasta de
+    sempre da Intrag. Nome existente ganha ' (n)', nunca sobrescreve."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    items = payload.get('items')
+    if not isinstance(items, list) or not items:
+        rows = payload.get('rows')
+        if not isinstance(rows, list) or not rows:
+            return jsonify({'success': False, 'message': 'No rows provided'}), 400
+        items = [{'deal_id': '', 'cells': r} for r in rows if isinstance(r, list)]
+
+    RECOMPRA_IDX = domain.INTRAG_UNWIND_FIELDS.index('data_recompra')
+    SENDABLE = {'New', 'Approved'}
+    grupos, enviadas = {}, []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        cells = ['' if c is None else str(c) for c in (it.get('cells') or [])]
+        if not cells:
+            continue
+        td_raw = cells[RECOMPRA_IDX] if len(cells) > RECOMPRA_IDX else ''
+        ref = _R()._parse_date_any(td_raw) or datetime.now()
+        grupos.setdefault(ref.strftime('%Y%m%d'), {'ref': ref, 'rows': []})['rows'].append(cells)
+        if it.get('deal_id'):
+            enviadas.append((it['deal_id'], td_raw))
+    if not grupos:
+        return jsonify({'success': False, 'message': 'No valid rows provided'}), 400
+
+    written = []
+    try:
+        with _R()._cache_lock:
+            for key, grp in grupos.items():
+                ref = grp['ref']
+                month_folder = ref.strftime('%m') + '. ' + _R()._EN_MONTH_NAMES[ref.month - 1]
+                dir_path = os.path.join(persistence.INTRAG_NDF_SEND_DIR, ref.strftime('%Y'),
+                                        month_folder, ref.strftime('%d'))
+                os.makedirs(dir_path, exist_ok=True)
+                base, n = 'Intrag-Unwind-' + key, 0
+                candidate = base + '.txt'
+                while _store.exists(os.path.join(dir_path, candidate)):
+                    n += 1
+                    candidate = base + ' (' + str(n) + ').txt'
+                file_path = os.path.join(dir_path, candidate)
+                with open(file_path, 'w', encoding='utf-8') as fh:
+                    fh.write('\n'.join(';'.join(r) for r in grp['rows']))
+                written.append(file_path)
+                _R().log.info('[INTRAG UNWIND] Wrote send file %s (%d row(s))',
+                              file_path, len(grp['rows']))
+            for deal_id, td_raw in enviadas:
+                fp, entries, idx = queries._find_intrag_unwind_entry(deal_id, td_raw)
+                if idx is None:
+                    continue
+                if (entries[idx].get('status') or 'New') in SENDABLE:
+                    entries[idx]['status'] = 'Sent'
+                    _R()._atomic_write_json(fp, entries)
+    except Exception as exc:                            # noqa: BLE001
+        _R().log.error('[INTRAG UNWIND] send-file failed: %s', exc)
+        return jsonify({'success': False, 'message': 'File generation failed: ' + str(exc)}), 500
+
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                              'Intrag Sent', 'Intrag Unwind',
+                              str(len(items)) + ' row' + ('' if len(items) == 1 else 's') + ' sent')
+    return jsonify({'success': True, 'files': written, 'count': len(items)})
+
+
+@blueprint.route('/api/intrag/unwind/edit', methods=['POST'])
+def api_intrag_unwind_edit():
+    """Edição de linha → status 'Pending' e o editor vira o maker (4 olhos)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    deal_id = (payload.get('deal_id') or '').strip()
+    trade_date = (payload.get('trade_date') or '').strip()
+    fields = payload.get('fields') or {}
+    if not deal_id:
+        return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
+    with _R()._cache_lock:
+        fp, entries, idx = queries._find_intrag_unwind_entry(deal_id, trade_date)
+        if idx is None:
+            return jsonify({'success': False, 'message': 'Entry not found'}), 404
+        if isinstance(fields, dict):
+            for k, v in fields.items():
+                if k in entries[idx] and k not in ('_deal', '_client', 'status', 'maker', 'checker'):
+                    entries[idx][k] = v
+        entries[idx]['status'] = 'Pending'
+        entries[idx]['maker'] = session.get('user_sid', '')
+        entries[idx]['checker'] = ''
+        _R()._atomic_write_json(fp, entries)
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                              'Deal Updated', 'Intrag Unwind', deal_id)
+    return jsonify({'success': True, 'status': 'Pending'})
+
+
+@blueprint.route('/api/intrag/unwind/approve', methods=['POST'])
+def api_intrag_unwind_approve():
+    """Pending → Approved, com maker ≠ checker."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    deal_id = (payload.get('deal_id') or '').strip()
+    trade_date = (payload.get('trade_date') or '').strip()
+    if not deal_id:
+        return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
+    user_sid = session.get('user_sid', '')
+    with _R()._cache_lock:
+        fp, entries, idx = queries._find_intrag_unwind_entry(deal_id, trade_date)
+        if idx is None:
+            return jsonify({'success': False, 'message': 'Entry not found'}), 404
+        if (entries[idx].get('status') or '') != 'Pending':
+            return jsonify({'success': False,
+                            'message': 'Only Pending entries can be approved.'}), 400
+        if entries[idx].get('maker') and entries[idx]['maker'] == user_sid:
+            return jsonify({'success': False,
+                            'message': 'Maker cannot approve their own change — a different '
+                                       'user must check it.'}), 403
+        entries[idx]['status'] = 'Approved'
+        entries[idx]['checker'] = user_sid
+        _R()._atomic_write_json(fp, entries)
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                              'Status Updated', 'Intrag Unwind', deal_id + ' → Approved')
+    return jsonify({'success': True, 'status': 'Approved'})

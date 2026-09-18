@@ -82,6 +82,19 @@ def _intrag_day_persist(cache_dir, suffix, tag, entry, td):
     _R().log.info('[%s] Saved entry deal=%r → %s', tag, deal_id, file_path)
 
 
+INTRAG_UNWIND_CACHE_DIR = os.path.normpath(os.path.join(
+    _R().data_dir(), "cache", "new deals", "Intrag", "Unwind"
+))
+
+
+def _intrag_unwind_persist(entry, td):
+    """Append/update de uma recompra no day-file da Intrag Unwind (chave =
+    `_deal`, o Athena ID da recompra). O dia e a **Data da Recompra**: e por
+    ela que a pagina lista e que o envio agrupa."""
+    _intrag_day_persist(INTRAG_UNWIND_CACHE_DIR, '_intrag_unwind.json',
+                        'INTRAG UNWIND', entry, td)
+
+
 def _intrag_ndf_persist(entry, td):
     """Append/update uma entrada no day-file da Intrag NDF (chave = _deal)."""
     _intrag_day_persist(INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json', 'INTRAG NDF', entry, td)
