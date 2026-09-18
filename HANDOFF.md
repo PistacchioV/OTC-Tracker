@@ -21669,3 +21669,29 @@ que este §494 conserta.
 
 Rede: `check_conf_matching.py` (a seção 4a virou brasileira, mais o caso do
 formato velho de volta e o contador novo no `fep_info`).
+
+## §495 — A varredura da recompra estava na pasta errada do Outlook (2026-09-18)
+
+O aviso `BRL NDF Unwind Notification` do Athena chega no **Inbox** da
+`brazil.otc.ops` — o mesmo lugar por onde entra o booking recap de NDF Comm e
+Opt Comm —, e não na subpasta `brazil_otc_settlements`, que era onde a primeira
+versão do `scan_unwind_box` o procurava (§488). Ali não havia o que ler: o
+Import com o dropzone vazio voltava "nenhum e-mail", que é como uma recompra
+some sem erro nenhum.
+
+A varredura passou a ser no Inbox, pela **mesma porta** do `scan_new_deals_box`
+(`_connect_inbox`). O `OTC_UNWIND_SOURCE_FOLDER` continua existindo e, vazio —
+que agora é o padrão —, significa a caixa de entrada; preenchido, volta a
+resolver uma subpasta pelo `resolve_folder`. **A tupla vazia não se passa ao
+`resolve_folder`**: ele desce zero níveis e devolve a RAIZ da caixa, que não
+tem mensagem nenhuma, e a varredura voltaria vazia outra vez — agora por outro
+motivo.
+
+**O arquivamento NÃO acompanhou** (decisão da mesa): o e-mail importado segue
+indo para a pasta `Unwind` das liquidações. Ler na caixa de entrada e guardar
+na pasta própria é o que separa, para quem olha o Outlook, o que já entrou do
+que ainda falta.
+
+Rede: `check_unwind_page.py`, `check_boxsched.py`, `check_soc_layers.py` (a
+resolução de pasta é COM do Outlook, Windows-only — não há teste que a exercite
+de verdade).
