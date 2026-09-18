@@ -1580,7 +1580,7 @@ Os cartões estão em **cinco seções**, e o que agrupa não é o que a rotina 
 
 | Cartão | O que faz | Quando roda sozinho |
 |---|---|---|
-| **Save CETIP Files** | Salva os arquivos da CETIP na pasta do dia e manda o e-mail para o OTC | Ao longo do pregão |
+| **Save CETIP Files** | Salva os arquivos da CETIP na pasta do dia e manda o e-mail para o OTC. Dois deles não são posição e atualizam uma base: o `INDEXADORESSWAP_VCP` atualiza os indexadores de swap e o `CADASTROCURVASMOEDASFEEDERDOMINIOS` atualiza o cadastro de domínios — este último vai **anexo** no e-mail | Ao longo do pregão |
 | **Deals Monitor — Pending Action** | Manda o e-mail do que está parado no New Deals Monitor | 19:00 e 19:30 (horário de Brasília) |
 | **Confirmations Escalation** | Cobra por e-mail o que está parado na esteira de confirmação — sete listas, uma por destinatário | Segundas e quintas; feriado **rola** para o próximo dia útil |
 | **Save Daily Settlement Files** | Salva os arquivos de liquidação do dia | Fim do dia |

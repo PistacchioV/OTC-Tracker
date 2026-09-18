@@ -125,6 +125,20 @@ _CETIP_BEHAVIOUR = {
     'SIC Contract Position (DPOSCONTRATOSIC)': {
         'attach_sales_support': True},   # this file is e-mailed to Sales Support
     'Comitente Registry (DCADCOMITENTES)': {},
+    # Cadastro de DOMÍNIOS (Arquivos Públicos da B3). Não é arquivo de posição:
+    # depois de salvo, as linhas dele atualizam a base `Dominio.json` — o mesmo
+    # desenho do INDEXADORESSWAP_VCP sobre a `VCP.json`. Colunas do arquivo:
+    # A=Nome do Grupo, B=Nome do Subgrupo, C=Codigo TipoIF,
+    # D=Identificador Qualificacao, E=Descricao Qualificacao, F=Data Inclusao
+    # (a única que NÃO vai para a base — pedido da mesa).
+    #
+    # `attach_ops` e proprio deste arquivo: ele vai ANEXO no e-mail de stage 1,
+    # o `CETIP Files Saved` que vai para o Brazil OTC Ops (pedido da mesa). Os
+    # demais anexos desta rotina sao do stage 2 (Sales Support, CEM Latam,
+    # BACC, HUB) — o de stage 1 nunca levou anexo nenhum, e este e o primeiro.
+    'Domain Registry (CADASTROCURVASMOEDASFEEDERDOMINIOS)': {
+        'dominio_update': True,
+        'attach_ops': True},
     # Salvo e mais nada, DE PROPÓSITO — como os outros `{}` daqui. A entrada
     # vazia não é decoração: `_cetip_behaviour_for` avisa em WARNING quando um
     # TYPE do cadastro não casa com nada, justamente para um `attach_*` perdido

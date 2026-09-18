@@ -621,6 +621,14 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   commodities as DUAS colunas aceitam `"MY"` (`quotes.symbol_lookup`, ano de 1
   ou 2 dígitos, sufixo de bolsa depois do vencimento, prefixo mais longo vence,
   literal vence padrão). Registro em `DE_PARA_TICKERS_COTACOES.md`.
+- **`cetip-files`** — a regra VIVA de quais arquivos a rotina salva: arquivo
+  que não está aqui não é salvo, e nenhum código diz o contrário. Como o
+  `seed` só roda com o arquivo AUSENTE (§6) e a instância já tem o cadastro,
+  **arquivo novo exige o `upgrade`** (`_cetip_files_upgrade`), que casa pelo
+  nome entre PARÊNTESES do TYPE — o prefixo é descrição e pode ter sido
+  reescrito na tela. Dois arquivos não são posição e atualizam uma BASE depois
+  de salvos: `INDEXADORESSWAP_VCP` → `VCP.json` e
+  `CADASTROCURVASMOEDASFEEDERDOMINIOS` → `Dominio.json` (§492).
 - **`ndfc-ir-exempt`** (uma lista para Advice e Trade Level),
   **`ndfc-advice-split`** (um aviso por mercadoria, depois do split por net),
   **`bankers-email`** (Cc da coleta de assinatura; vazio avisa no log),
@@ -1404,6 +1412,41 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `is_active` compara EXATO — `INACTIVE` contém `ACTIVE`). `Signature Type` é
   domínio fechado (`SIGNATURE_TYPES`), valor gravado entra na lista. `_id` não
   é estável entre importações.
+
+### Save CETIP Files
+
+- **O catálogo de comportamento casa pelo nome entre PARÊNTESES do TYPE**
+  (`_cetip_behaviour_for`): o prefixo do rótulo é descrição e é digitado na
+  tela. Junção pelo rótulo inteiro deixa a linha SEM comportamento — o arquivo
+  continua sendo salvo e some do JSON, do e-mail e do recorte do BACC, sem erro
+  nenhum (`dict.get` de chave inexistente é um dicionário vazio, que é
+  exatamente o que "sem comportamento" parece).
+- **Dois arquivos atualizam uma BASE depois de salvos**, e não viram JSON de
+  posição: `INDEXADORESSWAP_VCP` → `VCP.json` (`vcp_update`) e
+  `CADASTROCURVASMOEDASFEEDERDOMINIOS` → `Dominio.json` (`dominio_update`,
+  §492).
+- **Na `Dominio.json` a chave é o QUADRUPLO** (grupo, subgrupo, `Codigo
+  TipoIF`, identificador), NÃO o identificador: o mesmo id vale para vários
+  tipos de instrumento (o IGP-M é o `104` em CCB, CCE, CCI…) e repete 202 vezes
+  na base. Chaveado só pelo id, o upsert reescreveria a linha de um instrumento
+  com a descrição de outro.
+- **O identificador é normalizado dos DOIS lados** (`_dominio_id`): a base veio
+  de planilha e guarda float (`14056.0`), o arquivo é texto (`14056`).
+  Comparados como vêm, nada casa e a tabela inteira entra de novo a cada
+  rodada — 4 mil linhas duplicadas por dia, caladas.
+- **A `Data Inclusao` do arquivo não entra na base** (pedido da mesa), e
+  `Classificação`/`MAKER`/`CHECKER` da linha existente sobrevivem: são da mesa,
+  não do arquivo. Linha da base ausente do arquivo fica INTACTA, como no gêmeo
+  do VCP.
+- **Leitura em cp1252, não latin-1**: os dois só diferem na faixa `0x80-0x9F`,
+  que é onde moram o travessão e as aspas curvas das descrições — em latin-1
+  eles viram caracteres de controle invisíveis (§480).
+- **`attach_ops` é o anexo do e-mail de STAGE 1** (o `CETIP Files Saved`, para
+  o Brazil OTC Ops). Os quatro `attach_*` anteriores são todos do stage 2
+  (Sales Support, CEM Latam, BACC recortado, HUB inteiro); o de stage 1 nunca
+  levou anexo, e o cadastro de domínios é o primeiro (§492). O caminho anexado
+  é o do arquivo JÁ SALVO no destino, nunca o da origem — é o que foi salvo que
+  se confere, e a origem some no dia seguinte.
 
 ### Holidays e calendário
 

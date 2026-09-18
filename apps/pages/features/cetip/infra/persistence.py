@@ -160,3 +160,137 @@ def _cetip_update_vcp_json(src_path):
     except Exception:
         _R().log.warning("[cetip] VCP.json update failed:\n%s", traceback.format_exc())
         return None
+
+
+def _dominio_id(valor):
+    """O `Identificador Qualificacao` como CHAVE, igual dos dois lados.
+
+    A base veio de uma planilha e guarda o identificador como FLOAT (`14056.0`);
+    o arquivo da B3 e texto (`14056`). Comparados como vieram, `'14056.0'` nunca
+    e `'14056'`: NADA casaria, e cada rodada acrescentaria a tabela inteira de
+    novo — 4 mil linhas duplicadas por dia, sem erro nenhum.
+    """
+    txt = str(valor if valor is not None else '').strip()
+    if not txt:
+        return ''
+    try:
+        f = float(txt.replace(',', '.'))
+    except ValueError:
+        return txt.upper()
+    return str(int(f)) if f == int(f) else str(f)
+
+
+def _dominio_key(grupo, subgrupo, tipoif, ident):
+    """A chave de uma linha de dominio.
+
+    E o QUADRUPLO, nao o identificador sozinho: o mesmo id vale para varios
+    `Codigo TipoIF` (o indice IGP-M e o 104 em CCB, CCE, CCI, CRH...), e na base
+    ele repete 202 vezes. Chaveado so pelo id, o upsert reescreveria a linha de
+    um tipo de instrumento com a descricao de outro.
+    """
+    def _n(v):
+        return ' '.join(str(v or '').split()).strip().upper()
+    return (_n(grupo), _n(subgrupo), _n(tipoif), _dominio_id(ident))
+
+
+def _cetip_update_dominio_json(src_path):
+    """Atualiza a base `Dominio.json` NO LUGAR a partir do arquivo
+    CADASTROCURVASMOEDASFEEDERDOMINIOS salvo (';', Latin-1).
+
+    Colunas do arquivo: A=Nome do Grupo, B=Nome do Subgrupo, C=Codigo TipoIF,
+    D=Identificador Qualificacao, E=Descricao Qualificacao, F=Data Inclusao.
+    **A data de inclusao NAO entra na base** (pedido da mesa): ela e do arquivo,
+    nao do dominio, e a base nao tem coluna para ela.
+
+    Upsert pelo quadruplo (grupo, subgrupo, tipo IF, identificador), que e a
+    chave de verdade. Linha que ja existe tem a DESCRICAO atualizada e conserva
+    `Classificação`, `MAKER` e `CHECKER` — as tres sao da mesa, nao do arquivo.
+    Linha nova entra com `STATUS: ACTIVE` (a unica forma que a base conhece) e
+    as tres em branco.
+
+    Linha da base que NAO esta no arquivo fica INTACTA, como no gemeo do VCP: a
+    base tambem guarda o que a mesa cadastrou a mao, e apagar por ausencia
+    silenciaria isso. Se um dia a mesa quiser que o sumico do arquivo signifique
+    baixa, isso e uma decisao dela e vira `STATUS: INACTIVE`, nunca um delete.
+
+    Melhor esforco: devolve o caminho ou None.
+    """
+    try:
+        # cp1252, o ANSI do Windows, e nao latin-1: os dois so diferem na faixa
+        # 0x80-0x9F, que e justamente onde moram o travessao e as aspas curvas
+        # que aparecem em descricao de dominio. Em latin-1 eles viram caracteres
+        # de controle invisiveis — o texto "parece" certo e leva sujeira que so
+        # aparece no arquivo que sair depois (§480).
+        with open(src_path, 'r', encoding='cp1252', errors='replace', newline='') as fh:
+            linhas = [ln for ln in fh.read().splitlines() if ln.strip()]
+        if not linhas:
+            _R().log.warning('[cetip] Dominio.json: %s esta vazio', src_path)
+            return None
+        # O arquivo vem COM cabecalho; o teste e pelo conteudo, para um dia sem
+        # ele nao perder a primeira linha de dado.
+        primeira = [c.strip().lower() for c in linhas[0].split(';')]
+        if any('nome do grupo' in c or 'identificador' in c or 'tipoif' in c
+               for c in primeira):
+            linhas = linhas[1:]
+
+        atual = []
+        if _store.isfile(_R().DOMINIO_JSON):
+            try:
+                atual = _store.read(_R().DOMINIO_JSON) or []
+            except Exception:                               # noqa: BLE001
+                atual = []
+        if not isinstance(atual, list):
+            atual = []
+        # A chave aponta para uma LISTA: a base traz linhas exatamente iguais
+        # repetidas (seis copias de FEIJO DE CORDA, de um import antigo), e
+        # atualizar so a primeira deixaria as outras velhas ao lado dela.
+        por_chave = {}
+        for r in atual:
+            if isinstance(r, dict):
+                por_chave.setdefault(_dominio_key(
+                    r.get('Nome do Grupo'), r.get('Nome do Subgrupo'),
+                    r.get('Codigo TipoIF'), r.get('Identificador Qualificacao')), []).append(r)
+
+        novas = atualizadas = 0
+        for ln in linhas:
+            f = ln.split(';')
+
+            def g(i):
+                return f[i].strip() if i < len(f) else ''
+
+            grupo, subgrupo, tipoif, ident, descricao = g(0), g(1), g(2), g(3), g(4)
+            if not ident and not descricao:
+                continue
+            chave = _dominio_key(grupo, subgrupo, tipoif, ident)
+            existentes = por_chave.get(chave)
+            if existentes:
+                for r in existentes:
+                    r['Descricao Qualificacao'] = descricao
+                atualizadas += 1
+                continue
+            linha = {
+                'STATUS': 'ACTIVE',
+                'Nome do Grupo': grupo,
+                'Nome do Subgrupo': subgrupo,
+                'Codigo TipoIF': tipoif,
+                # Numerico como o resto da base, para a coluna nao ficar com
+                # dois tipos e a tela ordenar por texto sem avisar.
+                'Identificador Qualificacao': (float(_dominio_id(ident))
+                                               if _dominio_id(ident).replace('.', '').isdigit()
+                                               else ident),
+                'Descricao Qualificacao': descricao,
+                'Classificação': None,
+                'MAKER': None,
+                'CHECKER': None,
+            }
+            atual.append(linha)
+            por_chave.setdefault(chave, []).append(linha)
+            novas += 1
+
+        _R()._atomic_write_json(_R().DOMINIO_JSON, atual)
+        _R().log.info('[cetip] Dominio.json atualizado: %d atualizada(s), %d nova(s) '
+                      '(%d no total)', atualizadas, novas, len(atual))
+        return _R().DOMINIO_JSON
+    except Exception:
+        _R().log.warning('[cetip] Dominio.json update failed:\n%s', traceback.format_exc())
+        return None

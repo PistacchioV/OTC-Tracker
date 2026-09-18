@@ -2722,6 +2722,15 @@ _CETIP_FILES_SEED = [
      'SOURCE': 'SIC_YYMMDD_DCADCOMITENTES',
      # Keep the original SIC name so the Comitente reconciliation finds it unchanged.
      'DEST': 'SIC_YYMMDD_DCADCOMITENTES.txt', 'EXTRA DEST': ''},
+    # Cadastro de domínios da B3 (Arquivos Públicos): não é arquivo de posição.
+    # Depois de salvo, ele atualiza a base `Dominio.json` — o mesmo desenho do
+    # INDEXADORESSWAP_VCP, que atualiza a `VCP.json`.
+    #
+    # O prefixo do nome é `CETIP_`, e não `CETIP21_` como a maioria: é assim que
+    # a B3 o publica.
+    {'TYPE': 'Domain Registry (CADASTROCURVASMOEDASFEEDERDOMINIOS)',
+     'SOURCE': 'CETIP_YYMMDD_CADASTROCURVASMOEDASFEEDERDOMINIOS',
+     'DEST': 'CETIP_YYMMDD_CADASTROCURVASMOEDASFEEDERDOMINIOS.txt', 'EXTRA DEST': ''},
     # CGD: salvo na rotina e nada mais — não vira JSON e não vai para área nenhuma.
     {'TYPE': 'CGD (NET)',
      'SOURCE': 'CETIP21_YYMMDD_DPOSICAO-NET',
@@ -2950,6 +2959,9 @@ def _b3_export_json(src_path, json_cfg, dest_name, dref, skip_existing=False):
 # ID) — the Save CETIP Files routine refreshes it in place from the
 # INDEXADORESSWAP_VCP file. Also read by the Swap Characteristics page and index-b3.
 VCP_JSON = data_path('VCP.json')
+# A base de DOMÍNIOS da B3, atualizada pelo arquivo
+# `CETIP_YYMMDD_CADASTROCURVASMOEDASFEEDERDOMINIOS` do Save CETIP Files.
+DOMINIO_JSON = data_path('Dominio.json')
 
 
 # ── BACC: os quatro arquivos, recortados para o INTRAGRUPO ───────────────────
@@ -11105,6 +11117,30 @@ def _b3_accounts_upgrade(rows):
     return out
 
 
+def _cetip_files_upgrade(rows):
+    """Acrescenta ao cadastro já existente as linhas do seed que faltam.
+
+    O `seed` só roda quando o ARQUIVO NÃO EXISTE (§6), e a instância do time já
+    tem o `cetip-files.json` desde sempre: arquivo novo no seed nunca chegaria
+    lá, e a rotina simplesmente não o salvaria — sem erro nenhum, porque a
+    regra VIVA de quais arquivos existem é o cadastro.
+
+    A chave é o nome do arquivo ENTRE PARÊNTESES do TYPE, que é o que o
+    `_cetip_behaviour_for` já usa para juntar cadastro e comportamento: o
+    prefixo do rótulo é descrição e pode ter sido reescrito na tela. Linha que
+    a mesa editou fica como está — só o que não existe entra.
+    """
+    from apps.pages.features.cetip import domain as _cetip_domain
+    if not isinstance(rows, list):
+        return rows
+    have = {_cetip_domain._cetip_paren_key(r.get('TYPE'))
+            for r in rows if isinstance(r, dict)}
+    for linha in _CETIP_FILES_SEED:
+        if _cetip_domain._cetip_paren_key(linha['TYPE']) not in have:
+            rows.append(dict(linha))
+    return rows
+
+
 def _api_links_upgrade(rows):
     """Traz para o formato com PRODUCT os arquivos gravados antes da coluna.
 
@@ -11716,6 +11752,7 @@ _MAPPING_DEFS = {
             {'key': 'DEST', 'label': 'Saved As (YYMMDD = date)'},
             {'key': 'EXTRA DEST', 'label': 'Extra Copy Folder'},
         ],
+        'upgrade': _cetip_files_upgrade,
         'seed': _CETIP_FILES_SEED,
     },
     # Endereços da API Athena, um por USO. Era a constante BASE_URL +
