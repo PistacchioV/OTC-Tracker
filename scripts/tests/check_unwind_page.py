@@ -102,6 +102,11 @@ def main():
     # gravaria no Cockpit REAL da máquina, que é dado de verdade.
     R._ndfc_json_path = lambda ref: os.path.join(
         tmp, 'cockpit', ref.strftime('%Y%m%d') + '_ndf-cockpit.json')
+    # E o IR do dia e calculado no import (o Cockpit e onde a mesa o acompanha):
+    # o ledger MENSAL tambem vai para o tmp, senao este teste escreveria no
+    # acumulado de imposto de verdade da maquina.
+    R._ndfsum_ir_ledger_path = lambda ref: os.path.join(
+        tmp, 'ledger', 'ndf-ir-ledger_' + ref.strftime('%Y%m') + '.json')
     COLUNAS = list(POS.keys())
     def _collect(rows):
         return lambda ref: {'columns': COLUNAS, 'source_date': '2026-09-09',
@@ -556,8 +561,11 @@ def main():
         _neg = r['[PROD] Cockpit.SETTLEMENT'].startswith('-')
         check('o caixa com o SINAL da direcao apurada',
               _neg == (_dir == 'PAY'), (_dir, r['[PROD] Cockpit.SETTLEMENT']))
-        check('o IR nasce VAZIO (quem calcula e o dia inteiro montado)',
-              r['VL_TAX_INCOME'] == '', r['VL_TAX_INCOME'])
+        # O IMPORT ja calcula o imposto. Ate 18/09/2026 a celula ficava VAZIA
+        # ate alguem clicar Run no Cockpit — e o Cockpit e justamente a tela
+        # onde a mesa acompanha o IR.
+        check('o IR e calculado no IMPORT (a celula nao fica vazia)',
+              r['VL_TAX_INCOME'] != '', r['VL_TAX_INCOME'])
         check('e a chave e derivada do Athena ID',
               r['_nc_id'] == commands.COCKPIT_ID_PREFIX + 'STP-XE-10G5U5X-0-0', r['_nc_id'])
     # Reimportar ATUALIZA a mesma linha — nao cria uma segunda.
@@ -573,6 +581,33 @@ def main():
           [r.get('_nc_id') for r in do_zero if r.get('_nc_unwind')]
           == [commands.COCKPIT_ID_PREFIX + 'STP-XE-10G5U5X-0-0'],
           [r.get('_nc_id') for r in do_zero])
+
+    # O valor: 0,005% sobre a liquidacao em que o BANCO PAGA. Acima do piso
+    # mensal de R$ 1,00 o imposto e retido e vai para a celula — e a conta e a
+    # do `_ndfc_apply_ir`, a MESMA do Run do Cockpit e do NDF Summary.
+    _f, _l, _i = queries.find('STP-XE-10G5U5X-0-0', '2026-09-10')
+    grande = dict(_l[_i], AthenaID='STP-BIG', Result=400000.0, Direction='PAY')
+    persistence.upsert(datetime(2026, 9, 10), [grande])      # existe na vertical tambem
+    commands.cockpit_da_recompra([grande])
+    big = [r for r in (_ds.read(jp_ck) or []) if r.get('_nc_id', '').endswith('STP-BIG')]
+    check('acima do piso o imposto vai para a celula do Cockpit',
+          bool(big) and big[0]['VL_TAX_INCOME'] == '20.00',
+          big[0]['VL_TAX_INCOME'] if big else None)
+    # A TELA tem de dizer qual linha e recompra: a marca viaja na cauda de meta
+    # das linhas de exibicao (a quinta), depois do `_nc_id`.
+    with app.test_request_context():
+        _rows = R._ndfc_collect(date(2026, 9, 10))['rows']
+    _iu = len(R._NDFC_COLUMNS) + 4
+    _marcadas = [row for row in _rows if len(row) > _iu and row[_iu]]
+    check('a linha de exibicao carrega a marca da recompra',
+          len(_marcadas) == len(_rows) and len(_rows) >= 1, (len(_marcadas), len(_rows)))
+    # E apagar a recompra TIRA a projecao: o import do Cockpit preserva o que
+    # esta marcado com `_nc_unwind`, entao nem o Run seguinte a apagaria — o
+    # caixa fantasma ficaria no Trade Level e no IR do dia para sempre.
+    commands.delete('STP-BIG', '2026-09-10')
+    commands.delete('STP-XE-10G5U5X-0-0', '2026-09-10')
+    sobrou = [r for r in (_ds.read(jp_ck) or []) if r.get('_nc_unwind')]
+    check('o Delete tira a recompra do Cockpit', sobrou == [], [r.get('_nc_id') for r in sobrou])
 
     print('\n== 14. a varredura do box roda sozinha ==')
     # A tela promete "also runs on its own every 30 minutes". Ate 18/09/2026 a
