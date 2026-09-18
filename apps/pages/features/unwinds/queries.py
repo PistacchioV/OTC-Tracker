@@ -107,3 +107,61 @@ def participant_name(le='BANCO'):
     """O Nome Simplificado da entidade dona do arquivo, do cadastro
     `b3-accounts` — a mesma porta do `_ter_file_header`."""
     return _R()._b3_participant_name(le)
+
+
+def dashboard_counts(period, now):
+    """Quantas recompras o painel mostra: {'total': n, 'monthly': [12]}.
+
+    Varre `cache/unwinds/` INTEIRA — o card do painel e de recompra, nao de
+    recompra de NDF de moeda: os produtos que vierem depois entram sozinhos,
+    como entram os de New Deals.
+
+    Reusa o `_dash_scan_files` e o `_dash_dir_matters` do painel para a poda
+    de periodo ser a MESMA das outras contagens; uma poda propria aqui
+    significaria o card de recompra respondendo a um 'este mes' diferente do
+    dos outros quatro, sem nada na tela dizendo isso.
+
+    A regra da LINHA e mais simples que a de New Deals de proposito: uma
+    recompra e UMA linha. Nao ha perna espelhada a descartar (o `_is_bank` de
+    la existe porque o deal intragrupo e gravado das duas visoes), entao aqui
+    conta-se toda linha com Athena ID.
+    """
+    import os
+    from datetime import datetime
+
+    from apps.pages.features.unwinds.infra import persistence
+
+    total, monthly = 0, [0] * 12
+    raiz = os.path.normpath(persistence.cache_root())
+    if not _store.isdir(raiz):
+        return {'total': total, 'monthly': monthly}
+    # UMA passada SEM poda ('all'), e o periodo aplicado no laco. O painel faz
+    # duas passadas porque as duas compartilham o memo de arquivo-dia; aqui a
+    # arvore e pequena, e varrer por 'year' perderia os anos anteriores no
+    # periodo 'all' — a serie mensal e sempre do ano corrente, o total nao.
+    for fp, fname, _mtime, _size in _R()._dash_scan_files(raiz, 'all', now):
+        if fname.endswith('.tmp') or fname.endswith('.bak'):
+            continue
+        try:
+            fdate = datetime.strptime(fname[:8], '%Y%m%d')
+        except ValueError:
+            continue
+        try:
+            linhas = _store.read(fp)
+        except Exception:                                   # noqa: BLE001
+            continue
+        n = sum(1 for e in (linhas if isinstance(linhas, list) else [])
+                if isinstance(e, dict) and str(e.get('AthenaID') or '').strip())
+        if not n:
+            continue
+        if fdate.year == now.year:
+            monthly[fdate.month - 1] += n
+        if period == 'month':
+            if fdate.year == now.year and fdate.month == now.month:
+                total += n
+        elif period == 'year':
+            if fdate.year == now.year:
+                total += n
+        else:
+            total += n
+    return {'total': total, 'monthly': monthly}

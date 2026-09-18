@@ -268,6 +268,7 @@
 #dash-page .dash-stat--ndf   { --c1: #1866dc; --c2: #3d8bfd; }
 #dash-page .dash-stat--opt   { --c1: #4f46e5; --c2: #7c73ff; }
 #dash-page .dash-stat--swap  { --c1: #8b3ff0; --c2: #a855f7; }
+#dash-page .dash-stat--unwind{ --c1: #a532e6; --c2: #c65cf6; }
 #dash-page .dash-stat--total { --c1: #c026d3; --c2: #e455f5; }
 [data-bs-theme="light"] #dash-page .dash-stat {
     background: linear-gradient(162deg, color-mix(in oklab, var(--c2) 9%, #fff), #fff) !important;
@@ -338,7 +339,7 @@
     <div id="dash-load-error" class="alert alert-danger py-2 px-3 mb-3 d-none"
          style="font-size:.78rem;"></div>
 
-    <div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1 g-3">
+    <div class="row row-cols-xxl-5 row-cols-md-2 row-cols-1 g-3">
         <div class="col">
             <div class="card dash-fade-in dash-stat dash-stat--ndf">
                 <div class="card-body">
@@ -366,6 +367,16 @@
                     <span class="dash-stat__icon"><i class="ti ti-arrows-exchange-2"></i></span>
                     <h3 class="dash-stat__num"><span id="dash-swap-count">–</span></h3>
                     <p class="dash-stat__label" data-lang="dash-swap-title">Swap Deals</p>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card dash-fade-in dash-stat dash-stat--unwind">
+                <div class="card-body">
+                    <i class="ti ti-rotate-2 dash-stat__wm"></i>
+                    <span class="dash-stat__icon"><i class="ti ti-rotate-2"></i></span>
+                    <h3 class="dash-stat__num"><span id="dash-unwind-count">–</span></h3>
+                    <p class="dash-stat__label" data-lang="dash-unwind-title">Unwinds</p>
                 </div>
             </div>
         </div>
@@ -578,13 +589,13 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/chartjs/chart.umd.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/pages/custom-table.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/dashboard.js?v=20260729a"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/dashboard.js?v=20260918a"></script>
 <script>
 /* Count-up nos números-chave — anima quando o dashboard.js preenche os valores.
    Guardado contra re-entrância (nossas próprias escritas não re-disparam). */
 (function () {
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    var IDS = ['dash-ndf-count','dash-opt-count','dash-swap-count','dash-total-count','live-total'];
+    var IDS = ['dash-ndf-count','dash-opt-count','dash-swap-count','dash-unwind-count','dash-total-count','live-total'];
     function animate(el) {
         var orig = (el.textContent || '').trim();
         var t = parseFloat(orig.replace(/[^\d.-]/g, ''));
