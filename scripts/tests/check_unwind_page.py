@@ -440,6 +440,35 @@ def main():
     check('e o delete remove a linha nao enviada', dele.get('success'))
     check('o dia ficou vazio', queries.entries('2026-09-12') == [])
 
+    print('\n== 12. a varredura do box roda sozinha ==')
+    # A tela promete "also runs on its own every 30 minutes". Ate 18/09/2026 a
+    # frase era falsa: nenhum laco estava registrado, e a recompra so entrava
+    # no clique do Import — sem erro nenhum para denunciar isso.
+    check('o laco esta registrado no wiring do routes',
+          any(l == 'unwind-boxscan' for l, _ in R._SCHEDULERS),
+          [l for l, _ in R._SCHEDULERS])
+    from apps.pages.features.unwinds import entrypoint as _unw_ep
+    check('e o entrypoint expoe o mesmo start_scheduler',
+          _unw_ep.start_scheduler is commands.start_scheduler)
+    check('o intervalo e o mesmo do box de New Deals (BOX_SCAN_POLL_MIN)',
+          commands.POLL_MIN == int(os.getenv('BOX_SCAN_POLL_MIN', '30') or 30),
+          commands.POLL_MIN)
+    # Varredura VAZIA nao avisa ninguem: o laco roda o dia inteiro e a caixa
+    # esta vazia quase sempre. Um sino a cada 30 min seria o fim do sino.
+    avisos = []
+    _orig_notif = R._create_notification
+    R._create_notification = lambda *a, **k: avisos.append(a)
+    try:
+        commands._avisar_varredura({'rows': [], 'failed': [], 'scanned': 0})
+        check('caixa vazia nao toca o sino', avisos == [], avisos)
+        commands._avisar_varredura({'rows': [{'AthenaID': 'X'}], 'failed': [],
+                                    'scanned': 1})
+        check('recompra importada toca o sino', len(avisos) == 1, avisos)
+        check('e o rotulo da pagina e o dos tres mapas',
+              avisos and avisos[0][3] == commands.PAGE, avisos)
+    finally:
+        R._create_notification = _orig_notif
+
     print('')
     if FALHAS:
         print('FALHAS (%d): %s' % (len(FALHAS), ', '.join(FALHAS)))

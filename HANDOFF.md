@@ -21695,3 +21695,39 @@ que ainda falta.
 Rede: `check_unwind_page.py`, `check_boxsched.py`, `check_soc_layers.py` (a
 resolução de pasta é COM do Outlook, Windows-only — não há teste que a exercite
 de verdade).
+
+## §496 — A varredura da recompra passou a rodar sozinha, como a tela já dizia (2026-09-18)
+
+A `/unwinds/ndf/fx` sempre prometeu, no texto do dropzone, que *"the box scan
+also runs on its own every 30 minutes"* — e o docstring do `scan_box` repetia a
+frase. Não havia laço nenhum registrado: a recompra só entrava no clique do
+Import. Nada quebrava, e era esse o problema — o aviso do Athena ficava no
+Outlook até alguém abrir a página, o que num dia de recompra é a diferença
+entre registrar na B3 hoje e amanhã.
+
+O laço é da VERTICAL (`unwinds/commands.scheduler_loop`, subido pelo
+`_schedule_on_start('unwind-boxscan', …)` no `routes.py`), e não uma parada
+dentro do `features/boxscan`. Nesta casa **feature não importa feature** —
+nenhuma das 49 importa, e é o `check_soc_layers` que segura —, e pendurar a
+recompra no laço do booking recap só se resolveria com o gancho do `routes`,
+que é o desenho de platform → feature, não de feature → feature. O que as duas
+de fato compartilham é o INTERVALO: as duas leem `BOX_SCAN_POLL_MIN`, para a
+mesa ter um botão só para "a varredura do box".
+
+Três coisas que o laço faz de propósito:
+
+- **`_app_context()` em volta da varredura**: a thread do scheduler não tem um,
+  e o caminho do import passa pelo Live Position e pelo armazém;
+- **varredura vazia não toca o sino**: o laço roda o dia inteiro e a caixa está
+  vazia quase sempre — um aviso a cada 30 minutos é o fim do sino. E-mail que o
+  parser recusou, esse sim, vai para o log em WARNING mesmo sem linha nenhuma:
+  ele continua no box, e alguém precisa saber por quê;
+- **erro repetido sai UMA vez** (o padrão do `features/boxscan`): sem Outlook — a
+  dev é macOS — seriam 48 linhas por dia dizendo a mesma coisa, e é aí que o
+  log deixa de ser lido.
+
+Rede: `check_unwind_page.py` ganhou a seção 12 (o laço registrado, o intervalo
+compartilhado, o sino só quando entrou linha) e o `check_import_window.py` §5
+passou a varrer QUATRO laços, pelo PAR (arquivo, função) — dois deles se chamam
+`scheduler_loop`, e chaveada só pelo nome a varredura perdia o segundo sem
+falhar nada.

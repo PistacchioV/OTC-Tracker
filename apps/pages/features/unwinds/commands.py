@@ -3,6 +3,8 @@
 linha da tela com a posicao e gerar o arquivo da B3 (TER 0014)."""
 import os
 import random
+import threading
+import time
 import traceback
 from datetime import datetime
 
@@ -19,6 +21,12 @@ def _R():
 TER_FI_KEY = 'antecipacao-termo-multiclasses'
 PAGE_URL = '/unwinds/ndf/fx'
 PAGE = 'Unwind NDF FX'            # o rotulo `page` das notificacoes (§8)
+
+# Quem aparece no sino quando foi a MAQUINA que importou — o mesmo 'BOX' do
+# scan de New Deals, escrito aqui porque feature nao importa feature. Nao vai
+# para o `Maker` da linha: ali se registra quem ENVIOU para a B3, e enviar
+# continua sendo da mesa.
+BOX_MAKER_SID = 'BOX'
 
 # O nome do arquivo por VISAO (a entidade que lanca). A visao sai da conta da
 # parte pelo cadastro `b3-accounts` — nao ha par de pernas a adivinhar, porque
@@ -116,6 +124,101 @@ def scan_box(ref_dt=None):
                            'text': 'Imported, but the e-mail could not be archived: %s' % exc})
     return {'rows': rows, 'warnings': avisos, 'failed': falhas,
             'scanned': len(achados)}
+
+
+# ── O laco dos 30 minutos ────────────────────────────────────────────────────
+# A varredura tambem roda sozinha, como a do booking recap de NDF Comm e Opt
+# Comm — a tela sempre prometeu isso ("also runs on its own every 30 minutes")
+# e nao havia laco nenhum registrado: a recompra so entrava no clique do
+# Import. Nada quebrava; ela simplesmente ficava no Outlook ate alguem abrir a
+# pagina.
+#
+# E laco PROPRIO, e nao uma parada dentro do `features/boxscan`: nesta casa
+# feature nao importa feature (nenhuma das 49 importa, e o `check_soc_layers` e
+# quem segura). O que as duas compartilham de verdade e o INTERVALO — a mesma
+# `BOX_SCAN_POLL_MIN` —, para a mesa ter um botao so para "a varredura do box".
+POLL_MIN = int(os.getenv('BOX_SCAN_POLL_MIN', '30') or 30)
+
+_scheduler_started = False
+_scheduler_lock = threading.Lock()
+
+
+def scheduler_loop():
+    """Uma varredura a cada `POLL_MIN` minutos, dentro da janela da mesa.
+
+    O `_app_context` e obrigatorio: a thread do scheduler nao tem um, e o
+    caminho do import passa pelo Live Position e pelo armazem (§8). O erro
+    REPETIDO sai uma vez so — sem Outlook (a dev e macOS) seriam 48 linhas por
+    dia dizendo a mesma coisa, e e ai que o log para de ser lido.
+    """
+    from apps.pages import data_store
+    ultimo = ''
+    while True:
+        time.sleep(max(60, POLL_MIN * 60))
+        R = _R()
+        if not R._import_window_open():
+            continue                    # fora do horario da mesa
+        try:
+            with R._app_context():
+                out = scan_box()
+            ultimo = ''
+            _avisar_varredura(out)
+        except data_store.BancoOcupado as exc:
+            # E um IOError, e cairia no EnvironmentError abaixo como "sem
+            # Outlook", em INFO: e a instancia vizinha gravando (§434).
+            R.log.warning('[unwind-boxscan] banco ocupado, fica para a proxima '
+                          'volta (%s)', exc)
+        except EnvironmentError as exc:
+            # Sem Outlook (host nao-Windows): estado esperado, nao e falha.
+            if ultimo != str(exc):
+                R.log.info('[unwind-boxscan] indisponivel: %s', exc)
+            ultimo = str(exc)
+        except Exception as exc:                            # noqa: BLE001
+            if ultimo != str(exc):
+                R.log.warning('[unwind-boxscan] varredura falhou: %s\n%s',
+                              exc, traceback.format_exc())
+            else:
+                R.log.debug('[unwind-boxscan] varredura falhou de novo: %s', exc)
+            ultimo = str(exc)
+
+
+def _avisar_varredura(out):
+    """O sino e o log do que a varredura automatica trouxe.
+
+    So avisa quando ENTROU alguma coisa: o laco roda o dia inteiro e a caixa
+    esta vazia quase sempre. E-mail que o parser recusou vai para o log em
+    WARNING mesmo sem linha nenhuma — ele ficou no box, e alguem precisa saber
+    por que.
+    """
+    R = _R()
+    rows = (out or {}).get('rows') or []
+    falhas = (out or {}).get('failed') or []
+    for f in falhas:
+        R.log.warning('[unwind-boxscan] %r nao entrou (e-mail mantido no box): %s',
+                      f.get('subject') or '', f.get('reason') or '')
+    if not rows:
+        return
+    R.log.info('[unwind-boxscan] %d e-mail(s) · %d recompra(s) importada(s) · '
+               '%d recusada(s)', (out or {}).get('scanned') or 0, len(rows), len(falhas))
+    R._create_notification(BOX_MAKER_SID, 'Box Scan', 'Imported', PAGE,
+                           'Outlook box: %d unwind%s' % (len(rows),
+                                                         '' if len(rows) == 1 else 's'))
+
+
+def start_scheduler():
+    """Sobe o laco UMA vez por processo. Quem o chama e o wiring do
+    `routes.py` (`_schedule_on_start`), que respeita o `OTC_DISABLE_SCHEDULERS`
+    dos testes — a feature nunca sobe thread no proprio import."""
+    global _scheduler_started
+    with _scheduler_lock:
+        if _scheduler_started:
+            return
+        _scheduler_started = True
+    threading.Thread(target=scheduler_loop,
+                     name='unwind-box-scan-scheduler', daemon=True).start()
+    R = _R()
+    R.log.info('[unwind-boxscan] scheduler do box iniciado (a cada %d min · '
+               'janela %s BRT · NDF FX)', POLL_MIN, R._import_window_label())
 
 
 # ── O arquivo da B3 ──────────────────────────────────────────────────────────
