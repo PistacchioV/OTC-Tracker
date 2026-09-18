@@ -107,6 +107,14 @@ def main():
     # acumulado de imposto de verdade da maquina.
     R._ndfsum_ir_ledger_path = lambda ref: os.path.join(
         tmp, 'ledger', 'ndf-ir-ledger_' + ref.strftime('%Y%m') + '.json')
+    # O import poe a recompra na ESTEIRA e no Pending Confirmation, e o Delete
+    # a tira de la — os dois bancos vao para o tmp. Sem isto este teste escreve
+    # (e apaga) linha na fila de confirmacoes de verdade da maquina.
+    from apps.pages import manual_conf as _mc
+    _mc._DB_DIR = os.path.join(tmp, 'mc-db')
+    os.makedirs(_mc._DB_DIR, exist_ok=True)
+    R._PC_DB_DIR = os.path.join(tmp, 'pc-db')
+    os.makedirs(R._PC_DB_DIR, exist_ok=True)
     COLUNAS = list(POS.keys())
     def _collect(rows):
         return lambda ref: {'columns': COLUNAS, 'source_date': '2026-09-09',

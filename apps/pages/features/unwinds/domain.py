@@ -930,14 +930,18 @@ def _codigos(avisos):
 #                                parcelas são colunas da tela — o documento tem
 #                                de ser conferível na grade, e corrigir a
 #                                posição ali tem de mudar o número daqui. Na
-#                                resilição TOTAL não se aplica
+#                                resilição TOTAL sai **Zero**, que é o saldo
 #
 # Nada aqui se inventa: o que a recompra não responde sai VAZIO e entra nos
 # avisos — um documento assinado com um número plausível e errado é pior que um
 # campo que a mesa tem de preencher.
 RESILICAO_TOTAL = 'Total'
 RESILICAO_PARCIAL = 'Parcial'
-NAO_APLICAVEL = 'Não Aplicável'
+# Resilição TOTAL: a coluna diz **Zero**, e não "Não Aplicável" (mesa,
+# 18/09/2026). O que sobra do contrato é zero — é um valor, e é ele que o
+# documento tem de afirmar; "não se aplica" deixa o leitor do Termo sem saber
+# se o saldo acabou ou se ninguém o calculou.
+NOVO_BASE_ZERO = 'Zero'
 # Um centavo de moeda estrangeira: o saldo da posição e o recomprado vêm de
 # arredondamentos diferentes (a posição imprime 2 casas), e uma recompra que
 # zera o contrato pode fechar em 587.224,31 contra 587.224,3099.
@@ -1043,7 +1047,7 @@ def termo_linha(linha):
                        'text': 'Sem o saldo da posição não dá para dizer se a resilição é '
                                'total ou parcial — preencha a coluna no painel'})
     elif total:
-        tipo, novo_base = RESILICAO_TOTAL, NAO_APLICAVEL
+        tipo, novo_base = RESILICAO_TOTAL, NOVO_BASE_ZERO
     else:
         tipo = RESILICAO_PARCIAL
         novo_base = '{} {}'.format(moeda, num_br(saldo_apos_a_recompra(linha))).strip()

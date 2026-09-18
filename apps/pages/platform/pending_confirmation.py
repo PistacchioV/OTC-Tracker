@@ -516,6 +516,28 @@ def _pc_delete_tn(category, tn):
     _pc_write_exec(category, [('DELETE FROM {} WHERE "Trade Number" = ?'.format(_PC_TABLE), [tn])])
 
 
+def _pc_delete_trade_number(tn):
+    """Apaga o Trade Number dos TRES bancos do Pending Confirmation.
+
+    O `_pc_delete_tn` precisa da categoria, e quem apaga uma operacao na origem
+    nao sabe em qual balde ela esta (o status a move entre eles). Devolve o
+    numero de bancos em que a operacao existia."""
+    tn = str(tn or '').strip()
+    if not tn:
+        return 0
+    achou = 0
+    for cat in ('backlog', 'pending', 'ok'):
+        try:
+            if any(str(r.get('Trade Number', '') or '').strip() == tn
+                   for r in _pc_load_rows(cat)):
+                achou += 1
+                _pc_delete_tn(cat, tn)
+        except Exception:                                   # noqa: BLE001
+            log.warning('[pending-confirmation] delete de %s em %s falhou:\n%s',
+                        tn, cat, traceback.format_exc())
+    return achou
+
+
 def _pc_insert_into(category, row):
     # INSERT com colunas explícitas: funciona também num DB ainda não migrado
     # (colunas legadas extras ficam NULL) — o VALUES posicional quebraria.

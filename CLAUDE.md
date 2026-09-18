@@ -1136,10 +1136,27 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   recomprado (`Valor Antecipado`), menos o recomprado agora. As três são
   COLUNAS da tela — corrigir a posição na grade tem de mudar o número do
   documento, e um saldo que só existe dentro do código não se confere. O
-  `Total × Parcial` sai do MESMO número (Total é ele zerar), senão o Termo diz
+  `Total × Parcial` sai do MESMO número (Total é ele zerar, e aí a coluna diz
+  **Zero** — não "Não Aplicável": o saldo é um valor, e "não se aplica" deixa o
+  leitor sem saber se ele acabou ou se ninguém o calculou), senão o Termo diz
   encerrado com saldo aberto na coluna ao lado. Sem posição nenhuma a conta
   ainda sai, pelo original, presumindo zero — e DIZENDO que presumiu: o
   documento é assinado.
+- **A esteira nasce e morre com a recompra.** Apagar a recompra tira a linha do
+  Pending Confirmation e da esteira (`esteira_sem_a_recompra`) — sem isso ficava
+  um card de Pending OTC de uma operação que não existe mais, com o Generate
+  respondendo "nenhuma operação encontrada no arquivo-dia" para sempre. **Mas
+  não por cima de carimbo**: linha com documento gerado, validação de qualquer
+  mesa, callback ou envio ao cliente é REGISTRO, e aí o Delete RECUSA
+  (`manual_conf.row_untouched`). Reimportar noutro dia move a `Data Operação`
+  da linha INTOCADA para o arquivo-dia novo (`esteira_data_da_operacao`): o
+  `_mc_save_from_deal` nunca sobrescreve linha existente — de propósito —, e
+  sem isso a linha seguia apontando para o dia em que a recompra não está mais.
+- **No card do Monitor o Termo diz o produto RECOMPRADO**
+  (`manual_conf.confirmation_label`, `TERMO DE RESILICAO NDF FX`): o TIPO é um
+  só para termo, opção e swap, e na fila três cards com o mesmo nome não dizem
+  qual operação cada um distrata. É rótulo de TELA — pasta, cadastro de
+  validação e Confirmation Type continuam no `confirmation_type`.
 - **O Termo também gera o XML do FepWeb** (mesa, 18/09/2026), ao lado do `.doc`
   e do `.pdf` e com o mesmo nome base, como toda confirmação da casa. `valor` é
   o liquidado em **reais** e `valorEstrangeiro` é ele dividido pela **taxa da
