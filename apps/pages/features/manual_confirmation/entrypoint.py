@@ -165,10 +165,22 @@ def api_mc_docs_batch():
             out.append([])
             continue
         trades = it.get('trades') or []
-        docs = _R()._mc_confirmation_docs({
-            'Cliente': it.get('cliente', ''), 'Produto': it.get('produto', ''),
-            'LOB': it.get('lob', ''), 'Moeda': it.get('ativo', ''),
-            'Data Operação': it.get('data', '')}, trades)
+        try:
+            docs = _R()._mc_confirmation_docs({
+                'Cliente': it.get('cliente', ''), 'Produto': it.get('produto', ''),
+                'LOB': it.get('lob', ''), 'Moeda': it.get('ativo', ''),
+                'Data Operação': it.get('data', '')}, trades)
+        except Exception:                                   # noqa: BLE001
+            # `null` é "não deu para olhar ESTE item", e a tela o distingue de
+            # uma lista vazia. Duas coisas dependem disto: um item que levanta
+            # não pode derrubar os outros sete da fatia, e a resposta não pode
+            # afirmar "não há documento" sobre uma pasta que não abriu — o
+            # Monitor troca o Validate por Generate justamente com base nisso.
+            _R().log.warning('[manual-conf] docs: %r × %r ficou sem resposta:\n%s',
+                             it.get('cliente', ''), it.get('produto', ''),
+                             traceback.format_exc())
+            out.append(None)
+            continue
         out.append(docs)
         assuntos.update(_R()._mc_sync_email_subjects(docs, trades))
     # UMA gravação para o lote inteiro: por item, cada uma releria os dois bancos
