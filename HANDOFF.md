@@ -21482,3 +21482,80 @@ MEUS que passavam sem conferir nada: escritos com a assinatura do outro
 arquivo (`check(label, got, exp)` em vez de `check(nome, cond, extra)`), eles
 liam a MENSAGEM do erro como condição — verdes com qualquer erro que fosse
 levantado. Os dois passaram a comparar a mensagem.
+
+## §492 — O cadastro de domínios da B3 entra no Save CETIP Files e atualiza a Dominio.json (2026-09-18)
+
+**O pedido da mesa.** Incluir o `CETIP_AAMMDD_CADASTROCURVASMOEDASFEEDERDOMINIOS.txt`
+(Arquivos Públicos da B3) na rotina, e fazer com ele o mesmo que já se faz com
+o `INDEXADORESSWAP_VCP`: atualizar a base de domínios com o conteúdo, **menos a
+coluna de Data Inclusão**.
+
+**O encaixe já existia.** A `Dominio.json` está no app desde sempre (4.060
+registros, servida por `/static/data/` e lida pelo Swap Characteristics), com
+exatamente as colunas do arquivo mais as três da mesa (`Classificação`,
+`MAKER`, `CHECKER`) e o `STATUS`. O gêmeo do VCP deu a forma: `dominio_update`
+no catálogo de comportamento, gancho no entrypoint depois de salvar,
+`_cetip_update_dominio_json` na infra.
+
+**A chave NÃO é o identificador — é o QUADRUPLO.** No VCP o
+`ID da Qualificação` é único; aqui não: o mesmo id vale para vários
+`Codigo TipoIF` (o IGP-M é o `104` em CCB, CCE, CCI, CRH, CRP, LCA, LCI, LIG,
+NC, NCE, NCR…), e ele **repete 202 vezes** na base. Chaveado só pelo id, o
+upsert reescreveria a linha de um instrumento com a descrição de outro, em
+silêncio. A chave é (grupo, subgrupo, tipo IF, identificador), normalizada.
+
+**E o identificador não vale o mesmo dos dois lados.** A base veio de planilha
+e guarda FLOAT (`14056.0`); o arquivo da B3 é texto (`14056`). Comparados como
+vêm, `'14056.0'` nunca é `'14056'`: **nada** casaria e a tabela inteira entraria
+de novo a cada rodada — quatro mil linhas duplicadas por dia, sem erro nenhum.
+O `_dominio_id` normaliza os dois para o inteiro.
+
+**O `upgrade` é o que faz isso chegar à instância.** O `seed` de um mapping só
+roda quando o ARQUIVO NÃO EXISTE (§6), e o `cetip-files.json` existe lá desde
+sempre: sem o `_cetip_files_upgrade`, a linha nova ficaria só no repositório e
+a rotina simplesmente não salvaria o arquivo — porque a regra VIVA de quais
+arquivos existem é o cadastro, não o código. O upgrade casa pelo nome entre
+PARÊNTESES do TYPE (o mesmo eixo do `_cetip_behaviour_for`), então um rótulo
+reescrito na tela não vira linha duplicada.
+
+**Decisões do upsert**, todas iguais às do gêmeo do VCP salvo onde dito:
+
+- a `Data Inclusao` não entra — ela é do arquivo, não do domínio, e a base não
+  tem coluna para ela;
+- `Classificação`, `MAKER` e `CHECKER` da linha existente SOBREVIVEM: são da
+  mesa, não do arquivo. Só a descrição é atualizada;
+- linha nova nasce `STATUS: ACTIVE`, que é a única forma que a base conhece (os
+  4.060 registros são todos ACTIVE);
+- **linha da base ausente do arquivo fica INTACTA**, como no VCP. Vale dizer
+  que o arquivo é o registro COMPLETO de domínios, então um código que sai dele
+  é um código que foi baixado — se a mesa quiser que a ausência signifique
+  baixa, isso vira `STATUS: INACTIVE`, nunca um delete, e é decisão dela;
+- a chave aponta para uma LISTA de linhas: a base traz linhas exatamente iguais
+  repetidas (seis cópias de FEIJO DE CORDA, de um import antigo), e atualizar só
+  a primeira deixaria as outras velhas ao lado dela.
+
+**Leitura em cp1252, não latin-1.** Os dois só diferem na faixa `0x80-0x9F`,
+que é justamente onde moram o travessão e as aspas curvas que aparecem em
+descrição de domínio; em latin-1 eles viram caracteres de controle invisíveis —
+o texto "parece" certo e leva sujeira que só aparece no arquivo que sair depois
+(§480). O gêmeo do VCP segue em latin-1 e não foi tocado.
+
+**A prova real.** Uma ida e volta sobre a base de produção (o arquivo
+reconstruído a partir dos próprios 4.060 registros, que é o pior caso): **zero**
+linhas novas. As dez descrições que mudaram são melhorias e estão no teste —
+cinco perderam o espaço de preenchimento que a B3 põe (`'     COM E REVENDAS
+PROD. AGRICOLAS'`) e cinco eram números que o Excel tinha coagido (`0.95`,
+`15565`) e voltaram a ser texto, que é o que a coluna de DESCRIÇÃO é.
+
+**E ele vai ANEXO no e-mail** (pedido da mesa). O e-mail de STAGE 1 — o
+`CETIP Files Saved`, que sai junto com a rotina para o Brazil OTC Ops — nunca
+levou anexo: os quatro `attach_*` que existiam eram todos do stage 2 (Sales
+Support, CEM Latam, BACC recortado, HUB inteiro). O `attach_ops` é o primeiro,
+e o caminho anexado é o do arquivo JÁ SALVO no destino, nunca o da origem: é o
+que foi salvo que se confere, e a origem some no dia seguinte. O arquivo já
+aparecia na TABELA do e-mail desde a primeira linha do cadastro — ela é montada
+da lista de salvos —, então o que mudou foi só o anexo e a frase que o anuncia.
+
+Rede: `check_cetip_dominio.py` (novo, 11 seções, com a rotina inteira rodando
+num tmp e o envio interceptado), `check_cetip_bacc`, `check_soc_layers`,
+`check_duck_writers`.

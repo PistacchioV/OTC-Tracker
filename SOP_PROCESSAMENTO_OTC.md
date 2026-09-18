@@ -141,7 +141,7 @@ Hub das rotinas operacionais diárias, dividido em **cinco seções** — e o qu
 
 | Seção | Rotinas |
 |---|---|
-| **Intraday Routines** | Save CETIP Files (lê os arquivos brutos da B3, renomeia no padrão e salva nas pastas de liquidação) · Deals Monitor — Pending Action · Confirmations Escalation |
+| **Intraday Routines** | Save CETIP Files (lê os arquivos brutos da B3, renomeia no padrão e salva nas pastas de liquidação; o `INDEXADORESSWAP_VCP` e o `CADASTROCURVASMOEDASFEEDERDOMINIOS` também atualizam as bases de indexadores e de domínios, e o de domínios vai anexo no e-mail) · Deals Monitor — Pending Action · Confirmations Escalation |
 | **Settlement Reporting** | Save Daily Settlement Files (dropzone que processa todos os arquivos do dia em JSON) · Settlement Forecast (projeta as liquidações dos próximos dias úteis e envia por e-mail) |
 | **Pending Confirmation Routines** | Daily Metric — Outstanding Confirmation Brazil OTC · Pending Confirmations Spreadsheet Metrics · Pending Confirmation — Weekly Escalation (CEM/EDG) · Pending Signature Confirmations — Collection |
 | **Economic Affirmation Routines** | Manual Deals EA · BACC EA Metrics · MT300 |
