@@ -1244,7 +1244,15 @@ class _WordHtmlToFlowables(HTMLParser):
         s = s.replace('\n', ' ')
         while '  ' in s:
             s = s.replace('  ', ' ')
-        s = s.strip()
+        # O `.strip()` sem argumento levava o `\xa0` junto — e num documento do
+        # Word o `&nbsp;` do INÍCIO do parágrafo não é sobra de formatação do
+        # HTML: é o recuo da linha (o `mso-tab-count`, que o Word relê como
+        # tabulação). Removê-lo encostava na margem, só no PDF, toda linha cujo
+        # recuo vinha de tabulação — o `CNPJ/ME:` das partes nasceu embaixo do
+        # `Parte A:` em vez de embaixo do NOME, enquanto o `.doc` ao lado saía
+        # certo. Espaço ASCII continua caindo: esse sim é quebra de linha e
+        # indentação do fonte HTML.
+        s = s.strip(' \t\r\n')
         return '' if not re.sub(r'<[^>]*>|&nbsp;|\s|\xa0', '', s) else s
 
     def _style(self, name):
