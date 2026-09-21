@@ -53,6 +53,10 @@ SWB_COLUMNS = (
     ('MaturityDate', 'Maturity Date'),
     ('Currency', 'Currency'),
     ('Notional', 'Notional'),
+    # O Deal Ticket da CEM (mesa, 21/09/2026) traz o valor base nas DUAS moedas
+    # e a paridade do início; o da EDG não — ali as duas ficam em branco.
+    ('FXStart', 'FX Start'),
+    ('NotionalFC', 'Notional (Foreign Ccy)'),
     ('Adhesion', 'Adhesion'),
     ('Functionality', 'Functionality'),
     ('PremiumSchedule', 'Premium Schedule'),
@@ -60,6 +64,9 @@ SWB_COLUMNS = (
     ('PremiumPayer', 'Premium Payer'),
     ('PremiumAmount', 'Premium Amount'),
     ('Reset', 'Reset'),
+    ('NotionalIndex', 'Notional Update Index'),
+    ('NotionalObsDate', 'Notional Observation Date'),
+    ('NotionalDescription', 'Notional Update Description'),
     ('VcpHolder', 'VCP Holder'),
     ('VanillaHolder', 'Vanilla Holder'),
     ('CurveACategory', 'Curve A Category'),
@@ -69,6 +76,9 @@ SWB_COLUMNS = (
     ('CurveARate', 'Curve A Rate'),
     ('CurveACap', 'Curve A Cap'),
     ('CurveAFloor', 'Curve A Floor'),
+    ('CurveAQuote', 'Curve A Quote'),
+    ('CurveADCC', 'Curve A DCC'),
+    ('CurveACleanCoupon', 'Curve A Clean Coupon'),
     ('CurveBCategory', 'Curve B Category'),
     ('CurveBPct', 'Curve B Pct'),
     ('CurveB', 'Curve B'),
@@ -76,6 +86,9 @@ SWB_COLUMNS = (
     ('CurveBRate', 'Curve B Rate'),
     ('CurveBCap', 'Curve B Cap'),
     ('CurveBFloor', 'Curve B Floor'),
+    ('CurveBQuote', 'Curve B Quote'),
+    ('CurveBDCC', 'Curve B DCC'),
+    ('CurveBCleanCoupon', 'Curve B Clean Coupon'),
     ('VcpCurve', 'VCP Curve'),
     ('VcpCode', 'VCP Code'),
     ('VcpCategory', 'VCP Category'),
@@ -88,12 +101,13 @@ SWB_COLUMNS = (
     ('Denomination2', 'Denomination 2'),
     ('Denomination3', 'Denomination 3'),
     ('VcpText', 'VCP Text'),
+    ('Observations', 'Observations'),
     ('Maker', 'Maker'),
     ('Checker', 'Checker'),
 )
 SWB_FIELDS = tuple(k for k, _ in SWB_COLUMNS)
 SWB_LABELS = tuple(lbl for _, lbl in SWB_COLUMNS)
-SWB_DATE_FIELDS = ('StartDate', 'MaturityDate', 'PremiumDate', 'QuoteDate')
+SWB_DATE_FIELDS = ('StartDate', 'MaturityDate', 'PremiumDate', 'QuoteDate', 'NotionalObsDate')
 
 # Os literais que a página reconhece como "a nossa perna" no DT (Ativo VCP /
 # Ativo Curva Vanilla / Pagador do Prêmio). Cego a caixa e acento.

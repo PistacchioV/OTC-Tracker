@@ -17,6 +17,7 @@ from flask import jsonify, request, session
 
 from apps.pages import blueprint
 from apps.pages import data_store as _store  # noqa: E402
+from apps.pages.features.new_deals import catalog
 
 
 def _R():
@@ -2556,3 +2557,58 @@ def api_generic_nd_mapping_b3(product):
                              'B3 Mapped', cfg['label'],
                              str(len(results)) + ' deal' + ('' if len(results) == 1 else 's') + ' mapped')
     return jsonify({'ok': True, 'results': results})
+
+
+# ── As páginas de New Deals que saem do CATÁLOGO (uma tela só) ───────────────
+# Rota ESTÁTICA por página: o catch-all `/<template>` renderizaria o template
+# sem a variável `page`. Página nova no catálogo = um decorador a mais aqui
+# (o `check_new_deals_catalog.py` cobra os dois lados).
+@blueprint.route('/new_deals-swap-cashflow')
+@blueprint.route('/new_deals-opt-edg')
+def new_deals_product():
+    from flask import redirect, render_template, url_for
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    pagina = catalog.page(request.path)
+    if pagina is None:
+        return render_template('pages/error-404.html'), 404
+    pagina = dict(pagina, selects=dict(pagina['selects']))
+    # Select que é CADASTRO sai da tela /mapping (o LABEL de cada linha), e o
+    # que foi editado lá vale no request seguinte — nunca uma lista no código.
+    for campo, chave in (pagina.get('selects_from_mapping') or {}).items():
+        try:
+            linhas = _R()._mapping_rows(chave) or []
+        except Exception:                                   # noqa: BLE001
+            _R().log.warning('[new-deals] cadastro %s ilegivel para o select %s', chave, campo,
+                             exc_info=True)
+            linhas = []
+        pagina['selects'][campo] = [str(l.get('LABEL') or '').strip() for l in linhas
+                                    if str(l.get('LABEL') or '').strip()]
+    return render_template('pages/new_deals-product.html', segment=pagina['slug'], page=pagina)
+
+
+# Prefixo ESTÁTICO por página, e não `/api/new-deals/<path:sub>`: as rotas
+# genéricas `/api/new-deals/<product>/cache/search` e `.../send-conecta` (NDF
+# Vanilla/FWD Start/Other Publisher) casariam o slug do catálogo como
+# `product` e responderiam "Unknown product" — o segmento estático vence o
+# variável, o `<path>` não.
+@blueprint.route('/api/new-deals/swap-cashflow', methods=['GET', 'POST'])
+@blueprint.route('/api/new-deals/swap-cashflow/<path:resto>', methods=['GET', 'POST'])
+@blueprint.route('/api/new-deals/opt-edg', methods=['GET', 'POST'])
+@blueprint.route('/api/new-deals/opt-edg/<path:resto>', methods=['GET', 'POST'])
+def api_new_deals_product(resto=''):
+    """O servidor das páginas do catálogo ainda NÃO existe. A carga da grade
+    (`cache/search`) devolve vazio com o contrato; toda outra ação responde
+    501 com CÓDIGO (§486) — sem isto a tela leria a página 404 em HTML e
+    mostraria `Unexpected token '<'`. Quando o backend de um produto nascer,
+    as rotas dele substituem as duas linhas do produto aqui."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    pagina = catalog.page_by_api(request.path[len('/api/new-deals/'):])
+    if pagina is None:
+        return jsonify({'success': False, 'message': 'Not found'}), 404
+    if resto in ('', 'cache/search'):
+        return jsonify({'success': True, 'deals': [], 'entries': [], 'backend': False,
+                        'fields': catalog.fields(pagina), 'labels': catalog.labels(pagina)})
+    return jsonify({'success': False, 'code': 'nd_backend_pending',
+                    'message': 'This action is not available yet for this product'}), 501

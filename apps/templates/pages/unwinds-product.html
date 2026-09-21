@@ -1,0 +1,806 @@
+{% extends "layouts/vertical.html" %}
+
+{# A tela de TODA recompra que não é a da Fase 1 (`unwinds-ndf-fx.html`): o
+   contrato — título, colunas, API, arquivo da B3 — vem do catálogo
+   (`features/unwinds/catalog.py`) na variável `page`. Página nova é uma
+   entrada lá, não uma cópia deste arquivo. #}
+{% block title %}{{ page.title }}{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/dropzone/dropzone.css" rel="stylesheet" type="text/css"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
+<style>
+  @keyframes ti-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+  i.ti-spin, .ti-spin, i.ti-loader-2 { display: inline-block !important; animation: ti-spin 0.8s linear infinite !important; }
+
+  .badge.badge-sent { background-color: #17a2b8 !important; color: #fff !important; }
+
+  /* ── Dropzone — o MESMO bloco das páginas de New Deals ─────────────────── */
+  #myAwesomeDropzone.dropzone { max-width: 100% !important; margin-left: 0 !important; margin-right: 0 !important; }
+  #myAwesomeDropzone.dropzone { min-height: 0 !important; height: auto !important; padding: 4px 12px !important; }
+  #myAwesomeDropzone.dropzone .dz-message { margin: 0 !important; padding: 4px 0 !important; }
+  #myAwesomeDropzone.dropzone .dz-message .avatar-lg { height: 24px !important; width: 24px !important; margin-bottom: 2px !important; }
+  #myAwesomeDropzone.dropzone .dz-message .avatar-title { height: 24px !important; width: 24px !important; }
+  #myAwesomeDropzone.dropzone .dz-message .avatar-title i { font-size: 14px !important; }
+  #myAwesomeDropzone.dropzone .dz-message h4 { font-size: .82rem !important; margin-bottom: 1px !important; }
+  #myAwesomeDropzone.dropzone .dz-message p { font-size: .72rem !important; margin-bottom: 3px !important; }
+  #myAwesomeDropzone.dropzone .dz-message .btn { padding: 3px 10px !important; font-size: .74rem !important; }
+  #myAwesomeDropzone.dropzone { transition: border-color 180ms ease-out, background 180ms ease-out; }
+  #myAwesomeDropzone.dropzone:hover, #myAwesomeDropzone.dropzone.dz-drag-hover { border-color: #0066cc !important; background: rgba(0, 102, 204, 0.025) !important; }
+  .nd-upload-icon { background: rgba(0, 102, 204, 0.12) !important; color: #0066cc !important; }
+  .nd-deal-card { border-left: 3px solid #0066cc !important; }
+
+  div.dt-button-collection { opacity: 1 !important; background-color: var(--ins-dropdown-bg, var(--ins-secondary-bg, #fff)) !important; border: var(--ins-border-width, 1px) solid var(--ins-border-color, rgba(0,0,0,.1)) !important; border-radius: var(--ins-dropdown-border-radius, 0.6875rem) !important; box-shadow: 0 8px 24px rgba(0,0,0,.12) !important; }
+  div.dt-button-collection .dropdown-item { opacity: 1 !important; color: var(--ins-dropdown-link-color, var(--ins-body-color)) !important; }
+
+  .card-body { padding: 5px; }
+  .dt-scroll-head, .dataTables_scrollHead { padding-top: 8px; }
+  .dt-scroll-body thead, .dataTables_scrollBody thead { display: none !important; }
+  .dt-scroll-headInner table, .dataTables_scrollHeadInner table,
+  .dt-scroll-body > table, .dataTables_scrollBody > table { table-layout: fixed !important; }
+  /* Centralizada (§7): th .7rem, td .8rem; o clone do header do scrollX perde
+     o id da tabela, por isso as mesmas regras com !important nos clones. */
+  #unw-table th { white-space: normal; padding: 8px 10px; overflow: hidden; text-overflow: ellipsis; text-align: center !important; vertical-align: middle !important; font-size: 0.7rem; }
+  .dt-scroll-head thead th, .dt-scroll-headInner thead th,
+  .dataTables_scrollHead thead th, .dataTables_scrollHeadInner thead th { white-space: normal !important; overflow: hidden; text-overflow: ellipsis; text-align: center !important; vertical-align: middle !important; font-size: 0.7rem !important; }
+  #unw-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8rem; text-align: center; vertical-align: middle; font-variant-numeric: tabular-nums; }
+  #unw-table th, #unw-table td,
+  #unw-table_wrapper .dt-scroll-head thead th, #unw-table_wrapper .dataTables_scrollHead thead th { width: 130px; min-width: 130px; }
+  #unw-table th:nth-child(1), #unw-table td:nth-child(1),
+  #unw-table_wrapper .dt-scroll-head thead th:nth-child(1), #unw-table_wrapper .dataTables_scrollHead thead th:nth-child(1) { width: 50px; min-width: 50px; }
+  /* Ações: QUATRO squircles de 32px com `gap-1` entre eles são 140px de
+     conteúdo, e a coluna tinha 110 com `overflow:hidden` — o último botão
+     saía cortado ao meio, sem erro nenhum e sem barra de rolagem que
+     denunciasse. A largura aqui é a dos botões mais o respiro do `td`. */
+  #unw-table th:nth-child(2), #unw-table td:nth-child(2),
+  #unw-table_wrapper .dt-scroll-head thead th:nth-child(2), #unw-table_wrapper .dataTables_scrollHead thead th:nth-child(2) { width: 165px; min-width: 165px; }
+  /* [3] é o Status — a primeira coluna de dado (§7). Depois vêm as de
+     IDENTIDADE (Deal ID, B3 ID, contraparte), na ordem fixa do `_HEAD` do
+     catálogo: é por ser fixa que a largura pode ser por posição. */
+  #unw-table th:nth-child(3), #unw-table td:nth-child(3),
+  #unw-table_wrapper .dt-scroll-head thead th:nth-child(3), #unw-table_wrapper .dataTables_scrollHead thead th:nth-child(3) { width: 110px; min-width: 110px; }
+  #unw-table th:nth-child(4), #unw-table td:nth-child(4),
+  #unw-table_wrapper .dt-scroll-head thead th:nth-child(4), #unw-table_wrapper .dataTables_scrollHead thead th:nth-child(4) { width: 160px; min-width: 160px; }
+  #unw-table th:nth-child(5), #unw-table td:nth-child(5),
+  #unw-table_wrapper .dt-scroll-head thead th:nth-child(5), #unw-table_wrapper .dataTables_scrollHead thead th:nth-child(5) { width: 125px; min-width: 125px; }
+  #unw-table th:nth-child(6), #unw-table td:nth-child(6),
+  #unw-table_wrapper .dt-scroll-head thead th:nth-child(6), #unw-table_wrapper .dataTables_scrollHead thead th:nth-child(6) { width: 230px; min-width: 230px; text-align: left; padding-left: 10px; }
+  /* O campo da edição inline não pode esticar a coluna. */
+  #unw-table td .unw-edit { min-width: 0; width: 100%; font-size: 0.78rem; text-align: center; }
+
+  /* Botões de ação: squircle 32×32 (a regra global vive no visual-refresh). */
+  #unw-table td .btn-sm.rounded-circle { width: 32px; height: 32px; padding: 0 !important; border-radius: 10px !important; display: inline-flex; align-items: center; justify-content: center; }
+  #unw-table td .btn-sm.rounded-circle i { font-size: 1rem; }
+
+  /* O aviso da linha: por que a recompra não pode ir para a B3. */
+  .unw-warn { color: #dc3545; cursor: help; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" data-content="">
+    <div class="page-title-head d-flex align-items-center">
+        <div class="flex-grow-1">
+            <h4 class="fs-xl fw-bold m-0 d-flex align-items-center gap-2">
+                <i class="ti ti-rotate-2" style="color:#0066cc;font-size:22px;flex-shrink:0;"></i>
+                <span data-lang="unwinds">Unwinds</span> — <span>{{ page.group }}{% if page.product %} {{ page.product }}{% endif %}</span>
+            </h4>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="javascript: void(0);" data-lang="unwinds">Unwinds</a></li>
+                {% if page.product %}
+                <li class="breadcrumb-item"><a href="javascript: void(0);"{% if page.group_lang %} data-lang="{{ page.group_lang }}"{% endif %}>{{ page.group }}</a></li>
+                <li class="breadcrumb-item active"{% if page.product_lang %} data-lang="{{ page.product_lang }}"{% endif %}>{{ page.product }}</li>
+                {% else %}
+                <li class="breadcrumb-item active"{% if page.group_lang %} data-lang="{{ page.group_lang }}"{% endif %}>{{ page.group }}</li>
+                {% endif %}
+            </ol>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card nd-deal-card">
+
+                <!-- ── Dropzone: o CORPO do e-mail, salvo como .htm/.html/.txt ── -->
+                <div class="card-body" style="padding: 10px;">
+                    <form action="/" class="dropzone" data-plugin="dropzone"
+                          data-previews-container="#file-previews"
+                          data-upload-preview-template="#uploadPreviewTemplate"
+                          id="myAwesomeDropzone" method="post">
+                        <div class="fallback"><input name="file" type="file"/></div>
+                        <div class="dz-message needsclick">
+                            <div class="avatar-lg mx-auto mb-3">
+                                <span class="avatar-title nd-upload-icon rounded-circle">
+                                    <i class="fs-24 ti ti-cloud-upload"></i>
+                                </span>
+                            </div>
+                            <h4 class="mb-2" data-lang="unw-dropzone-title-generic">Drop the unwind e-mail here, or click to upload.</h4>
+                            <p class="text-muted fst-italic mb-3" data-lang="unw-dropzone-hint-generic">Drag the e-mail straight from Outlook (.msg, .eml or .htm) and click Import.</p>
+                            <button class="btn btn-sm shadow btn-default" type="button" data-lang="nd-browse">Browse</button>
+                        </div>
+                    </form>
+                    <div class="dropzone-previews mt-3" id="file-previews"></div>
+                    <div class="d-none" id="uploadPreviewTemplate">
+                        <div class="card mt-1 mb-0 border-dashed border">
+                            <div class="p-2">
+                                <div class="row align-items-center">
+                                    <div class="col-auto">
+                                        <div class="avatar-sm rounded bg-light d-flex align-items-center justify-content-center">
+                                            <i class="file-icon fs-24 text-muted ti ti-file"></i>
+                                        </div>
+                                    </div>
+                                    <div class="col ps-0">
+                                        <a class="fw-semibold" data-dz-name="" href="javascript:void(0);"></a>
+                                        <p class="mb-0 text-muted" data-dz-size=""></p>
+                                    </div>
+                                    <div class="col-auto">
+                                        <a class="btn btn-link btn-lg text-danger" data-dz-remove="" href="">
+                                            <i class="ti ti-x"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="form-label mb-0" data-lang="b3-show">Show</label>
+                        <select class="form-select form-select-sm" style="width: 80px;" data-table-set-rows-per-page>
+                            <option value="50" selected>50</option>
+                            <option value="100">100</option>
+                            <option value="150">150</option>
+                            <option value="200">200</option>
+                        </select>
+                        <label class="form-label mb-0" data-lang="b3-entries">entries</label>
+                        {% if page.b3 %}<span class="text-muted fs-xs ms-auto d-none d-lg-inline"><span data-lang="unw-preview-hint-generic">Double-click a row to preview the B3 file</span> ({{ page.b3.label }} · {{ page.b3.length }})</span>{% endif %}
+                    </div>
+                </div>
+
+                <div class="card-body" style="padding-top: 10px;">
+                    <div>
+                        <table class="table table-striped dt-responsive align-middle mb-0" id="unw-table">
+                            <thead class="thead-sm text-uppercase fs-xxs">
+                                <tr class="text-uppercase fs-xxs" id="unwHead">
+                                    <th class="ps-3" style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" id="selectAll"></th>
+                                    <th data-lang="nd-col-actions">Actions</th>
+                                    <!-- as colunas da recompra entram por JS (PAGE.columns, do catálogo) -->
+                                </tr>
+                                <tr class="column-search-input-bar" id="column-search-inputs">
+                                    <th></th><th></th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.responsive.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.select.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/dropzone/dropzone-min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/otc-fileupload.js?v={{ asset_v('js/pages/otc-fileupload.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/file-preview.js?v={{ asset_v('js/file-preview.js') }}"></script>
+<script>
+// ── O contrato da página vem do CATÁLOGO (features/unwinds/catalog.py) ─────
+// Uma tela para todos os produtos: o que muda entre eles é só este objeto.
+var PAGE = {{ page|tojson }};
+var UNW_COLS = PAGE.columns;                        // [campo, rótulo, tipo]
+var UNW_FIELDS = UNW_COLS.map(function(c){ return c[0]; });
+var UNW_KIND = {};
+UNW_COLS.forEach(function(c){ UNW_KIND[c[0]] = c[2] || 'text'; });
+// [0]=checkbox [1]=actions [2..]=UNW_FIELDS [último]=a chave, ESCONDIDA. A
+// chave é o `_id` interno e não um id de sistema: NDF/Opção de Commodities e
+// FXO chegam sem identificador nenhum.
+var C_OFF = 2;
+var C_KEY = C_OFF + UNW_FIELDS.length;
+var ENTRIES = [], ROWS = {}, selected = new Set();
+
+// Os avisos do servidor chegam por CÓDIGO (§486): a tela é que diz a frase.
+var _TRANS = {
+    en: {
+        'unw_imported': 'Imported',
+        'unw_nothing_imported': 'Nothing imported',
+        'e_unwind_backend_pending': 'This product\'s server side is not available yet — the page is ready, the import and the B3 file come next',
+        'unw_nothing_to_import': 'Nothing to import',
+        'unw_drop_first': 'Drop the unwind e-mail in the box above first.',
+        'unw_nothing_sent': 'Nothing sent',
+        'unw_no_b3_file': 'Cannot build the B3 file',
+        'unw_not_saved': 'Not saved',
+        'unw_not_confirmed': 'Not confirmed',
+        'e_unwind_already_sent': 'This unwind was already sent to B3',
+        'e_unwind_not_found': 'Entry not found',
+        'e_unwind_only_pending': 'Only Pending unwinds can be confirmed',
+        'e_unwind_maker_is_checker': 'You edited this row — a different user must confirm it'
+    },
+    br: {
+        'unw_imported': 'Importado',
+        'unw_nothing_imported': 'Nada foi importado',
+        'e_unwind_backend_pending': 'O servidor deste produto ainda não existe — a tela está pronta, o import e o arquivo da B3 vêm em seguida',
+        'unw_nothing_to_import': 'Nada para importar',
+        'unw_drop_first': 'Solte primeiro o e-mail da recompra na caixa acima.',
+        'unw_nothing_sent': 'Nada foi enviado',
+        'unw_no_b3_file': 'Não foi possível montar o arquivo da B3',
+        'unw_not_saved': 'Não foi salvo',
+        'unw_not_confirmed': 'Não foi confirmado',
+        'e_unwind_already_sent': 'Esta recompra já foi enviada à B3',
+        'e_unwind_not_found': 'Linha não encontrada',
+        'e_unwind_only_pending': 'Só recompras Pending podem ser confirmadas',
+        'e_unwind_maker_is_checker': 'Você editou esta linha — quem confirma tem de ser outro usuário'
+    },
+    es: {
+        'unw_imported': 'Importado',
+        'unw_nothing_imported': 'No se importó nada',
+        'e_unwind_backend_pending': 'El servidor de este producto aún no existe — la pantalla está lista, la importación y el archivo de la B3 vienen después',
+        'unw_nothing_to_import': 'Nada para importar',
+        'unw_drop_first': 'Suelte primero el correo de la recompra en el cuadro de arriba.',
+        'unw_nothing_sent': 'No se envió nada',
+        'unw_no_b3_file': 'No se pudo generar el archivo de la B3',
+        'unw_not_saved': 'No se guardó',
+        'unw_not_confirmed': 'No se confirmó',
+        'e_unwind_already_sent': 'Esta recompra ya fue enviada a la B3',
+        'e_unwind_not_found': 'Línea no encontrada',
+        'e_unwind_only_pending': 'Solo las recompras Pending pueden confirmarse',
+        'e_unwind_maker_is_checker': 'Usted editó esta línea — quien confirma debe ser otro usuario'
+    }
+};
+function _lang() { try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) { return 'en'; } }
+function t(key, fallback) {
+    var l = _lang();
+    if (_TRANS[l] && _TRANS[l][key]) return _TRANS[l][key];
+    try {
+        var d = window.__OTC_TRANSLATIONS__ && window.__OTC_TRANSLATIONS__[l];
+        if (d && d[key]) return d[key];
+    } catch (e) {}
+    return fallback;
+}
+// O aviso do servidor é {code, params, text}: a tela diz pelo código e só cai
+// no `text` quando o código é novo aqui.
+// O erro do servidor também chega por código (§486): `e_<code>`, com o
+// `message` só de fallback para o código que esta tela ainda não conhece.
+function erroTexto(res, padrao) {
+    if (!res) return padrao || '';
+    return t('e_' + (res.code || ''), res.message || padrao || '');
+}
+function avisoTexto(a) {
+    if (!a) return '';
+    if (typeof a === 'string') return t('w_' + a, a);
+    return t('w_' + a.code, a.text || a.code || '');
+}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function _isoToDmy(s){var m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?(m[3]+'/'+m[2]+'/'+m[1]):String(s||'');}
+function _todayDmy(){var d=new Date();return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();}
+function fmtMoney(v){var n=parseFloat(String(v==null?'':v).replace(/[^\d.\-]/g,''));if(isNaN(n))return v==null?'':String(v);return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+// Os quatro estados da linha. `Pending` é amarelo porque é o único que PEDE
+// alguma coisa de alguém: uma edição esperando o segundo par de olhos.
+var STATUS_META = { 'Imported': { cls: 'bg-info text-white' }, 'Pending': { cls: 'bg-warning text-dark' },
+                    'Approved': { cls: 'bg-success text-white' }, 'Sent': { cls: 'badge-sent' } };
+function statusBadge(status) {
+    var txt = String(status == null ? '' : status).replace(/<[^>]*>/g, '').trim() || 'Imported';
+    var m = STATUS_META[txt] || STATUS_META['Imported'];
+    return '<span class="badge ' + m.cls + ' bg-gradient">' + esc(txt) + '</span>';
+}
+// O Check é o veredito de TRÊS estados do `conferir_apuracao` — não existe
+// "passou por omissão": '-' é "não deu para conferir", e não é verde.
+function checkBadge(v, warns) {
+    var txt = String(v || '-').trim();
+    var cls = txt === 'OK' ? 'text-bg-success' : (txt === 'NOK' ? 'text-bg-danger' : 'text-bg-secondary');
+    var tip = (warns || []).map(avisoTexto).filter(Boolean).join(' · ');
+    return '<span class="badge ' + cls + ' bg-gradient"' +
+        (tip ? ' data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="' + esc(tip) + '"' : '') +
+        '>' + esc(txt) + '</span>';
+}
+
+(function buildHead() {
+    var h = document.getElementById('unwHead'), f = document.getElementById('column-search-inputs');
+    UNW_COLS.forEach(function (c) {
+        var th = document.createElement('th');
+        // A chave sai do RÓTULO, não do campo: `OriginalNotional` é "Original
+        // Notional" num swap e "Original Quantity" numa opção.
+        th.setAttribute('data-lang', 'unw-col-' + c[1].toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
+        th.textContent = c[1];
+        h.appendChild(th);
+        var tf = document.createElement('th');
+        tf.innerHTML = '<input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="' + esc(c[1]) + '">';
+        f.appendChild(tf);
+    });
+    // A coluna da chave (escondida) precisa do seu <th> nas DUAS linhas: o
+    // DataTables conta as colunas pelo cabeçalho.
+    h.appendChild(document.createElement('th'));
+    f.appendChild(document.createElement('th'));
+})();
+
+$(document).ready(function () {
+    if (typeof JSZip !== 'undefined') {
+        window.JSZip = JSZip;
+        if ($.fn.dataTable && $.fn.dataTable.Buttons && typeof $.fn.dataTable.Buttons.jszip === 'function') $.fn.dataTable.Buttons.jszip(JSZip);
+    }
+    function fmtExport(data, row, col, node) {
+        if (node) { var inp = $(node).find('input[type!="checkbox"]'); if (inp.length) return inp.val() || ''; }
+        return (data == null ? '' : String(data)).replace(/<[^>]*>/g, '').trim();
+    }
+    function range(a, b) { var o = []; for (var i = a; i <= b; i++) o.push(i); return o; }
+    var EXPORT_COLS = range(C_OFF, C_OFF + UNW_FIELDS.length - 1);
+    var PAGINATE = { paginate: { first:'<i class="ti ti-chevrons-left"></i>', previous:'<i class="ti ti-chevron-left"></i>', next:'<i class="ti ti-chevron-right"></i>', last:'<i class="ti ti-chevrons-right"></i>' } };
+    // O nome do arquivo é o do DOCUMENTO: tela + data de referência (§7).
+    function exportName() { return PAGE.export_name + '-' + (refDateIso() || '').replace(/-/g, ''); }
+
+    var columnDefs = [{ orderable: false, targets: [0, 1] },
+                      { targets: C_KEY, visible: false, searchable: false }];
+    UNW_FIELDS.forEach(function (f, i) {
+        var target = i + C_OFF;
+        if (UNW_KIND[f] === 'date') columnDefs.push({ targets: target, render: function (d, type) { return type === 'display' ? _isoToDmy(d) : (d || ''); } });
+        if (UNW_KIND[f] === 'money') columnDefs.push({ targets: target, render: function (d, type) { return type === 'display' ? fmtMoney(d) : (d || ''); } });
+        if (f === 'Status') columnDefs.push({ targets: target, render: function (d, type) { return type === 'display' ? statusBadge(d) : (d || 'Imported'); } });
+        if (f === 'Check') columnDefs.push({ targets: target, render: function (d, type, row) { return type === 'display' ? checkBadge(d, (ROWS[row[C_KEY]] || {}).Warnings) : (d || ''); } });
+    });
+
+    var table = window.unwTable = $('#unw-table').DataTable({
+        responsive: false, scrollX: true, scrollY: '52vh', scrollCollapse: true, autoWidth: false, pageLength: 50,
+        orderCellsTop: true, order: [],
+        select: { style: 'os', items: 'cell', selector: 'td:not(:nth-child(1)):not(:nth-child(2))' },
+        columnDefs: columnDefs,
+        dom: "<'d-md-flex justify-content-between align-items-center my-2'" +
+            "<'btn-toolbar d-flex flex-wrap align-items-center'" +
+            "<'columnToggleWrapper me-2'>" +
+            "B" +
+            "<'refDateWrap ms-2 d-flex align-items-center'>" +
+            "<'importBtn ms-2 me-2'>" +
+            "<'clearFiltersBtn me-2'>" +
+            "<'conditionalActions ms-2 d-flex align-items-center gap-2'>" +
+            ">" +
+            "<'ms-auto'>" +
+            ">" +
+            "<'row'<'col-sm-12'tr>>" +
+            "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+        buttons: [{
+            extend: 'collection', text: '<i class="ti ti-download me-1"></i> Export',
+            className: 'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all', autoClose: true, fade: 0,
+            buttons: [
+                { extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', title: exportName, exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
+                { extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV', className:'dropdown-item', bom:true, fieldSeparator:';', title: exportName, exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
+                { extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', title: exportName, exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
+                { extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', title: exportName, exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
+                { extend:'pdf',   text:'<i class="ti ti-file-text me-1"></i> PDF', className:'dropdown-item', title: exportName, orientation:'landscape', pageSize:'A3', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} }
+            ]
+        }],
+        language: PAGINATE,
+        drawCallback: function () {
+            var api = this.api();
+            api.rows().every(function () {
+                var d = this.data(), id = d ? d[C_KEY] : null, node = this.node();
+                if (!node) return;
+                $(node).find('input[type="checkbox"]').prop('checked', !!(id && selected.has(id)));
+                var st = (ROWS[id] || {}).Status || 'Imported';
+                // `Pending` é o único que oferece o Confirm, e é o único que
+                // NÃO oferece o Send: edição sem segundo par de olhos não vai
+                // para a B3. Enviada não se edita nem se apaga.
+                $(node).find('.btn-row-approve').toggleClass('d-none', st !== 'Pending');
+                $(node).find('.btn-row-send').toggleClass('d-none', !(st === 'Imported' || st === 'Approved'));
+                $(node).find('.btn-row-edit').toggleClass('d-none', st === 'Sent');
+                $(node).find('.btn-row-delete').toggleClass('d-none', st === 'Sent');
+            });
+            syncSelectAll();
+            setTimeout(function () { api.columns.adjust(); }, 0);
+        },
+        initComplete: function () {
+            var api = this.api();
+
+            // Filtro por coluna delegado no CONTAINER (§462): com scrollX o
+            // cabeçalho é CLONADO e é no clone que a pessoa digita.
+            var $c = $(api.table().container());
+            $c.on('click', '.column-search-input-bar th, .column-search-input-bar th input', function (e) { e.stopPropagation(); });
+            $c.on('keyup input change', '.column-search-input-bar th input', function () {
+                var ci = $(this).closest('th').index();
+                if (api.column(ci).search() !== this.value) api.column(ci).search(this.value).draw();
+            });
+
+            var columnToggleWrapper = document.querySelector('.columnToggleWrapper');
+            if (columnToggleWrapper) {
+                var dd = document.createElement('div'); dd.className = 'dropdown';
+                dd.innerHTML = '<button class="btn btn-sm btn-soft-primary dropdown-toggle btn-toolbar-all" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside"><i class="ti ti-columns me-1"></i> Columns</button>' +
+                    '<ul class="dropdown-menu" id="columnToggleMenu" style="max-height:60vh;overflow-y:auto;">' +
+                    UNW_COLS.map(function (c, i) {
+                        return '<li class="dropdown-item"><div class="form-check">' +
+                            '<input class="form-check-input form-check-input-light fs-14 mt-0 toggle-vis" type="checkbox" data-column="' + (i + C_OFF) + '" id="colToggle' + i + '" checked>' +
+                            '<label class="form-check-label fw-medium" for="colToggle' + i + '">' + esc(c[1]) + '</label></div></li>';
+                    }).join('') + '</ul>';
+                columnToggleWrapper.appendChild(dd);
+                document.getElementById('columnToggleMenu').addEventListener('change', function (e) {
+                    if (e.target.classList.contains('toggle-vis')) api.column(parseInt(e.target.dataset.column, 10)).visible(e.target.checked);
+                });
+                (PAGE.hidden || []).forEach(function (f) {
+                    var i = UNW_FIELDS.indexOf(f);
+                    if (i >= 0) { api.column(i + C_OFF).visible(false); var cb = document.getElementById('colToggle' + i); if (cb) cb.checked = false; }
+                });
+            }
+
+            // ── Reference Date (o dia do arquivo-dia) ──────────────────────
+            var refDateWrap = document.querySelector('.refDateWrap');
+            if (refDateWrap && !document.getElementById('unwRefDate')) {
+                refDateWrap.innerHTML =
+                    '<label for="unwRefDate" class="form-label fs-xs text-muted mb-0 me-1 text-nowrap" data-lang="b3-reference-date">Reference Date</label>' +
+                    '<input type="text" id="unwRefDate" class="form-control form-control-sm otc-datefield" style="width:130px" value="' + _todayDmy() + '" placeholder="dd/mm/yyyy">';
+                var el = document.getElementById('unwRefDate');
+                if (el && typeof flatpickr !== 'undefined') flatpickr(el, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
+                if (el) el.addEventListener('change', load);
+            }
+
+            // ── Import: fila do dropzone ou, se ela estiver VAZIA, o box ──
+            // Um botão só, como no NDF/Opt Commodities: a varredura do box é a
+            // rota AUTOMÁTICA do mesmo Import, não uma ação à parte. Dois
+            // botões faziam a mesa escolher entre dois caminhos que levam ao
+            // mesmo lugar.
+            var importWrap = document.querySelector('.importBtn');
+            if (importWrap && !document.getElementById('importBtn')) {
+                var ib = document.createElement('button');
+                ib.id = 'importBtn'; ib.type = 'button';
+                ib.className = 'btn btn-sm btn-warning bg-gradient btn-toolbar-all btn-toolbar-import';
+                ib.setAttribute('data-bs-toggle', 'tooltip');
+                ib.setAttribute('data-bs-placement', 'bottom');
+                ib.setAttribute('data-bs-title', 'Process the e-mails in the dropzone');
+                ib.setAttribute('data-bs-custom-class', 'tooltip-teal');
+                ib.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
+                importWrap.appendChild(ib);
+                ib.addEventListener('click', runImport);
+                if (window.bootstrap && !bootstrap.Tooltip.getInstance(ib)) new bootstrap.Tooltip(ib, { trigger: 'hover' });
+            }
+
+            var clearWrap = document.querySelector('.clearFiltersBtn');
+            if (clearWrap && !document.getElementById('clearFiltersBtn')) {
+                var cb2 = document.createElement('button');
+                cb2.id = 'clearFiltersBtn'; cb2.type = 'button';
+                cb2.className = 'btn btn-sm btn-outline-secondary btn-toolbar-all';
+                cb2.innerHTML = '<i class="ti ti-filter-off me-1"></i><span data-lang="btn-clear-filters">Clear Filters</span>';
+                clearWrap.appendChild(cb2);
+                cb2.addEventListener('click', function () {
+                    // As DUAS cópias do cabeçalho (original e clone do scrollX).
+                    $(api.table().container()).find('.column-search-input-bar th input').val('');
+                    api.columns().search('').draw();
+                });
+            }
+
+            var actions = document.querySelector('.conditionalActions');
+            if (actions) {
+                actions.innerHTML =
+                    (PAGE.b3 ? '<button class="btn btn-sm btn-soft-info btn-toolbar-all d-none" id="btnPreview" type="button" data-table-preview-selected><i class="ti ti-eye me-1"></i><span data-lang="unw-btn-preview">Preview</span></button>' : '') +
+                    '<button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all d-none" id="btnSend" type="button" data-table-send-selected><i class="ti ti-brand-telegram me-1"></i> Send</button>' +
+                    '<button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="btnDel" type="button" data-table-delete-selected><i class="ti ti-trash me-1"></i> Delete</button>';
+                if (PAGE.b3) document.getElementById('btnPreview').addEventListener('click', function () { var ids = Array.from(selected); if (ids.length) previewRow(ids[0]); });
+                document.getElementById('btnSend').addEventListener('click', function () { sendRows(Array.from(selected)); });
+                document.getElementById('btnDel').addEventListener('click', function () { deleteRows(Array.from(selected)); });
+            }
+
+            setTimeout(function () { api.columns.adjust(); }, 150);
+            load();
+        }
+    });
+    $(window).on('resize', function () { table.columns.adjust(); });
+
+    function refDateIso() {
+        var el = document.getElementById('unwRefDate');
+        var v = (el && el.value) || '';
+        var m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        return m ? (m[3] + '-' + m[2] + '-' + m[1]) : v;
+    }
+
+    // Os QUATRO botões padrão da casa, na ordem do §7: Confirm, Edit, Delete,
+    // Send. O olho e o documento saíram daqui — o preview é o DUPLO CLIQUE na
+    // linha (o texto acima da grade diz isso) e o Termo de Resilição se gera
+    // no Confirmations Monitor, que é onde vivem os documentos da esteira.
+    function _actionsCell() {
+        return '<div class="d-flex justify-content-center gap-1">' +
+            '<a class="btn btn-success btn-sm rounded-circle btn-row-approve d-none" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Confirm" data-bs-custom-class="tooltip-success"><i class="ti ti-check"></i></a>' +
+            '<a class="btn btn-info btn-sm rounded-circle btn-row-edit" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Edit" data-bs-custom-class="tooltip-info"><i class="ti ti-edit"></i></a>' +
+            '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Delete" data-bs-custom-class="tooltip-danger"><i class="ti ti-trash"></i></a>' +
+            '<a class="btn btn-primary btn-sm rounded-circle btn-row-send" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Send" data-bs-custom-class="tooltip-primary"><i class="ti ti-brand-telegram"></i></a></div>';
+    }
+    function _editCell() {
+        return '<div class="d-flex justify-content-center gap-1">' +
+            '<a class="btn btn-success btn-sm rounded-circle btn-row-save" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Save" data-bs-custom-class="tooltip-success"><i class="ti ti-device-floppy"></i></a>' +
+            '<a class="btn btn-secondary btn-sm rounded-circle btn-row-cancel" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Cancel" data-bs-custom-class="tooltip-secondary"><i class="ti ti-x"></i></a></div>';
+    }
+    // Tooltip colorido no primeiro hover (os <td> são reescritos a cada redraw).
+    $('#unw-table tbody').on('mouseenter', '[data-bs-toggle="tooltip"]', function () {
+        if (window.bootstrap && !bootstrap.Tooltip.getInstance(this)) new bootstrap.Tooltip(this).show();
+    });
+
+    function rowOf(e) {
+        var row = ['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">', _actionsCell()];
+        UNW_FIELDS.forEach(function (f) { row.push(e[f] != null ? String(e[f]) : ''); });
+        row.push(String(e[PAGE.key]));
+        return row;
+    }
+    function renderAll() {
+        table.clear(); ROWS = {};
+        ENTRIES.forEach(function (e) {
+            if (!e || !e[PAGE.key]) return;
+            ROWS[e[PAGE.key]] = e;
+            table.row.add(rowOf(e));
+        });
+        table.draw(false);
+        setTimeout(function () { table.columns.adjust(); }, 100);
+    }
+
+    function load() {
+        selected.clear();
+        fetch(PAGE.api + '?date=' + encodeURIComponent(refDateIso()), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.success) { ENTRIES = []; renderAll(); return; }
+                ENTRIES = res.entries || [];
+                renderAll();
+            })
+            .catch(function () { ENTRIES = []; renderAll(); });
+    }
+    window.unwReload = load;
+
+    // ── Import: a fila do dropzone; vazia, a varredura do box ─────────────
+    function runImport() {
+        var btn = document.getElementById('importBtn');
+        var dz = window.myDropzone || ((typeof Dropzone !== 'undefined') ? Dropzone.forElement('#myAwesomeDropzone') : null);
+        // `.msg`, `.eml` e o corpo salvo como `.htm` — os mesmos formatos das
+        // páginas de New Deals. Quem decide de fato é o CONTEÚDO, no servidor
+        // (`infra/email_file.py`): a extensão aqui só evita mandar um .xlsx.
+        var files = (dz && dz.files) ? dz.files.filter(function (f) { return /\.(msg|eml|html?|txt)$/i.test(f.name); }) : [];
+        // Sem arquivo não há o que importar: a varredura do box é da Fase 1
+        // (o aviso do Athena). Estes produtos chegam por e-mail avulso, e a
+        // regra de qual e-mail é de quem ainda não existe.
+        if (!files.length) {
+            Swal.fire({ icon: 'info', title: t('unw_nothing_to_import', 'Nothing to import'),
+                        text: t('unw_drop_first', 'Drop the unwind e-mail in the box above first.'), confirmButtonColor: '#0066cc' });
+            return;
+        }
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i> Importing...';
+        function _restore() { btn.disabled = false; btn.innerHTML = '<i class="ti ti-upload me-1"></i> Import'; }
+        var rows = [], warns = [], errors = [];
+        var chain = Promise.resolve();
+        files.forEach(function (f) {
+            chain = chain.then(function () {
+                var fd = new FormData();
+                fd.append('file', f);
+                fd.append('date', refDateIso());
+                return fetch(PAGE.api + '/import-file', { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (res) {
+                        if (!res || !res.success) { errors.push(f.name + ': ' + erroTexto(res, 'Import failed')); return; }
+                        rows = rows.concat(res.rows || []);
+                        warns = warns.concat(res.warnings || []);
+                    });
+            });
+        });
+        chain.then(function () {
+            _restore();
+            if (dz && rows.length) dz.removeAllFiles(true);
+            load();
+            reportImport(rows.length, warns, errors);
+        }).catch(function (e) { _restore(); Swal.fire({ icon: 'error', title: 'Error', text: String(e) }); });
+    }
+
+    // O resumo do import NÃO se resume a "deu certo": o que foi importado sem
+    // conseguir responder algum campo aparece aqui, porque é o que vai travar
+    // o envio à B3 depois.
+    function reportImport(n, warns, errors) {
+        var linhas = (warns || []).map(avisoTexto).filter(Boolean);
+        var uniq = linhas.filter(function (v, i) { return linhas.indexOf(v) === i; });
+        var extra = '';
+        if (uniq.length) extra += '<div class="text-start mt-2 fs-xs"><b>Check before sending:</b><ul class="mb-0 ps-3">' + uniq.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul></div>';
+        if ((errors || []).length) extra += '<div class="text-start mt-2 fs-xs text-danger">' + esc(errors.join('; ')) + '</div>';
+        Swal.fire({
+            icon: (errors || []).length ? 'error' : (uniq.length ? 'warning' : 'success'),
+            // Zero linhas com erro NÃO é "Imported": o título diz o que aconteceu.
+            title: n ? t('unw_imported', 'Imported') : t('unw_nothing_imported', 'Nothing imported'), width: 640,
+            html: (n ? n + ' unwind' + (n === 1 ? '' : 's') + ' imported.' : '') + extra,
+            showConfirmButton: !!(uniq.length || (errors || []).length),
+            timer: (uniq.length || (errors || []).length) ? undefined : 2200
+        });
+    }
+
+    // ── Preview do arquivo da B3 (otcFilePreview, §480) ────────────────────
+    // Produto sem layout da B3 no catálogo (COE, DCE) não tem o que prever.
+    function previewRow(aid) {
+        var e = ROWS[aid]; if (!e || !PAGE.b3) return;
+        fetch(PAGE.api + '/preview?id=' + encodeURIComponent(aid) + '&date=' + encodeURIComponent(refDateIso()),
+              { credentials: 'same-origin' })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); })
+            .then(function (o) {
+                if (!o.ok || !o.data.success) {
+                    Swal.fire({ icon: 'warning', title: t('unw_no_b3_file', 'Cannot build the B3 file'), text: erroTexto(o.data, 'Preview failed'), confirmButtonColor: '#0066cc' });
+                    return;
+                }
+                otcFilePreview({
+                    title: 'B3 file preview — ' + PAGE.b3.label,
+                    subtitle: [e.DealID, e.Contract ? 'B3 ID ' + e.Contract : '', e.Counterparty || ''].filter(Boolean).join(' · '),
+                    files: (o.data.files || []).map(function (f) {
+                        return { label: 'Antecipação ' + PAGE.b3.label + ' · ' + f.view, file_name: f.file_name,
+                                 fields: f.fields, header: f.header, records: f.records };
+                    }), t: t
+                });
+            })
+            .catch(function (err) { Swal.fire({ icon: 'error', title: 'Error', text: 'Request failed: ' + err.message }); });
+    }
+    $('#unw-table tbody').on('dblclick', 'tr', function (e) {
+        if ($(e.target).closest('td').index() <= 1) return;
+        var d = table.row(this).data(); if (d) previewRow(d[C_KEY]);
+    });
+
+    function sendRows(ids) {
+        if (!ids.length) return;
+        Swal.fire({
+            icon: 'question', title: 'Send to B3?',
+            html: ids.length + ' unwind' + (ids.length === 1 ? '' : 's') + ' will be written to the Batch Conecta folder.',
+            showCancelButton: true, confirmButtonText: 'Send', confirmButtonColor: '#0066cc'
+        }).then(function (r) {
+            if (!r.isConfirmed) return;
+            fetch(PAGE.api + '/send-conecta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+                                                        body: JSON.stringify({ items: ids.map(function (a) { return { id: a }; }), date: refDateIso() }) })
+                .then(function (rr) { return rr.json(); })
+                .then(function (res) {
+                    if (!res || !res.success) { Swal.fire({ icon: 'error', title: t('unw_nothing_sent', 'Nothing sent'), text: erroTexto(res, 'Send failed'), width: 640 }); return; }
+                    if (window.fetchNotifications) window.fetchNotifications();
+                    load();
+                    Swal.fire({ icon: 'success', title: 'Sent',
+                                html: (res.files || []).map(function (f) { return esc(f.filename) + ' (' + f.count + ')'; }).join('<br>'), timer: 2600 });
+                })
+                .catch(function (e) { Swal.fire({ icon: 'error', title: 'Error', text: String(e) }); });
+        });
+    }
+
+    function deleteRows(ids) {
+        if (!ids.length) return;
+        Swal.fire({ icon: 'warning', title: 'Delete?', text: ids.length + ' row(s) will be removed from the day file.',
+                    showCancelButton: true, confirmButtonText: 'Delete', confirmButtonColor: '#dc3545' })
+            .then(function (r) {
+                if (!r.isConfirmed) return;
+                var chain = Promise.resolve(), errs = [];
+                ids.forEach(function (a) {
+                    chain = chain.then(function () {
+                        return fetch(PAGE.api + '/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+                                                                     body: JSON.stringify({ id: a, date: refDateIso() }) })
+                            .then(function (rr) { return rr.json(); })
+                            .then(function (res) { if (!res || !res.success) errs.push(erroTexto(res, 'failed')); });
+                    });
+                });
+                chain.then(function () {
+                    load();
+                    if (errs.length) Swal.fire({ icon: 'warning', title: 'Not everything was deleted', html: esc(errs.join('; ')) });
+                });
+            });
+    }
+
+    // ── Seleção ────────────────────────────────────────────────────────────
+    function toggleActionButtons(show) {
+        $('[data-table-preview-selected],[data-table-send-selected],[data-table-delete-selected]').toggleClass('d-none', !show);
+    }
+    function syncSelectAll() {
+        var total = Object.keys(ROWS).length, sel = selected.size;
+        $('#selectAll').each(function () {
+            if (sel === 0) { this.checked = false; this.indeterminate = false; }
+            else if (sel >= total) { this.checked = true; this.indeterminate = false; }
+            else { this.checked = false; this.indeterminate = true; }
+        });
+        toggleActionButtons(sel >= 1);
+    }
+    $('[data-table-set-rows-per-page]').on('change', function () { table.page.len(parseInt(this.value, 10)).draw(); });
+    // Delegado no container: o clone do cabeçalho do scrollX carrega o id.
+    $(table.table().container()).on('change', '#selectAll', function () {
+        var on = this.checked;
+        selected.clear();
+        if (on) Object.keys(ROWS).forEach(function (k) { selected.add(k); });
+        table.draw(false);
+    });
+    $('#unw-table tbody').on('change', 'input[type="checkbox"]', function () {
+        var d = table.row($(this).closest('tr')).data(); if (!d) return;
+        var id = d[C_KEY];
+        if (this.checked) selected.add(id); else selected.delete(id);
+        syncSelectAll();
+    });
+    $('#unw-table tbody').on('click', '.btn-row-send', function (e) {
+        e.preventDefault(); var d = table.row($(this).closest('tr')).data(); if (d) sendRows([d[C_KEY]]);
+    });
+    $('#unw-table tbody').on('click', '.btn-row-delete', function (e) {
+        e.preventDefault(); var d = table.row($(this).closest('tr')).data(); if (d) deleteRows([d[C_KEY]]);
+    });
+
+    // ── Edição inline (4 olhos) ────────────────────────────────────────────
+    // Salvar põe a linha em `Pending` e marca o maker; quem confere é OUTRO
+    // usuário, pelo Confirm. O Status e o Check ficam de FORA dos campos: um
+    // é o estado da esteira e o outro é veredito apurado — nenhum dos dois se
+    // digita.
+    var NAO_EDITA = { Status: 1, Check: 1 };
+    $('#unw-table tbody').on('click', '.btn-row-edit', function (e) {
+        e.preventDefault();
+        var tr = $(this).closest('tr'), d = table.row(tr).data();
+        if (!d) return;
+        var row = ROWS[d[C_KEY]] || {};
+        // A célula se acha pela API da tabela (`table.cell(linha, coluna)`), e
+        // NUNCA pelo índice do `<td>`: coluna escondida sai do DOM, e daí o
+        // i-ésimo `<td>` deixa de ser o i-ésimo campo. Esta tela nasce com
+        // Tax ID, Trade Date e Maturity Date ocultas — pelo índice do DOM, o
+        // que se digitasse em Ccy seria gravado no Tax ID, calado.
+        var ri = table.row(tr).index();
+        UNW_FIELDS.forEach(function (f, k) {
+            if (NAO_EDITA[f]) return;
+            var col = k + C_OFF;
+            if (!table.column(col).visible()) return;
+            var cel = table.cell(ri, col).node();
+            if (!cel) return;
+            $(cel).html('<input class="form-control form-control-sm unw-edit" data-f="' + f +
+                        '" value="' + esc(row[f] == null ? '' : row[f]) + '">');
+        });
+        tr.find('td').eq(1).html(_editCell());
+    });
+    $('#unw-table tbody').on('click', '.btn-row-cancel', function (e) { e.preventDefault(); load(); });
+    $('#unw-table tbody').on('click', '.btn-row-save', function (e) {
+        e.preventDefault();
+        var tr = $(this).closest('tr'), d = table.row(tr).data();
+        if (!d) return;
+        var fields = {};
+        tr.find('input.unw-edit').each(function () { fields[$(this).data('f')] = this.value; });
+        fetch(PAGE.api + '/edit', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                            credentials: 'same-origin',
+                                            body: JSON.stringify({ id: d[C_KEY], date: refDateIso(), fields: fields }) })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.success) {
+                    Swal.fire({ icon: 'error', title: t('unw_not_saved', 'Not saved'),
+                                text: erroTexto(res, 'Edit failed'), confirmButtonColor: '#0066cc' });
+                    return;
+                }
+                load();
+            })
+            .catch(function (err) { Swal.fire({ icon: 'error', title: 'Error', text: String(err) }); });
+    });
+    $('#unw-table tbody').on('click', '.btn-row-approve', function (e) {
+        e.preventDefault();
+        var d = table.row($(this).closest('tr')).data();
+        if (!d) return;
+        fetch(PAGE.api + '/approve', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                               credentials: 'same-origin',
+                                               body: JSON.stringify({ id: d[C_KEY], date: refDateIso() }) })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.success) {
+                    Swal.fire({ icon: 'warning', title: t('unw_not_confirmed', 'Not confirmed'),
+                                text: erroTexto(res, 'Confirm failed'), confirmButtonColor: '#0066cc' });
+                    return;
+                }
+                load();
+            })
+            .catch(function (err) { Swal.fire({ icon: 'error', title: 'Error', text: String(err) }); });
+    });
+
+    // Seleção de célula em TODA tabela (§7).
+    if (window.otcCellCopy) otcCellCopy('#unw-table', { skip: [0, 1] });
+});
+</script>
+{% endblock extra_javascript %}
