@@ -10,54 +10,14 @@ como 1.0 — sem o formato o parser leria 1%); inteiro sem `.0`.
 PDF: o texto de cada página (pypdf). O DT em PDF é o mesmo layout impresso,
 uma operação por página.
 """
-import datetime as _dt
-import io
+from apps.pages.platform import swap_new_deals as _sw
 
-
-def _cell_text(v, number_format=''):
-    if v is None:
-        return ''
-    if isinstance(v, bool):
-        return 'TRUE' if v else 'FALSE'
-    if isinstance(v, _dt.datetime):
-        return v.strftime('%Y-%m-%d')
-    if isinstance(v, _dt.date):
-        return v.strftime('%Y-%m-%d')
-    if isinstance(v, (int, float)):
-        f = float(v)
-        if f != f:
-            return ''
-        if '%' in str(number_format or ''):
-            return ('%.4f' % (f * 100)).rstrip('0').rstrip('.') + '%'
-        if f.is_integer() and abs(f) < 1e15:
-            return str(int(f))
-        return ('%.10f' % f).rstrip('0').rstrip('.')
-    return str(v)
-
-
-def sheets_from_xlsx(data):
-    """[(título, grade)] de todas as abas, células como texto."""
-    from openpyxl import load_workbook
-    wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
-    out = []
-    for ws in wb.worksheets:
-        grid = []
-        for row in ws.iter_rows():
-            grid.append([_cell_text(c.value, getattr(c, 'number_format', '')) for c in row])
-        out.append((ws.title, grid))
-    wb.close()
-    return out
-
-
-def pages_from_pdf(data):
-    """[texto] por página do PDF. Levanta ValueError se o pypdf não estiver
-    instalado ou o arquivo não for legível."""
-    try:
-        from pypdf import PdfReader
-    except ImportError as exc:                              # pragma: no cover
-        raise ValueError('pypdf is not installed (pip install pypdf)') from exc
-    reader = PdfReader(io.BytesIO(data))
-    return [(p.extract_text() or '') for p in reader.pages]
+# A leitura da grade e do PDF mora na horizontal desde 21/09/2026 (o Swap
+# Cashflow lê o mesmo Deal Ticket). O Bullet segue decidindo pela EXTENSÃO
+# (`read_upload` abaixo), como sempre fez.
+_cell_text = _sw.cell_text
+sheets_from_xlsx = _sw.sheets_from_xlsx
+pages_from_pdf = _sw.pages_from_pdf
 
 
 def read_upload(filename, data):

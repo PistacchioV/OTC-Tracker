@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 """Leituras do Swap Bullet: os deals do(s) arquivo(s)-dia, o finder por Deal,
 e os cadastros que o gerador consulta (contas B3, códigos, Reference Data)."""
-import os
-import re
 from datetime import datetime
 
 from apps.pages import data_store as _store
+from apps.pages.platform import swap_new_deals as _sw
 from apps.pages.features.swap_bullet.infra import persistence
 
 
@@ -80,71 +79,11 @@ def find(deal_id, trade_date=''):
 
 
 # ── Cadastros ────────────────────────────────────────────────────────────────
-
-def own_accounts():
-    """{LE: conta PRÓPRIA só dígitos} do `b3-accounts` — 'JPM': '73760009'."""
-    out = {}
-    for row in _R()._mapping_rows('b3-accounts'):
-        le = str(row.get('LE', '') or '').strip().upper()
-        if not le or _R()._b3_account_type(row.get('ACCOUNT TYPE', '')) != 'OWN':
-            continue
-        acc = re.sub(r'\D', '', str(row.get('ACCOUNT', '') or ''))
-        if acc and le not in out:
-            out[le] = acc
-    return out
-
-
-def omnibus_account(le='JPM', kind='CLIENT 2'):
-    """A conta guarda-chuva de clientes da LE (o omnibus)."""
-    for row in _R()._mapping_rows('b3-accounts'):
-        if str(row.get('LE', '') or '').strip().upper() != le:
-            continue
-        if _R()._b3_account_type(row.get('ACCOUNT TYPE', '')) == kind:
-            return re.sub(r'\D', '', str(row.get('ACCOUNT', '') or ''))
-    return ''
-
-
-def le_by_spn(spn):
-    """SPN de entidade NOSSA pelo cadastro `le-spn` → {LE, NAME, SPN} ou None."""
-    from apps.pages.features.swap_bullet import domain
-    return domain.le_for_spn(_R()._mapping_rows('le-spn'), spn)
-
-
-def refdata_by_spn(spn):
-    """O registro do Reference Data da SPN (ou {})."""
-    key = _R()._spn_key(spn)
-    if not key:
-        return {}
-    for rec in _R()._refdata_records():
-        if _R()._spn_key(rec.get('SPN', '')) == key:
-            return rec
-    return {}
-
-
-def codes_for(deal):
-    """Os códigos B3 dos campos cadastráveis do deal, pelos de-para do
-    /mapping. Vazio = lacuna (o preview mostra, o Send recusa)."""
-    from apps.pages.features.swap_bullet import domain
-    func_rows = _R()._mapping_rows('swap-funcionalidade')
-    code_rows = _R()._mapping_rows('swap-code-labels')
-    curve_rows = _R()._mapping_rows('swap-bullet-curve')
-    func_txt = str(deal.get('Functionality') or '').strip()
-    if domain.norm(func_txt) in ('', 'NA', 'N', 'NAO', 'NENHUMA', 'NONE', 'SEM'):
-        func_txt = 'SEM FUNCIONALIDADE'
-    codes = {
-        'functionality': domain.code_by_label(func_rows, func_txt),
-        'adhesion': domain.code_by_label(code_rows, deal.get('Adhesion', ''), field='Adesão'),
-        'premium_schedule': domain.code_by_label(code_rows, deal.get('PremiumSchedule', ''), field='Sim/Não'),
-        'reset': domain.code_by_label(code_rows, deal.get('Reset', ''), field='Sim/Não'),
-        'signA': domain.code_by_label(code_rows, deal.get('CurveASign', '+'), field='Sinal Taxa'),
-        'signB': domain.code_by_label(code_rows, deal.get('CurveBSign', '+'), field='Sinal Taxa'),
-        'curveA': domain.curve_code(curve_rows, deal.get('CurveA', ''), deal.get('CurveACategory', '')),
-        'curveB': domain.curve_code(curve_rows, deal.get('CurveB', ''), deal.get('CurveBCategory', '')),
-    }
-    return codes
-
-
-def template_blocks(key):
-    """Os blocos do template do File Interpreter (lista) — [] sem template."""
-    tpl = _R()._fi_tpl_cached(key)
-    return list((tpl or {}).get('blocks') or [])
+# Moram na horizontal `platform/swap_new_deals.py` desde 21/09/2026 (o Swap
+# Cashflow consulta os mesmos); aqui ficam os nomes de sempre.
+own_accounts = _sw.own_accounts
+omnibus_account = _sw.omnibus_account
+le_by_spn = _sw.le_by_spn
+refdata_by_spn = _sw.refdata_by_spn
+codes_for = _sw.codes_for
+template_blocks = _sw.template_blocks
