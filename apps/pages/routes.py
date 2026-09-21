@@ -3508,6 +3508,8 @@ _OPS_SWAP_JOIN_TOKENS = _pf_settle._OPS_SWAP_JOIN_TOKENS
 _ops_src_latest_path = _pf_settle._ops_src_latest_path
 _ops_settlement_counts = _pf_settle._ops_settlement_counts
 _OPS_TRADE_COLS = _pf_settle._OPS_TRADE_COLS
+_ops_settle_type_dates = _pf_settle._ops_settle_type_dates
+_ops_settle_type_join = _pf_settle._ops_settle_type_join
 _swadv_indexador = _pf_settle._swadv_indexador
 _ops_swap_pos_terms = _pf_settle._ops_swap_pos_terms
 _ops_swap_ir_rate = _pf_settle._ops_swap_ir_rate
@@ -3556,6 +3558,9 @@ _opb3_ev_key = _pf_opb3._opb3_ev_key
 _opb3_event_rules = _pf_opb3._opb3_event_rules
 _opb3_rule_hit = _pf_opb3._opb3_rule_hit
 _opb3_settle_ok = _pf_opb3._opb3_settle_ok
+_opb3_settle_type_rules = _pf_opb3._opb3_settle_type_rules
+_opb3_settle_type = _pf_opb3._opb3_settle_type
+_opb3_settle_types = _pf_opb3._opb3_settle_types
 _opb3_settle_rows = _pf_opb3._opb3_settle_rows
 _OPB3_COLUMNS = _pf_opb3._OPB3_COLUMNS
 _OPB3_DATE_COLS = _pf_opb3._OPB3_DATE_COLS
@@ -5816,6 +5821,15 @@ def _ndfadv_collect(ref, with_ir=True):
             'b3_id': titulo, 'internal_id': conf,
             'apurado': apurado, 'ir': ir, 'liquido': liq,
             'b3': sum(b3_vals) if b3_vals else None,
+            # O TIPO de liquidação (Maturity · Premium · Unwind), pelo cadastro
+            # `opb3-events`: é a coluna Settlement Type do Trade Level e o que a
+            # geração do aviso lê para dizer que liquidação é esta.
+            # Pela DATA na posição, como os cards do topo (o evento da B3 é o
+            # plano B — ver `_ops_settle_type_dates`).
+            'settle_type': _ops_settle_type_dates(ref, (
+                (_lcell(lrow, 'Data de Liquidacao do Premio'), 'Premium'),
+                (_lcell(lrow, 'Data de Vencimento'), 'Maturity')),
+                [x for x in opb3 if str(x.get('Título', '') or '').strip().upper() == titulo.upper()]),
         })
     # O imposto é do BALDE da contraparte no mês, então só dá para calculá-lo
     # com as linhas do dia todas na mão — por isso ele é um passe depois do
@@ -6326,6 +6340,11 @@ def _optadv_collect(ref, with_ir=True):
             'b3_id': titulo, 'internal_id': conf,
             'apurado': apurado, 'ir': ir, 'liquido': liq,
             'b3': sum(b3_vals) if b3_vals else None,
+            # Premium · Exercise · Unwind, pelo cadastro `opb3-events` (o mesmo
+            # campo do termo): o Trade Level mostra e o aviso lê.
+            'settle_type': _ops_settle_type_dates(ref, (
+                (_lcell(lrow, 'Data de Liquidação do Prêmio'), 'Premium'),
+                (_lcell(lrow, 'Data Vencimento'), 'Exercise')), mine),
         })
     # O IR é do NET por contraparte, então só dá para calculá-lo com as linhas do
     # dia todas na mão — por isso ele é um passe depois do laço, e não parte
@@ -9983,6 +10002,13 @@ def _summary_warm_start():
 _schedule_on_start('summary-warm', _summary_warm_start)
 
 
+# A célula TAX do Trade Level (`cells` é posicional e a tela o lê na ordem dos
+# <th>): LEGAL, COUNTERPARTY, SETTLEMENT TYPE, ATHENA ID, B3 ID, TRADE DATE,
+# SETTLEMENT DATE, NOTIONAL FC, CCY, FORWARD RATE, SETTLEMENT, SETTLEMENT B3,
+# FIXING RATE, TAX. Com nome: era um `12` solto, e a coluna nova o deslocou.
+_NDFSUM_TAX_CELL = 13
+
+
 def _ndfsum_collect(ref):
     ci = {c: i for i, c in enumerate(_NDFC_COLUMNS)}
     # Operations B3 settlement leg, já peneirado pelo cadastro `opb3-events` —
@@ -9990,6 +10016,13 @@ def _ndfsum_collect(ref):
     # entrava tanto no Settlement B3 da linha quanto nos cards de conciliação.
     ops = _opb3_settle_rows(ref)
     legs = _ndfsum_b3_legs(ops)
+    # Os eventos da B3 por Título: é deles que sai o SETTLEMENT TYPE da linha
+    # (Maturity · Premium · Unwind), pelo cadastro `opb3-events`.
+    ops_by_titulo = {}
+    for _o in (ops or []):
+        _t = str(_o.get('Título', '') or '').strip().upper()
+        if _t:
+            ops_by_titulo.setdefault(_t, []).append(_o)
 
     def _ter_date(v):
         d = _fcst_parse_date(v)
@@ -10043,8 +10076,23 @@ def _ndfsum_collect(ref):
         b3_n = _ndfc_valnum(raw_b3)
         diff = settle_n - b3_n if (settle_n is not None and b3_n is not None) else None
         ok = diff is not None and -_NDFSUM_TOL < diff < _NDFSUM_TOL
+        # Settlement Type (mesa, 21/09/2026), à direita da COUNTERPARTY. O
+        # evento da B3 daquele contrato VENCE quando existe (é por ele, pelo
+        # cadastro `opb3-events`, que um prêmio ou uma antecipação se dizem).
+        # Sem evento, a linha é **Maturity**: o universo do Cockpit é o
+        # `getTradesBySettle`, que é a liquidação do vencimento do termo — a
+        # recompra entra por outra porta, logo abaixo, e se diz Unwind.
+        #
+        # A primeira versão só respondia Maturity quando o vencimento da POSIÇÃO
+        # era a data da tela, e a célula saía vazia exatamente nas linhas em
+        # `Check`: é Check porque o resgate da B3 não casou, e sem ele a posição
+        # era a única fonte — que falha no contrato cujo vencimento na B3 é D+1
+        # da liquidação do Athena. A linha que mais precisa do tipo era a que
+        # ficava sem ele.
+        settle_type = _ops_settle_type_join(
+            (_opb3_settle_types(ops_by_titulo.get(b3.upper(), [])) if b3 else '').split(' \u00b7 ')) or 'MATURITY'
         trade.append({
-            'cells': [row[ci['LEGAL']], row[ci['NM_COUNTERPARTY']],
+            'cells': [row[ci['LEGAL']], row[ci['NM_COUNTERPARTY']], settle_type,
                       row[ci['ID_SOURCE_DEAL']], b3, trade_date, settle_date,
                       row[ci['VL_NOTIONAL_FC']], row[ci['CCY_NOTIONAL_FC']],
                       row[ci['VL_FORWARD_RATE']], row[ci['[PROD] Cockpit.SETTLEMENT']],
@@ -10094,7 +10142,9 @@ def _ndfsum_collect(ref):
     try:
         for u in (_unwind_engine().settlement_rows(ref) or []):
             trade.append({
-                'cells': [u['legal'], u['counterparty'], u['athena'], u['b3'],
+                # A recompra É o Settlement Type `Unwind`: quem o diz é a
+                # vertical (não há evento da B3 para perguntar ao cadastro).
+                'cells': [u['legal'], u['counterparty'], 'UNWIND', u['athena'], u['b3'],
                           u['trade_date'], u['settle_date'],
                           _swapchar_fmt_value('{:.2f}'.format(u['notional_fc'])),
                           u['ccy'], u['fixing'],
@@ -10145,7 +10195,7 @@ def _ndfsum_collect(ref):
             r['ir_waived'] = bool(res.get('due', 0.0) and not res.get('withheld', 0.0))
             idx = r.pop('_trade_idx', None)
             if idx is not None and 0 <= idx < len(trade):
-                trade[idx]['cells'][12] = _swapchar_fmt_value('{:.2f}'.format(r['tax'])) if r['tax'] else ''
+                trade[idx]['cells'][_NDFSUM_TAX_CELL] = _swapchar_fmt_value('{:.2f}'.format(r['tax'])) if r['tax'] else ''
 
     spn_by_name = _ndfsum_refdata_spn()
     cpd = _cpd_load()
@@ -11040,6 +11090,12 @@ _MAP_OPB3_STATUSES = [
     'PENDENTE DE CONFIRMACAO', 'PENDENTE DE AUTORIZACAO', 'REGISTRADA',
 ]
 _MAP_OPB3_USE = ['Consider', 'Disregard']
+# O TIPO DE LIQUIDAÇÃO que o evento da B3 representa (mesa, 21/09/2026): é a
+# coluna Settlement Type do Trade Level (Other Products e NDF Summary) e o que
+# a geração dos avisos vai ler. Domínio FECHADO — é vocabulário de tela e de
+# aviso, não texto livre. Swap: Cashflow · Maturity · Premium · Unwind; opção:
+# Premium · Exercise · Unwind; termo: Premium · Unwind · Maturity.
+_MAP_OPB3_SETTLE_TYPES = ['', 'Cashflow', 'Maturity', 'Premium', 'Exercise', 'Unwind']
 
 # As linhas com que o cadastro nasce. Todo Settlement Advice de Other Products
 # (Swap, NDF Commodities e Opção) pergunta a ELE quais eventos entram no aviso —
@@ -11050,27 +11106,27 @@ _MAP_OPB3_SEED = (
     # As três do swap, como estavam em `swap-b3-events`. RESGATE e RESGATE
     # ANTECIPADO ficam de fora de propósito: são vencimento/antecipação,
     # não pagamento de diferencial.
-    {'TIPO TITULO': 'SWAP', 'TIPO OPERACAO': 'PAGAMENTO DE DIF. AMORTIZACAO',
+    {'TIPO TITULO': 'SWAP', 'TIPO OPERACAO': 'PAGAMENTO DE DIF. AMORTIZACAO', 'SETTLEMENT TYPE': 'Cashflow',
      'STATUS B3': '', 'USE': 'Consider', 'NOTES': ''},
-    {'TIPO TITULO': 'SWAP', 'TIPO OPERACAO': 'PAGAMENTO DE DIF. DE JUROS',
+    {'TIPO TITULO': 'SWAP', 'TIPO OPERACAO': 'PAGAMENTO DE DIF. DE JUROS', 'SETTLEMENT TYPE': 'Cashflow',
      'STATUS B3': '', 'USE': 'Consider', 'NOTES': ''},
-    {'TIPO TITULO': 'SWAP', 'TIPO OPERACAO': 'PAGAMENTO DE PREMIO',
+    {'TIPO TITULO': 'SWAP', 'TIPO OPERACAO': 'PAGAMENTO DE PREMIO', 'SETTLEMENT TYPE': 'Premium',
      'STATUS B3': '', 'USE': 'Consider', 'NOTES': ''},
     # Termo de mercadoria e opção: o RESGATE é a liquidação — no termo, o
     # vencimento; na opção, o exercício. É o que o código fixava para o TER e o
     # que passa a valer para o OPC, agora cadastrável pelos dois.
-    {'TIPO TITULO': 'TER', 'TIPO OPERACAO': 'RESGATE', 'STATUS B3': '',
+    {'TIPO TITULO': 'TER', 'TIPO OPERACAO': 'RESGATE', 'SETTLEMENT TYPE': 'Maturity', 'STATUS B3': '',
      'USE': 'Consider', 'NOTES': 'Liquidação do termo de mercadoria'},
-    {'TIPO TITULO': 'OPC', 'TIPO OPERACAO': 'RESGATE', 'STATUS B3': '',
+    {'TIPO TITULO': 'OPC', 'TIPO OPERACAO': 'RESGATE', 'SETTLEMENT TYPE': 'Exercise', 'STATUS B3': '',
      'USE': 'Consider', 'NOTES': 'Liquidação/exercício da opção'},
     # O prêmio da opção é caixa do dia como qualquer outro, e o aviso o distingue
     # sozinho (assunto prefixado com "(Pagamento de Prêmio)"). No SWAP ele é um
     # Consider próprio pela mesma razão.
-    {'TIPO TITULO': 'OPC', 'TIPO OPERACAO': 'PAGAMENTO DE PREMIO', 'STATUS B3': '',
+    {'TIPO TITULO': 'OPC', 'TIPO OPERACAO': 'PAGAMENTO DE PREMIO', 'SETTLEMENT TYPE': 'Premium', 'STATUS B3': '',
      'USE': 'Consider', 'NOTES': 'Pagamento de prêmio da opção'},
     # A operação cancelada continua no arquivo da B3 com o valor cheio.
     # Somá-la é contar um caixa que não vai acontecer.
-    {'TIPO TITULO': '', 'TIPO OPERACAO': '', 'STATUS B3': 'CANCELADA: COMANDADA',
+    {'TIPO TITULO': '', 'TIPO OPERACAO': '', 'SETTLEMENT TYPE': '', 'STATUS B3': 'CANCELADA: COMANDADA',
      'USE': 'Disregard', 'NOTES': 'Cancelada na B3 — fora de toda liquidação'},
 )
 
@@ -12100,6 +12156,8 @@ _MAPPING_DEFS = {
              'type': 'datalist', 'options': _MAP_OPB3_STATUSES},
             {'key': 'USE', 'label': 'Consider / Disregard', 'type': 'select',
              'options': _MAP_OPB3_USE},
+            {'key': 'SETTLEMENT TYPE', 'label': 'Settlement Type', 'type': 'select',
+             'options': _MAP_OPB3_SETTLE_TYPES},
             {'key': 'NOTES', 'label': 'Notes'},
         ],
         'seed': list(_MAP_OPB3_SEED),

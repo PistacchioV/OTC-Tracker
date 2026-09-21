@@ -239,7 +239,7 @@ def _ops_settlement_counts(settle_ref, pos_ref):
 #  juros, prêmio). A linha é UMA só por Título — daí o dedup — mas o Settlement
 #  B3 soma TODAS as linhas daquele Título, inclusive as que o filtro descartou:
 #  o que se concilia é o caixa do dia, não o evento.
-_OPS_TRADE_COLS = ('lob', 'counterparty', 'internal_id', 'id_b3', 'product', 'type',
+_OPS_TRADE_COLS = ('lob', 'counterparty', 'settle_type', 'internal_id', 'id_b3', 'product', 'type',
                    'settlement', 'settlement_b3', 'tax_income', 'difference')
 
 def _swadv_indexador(cod, nome):
@@ -259,6 +259,81 @@ def _swadv_indexador(cod, nome):
     if routes._fcst_norm(nome_curva) == 'vcp':
         return str(nome or '').strip().upper()
     return nome_curva
+
+
+# ── Settlement Type: a MESMA leitura dos cards do topo ───────────────────────
+#  A primeira versão perguntava o tipo só ao EVENTO da B3 (cadastro
+#  `opb3-events`), e na instância ele saiu vazio em tudo que não era swap de
+#  equity — o evento chega depois, com a grafia do dia, e onde o Tipo Título
+#  não tem Consider próprio ele entra na liquidação sem regra nenhuma para dizer
+#  o tipo. Os cards do topo nunca tiveram esse problema porque contam pela DATA
+#  NA POSIÇÃO: vencimento, liquidação do prêmio, evento do DFLUXO, agenda de
+#  prêmios. O tipo sai da mesma leitura; o evento da B3 fica para o que data
+#  nenhuma diz (a antecipação → Unwind) e como plano B.
+def _ops_settle_type_join(tipos):
+    """Os tipos distintos, na ordem, em MAIÚSCULAS (mesa, 21/09/2026)."""
+    vistos = []
+    for t in tipos:
+        t = str(t or '').strip().upper()
+        if t and t not in vistos:
+            vistos.append(t)
+    return ' \u00b7 '.join(vistos)
+
+
+def _ops_settle_type_dates(settle_ref, pares, eventos=None):
+    """O Settlement Type de uma linha: `pares` = [(data da posição, tipo)] — o
+    tipo entra quando a data É a da liquidação. Sem data que responda, os
+    `eventos` da B3 daquele Título pelo cadastro `opb3-events`."""
+    from apps.pages import routes
+    ref_d = settle_ref.date() if hasattr(settle_ref, 'hour') else settle_ref
+    tipos = [tipo for valor, tipo in pares
+             if valor and routes._fcst_parse_date(str(valor)) == ref_d]
+    if not tipos and eventos:
+        return _ops_settle_type_join(routes._opb3_settle_types(eventos).split(' \u00b7 '))
+    return _ops_settle_type_join(tipos)
+
+
+@_req_cached
+def _ops_swap_event_contracts(settle_ref):
+    """{'flow': {contratos}, 'premium': {contratos}} — os contratos de swap com
+    evento de FLUXO (DFLUXO) e de PRÊMIO (DAGENDAPREMIOS) na data, lidos dos
+    MESMOS arquivos e pela MESMA coluna de data que o card de Swap conta
+    (`_FORECAST_SOURCES`). Fonte ausente = conjunto vazio, com aviso no log."""
+    from apps.pages import routes
+    out = {'flow': set(), 'premium': set()}
+    alvo = {'swap_flx': 'flow', 'swap_prm': 'premium'}
+    for src in routes._FORECAST_SOURCES:
+        balde = alvo.get(src['key'])
+        if not balde:
+            continue
+        path, _dref = _ops_src_latest_path(src)
+        if path is None:
+            continue
+        try:
+            from apps.pages import duck_read
+            rows = duck_read.day_records(path)
+        except Exception:                                   # noqa: BLE001
+            log.warning('[ops] settlement type: %s ilegivel', src['key'], exc_info=True)
+            continue
+        if not rows:
+            continue
+        keys = list(rows[0].keys())
+        date_key = routes._fcst_resolve_key(keys, src['date'])
+        if date_key is None and src.get('date_index') is not None and 0 <= src['date_index'] < len(keys):
+            date_key = keys[src['date_index']]
+        id_key = routes._fcst_resolve_key(
+            [k for k in keys if routes._fcst_norm(k) != 'tipo de contrato'],
+            ['codigo do contrato', 'código do contrato', 'codigo contrato', 'contrato'])
+        if date_key is None or id_key is None:
+            log.warning('[ops] settlement type: %s sem coluna de %s (%s)', src['key'],
+                        'data' if date_key is None else 'contrato', path)
+            continue
+        for row in rows:
+            if routes._fcst_parse_date(row.get(date_key, '')) == settle_ref:
+                cid = routes._fcst_norm_contract(row.get(id_key, '')).upper()
+                if cid:
+                    out[balde].add(cid)
+    return out
 
 
 @_req_cached
@@ -500,6 +575,7 @@ def _ops_swap_trade_rows(settle_ref):
     # Fontes auxiliares — lidas UMA vez cada, não por linha.
     tipo_maps = routes._opb3_tipo_maps(ref_dt)                       # Título → identificador (LOB)
     terms = _ops_swap_pos_terms(ref_dt)                       # Contrato → (dt op, dt venc)
+    ev_contracts = _ops_swap_event_contracts(settle_ref)      # fluxo / prêmio na data
 
     # Mesma coleta da página Swap Athena e do aviso, com o CounterParty já
     # resolvido pelo SPN — aqui ele é o ÚLTIMO recurso do nome (o Cpty SPN do OTM
@@ -601,6 +677,23 @@ def _ops_swap_trade_rows(settle_ref):
         tax = None if (rate is None or settlement is None) else abs(settlement) * rate
 
         diff = None if (settlement is None or settlement_b3 is None) else settlement - settlement_b3
+        # Settlement Type (mesa, 21/09/2026), pela leitura dos cards do topo: o
+        # contrato na agenda de prêmios do dia é PREMIUM; o que VENCE hoje na
+        # posição é MATURITY (na B3 o último fluxo chega como o mesmo pagamento
+        # de diferencial dos intermediários — quem o distingue é o vencimento);
+        # o que tem evento no DFLUXO e não vence hoje é CASHFLOW. Só quando
+        # nenhuma data responde é que fala o evento da B3 (a antecipação).
+        cid = routes._fcst_norm_contract(titulo).upper()
+        venc = (terms.get(cid) or {}).get('venc')
+        tipos = []
+        if cid in ev_contracts['premium']:
+            tipos.append('Premium')
+        if venc and venc == settle_ref:
+            tipos.append('Maturity')
+        elif cid in ev_contracts['flow']:
+            tipos.append('Cashflow')
+        settle_type = (_ops_settle_type_join(tipos) or
+                       _ops_settle_type_join(routes._opb3_settle_types(by_titulo.get(key, [])).split(' \u00b7 ')))
         out.append({
             'status': 'OK' if (diff is not None and abs(diff) <= _OPS_RECON_TOL) else 'Check',
             # LOB = o TOKEN (EDG · CEM · CEMHYB), não o Código Identificador
@@ -615,6 +708,7 @@ def _ops_swap_trade_rows(settle_ref):
             # linha é de equity — o cadastro continua vencendo quando responde.
             'lob': routes._fcst_lob(routes._opb3_tipo_for(rec, tipo_maps)) or ('EQUITIES' if eq else ''),
             'counterparty': counterparty,
+            'settle_type': settle_type,
             'internal_id': internal_id,
             'id_b3': titulo,
             # A B3 registra a operação de equity como SWAP, e é dessa linha que
@@ -729,6 +823,7 @@ def _ops_ndfc_trade_rows(settle_ref):
             'status': 'OK' if (diff is not None and abs(diff) <= _OPS_RECON_TOL) else 'Check',
             'lob': 'COMMODITIES',
             'counterparty': r.get('counterparty', ''),
+            'settle_type': r.get('settle_type', ''),
             'internal_id': r.get('internal_id', ''),
             'id_b3': r.get('b3_id', ''),
             'product': 'TERMO',
@@ -768,6 +863,7 @@ def _ops_opt_trade_rows(settle_ref):
             'status': 'OK' if (diff is not None and abs(diff) <= _OPS_RECON_TOL) else 'Check',
             'lob': r.get('lob', ''),
             'counterparty': r.get('counterparty', ''),
+            'settle_type': r.get('settle_type', ''),
             'internal_id': r.get('internal_id', ''),
             'id_b3': r.get('b3_id', ''),
             'product': 'OPTION',

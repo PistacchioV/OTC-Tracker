@@ -22148,3 +22148,138 @@ depois de rodar.
 
 Rede: `check_unwind_page.py` (o Delete que recusa a linha carimbada),
 `check_unwind_termo.py` §14 (o órfão).
+
+
+## §505 — Todas as páginas primeiro: recompras e New Deals saem de CATÁLOGO (2026-09-21)
+
+**A decisão da mesa.** Depois da Fase 1 da recompra (§488/§493), a ordem passou
+a ser **todas as páginas primeiro, o backend depois**. O menu já prometia onze
+páginas de recompra e três de New Deals que respondiam 404 (ou `#placeholder`).
+
+**Uma tela, um catálogo — duas vezes.** A página da Fase 1 tem 840 linhas e
+quase tudo nela é igual para qualquer produto: o que muda é o contrato (título,
+colunas, API, layout da B3). Copiá-la onze vezes seria onze lugares para
+consertar o próximo defeito de tabela. Então:
+
+- **Recompras:** `features/unwinds/catalog.py` + `pages/unwinds-product.html`
+  (Swap CEM/EDG, NDF Commodities, Options FXO/Commodities/EDG, COE, os quatro
+  DCE). As colunas saem dos layouts da B3 que já estavam no File Interpreter
+  (`swap-antecipacao` 0035, `antecipacao-opcao` 0036, TER 0014) e são
+  PROPOSTA — a mesa ainda não as validou. Os nomes de CAMPO do mesmo conceito
+  são os da Fase 1, porque é por eles que a Intrag, o Termo e a esteira leem a
+  recompra; o que muda por produto é o RÓTULO, e por isso a chave de tradução
+  da coluna sai do rótulo, não do campo. A chave da linha é o `_id` interno:
+  NDF/Opção de Commodities e FXO chegam sem identificador.
+- **New Deals:** `features/new_deals/catalog.py` + `pages/new_deals-product.html`
+  (o molde do Swap Bullet) para **Swap Cashflow** e **Options EDG**.
+
+A página da Fase 1 e a do Swap Bullet ficaram com template PRÓPRIO de propósito:
+os guardas delas leem o HTML (`var UNW_COLS`, `var SWB_COLS`).
+
+**Não existe página "Swap CEM".** A mesa respondeu: o swap da CEM é bullet ou
+cashflow, e o que o encaixa na mesma tela do da EDG é a coluna **LOB** (virou
+select `EDG`/`CEM`, no Bullet também). O **Deal Ticket da CEM** (a mesa mandou
+a planilha) trouxe o que o da EDG não tinha, e entrou nas DUAS páginas de swap:
+FX Início, Valor Base em ME, Cotação/DCC/Cupom Limpo POR CURVA, o bloco de
+Atualização de Notional e as Observações — aditivo no `SWB_COLUMNS`, em branco
+no deal da EDG; os limitadores (Cap/Floor) já existiam. O **cronograma** do
+cashflow é a lista `CashFlows` do deal, editada no modal; na grade ele é a
+contagem (`Flows`). O tipo de amortização é CADASTRO (`swap-amortizacao`) e
+chega ao select resolvido pelo servidor.
+
+**O que o teste achou.** As rotas genéricas `/api/new-deals/<product>/cache/
+search` e `/send-conecta` (NDF Vanilla/FWD Start/Other Publisher) casavam o
+slug do catálogo como `product` e respondiam "Unknown product": um
+`/api/new-deals/<path:sub>` perde para elas. A API de cada página do catálogo
+tem **prefixo estático**, que vence o segmento variável.
+
+**O servidor ainda NÃO existe**, e a tela DIZ isso: a carga devolve o dia vazio
+com o contrato e toda ação responde **501 em JSON com código**
+(`unwind_backend_pending` / `nd_backend_pending`), que a tela traduz. Sem o
+stub ela leria a página 404 em HTML e mostraria `Unexpected token '<'`.
+
+Rede: `check_unwind_catalog.py` e `check_new_deals_catalog.py` (novos — menu ×
+catálogo × rota, contrato de colunas, paridade com o `SWB_COLUMNS`, o 501),
+`check_swap_bullet`, `check_unwind_page`, `check_export_padrao`,
+`check_row_action_buttons`, `check_table_center`, `check_modal_standard`,
+`check_soc_layers`, `check_export_excel_ids`.
+
+## §506 — Settlement Type no Trade Level: o tipo de liquidação sai do `opb3-events` (2026-09-21)
+
+**O pedido.** No Trade Level do Other Products Summary e do NDF Summary, uma
+coluna **Settlement Type** à direita da Counterparty: swap = Cashflow ·
+Maturity · Premium · Unwind; opção = Premium · Exercise · Unwind; termo =
+Premium · Unwind · Maturity. É o que a geração dos avisos vai ler.
+
+**De onde sai.** Do cadastro que JÁ responde quais eventos da B3 entram na
+liquidação: o `opb3-events` ganhou a coluna `SETTLEMENT TYPE` (domínio
+fechado), e a linha que admite o evento diz que liquidação ele é. Um de-para
+Tipo Operação → tipo no código seria a segunda resposta para a mesma pergunta —
+e a regra permanente é que de-para se cadastra. A regra mais específica vence;
+evento sem regra fica VAZIO (pede cadastro, não chuta); o Título com fluxo e
+prêmio no mesmo dia diz os dois (` · `).
+
+**Duas coisas que o evento não diz.** No swap o **último fluxo é Maturity**: na
+B3 ele chega como o mesmo pagamento de diferencial dos intermediários, e quem o
+distingue é o `venc` da POSIÇÃO. E **a recompra de NDF é Unwind pela vertical**
+— não há evento da B3 para perguntar ao cadastro. No NDF Summary, enquanto o
+arquivo da B3 não chegou, o contrato que vence hoje na posição é Maturity (fato
+da posição, não palpite).
+
+**Seed não alcança quem já tem o cadastro** (§6): o `upgrade` preenche a coluna
+só na linha que a ANTECEDE (sem a chave). Linha que tem a chave — mesmo vazia —
+já passou pela tela, e o branco ali é decisão da mesa.
+
+**Posicional.** As `cells` do Trade Level do NDF são lidas por posição: a
+coluna nova deslocou tudo à direita da Counterparty — o `cells[12]` solto do
+IR virou `_NDFSUM_TAX_CELL`, o CSS das duas taxas foi de `nth-child(12/15)`
+para `13/16`, e no Other Products a ordenação fixa foi de `[7,3,4]` para
+`[8,3,4]`. Os testes que prendiam essas posições andaram junto.
+
+Rede: `check_opb3_events.py` §8 (novo), `check_ops_trade_swap`,
+`check_unwind_summary`, `check_ndfsum_fwd_rate`, `check_ops_summary`,
+`check_ops_trade_equity`, `check_ted_release`. Falhas ANTERIORES a esta mudança
+(conferidas contra o HEAD): `check_swap_advice`, `check_summary_glow`,
+`check_config_names`.
+
+### Correção no mesmo dia: o tipo saía VAZIO nas linhas em Check
+
+A primeira versão do NDF Summary só respondia `Maturity`, na falta de evento da
+B3, quando o vencimento da POSIÇÃO era a data da tela. A mesa viu na hora: as
+linhas em `Check` saíam sem tipo. É a mesma causa duas vezes — a linha está em
+Check PORQUE o resgate da B3 não casou, então o cadastro não tinha o que
+responder; e o contrato dela vencia na B3 em D+1 da liquidação do Athena
+(22/09 numa tela de 21/09), então o teste da data também falhava. A linha que
+mais precisa do tipo era a que ficava sem ele.
+
+O padrão passou a ser da LINHA, não da data: o universo do Cockpit é o
+`getTradesBySettle`, que é a liquidação do vencimento do termo, e a recompra
+entra por outra porta dizendo `Unwind`. O evento da B3 continua vencendo quando
+existe (é por ele que um prêmio ou uma antecipação se dizem).
+
+Rede: `check_unwind_summary.py` §3b (novo — a linha sem resgate sai Maturity e
+fica em Check; com evento de prêmio, sai Premium).
+
+### Segunda correção: na instância o tipo saiu vazio em quase tudo
+
+No Other Products da instância só o swap de EQUITY mostrou tipo — e só porque
+caiu no remendo do vencimento. Opção e swap de CEM saíram em branco com o
+Settlement B3 batendo, ou seja: os eventos estavam lá e o cadastro não
+respondeu. É a consequência direta de uma regra antiga do `opb3-events`: "Tipo
+Título sem Consider próprio não é filtrado" — o evento ENTRA na liquidação sem
+passar por regra nenhuma, então não há linha do cadastro para dizer o tipo; e
+o evento da B3 chega depois, com a grafia do dia. Na dev nada disso aparece
+(não há Operations B3 aqui), e o teste que usava a seed passava.
+
+A mesa apontou a saída: **a contagem dos cards do topo**. Eles nunca tiveram o
+problema porque não perguntam nada ao evento — contam pela DATA NA POSIÇÃO
+(vencimento, liquidação do prêmio, evento do DFLUXO, agenda de prêmios). O tipo
+passou a sair da mesma leitura (`_ops_settle_type_dates`,
+`_ops_swap_event_contracts`), e o evento da B3 virou o plano B e a fonte do que
+data nenhuma diz (a antecipação → Unwind, quando a mesa cadastrar). E em
+**MAIÚSCULAS** nas duas páginas, a pedido.
+
+Rede: `check_opb3_events.py` §9 (novo — data vence evento, as duas datas no
+mesmo dia, datetime × date, vazio sem palpite), `check_ops_trade_swap` (o tipo
+de ponta a ponta nas fixtures), `check_unwind_summary` (maiúsculas).
+

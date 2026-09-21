@@ -961,6 +961,25 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   o Strike é o % sobre ele; `Spot` deixa Preço Inicial e Strike em BRANCO e
   obrigatórios. XML só com o valor em BRL. Platform lê os deals do dia por
   `routes._swap_bullet_engine()` (platform não importa feature).
+- **Swap Cashflow e Options EDG são UMA tela e um CATÁLOGO**
+  (`features/new_deals/catalog.py` + `pages/new_deals-product.html`, o molde do
+  Swap Bullet; 21/09/2026). **Não existe página "Swap CEM"**: o swap da CEM é
+  bullet ou cashflow, e o que encaixa CEM e EDG na mesma tela é a coluna **LOB**
+  (select `EDG`/`CEM`, no Bullet também). As colunas de swap são as do Bullet
+  COPIADAS (feature não importa feature) e o `check_new_deals_catalog.py` cobra
+  a paridade. **O Deal Ticket da CEM** trouxe o que o da EDG não tinha, e entrou
+  nas DUAS páginas: `FXStart`, `NotionalFC`, Cotação/DCC/Cupom Limpo POR CURVA
+  (`CurveXQuote`/`CurveXDCC`/`CurveXCleanCoupon`), o bloco de Atualização de
+  Notional e `Observations` — aditivo no `SWB_COLUMNS`, em branco no deal da
+  EDG. O **cronograma** do cashflow (a tabela Cash Flow do DT) é a lista
+  `CashFlows` do deal, editada no modal; na grade ele é a CONTAGEM (`Flows`),
+  que por isso não se digita. Select que é cadastro (`AmortizationType` ←
+  `swap-amortizacao`) chega resolvido pelo servidor (`selects_from_mapping`).
+  **A API de cada página tem prefixo ESTÁTICO**, não `/api/new-deals/<path>`:
+  as genéricas `/api/new-deals/<product>/cache/search` e `/send-conecta` casam o
+  slug como `product` e respondem "Unknown product". O servidor ainda NÃO
+  existe: `cache/search` devolve vazio com o contrato e o resto é 501
+  `nd_backend_pending`.
 - **Swap Calculator: a `Denominação` da curva VCP é CONTRATO, e o IR sai do
   CADASTRO** (§479). A posição traz nas colunas 70/75 o texto livre da curva
   (`(3M SOFR + 0.75%)*1.1765 A/360`), e o `*1.1765` só existe ali. Quem o lê é
@@ -1092,6 +1111,24 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 
 ### Unwinds (recompra) — Fase 1: NDF de moeda (§488)
 
+- **As outras onze páginas de recompra são UMA tela e um CATÁLOGO**
+  (`features/unwinds/catalog.py` + `pages/unwinds-product.html`, 21/09/2026):
+  Swap CEM/EDG, NDF Commodities, Options FXO/Commodities/EDG, COE e os quatro
+  DCE. Página nova é uma ENTRADA no catálogo (colunas `[campo, rótulo, tipo]`,
+  layout da B3, rótulos do breadcrumb), nunca uma cópia do template — e o link
+  do menu tem de existir, senão o `check_unwind_catalog.py` reprova (menu ×
+  catálogo). A da Fase 1 segue com template PRÓPRIO: o guarda dela lê o
+  `var UNW_COLS` do HTML. Os nomes de CAMPO do mesmo conceito são os da Fase 1
+  (`Contract`, `UnwoundNotional`, `Result`, `Direction`…), porque é por eles
+  que a Intrag, o Termo e a esteira leem a recompra; o que muda por produto é
+  o RÓTULO — e por isso a chave de tradução da coluna sai do rótulo
+  (`unw-col-original-quantity`), não do campo. **A chave da linha é o `_id`
+  interno** (coluna escondida, a última): NDF/Opção de Commodities e FXO chegam
+  sem identificador. **O servidor dessas páginas ainda NÃO existe**: o GET
+  devolve o dia vazio com o contrato e toda ação responde 501
+  `unwind_backend_pending` (uma rota só, `/api/unwinds/<path:sub>`, que a
+  regra estática da Fase 1 vence) — quando o backend de um produto nascer, as
+  rotas estáticas dele tiram o produto desse stub sem mexer nele.
 - **A ponte até o contrato é o `Código Identificador` do Live Position, e ele
   vem de DUAS formas**: TRUNCADO nos 14 da direita (o aviso traz
   `STP-XE-10G5U5X-0-0` e a posição, `XE-10G5U5X-0-0`) ou INTEIRO
@@ -1326,6 +1363,29 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 
 ### Liquidação (Other Products, NDF Summary, Settlement Advice)
 
+- **Settlement Type (Trade Level do Other Products e do NDF Summary, à direita
+  da Counterparty; mesa, 21/09/2026) sai da DATA NA POSIÇÃO — a MESMA leitura
+  dos cards do topo** (`_ops_settlement_counts`), em MAIÚSCULAS
+  (`_ops_settle_type_dates`/`_ops_settle_type_join`): opção que vence hoje é
+  `EXERCISE` e a de `Data de Liquidação do Prêmio` hoje é `PREMIUM`; termo que
+  vence é `MATURITY`; swap na agenda de prêmios do dia é `PREMIUM`, o que VENCE
+  hoje na posição é `MATURITY` e o que tem evento no DFLUXO sem vencer é
+  `CASHFLOW` (`_ops_swap_event_contracts`, os mesmos arquivos e a mesma coluna de
+  data do `_FORECAST_SOURCES`). **A primeira versão perguntava só ao EVENTO da
+  B3 e saiu VAZIA na instância em tudo que não era swap de equity**: o evento
+  chega depois, e onde o Tipo Título não tem Consider próprio ele entra na
+  liquidação sem regra nenhuma para dizer o tipo (§6, `opb3-events`) — nada
+  quebra, a coluna só não diz. O evento virou o PLANO B e a fonte do que data
+  nenhuma diz: a coluna `SETTLEMENT TYPE` do `opb3-events` (domínio fechado;
+  `_opb3_settle_type`, a regra mais específica vence) é onde a mesa cadastra a
+  antecipação como `Unwind`. Sem data e sem evento a célula fica VAZIA. **A
+  recompra de NDF é `UNWIND` pela vertical**, e **no NDF Summary a linha do
+  Cockpit sem evento é `MATURITY`, sempre** (o universo dela é o
+  `getTradesBySettle`; condicionar ao `venc` da posição deixava o tipo vazio
+  justamente nas linhas em `Check`, cujo resgate não casou). As linhas dos
+  avisos de termo e de opção carregam `settle_type` — é o que a geração dos
+  avisos vai ler. No NDF Summary as `cells` são posicionais: o TAX virou
+  `_NDFSUM_TAX_CELL`.
 - **`_ops_trade_rows(settle_ref)` é o único lugar que sabe quais famílias
   existem** (SWAP + NDF Commodities); página, cards e e-mail de TED chamam
   ele. Status do aviso vive no overlay `other-products-summary_YYYYMMDD.json`
@@ -1766,7 +1826,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (142 scripts)
+### `scripts/tests/` (148 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

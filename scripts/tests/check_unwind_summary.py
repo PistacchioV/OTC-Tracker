@@ -111,9 +111,12 @@ def main():
               all(u['ok'] is None for u in unw))
         check('e sem diferenca', all(u['diff'] == '' for u in unw))
         cells = unw[0]['cells']
-        check('a celula do lado da B3 fica VAZIA', cells[10] == '', cells[10])
+        check('a celula do lado da B3 fica VAZIA', cells[11] == '', cells[11])
+        # O Settlement Type vem logo a direita da COUNTERPARTY (21/09/2026), e a
+        # recompra E o tipo `Unwind` — quem diz e a vertical, nao um evento da B3.
+        check('o Settlement Type da recompra e Unwind', cells[2] == 'UNWIND', cells[:3])
         check('o Athena ID e o B3 ID estao na linha',
-              cells[2].startswith('STP-') and cells[3] == '26C03202688', cells[:4])
+              cells[3].startswith('STP-') and cells[4] == '26C03202688', cells[:5])
     cp = [s for s in out['summary'] if s['counterparty'] == BASE['Counterparty']]
     check('a contraparte aparece no Summary', bool(cp), [s['counterparty'] for s in out['summary']])
     if cp:
@@ -144,12 +147,46 @@ def main():
             out_ck = R._ndfsum_collect(datetime(2026, 9, 18))
     finally:
         R._ndfc_load, R._ndfc_collect = _orig_load, _orig_collect
-    linhas_xe = [t for t in out_ck['trade'] if t['cells'][2] == 'STP-XE-1']
+    linhas_xe = [t for t in out_ck['trade'] if t['cells'][3] == 'STP-XE-1']
     check('a recompra projetada no Cockpit NAO entra duas vezes',
-          len(linhas_xe) == 1, [t['cells'][2] for t in out_ck['trade']])
+          len(linhas_xe) == 1, [t['cells'][3] for t in out_ck['trade']])
     check('e a que ficou e a da vertical (sem veredito)',
           linhas_xe and linhas_xe[0].get('unwind') is True and linhas_xe[0]['ok'] is None,
           linhas_xe[0] if linhas_xe else None)
+
+    # ── 3b. o Settlement Type da linha COMUM do Cockpit (21/09/2026) ─────────
+    # A linha em `Check` e justamente a que NAO tem resgate da B3 casado — e
+    # era nela que o tipo saia vazio: a primeira versao so respondia Maturity
+    # quando o vencimento da POSICAO era a data da tela, e o contrato cujo
+    # vencimento na B3 e D+1 da liquidacao do Athena nao passava em nenhum dos
+    # dois testes. Sem evento da B3, a linha do Cockpit e Maturity (o universo
+    # dela e o getTradesBySettle); com evento, quem diz e o cadastro.
+    comum = dict(projetada)
+    comum.pop('_nc_unwind', None)
+    comum.update({'ID_SOURCE_DEAL': 'STP-COMUM-1', 'CD_CETIP_RETURN': '26H04763424', '_nc_id': 'comum-1'})
+    _o_load, _o_collect, _o_rows = R._ndfc_load, R._ndfc_collect, R._opb3_settle_rows
+    R._ndfc_load = lambda ref: ('jp', [comum])
+    R._ndfc_collect = lambda ref: {'rows': [
+        [comum.get(c, '') for c in R._NDFC_COLUMNS]
+        + [comum.get(k, '') for k in ('_nc_status', '_nc_maker', '_nc_checker', '_nc_id')]]}
+    try:
+        R._opb3_settle_rows = lambda ref: []
+        with app.test_request_context():
+            sem = [x for x in R._ndfsum_collect(datetime(2026, 9, 18))['trade']
+                   if x['cells'][3] == 'STP-COMUM-1']
+        check('linha do Cockpit SEM resgate da B3 (a que fica em Check) sai Maturity',
+              bool(sem) and sem[0]['cells'][2] == 'MATURITY' and not sem[0]['ok'],
+              sem[0]['cells'][:5] if sem else None)
+        R._opb3_settle_rows = lambda ref: [{'Título': '26H04763424', 'Tipo Título': 'OPC',
+                                            'Tipo Operação': 'PAGAMENTO DE PREMIO',
+                                            'Status': 'FINALIZADA', 'Valor': '1,00'}]
+        with app.test_request_context():
+            com = [x for x in R._ndfsum_collect(datetime(2026, 9, 18))['trade']
+                   if x['cells'][3] == 'STP-COMUM-1']
+        check('e o evento da B3 VENCE o padrao quando existe',
+              bool(com) and com[0]['cells'][2] == 'PREMIUM', com[0]['cells'][:5] if com else None)
+    finally:
+        R._ndfc_load, R._ndfc_collect, R._opb3_settle_rows = _o_load, _o_collect, _o_rows
 
     print('\n== 4. o IR do dia enxerga a recompra ==')
     # O IR incide sobre o ganho do CLIENTE (o banco pagando): 0,005% de
@@ -158,15 +195,15 @@ def main():
     # — e e por isso que as duas aparecem com os R$ 0,56 delas.
     taxas = [t for t in out['trade'] if t.get('unwind')]
     check('duas de R$ 0,56 cruzam o piso MENSAL e as duas retem',
-          [t['cells'][12] for t in taxas] == ['0.56', '0.56'],
-          [t['cells'][12] for t in taxas])
+          [t['cells'][13] for t in taxas] == ['0.56', '0.56'],
+          [t['cells'][13] for t in taxas])
     grande = dict(BASE, AthenaID='STP-BIG', Result=400000.0, Direction='PAY')
     persistence.upsert(datetime(2026, 9, 18), [grande])
     with app.test_request_context():
         out2 = R._ndfsum_collect(datetime(2026, 9, 18))
-    big = [t for t in out2['trade'] if t.get('unwind') and t['cells'][2] == 'STP-BIG']
+    big = [t for t in out2['trade'] if t.get('unwind') and t['cells'][3] == 'STP-BIG']
     check('acima do piso o IR da recompra e calculado e vai para a celula',
-          bool(big) and big[0]['cells'][12] not in ('', None), big[0]['cells'][12] if big else None)
+          bool(big) and big[0]['cells'][13] not in ('', None), big[0]['cells'][13] if big else None)
 
     print('\n' + ('tudo ok' if not FALHAS else 'FALHAS: ' + '; '.join(FALHAS)))
     return 1 if FALHAS else 0

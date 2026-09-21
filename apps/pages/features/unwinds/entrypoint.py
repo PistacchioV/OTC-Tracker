@@ -13,7 +13,7 @@ from flask import jsonify, render_template, request, session
 
 from apps.pages import blueprint
 from apps.pages import data_store as _store
-from apps.pages.features.unwinds import commands, domain, queries
+from apps.pages.features.unwinds import catalog, commands, domain, queries
 
 
 def _R():
@@ -313,3 +313,37 @@ def api_unwinds_termo_pdf():
     import os as _os
     return send_file(pdf, mimetype='application/pdf', as_attachment=False,
                      download_name=_os.path.basename(pdf))
+
+
+# ── As outras páginas de recompra: UMA tela, o contrato sai do catálogo ─────
+# `ndf/fx` tem rota estática acima e o werkzeug a prefere à regra com
+# variável: o que chega aqui é só o que o catálogo conhece (o resto é 404).
+@blueprint.route('/unwinds/<group>', defaults={'product': ''})
+@blueprint.route('/unwinds/<group>/<product>')
+def unwinds_product(group, product):
+    from flask import redirect, url_for
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    pagina = catalog.page(group + '/' + product)
+    if pagina is None:
+        return render_template('pages/error-404.html'), 404
+    return render_template('pages/unwinds-product.html', segment=pagina['slug'], page=pagina)
+
+
+@blueprint.route('/api/unwinds/<path:sub>', methods=['GET', 'POST'])
+def api_unwinds_product(sub):
+    """O contrato de colunas de cada página do catálogo — e só ele, por ora.
+
+    O servidor destas páginas (import, conferência contra o Live Position,
+    arquivo da B3) ainda não existe. Enquanto isso o GET devolve o dia VAZIO
+    com o contrato, e toda ação responde 501 com CÓDIGO (§486): sem isto a
+    tela leria a página 404 em HTML e mostraria `Unexpected token '<'`."""
+    err = _auth()
+    if err:
+        return err
+    pagina = catalog.page(sub)
+    if pagina is not None and request.method == 'GET':
+        return jsonify({'success': True, 'entries': [], 'backend': False,
+                        'fields': catalog.fields(pagina), 'labels': catalog.labels(pagina)})
+    return jsonify({'success': False, 'code': 'unwind_backend_pending',
+                    'message': 'This action is not available yet for this product'}), 501

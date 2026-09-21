@@ -299,8 +299,8 @@
    meio — uma taxa partida em duas linhas é pior que uma arredondada, porque
    parece um valor diferente. `nowrap` impede a quebra; o mínimo é o que dá à
    tabela largura própria para o scrollX rolar de verdade. */
-#ops-trade-table th:nth-child(12), #ops-trade-table td:nth-child(12),
-#ops-trade-table th:nth-child(15), #ops-trade-table td:nth-child(15) {
+#ops-trade-table th:nth-child(13), #ops-trade-table td:nth-child(13),
+#ops-trade-table th:nth-child(16), #ops-trade-table td:nth-child(16) {
     min-width: 165px; white-space: nowrap;
 }
 #ops-summary-table th:nth-child(4),  #ops-summary-table td:nth-child(4)  { min-width: 440px; }  /* Counterparty */
@@ -510,6 +510,7 @@
                                     <th data-lang="ops-col-status">Status</th>
                                     <th>LEGAL</th>
                                     <th>COUNTERPARTY</th>
+                                    <th data-lang="ops-col-settlement-type">SETTLEMENT TYPE</th>
                                     <th>ATHENA ID</th>
                                     <th>B3 ID</th>
                                     <th>TRADE DATE</th>
@@ -528,6 +529,7 @@
                                     <th><input type="text" placeholder="Status"></th>
                                     <th><input type="text" placeholder="LEGAL"></th>
                                     <th><input type="text" placeholder="COUNTERPARTY"></th>
+                                    <th><input type="text" placeholder="SETTLEMENT TYPE"></th>
                                     <th><input type="text" placeholder="ATHENA ID"></th>
                                     <th><input type="text" placeholder="B3 ID"></th>
                                     <th><input type="text" placeholder="TRADE DATE"></th>
@@ -811,9 +813,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     var dtSummary = initTable('ops-summary-table', 7);   // 7 data cols (Counterparty…Observation)
-    // 14 data cols (LEGAL…DIFFERENCE); default 50/page; ordem TRAVADA na
+    // 15 data cols (LEGAL…DIFFERENCE, com o SETTLEMENT TYPE depois da COUNTERPARTY); default 50/page; ordem TRAVADA na
     // COUNTERPARTY (coluna 4: [0]=checkbox [1]=Actions [2]=Status [3]=LEGAL).
-    var dtTrade   = initTable('ops-trade-table', 14, 50, 4);
+    var dtTrade   = initTable('ops-trade-table', 15, 50, 4);
 
     // Add-row modal Save → append the filled row to the active table (cells stay
     // inline-editable, seeded with the modal values).
