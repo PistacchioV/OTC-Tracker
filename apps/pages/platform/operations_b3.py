@@ -25,6 +25,7 @@ import re
 
 from apps.pages.data_paths import data_path
 from apps.pages.request_cache import req_cached as _req_cached
+from apps.pages.request_cache import once_per_request as _once_per_request
 from apps.pages import data_store as _store  # noqa: E402
 
 log = logging.getLogger('otc_tracker')
@@ -109,6 +110,59 @@ def _opb3_settle_ok(rec, rules=None):
     if any(r[0] == tit for r in cons if r[0]):
         return any(_opb3_rule_hit(r, tit, op, st) for r in cons)
     return True
+
+
+@_once_per_request
+def _opb3_settle_type_rules():
+    """As regras do `opb3-events` que DIZEM um tipo de liquidação: lista de
+    (tripla normalizada, SETTLEMENT TYPE), só das linhas Consider com o tipo
+    preenchido. `once_per_request`: as coletas perguntam por LINHA, e um `stat`
+    do cadastro por linha custa minutos no share (§4); fora de request não
+    memoiza, e a edição na tela vale no request seguinte."""
+    from apps.pages import routes
+    out = []
+    for r in routes._mapping_rows('opb3-events'):
+        tipo = str(r.get('SETTLEMENT TYPE') or '').strip()
+        if not tipo or routes._fcst_norm(r.get('USE', '')).strip().startswith('disreg'):
+            continue
+        rule = (_opb3_ev_key(r.get('TIPO TITULO', '')),
+                _opb3_ev_key(r.get('TIPO OPERACAO', '')),
+                _opb3_ev_key(r.get('STATUS B3', '')))
+        if any(rule):
+            out.append((rule, tipo))
+    return out
+
+
+def _opb3_settle_type(rec, type_rules=None):
+    """O Settlement Type de UMA linha do Operations B3, pelo cadastro
+    `opb3-events` — a mesma linha que admite o evento na liquidação diz que
+    liquidação ele é. A regra mais ESPECÍFICA vence (mais campos preenchidos);
+    empate, a primeira do cadastro. Sem regra que responda: `''`, nunca um
+    palpite — a coluna vazia pede cadastro."""
+    regras = type_rules if type_rules is not None else _opb3_settle_type_rules()
+    tit = _opb3_ev_key(rec.get('Tipo Título', ''))
+    op = _opb3_ev_key(rec.get('Tipo Operação', ''))
+    st = _opb3_ev_key(rec.get('Status', ''))
+    melhor, peso = '', -1
+    for rule, tipo in regras:
+        if _opb3_rule_hit(rule, tit, op, st):
+            w = sum(1 for x in rule if x)
+            if w > peso:
+                melhor, peso = tipo, w
+    return melhor
+
+
+def _opb3_settle_types(recs, type_rules=None):
+    """Os tipos DISTINTOS de um conjunto de eventos, na ordem em que aparecem,
+    unidos por ' · ' — o Trade Level é UMA linha por Título, e o mesmo swap
+    pode pagar fluxo e prêmio no mesmo dia."""
+    regras = type_rules if type_rules is not None else _opb3_settle_type_rules()
+    vistos = []
+    for rec in recs or []:
+        tipo = _opb3_settle_type(rec, regras)
+        if tipo and tipo not in vistos:
+            vistos.append(tipo)
+    return ' \u00b7 '.join(vistos)
 
 
 @_req_cached
@@ -787,4 +841,16 @@ def _opb3_events_upgrade(rows):
         tit = _opb3_ev_key(seed['TIPO TITULO'])
         if tit in ('ter', 'opc') and tit not in tem_consider:
             out.append(dict(seed))
+    # SETTLEMENT TYPE (21/09/2026): a linha que ANTECEDE a coluna não tem a
+    # chave, e ganha o tipo da seed de mesmo Tipo Título × Tipo Operação. Linha
+    # que TEM a chave — mesmo vazia — já passou pela tela depois da coluna
+    # existir: o branco ali é decisão da mesa, e upgrade não desfaz decisão.
+    da_seed = {(_opb3_ev_key(sd['TIPO TITULO']), _opb3_ev_key(sd['TIPO OPERACAO'])):
+               sd.get('SETTLEMENT TYPE', '') for sd in routes._MAP_OPB3_SEED}
+    for i, r in enumerate(out):
+        if 'SETTLEMENT TYPE' not in r:
+            r = dict(r)
+            r['SETTLEMENT TYPE'] = da_seed.get((_opb3_ev_key(r.get('TIPO TITULO', '')),
+                                                _opb3_ev_key(r.get('TIPO OPERACAO', ''))), '')
+            out[i] = r
     return out

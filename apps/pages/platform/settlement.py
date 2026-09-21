@@ -239,7 +239,7 @@ def _ops_settlement_counts(settle_ref, pos_ref):
 #  juros, prêmio). A linha é UMA só por Título — daí o dedup — mas o Settlement
 #  B3 soma TODAS as linhas daquele Título, inclusive as que o filtro descartou:
 #  o que se concilia é o caixa do dia, não o evento.
-_OPS_TRADE_COLS = ('lob', 'counterparty', 'internal_id', 'id_b3', 'product', 'type',
+_OPS_TRADE_COLS = ('lob', 'counterparty', 'settle_type', 'internal_id', 'id_b3', 'product', 'type',
                    'settlement', 'settlement_b3', 'tax_income', 'difference')
 
 def _swadv_indexador(cod, nome):
@@ -601,6 +601,17 @@ def _ops_swap_trade_rows(settle_ref):
         tax = None if (rate is None or settlement is None) else abs(settlement) * rate
 
         diff = None if (settlement is None or settlement_b3 is None) else settlement - settlement_b3
+        # Settlement Type (mesa, 21/09/2026): o que os eventos do Título dizem
+        # pelo cadastro `opb3-events` (Cashflow · Premium · Unwind). O ÚLTIMO
+        # fluxo é o **Maturity**: na B3 ele chega como o mesmo pagamento de
+        # diferencial dos intermediários, e quem o distingue é a data de
+        # vencimento da POSIÇÃO — sem posição, fica o que o evento disse.
+        settle_type = routes._opb3_settle_types(by_titulo.get(key, []))
+        venc = (terms.get(routes._fcst_norm_contract(titulo).upper()) or {}).get('venc')
+        if venc and venc == settle_ref:
+            partes = [('Maturity' if x == 'Cashflow' else x)
+                      for x in settle_type.split(' \u00b7 ') if x] or ['Maturity']
+            settle_type = ' \u00b7 '.join(dict.fromkeys(partes))
         out.append({
             'status': 'OK' if (diff is not None and abs(diff) <= _OPS_RECON_TOL) else 'Check',
             # LOB = o TOKEN (EDG · CEM · CEMHYB), não o Código Identificador
@@ -615,6 +626,7 @@ def _ops_swap_trade_rows(settle_ref):
             # linha é de equity — o cadastro continua vencendo quando responde.
             'lob': routes._fcst_lob(routes._opb3_tipo_for(rec, tipo_maps)) or ('EQUITIES' if eq else ''),
             'counterparty': counterparty,
+            'settle_type': settle_type,
             'internal_id': internal_id,
             'id_b3': titulo,
             # A B3 registra a operação de equity como SWAP, e é dessa linha que
@@ -729,6 +741,7 @@ def _ops_ndfc_trade_rows(settle_ref):
             'status': 'OK' if (diff is not None and abs(diff) <= _OPS_RECON_TOL) else 'Check',
             'lob': 'COMMODITIES',
             'counterparty': r.get('counterparty', ''),
+            'settle_type': r.get('settle_type', ''),
             'internal_id': r.get('internal_id', ''),
             'id_b3': r.get('b3_id', ''),
             'product': 'TERMO',
@@ -768,6 +781,7 @@ def _ops_opt_trade_rows(settle_ref):
             'status': 'OK' if (diff is not None and abs(diff) <= _OPS_RECON_TOL) else 'Check',
             'lob': r.get('lob', ''),
             'counterparty': r.get('counterparty', ''),
+            'settle_type': r.get('settle_type', ''),
             'internal_id': r.get('internal_id', ''),
             'id_b3': r.get('b3_id', ''),
             'product': 'OPTION',

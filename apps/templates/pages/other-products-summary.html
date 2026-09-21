@@ -517,6 +517,7 @@
                                     <th data-lang="ops-col-status">Status</th>
                                     <th data-lang="ops-col-lob">LOB</th>
                                     <th data-lang="ops-col-counterparty">Counterparty</th>
+                                    <th data-lang="ops-col-settlement-type">Settlement Type</th>
                                     <th data-lang="ops-col-internal-id">Internal ID</th>
                                     <th data-lang="ops-col-id-b3">B3 ID</th>
                                     <th data-lang="ops-col-product">Product</th>
@@ -531,6 +532,7 @@
                                     <th><input type="text" placeholder="Status"></th>
                                     <th><input type="text" placeholder="LOB"></th>
                                     <th><input type="text" placeholder="Counterparty"></th>
+                                    <th><input type="text" placeholder="Settlement Type"></th>
                                     <th><input type="text" placeholder="Internal ID"></th>
                                     <th><input type="text" placeholder="B3 ID"></th>
                                     <th><input type="text" placeholder="Product"></th>
@@ -836,12 +838,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var dtSummary = initTable('ops-summary-table', 9);   // 9 data cols (Counterparty…Observation)
     // Trade Level abre ordenado por **Product → LOB → Counterparty**, nessa
-    // precedência (cols 7, 3 e 4 — cb, Actions, Status, LOB, Counterparty,
-    // Internal ID, B3 ID, Product…). É a leitura da mesa: o produto agrupa a
+    // precedência (cols 8, 3 e 4 — cb, Actions, Status, LOB, Counterparty,
+    // Settlement Type, Internal ID, B3 ID, Product…). É a leitura da mesa: o produto agrupa a
     // conferência, a LOB separa a mesa dentro dele e o cliente ordena a lista
     // final. Ordenar só por Counterparty intercalava swap, termo e opção do
     // mesmo cliente, e a ordem em que a B3 devolveu os Títulos não agrupa nada.
-    var dtTrade   = initTable('ops-trade-table', 10, 50, [7, 3, 4]); // 10 data cols (LOB…Difference); default 50/page
+    var dtTrade   = initTable('ops-trade-table', 11, 50, [8, 3, 4]); // 11 data cols (LOB…Difference); default 50/page
 
     // Add-row modal Save → append the filled row to the active table (cells stay
     // inline-editable, seeded with the modal values).
@@ -987,7 +989,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 // A ORDEM abaixo tem de bater com os <th> lá em cima.
                 (j.trade || []).forEach(function (r) {
                     dtTrade.row.add(['<input type="checkbox" class="form-check-input ops-cb">', actionsCell(), statusBadge(r.status || 'Check'),
-                        esc(r.lob), esc(r.counterparty), esc(r.internal_id), esc(r.id_b3),
+                        esc(r.lob), esc(r.counterparty), esc(r.settle_type), esc(r.internal_id), esc(r.id_b3),
                         esc(r.product), esc(r.type), esc(r.settlement), esc(r.settlement_b3),
                         esc(r.tax_income), diffCell(r)]);
                 });

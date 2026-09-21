@@ -111,9 +111,12 @@ def main():
               all(u['ok'] is None for u in unw))
         check('e sem diferenca', all(u['diff'] == '' for u in unw))
         cells = unw[0]['cells']
-        check('a celula do lado da B3 fica VAZIA', cells[10] == '', cells[10])
+        check('a celula do lado da B3 fica VAZIA', cells[11] == '', cells[11])
+        # O Settlement Type vem logo a direita da COUNTERPARTY (21/09/2026), e a
+        # recompra E o tipo `Unwind` — quem diz e a vertical, nao um evento da B3.
+        check('o Settlement Type da recompra e Unwind', cells[2] == 'Unwind', cells[:3])
         check('o Athena ID e o B3 ID estao na linha',
-              cells[2].startswith('STP-') and cells[3] == '26C03202688', cells[:4])
+              cells[3].startswith('STP-') and cells[4] == '26C03202688', cells[:5])
     cp = [s for s in out['summary'] if s['counterparty'] == BASE['Counterparty']]
     check('a contraparte aparece no Summary', bool(cp), [s['counterparty'] for s in out['summary']])
     if cp:
@@ -144,9 +147,9 @@ def main():
             out_ck = R._ndfsum_collect(datetime(2026, 9, 18))
     finally:
         R._ndfc_load, R._ndfc_collect = _orig_load, _orig_collect
-    linhas_xe = [t for t in out_ck['trade'] if t['cells'][2] == 'STP-XE-1']
+    linhas_xe = [t for t in out_ck['trade'] if t['cells'][3] == 'STP-XE-1']
     check('a recompra projetada no Cockpit NAO entra duas vezes',
-          len(linhas_xe) == 1, [t['cells'][2] for t in out_ck['trade']])
+          len(linhas_xe) == 1, [t['cells'][3] for t in out_ck['trade']])
     check('e a que ficou e a da vertical (sem veredito)',
           linhas_xe and linhas_xe[0].get('unwind') is True and linhas_xe[0]['ok'] is None,
           linhas_xe[0] if linhas_xe else None)
@@ -158,15 +161,15 @@ def main():
     # — e e por isso que as duas aparecem com os R$ 0,56 delas.
     taxas = [t for t in out['trade'] if t.get('unwind')]
     check('duas de R$ 0,56 cruzam o piso MENSAL e as duas retem',
-          [t['cells'][12] for t in taxas] == ['0.56', '0.56'],
-          [t['cells'][12] for t in taxas])
+          [t['cells'][13] for t in taxas] == ['0.56', '0.56'],
+          [t['cells'][13] for t in taxas])
     grande = dict(BASE, AthenaID='STP-BIG', Result=400000.0, Direction='PAY')
     persistence.upsert(datetime(2026, 9, 18), [grande])
     with app.test_request_context():
         out2 = R._ndfsum_collect(datetime(2026, 9, 18))
-    big = [t for t in out2['trade'] if t.get('unwind') and t['cells'][2] == 'STP-BIG']
+    big = [t for t in out2['trade'] if t.get('unwind') and t['cells'][3] == 'STP-BIG']
     check('acima do piso o IR da recompra e calculado e vai para a celula',
-          bool(big) and big[0]['cells'][12] not in ('', None), big[0]['cells'][12] if big else None)
+          bool(big) and big[0]['cells'][13] not in ('', None), big[0]['cells'][13] if big else None)
 
     print('\n' + ('tudo ok' if not FALHAS else 'FALHAS: ' + '; '.join(FALHAS)))
     return 1 if FALHAS else 0

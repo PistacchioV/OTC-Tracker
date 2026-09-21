@@ -115,11 +115,13 @@ head = HTML.split('id="ops-trade-table"', 1)[1].split('<tr class="ops-filter">',
 pos = {}
 for i, m in enumerate(re.finditer(r'<th[^>]*>(.*?)</th>', head, re.S), start=1):
     pos[re.sub(r'<[^>]+>', '', m.group(1)).strip()] = i
-check('FORWARD RATE e a 12a coluna', pos.get('FORWARD RATE'), 12)
-check('FIXING RATE e a 15a coluna', pos.get('FIXING RATE'), 15)
+# O SETTLEMENT TYPE entrou a direita da COUNTERPARTY (21/09/2026) e deslocou as
+# duas uma casa — e o CSS junto, senao a largura minima iria para a vizinha.
+check('FORWARD RATE e a 13a coluna', pos.get('FORWARD RATE'), 13)
+check('FIXING RATE e a 16a coluna', pos.get('FIXING RATE'), 16)
 check('e o CSS mira essas duas',
-      '#ops-trade-table th:nth-child(12), #ops-trade-table td:nth-child(12),' in HTML and
-      '#ops-trade-table th:nth-child(15), #ops-trade-table td:nth-child(15) {' in HTML, True)
+      '#ops-trade-table th:nth-child(13), #ops-trade-table td:nth-child(13),' in HTML and
+      '#ops-trade-table th:nth-child(16), #ops-trade-table td:nth-child(16) {' in HTML, True)
 check('com nowrap para a taxa nao partir ao meio',
       'min-width: 165px; white-space: nowrap;' in HTML, True)
 

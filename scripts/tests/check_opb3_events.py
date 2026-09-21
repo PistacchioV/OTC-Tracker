@@ -239,5 +239,54 @@ check('   e a da contraparte pelo nome dela',
       "_opb3_legal_side(row[ci['NM_COUNTERPARTY']])" in blk, True)
 check('   e busca pelas tres chaves', '_ndfsum_b3_val(legs, b3.upper(), casa, cpty_acc)' in blk, True)
 
+print('\n== 8. o SETTLEMENT TYPE sai do MESMO cadastro (21/09/2026) ==')
+# A linha que admite o evento na liquidacao diz que liquidacao ele e: e a coluna
+# Settlement Type do Trade Level (Other Products e NDF Summary) e o que a
+# geracao dos avisos le. Dominio FECHADO.
+check('a coluna existe no cadastro, como select fechado',
+      [c.get('options') for c in R._MAPPING_DEFS['opb3-events']['columns']
+       if c['key'] == 'SETTLEMENT TYPE'],
+      [['', 'Cashflow', 'Maturity', 'Premium', 'Exercise', 'Unwind']])
+check('swap: amortizacao e juros sao Cashflow', 
+      [R._opb3_settle_type(rec('SWAP', 'PAGAMENTO DE DIF. AMORTIZACAO')),
+       R._opb3_settle_type(rec('SWAP', 'Pagamento de Dif. de Juros'))], ['Cashflow', 'Cashflow'])
+check('swap: premio e Premium', R._opb3_settle_type(rec('SWAP', 'PAGAMENTO DE PREMIO')), 'Premium')
+check('termo: o resgate e Maturity', R._opb3_settle_type(rec('TER', 'RESGATE')), 'Maturity')
+check('opcao: o resgate e Exercise, o premio e Premium',
+      [R._opb3_settle_type(rec('OPC', 'RESGATE')), R._opb3_settle_type(rec('OPC', 'PAGAMENTO DE PREMIO'))],
+      ['Exercise', 'Premium'])
+check('evento sem regra fica VAZIO (pede cadastro, nao chuta)',
+      R._opb3_settle_type(rec('SWAP', 'RESGATE ANTECIPADO')), '')
+check('um Titulo com fluxo E premio no dia diz os dois, sem repetir',
+      R._opb3_settle_types([rec('SWAP', 'PAGAMENTO DE DIF. DE JUROS'),
+                            rec('SWAP', 'PAGAMENTO DE DIF. AMORTIZACAO'),
+                            rec('SWAP', 'PAGAMENTO DE PREMIO')]), 'Cashflow \u00b7 Premium')
+# A regra mais ESPECIFICA vence: a mesa cadastra o Unwind de um titulo so.
+_seed_rows = R._mapping_rows
+R._mapping_rows = lambda key: ([{'TIPO TITULO': '', 'TIPO OPERACAO': 'RESGATE ANTECIPADO', 'STATUS B3': '',
+                                 'USE': 'Consider', 'SETTLEMENT TYPE': 'Unwind'},
+                                {'TIPO TITULO': 'OPC', 'TIPO OPERACAO': 'RESGATE ANTECIPADO', 'STATUS B3': '',
+                                 'USE': 'Consider', 'SETTLEMENT TYPE': 'Exercise'},
+                                {'TIPO TITULO': 'TER', 'TIPO OPERACAO': 'RESGATE', 'STATUS B3': '',
+                                 'USE': 'Disregard', 'SETTLEMENT TYPE': 'Maturity'}]
+                               if key == 'opb3-events' else _seed_rows(key))
+check('a regra mais especifica vence o coringa',
+      [R._opb3_settle_type(rec('OPC', 'RESGATE ANTECIPADO')),
+       R._opb3_settle_type(rec('SWAP', 'RESGATE ANTECIPADO'))], ['Exercise', 'Unwind'])
+check('linha Disregard nao diz tipo nenhum', R._opb3_settle_type(rec('TER', 'RESGATE')), '')
+R._mapping_rows = _seed_rows
+# Seed so roda com o arquivo AUSENTE (§6): quem ja tem o cadastro recebe a
+# coluna pelo upgrade — e so a linha que ANTECEDE a coluna (sem a chave).
+antigas = [{'TIPO TITULO': 'SWAP', 'TIPO OPERACAO': 'PAGAMENTO DE PREMIO', 'STATUS B3': '', 'USE': 'Consider'},
+           {'TIPO TITULO': 'TER', 'TIPO OPERACAO': 'RESGATE', 'STATUS B3': '', 'USE': 'Consider',
+            'SETTLEMENT TYPE': ''},
+           {'TIPO TITULO': 'OPC', 'TIPO OPERACAO': 'RESGATE', 'STATUS B3': '', 'USE': 'Consider'}]
+up = R._MAPPING_DEFS['opb3-events']['upgrade']([dict(x) for x in antigas])
+por = {(x['TIPO TITULO'], x['TIPO OPERACAO']): x.get('SETTLEMENT TYPE') for x in up}
+check('o upgrade preenche a linha que antecede a coluna',
+      [por[('SWAP', 'PAGAMENTO DE PREMIO')], por[('OPC', 'RESGATE')]], ['Premium', 'Exercise'])
+check('e NAO mexe no branco que a mesa deixou', por[('TER', 'RESGATE')], '')
+check('nem altera a lista que recebeu', 'SETTLEMENT TYPE' in antigas[0], False)
+
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)

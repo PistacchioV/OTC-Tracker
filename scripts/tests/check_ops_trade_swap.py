@@ -238,7 +238,8 @@ print('\n== 4. a ordem das colunas concorda nas TRES listas ==')
 HTML = read('apps/templates/pages/other-products-summary.html')
 trade = HTML.split('id="ops-trade-table"', 1)[1].split('</thead>', 1)[0]
 ths = re.findall(r'<th data-lang="ops-col-([a-z0-9-]+)"', trade)
-from_html = [t.replace('-', '_') for t in ths if t not in ('actions', 'status')]
+from_html = [{'settlement_type': 'settle_type'}.get(t.replace('-', '_'), t.replace('-', '_'))
+             for t in ths if t not in ('actions', 'status')]
 js = HTML.split('(j.trade || []).forEach', 1)[1].split('});', 1)[0]
 # A ultima celula NAO e um esc(): a Difference passa pelo diffCell, que junta o
 # numero com o icone ✓/✗ (§188). Ela conta como coluna do mesmo jeito.
@@ -247,7 +248,9 @@ from_js = ['difference' if b else a for a, b in from_js]
 SRC = _fontes_com_rotas_(ROOT)
 m = re.search(r'_OPS_TRADE_COLS = \((.*?)\)\n', SRC, re.S)
 from_py = re.findall(r"'(\w+)'", m.group(1)) if m else []
-EXPECTED = ['lob', 'counterparty', 'internal_id', 'id_b3', 'product', 'type',
+# `settlement_type`/`settle_type`: o <th> diz o nome da tela, o servidor o do
+# campo — a posicao e a mesma, logo a direita da Counterparty (21/09/2026).
+EXPECTED = ['lob', 'counterparty', 'settle_type', 'internal_id', 'id_b3', 'product', 'type',
             'settlement', 'settlement_b3', 'tax_income', 'difference']
 check('a ordem pedida esta no cabecalho', from_html, EXPECTED)
 check('o rowMaker do JS segue a mesma', from_js, EXPECTED)
@@ -260,10 +263,10 @@ check('a linha de filtros tem uma caixa por coluna filtravel',
 # Counterparty, Internal ID, B3 ID, Product. Ele entra no teste porque um indice
 # errado ordena a tabela pela coluna vizinha sem erro nenhum.
 check('o DataTables sabe quantas colunas de dado ha',
-      "initTable('ops-trade-table', 10, 50, [7, 3, 4])" in HTML, True)
+      "initTable('ops-trade-table', 11, 50, [8, 3, 4])" in HTML, True)
 # Os indices tem de casar com o cabecalho real: sem isto, uma coluna nova no meio
 # desloca a ordenacao e a tabela abre agrupada pela coluna errada, calada.
-for nome, idx in (('product', 7), ('lob', 3), ('counterparty', 4)):
+for nome, idx in (('product', 8), ('lob', 3), ('counterparty', 4)):
     check('indice de ordenacao de %s' % nome, from_html[idx - 3], nome)
 
 print('\n== 5. os tres cadastros existem e o seed reproduz a formula ==')
