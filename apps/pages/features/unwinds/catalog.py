@@ -23,7 +23,16 @@ Tipos de coluna: `text` · `date` · `money` (#,##0.00) · `rate` (as casas que
 tem — taxa nao e valor) · `status` · `check`.
 """
 
+import re
+
 KEY_FIELD = '_id'
+
+# A chave NATURAL da recompra — o upsert do re-import e a pergunta das
+# duplicatas: o contrato na B3 e a data da antecipacao (o mesmo contrato antecipa
+# mais de uma vez, em dias diferentes). Sem contrato (FXO e NDF/Opcao de
+# Commodities chegam sem identificador) vale o Deal ID do sistema de origem; sem
+# nenhum dos dois a linha e sempre NOVA — nao ha o que casar.
+NATURAL_KEY = (('Contract', 'UnwindDate'), ('DealID', 'UnwindDate'))
 
 _HEAD = (
     ('Status', 'Status', 'status'),
@@ -119,7 +128,29 @@ _B3_OPCAO = {'layout': 'antecipacao-opcao', 'label': 'OPC 0014', 'length': 149}
 _B3_SWAP = {'layout': 'swap-antecipacao', 'label': 'SWAP 0014', 'length': 99}
 
 
-def _page(path, group, product, columns, b3=None, group_lang='', product_lang=''):
+# De onde sai a POSICAO que completa a linha (o Live Position do produto). `None`
+# e produto sem posicao na B3 lida aqui (COE, DCE): a linha vale pelo que a
+# planilha trouxe.
+POS_SWAP, POS_OPCAO, POS_NDF = 'swap', 'option', 'ndf'
+
+# As conferencias do veredito de TRES estados (`product/domain.conferir`):
+#   `balance` — o recomprado cabe no saldo (original − ja recomprado);
+#   `termo`   — o resultado refeito pela formula do termo (a mesma da Fase 1);
+#   `premio`  — o valor financeiro = quantidade x premio (ou preco) unitario.
+# OK so sai quando TODAS rodaram e fecharam; uma que nao rodou e '-'.
+_CK_SWAP = ('balance',)
+_CK_TERMO = ('balance', 'termo')
+_CK_PREMIO = ('balance', 'premio')
+
+# E-MAIL de recompra destes produtos: o aviso do Athena que a Fase 1 le (`BRL
+# NDF Unwind Notification`) e o UNICO formato que esta casa conhece, e nenhum
+# dos onze tem amostra. O import de .msg/.eml responde
+# `unwind_email_format_pending` em vez de adivinhar um parser; so a PLANILHA
+# (rotulos ou campos das colunas abaixo) entra.
+
+
+def _page(path, group, product, columns, b3=None, group_lang='', product_lang='',
+          position=None, checks=_CK_SWAP):
     slug = path.strip('/').replace('/', '-')
     nome = (group + ' ' + product).strip()
     return {
@@ -135,29 +166,63 @@ def _page(path, group, product, columns, b3=None, group_lang='', product_lang=''
         'hidden': list(_HIDDEN),
         'key': KEY_FIELD,
         'b3': b3,
+        # A pasta do arquivo-dia sob `cache/unwinds/`: os dois niveis que o New
+        # Deals Monitor le como produto (§454, pkey `Unwind/<dir>`) e que o
+        # painel le como rotulo — `Unwind <grupo> <produto>`, o mesmo `label`.
+        'dir': '/'.join(x for x in (group, product) if x),
+        'suffix': '_unwind' + re.sub(r'[^a-z0-9]', '', nome.lower()) + '.json',
+        'position': position,
+        'checks': list(checks),
+        'backend': True,
     }
 
 
 # Na ORDEM do menu (`partials/sidenav.html`). `ndf/fx` nao esta aqui de
 # proposito: e a pagina da Fase 1.
 PAGES = dict((p['path'], p) for p in (
-    _page('swap/cem', 'Swap', 'CEM', _COLS_SWAP, _B3_SWAP, 'nav-swap'),
-    _page('swap/edg', 'Swap', 'EDG', _COLS_SWAP, _B3_SWAP, 'nav-swap', 'nav-edg'),
-    _page('ndf/commodities', 'NDF', 'Commodities', _COLS_TERMO_COMM, _B3_TERMO, 'nav-ndf', 'nav-commodities'),
-    _page('options/fxo', 'Options', 'FXO', _COLS_OPCAO, _B3_OPCAO, 'nav-options', 'nav-fxo'),
-    _page('options/commodities', 'Options', 'Commodities', _COLS_OPCAO, _B3_OPCAO, 'nav-options', 'nav-commodities'),
-    _page('options/edg', 'Options', 'EDG', _COLS_OPCAO, _B3_OPCAO, 'nav-options', 'nav-edg'),
-    _page('coe', 'COE', '', _COLS_COE, None, 'nav-coe'),
-    _page('dce/deliverable-forward', 'DCE', 'Deliverable Forward', _COLS_TERMO_FX, None, 'nav-dce', 'nav-deliverable-forward'),
-    _page('dce/ndf', 'DCE', 'NDF', _COLS_TERMO_FX, None, 'nav-dce', 'nav-ndf'),
-    _page('dce/option', 'DCE', 'Option', _COLS_OPCAO, None, 'nav-dce'),
-    _page('dce/swap', 'DCE', 'Swap', _COLS_SWAP, None, 'nav-dce', 'nav-swap'),
+    _page('swap/cem', 'Swap', 'CEM', _COLS_SWAP, _B3_SWAP, 'nav-swap',
+          position=POS_SWAP, checks=_CK_SWAP),
+    _page('swap/edg', 'Swap', 'EDG', _COLS_SWAP, _B3_SWAP, 'nav-swap', 'nav-edg',
+          position=POS_SWAP, checks=_CK_SWAP),
+    _page('ndf/commodities', 'NDF', 'Commodities', _COLS_TERMO_COMM, _B3_TERMO, 'nav-ndf',
+          'nav-commodities', position=POS_NDF, checks=_CK_TERMO),
+    _page('options/fxo', 'Options', 'FXO', _COLS_OPCAO, _B3_OPCAO, 'nav-options', 'nav-fxo',
+          position=POS_OPCAO, checks=_CK_PREMIO),
+    _page('options/commodities', 'Options', 'Commodities', _COLS_OPCAO, _B3_OPCAO, 'nav-options',
+          'nav-commodities', position=POS_OPCAO, checks=_CK_PREMIO),
+    _page('options/edg', 'Options', 'EDG', _COLS_OPCAO, _B3_OPCAO, 'nav-options', 'nav-edg',
+          position=POS_OPCAO, checks=_CK_PREMIO),
+    _page('coe', 'COE', '', _COLS_COE, None, 'nav-coe', checks=_CK_PREMIO),
+    _page('dce/deliverable-forward', 'DCE', 'Deliverable Forward', _COLS_TERMO_FX, None, 'nav-dce',
+          'nav-deliverable-forward', checks=_CK_TERMO),
+    _page('dce/ndf', 'DCE', 'NDF', _COLS_TERMO_FX, None, 'nav-dce', 'nav-ndf', checks=_CK_TERMO),
+    _page('dce/option', 'DCE', 'Option', _COLS_OPCAO, None, 'nav-dce', checks=_CK_PREMIO),
+    _page('dce/swap', 'DCE', 'Swap', _COLS_SWAP, None, 'nav-dce', 'nav-swap', checks=_CK_SWAP),
 ))
 
 
 def page(path):
     """A entrada do catalogo para `/unwinds/<path>`, ou `None`."""
     return PAGES.get('/unwinds/' + str(path or '').strip('/'))
+
+
+def page_and_action(sub):
+    """`'options/fxo/import-file'` -> (pagina, 'import-file'); `'coe'` -> (pagina, '').
+
+    A API das onze paginas e UMA regra (`/api/unwinds/<path:sub>`), e o caminho
+    do produto tem UM ou DOIS segmentos (`coe` x `swap/cem`): quem separa o
+    produto da acao e o catalogo, pelo prefixo mais longo que ele conhece."""
+    partes = [x for x in str(sub or '').strip('/').split('/') if x]
+    for n in range(min(len(partes), 2), 0, -1):
+        p = page('/'.join(partes[:n]))
+        if p is not None:
+            return p, '/'.join(partes[n:])
+    return None, ''
+
+
+def column_kinds(p):
+    """{campo: tipo} das colunas da pagina."""
+    return dict((c[0], c[2]) for c in p['columns'])
 
 
 def fields(p):

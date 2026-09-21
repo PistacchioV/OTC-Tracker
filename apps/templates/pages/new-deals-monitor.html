@@ -342,6 +342,16 @@
         'intrag-option':      'ti-briefcase',
         'intrag-swap':        'ti-arrows-exchange',
         'intrag-unwind':      'ti-rotate-2',
+        'unwind-ndf-fx':      'ti-rotate-2',
+        'unwind-ndf-commodities': 'ti-rotate-2',
+        'unwind-opt-fxo':     'ti-rotate-2',
+        'unwind-opt-commodities': 'ti-rotate-2',
+        'unwind-opt-edg':     'ti-rotate-2',
+        'unwind-coe':         'ti-rotate-2',
+        'intrag-unwind-dce-deliverable-forward': 'ti-rotate-2',
+        'intrag-unwind-dce-ndf': 'ti-rotate-2',
+        'intrag-unwind-dce-option': 'ti-rotate-2',
+        'intrag-unwind-dce-swap': 'ti-rotate-2',
         'intrag-dce-option':  'ti-file-invoice',
         'intrag-dce-ndf':     'ti-file-invoice',
         'intrag-dce-swap':    'ti-file-invoice'
@@ -463,14 +473,17 @@
     // então os cards da mesma família ficam sempre na mesma altura.
     var GROUPS = [
         { key: 'ndm-grp-ndf',     label: 'NDF',
-          b3: ['ndf-commodities', 'ndf-fwdstart', 'ndf-otherpublisher', 'ndf-vanilla', 'unwind-ndf-fx'],
-          intrag: ['intrag-ndf', 'intrag-unwind'] },
+          b3: ['ndf-commodities', 'ndf-fwdstart', 'ndf-otherpublisher', 'ndf-vanilla', 'unwind-ndf-fx',
+               'unwind-ndf-commodities'],
+          intrag: ['intrag-ndf', 'intrag-unwind', 'intrag-unwind-dce-ndf',
+                   'intrag-unwind-dce-deliverable-forward'] },
         { key: 'ndm-grp-options', label: 'Options',
-          b3: ['opt-commodities', 'opt-fxo', 'opt-equity'],
-          intrag: ['intrag-option', 'intrag-dce-option', 'intrag-dce-ndf'] },
+          b3: ['opt-commodities', 'opt-fxo', 'opt-equity', 'unwind-opt-commodities', 'unwind-opt-fxo',
+               'unwind-opt-edg', 'unwind-coe'],
+          intrag: ['intrag-option', 'intrag-dce-option', 'intrag-dce-ndf', 'intrag-unwind-dce-option'] },
         { key: 'ndm-grp-swaps',   label: 'Swaps',
           b3: ['swap-equities', 'swap-cem'],
-          intrag: ['intrag-swap', 'intrag-dce-swap'] }
+          intrag: ['intrag-swap', 'intrag-dce-swap', 'intrag-unwind-dce-swap'] }
     ];
 
     // Cards de Confirmations por família de produto (só produtos com lógica de
