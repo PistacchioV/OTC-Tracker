@@ -2714,5 +2714,6 @@
   "tl-ndf-parity": "Paridad a reales (en blanco = PTAX)",
   "tl-ndf-underlying": "Activo subyacente",
   "tl-ndf-commodity-help": "Forward de mercancía: el nocional es cantidad, el fixing es el PRECIO del activo (de Quotes, × 0,01 cuando el Index B3 dice que cotiza en centavos) y la paridad lleva la diferencia a reales.",
-  "tl-nav-calculators": "Calculadoras"
+  "tl-nav-calculators": "Calculadoras",
+  "swal-mapping-failed-n": "operación(es) NO se guardaron — revise el log e intente de nuevo."
 }
