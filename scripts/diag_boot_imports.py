@@ -38,6 +38,17 @@ Uso, da pasta da versão que o `link.txt` aponta:
 
     python scripts\\diag_boot_imports.py
 
+Rodá-lo de um CLONE LOCAL (fora do share) é o CONTROLE do experimento, não um
+erro: é o mesmo app, com os mesmos dados no share, e só o CÓDIGO em disco
+local. Se a mesma medição cai de minutos para segundos, o custo é ler o
+código pelo SMB; se não cai, é o que o import EXECUTA. Vale rodar os dois.
+
+Ele imprime o progresso ENQUANTO roda, e isso não é enfeite: a versão
+anterior só falava no fim, e doze minutos mudos são indistinguíveis de um
+travamento — foi o que aconteceu na primeira execução na instância
+(21/09/2026), e é o mesmo engano do `> boot.log` que fez a subida parecer
+congelada. Saída que demora tem de dizer que está viva.
+
 O relatório sai na tela e o bruto fica ao lado do log da instância, em
 `%LOCALAPPDATA%\\OTC-Tracker\\diag-boot-imports.txt`.
 """
@@ -49,6 +60,11 @@ import time
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 TOPO = 25
+
+# De quantos em quantos segundos o progresso fala. Cinco é curto o bastante
+# para a primeira linha aparecer antes de alguém desconfiar, e longo o
+# bastante para não virar ruído numa subida de doze minutos.
+PULSO = 5.0
 
 
 def _prefixo_de_bytecode():
@@ -103,16 +119,45 @@ def main():
     print('raiz do app .........: %s' % ROOT)
     print('bytecode em .........: %s' % ambiente['PYTHONPYCACHEPREFIX'])
     print('\nimportando o app inteiro com o cronômetro do Python.')
-    print('leva o tempo de uma subida — na instância, minutos. aguarde.\n')
+    print('leva o tempo de uma subida — na instância, minutos.')
+    print('o progresso abaixo fala a cada %ds; enquanto ele andar, está vivo.\n' % PULSO)
 
     inicio = time.time()
+    # `stdout` no DEVNULL de propósito: o `-X importtime` escreve no STDERR, e
+    # um cano de saída que ninguém drena enche e TRAVA o processo filho — um
+    # impasse que só apareceria numa subida longa, que é justamente esta.
+    #
+    # Modo texto com `bufsize=1` (linha a linha): é o que permite ler a saída
+    # enquanto ela sai. Com o buffer de bloco padrão, nada chegaria aqui antes
+    # de o filho terminar — que é exatamente o defeito que este trecho conserta.
     proc = subprocess.Popen([sys.executable, '-X', 'importtime', '-c', 'import run'],
                             cwd=ROOT, env=ambiente,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    _saida, erro = proc.communicate()
+                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                            text=True, encoding='utf-8', errors='replace', bufsize=1)
+
+    linhas, n_modulos, ultimo_modulo, ultimo_pulso = [], 0, '', inicio
+    for linha in proc.stderr:
+        linhas.append(linha)
+        if linha.startswith('import time:'):
+            n_modulos += 1
+            ultimo_modulo = linha.rstrip().split('|')[-1].strip()
+        else:
+            # O que o PRÓPRIO app loga durante a subida (os avisos do farol do
+            # `database_access`, entre eles). Vai para a tela na hora: é metade
+            # da resposta, e guardá-lo para o fim o esconderia justamente de
+            # quem está olhando o processo não terminar.
+            sys.stdout.write('  | ' + linha)
+            sys.stdout.flush()
+        agora = time.time()
+        if agora - ultimo_pulso >= PULSO:
+            print('  [%5.0fs] %4d módulos · %s' % (agora - inicio, n_modulos,
+                                                   ultimo_modulo[:52]))
+            sys.stdout.flush()
+            ultimo_pulso = agora
+    proc.wait()
     gasto = time.time() - inicio
 
-    texto = erro.decode('utf-8', 'replace')
+    texto = ''.join(linhas)
     destino = _destino_do_bruto()
     try:
         os.makedirs(os.path.dirname(destino), exist_ok=True)
