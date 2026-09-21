@@ -263,7 +263,9 @@ def api_tools_swap_curve():
     if r:
         return r
     chaves = ('indexador', 'taxa', 'percentual', 'convencao', 'regime', 'tenor',
-              'ptax_offset', 'multiplicador', 'lookback', 'shift')
+              'ptax_offset', 'multiplicador', 'lookback', 'shift',
+              # equity: o ativo vai junto porque é dele que sai o fechamento
+              'ativo', 'cupom_limpo', 'cupom_data')
     atuais = {k: str(request.args.get(k) or '') for k in chaves}
     campos = queries.ler_descricao(request.args.get('text') or '', atuais)
     campos['success'] = True

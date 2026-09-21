@@ -2612,5 +2612,9 @@
   "unw-col-fixing-dates": "Fixing Dates",
   "unw-col-unit-price": "Unit Price",
   "unw-col-termination-rate": "Termination Rate",
-  "ops-col-settlement-type": "Settlement Type"
+  "ops-col-settlement-type": "Settlement Type",
+  "tl-clean-coupon": "Clean coupon (%)",
+  "tl-close-price": "Close price",
+  "tl-initial-calc": "Initial price (close × coupon)",
+  "tl-clean-coupon-help": "The curve description sets the initial price as a percentage of a close: the clean coupon of the position is that percentage, not the price. Close × coupon goes into the Initial price below."
 }

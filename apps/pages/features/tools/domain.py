@@ -314,7 +314,7 @@ def montar_ponta(regra, pct, taxa, sinal, nome_classe, cotacao_inicial,
               'moeda': '', 'tenor': '', 'taxa_indice': '', 'ptax_inicial': '',
               'ptax_final': '', 'ptax_offset': '', 'ni_inicial': '', 'preco_inicial': '',
               'preco_final': '', 'ativo': '', 'ipca_fixing': '', 'multiplicador': '',
-              'descricao': ''}
+              'descricao': '', 'cupom_limpo': '', 'cupom_data': '', 'preco_close': ''}
     faltando = []
     if not regra:
         return campos, ['indexador']
@@ -439,6 +439,8 @@ _SO_EM = {
     descricao_curva.SHIFT: {liquidacao.SOFR},
     descricao_curva.TENOR: set(liquidacao.COM_FIXING),
     descricao_curva.PTAX_OFFSET: set(liquidacao.COM_MOEDA),
+    descricao_curva.CUPOM_LIMPO: {liquidacao.EQUITY},
+    descricao_curva.CUPOM_DATA: {liquidacao.EQUITY},
 }
 
 
@@ -485,3 +487,15 @@ def aplicar_descricao(campos, texto, faltando=None):
         itens.append(item)
     campos['leitura'] = itens
     return campos
+
+
+def preco_inicial_do_cupom(cupom_pct, fechamento):
+    """O preço inicial de uma perna de EQUITY cujo contrato o define como um
+    percentual de um fechamento (`Preco in ativo - 100.00% Close 20-Sep-24`):
+    `fechamento × cupom/100`. `None` quando falta uma das duas parcelas — o
+    campo fica em branco e SINALIZADO, nunca o percentual no lugar do preço
+    (era o `100.0000` que a tela mostrava como preço inicial do GLD)."""
+    if cupom_pct is None or fechamento is None:
+        return None
+    return float(fechamento) * float(cupom_pct) / 100.0
+

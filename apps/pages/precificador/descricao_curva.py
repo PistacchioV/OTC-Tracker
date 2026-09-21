@@ -42,6 +42,11 @@ TENOR = 'tenor'
 PTAX_OFFSET = 'ptax_offset'
 LOOKBACK = 'lookback'
 SHIFT = 'shift'
+# Equity: o PREÇO INICIAL é um percentual sobre um fechamento — `Preco in ativo
+# - 100.00% Close 20-Sep-24`. O percentual é o Cupom Limpo; a data é a do pregão
+# cujo fechamento ele multiplica.
+CUPOM_LIMPO = 'cupom_limpo'   # % (100.0000 = 100%)
+CUPOM_DATA = 'cupom_data'     # ISO — o pregão do fechamento
 
 
 @dataclass(frozen=True)
@@ -126,6 +131,36 @@ def _dc(codigo):
     return lambda m: codigo
 
 
+# Os meses como a denominação os escreve: em inglês (o Bloomberg) e em
+# português (a mesa). Só as três letras — `September` e `Setembro` caem no mesmo.
+_MESES = {'JAN': 1, 'FEB': 2, 'FEV': 2, 'MAR': 3, 'APR': 4, 'ABR': 4, 'MAY': 5, 'MAI': 5,
+          'JUN': 6, 'JUL': 7, 'AUG': 8, 'AGO': 8, 'SEP': 9, 'SET': 9, 'OCT': 10, 'OUT': 10,
+          'NOV': 11, 'DEC': 12, 'DEZ': 12}
+
+
+def _data_do_close(m):
+    """`20-Sep-24` / `20/SET/2024` → ISO; data que não existe descarta o match."""
+    mes = _MESES.get(m.group(2)[:3])
+    if not mes:
+        return None
+    ano = int(m.group(3))
+    ano += 2000 if ano < 100 else 0
+    try:
+        from datetime import date
+        return date(ano, mes, int(m.group(1))).isoformat()
+    except ValueError:
+        return None
+
+
+def _cupom_pct(m):
+    return _fmt(_num(m.group(1)), 4)
+
+
+def _cupom_fator(m):
+    # `1.5 Close 14-Aug-26`: sem o `%`, o número é o FATOR (1.5 = 150%)
+    return _fmt(_num(m.group(1)) * 100.0, 4)
+
+
 _REGRAS = [
     # o multiplicador da taxa: `(… + 0.75%)*1.1765`, `(…) x 1,1765`, `1.1765*(…)`
     (MULTIPLICADOR, r'\)\s*[*X×]\s*(' + _NUM + r')', lambda m: _fmt(_num(m.group(1)), 8),
@@ -173,11 +208,37 @@ _REGRAS = [
     (LOOKBACK, r'LOOK[\s-]*BACK\s*(?:OF|DE)?\s*(\d+)', lambda m: str(int(m.group(1))), 'lookback'),
     (SHIFT, r'(?:OBS(?:ERVATION)?\s*)?SHIFT\s*(?:OF|DE)?\s*(\d+)', lambda m: str(int(m.group(1))),
      'observation shift'),
+    # Equity — o preço inicial como % de um fechamento. A cláusula do CLOSE
+    # vem ANTES de `Preco Inicial: 100.00%`: as duas dizem o mesmo percentual,
+    # e a primeira regra que acha o campo vence — a que está ao lado da data é a
+    # que o contrato amarra ao pregão.
+    (CUPOM_LIMPO, r'(' + _NUM + r')\s*%\s*(?:DO\s+|OF\s+)?(?:CLOSE|FECHAMENTO)\b', _cupom_pct,
+     'clean coupon (% of the close)'),
+    (CUPOM_LIMPO, r'(?<![\d.,])(' + _NUM + r')\s+(?:CLOSE|FECHAMENTO)\b', _cupom_fator,
+     'clean coupon (factor of the close)'),
+    (CUPOM_LIMPO, r'(' + _NUM + r')\s*%\s*(?:DO\s+|OF\s+)?SPOT\b', _cupom_pct,
+     'clean coupon (% of the spot)'),
+    (CUPOM_LIMPO, r'PRECO\s+INICIAL\s*:?\s*(' + _NUM + r')\s*%', _cupom_pct,
+     'clean coupon (initial price %)'),
+    # o grupo do VALOR é o último (a regra do `valor_usado`): dia, mês e ano
+    # entram num grupo só, e o `_data_do_close` os separa
+    (CUPOM_DATA, r'(?:CLOSE|FECHAMENTO)\s*[:\-]?\s*((\d{1,2})[-/ ]([A-Z]{3,9})[-/ ](\d{2,4}))',
+     lambda m: _data_do_close(_Grupos(m)), 'close date of the initial price'),
     # só informação: a data e o lado do fixing inicial da moeda
     (None, r'INITIAL\s+FX\s+PTAX[\s-]*(?:ASK|BID|VENDA|COMPRA|V|C)?\s*(\d{1,2}/[A-Z]{3}/\d{2,4})',
      lambda m: m.group(1), 'initial FX fixing date'),
     (None, r'PTAX[\s-]*(ASK|BID|VENDA|COMPRA)\b', lambda m: m.group(1).lower(), 'PTAX side'),
 ]
+
+class _Grupos(object):
+    """O match da data com os grupos DESLOCADOS: o grupo 1 é a data inteira (o
+    valor, para o `valor_usado`), e dia/mês/ano são os 2, 3 e 4."""
+    def __init__(self, m):
+        self._m = m
+
+    def group(self, n):
+        return self._m.group(n + 1)
+
 
 # o que, sobrando no texto, merece conferência: um número com operador ou %
 _SUSPEITO = re.compile(r'(?:\d\s*[%*X×/^]|[*X×/^]\s*\d)')
