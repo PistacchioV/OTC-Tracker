@@ -2713,5 +2713,6 @@
   "tl-opt-lookup-help": "Código IF o número de confirmación de Live Position › Option. La posición completa tipo, lado, strike, cantidad abierta, fecha de ejercicio y prima unitaria, y los precios de verificación vienen de Quotes — uno en la vanilla, la serie completa en la asiática.",
   "tl-ndf-parity": "Paridad a reales (en blanco = PTAX)",
   "tl-ndf-underlying": "Activo subyacente",
-  "tl-ndf-commodity-help": "Forward de mercancía: el nocional es cantidad, el fixing es el PRECIO del activo (de Quotes, × 0,01 cuando el Index B3 dice que cotiza en centavos) y la paridad lleva la diferencia a reales."
+  "tl-ndf-commodity-help": "Forward de mercancía: el nocional es cantidad, el fixing es el PRECIO del activo (de Quotes, × 0,01 cuando el Index B3 dice que cotiza en centavos) y la paridad lleva la diferencia a reales.",
+  "tl-nav-calculators": "Calculadoras"
 }

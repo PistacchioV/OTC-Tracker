@@ -1472,7 +1472,33 @@ def opcao_prefill(b3_id):
                            or _moeda_iso(_subjacente(ativo).get('Moeda')))
         if not campos['moeda']:
             falt.append('moeda')
-    campos['paridade'], campos['paridade_premio'] = '', ''
+    campos['paridade'], campos['paridade_auto'], campos['paridade_premio'] = '', '', ''
+    # A PARIDADE já vem no campo ao buscar (mesa, 21/09/2026): a PTAX de venda da
+    # moeda do preço, D-n úteis do exercício — e o `n` sai da própria posição, pela
+    # `Data de fixing da moeda do ativo subjacente` (sem ela, o D-1 de costume).
+    # Marcada como automática: o Calculate a rebusca se o exercício mudar. Data
+    # de fixing no FUTURO fica em branco — essa PTAX ainda não existe.
+    if campos['moeda'] and campos['moeda'] != liquidacao.SEM_CONVERSAO and campos['exercicio']:
+        n = 1
+        fix_moeda = _data_tela(cel.get('Data de fixing da moeda do ativo subjacente'))
+        if fix_moeda:
+            try:
+                n = max(calendario.calendario_anbima().dias_uteis(
+                    para_data(fix_moeda), para_data(campos['exercicio'])), 0)
+            except ErroDeDado:
+                n = 1
+        campos['ptax_offset'] = str(int(n))
+        alvo = para_data(campos['exercicio'])
+        quando = calendario.calendario_anbima().workday(alvo, -n) if n else alvo
+        if quando <= date.today():
+            valor, quando, erro = _ptax_do_fixing(campos['moeda'], campos['exercicio'], n)
+            if valor is not None:
+                campos['paridade'], campos['paridade_auto'] = domain.fx8(valor), '1'
+                notas.append({'code': 'parity_ptax', 'params': {
+                    'moeda': campos['moeda'], 'data': '{:%d/%m/%Y}'.format(quando)}})
+            else:
+                falt.append('paridade')
+                notas.append({'code': 'parity_failed', 'params': {'motivo': erro}})
     # Os preços de verificação vêm do QUOTES: um na vanilla, a série na asiática.
     datas = _datas_de_verificacao(cel)
     precos, sem, fonte_q, erro_q = _fixings_do_quotes(
@@ -1506,4 +1532,63 @@ def opcao_prefill(b3_id):
     return {'found': True, 'b3_id': cel.get('Código IF', '') or b3_id, 'source_date': fonte,
             'counterparty': contraparte,
             'fields': campos, 'missing': falt, 'assumed': assumido, 'notes': notas}
+
+
+# ── Export: a memória de cálculo das três calculadoras ──────────────────────
+# A MESMA lógica da do swap (§455): refaz a conta pela função da tela — nada de
+# resultado guardado entre dois requests — e o arquivo é FÓRMULA com o valor
+# gravado junto. O nome é o do DOCUMENTO: CETIP ID, contraparte e a data.
+
+def _emissao_do_form(form):
+    iso = str(form.get('data_emissao') or '').strip()
+    try:
+        return para_data(iso) if iso else None
+    except ErroDeDado:
+        return None
+
+
+def _num_opcional(form, campo):
+    bruto = str(form.get(campo) or '').strip()
+    return domain.decimal(bruto, campo) if bruto else None
+
+
+def memoria_ndf(form):
+    from apps.pages.features.tools.infra import memoria_derivativos
+    c = calcular_ndf(form)
+    cetip, cpty = str(form.get('b3_id') or '').strip(), str(form.get('counterparty') or '').strip()
+    conteudo = memoria_derivativos.ndf(
+        c['r'], c['moeda'], c['vencimento'], cetip_id=cetip, contraparte=cpty,
+        classe=str(form.get('classe') or '').strip(), emissao=_emissao_do_form(form),
+        nocional_informado=_num_opcional(form, 'nocional'),
+        fixo_em_reais=domain.ligado(form, 'fixo_em_reais'),
+        fixing_nota=c.get('fixing_nota') or '', paridade_nota=c.get('paridade_nota') or '',
+        ativo=str(form.get('ativo') or '').strip() if c.get('mercadoria') else '')
+    return conteudo, domain.nome_memoria(cetip, cpty, c['vencimento'])
+
+
+def memoria_unwind_ndf(form):
+    from apps.pages.features.tools.infra import memoria_derivativos
+    c = calcular_unwind_ndf(form)
+    cetip, cpty = str(form.get('b3_id') or '').strip(), str(form.get('counterparty') or '').strip()
+    conteudo = memoria_derivativos.unwind_ndf(
+        c['r'], c['moeda'], c['liquidacao'], c['vencimento'], cetip_id=cetip, contraparte=cpty,
+        classe=str(form.get('classe') or '').strip(), emissao=_emissao_do_form(form),
+        nocional_informado=_num_opcional(form, 'nocional'),
+        fixo_em_reais=domain.ligado(form, 'fixo_em_reais'), du_contado=c['du_contado'],
+        original_informado=_num_opcional(form, 'nocional_original'),
+        ja_recomprado=_num_opcional(form, 'ja_recomprado') or 0.0)
+    return conteudo, domain.nome_memoria(cetip, cpty, c['liquidacao'])
+
+
+def memoria_opcao(form):
+    from apps.pages.features.tools.infra import memoria_derivativos
+    c = calcular_opcao(form)
+    cetip, cpty = str(form.get('b3_id') or '').strip(), str(form.get('counterparty') or '').strip()
+    conteudo = memoria_derivativos.opcao(
+        c['r'], c['moeda'], c['exercicio'], cetip_id=cetip, contraparte=cpty,
+        classe=str(form.get('classe') or '').strip(), emissao=_emissao_do_form(form),
+        paridade_nota=c.get('paridade_nota') or '',
+        premio_unitario=_num_opcional(form, 'premio_unitario') or 0.0,
+        paridade_premio=_num_opcional(form, 'paridade_premio'))
+    return conteudo, domain.nome_memoria(cetip, cpty, c['exercicio'])
 

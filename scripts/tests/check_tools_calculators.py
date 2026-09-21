@@ -50,10 +50,23 @@ def main():
     print('== 1. o menu de Tools: ordem alfabetica e link com rota ==')
     menu = io.open(os.path.join(ROOT, 'apps', 'templates', 'partials', 'sidenav.html'),
                    encoding='utf-8').read()
-    bloco = menu.split('id="toolsSection"', 1)[1].split('</ul>', 1)[0]
-    itens = re.findall(r'href="([^"]+)"[^>]*>\s*<span class="menu-text"[^>]*>\s*([^<]+?)\s*</span>', bloco)
+    # Tools tem DOIS niveis: o grupo **Calculators** (as calculadoras) e as
+    # irmas dele. Cada nivel e alfabetico por conta propria.
+    tools = menu.split('id="toolsSection"', 1)[1].split('<!-- Estrutura de "Daily Settlement"', 1)[0]
+    grupo = tools.split('id="toolsCalculators"', 1)[1].split('</ul>', 1)[0]
+    fora = tools.split('id="toolsCalculators"', 1)[0] + tools.split('id="toolsCalculators"', 1)[1].split('</ul>', 1)[1]
+    _RE_ITEM = r'href="([^"#][^"]*)"[^>]*>\s*<span class="menu-text"[^>]*>\s*([^<]+?)\s*</span>'
+    no_grupo = re.findall(_RE_ITEM, grupo)
+    irmas = re.findall(_RE_ITEM, fora)
+    itens = no_grupo + irmas
+    check('as calculadoras estao no grupo Calculators, em ordem alfabetica',
+          [r for _h, r in no_grupo],
+          ['NDF Calculator', 'Option Calculator', 'Swap Calculator', 'Unwind NDF Calculator'])
+    check('nenhuma calculadora ficou solta fora do grupo',
+          [r for _h, r in irmas if 'calculator' in r.lower()], [])
+    nivel1 = ['Calculators'] + [r for _h, r in irmas]
+    check('o primeiro nivel de Tools em ordem alfabetica', nivel1, sorted(nivel1, key=lambda x: x.lower()))
     rotulos = [r for _h, r in itens]
-    check('em ordem alfabetica', rotulos, sorted(rotulos, key=lambda s: s.lower()))
     check('com as tres paginas novas',
           [r for r in rotulos if r in ('NDF Calculator', 'Option Calculator', 'Unwind NDF Calculator')],
           ['NDF Calculator', 'Option Calculator', 'Unwind NDF Calculator'])
@@ -257,6 +270,10 @@ def main():
     _o = (R._lpndf_collect, R._lpopt_collect, R._b3_is_omnibus, R._ndfc_ir_exempt,
           R._mapping_rows, Q.fetch_ohlc, Q.fetch_ptax)
     _subj_real = R._subjacente_by_code
+    # HERMETICO: o prefill busca a PTAX quando a data do fixing ja passou, e sem
+    # isto o teste dependeria da rede (e do BCB) para passar.
+    _ptax_base = queries._ptax_do_fixing
+    queries._ptax_do_fixing = lambda moeda, fim, n: (None, None, 'sem rede no teste')
     SUBJ = {}                       # o Index B3 do teste: vazio = ninguem cotado em centavos
     R._subjacente_by_code = lambda: SUBJ
     R._lpndf_collect = lambda ref, exact=False: {'columns': NDF_COLS, 'rows': LINHAS_NDF,
@@ -450,6 +467,52 @@ def main():
               queries.opcao_prefill('CHASM26081V')['fields']['moeda'], 'USD')
         check('o numero da confirmacao tambem acha', queries.opcao_prefill('D5YJ-QD5YF')['b3_id'],
               'CHASM26081V')
+        # A PARIDADE vem no campo ja na busca (mesa, 21/09/2026): a PTAX de venda
+        # da moeda do preco, D-n do exercicio, com o `n` contado pela data de
+        # fixing da MOEDA que a posicao traz.
+        _ptax_opt = queries._ptax_do_fixing
+        pedidos_ptax = []
+
+        def _ptax_stub(moeda, fim, n):
+            pedidos_ptax.append((moeda, fim, n))
+            return 5.4321, date(2026, 9, 16), ''
+        queries._ptax_do_fixing = _ptax_stub
+        i_fm = OPT_COLS.index('Data de fixing da moeda do ativo subjacente')
+        LINHAS_OPT[0][i_fm] = '16/09/2026'                   # exercicio 18/09 -> D-2
+        try:
+            pr = queries.opcao_prefill('CHASM26081V')
+            check('a paridade vem PREENCHIDA e marcada como automatica, com o D-n da posicao',
+                  (pr['fields']['paridade'], pr['fields']['paridade_auto'], pr['fields']['ptax_offset'],
+                   pedidos_ptax[-1]), ('5.4321', '1', '2', ('USD', '2026-09-18', 2)))
+            check('e a nota diz de que dia e a PTAX',
+                  [n['params'] for n in pr['notes'] if n['code'] == 'parity_ptax'],
+                  [{'moeda': 'USD', 'data': '16/09/2026'}])
+            LINHAS_OPT[0][i_fm] = ''
+            check('sem a data de fixing da moeda: o D-1 de costume',
+                  queries.opcao_prefill('CHASM26081V')['fields']['ptax_offset'], '1')
+            i_ex = OPT_COLS.index('Data Vencimento')
+            _ex = LINHAS_OPT[0][i_ex]
+            LINHAS_OPT[0][i_ex] = '15/01/2030'
+            fu = queries.opcao_prefill('CHASM26081V')
+            check('exercicio no FUTURO: paridade em branco, sem marca — a PTAX ainda nao existe',
+                  (fu['fields']['paridade'], fu['fields']['paridade_auto']), ('', ''))
+            LINHAS_OPT[0][i_ex] = _ex
+            queries._ptax_do_fixing = lambda moeda, fim, n: (None, None, 'sem rede')
+            fa = queries.opcao_prefill('CHASM26081V')
+            check('PTAX fora do ar: campo em branco, SINALIZADO, com o motivo',
+                  (fa['fields']['paridade'], 'paridade' in fa['missing'],
+                   [n['params']['motivo'] for n in fa['notes'] if n['code'] == 'parity_failed']),
+                  ('', True, ['sem rede']))
+            i_sr2 = OPT_COLS.index('Strike/Limitador/Barreiras em Reais')
+            LINHAS_OPT[0][i_sr2] = 'S'
+            queries._ptax_do_fixing = _ptax_stub
+            n_antes = len(pedidos_ptax)
+            br = queries.opcao_prefill('CHASM26081V')
+            check('preco em reais: nao ha paridade a buscar',
+                  (br['fields']['paridade'], len(pedidos_ptax) == n_antes), ('', True))
+            LINHAS_OPT[0][i_sr2] = ''
+        finally:
+            queries._ptax_do_fixing = _ptax_opt
         # cambio: a PTAX de VENDA da moeda base, pela data de fixing do ativo
         Q.fetch_ptax = lambda ccy, ini, fim: (list(Q.PTAX_COLUMNS),
                                               [['14/09/2026', ccy, '5.4300', '5.4321', '', '']])
@@ -543,6 +606,124 @@ def main():
         (R._lpndf_collect, R._lpopt_collect, R._b3_is_omnibus, R._ndfc_ir_exempt,
          R._mapping_rows, Q.fetch_ohlc, Q.fetch_ptax) = _o
         R._subjacente_by_code = _subj_real
+        queries._ptax_do_fixing = _ptax_base
+
+    print('\n== 10. Export: a memoria de calculo em Excel, na logica da do swap ==')
+    # FORMULA, nao valor — e com o VALOR gravado junto, porque o Modo de Exibicao
+    # Protegido e o preview do anexo nao recalculam (a memoria chegaria em branco).
+    # O cache sai da PROPRIA formula: o que se cobra aqui e que ele seja o numero
+    # do MOTOR. Planilha afirmando um numero que a tela nao deu e o defeito.
+    import io as _io
+    import zipfile
+    import openpyxl
+    from apps.pages.features.tools.infra import memoria_derivativos as M
+
+    def abrir(conteudo):
+        return (openpyxl.load_workbook(_io.BytesIO(conteudo)).active,
+                openpyxl.load_workbook(_io.BytesIO(conteudo), data_only=True).active)
+
+    def celula(ws, rotulo):
+        for row in ws.iter_rows(min_col=1, max_col=2):
+            if row[0].value == rotulo:
+                return row[1].value
+        return None
+
+    rn = D.liquidar_ndf(1000000.0, 5.20, 5.35, D.VENDIDO)
+    wf, wv = abrir(M.ndf(rn, 'USD', date(2026, 9, 21), cetip_id='26C03202688',
+                         contraparte='USINA ALTO ALEGRE SA', nocional_informado=1000000.0,
+                         fixing_nota='PTAX USD 18/09/2026'))
+    check('NDF: a liquidacao e FORMULA', str(celula(wf, 'Liquidação (resultado do banco)')).startswith('=ROUND('))
+    check('NDF: o valor em cache e o do motor (liquidacao, IR e liquido ao cliente)',
+          (celula(wv, 'Liquidação (resultado do banco)'), celula(wv, 'IR da operação'),
+           celula(wv, 'Líquido ao cliente')), (rn.liquidacao, rn.ir, rn.liquido_cliente))
+    check('NDF: a parte devedora e NOMEADA (o banco paga)', celula(wv, 'Parte devedora'), 'Banco J.P. Morgan')
+    rm = D.liquidar_ndf(100000.0, 0.696, 0.74, D.COMPRADO, paridade=5.4)
+    _f, wv = abrir(M.ndf(rm, 'USD', date(2026, 9, 18), classe='COMMODITIES', ativo='CTZ6',
+                         contraparte='COFCO', nocional_informado=100000.0))
+    check('NDF de mercadoria: a paridade entra na formula e o cache e o do motor',
+          (celula(wv, 'Liquidação (resultado do banco)'), celula(wv, 'Paridade para reais'),
+           celula(wv, 'Parte devedora')), (rm.liquidacao, 5.4, 'COFCO'))
+    rf = D.liquidar_ndf(5200000.0, 5.20, 5.35, D.COMPRADO, fixo_em_reais=True)
+    _f, wv = abrir(M.ndf(rf, 'USD', date(2026, 9, 21), nocional_informado=5200000.0, fixo_em_reais=True))
+    check('fixo em reais: a planilha divide pela taxa POR FORMULA',
+          (round(celula(wv, 'Nocional em moeda estrangeira'), 2), celula(wv, 'Liquidação (resultado do banco)')),
+          (1000000.0, rf.liquidacao))
+
+    for rot, noc, strike, term, pre, du, fixo, comprado, esperado, _me in CASOS:
+        ru = D.recomprar_ndf(noc, strike, term, pre / 100.0, du, D.COMPRADO if comprado else D.VENDIDO,
+                             fixo_em_reais=fixo)
+        wf, wv = abrir(M.unwind_ndf(ru, 'USD', date(2026, 9, 10), date(2026, 9, 30),
+                                    nocional_informado=noc, fixo_em_reais=fixo))
+        check('recompra %s: o cache da planilha e o resultado REAL (%s)' % (rot, esperado),
+              celula(wv, 'Resultado da recompra (valor presente, do banco)'), esperado)
+    check('recompra: o fator de desconto e FORMULA — (1 + pre) ^ (DU / 252)',
+          bool(re.match(r'^=\(1\+\$B\$\d+\)\^\(\$B\$\d+/252\)$', str(celula(wf, 'Fator de desconto')))), True)
+    rs = D.recomprar_ndf(300000.0, 5.2, 5.3, 0.13, 10, D.COMPRADO, nocional_original=1000000.0,
+                         ja_recomprado=200000.0)
+    _f, wv = abrir(M.unwind_ndf(rs, 'USD', date(2026, 9, 10), date(2026, 9, 30), nocional_informado=300000.0,
+                                original_informado=1000000.0, ja_recomprado=200000.0))
+    check('recompra: o novo valor base sai das TRES parcelas, por formula',
+          (celula(wv, 'Novo valor base'), celula(wv, 'Recompra')), (500000.0, 'Parcial'))
+
+    ro = D.liquidar_opcao(D.PUT, D.TITULAR, 80.0, 1000.0, [70.0, 72.0, 74.0], paridade=5.0,
+                          premio_unitario=2.0, paridade_premio=4.0)
+    wf, wv = abrir(M.opcao(ro, 'USD', date(2026, 9, 18), cetip_id='CHASM26081V', contraparte='SUZANO SA',
+                           premio_unitario=2.0, paridade_premio=4.0))
+    check('opcao asiatica: a media e a soma das TRES celulas / 3 (o avaliador nao conhece AVERAGE)',
+          str(celula(wf, 'Preço de exercício apurado')).count('+'), 2)
+    check('opcao: exercicio, premio e resultado do banco em cache = o motor',
+          (celula(wv, 'Liquidação do exercício'), celula(wv, 'Prêmio'), celula(wv, 'Resultado do banco'),
+           celula(wv, 'Preço de exercício apurado')), (ro.payoff, ro.premio, ro.resultado, 72.0))
+    rl = D.liquidar_opcao(D.CALL, D.LANCADOR, 5.20, 1000000.0, [5.35], premio_unitario=0.05)
+    _f, wv = abrir(M.opcao(rl, 'BRL', date(2026, 9, 18), contraparte='CLIENTE', premio_unitario=0.05))
+    check('opcao, banco LANCADOR: o sinal vira por formula e o banco e o devedor',
+          (celula(wv, 'Resultado do banco'), celula(wv, 'Parte devedora')), (rl.resultado, 'Banco J.P. Morgan'))
+
+    # o arquivo: o cache esta ESCRITO no xml (nas duas grafias do <v> vazio) e o
+    # documento e do banco — nada do sistema que o gerou
+    bruto = M.opcao(ro, 'USD', date(2026, 9, 18))
+    z = zipfile.ZipFile(_io.BytesIO(bruto))
+    folha = z.read('xl/worksheets/sheet1.xml').decode('utf-8')
+    check('nenhuma formula ficou com o valor em branco no xml',
+          ('<v></v>' in folha, '<v />' in folha, '<v/>' in folha), (False, False, False))
+    app_xml = z.read('docProps/app.xml').decode('utf-8') if 'docProps/app.xml' in z.namelist() else ''
+    check('nada do sistema que gerou (openpyxl / OTC Tracker) no documento',
+          ('openpyxl' in app_xml.lower(), 'otc tracker' in (app_xml + folha).lower()), (False, False))
+
+    print('\n== 11. o Export pelas tres telas ==')
+    for tool, dados in (
+            ('ndf-calculator', {'posicao': 'vendido', 'moeda': 'USD', 'nocional': '1,000,000.00',
+                                'taxa_termo': '5.2', 'fixing': '5.35', 'vencimento': '2026-09-21',
+                                'b3_id': '26C03202688', 'counterparty': 'USINA ALTO ALEGRE SA'}),
+            ('unwind-ndf-calculator', {'posicao': 'vendido', 'moeda': 'USD', 'nocional': '42,227.42',
+                                       'strike': '5.3748', 'taxa_recompra': '5.109', 'taxa_pre': '13.75',
+                                       'du': '14', 'liquidacao': '2026-09-10', 'vencimento': '2026-09-30'}),
+            ('option-calculator', {'tipo': 'put', 'lado': 'titular', 'moeda': 'BRL', 'strike': '80',
+                                   'quantidade': '1000', 'fixings': '70\n72\n74', 'exercicio': '2026-09-18',
+                                   'premio_unitario': '2'})):
+        h = cl.get('/tools/' + tool).data.decode('utf-8')
+        check(tool + ': o botao Export e o action EXPLICITO do formulario',
+              ('id="tl-export"' in h and ('formaction="/tools/%s/extract"' % tool) in h,
+               ('<form method="post" action="/tools/%s"' % tool) in h), (True, True))
+        r = cl.post('/tools/%s/extract' % tool, data=dados)
+        cd = r.headers.get('Content-Disposition', '')
+        check(tool + ': baixa um .xlsx com o nome do DOCUMENTO',
+              (r.status_code, r.data[:2], 'Mem' in cd and '.xlsx' in cd), (200, b'PK', True))
+    nome = cl.post('/tools/ndf-calculator/extract', data={
+        'posicao': 'vendido', 'moeda': 'USD', 'nocional': '1000000', 'taxa_termo': '5.2', 'fixing': '5.35',
+        'vencimento': '2026-09-21', 'b3_id': '26C03202688',
+        'counterparty': 'USINA ALTO ALEGRE SA'}).headers.get('Content-Disposition', '')
+    check('o nome leva CETIP ID, contraparte e a data', ('26C03202688' in nome, '21-09-2026' in nome), (True, True))
+    rx = cl.post('/tools/option-calculator/extract', data={'tipo': 'call', 'lado': 'titular', 'strike': ''},
+                 headers={'X-Requested-With': 'XMLHttpRequest'})
+    check('conta que nao fecha: 422 em JSON para o botao (nunca um download quebrado)',
+          (rx.status_code, bool((rx.get_json() or {}).get('error'))), (422, True))
+    check('sem JavaScript, o mesmo POST devolve a TELA com a mensagem',
+          'alert-danger' in cl.post('/tools/option-calculator/extract',
+                                    data={'tipo': 'call', 'lado': 'titular', 'strike': ''}).data.decode('utf-8'), True)
+    check('ferramenta que nao existe: 404', cl.post('/tools/nada/extract', data={}).status_code, 404)
+    sw = cl.post('/tools/swap-calculator/extract', data={}, headers={'X-Requested-With': 'XMLHttpRequest'})
+    check('a rota do Export do SWAP nao foi sombreada', sw.status_code in (200, 422), True)
 
     print('\n%s' % ('TUDO OK' if not FALHAS else '%d FALHA(S): %s' % (len(FALHAS), FALHAS)))
     return 1 if FALHAS else 0

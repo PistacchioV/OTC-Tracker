@@ -880,13 +880,16 @@ for rota in ('/tools/fixed-income', '/tools/swap-calculator', '/tools/sofr-index
 nav = ler('apps/templates/partials/sidenav.html')
 import re                                                              # noqa: E402
 filhas = re.findall(r'href="(/quotes|/tools/[a-z-]+)"', nav)
-# Em ORDEM ALFABETICA pelo rotulo em ingles (mesa, 21/09/2026), com as tres
-# calculadoras novas: Euribor, Fixed Income, NDF Calculator, Option Calculator,
-# Quotes, SOFR Index, Swap Calculator, Term SOFR, Unwind NDF Calculator.
-check('o Tools tem o Quotes e as oito ferramentas, em ordem alfabetica', filhas,
-      ['/tools/euribor', '/tools/fixed-income', '/tools/ndf-calculator',
-       '/tools/option-calculator', '/quotes', '/tools/sofr-index', '/tools/swap-calculator',
-       '/tools/term-sofr', '/tools/unwind-ndf-calculator'])
+# Em ORDEM ALFABETICA pelo rotulo em ingles (mesa, 21/09/2026). As quatro
+# calculadoras vivem no grupo **Calculators** (o primeiro item, por ser o `C`);
+# depois dele: Euribor, Fixed Income, Quotes, SOFR Index, Term SOFR.
+check('o Tools tem o grupo Calculators (4) e as cinco irmas, em ordem alfabetica', filhas,
+      ['/tools/ndf-calculator', '/tools/option-calculator', '/tools/swap-calculator',
+       '/tools/unwind-ndf-calculator', '/tools/euribor', '/tools/fixed-income', '/quotes',
+       '/tools/sofr-index', '/tools/term-sofr'])
+check('o grupo Calculators existe, traduz e abre o proprio collapse',
+      ('data-lang="tl-nav-calculators"' in nav, 'href="#toolsCalculators"' in nav,
+       'id="toolsCalculators"' in nav), (True, True, True))
 check('o item pai traduz por data-lang', 'data-lang="tools"' in nav, True)
 # O Page_Access enxerga o que tem href + class="side-nav-link": as filhas
 # precisam ser concediveis uma a uma.

@@ -1014,6 +1014,23 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `_ptax_do_fixing` do Swap Calculator e dizem de que dia é; sem PTAX e sem
   número é erro em frase com o motivo. **O menu de Tools é em ORDEM ALFABÉTICA
   pelo rótulo em inglês** — item novo entra no lugar, não no fim.
+- **As três calculadoras têm Export — a memória de cálculo do swap, na MESMA
+  lógica** (§515, `infra/memoria_derivativos.py`): fórmula encadeada até as
+  entradas, com o VALOR gravado junto (o `_cache_das_formulas`/`_selar` do
+  `memoria_xlsx`, reaproveitados — não reescritos), timbre do banco, parte
+  devedora NOMEADA, nome `Memória de Cálculo - CETIP ID - contraparte - data`.
+  **Só as funções que o avaliador conhece** (as quatro operações, `^`,
+  IF/AND/MAX/ABS/ROUND): a média da asiática é a SOMA explícita das células
+  dividida pela contagem, não AVERAGE — função fora do avaliador sai com o cache
+  errado e o Modo Protegido mostra o número errado. O `check_tools_calculators`
+  cobra que o cache da planilha seja o número do MOTOR (nas três recompras reais
+  inclusive). A rota é UMA (`/tools/<tool>/extract`, que a estática do swap
+  vence), o botão é o mesmo `#tl-export` com `formaction` (o JS do swap já era
+  genérico) e o `<form>` das três tem `action` EXPLÍCITO. **O prefill da opção
+  traz a PARIDADE** (a PTAX, D-n pela `Data de fixing da moeda do ativo`), e o
+  JS zera a procedência da busca anterior antes de escrever a nova. **No menu,
+  as calculadoras vivem no grupo Tools › Calculators** (terceiro nível, como New
+  Deals › Swap); cada nível é alfabético por conta própria.
 - **Calculadoras de NDF e de opção: mercadoria COTADA EM CENTAVOS multiplica o
   preço do Quotes por 0,01** (§514, `_fator_de_centavos`): quem diz é o
   `Fator Conversao` = 0,01 do Index B3 (`Subjacente`), pela MESMA regra da casa

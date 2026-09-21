@@ -2713,5 +2713,6 @@
   "tl-opt-lookup-help": "Código IF or confirmation number from Live Position › Option. The position fills type, side, strike, open quantity, exercise date and unit premium, and the fixing prices come from Quotes — one for a vanilla, the whole series for an Asian.",
   "tl-ndf-parity": "FX rate to BRL (blank = PTAX)",
   "tl-ndf-underlying": "Underlying asset",
-  "tl-ndf-commodity-help": "Commodity forward: the notional is a quantity, the fixing is the PRICE of the underlying (from Quotes, × 0.01 when the B3 Index says it is quoted in cents) and the FX rate takes the difference to BRL."
+  "tl-ndf-commodity-help": "Commodity forward: the notional is a quantity, the fixing is the PRICE of the underlying (from Quotes, × 0.01 when the B3 Index says it is quoted in cents) and the FX rate takes the difference to BRL.",
+  "tl-nav-calculators": "Calculators"
 }

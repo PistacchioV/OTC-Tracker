@@ -33,6 +33,7 @@
           flow: 'flow', pickId: 'Type a B3 ID first.', fromBase: 'from the imported base of',
           closeOf: 'close of',
           posLooking: 'Looking up the position…',
+          n_parity_failed: 'the PTAX of the FX rate could not be fetched — {motivo}',
           n_quoted_in_cents: '{ativo} is quoted in CENTS in the B3 Index (conversion factor 0.01): the Quotes prices were multiplied by 0.01',
           n_parity_ptax: 'FX rate: PTAX {moeda} of {data} (BCB, ask)',
           f_paridade: 'FX rate',
@@ -97,6 +98,7 @@
           flow: 'fluxo', pickId: 'Digite um B3 ID primeiro.', fromBase: 'da base importada de',
           closeOf: 'fechamento de',
           posLooking: 'Consultando a posição…',
+          n_parity_failed: 'não foi possível buscar a PTAX da paridade — {motivo}',
           n_quoted_in_cents: '{ativo} é cotado em CENTAVOS no Index B3 (fator de conversão 0,01): os preços do Quotes foram multiplicados por 0,01',
           n_parity_ptax: 'paridade: PTAX {moeda} de {data} (BCB, venda)',
           f_paridade: 'FX rate',
@@ -161,6 +163,7 @@
           flow: 'flujo', pickId: 'Escriba un B3 ID primero.', fromBase: 'de la base importada de',
           closeOf: 'cierre de',
           posLooking: 'Consultando la posición…',
+          n_parity_failed: 'no se pudo obtener la PTAX de la paridad — {motivo}',
           n_quoted_in_cents: '{ativo} cotiza en CENTAVOS en el Index B3 (factor de conversión 0,01): los precios de Quotes se multiplicaron por 0,01',
           n_parity_ptax: 'paridad: PTAX {moeda} del {data} (BCB, venta)',
           f_paridade: 'FX rate',
@@ -910,6 +913,11 @@
       Object.keys(d.fields || {}).forEach(function (k) { setCampo(k, d.fields[k]); });
       setCampo('b3_id', d.b3_id || inp.value);
       emissao();
+      // A procedência embaixo dos campos é da busca ANTERIOR: zera antes de
+      // escrever a desta, senão um campo vazio ficaria com "PTAX USD …" embaixo.
+      ['fixing_auto_nota', 'paridade_auto_nota'].forEach(function (id) {
+        var el = document.getElementById(id); if (el) el.textContent = '';
+      });
       // NDF: o bloco do termo de MERCADORIA (paridade + ativo) segue a classe
       var merc = document.getElementById('tl-ndf-commodity');
       if (merc) merc.hidden = !/commodit/i.test((d.fields || {}).classe || '');
