@@ -83,6 +83,22 @@ _TOL_COMM_OPT_ABS = 0.20      # + 20 cents
 _TOL_BANK = 20.0
 _LTR_PAY = 'LTR0004'          # JP is PAYING  → Pay  (negative)
 _LTR_RECEIVE = 'LTR0005'      # JP is RECEIVING → Receive (positive)
+# Liquidação de CLIENTE pelo STR (a via do BACEN), 21/09/2026. Ela não é
+# `Derivativos`/`LMA-COMM-BR` na descrição nem `LTR000x` no código, então caía
+# no `continue` mudo do fim do laço: a perna do cliente simplesmente não
+# existia, e a operação aparecia como Pending Payment com `Client Value` vazio
+# — um swap de R$ 253.194,78 da SUZANO que estava no arquivo, pago e `Sucesso`.
+#
+# O par que a identifica é o CÓDIGO mais o PREFIXO da descrição, e são os dois:
+# o `STR0007` sozinho é a mensagem de transferência do SPB e carrega mais coisa
+# que liquidação de cliente; o `STS - ` sozinho não diz por qual via foi. Quem
+# tem os dois traz o nome da contraparte depois do prefixo, que é por onde ela
+# se junta ao lado JPM.
+_STR_CLIENT = 'STR0007'
+# Só o PREFIXO, e ancorado: um `STS` solto no meio do nome de um cliente não
+# pode transformar a linha em liquidação. O `(?i)` porque a grafia do arquivo é
+# de quem digitou a mensagem.
+_STS_PREFIX_RE = re.compile(r'(?i)^\s*STS\s*-\s*')
 # 0.005% COMM TER fee (IR). It is withheld TRADE-LEVEL: the cashflow legs are first
 # netted per Trade Id, then the fee is applied to each trade whose net is a Pay
 # (negative) — the amount paid drops by |trade-net|·0.005%, so the counterparty's
@@ -907,12 +923,18 @@ def _cli_rec(rows, cols):
 
 
 def _cli_spb(rows, cols, mgt=False):
-    """SPB externa — two capture paths on the HistoricoMensagens (JPM or MGT) file:
+    """SPB externa — three capture paths on the HistoricoMensagens (JPM or MGT) file:
 
     1) DERIVATIVES clients (LMA): rows whose Descrição Evento contains
        Derivativos/LMA-COMM-BR → the counterparty name is in the description and
        the leg is always a Pay (sent TED). (Received derivative TEDs come from
        RLDOCREC / _cli_rec.)
+    1b) CLIENT settlements via STR (the BACEN route), 21/09/2026: `STR0007` in
+       col F AND a `STS - <COUNTERPARTY>` description. Same nature as (1) — the
+       name is in the description — by a different settlement route. It matched
+       NEITHER of the other two paths and was being dropped by the silent
+       `continue` at the end of the loop: the client leg simply did not exist,
+       and the trade showed up as a Pending Payment with an empty Client Value.
     2) OTHER BANKS (Safra, Bradesco, Caterpillar…): interbank settlements that
        carry NO client info. Keep rows whose message code (col F) is LTR0004
        (JP paying → Pay) or LTR0005 (JP receiving → Receive). These have no name
@@ -953,6 +975,42 @@ def _cli_spb(rows, cols, mgt=False):
                 continue
             titular = re.sub(r'(?i)operacao de derivativos-', '', evt).strip()
             titular = titular.replace('LMA-COMM-BR ', '').strip()
+            out.append({'value': val, 'client': titular, 'sistema': sistema,
+                        'snumconta': conta, 'product': 'NDF',
+                        'pay_receive': 'Pay', 'le': le})
+            continue
+
+        # 1b) Liquidação de CLIENTE pelo STR, a via do BACEN: `STR0007` na col F
+        #     com a descrição `STS - <CONTRAPARTE>`.  Mesma natureza da trilha
+        #     acima — o nome vem na descrição e se junta ao lado JPM por ele —,
+        #     só que por outra via de liquidação.
+        #
+        #     Exige os DOIS: o código sozinho é a mensagem de transferência do
+        #     SPB e carrega mais coisa que liquidação de cliente; o prefixo
+        #     sozinho não diz por qual via foi.  Casar por um só abriria a porta
+        #     para perna de cliente SEM DINHEIRO atrás, que é pior que a falta —
+        #     ela ou casa com uma perna JPM legítima, escondendo uma quebra de
+        #     verdade, ou vira pendência fantasma.
+        cod_msg = str(r.get(c_ltr, '') if c_ltr else '').strip().upper()
+        if _STR_CLIENT in cod_msg and _STS_PREFIX_RE.match(evt):
+            val = -abs(_num(r.get(c_val, '') if c_val else 0))
+            if abs(val) < 1e-9:
+                continue
+            # Só o prefixo sai, e ancorado no começo: um hífen DENTRO da razão
+            # social sobrevive (`STS - CIA BRASILEIRA - FILIAL` continua
+            # `CIA BRASILEIRA - FILIAL`).  Um `split('-')` comeria o resto.
+            titular = _STS_PREFIX_RE.sub('', evt).strip()
+            if not titular:
+                # Sem nome não há por onde juntar ao lado JPM, e a perna viraria
+                # uma pendência fantasma.  Fica de fora DIZENDO o motivo — o que
+                # some calado é o que ninguém conserta.
+                _LOG.warning('[payrec] %s sem contraparte na descricao (%r) — '
+                             'linha fora da recon', _STR_CLIENT, evt)
+                continue
+            # `Pay` fixo, como na trilha 1: o STR0007 é a mensagem que o JP
+            # ENVIA.  Aparecendo um código irmão de recebimento, ele entra aqui
+            # ao lado — a direção nunca sai do SINAL do valor, que é a regra que
+            # a trilha interbancária abaixo também segue.
             out.append({'value': val, 'client': titular, 'sistema': sistema,
                         'snumconta': conta, 'product': 'NDF',
                         'pay_receive': 'Pay', 'le': le})
