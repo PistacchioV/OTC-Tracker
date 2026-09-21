@@ -33,6 +33,7 @@ var PAGE_URL = {
     'Intrag DCE NDF': '/intrag-dce-ndf',
     'Intrag DCE Swap': '/intrag-dce-swap',
     'Swap Bullet': '/new_deals-swap-bullet',
+    'Swap Cashflow': '/new_deals-swap-cashflow',
     'Unwind NDF FX': '/unwinds/ndf/fx',
     'Unwind Swap CEM': '/unwinds/swap/cem',
     'Unwind Swap EDG': '/unwinds/swap/edg',

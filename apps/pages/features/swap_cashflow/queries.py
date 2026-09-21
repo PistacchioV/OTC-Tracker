@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
-"""Leituras do Swap Bullet: os deals do(s) arquivo(s)-dia, o finder por Deal,
-e os cadastros que o gerador consulta (contas B3, códigos, Reference Data)."""
+"""Leituras do Swap Cashflow: os deals do(s) arquivo(s)-dia, o finder pelo
+`_id`, e os cadastros que o gerador consulta — os do Bullet pela horizontal
+(`platform/swap_new_deals`), mais o tipo de amortização."""
 from datetime import datetime
 
 from apps.pages import data_store as _store
 from apps.pages.platform import swap_new_deals as _sw
-from apps.pages.features.swap_bullet.infra import persistence
+from apps.pages.features.swap_cashflow import domain
+from apps.pages.features.swap_cashflow.infra import persistence
 
 
 def _R():
@@ -33,16 +35,15 @@ def entries(date_str='', date_from='', date_to=''):
         fp = persistence.day_path(datetime(ref.year, ref.month, ref.day))
         try:
             st = _store.stat(fp)
-            mtime, size = st.st_mtime, st.st_size
         except OSError:
             return []
-        out.extend(_R()._day_json(fp, mtime, size))
+        out.extend(_R()._day_json(fp, st.st_mtime, st.st_size))
     else:
         dias = list(_R()._day_files(persistence.cache_dir(), persistence.SUFFIX))
         _R()._day_prefetch(dias)
         for fp, _fname, mtime, size in dias:
             out.extend(_R()._day_json(fp, mtime, size))
-    return [persistence.migrate(dict(e)) for e in out if isinstance(e, dict) and persistence.key_of(e)]
+    return [dict(e) for e in out if isinstance(e, dict) and persistence.key_of(e)]
 
 
 def find(deal_id, trade_date=''):
@@ -70,8 +71,6 @@ def find(deal_id, trade_date=''):
             continue
         for i, e in enumerate(lst):
             if isinstance(e, dict) and persistence.key_of(e) == deal_id:
-                for x in lst:
-                    persistence.migrate(x)      # a lista volta para ser gravada: migra junto
                 return fp, lst, i
     if ref is not None:
         return find(deal_id, '')
@@ -79,11 +78,21 @@ def find(deal_id, trade_date=''):
 
 
 # ── Cadastros ────────────────────────────────────────────────────────────────
-# Moram na horizontal `platform/swap_new_deals.py` desde 21/09/2026 (o Swap
-# Cashflow consulta os mesmos); aqui ficam os nomes de sempre.
+
 own_accounts = _sw.own_accounts
-omnibus_account = _sw.omnibus_account
 le_by_spn = _sw.le_by_spn
 refdata_by_spn = _sw.refdata_by_spn
-codes_for = _sw.codes_for
 template_blocks = _sw.template_blocks
+
+
+def amortization_rows():
+    """As linhas do cadastro `swap-amortizacao` (CODE × LABEL)."""
+    return _R()._mapping_rows('swap-amortizacao') or []
+
+
+def codes_for(deal):
+    """Os códigos B3 do deal: os do Bullet (`platform/swap_new_deals.codes_for`)
+    mais o do Tipo de Amortização (`amortization`, 9(02) do 0034)."""
+    codes = dict(_sw.codes_for(deal))
+    codes['amortization'] = domain.amortization_code(amortization_rows(), deal.get('AmortizationType', ''))
+    return codes

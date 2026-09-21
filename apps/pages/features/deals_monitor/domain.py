@@ -40,10 +40,9 @@ _NDM_CARDS = [
     # recompra (`Unwind/Swap/...`) seguem a convenção do `cache/unwinds/` da
     # Fase 1: o backend delas ainda não existe, e quando nascer cai aqui.
     {'key': 'swap-equities',      'label': 'Swap Equities',       'url': '/new_deals-swap-bullet',        'dirs': _NDM_SWAP_DIRS, 'lob': 'EDG',                  'les': ('JPM', 'ATA')},
-    # `soon` enquanto o backend do Cashflow é 501 (`nd_backend_pending`): o
-    # selo só aparece com o card VAZIO, então no dia em que a CEM tiver
-    # operação a tela mostra o número e o link, sem mexer aqui.
-    {'key': 'swap-cem',           'label': 'Swap CEM',            'url': '/new_deals-swap-cashflow', 'soon': True, 'dirs': _NDM_SWAP_DIRS, 'lob': 'CEM',       'les': ('JPM', 'ATA')},
+    # O backend do Cashflow existe desde 21/09/2026 (`features/swap_cashflow`,
+    # arquivo-dia em `Swap/Cashflow`): o selo `soon` saiu.
+    {'key': 'swap-cem',           'label': 'Swap CEM',            'url': '/new_deals-swap-cashflow', 'dirs': _NDM_SWAP_DIRS, 'lob': 'CEM',       'les': ('JPM', 'ATA')},
     # Recompra (unwind): registro na B3 como os demais desta coluna — o TER
     # 0014 vai para o mesmo Batch Conecta —, e por isso a chave NÃO leva
     # prefixo `intrag-`, que é o único teste de zona do e-mail.
