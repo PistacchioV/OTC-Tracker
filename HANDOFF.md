@@ -22736,3 +22736,389 @@ Três decisões que o teste prende, porque nenhuma é óbvia depois:
 
 `OTC_SEED_ALWAYS=1` força a passada inteira. Rede: `check_seed_stamp.py`, que
 MEDE as aberturas em vez de conferir texto.
+
+---
+
+## §520 — Onboarding: Status vira domínio, Razão Social padronizada e vários anexos (2026-09-21)
+
+Três pedidos da mesa (Raphaella) no Track Docs e no New Request. Cada um tem
+uma decisão que não é a óbvia.
+
+**O Status é um `select`, e são TRÊS opções.** Era texto livre. As pedidas
+foram duas (Active/Inactive), mas `Cancelled` é um dos QUATRO cards do Track
+Docs (`OUTCOMES`): fora da lista, ninguém consegue cancelar um CGD pelo app — o
+card seguiria contando só o que viesse cancelado do SharePoint, e a única saída
+seria editar a lista de lá e reimportar.
+
+A grafia é a de TÍTULO porque é a que a lista usa e a que o `stamp_mo` grava ao
+fechar a esteira. Ela **não** é o `ACTIVE_STATUS`, que é o valor NORMALIZADO com
+que `is_active` compara: derivá-la dele por `.title()` deixava a esteira gravando
+um valor que a lista do select não oferece, no dia em que uma das duas mudasse.
+
+E o domínio **não FECHA o campo**: o Status é texto livre do SharePoint (`Em
+Analise Legal`, `Pendente Cliente`) e é ele que o cadastro `cgd-stage` traduz em
+etapa. O valor gravado continua entrando na lista — e o `selectDe` passou a
+compará-lo cego à caixa, senão o `ACTIVE` da instância apareceria ao lado do
+`Active` do domínio, duas linhas para o mesmo status no mesmo dropdown (o
+servidor já os trata como um só).
+
+**A Razão Social sai em MAIÚSCULAS, e a padronização é no FUNIL.** A coluna
+chegava em caixa mista (`Votorantim Cimentos N/NE S/A` ao lado de `CASA DO ADUBO
+SA`) e é lida de cima a baixo: o nome em minúscula salta como se fosse outro tipo
+de registro.
+
+Ela alcança os TRÊS caminhos de gravação — New Request, edição da grade e a
+importação do SharePoint. Só nos dois primeiros ela se desfaria sozinha: a
+importação REESCREVE a tabela inteira, e o nome voltaria em caixa mista na rodada
+seguinte, sem erro nenhum.
+
+É `upper()` e não `_norm()`: o acento FICA (`COVESTRO INDÚSTRIA`), porque tirá-lo
+mudaria o nome da empresa e é por este texto que a pasta da contraparte é
+procurada no Electronic Inventory. Pasta gêmea não nasce daí — o `_ei_match_key`
+já compara em maiúsculas e sem pontuação.
+
+**A solicitação aceita vários anexos.** Todos vão para a MESMA pasta do
+Electronic Inventory e com o mesmo prefixo; o que os separa na listagem é o
+marcador de cópia do próprio inventário (`_ei_version_prefix`), que já numera o
+segundo e o terceiro papel do mesmo tipo.
+
+Soltar ACUMULA e o seletor SUBSTITUI: arrastar é incremental (a pessoa traz um
+papel, depois outro) e substituir é o comportamento nativo do seletor. A lista de
+nomes embaixo da área mostra o resultado dos dois caminhos — com vários anexos,
+mostrar só o primeiro esconde justamente o que se precisa conferir antes de
+gravar. Mesmo nome e mesmo tamanho é o mesmo papel largado duas vezes e entra uma
+vez só, senão o inventário o numeraria como se fossem duas versões.
+
+Os uploads vão **EM SÉRIE**: cada um é uma ida ao share, e três simultâneas
+disputam a mesma pasta enquanto o `_ei_next_ordinal` decide o número da cópia.
+Falhando no meio, a cadeia para, a linha não é criada e o erro NOMEIA o arquivo —
+com vários anexos, *"não consegui gravar o apêndice"* não diz qual refazer.
+
+Rede: `check_cgd_docs.py`, +11 asserções.
+
+---
+
+## §521 — O mapeamento do B3 ID dizia Success sem ter gravado (2026-09-21)
+
+**O relato.** Operações mapeadas no NDF Comm continuaram com Status `Sent`. Eram
+ALGUMAS e não todas, que é o que mais atrapalhava o diagnóstico.
+
+**A causa.** Os quatro endpoints de `mapping-b3` decidiam o `new_status` pelo
+arquivo de retorno da B3 e o devolviam à tela **sem olhar se a gravação no
+arquivo-dia aconteceu**. A gravação ficava atrás de um `if file_path is not
+None:` e de um `except Exception: pass`, e o `results.append` vinha depois dos
+dois, com o veredito decidido lá atrás. Duas saídas mudas:
+
+1. **a linha não é achada** — o casamento é por `(Deal, Client)` EXATO, e não
+   achando, o código seguia em frente;
+2. **a gravação estoura** — no share, `_store.read` e `_atomic_write_json`
+   levantam `BancoOcupado`/`BancoIlegivel` quando a instância vizinha está com a
+   trava (§4). Ali isso é ESPERADO, não excepcional, e o `pass` engolia. É também
+   o que explica o "algumas": depende de com quem a trava estava naquele instante.
+
+Nos dois casos o navegador recebia `Success`, pintava Status e B3 ID na grade
+(células 2 e 4) e anunciava *"N deal(s) mapped successfully"*; na abertura
+seguinte a linha voltava do banco como estava. A mesa só descobria reabrindo a
+tela, sem nada no log ligando uma coisa à outra.
+
+**O conserto.** A gravação é um funil (`_grava_mapeamento`) que DIZ se gravou, e
+o que volta sai da gravação, nunca da intenção:
+
+- não gravou, não há B3 ID a devolver — mandá-lo faria a grade pintar um número
+  que o banco não tem;
+- o status de "não gravou" é `Failed`, **não** `Error`: `Error` é o veredito da
+  B3, e confundir os dois mandaria a mesa procurar no arquivo de retorno um
+  problema que está do lado de cá;
+- as duas saídas LOGAM com deal e cliente. O finder já emitia o diagnóstico
+  detalhado (`[_find_ndf] CLIENT MISMATCH`, com os pares do arquivo); faltava a
+  linha `[MAPPING-B3]` que liga aquele aviso ao mapeamento perdido;
+- o que não gravou não vira espelho: Intrag e Pending Confirmation passam a ser
+  alimentados pela linha que FICOU no arquivo-dia;
+- o sino conta os GRAVADOS. Escrito `len(results)`, ele anunciava para a mesa
+  inteira um número que inclui o que não chegou ao banco.
+
+Nas seis telas o `saved` é testado ANTES do `Success`, então a linha que não
+gravou não é pintada — ela continua mostrando o que o banco tem, que é a verdade
+— e o aviso diz quantas falharam, por código de tradução (§486).
+
+**FICA EM ABERTO.** Isso não explica sozinho o print da mesa, que mostra B3 ID
+preenchido com Status `Sent`: o endpoint grava os dois no mesmo `update`. Falta
+uma segunda peça — ou o B3 ID chegou por outro caminho, ou o Status foi rebaixado
+depois. O que esta mudança garante é que o próximo caso apareça no log em vez de
+sumir, que era a razão de o primeiro ter levado tanto tempo.
+
+Rede: `check_nd_mapping_b3.py`, com dublês para o funil (grava / não acha /
+estoura na leitura / estoura na escrita) e varredura dos quatro endpoints e das
+seis telas.
+
+---
+
+## §522 — Seis caminhos de dado abriam DuckDB durante o IMPORT (2026-09-21)
+
+**`data_path()` parece montagem de caminho e não é**: ele pergunta ao ARMAZÉM se
+o arquivo existe (`_existe` → `data_store.exists`), e isso ABRE UM DUCKDB. No
+share, frio, cada abertura custa de segundos a minutos.
+
+Seis chamadas dele estavam no NÍVEL DE MÓDULO, ou seja, dentro do IMPORT — que na
+instância acontece durante a subida, com o app sem atender:
+
+- `VCP_JSON` e `DOMINIO_JSON` no `routes`;
+- `_MTM_HYB_MAP_PATH` em `features/mtm/infra/mappers`;
+- `API_LINKS_FILE` no `athena_api`, por dentro do `mapping_file` — **sem um
+  `data_path` visível na linha**, que é por isso que a primeira varredura por AST
+  não o achou;
+- os dois caminhos do `recon_payrec`.
+
+Eram os vãos MUDOS da subida: dois de 4 e 3,3 minutos sem uma linha de log,
+dentro dos ~9,5 min gastos no `register_blueprints`. O silêncio não era falta de
+instrumentação — o farol do `database_access` só avisa acima de ~5 s por
+operação, e cada uma destas ficava logo abaixo.
+
+Quem entregou o diagnóstico foi o `diag_boot_imports.py` (§524): o cronômetro do
+import parou mais de um minuto em `apps.pages.features.mtm.infra.mappers`, e o
+que aparentava ser o script travado era o script apontando para o defeito.
+
+**Duas coisas se ganham além do boot**: a abertura passa a acontecer dentro de um
+request, onde o app já paga leitura de dado e o memo do armazém costuma estar
+quente; e acontece DEPOIS da semeadura da subida — antes dela a resposta podia
+ser a cópia empacotada, e ficava congelada no caminho errado pelo resto do
+processo.
+
+**São DUAS formas, e a escolha não é estilo:**
+
+- **`__getattr__` de módulo** (PEP 562) onde os leitores usam a forma de ATRIBUTO
+  e os testes a TROCAM — `check_cetip_dominio.py` faz `R.DOMINIO_JSON = base`,
+  `check_ndfc_api.py` e `check_api_links.py` fazem o mesmo com o
+  `API_LINKS_FILE`. Virando função, o patch pararia de valer EM SILÊNCIO e o
+  teste passaria lendo e gravando dado real (§3). Com o gancho, a atribuição cria
+  um atributo de verdade e ele nunca mais é consultado.
+- **FUNÇÃO** onde o nome é lido de DENTRO do próprio arquivo (mtm, recon_payrec,
+  e o leitor interno do `athena_api`): `__getattr__` de módulo só responde a
+  acesso pelo objeto módulo, e nome global lido ali dentro daria `NameError`.
+
+O `athena_api` precisou das DUAS: `_api_links_file()` para o leitor interno e o
+`__getattr__` para os dois testes que trocam o atributo.
+
+Resolvido, o valor vira atributo de verdade do módulo: a consulta ao armazém
+acontece UMA vez por processo, que é o que a constante fazia — só que no momento
+certo.
+
+**Sobra UMA abertura no import, e ela fica**: a migração do CounterpartyDetails
+(`_cpd_load`, 4 aberturas) é eager de propósito — o modal do Reference Data lê o
+JSON pela rota `static_data_file`, que não passa por ela, e sem a migração na
+subida o primeiro acesso veria o cadastro sem os ids estáveis. Adiá-la é decisão
+de produto, não de desempenho, e por isso o guarda a NOMEIA em vez de proibir.
+
+**E isto sozinho NÃO moveu a subida da instância**: deployado às 15:05, o boot
+das 15:13 ainda levou 11m49s. O que dominava era outra coisa (§524). O ganho aqui
+é real e medido pelo guarda (o cronômetro passou de 1598 para 1714 módulos), mas
+estava escondido atrás de um custo maior.
+
+Rede: `check_boot_lazy_paths.py`, que **MEDE** (sonda o `duckdb.connect` num
+subprocesso e NOMEIA o chamador de cada abertura — a lista não pode crescer) e
+varre por AST o nível de módulo de `apps/pages` atrás de
+`data_path`/`mapping_file`/`with_fallback`.
+
+O defeito é do tipo que volta: escrever `X = data_path('Y.json')` no topo de um
+módulo é a coisa natural a fazer e não dá erro nenhum — só custa minutos de
+subida na máquina que ninguém usa para desenvolver (§9).
+
+---
+
+## §523 — A LEITURA de dado não tinha guarda nenhuma (2026-09-21)
+
+O §434 vale para os dois sentidos — escrita e leitura de dado são só nos DuckDB
+—, mas só a escrita era vigiada: o `check_duck_writers.py` recusava `json.dump`
+fora do funil e **nada olhava o `json.load`**.
+
+A auditoria de hoje confirma que a árvore está limpa: sobraram QUATRO `json.load`
+em todo o app, e os quatro leem a origem empacotada ou legada para COLOCAR dado
+no banco, ou são o próprio armazém — a semeadura da subida, o `_read_fs` do
+`data_store`, o motor `json_to_duckdb` e o
+`import_file_interpreter_template.py`. Nenhum serve dado à tela a partir do
+disco.
+
+O que faltava era **impedir o próximo**. E a leitura crua é a MAIS traiçoeira das
+duas: `json.load(data_path('X.json'))` devolve a SEED DO REPOSITÓRIO e ignora o
+que a mesa editou pela tela. A página abre, a API responde 200, e o cadastro
+mostra o valor de fábrica — nada nisso parece defeito, e é exatamente o que o
+§488 documenta no File Interpreter. A escrita, ao menos, deixa os bancos
+defasados de um jeito que a próxima carga completa corrige.
+
+A varredura é a MESMA das escritas, agora num percorredor só (`varre()`): duas
+cópias com regras próprias divergiriam no primeiro arquivo que uma pula e a outra
+não. Ela cobre `apps/pages`, o `apps/__init__.py` e o **primeiro nível** de
+`scripts/` — `scripts/tests/` são os guardas (ler JSON é o trabalho deles) e
+`scripts/standalone/`, `scripts/convert/` são GERADOS.
+
+Cada permissão está presa por um **MARCADOR** à função que a justifica (o
+`_read_fs`, o `_load_json`, o `_seed_data_dir`, o `_origem` que aponta para a
+cópia do repositório): movida ela de lugar, a permissão deixa de valer em vez de
+virar licença permanente para o arquivo inteiro. E a allowlist não pode apontar
+para arquivo inexistente — renomeado, ela deixaria uma permissão pendurada num
+caminho morto e a próxima leitura crua nascida ali passaria batida.
+
+`json.loads(` fica de FORA de propósito: ele opera sobre texto já em mãos (o
+corpo de uma resposta HTTP, uma coluna do banco) e não abre arquivo nenhum.
+Proibi-lo pegaria dezenas de usos legítimos e ensinaria a contornar o guarda, que
+é pior do que não ter guarda.
+
+Conferido que ele REPROVA: com um `json.load` injetado no `quotes.py:42`, o
+guarda aponta arquivo, linha e o remédio.
+
+---
+
+## §524 — Os 12 minutos de subida eram o bytecode recompilado pelo SMB (2026-09-21)
+
+**O relato.** A instância levava ~12 minutos para atender, mesmo depois do
+carimbo da semeadura (§519) ter zerado as 177 aberturas de banco e do §522 ter
+tirado seis aberturas do import. Duas subidas medidas: 13h38→13h45 e
+13h50→14h03.
+
+**O cronômetro precisou de um conserto primeiro.** O `diag_boot_imports.py` só
+imprimia no fim, e o `communicate()` segura tudo até o filho sair: na instância
+isso são doze minutos de tela parada, indistinguíveis de um travamento. Foi o que
+aconteceu — o script foi dado como travado e interrompido, e a medição não saiu.
+É a MESMA armadilha do `> boot.log 2>&1` da véspera, e a lição é a mesma: **saída
+que demora tem de dizer que está viva.** Agora o stderr do filho é lido linha a
+linha (`bufsize=1`, modo texto), com um pulso a cada 5 s dizendo segundos,
+módulos contados e o último módulo importado; o que o próprio app loga passa
+direto para a tela; e o `stdout` do filho foi para o `DEVNULL`, porque cano que
+ninguém drena enche e TRAVA o processo — um impasse que só apareceria numa subida
+longa, que é exatamente o caso de uso deste script.
+
+**A causa-raiz está no `new-otc-deploy.bat`.** Cada deploy cria uma pasta de
+versão NOVA (`v15` → `v16`) e reaponta o `link.txt`. E o `start-otc-tracker.bat`
+chaveia o bytecode pela versão:
+
+```bat
+set "PYCACHE_DIR=%APP_STATE_DIR%\pycache\%VERSION_PATH%"
+```
+
+Versão nova é **cache VAZIO**. Os ~313 módulos do app recompilam, e para
+recompilar o Python lê cada `.py` INTEIRO pelo SMB — com o `routes.py` de 711 KB
+no meio. São os 8 minutos de vão mudo dentro do import.
+
+**Há um segundo efeito, que é o que torna isto pior do que era.** O deploy manda
+`__pycache__` para o share (está em `DEPLOY_DIRS`), justamente para a instância
+não recompilar — e o `PYTHONPYCACHEPREFIX`, acrescentado na véspera (§322),
+**SUBSTITUI** o lugar onde o Python procura bytecode. Ele olha só dentro do
+prefixo e nunca o `__pycache__` ao lado do fonte. As duas mudanças se anulam:
+copia-se o bytecode e não se usa. São 14 MB por deploy, jogados fora.
+
+**O erro de leitura que atrasou o diagnóstico.** Eu havia descartado essa
+hipótese olhando as datas misturadas dos arquivos no share e concluindo que o
+deploy era incremental. Errado: ele copia com `/COPY:DAT`, que **PRESERVA os
+timestamps da origem** — as datas são dos arquivos originais, não do deploy, e a
+pasta inteira pode ter nascido minutos antes da subida. O `__pycache__` datado
+junto era a marca disso. E o cabeçalho do próprio `.bat` já dizia, no item 1, que
+o custo aparece "toda vez que o `%VERSION_PATH%` muda".
+
+**O conserto, por ora em `start-otc-tracker_teste.bat`** — para MEDIR, não para
+substituir: a mesa continua subindo pelo `start-otc-tracker.bat`, e este só vai
+para o lugar dele quando houver número. Ele espelha
+`otc-source\%VERSION_PATH%` para o `%LOCALAPPDATA%` com robocopy `/MIR` e faz o
+`pushd` **NO ESPELHO**. A cópia é sequencial em bloco, que é o que o SMB faz bem,
+em vez de centenas de aberturas aleatórias, que é o que ele faz mal. Dali em
+diante listagem, `stat`, leitura e recompilação acontecem todos em disco local — e
+o ganho não depende de qual das duas causas domina, porque as duas são I/O de
+CÓDIGO pelo share.
+
+**SÓ O CÓDIGO se move.** `DATA_DIR`, `DATABASE_DIR` e `SHARED_DRIVE_ROOT` saem do
+`apps/config.py` como caminhos UNC ABSOLUTOS, não do diretório atual, então trocar
+o `pushd` não move um byte de dado: os bancos continuam no share e o modelo de
+"cada pessoa roda a própria instância sobre o MESMO `db/`" fica idêntico. O
+espelho é por pessoa, no `%LOCALAPPDATA%`, então não há disputa.
+
+**A MEDIDA, na instância, na segunda rodada:**
+
+| | share | disco local |
+|---|---|---|
+| entregar ao Python → *Serving on* | **11m49s** | **63s** |
+| `.bat` inteiro | 12m22s | 2m39s |
+
+O espelho em si levou 83 s. O que se move são ~45 MB e ~770 arquivos (pages 14 MB
++ templates 8,6 MB + static-menos-data 23 MB); `static\data` são 299 MB e já é
+excluído pelo deploy, então **nenhum dado atravessa**.
+
+Detalhes que não são óbvios e estão comentados no arquivo:
+
+- o robocopy devolve o código de saída em **BITS** — 0 a 7 são sucesso, 8+ é
+  falha. `if errorlevel 1`, o teste natural, abortaria toda vez que a cópia desse
+  certo e tivesse copiado algo, que é o caso comum;
+- `/MIR` **APAGA** no destino o que não existe na origem, e por isso o destino é
+  uma pasta dedicada (`src-teste`) que nunca deve apontar para outra coisa;
+- `/XD __pycache__` para de arrastar o bytecode morto do share;
+- o `PYTHONPYCACHEPREFIX` continua, agora por outra razão: manter o bytecode FORA
+  da árvore espelhada, senão o `/MIR` apagaria os `__pycache__` a cada rodada e
+  tudo recompilaria. Ele aponta para `pycache-teste`, separado do de produção,
+  para os dois não se misturarem e falsearem a medida;
+- a PRIMEIRA subida por aqui é fria de propósito (espelha tudo e compila do
+  zero). O número que vale é o da segunda.
+
+**O que falta fazer** (nenhum destes está feito):
+
+1. promover o espelho local ao `start-otc-tracker.bat` de produção;
+2. `/MT:16` no robocopy dos dois — os 83 s do espelho devem cair muito;
+3. tirar `__pycache__` do `DEPLOY_DIRS` do `new-otc-deploy.bat`: são 14 MB por
+   deploy que o `PYTHONPYCACHEPREFIX` faz o Python ignorar;
+4. decidir a limpeza das versões velhas de `src-teste` (45 MB por versão
+   acumulam). É `rd /s` dentro do perfil do usuário, e por isso não foi feito sem
+   permissão.
+
+---
+
+## §525 — Recon Pay/Rec: a liquidação de cliente pelo STR era descartada em silêncio (2026-09-21)
+
+**O relato.** Um swap da SUZANO de R$ 253.194,78 aparecia como Pending Payment
+com `Client Value` VAZIO, com a linha paga e `Sucesso` no arquivo o tempo todo.
+
+**Não era casamento nem tolerância: a linha nunca virava registro.** O `_cli_spb`
+tinha DUAS portas de entrada e ela falhava nas duas — a descrição `STS - SUZANO
+SA` não contém `Derivativos` nem `LMA-COMM-BR`, e o código `STR0007` da coluna F
+não é `LTR0004` nem `LTR0005`. Caía no `else: continue` do fim do laço, sem log e
+sem rastro. Sem perna do cliente não há o que casar, e a operação ficava pendente
+para sempre.
+
+O centavo entre o arquivo (`−253.194,77`) e a tela (`−253.194,78`) era falso
+alarme: o casamento agrupa por valor inteiro arredondado (`_int_key` — os dois dão
+−253.195) e ainda tem tolerância de R$ 1 (`_TOL_SETTLED`). Assim que a perna
+existe, ela casa.
+
+**A terceira porta exige o CÓDIGO e o PREFIXO juntos, e isso é a regra, não
+rigor**: o `STR0007` sozinho é a mensagem de transferência do SPB e carrega mais
+coisa que liquidação de cliente; o `STS - ` sozinho não diz por qual via foi.
+Casar por um só criaria perna de cliente SEM DINHEIRO atrás — que ou casa com uma
+perna JPM legítima, escondendo uma quebra de verdade, ou vira pendência fantasma.
+O docstring da própria função já advertia disso a respeito do filtro de status.
+
+Três decisões que não são óbvias:
+
+- o prefixo sai **ANCORADO** no começo (`^\s*STS\s*-\s*`), então um `STS` no meio
+  de uma razão social não transforma a linha em liquidação — e o hífen DENTRO do
+  nome sobrevive, que um `split('-')` comeria (`STS - CIA BRASILEIRA - FILIAL SP`
+  continua `CIA BRASILEIRA - FILIAL SP`);
+- a linha **NÃO sai como `bank`**: ela tem contraparte e casa por NOME. Marcada
+  como banco, casaria por VALOR com a tolerância de R$ 20 do interbancário,
+  contra qualquer perna pequena do dia;
+- descrição sem contraparte depois do prefixo fica de fora **DIZENDO o motivo no
+  log**. Sem nome não há por onde juntar ao lado JPM, e a perna viraria exatamente
+  a pendência fantasma que esta guarda existe para evitar — mas o que some calado
+  é o que ninguém conserta, e foi assim que este defeito durou.
+
+**Duas suposições ficam explícitas no código, para o dia em que forem falsas**: a
+direção é `Pay` FIXO (o `STR0007` é a mensagem que o JP envia; aparecendo um
+código irmão de recebimento ele entra ao lado, e a direção nunca sai do SINAL do
+valor — a mesma regra da trilha interbancária), e o produto é `NDF`, copiado da
+trilha 1, embora a operação do relato seja um SWAP. O produto não entra no
+casamento, que é por nome e valor.
+
+Rede: `check_spb_status.py` foi de 18 para 24 casos, com a linha real do relato
+entre eles, e prende os dois lados da conjunção: `STR0007` sem o prefixo não
+entra, e o prefixo sem o `STR0007` também não.
+
+**FICA EM ABERTO**: o Receive do mesmo dia está curto em duas pernas (JPM 14 ×
+Client 12, diferença R$ 860.672,77). Elas vêm de outro arquivo (RLDOCREC, pelo
+`_cli_rec`) e podem ser a mesma classe de problema — uma via de liquidação que
+nenhuma porta de entrada reconhece. O caminho mais curto é filtrar o arquivo por
+`CodMs` e olhar os códigos distintos com a contagem de linhas de cada um.
