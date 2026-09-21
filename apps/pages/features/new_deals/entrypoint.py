@@ -2649,9 +2649,8 @@ def new_deals_product():
 # genéricas `/api/new-deals/<product>/cache/search` e `.../send-conecta` (NDF
 # Vanilla/FWD Start/Other Publisher) casariam o slug do catálogo como
 # `product` e responderiam "Unknown product" — o segmento estático vence o
-# variável, o `<path>` não.
-@blueprint.route('/api/new-deals/swap-cashflow', methods=['GET', 'POST'])
-@blueprint.route('/api/new-deals/swap-cashflow/<path:resto>', methods=['GET', 'POST'])
+# variável, o `<path>` não. O Swap Cashflow já saiu daqui: o backend dele é a
+# vertical `features/swap_cashflow` (21/09/2026), com as rotas estáticas dela.
 @blueprint.route('/api/new-deals/opt-edg', methods=['GET', 'POST'])
 @blueprint.route('/api/new-deals/opt-edg/<path:resto>', methods=['GET', 'POST'])
 def api_new_deals_product(resto=''):

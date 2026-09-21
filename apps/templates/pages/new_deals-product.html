@@ -311,16 +311,98 @@ function statusBadge(status) {
     var m = STATUS_META[txt] || STATUS_META['New'];
     return '<span class="badge ' + m.cls + ' bg-gradient">' + esc(txt) + '</span>';
 }
+// Erros (`e_<code>`) e lacunas (`w_<code>`) chegam do servidor por CÓDIGO +
+// params (§486); `{nome}` no texto é o param. O `message`/`text` do servidor
+// é só o fallback.
 var _TRANS = {
-    en: { e_nd_backend_pending: "This product's server side is not available yet — the page is ready, the import and the B3 file come next" },
-    br: { e_nd_backend_pending: 'O servidor deste produto ainda não existe — a tela está pronta, o import e o arquivo da B3 vêm em seguida' },
-    es: { e_nd_backend_pending: 'El servidor de este producto aún no existe — la pantalla está lista, la importación y el archivo de la B3 vienen después' }
+    en: { e_nd_backend_pending: "This product's server side is not available yet — the page is ready, the import and the B3 file come next",
+          e_nd_unknown_action: 'This page has no action {action}',
+          e_swc_no_file: 'No file received', e_swc_unreadable: 'Could not read the file: {reason}',
+          e_swc_import_failed: 'Import failed: {reason}', e_swc_save_failed: 'Save failed: {reason}',
+          e_swc_send_failed: 'File generation failed: {reason}', e_swc_file_failed: 'File generation failed: {reason}',
+          e_swc_no_deal_ticket: 'No Deal Ticket found — the file needs a sheet/page with Valor Base and Vencimento.',
+          e_swc_no_rows: 'No rows provided', e_swc_missing_deal_id: 'Missing deal', e_swc_not_found: 'Entry not found',
+          e_swc_client_required: 'Client or SPN is required',
+          e_swc_not_approvable: 'Only New or Pending entries can be approved.',
+          e_swc_maker_checker: 'Maker cannot approve their own change — a different user must check it.',
+          e_swc_lacunas: 'The B3 files cannot be generated yet — fill in or register',
+          e_swc_send_refused: 'Nothing sent — fill in or register',
+          w_swc_missing: '{field}', w_swc_no_flows: 'Cash Flow schedule (no flow)',
+          w_swc_too_many_flows: 'Cash Flow schedule ({n} flows; the B3 accepts up to {max})',
+          w_swc_flow_no_date: 'Flow {n}: Payment Date',
+          w_swc_flow_out_of_range: 'Flow {n}: Payment Date {date} outside the contract (Start → Maturity)',
+          w_swc_flow_order: 'Flow {n}: Payment Date {date} is not after the previous one',
+          w_swc_last_flow_maturity: 'The last flow must pay on the Maturity Date ({date})',
+          w_swc_no_amortization: 'Amortization type',
+          w_swc_amortization_code: 'Amortization "{value}" has no B3 code in /mapping › Swap — Tipo de Amortização',
+          w_swc_intl_curve: 'Curve {side} is JUROS INTERNACIONAIS — the SOFR / TERM SOFR fields of the B3 file are not generated yet',
+          w_swc_no_lob: 'LOB (CEM or EDG)', w_swc_status: 'status {status} is not sendable', w_swc_not_found: 'not found' },
+    br: { e_nd_backend_pending: 'O servidor deste produto ainda não existe — a tela está pronta, o import e o arquivo da B3 vêm em seguida',
+          e_nd_unknown_action: 'Esta tela não tem a ação {action}',
+          e_swc_no_file: 'Nenhum arquivo recebido', e_swc_unreadable: 'Não foi possível ler o arquivo: {reason}',
+          e_swc_import_failed: 'O import falhou: {reason}', e_swc_save_failed: 'A gravação falhou: {reason}',
+          e_swc_send_failed: 'A geração dos arquivos falhou: {reason}', e_swc_file_failed: 'A geração dos arquivos falhou: {reason}',
+          e_swc_no_deal_ticket: 'Nenhum Deal Ticket encontrado — o arquivo precisa de uma aba/página com Valor Base e Vencimento.',
+          e_swc_no_rows: 'Nenhuma linha enviada', e_swc_missing_deal_id: 'Operação não informada', e_swc_not_found: 'Linha não encontrada',
+          e_swc_client_required: 'Informe o Cliente ou a SPN',
+          e_swc_not_approvable: 'Só linhas New ou Pending podem ser aprovadas.',
+          e_swc_maker_checker: 'Quem alterou não pode aprovar a própria alteração — outro usuário precisa conferir.',
+          e_swc_lacunas: 'Os arquivos da B3 ainda não podem ser gerados — preencha ou cadastre',
+          e_swc_send_refused: 'Nada foi enviado — preencha ou cadastre',
+          w_swc_missing: 'Falta: {field}', w_swc_no_flows: 'Cronograma Cash Flow (nenhum fluxo)',
+          w_swc_too_many_flows: 'Cronograma Cash Flow ({n} fluxos; a B3 aceita até {max})',
+          w_swc_flow_no_date: 'Fluxo {n}: Data de Pagamento',
+          w_swc_flow_out_of_range: 'Fluxo {n}: Data de Pagamento {date} fora do contrato (Início → Vencimento)',
+          w_swc_flow_order: 'Fluxo {n}: Data de Pagamento {date} não é posterior à anterior',
+          w_swc_last_flow_maturity: 'O último fluxo tem de pagar no Vencimento ({date})',
+          w_swc_no_amortization: 'Tipo de amortização',
+          w_swc_amortization_code: 'Amortização "{value}" sem código B3 em /mapping › Swap — Tipo de Amortização',
+          w_swc_intl_curve: 'A Curva {side} é JUROS INTERNACIONAIS — os campos SOFR / TERM SOFR do arquivo da B3 ainda não são gerados',
+          w_swc_no_lob: 'LOB (CEM ou EDG)', w_swc_status: 'status {status} não é enviável', w_swc_not_found: 'não encontrada' },
+    es: { e_nd_backend_pending: 'El servidor de este producto aún no existe — la pantalla está lista, la importación y el archivo de la B3 vienen después',
+          e_nd_unknown_action: 'Esta pantalla no tiene la acción {action}',
+          e_swc_no_file: 'Ningún archivo recibido', e_swc_unreadable: 'No se pudo leer el archivo: {reason}',
+          e_swc_import_failed: 'La importación falló: {reason}', e_swc_save_failed: 'La grabación falló: {reason}',
+          e_swc_send_failed: 'La generación de los archivos falló: {reason}', e_swc_file_failed: 'La generación de los archivos falló: {reason}',
+          e_swc_no_deal_ticket: 'Ningún Deal Ticket encontrado — el archivo necesita una hoja/página con Valor Base y Vencimento.',
+          e_swc_no_rows: 'Ninguna fila enviada', e_swc_missing_deal_id: 'Operación no informada', e_swc_not_found: 'Fila no encontrada',
+          e_swc_client_required: 'Informe el Cliente o el SPN',
+          e_swc_not_approvable: 'Solo filas New o Pending pueden aprobarse.',
+          e_swc_maker_checker: 'Quien modificó no puede aprobar su propio cambio — otro usuario debe revisarlo.',
+          e_swc_lacunas: 'Los archivos de la B3 aún no pueden generarse — complete o registre',
+          e_swc_send_refused: 'Nada fue enviado — complete o registre',
+          w_swc_missing: 'Falta: {field}', w_swc_no_flows: 'Cronograma Cash Flow (ningún flujo)',
+          w_swc_too_many_flows: 'Cronograma Cash Flow ({n} flujos; la B3 acepta hasta {max})',
+          w_swc_flow_no_date: 'Flujo {n}: Fecha de Pago',
+          w_swc_flow_out_of_range: 'Flujo {n}: Fecha de Pago {date} fuera del contrato (Inicio → Vencimiento)',
+          w_swc_flow_order: 'Flujo {n}: Fecha de Pago {date} no es posterior a la anterior',
+          w_swc_last_flow_maturity: 'El último flujo debe pagar en el Vencimiento ({date})',
+          w_swc_no_amortization: 'Tipo de amortización',
+          w_swc_amortization_code: 'Amortización "{value}" sin código B3 en /mapping › Swap — Tipo de Amortização',
+          w_swc_intl_curve: 'La Curva {side} es JUROS INTERNACIONAIS — los campos SOFR / TERM SOFR del archivo de la B3 aún no se generan',
+          w_swc_no_lob: 'LOB (CEM o EDG)', w_swc_status: 'status {status} no es enviable', w_swc_not_found: 'no encontrada' }
 };
+function _lang() { try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) { return 'en'; } }
+function _fmtParams(tpl, params) {
+    return String(tpl).replace(/\{(\w+)\}/g, function (m, k) { return (params && params[k] != null) ? String(params[k]) : m; });
+}
+// Uma lacuna do servidor: texto solto (páginas antigas) ou {code, params, text[, deal_id]}.
+function lacunaTexto(x) {
+    if (x == null) return '';
+    if (typeof x !== 'object') return String(x);
+    var l = _lang(), k = 'w_' + (x.code || '');
+    var tpl = (_TRANS[l] && _TRANS[l][k]) || _TRANS.en[k];
+    var txt = tpl ? _fmtParams(tpl, x.params || {}) : (x.text || '');
+    if (x.deal_id) { var e = (typeof DEALS !== 'undefined' && DEALS[x.deal_id]) || {}; txt = (e.Client || x.deal_id) + ': ' + txt; }
+    return txt;
+}
 function erroTexto(res) {
     if (!res) return '';
-    var l = 'en'; try { l = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) {}
-    var k = 'e_' + (res.code || '');
-    return (_TRANS[l] && _TRANS[l][k]) || _TRANS.en[k] || res.message || '';
+    var l = _lang(), k = 'e_' + (res.code || '');
+    var tpl = (_TRANS[l] && _TRANS[l][k]) || _TRANS.en[k];
+    var txt = tpl ? _fmtParams(tpl, res.params || {}) : (res.message || '');
+    if (res.lacunas && res.lacunas.length) txt += ': ' + res.lacunas.map(lacunaTexto).join('; ');
+    return txt;
 }
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function t(key, fallback) {
@@ -652,7 +734,7 @@ $(document).ready(function() {
                     var extra = '';
                     if (missKeys.length) {
                         extra += '<div class="text-start mt-2 fs-xs"><b>Cannot be sent yet — fill in or register:</b><ul class="mb-0 ps-3">' +
-                            missKeys.map(function(k){ var dd = finalDeals.filter(function(d){ return d._id === k; })[0] || {}; return '<li><b>' + _escHtml((dd.Client || '') + (dd.Deal ? ' · ' + dd.Deal : '')) + '</b>: ' + _escHtml(missing[k].join('; ')) + '</li>'; }).join('') + '</ul></div>';
+                            missKeys.map(function(k){ var dd = finalDeals.filter(function(d){ return d._id === k; })[0] || {}; return '<li><b>' + _escHtml((dd.Client || '') + (dd.Deal ? ' · ' + dd.Deal : '')) + '</b>: ' + _escHtml(missing[k].map(lacunaTexto).join('; ')) + '</li>'; }).join('') + '</ul></div>';
                     }
                     if (ignored.length) extra += '<div class="text-start mt-2 fs-xs text-muted">Ignored (not a deal): ' + _escHtml(ignored.join(', ')) + '</div>';
                     if (errors.length) extra += '<div class="text-start mt-2 fs-xs text-danger">' + _escHtml(errors.join('; ')) + '</div>';

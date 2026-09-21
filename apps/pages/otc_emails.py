@@ -1790,12 +1790,46 @@ def _swap_bullet_deal_ticket(d):
     rows += _swb_row([('Código', d.get('VcpCode', '')), (None, None), (None, None)])
     rows += _swb_row([('Curva VCP', d.get('VcpCurve', '')), (None, None), (None, None)])
     rows += _swb_row([('Descrição da Curva VCP', d.get('VcpDescription', '')), (None, None), (None, None)])
+    # O CRONOGRAMA do Swap Cashflow (21/09/2026): a tabela Cash Flow do Deal
+    # Ticket, com o tipo de amortização. Deal do Bullet não tem `CashFlows` e
+    # o e-mail dele sai exatamente como antes.
+    if isinstance(d.get('CashFlows'), list) and d.get('CashFlows'):
+        rows += _swb_blank()
+        rows += ('<tr><td colspan="6" style="padding:4px 8px;font-size:12px;font-weight:700;color:#1d1d1f;'
+                 'border-bottom:2px solid #1d1d1f;">Cash Flow</td></tr>')
+        if str(d.get('AmortizationType') or '').strip():
+            rows += _swb_row([('Tipo de Amortização', d.get('AmortizationType')), (None, None), (None, None)])
+        rows += _swb_cashflow_table(d['CashFlows'])
     # A linha que FECHA o Deal Ticket. O `border` da <table> não basta: o Word
     # do Outlook desenha a borda por célula e, com o espaçador (font-size:0)
     # como última linha, a de baixo sumia — o quadro saía aberto embaixo.
     rows += ('<tr><td colspan="6" style="padding:4px 0 0 0;font-size:0;line-height:1px;'
              'border-bottom:1px solid #1d1d1f;">&nbsp;</td></tr>')
     return T + rows + '</table>'
+
+
+def _swb_cashflow_table(flows):
+    """As linhas do cronograma do Swap Cashflow numa tabela aninhada (uma
+    linha por fluxo): Início · Pagamento · Amortização · DU · DC · Fixing."""
+    th = ('<td align="center" style="padding:3px 8px;font-size:11px;font-weight:700;color:#ffffff;'
+          'background:#8fa9c9;white-space:nowrap;">')
+    td = ('<td align="center" style="padding:3px 8px;font-size:11.5px;color:#1d1d1f;text-align:center;'
+          'border-bottom:1px solid #9a9aa0;white-space:nowrap;">')
+    cab = ('Início', 'Pagamento', 'Amortização', 'Dias Úteis', 'Dias Corridos', 'Fixing')
+    corpo = ''.join(th + _esc(c) + '</td>' for c in cab)
+    linhas = ''
+    for fl in flows:
+        if not isinstance(fl, dict):
+            continue
+        amort = _num(fl.get('AmortizationPct'))
+        cel = (_swb_date(fl.get('StartDate')), _swb_date(fl.get('PaymentDate')),
+               (_br(amort, 5).rstrip('0').rstrip(',') + '%') if amort is not None else '',
+               str(fl.get('BusinessDays') or ''), str(fl.get('CalendarDays') or ''),
+               _swb_date(fl.get('FixingDate')) if fl.get('FixingDate') else '')
+        linhas += '<tr>' + ''.join(td + _esc(c) + '</td>' for c in cel) + '</tr>'
+    return ('<tr><td colspan="6" style="padding:4px 8px;">'
+            '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">'
+            '<tr>' + corpo + '</tr>' + linhas + '</table></td></tr>')
 
 
 _SWB_CONTACT_KEYWORDS = ('confirmation',)      # Confirmation Letter · Only for Confirmation · Contact Confirmation

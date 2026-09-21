@@ -68,6 +68,7 @@ _NOTIF_PAGE_URL = {
     'Intrag DCE NDF': '/intrag-dce-ndf',
     'Intrag DCE Swap': '/intrag-dce-swap',
     'Swap Bullet': '/new_deals-swap-bullet',
+    'Swap Cashflow': '/new_deals-swap-cashflow',
     'Unwind NDF FX': '/unwinds/ndf/fx',
     'Swap VCP': '/other-products-swap-vcp',
     'Reconciliation': '/reconciliation-payrec',
