@@ -23014,7 +23014,7 @@ pasta inteira pode ter nascido minutos antes da subida. O `__pycache__` datado
 junto era a marca disso. E o cabeçalho do próprio `.bat` já dizia, no item 1, que
 o custo aparece "toda vez que o `%VERSION_PATH%` muda".
 
-**O conserto, por ora em `start-otc-tracker_teste.bat`** — para MEDIR, não para
+**O conserto, por ora em `start-otc-tracker_naeast.bat`** — para MEDIR, não para
 substituir: a mesa continua subindo pelo `start-otc-tracker.bat`, e este só vai
 para o lugar dele quando houver número. Ele espelha
 `otc-source\%VERSION_PATH%` para o `%LOCALAPPDATA%` com robocopy `/MIR` e faz o
