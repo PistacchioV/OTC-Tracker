@@ -64,7 +64,25 @@ OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_<nome>.py
   09/09/2026 (§434) escrita e leitura de dado são só nos DuckDB — não existe
   mais JSON como cópia de escrita nem espelho. Leitura de dado é pelo
   `data_store` (`read`/`isfile`/`stat`/`listdir`/`walk`), nunca `open` +
-  `json.load` num caminho do `DATA_DIR`.
+  `json.load` num caminho do `DATA_DIR`. **O guarda varre os DOIS sentidos**
+  desde 21/09/2026 (§523, um percorredor só): a leitura crua é a mais
+  traiçoeira, porque `json.load(data_path('X.json'))` devolve a SEED DO
+  REPOSITÓRIO e ignora o que a mesa editou pela tela — a página abre, a API
+  responde 200 e o cadastro mostra o valor de fábrica. Só passam os quatro que
+  ALIMENTAM o banco ou são o armazém, cada um preso por um MARCADOR à função
+  que o justifica; `json.loads(` fica de fora (opera sobre texto já em mãos).
+- **`data_path()` NÃO é montagem de caminho — ele ABRE UM DUCKDB** (§522): por
+  dentro pergunta ao armazém se o arquivo existe (`_existe` →
+  `data_store.exists`), e no share, frio, isso custa de segundos a minutos. Daí
+  `X = data_path('Y.json')` no NÍVEL DE MÓDULO pagar a abertura dentro do
+  IMPORT, que na instância é a subida com o app sem atender — e não dar erro
+  nenhum na dev, onde os dados são locais (§9). Vale também para o
+  `mapping_file`/`with_fallback`, que caem nele **sem um `data_path` visível na
+  linha**. Resolva no PRIMEIRO USO: `__getattr__` de módulo onde os testes
+  TROCAM o atributo (`R.DOMINIO_JSON = base` — virando função, o patch pararia
+  de valer em silêncio e o teste leria dado real, §3) e FUNÇÃO onde o nome é
+  lido de DENTRO do próprio arquivo (`__getattr__` de módulo não alcança isso:
+  daria `NameError`). `check_boot_lazy_paths.py` MEDE e varre por AST.
 - **Todo valor de request/sessão/planilha/e-mail entra no SQL como parâmetro
   `?`.** Só DDL sobre identificadores do próprio código (`_PC_TABLE`,
   `_PC_COLUMNS`) monta string. Referência vendorizada:
@@ -829,6 +847,19 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   A varredura do box não tem a proteção de propósito (paridade com
   `otc-fileupload.js`).
 - **Só `isCancelled` é cancelado** na Athena; `isDead` importa normalmente.
+- **O veredito do `mapping-b3` sai da GRAVAÇÃO, nunca da intenção** (§521): os
+  quatro endpoints decidiam o Status pelo arquivo de retorno da B3 e o
+  devolviam à tela sem olhar se o arquivo-dia foi gravado, atrás de um
+  `if file_path is not None:` e de um `except Exception: pass` — linha não
+  achada pelo `(Deal, Client)` EXATO, ou `BancoOcupado` da instância vizinha
+  (que ali é ESPERADO, §4), e a grade pintava um B3 ID que o banco não tem. Hoje
+  a gravação é o funil `_grava_mapeamento`, que DIZ se gravou: sem `saved` não
+  vai B3 ID, o status é **`Failed`** e não `Error` (`Error` é o veredito da B3, e
+  confundi-los manda a mesa procurar no arquivo de retorno um problema que está
+  do lado de cá), as duas saídas logam `[MAPPING-B3]` com deal e cliente, o que
+  não gravou não vira espelho em Intrag nem Pending Confirmation, e o sino conta
+  os GRAVADOS. Nas seis telas o `saved` é testado ANTES do `Success`.
+  `check_nd_mapping_b3.py`.
 - **O notional do NDF é SEMPRE o da moeda que não é BRL nem USD** (§485,
   `_ndf_notional_leg`): com BRL no par, a outra perna (USD/BRL → USD, CNH/BRL
   → CNH); sem BRL, a que não é USD (USD/CNH → CNH); nenhuma das duas BRL/USD
@@ -1752,6 +1783,18 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `bank-name`, por PALAVRA nunca substring, `banco` é token significativo,
   direção entra pela mesma porta, vale nos três estágios; fora do cadastro
   responde NÃO). Só linha `Sucesso` entra (`check_spb_status.py`).
+  **O `_cli_spb` tem TRÊS portas de entrada, e a terceira exige o código E o
+  prefixo JUNTOS** (§525): `STR0007` na coluna de código **mais** `STS - ` no
+  começo da descrição, de onde sai a contraparte. Cada um sozinho criaria perna
+  de cliente SEM DINHEIRO atrás — que ou casa com uma perna JPM legítima,
+  escondendo uma quebra de verdade, ou vira pendência fantasma. O prefixo é
+  ANCORADO (o hífen DENTRO do nome sobrevive, que um `split('-')` comeria), a
+  linha NÃO sai como `bank` (tem contraparte e casa por NOME; marcada como
+  banco cairia na tolerância de R$ 20 do interbancário) e descrição sem
+  contraparte fica de fora **DIZENDO o motivo no log** — o que some calado é o
+  que ninguém conserta, e foi assim que este defeito durou. Duas suposições
+  estão escritas no código para o dia em que forem falsas: direção `Pay` fixa e
+  produto `NDF` (nenhum dos dois entra no casamento).
 - **CGD**: lê o D-1 do arquivo que o Save CETIP Files GRAVA (`CETIP_DEST_ROOT`),
   a lista do FEP vem do ANEXO do e-mail mais recente do box
   (`baixar_fep_do_box`; `path` vence; sem Outlook cai para `CGD_INPUT_ROOT`
@@ -1797,6 +1840,28 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `is_active` compara EXATO — `INACTIVE` contém `ACTIVE`). `Signature Type` é
   domínio fechado (`SIGNATURE_TYPES`), valor gravado entra na lista. `_id` não
   é estável entre importações.
+- **O `Status` é `select` de TRÊS opções** (§520, `STATUS_OPTIONS`):
+  `Cancelled` está lá porque é um dos QUATRO cards do Track Docs (`OUTCOMES`) —
+  fora da lista ninguém cancela um CGD pelo app. A grafia é a de TÍTULO (a da
+  lista e a que o `stamp_mo` grava), NÃO derivada do `ACTIVE_STATUS`, que é o
+  valor normalizado com que `is_active` compara. **O domínio não FECHA o
+  campo**: o Status é texto livre do SharePoint e é ele que o `cgd-stage` traduz
+  em etapa — o valor gravado entra na lista, e o `selectDe` compara cego à caixa
+  (senão `ACTIVE` e `Active` virariam duas linhas para o mesmo status).
+- **A Razão Social sai em MAIÚSCULAS, e a padronização é no FUNIL de gravação**
+  (§520, `UPPERCASE_COLUMNS` + `padroniza()`), alcançando os TRÊS caminhos —
+  New Request, edição da grade e a importação do SharePoint. Só nos dois
+  primeiros ela se desfaria sozinha: a importação REESCREVE a tabela inteira. É
+  `upper()` e não `_norm()` — o acento FICA, porque tirá-lo mudaria o nome da
+  empresa e é por este texto que a pasta da contraparte é procurada no
+  Electronic Inventory (pasta gêmea não nasce daí: o `_ei_match_key` já compara
+  em maiúsculas e sem pontuação).
+- **O Apêndice aceita VÁRIOS arquivos** (§520): todos na MESMA pasta do EI com o
+  mesmo prefixo, separados pelo marcador de cópia do inventário
+  (`_ei_version_prefix`). Soltar ACUMULA e o seletor SUBSTITUI; mesmo nome e
+  tamanho entra uma vez só. Os uploads vão **EM SÉRIE** (cada um é uma ida ao
+  share, e o `_ei_next_ordinal` decide o número da cópia), e falha no meio para
+  a cadeia, não cria a linha e NOMEIA o arquivo.
 
 ### Quotes
 
@@ -1949,6 +2014,24 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   share; o que a instância executa é o de lá. **Todo `ds` do `.bat` leva
   `call`**: `ds` é script do shell, e um `.bat` que chama outro sem `call`
   entrega o controle de vez — o pipe da versão antiga escondia isso.
+- **A subida de ~12 min é o BYTECODE recompilado pelo SMB** (§524). O
+  `new-otc-deploy.bat` cria uma pasta de versão NOVA a cada deploy e o
+  `start-otc-tracker.bat` chaveia o cache pela versão
+  (`pycache\%VERSION_PATH%`): versão nova é cache VAZIO, e para recompilar os
+  ~313 módulos o Python lê cada `.py` INTEIRO pelo share, com o `routes.py` de
+  711 KB no meio. Pior: o deploy manda `__pycache__` para o share justamente
+  para evitar isso, e o `PYTHONPYCACHEPREFIX` **SUBSTITUI** o lugar onde o
+  Python procura bytecode — o `__pycache__` ao lado do fonte nunca é lido, e as
+  duas mudanças se anulam. A saída é **espelhar o código para o disco local**
+  (robocopy `/MIR` + `pushd` no espelho, ~45 MB e ~770 arquivos, `static\data`
+  já fora): na instância, **11m49s → 63s**. SÓ O CÓDIGO se move — `DATA_DIR`,
+  `DATABASE_DIR` e `SHARED_DRIVE_ROOT` são UNC absolutos no `config.py`, não
+  relativos ao diretório atual. Hoje isso vive no `start-otc-tracker_teste.bat`
+  (para MEDIR), e o §524 lista o que falta promover. **O código de saída do
+  robocopy é um BITMASK**: 0–7 é sucesso, 8+ é falha — `if errorlevel 1`
+  abortaria em toda cópia bem-sucedida. E **`/COPY:DAT` PRESERVA o timestamp da
+  origem**: data de arquivo no share não diz quando o deploy rodou (foi o que
+  me fez descartar esta hipótese uma vez).
 - **Parêntese dentro de bloco `( … )` do `.bat` vai escapado** (`^(`/`^)`) —
   erro de PARSE. `check_bat_blocks.py`.
 - **`SECRET_KEY` é estado da máquina**: sem variável, o app mantém
@@ -1987,11 +2070,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 | `scripts/standalone/` (40, GERADOS por `build_duckdb_standalone.py`) | os mesmos conversores para máquina sem o código (`pip install duckdb` só) — nunca editar à mão |
 | `build_sop_docx.py` | SOP e Guia em Word a partir do `.md` |
 | `diag_ndfsum_account.py [AAAA-MM-DD]` | DIAGNÓSTICO da coluna Account do Settlement Summary: nome da linha → SPN no Reference Data → registro do Counterparty Details → defaults → conta, dizendo onde a cadeia quebra (§436) |
+| `diag_boot_imports.py` | DIAGNÓSTICO da SUBIDA (§522/§524): `python -X importtime` num subprocesso, com o farol do app passando direto para a tela e um pulso a cada 5 s (segundos · módulos · último módulo) — saída que demora tem de dizer que está viva, senão doze minutos de subida são indistinguíveis de um travamento. Rodá-lo de um clone LOCAL é o CONTROLE do experimento, não erro de uso: mesmos dados no share, só o código em disco local — caiu de minutos para segundos, o custo é ler o código pelo SMB; não caiu, é o que o import EXECUTA. Vale rodar os dois |
 
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (151 scripts)
+### `scripts/tests/` (152 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
