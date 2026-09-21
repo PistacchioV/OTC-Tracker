@@ -25,6 +25,10 @@
                         <i class="ti ti-calculator me-1"></i><span data-lang="tl-calculate">Calculate</span>
                     </button>
                 </div>
+                {% set tool='unwind-ndf-calculator' %}{% set lookup_placeholder='26C03202688' %}
+                {% set lookup_hint_key='tl-unw-lookup-help' %}
+                {% set lookup_hint="Contract or Código Identificador from Live Position › NDF. The position fills the ORIGINAL contract — counterparty, currency, strike, maturity, side, base value and what was already unwound. The termination rate and the pre rate belong to the deal of the day and stay for you." %}
+                {% include 'partials/tools-position-lookup.html' %}
                 <div class="row g-2">
                     <div class="col-12 tl-field">
                         <label for="posicao" data-lang="tl-ndf-position">Bank position</label>

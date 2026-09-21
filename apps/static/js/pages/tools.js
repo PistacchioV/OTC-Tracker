@@ -32,6 +32,33 @@
           noIndexCell: 'The position brings no index on this leg.',
           flow: 'flow', pickId: 'Type a B3 ID first.', fromBase: 'from the imported base of',
           closeOf: 'close of',
+          posLooking: 'Looking up the position…',
+          posFilled: 'Filled from the position of',
+          posMissing: 'Could not pull (left blank):',
+          posAssumed: 'Filled by approximation — check:',
+          n_unwound_before: 'already unwound in this contract: {valor} — the notional is what is still open',
+          n_cpty_not_registered: 'the counterparty document {taxid} is not in the Reference Data — on the umbrella account the holder is the bank, so the client cannot be named',
+          n_side_of_party: 'the side is the one of the PARTY of the record ({parte}) — confirm it is the bank',
+          n_strike_in_percent: 'the strike is registered in PERCENT ({pct}) — type the strike in value',
+          n_asian: 'Asian option: {n} verification dates',
+          n_has_barrier: 'the contract has a barrier — barriers and rebates are not priced here',
+          n_fixings_from_quotes: '{n} fixing price(s) from Quotes ({fonte}), {de} to {ate}',
+          n_fixings_missing: '{n} verification date(s) without a price yet: {datas} {motivo}',
+          e_not_in_position: '{id} is not in {fonte} of the last business day',
+          e_position_unreadable: 'Could not read the position',
+          f_nocional: 'notional',
+          f_taxa_termo: 'forward rate',
+          f_vencimento: 'maturity',
+          f_posicao: 'bank position',
+          f_moeda: 'currency',
+          f_strike: 'strike',
+          f_taxa_recompra: 'termination rate',
+          f_taxa_pre: 'pre rate',
+          f_tipo: 'type',
+          f_lado: 'bank side',
+          f_quantidade: 'quantity',
+          f_exercicio: 'exercise date',
+          f_fixings: 'fixing prices',
           closeNoDate: 'no close date in the description — type the price',
           ipcaAuto: 'fetched from IBGE on Calculate',
           descRead: 'From the curve description:', descNone: 'Nothing in the curve description changes the calculation.',
@@ -62,6 +89,33 @@
           noIndexCell: 'A posição não traz índice nesta perna.',
           flow: 'fluxo', pickId: 'Digite um B3 ID primeiro.', fromBase: 'da base importada de',
           closeOf: 'fechamento de',
+          posLooking: 'Consultando a posição…',
+          posFilled: 'Preenchido pela posição de',
+          posMissing: 'Não deu para puxar (ficou em branco):',
+          posAssumed: 'Preenchido por aproximação — confira:',
+          n_unwound_before: 'já recomprado neste contrato: {valor} — o nocional é o que ainda está aberto',
+          n_cpty_not_registered: 'o documento {taxid} da contraparte não está no Reference Data — na conta guarda-chuva o titular é o banco, então o cliente não pode ser nomeado',
+          n_side_of_party: 'o lado é o da PARTE do registro ({parte}) — confirme que é o banco',
+          n_strike_in_percent: 'o strike está registrado em PERCENTUAL ({pct}) — digite o strike em valor',
+          n_asian: 'Opção asiática: {n} datas de verificação',
+          n_has_barrier: 'o contrato tem barreira — barreiras e rebates não são apurados aqui',
+          n_fixings_from_quotes: '{n} preço(s) de verificação do Quotes ({fonte}), de {de} a {ate}',
+          n_fixings_missing: '{n} data(s) de verificação ainda sem preço: {datas} {motivo}',
+          e_not_in_position: '{id} não está em {fonte} do último dia útil',
+          e_position_unreadable: 'Não foi possível ler a posição',
+          f_nocional: 'nocional',
+          f_taxa_termo: 'taxa a termo',
+          f_vencimento: 'vencimento',
+          f_posicao: 'posição do banco',
+          f_moeda: 'moeda',
+          f_strike: 'strike',
+          f_taxa_recompra: 'taxa da recompra',
+          f_taxa_pre: 'taxa pré',
+          f_tipo: 'tipo',
+          f_lado: 'lado do banco',
+          f_quantidade: 'quantidade',
+          f_exercicio: 'data de exercício',
+          f_fixings: 'preços de verificação',
           closeNoDate: 'a denominação não traz a data do fechamento — digite o preço',
           ipcaAuto: 'buscado no IBGE ao calcular',
           descRead: 'Da descrição da curva:', descNone: 'Nada na descrição da curva muda o cálculo.',
@@ -92,6 +146,33 @@
           noIndexCell: 'La posición no trae índice en esta pata.',
           flow: 'flujo', pickId: 'Escriba un B3 ID primero.', fromBase: 'de la base importada de',
           closeOf: 'cierre de',
+          posLooking: 'Consultando la posición…',
+          posFilled: 'Completado con la posición de',
+          posMissing: 'No se pudo traer (quedó en blanco):',
+          posAssumed: 'Completado por aproximación — verifique:',
+          n_unwound_before: 'ya recomprado en este contrato: {valor} — el nocional es lo que sigue abierto',
+          n_cpty_not_registered: 'el documento {taxid} de la contraparte no está en el Reference Data — en la cuenta paraguas el titular es el banco, así que el cliente no puede nombrarse',
+          n_side_of_party: 'el lado es el de la PARTE del registro ({parte}) — confirme que es el banco',
+          n_strike_in_percent: 'el strike está registrado en PORCENTAJE ({pct}) — escriba el strike en valor',
+          n_asian: 'Opción asiática: {n} fechas de verificación',
+          n_has_barrier: 'el contrato tiene barrera — barreras y rebates no se calculan aquí',
+          n_fixings_from_quotes: '{n} precio(s) de verificación de Quotes ({fonte}), de {de} a {ate}',
+          n_fixings_missing: '{n} fecha(s) de verificación aún sin precio: {datas} {motivo}',
+          e_not_in_position: '{id} no está en {fonte} del último día hábil',
+          e_position_unreadable: 'No se pudo leer la posición',
+          f_nocional: 'nocional',
+          f_taxa_termo: 'tasa forward',
+          f_vencimento: 'vencimiento',
+          f_posicao: 'posición del banco',
+          f_moeda: 'moneda',
+          f_strike: 'strike',
+          f_taxa_recompra: 'tasa de la recompra',
+          f_taxa_pre: 'tasa pre',
+          f_tipo: 'tipo',
+          f_lado: 'lado del banco',
+          f_quantidade: 'cantidad',
+          f_exercicio: 'fecha de ejercicio',
+          f_fixings: 'precios de verificación',
           closeNoDate: 'la denominación no trae la fecha del cierre — escriba el precio',
           ipcaAuto: 'traído del IBGE al calcular',
           descRead: 'De la descripción de la curva:', descNone: 'Nada en la descripción de la curva cambia el cálculo.',
@@ -749,6 +830,84 @@
       var fl = lastData.flows[parseInt(this.value, 10)];
       if (fl) applyFlow(fl);
     });
+  })();
+
+  // ── NDF · Unwind NDF · Option: o B3 ID puxa a POSIÇÃO (o esquema do Swap) ──
+  // Genérico: o bloco `[data-tl-prefill]` diz o endpoint, e o servidor devolve
+  // `fields` pelo id/nome do campo. O que não veio fica em branco e marcado
+  // (`tl-missing`); o que veio por aproximação, `tl-assumed`. As notas chegam
+  // por CÓDIGO + params (§486) e a tela diz a frase no idioma de quem olha.
+  (function () {
+    var bloco = page.querySelector('[data-tl-prefill]');
+    if (!bloco) return;
+    var url = bloco.getAttribute('data-tl-prefill');
+    var inp = document.getElementById('b3_id'), btn = document.getElementById('tl-pos-lookup');
+    var status = document.getElementById('tl-pos-status');
+    if (!inp || !btn) return;
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function frase(chave, params, padrao) {
+      var s = t(chave); if (s === undefined) s = padrao || '';
+      return String(s).replace(/\{(\w+)\}/g, function (_m, k) { return params && params[k] != null ? params[k] : ''; }).trim();
+    }
+    function say(html, cls) { if (!status) return; status.className = 'tl-note mt-0 ' + (cls || ''); status.innerHTML = html; status.hidden = !html; }
+    function campo(nome) { return document.getElementById(nome) || page.querySelector('[name="' + nome + '"]'); }
+    function mark(nome, cls) {
+      var el = campo(nome), f = el && (el.closest('.tl-field') || el.closest('.tl-check'));
+      if (!f) return;
+      f.classList.remove('tl-missing', 'tl-assumed');
+      if (cls) f.classList.add(cls);
+    }
+    function setCampo(nome, v) {
+      var el = campo(nome);
+      if (!el) return;
+      if (el.type === 'checkbox') { el.checked = !!v; return; }
+      el.value = v == null ? '' : String(v);
+      if (el._flatpickr) el._flatpickr.setDate(el.value || '', false);
+      if (el.hasAttribute && el.hasAttribute('data-format')) formatar(el);
+    }
+    function emissao() {
+      var iso = (document.getElementById('data_emissao') || {}).value || '';
+      var out = document.getElementById('data_emissao_txt');
+      if (out) out.value = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.split('-').reverse().join('/') : iso;
+    }
+    emissao();                                  // a tela que volta do Calculate
+    var marcados = [];
+    function fill(d) {
+      marcados.forEach(function (n) { mark(n, null); }); marcados = [];
+      Object.keys(d.fields || {}).forEach(function (k) { setCampo(k, d.fields[k]); });
+      setCampo('b3_id', d.b3_id || inp.value);
+      emissao();
+      (d.missing || []).forEach(function (n) { mark(n, 'tl-missing'); marcados.push(n); });
+      (d.assumed || []).forEach(function (n) { mark(n, 'tl-assumed'); marcados.push(n); });
+      var html = '<strong>' + t('posFilled') + ' ' + esc((d.source_date || '').split('-').reverse().join('/')) + '</strong>';
+      var notas = (d.notes || []).map(function (n) { return frase('n_' + n.code, n.params, n.code); }).filter(Boolean);
+      if (notas.length) html += '<br>' + notas.map(esc).join('<br>');
+      if ((d.assumed || []).length) html += '<br>' + t('posAssumed') + ' ' + d.assumed.map(function (n) { return esc(frase('f_' + n, null, n)); }).join(' · ');
+      if ((d.missing || []).length) html += '<br><span class="text-danger">' + t('posMissing') + ' ' + d.missing.map(function (n) { return esc(frase('f_' + n, null, n)); }).join(' · ') + '</span>';
+      say(html, (d.missing || []).length ? 'tl-note--warn' : '');
+    }
+    function lookup() {
+      var id = (inp.value || '').trim();
+      if (!id) { say(esc(t('pickId')), 'tl-note--warn'); return; }
+      btn.disabled = true;
+      say(esc(t('posLooking')), '');
+      fetch(url + '?id=' + encodeURIComponent(id), { credentials: 'same-origin' })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          if (!res.ok || !res.d || !res.d.success) {
+            var d = res.d || {};
+            var msg = frase('e_' + (d.code || ''), d.params, d.error || '');
+            if (d.code === 'position_unreadable' && d.error) msg += ' — ' + d.error.split('—').slice(1).join('—').trim();
+            say('<strong>' + esc(t('notFound')) + '</strong> — ' + esc(msg || d.error || ''), 'tl-note--warn');
+            return;
+          }
+          fill(res.d);
+        })
+        .catch(function (e) { say(esc(String(e)), 'tl-note--warn'); })
+        .then(function () { btn.disabled = false; });
+    }
+    btn.addEventListener('click', lookup);
+    inp.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); lookup(); } });
   })();
 
   // ── Term SOFR: a dropzone do relatório da B3 ─────────────────────────────

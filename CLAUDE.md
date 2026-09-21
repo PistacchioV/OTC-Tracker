@@ -1014,6 +1014,27 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `_ptax_do_fixing` do Swap Calculator e dizem de que dia é; sem PTAX e sem
   número é erro em frase com o motivo. **O menu de Tools é em ORDEM ALFABÉTICA
   pelo rótulo em inglês** — item novo entra no lugar, não no fim.
+- **As três calculadoras puxam a POSIÇÃO pelo B3 ID** (§511, o esquema do Swap
+  Calculator; `partials/tools-position-lookup.html` + `/api/tools/<tool>/prefill`
+  + o IIFE `[data-tl-prefill]` do `tools.js`). A fonte é o MESMO coletor da tela
+  de Live Position (`_lpndf_collect`, `_lpopt_collect`) e a leitura é a MESMA da
+  vertical de Unwinds, repetida em `tools/queries.py` porque feature não importa
+  feature: **número de TELA** (`_num_tela`: o último separador manda, e três
+  dígitos depois de um separador só são milhar — MENOS numa taxa, onde `5.374`
+  é 5,374: `taxa=True`), **saldo = `Valor Base no registro − Valor Antecipado`**,
+  e **na conta guarda-chuva o cliente é a coluna do CPF/CNPJ, nunca o titular**
+  (`_b3_is_omnibus`; documento sem cadastro deixa o nome VAZIO avisando). O
+  lado ilegível NÃO se chuta (o sinal depende dele). Na recompra a posição dá o
+  contrato ORIGINAL e o nocional nasce com o saldo MARCADO como aproximação; as
+  taxas do negócio ficam para a mesa. **Na opção os preços de verificação vêm
+  do QUOTES** (`_fixings_do_quotes`): um na vanilla, a série `Média Asiática
+  (data) N` na asiática, numa chamada só — câmbio pela PTAX de VENDA da moeda
+  base, commodities pelo `quotes-commodity` (com o `"MY"`), o resto pelo
+  `quotes-equity`; vale o Close do pregão ou o último antes dele. **Série pela
+  metade não é média**: data futura ou sem preço deixa `fixings` SINALIZADO com
+  a nota dizendo quantas faltam, e símbolo fora do cadastro diz qual cadastro.
+  O `lado` da opção é o da PARTE do registro e vai marcado como aproximação.
+  Notas e erros chegam por CÓDIGO + params (§486).
 - **Swap Calculator: a data do fixing da taxa a termo conta no calendário do
   ÍNDICE, não no ANBIMA** (§509, `liquidacao.calendario_do_fixing`): Term SOFR =
   calendário SOFR do Holidays (*US Government Securities business days*),
