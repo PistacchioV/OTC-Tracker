@@ -121,6 +121,68 @@ def tools_fixed_income():
     return render_template('pages/tools-fixed-income.html', segment='tools-fixed-income', **ctx)
 
 
+# ── NDF · Unwind NDF · Option Calculator ────────────────────────────────────
+# As três são o mesmo desenho da Fixed Income: formulário à esquerda, a conta
+# ABERTA em parcelas à direita. O motor é o `precificador/derivativos.py`.
+
+def _calculadora(template, segment, form_padrao, calcular, **extra):
+    r = _auth_page()
+    if r:
+        return r
+    ctx = dict(extra, form=form_padrao, resultado=None, erro=None,
+               hoje=date.today().isoformat())
+    if request.method == 'POST':
+        ctx['form'] = {k: v for k, v in request.form.items()}
+        try:
+            ctx['resultado'] = calcular(request.form)
+        except _ERROS_DE_TELA as exc:
+            ctx['erro'] = str(exc)
+    return render_template(template, segment=segment, **ctx)
+
+
+def _moedas_estrangeiras():
+    return [m for m in liquidacao.MOEDAS if m.codigo != liquidacao.SEM_CONVERSAO]
+
+
+@blueprint.route('/tools/ndf-calculator', methods=['GET', 'POST'])
+def tools_ndf_calculator():
+    from apps.pages.precificador import derivativos
+    hoje = date.today()
+    return _calculadora(
+        'pages/tools-ndf-calculator.html', 'tools-ndf-calculator',
+        {'moeda': 'USD', 'nocional': '1,000,000.00', 'taxa_termo': '', 'fixing': '',
+         'vencimento': hoje.isoformat(), 'ptax_offset': '1', 'posicao': derivativos.COMPRADO,
+         'fixo_em_reais': '', 'isento_ir': ''},
+        queries.calcular_ndf, moedas=_moedas_estrangeiras(), posicoes=derivativos.POSICOES)
+
+
+@blueprint.route('/tools/unwind-ndf-calculator', methods=['GET', 'POST'])
+def tools_unwind_ndf_calculator():
+    from apps.pages.precificador import derivativos
+    hoje = date.today()
+    return _calculadora(
+        'pages/tools-unwind-ndf-calculator.html', 'tools-unwind-ndf-calculator',
+        {'moeda': 'USD', 'nocional': '1,000,000.00', 'nocional_original': '', 'ja_recomprado': '',
+         'strike': '', 'taxa_recompra': '', 'taxa_pre': '', 'du': '',
+         'liquidacao': hoje.isoformat(), 'vencimento': '', 'posicao': derivativos.COMPRADO,
+         'fixo_em_reais': ''},
+        queries.calcular_unwind_ndf, moedas=_moedas_estrangeiras(),
+        posicoes=derivativos.POSICOES)
+
+
+@blueprint.route('/tools/option-calculator', methods=['GET', 'POST'])
+def tools_option_calculator():
+    from apps.pages.precificador import derivativos
+    hoje = date.today()
+    return _calculadora(
+        'pages/tools-option-calculator.html', 'tools-option-calculator',
+        {'tipo': derivativos.CALL, 'lado': derivativos.TITULAR, 'moeda': 'USD',
+         'strike': '', 'quantidade': '', 'fixings': '', 'paridade': '', 'ptax_offset': '1',
+         'premio_unitario': '', 'paridade_premio': '', 'exercicio': hoje.isoformat()},
+        queries.calcular_opcao, moedas=liquidacao.MOEDAS, tipos=derivativos.TIPOS_OPCAO,
+        lados=derivativos.LADOS_OPCAO)
+
+
 # ── Swap Calculator ─────────────────────────────────────────────────────────
 
 def _form_padrao_swap(hoje):

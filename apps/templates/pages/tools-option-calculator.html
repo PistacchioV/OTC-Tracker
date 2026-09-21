@@ -1,0 +1,137 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Option Calculator{% endblock title %}
+
+{% block extra_css %}
+{% include 'partials/tools-assets-css.html' %}
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="tl-option-calculator" class="container-fluid tl-page">
+    {% set title='Option Calculator' %}
+    {% set crumbs=['OTC Tracker', 'Tools', 'Option Calculator'] %}
+    {% include 'partials/page-title.html' %}
+
+    {# O EXERCÍCIO de uma opção flexível (FX, commodities, equity): o payoff é
+       de quem é titular, o prêmio é pago pelo titular, e o resultado é o do
+       BANCO. Vários preços de verificação = asiática (média aritmética). #}
+    <form method="post" class="row g-3">
+        <div class="col-lg-5">
+            <div class="tl-card">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <p class="tl-kicker mb-0" data-lang="tl-opt-trade">The option</p>
+                    <button type="submit" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all">
+                        <i class="ti ti-calculator me-1"></i><span data-lang="tl-calculate">Calculate</span>
+                    </button>
+                </div>
+                <div class="row g-2">
+                    <div class="col-4 tl-field">
+                        <label for="tipo" data-lang="tl-opt-type">Type</label>
+                        <select class="form-select form-select-sm" id="tipo" name="tipo">
+                            {% for valor, rotulo in tipos %}
+                            <option value="{{ valor }}" {{ 'selected' if form.tipo == valor }}>{{ rotulo }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-8 tl-field">
+                        <label for="lado" data-lang="tl-opt-side">Bank side</label>
+                        <select class="form-select form-select-sm" id="lado" name="lado">
+                            {% for valor, rotulo in lados %}
+                            <option value="{{ valor }}" {{ 'selected' if form.lado == valor }} data-lang="tl-opt-side-{{ valor }}">{{ rotulo }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="strike" data-lang="tl-opt-strike">Strike</label>
+                        <input class="form-control form-control-sm" id="strike" name="strike" value="{{ form.strike }}" inputmode="decimal" data-format="fx" required>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="quantidade" data-lang="tl-opt-quantity">Quantity / notional</label>
+                        <input class="form-control form-control-sm" id="quantidade" name="quantidade" value="{{ form.quantidade }}" inputmode="decimal" data-format="money" required>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="exercicio" data-lang="tl-opt-exercise">Exercise date</label>
+                        <input class="form-control form-control-sm tl-date" id="exercicio" name="exercicio" value="{{ form.exercicio }}" autocomplete="off" placeholder="dd/mm/yyyy" required>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="premio_unitario" data-lang="tl-opt-unit-premium">Unit premium (blank = none)</label>
+                        <input class="form-control form-control-sm" id="premio_unitario" name="premio_unitario" value="{{ form.premio_unitario }}" inputmode="decimal" data-format="fx">
+                    </div>
+                    <div class="col-12 tl-field">
+                        <label for="fixings" data-lang="tl-opt-fixings">Fixing price(s)</label>
+                        <textarea class="form-control form-control-sm" id="fixings" name="fixings" rows="3" placeholder="5.4321" required>{{ form.fixings }}</textarea>
+                        <p class="tl-help" data-lang="tl-opt-fixings-help">One price is a vanilla. For an Asian option, one price per line (or separated by ;): the exercise price is their arithmetic average.</p>
+                    </div>
+                </div>
+                <p class="tl-kicker mt-3 mb-2" data-lang="tl-opt-currency-block">Price currency</p>
+                <div class="row g-2">
+                    <div class="col-12 tl-field">
+                        <label for="moeda" data-lang="tl-opt-currency">Currency of the strike and the fixings</label>
+                        <select class="form-select form-select-sm" id="moeda" name="moeda">
+                            {% for m in moedas %}
+                            <option value="{{ m.codigo }}" {{ 'selected' if form.moeda == m.codigo }}>{{ m.codigo }} — {{ m.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-4 tl-field">
+                        <label for="paridade" data-lang="tl-opt-fx">FX rate (blank = PTAX)</label>
+                        <input class="form-control form-control-sm" id="paridade" name="paridade" value="{{ form.paridade }}" inputmode="decimal" data-format="fx">
+                    </div>
+                    <div class="col-4 tl-field">
+                        <label for="ptax_offset" data-lang="tl-ndf-offset">Fixing offset (business days)</label>
+                        <input class="form-control form-control-sm" id="ptax_offset" name="ptax_offset" value="{{ form.ptax_offset }}" inputmode="numeric" data-format="int">
+                    </div>
+                    <div class="col-4 tl-field">
+                        <label for="paridade_premio" data-lang="tl-opt-fx-premium">Premium FX rate</label>
+                        <input class="form-control form-control-sm" id="paridade_premio" name="paridade_premio" value="{{ form.paridade_premio }}" inputmode="decimal" data-format="fx">
+                    </div>
+                    <div class="col-12"><p class="tl-help" data-lang="tl-opt-fx-help">In BRL there is no conversion. For a foreign currency, blank is the BCB selling PTAX of the exercise date minus the offset. For an FX option the fixing IS the rate: pick BRL and type the fixing as the price. The premium FX rate is the one of the premium date — blank, the exercise one.</p></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            {% if erro %}<div class="alert alert-danger py-2 fs-xs"><i class="ti ti-alert-triangle me-1"></i>{{ erro }}</div>{% endif %}
+            {% if resultado %}
+            {% set r = resultado.r %}
+            <div class="tl-card tl-card--accent">
+                <div class="d-flex justify-content-between align-items-start gap-3">
+                    <div>
+                        <p class="tl-kicker" data-lang="tl-opt-exercise-value">Exercise settlement</p>
+                        <div class="tl-big">R$ {{ r.payoff | tl_money(2) }}</div>
+                        <p class="tl-sub">{% if not r.exercida %}<span data-lang="tl-opt-otm">out of the money — the option is not exercised</span>{% elif r.direcao_exercicio == 'RECEIVE' %}<span data-lang="tl-bank-receives">the bank receives</span>{% else %}<span data-lang="tl-bank-pays">the bank pays</span>{% endif %}</p>
+                    </div>
+                    <div class="d-flex flex-column align-items-end gap-1">
+                        <span class="badge rounded-pill {{ 'text-bg-success' if r.exercida else 'text-bg-secondary' }} bg-gradient">{% if r.exercida %}<span data-lang="tl-opt-itm">In the money</span>{% else %}<span data-lang="tl-opt-otm-s">Out of the money</span>{% endif %}</span>
+                        {% if r.direcao_exercicio %}<span class="badge rounded-pill {{ 'text-bg-success' if r.direcao_exercicio == 'RECEIVE' else 'text-bg-warning' }} bg-gradient">{{ r.direcao_exercicio }}</span>{% endif %}
+                    </div>
+                </div>
+                <div class="tl-stats mt-3">
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-opt-exercise-price">Exercise price</div><div class="tl-stat__value">{{ r.fixing | tl_fixed(8) }}</div><div class="tl-stat__note">{% if r.fixings | length > 1 %}<span data-lang="tl-opt-average-of">average of</span> {{ r.fixings | length }}{% endif %}</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-opt-strike">Strike</div><div class="tl-stat__value">{{ r.strike | tl_fixed(8) }}</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-opt-intrinsic">Intrinsic value (per unit)</div><div class="tl-stat__value">{{ r.intrinseco | tl_fixed(8) }}</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-opt-fx-s">FX rate</div><div class="tl-stat__value">{{ r.paridade | tl_fixed(8) }}</div><div class="tl-stat__note">{{ resultado.paridade_nota or '' }}</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-opt-premium">Premium</div><div class="tl-stat__value">R$ {{ r.premio | tl_money(2) }}</div><div class="tl-stat__note">{% if r.direcao_premio == 'RECEIVE' %}<span data-lang="tl-bank-receives">the bank receives</span>{% elif r.direcao_premio == 'PAY' %}<span data-lang="tl-bank-pays">the bank pays</span>{% endif %}</div></div>
+                    <div class="tl-stat tl-stat--hi"><div class="tl-stat__label" data-lang="tl-opt-net">Bank result (exercise + premium)</div><div class="tl-stat__value">R$ {{ r.resultado | tl_money(2) }}</div></div>
+                </div>
+            </div>
+            <div class="tl-card">
+                <p class="tl-title" data-lang="tl-how">How the number is built</p>
+                <p class="tl-sub mb-1">{% if r.tipo == 'call' %}max(0, {{ r.fixing | tl_fixed(8) }} − {{ r.strike | tl_fixed(8) }}){% else %}max(0, {{ r.strike | tl_fixed(8) }} − {{ r.fixing | tl_fixed(8) }}){% endif %} = {{ r.intrinseco | tl_fixed(8) }}</p>
+                <p class="tl-sub mb-0">{{ r.intrinseco | tl_fixed(8) }} × {{ r.quantidade | tl_money(2) }} × {{ r.paridade | tl_fixed(8) }} = <strong>R$ {{ r.payoff | tl_money(2) }}</strong></p>
+            </div>
+            <div class="tl-note" data-lang="tl-opt-note">The exercise and the premium settle on different days: the two are shown apart, and the bank result is only their sum. Barriers and rebates are not priced here.</div>
+            {% else %}
+            <div class="tl-card tl-card--dashed">
+                <i class="ti ti-chart-candle"></i>
+                <span data-lang="tl-opt-empty">Enter the strike, the quantity and the fixing price.</span>
+            </div>
+            {% endif %}
+        </div>
+    </form>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+{% include 'partials/tools-assets-js.html' %}
+{% endblock extra_javascript %}

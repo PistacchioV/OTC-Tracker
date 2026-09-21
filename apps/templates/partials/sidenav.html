@@ -372,9 +372,11 @@
                         </a>
                     </li>
 
-                    <!-- Tools: o antigo item Quotes virou o pai. As cinco irmãs
-                         são as ferramentas portadas do Precificação Swap
-                         (features/tools); o Quotes segue na vertical dele. -->
+                    <!-- Tools: o antigo item Quotes virou o pai. As irmãs são as
+                         ferramentas da vertical `features/tools`; o Quotes segue
+                         na vertical dele. Em ORDEM ALFABÉTICA pelo rótulo em
+                         inglês (mesa, 21/09/2026) — item novo entra no lugar,
+                         não no fim; o `check_tools_calculators.py` cobra. -->
                     <li class="side-nav-item">
                         <a data-bs-toggle="collapse" href="#toolsSection" aria-expanded="false"
                            aria-controls="toolsSection" class="side-nav-link">
@@ -385,8 +387,8 @@
                         <div class="collapse" id="toolsSection">
                             <ul class="sub-menu">
                                 <li class="side-nav-item">
-                                    <a href="/quotes" class="side-nav-link">
-                                        <span class="menu-text" data-lang="quotes"> Quotes </span>
+                                    <a href="/tools/euribor" class="side-nav-link">
+                                        <span class="menu-text" data-lang="tl-nav-euribor">Euribor</span>
                                     </a>
                                 </li>
                                 <li class="side-nav-item">
@@ -395,8 +397,18 @@
                                     </a>
                                 </li>
                                 <li class="side-nav-item">
-                                    <a href="/tools/swap-calculator" class="side-nav-link">
-                                        <span class="menu-text" data-lang="tl-nav-swap-calculator">Swap Calculator</span>
+                                    <a href="/tools/ndf-calculator" class="side-nav-link">
+                                        <span class="menu-text" data-lang="tl-nav-ndf-calculator">NDF Calculator</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/tools/option-calculator" class="side-nav-link">
+                                        <span class="menu-text" data-lang="tl-nav-option-calculator">Option Calculator</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/quotes" class="side-nav-link">
+                                        <span class="menu-text" data-lang="quotes">Quotes</span>
                                     </a>
                                 </li>
                                 <li class="side-nav-item">
@@ -405,13 +417,18 @@
                                     </a>
                                 </li>
                                 <li class="side-nav-item">
+                                    <a href="/tools/swap-calculator" class="side-nav-link">
+                                        <span class="menu-text" data-lang="tl-nav-swap-calculator">Swap Calculator</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
                                     <a href="/tools/term-sofr" class="side-nav-link">
                                         <span class="menu-text" data-lang="tl-nav-term-sofr">Term SOFR</span>
                                     </a>
                                 </li>
                                 <li class="side-nav-item">
-                                    <a href="/tools/euribor" class="side-nav-link">
-                                        <span class="menu-text" data-lang="tl-nav-euribor">Euribor</span>
+                                    <a href="/tools/unwind-ndf-calculator" class="side-nav-link">
+                                        <span class="menu-text" data-lang="tl-nav-unwind-ndf-calculator">Unwind NDF Calculator</span>
                                     </a>
                                 </li>
                             </ul>

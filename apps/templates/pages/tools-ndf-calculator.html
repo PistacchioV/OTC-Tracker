@@ -1,0 +1,125 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}NDF Calculator{% endblock title %}
+
+{% block extra_css %}
+{% include 'partials/tools-assets-css.html' %}
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="tl-ndf-calculator" class="container-fluid tl-page">
+    {% set title='NDF Calculator' %}
+    {% set crumbs=['OTC Tracker', 'Tools', 'NDF Calculator'] %}
+    {% include 'partials/page-title.html' %}
+
+    {# A liquidação de um termo de moeda no VENCIMENTO. O motor é o
+       `precificador/derivativos.py`; a conta sai ABERTA em parcelas, porque um
+       número sem as parcelas não se confere. O resultado é o do BANCO. #}
+    <form method="post" class="row g-3">
+        <div class="col-lg-5">
+            <div class="tl-card">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <p class="tl-kicker mb-0" data-lang="tl-ndf-trade">The forward</p>
+                    <button type="submit" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all">
+                        <i class="ti ti-calculator me-1"></i><span data-lang="tl-calculate">Calculate</span>
+                    </button>
+                </div>
+                <div class="row g-2">
+                    <div class="col-12 tl-field">
+                        <label for="posicao" data-lang="tl-ndf-position">Bank position</label>
+                        <select class="form-select form-select-sm" id="posicao" name="posicao">
+                            {% for valor, rotulo in posicoes %}
+                            <option value="{{ valor }}" {{ 'selected' if form.posicao == valor }} data-lang="tl-ndf-pos-{{ valor }}">{{ rotulo }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="moeda" data-lang="tl-ndf-currency">Foreign currency</label>
+                        <select class="form-select form-select-sm" id="moeda" name="moeda">
+                            {% for m in moedas %}
+                            <option value="{{ m.codigo }}" {{ 'selected' if form.moeda == m.codigo }}>{{ m.codigo }} — {{ m.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="nocional" data-lang="tl-ndf-notional">Notional</label>
+                        <input class="form-control form-control-sm" id="nocional" name="nocional" value="{{ form.nocional }}" inputmode="decimal" data-format="money" required>
+                    </div>
+                    <div class="col-12">
+                        <label class="tl-check">
+                            <input type="checkbox" name="fixo_em_reais" value="1" class="form-check-input" {{ 'checked' if form.fixo_em_reais }}>
+                            <div><strong data-lang="tl-ndf-brl-fixed">The notional is fixed in BRL</strong>
+                                <span data-lang="tl-ndf-brl-fixed-help">The contract is in foreign currency at B3: a BRL notional is divided by the forward rate.</span></div>
+                        </label>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="taxa_termo" data-lang="tl-ndf-forward">Forward rate (strike)</label>
+                        <input class="form-control form-control-sm" id="taxa_termo" name="taxa_termo" value="{{ form.taxa_termo }}" inputmode="decimal" data-format="fx" required>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="vencimento" data-lang="tl-ndf-maturity">Maturity</label>
+                        <input class="form-control form-control-sm tl-date" id="vencimento" name="vencimento" value="{{ form.vencimento }}" autocomplete="off" placeholder="dd/mm/yyyy" required>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="fixing" data-lang="tl-ndf-fixing">Fixing (blank = PTAX)</label>
+                        <input class="form-control form-control-sm" id="fixing" name="fixing" value="{{ form.fixing }}" inputmode="decimal" data-format="fx">
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="ptax_offset" data-lang="tl-ndf-offset">Fixing offset (business days)</label>
+                        <input class="form-control form-control-sm" id="ptax_offset" name="ptax_offset" value="{{ form.ptax_offset }}" inputmode="numeric" data-format="int">
+                    </div>
+                    <div class="col-12"><p class="tl-help" data-lang="tl-ndf-fixing-help">Blank, the fixing is the BCB selling PTAX of the maturity minus the offset (ANBIMA business days) — 1 is the usual D-1. Outside the currencies the BCB publishes, type it in.</p></div>
+                    <div class="col-12">
+                        <label class="tl-check">
+                            <input type="checkbox" name="isento_ir" value="1" class="form-check-input" {{ 'checked' if form.isento_ir }}>
+                            <div><strong data-lang="tl-ndf-exempt">Counterparty is exempt from income tax</strong>
+                                <span data-lang="tl-ndf-exempt-help">The ones registered in the NDF IR Exempt mapping.</span></div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            {% if erro %}<div class="alert alert-danger py-2 fs-xs"><i class="ti ti-alert-triangle me-1"></i>{{ erro }}</div>{% endif %}
+            {% if resultado %}
+            {% set r = resultado.r %}
+            <div class="tl-card tl-card--accent">
+                <div class="d-flex justify-content-between align-items-start gap-3">
+                    <div>
+                        <p class="tl-kicker" data-lang="tl-ndf-settlement">Settlement at maturity</p>
+                        <div class="tl-big">R$ {{ r.liquidacao | abs | tl_money(2) }}</div>
+                        <p class="tl-sub">{% if r.direcao == 'RECEIVE' %}<span data-lang="tl-bank-receives">the bank receives</span>{% elif r.direcao == 'PAY' %}<span data-lang="tl-bank-pays">the bank pays</span>{% else %}<span data-lang="tl-nothing-settles">nothing settles — the fixing is the forward rate</span>{% endif %}</p>
+                    </div>
+                    {% if r.direcao %}<span class="badge rounded-pill {{ 'text-bg-success' if r.direcao == 'RECEIVE' else 'text-bg-warning' }} bg-gradient">{{ r.direcao }}</span>{% endif %}
+                </div>
+                <div class="tl-stats mt-3">
+                    <div class="tl-stat"><div class="tl-stat__label"><span data-lang="tl-ndf-notional-fc">Notional in</span> {{ resultado.moeda }}</div><div class="tl-stat__value">{{ r.nocional_me | tl_money(2) }}</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-ndf-forward-s">Forward rate</div><div class="tl-stat__value">{{ r.taxa_termo | tl_fixed(8) }}</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-ndf-fixing-s">Fixing</div><div class="tl-stat__value">{{ r.fixing | tl_fixed(8) }}</div><div class="tl-stat__note">{{ resultado.fixing_nota or '' }}</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-ndf-diff">Fixing − forward</div><div class="tl-stat__value">{{ r.diferenca | tl_fixed(8) }}</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-ndf-ir">Income tax (0.005%)</div><div class="tl-stat__value">R$ {{ r.ir | tl_money(2) }}</div><div class="tl-stat__note">{% if r.isento %}<span data-lang="tl-ndf-ir-exempt">exempt counterparty</span>{% elif r.direcao != 'PAY' %}<span data-lang="tl-ndf-ir-none">only when the bank pays</span>{% endif %}</div></div>
+                    {% if r.liquido_cliente is not none %}
+                    <div class="tl-stat tl-stat--hi"><div class="tl-stat__label" data-lang="tl-ndf-net-client">Net to the client</div><div class="tl-stat__value">R$ {{ r.liquido_cliente | tl_money(2) }}</div></div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="tl-card">
+                <p class="tl-title" data-lang="tl-how">How the number is built</p>
+                <p class="tl-sub mb-0">{{ r.nocional_me | tl_money(2) }} {{ resultado.moeda }} × ({{ r.fixing | tl_fixed(8) }} − {{ r.taxa_termo | tl_fixed(8) }}) × {{ '+1' if r.sinal > 0 else '−1' }} = <strong>R$ {{ r.liquidacao | tl_money(2) }}</strong></p>
+            </div>
+            <div class="tl-note" data-lang="tl-ndf-ir-note">The 0.005% is withheld on the settlement the BANK pays. A tax below R$ 1.00 is not withheld and accrues against the counterparty for the month — that floor depends on the month's bucket and cannot be decided from one trade, so this page shows the tax of the trade alone.</div>
+            {% else %}
+            <div class="tl-card tl-card--dashed">
+                <i class="ti ti-arrows-exchange"></i>
+                <span data-lang="tl-ndf-empty">Enter the notional, the forward rate and the maturity.</span>
+            </div>
+            {% endif %}
+        </div>
+    </form>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+{% include 'partials/tools-assets-js.html' %}
+{% endblock extra_javascript %}
