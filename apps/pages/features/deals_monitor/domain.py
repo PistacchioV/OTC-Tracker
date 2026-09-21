@@ -11,6 +11,18 @@ import re
 # de um `NDF/FX` criado aqui — duas coisas diferentes somadas num card só.
 PREFIXO_UNWIND = 'Unwind/'
 
+# As pastas de SWAP que se dividem pela LOB da linha (ver os dois cards de swap
+# abaixo e `_ndm_bucket`). `Swap/Equities` e `Swap/CEM` são as pastas que os
+# dois cards já declaravam antes de existir página: ficam, para o dia em que
+# alguém gravar nelas.
+_NDM_SWAP_DIRS = ('Swap/Bullet', 'Swap/Cashflow', 'Swap/Equities', 'Swap/CEM',
+                  PREFIXO_UNWIND + 'Swap/EDG', PREFIXO_UNWIND + 'Swap/CEM')
+
+# O que a varredura acrescenta ao pkey da linha cuja LOB não diz o card: ela
+# NÃO é chutada para um dos dois — sobra sem dono e vira o card genérico do
+# grupo Others (`Swap Bullet No LOB`), que é a tela dizendo o que falta.
+SEM_LOB = 'No LOB'
+
 _NDM_CARDS = [
     {'key': 'ndf-commodities',    'label': 'NDF Commodities',     'url': '/new_deals-ndf-commodities',    'dirs': ('NDF/Commodities',),                          'les': ('JPM', 'LAW')},
     {'key': 'ndf-fwdstart',       'label': 'NDF FWD Start',       'url': '/new_deals-ndf-fwdstart',       'dirs': ('NDF/FwdStart',),                             'les': ('JPM', 'MGT', 'LAW')},
@@ -19,9 +31,19 @@ _NDM_CARDS = [
     {'key': 'opt-commodities',    'label': 'Commodities Options', 'url': '/new_deals-opt-commodities',    'dirs': ('Option/Commodities',),                       'les': ('JPM', 'LAW')},
     {'key': 'opt-fxo',            'label': 'FX Options',          'url': '/new_deals-opt-fxo',            'dirs': ('Option/FXO',),                               'les': ('JPM', 'LAW')},
     {'key': 'opt-equity',         'label': 'Equity Options',      'url': None, 'soon': True,              'dirs': ('Option/Equity', 'Option/Equities'),          'les': ('JPM', 'ATA')},
-    {'key': 'swap-bullet',        'label': 'Swap Bullet',         'url': '/new_deals-swap-bullet',        'dirs': ('Swap/Bullet',),                              'les': ('JPM', 'ATA')},
-    {'key': 'swap-equities',      'label': 'Swap Equities',       'url': None, 'soon': True,              'dirs': ('Swap/Equities',),                            'les': ('JPM', 'ATA')},
-    {'key': 'swap-cem',           'label': 'Swap CEM',            'url': None, 'soon': True,              'dirs': ('Swap/CEM',),                                 'les': ('JPM', 'LAW')},
+    # Swap: DOIS cards, e quem decide em qual a operação cai é a coluna LOB da
+    # linha (`EDG` → Swap Equities, `CEM` → Swap CEM), não a PÁGINA em que ela
+    # nasceu (mesa, 21/09/2026). Bullet e Cashflow são FORMATO de contrato — a
+    # CEM tem swap bullet e a EDG pode ter cashflow —, e o card `Swap Bullet`
+    # somava as duas mesas num número que nenhuma delas conferia. As pastas são
+    # as MESMAS nos dois cards; o `lob` é o que separa (`_ndm_bucket`). As de
+    # recompra (`Unwind/Swap/...`) seguem a convenção do `cache/unwinds/` da
+    # Fase 1: o backend delas ainda não existe, e quando nascer cai aqui.
+    {'key': 'swap-equities',      'label': 'Swap Equities',       'url': '/new_deals-swap-bullet',        'dirs': _NDM_SWAP_DIRS, 'lob': 'EDG',                  'les': ('JPM', 'ATA')},
+    # `soon` enquanto o backend do Cashflow é 501 (`nd_backend_pending`): o
+    # selo só aparece com o card VAZIO, então no dia em que a CEM tiver
+    # operação a tela mostra o número e o link, sem mexer aqui.
+    {'key': 'swap-cem',           'label': 'Swap CEM',            'url': '/new_deals-swap-cashflow', 'soon': True, 'dirs': _NDM_SWAP_DIRS, 'lob': 'CEM',       'les': ('JPM', 'ATA')},
     # Recompra (unwind): registro na B3 como os demais desta coluna — o TER
     # 0014 vai para o mesmo Batch Conecta —, e por isso a chave NÃO leva
     # prefixo `intrag-`, que é o único teste de zona do e-mail.
@@ -65,13 +87,41 @@ _NDM_CARDS = [
 
 _NDM_JPM_RE = re.compile(r'J\.?P\.?\s*MORGAN', re.IGNORECASE)
 
-_NDM_ATA_DIRS = {'Option/Equity', 'Option/Equities', 'Swap/Equities', 'Swap/Bullet'}
+_NDM_ATA_DIRS = {'Option/Equity', 'Option/Equities'} | set(_NDM_SWAP_DIRS)
 
 # As PASTAS das três páginas genéricas de NDF — sem espaço, que é como o
 # `_GENERIC_ND_PRODUCTS` as grava. `FWD Start` e `Other Publisher` (com espaço)
 # são os RÓTULOS, e conviviam aqui como se fossem "a outra grafia em produção":
 # nunca foram, e um diretório que não existe casa com nada.
 _NDM_GENERIC_NDF_DIRS = {'NDF/FwdStart', 'NDF/OtherPublisher', 'NDF/Vanilla'}
+
+_NDM_LOBS = tuple(c['lob'] for c in _NDM_CARDS if c.get('lob'))
+
+
+def _ndm_lob(d):
+    """A LOB da linha como o card a declara (`EDG`/`CEM`), ou `''`. Só letras
+    e dígitos, em maiúsculas — a mesma leitura que o Swap Bullet faz dela para
+    o nome do arquivo —, porque nas páginas de recompra a coluna é texto livre."""
+    return re.sub(r'[^A-Z0-9]', '', str((d or {}).get('LOB') or '').upper())
+
+
+def _ndm_bucket(pkey, d):
+    """O balde da contagem: o pkey, e nas pastas de swap o pkey + a LOB.
+
+    O card pede `<pasta>#<LOB>` (ver `card_buckets`). LOB fora das declaradas
+    devolve `<pasta>/No LOB`, que card nenhum pede: a linha aparece no grupo
+    Others com esse nome, em vez de somar no card da outra mesa."""
+    if pkey not in _NDM_SWAP_DIRS:
+        return pkey
+    lob = _ndm_lob(d)
+    return pkey + '#' + lob if lob in _NDM_LOBS else pkey + '/' + SEM_LOB
+
+
+def card_buckets(card):
+    """Os baldes que o card soma — as `dirs`, com a LOB quando ele a declara."""
+    lob = card.get('lob')
+    return tuple(d + '#' + lob if lob else d for d in card['dirs'])
+
 
 def _ndm_deal_le(pkey, d):
     """Entidade (LE) de uma linha do monitor, para os subitens dos cards.
@@ -108,7 +158,6 @@ _NDM_TAXONOMY = {
     'opt-commodities':    ('Option', 'Commodities'),
     'opt-fxo':            ('Option', 'FX'),
     'opt-equity':         ('Option', 'Equity'),
-    'swap-bullet':        ('Swap', 'Bullet'),
     'swap-equities':      ('Swap', 'Equities'),
     'swap-cem':           ('Swap', 'CEM'),
     'unwind-ndf-fx':      ('NDF', 'Unwind FX'),
