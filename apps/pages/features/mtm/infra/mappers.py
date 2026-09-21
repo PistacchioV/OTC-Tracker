@@ -84,13 +84,40 @@ def _mtm_apply_edg_values(data, file_rows):
     return edg_m, coe_m, zeros, missing
 
 
-_MTM_HYB_MAP_PATH  = _R().data_path('mapping_swap-hyb.json')
+def _mtm_hyb_map_path():
+    """O caminho do `mapping_swap-hyb.json`, resolvido no PRIMEIRO USO.
+
+    Era uma constante de módulo (`_MTM_HYB_MAP_PATH = _R().data_path(...)`), e
+    `data_path()` parece montagem de caminho mas não é: ele pergunta ao ARMAZÉM
+    se o arquivo existe (`_existe` → `data_store.exists`), e isso ABRE UM
+    DUCKDB. No share, frio, custa de segundos a minutos — e acontecia durante o
+    IMPORT deste módulo, ou seja, dentro da subida, com o app sem atender.
+
+    Foi aqui que o cronômetro do import parou por mais de um minuto na medição
+    de 21/09/2026 (`scripts/diag_boot_imports.py`), entregando o diagnóstico dos
+    ~9,5 min que a subida da instância gastava no `register_blueprints`. As duas
+    gêmeas estão no `routes` (`VCP_JSON`, `DOMINIO_JSON`), resolvidas por um
+    `__getattr__` de módulo.
+
+    Aqui é FUNÇÃO e não `__getattr__`: o nome é lido de DENTRO deste arquivo
+    (por `_mtm_load_hyb_mapping`), e `__getattr__` de módulo só responde a
+    acesso pelo objeto módulo — nome global lido aqui dentro daria `NameError`.
+    Nenhum teste troca este atributo, então a forma de função não tira patch de
+    ninguém; a travessia de fora continua pelo atributo do módulo
+    (`mappers._mtm_hyb_map_path()`), como manda o §3.
+
+    Sem memo próprio de propósito: quem memoiza é o armazém, por mtime do `.db`
+    (§4), e um cache aqui congelaria a resposta do jeito que a constante
+    congelava — inclusive quando ela foi decidida ANTES da semeadura da subida
+    e apontava para a cópia empacotada.
+    """
+    return _R().data_path('mapping_swap-hyb.json')
 
 
 def _mtm_load_hyb_mapping():
     try:                                        # DB-first (fase 3)
         from apps.pages import duck_read
-        data = duck_read.dataset_rows(_MTM_HYB_MAP_PATH)
+        data = duck_read.dataset_rows(_mtm_hyb_map_path())
         return data if isinstance(data, list) else []
     except Exception:
         return []

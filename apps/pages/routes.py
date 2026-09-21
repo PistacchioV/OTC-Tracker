@@ -2986,13 +2986,68 @@ def _b3_export_json(src_path, json_cfg, dest_name, dref, skip_existing=False):
         return None
 
 
-# Existing VCP qualification table (Descrição/Classificação/STATUS per Qualification
-# ID) — the Save CETIP Files routine refreshes it in place from the
-# INDEXADORESSWAP_VCP file. Also read by the Swap Characteristics page and index-b3.
-VCP_JSON = data_path('VCP.json')
-# A base de DOMÍNIOS da B3, atualizada pelo arquivo
-# `CETIP_YYMMDD_CADASTROCURVASMOEDASFEEDERDOMINIOS` do Save CETIP Files.
-DOMINIO_JSON = data_path('Dominio.json')
+# ── Os dois caminhos de base que nascem no PRIMEIRO USO ─────────────────────
+#
+# `VCP_JSON` e `DOMINIO_JSON` eram atribuídos AQUI, no nível de módulo. Parecem
+# montagem de caminho e não são: `data_path()` pergunta ao ARMAZÉM se o arquivo
+# existe (`_existe` → `data_store.exists`), e isso ABRE UM DUCKDB. No share,
+# frio, cada abertura custa de segundos a minutos — e acontecia durante o
+# IMPORT do módulo, com o app ainda sem atender.
+#
+# Foi metade dos ~9,5 min que a subida da instância gastava dentro do
+# `register_blueprints` (21/09/2026, medido com o `diag_boot_imports.py`): dois
+# vãos de minutos sem uma linha de log, porque o farol do `database_access` só
+# avisa acima de ~5 s por operação e estas ficavam logo abaixo. A outra metade
+# era a gêmea em `features/mtm/infra/mappers.py`, e foi nela que o cronômetro
+# do import parou por mais de um minuto, entregando o diagnóstico.
+#
+# Agora o caminho é resolvido na PRIMEIRA LEITURA do atributo e o resultado
+# vira atributo de verdade do módulo. Duas coisas se ganham: a abertura sai do
+# boot e passa a acontecer dentro de um request (que é onde o app já paga
+# leitura de dado, e onde o memo do armazém costuma estar quente), e ela
+# acontece DEPOIS da semeadura da subida — antes dela, a resposta podia ser a
+# cópia empacotada, e ficava congelada no caminho errado pelo resto do
+# processo.
+#
+# Por que `__getattr__` de MÓDULO e não uma função: os leitores usam a forma de
+# ATRIBUTO (`_R().VCP_JSON`, em `features/cetip/infra/persistence.py`) e o
+# `check_cetip_dominio.py` TROCA o atributo (`R.DOMINIO_JSON = base`) para
+# apontar o teste a um diretório temporário. Virando função, o patch pararia de
+# valer em SILÊNCIO e o teste passaria lendo e gravando dado de verdade — é a
+# armadilha do §3 (guarda que deixa de cobrir o que saiu do lugar). Com o
+# `__getattr__`, a atribuição do teste cria um atributo real e o `__getattr__`
+# nunca chega a ser consultado.
+#
+# Ele NÃO serve para uso interno: `__getattr__` de módulo só responde a acesso
+# pelo objeto módulo, nunca a nome global lido de dentro deste arquivo. Nenhuma
+# função do `routes` lê estes dois nomes — quem lê são as features, pelo `_R()`.
+_CAMINHOS_PREGUICOSOS = {
+    # Tabela de qualificação VCP (Descrição/Classificação/STATUS por Qualification
+    # ID) — o Save CETIP Files a atualiza no lugar a partir do INDEXADORESSWAP_VCP.
+    # Lida também pelo Swap Characteristics e pelo index-b3.
+    'VCP_JSON': ('VCP.json',),
+    # A base de DOMÍNIOS da B3, atualizada pelo arquivo
+    # `CETIP_YYMMDD_CADASTROCURVASMOEDASFEEDERDOMINIOS` do Save CETIP Files.
+    'DOMINIO_JSON': ('Dominio.json',),
+}
+
+
+def __getattr__(name):
+    """Resolve na primeira leitura os caminhos de `_CAMINHOS_PREGUICOSOS`.
+
+    Qualquer outro nome levanta `AttributeError`, como o Python faria sem
+    este gancho — é o que mantém `getattr(routes, 'x', padrão)` e
+    `hasattr(routes, 'x')` respondendo o que sempre responderam.
+    """
+    partes = _CAMINHOS_PREGUICOSOS.get(name)
+    if partes is None:
+        raise AttributeError('module %r has no attribute %r' % (__name__, name))
+    valor = data_path(*partes)
+    # Vira atributo de verdade: a partir daqui o acesso não passa mais por
+    # aqui, e o armazém é consultado UMA vez por processo — que é exatamente o
+    # que a constante de módulo fazia, só que no momento certo.
+    globals()[name] = valor
+    return valor
 
 
 # ── BACC: os quatro arquivos, recortados para o INTRAGRUPO ───────────────────

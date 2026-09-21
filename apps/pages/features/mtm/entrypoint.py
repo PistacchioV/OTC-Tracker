@@ -68,7 +68,7 @@ def api_mtm_mapping_add():
         mapping = mappers._mtm_load_hyb_mapping()
         mapping.append({'b3_id': b3, 'hybrids_id': hyb, 'trade_name': name})
         try:
-            _R()._atomic_write_json(mappers._MTM_HYB_MAP_PATH, mapping)
+            _R()._atomic_write_json(mappers._mtm_hyb_map_path(), mapping)
         except Exception:
             _R().log.error('[mtm] mapping add failed:\n%s', traceback.format_exc())
             return jsonify({'success': False, 'error': 'Save failed.'}), 500
