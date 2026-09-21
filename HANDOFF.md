@@ -23122,3 +23122,56 @@ Client 12, diferença R$ 860.672,77). Elas vêm de outro arquivo (RLDOCREC, pelo
 `_cli_rec`) e podem ser a mesma classe de problema — uma via de liquidação que
 nenhuma porta de entrada reconhece. O caminho mais curto é filtrar o arquivo por
 `CodMs` e olhar os códigos distintos com a contagem de linhas de cada um.
+
+---
+
+## §526 — O backend das onze recompras do catálogo e do Swap Cashflow (2026-09-21)
+
+**O que estava faltando.** As onze páginas de `unwinds-product.html` e o Swap
+Cashflow de New Deals (onde mora o swap da CEM) existiam como tela e catálogo,
+com o servidor respondendo 501 em toda ação. Foram feitos em paralelo, cada
+um no seu worktree, e unidos na StreamFlow.
+
+**Recompras.** O servidor nasceu GENÉRICO em `features/unwinds/product/`
+(domain puro, queries, commands) + `infra/product_store.py`, dirigido pelo
+catálogo, que ganhou `dir`/`suffix`/`position`/`checks`/`backend`. Entra
+planilha; e-mail responde `unwind_email_format_pending` (sem amostra do aviso
+destes produtos). A posição completa só o que veio em branco; sem B3 ID, casa
+por características só com candidato ÚNICO. Arquivos TER/SWAP/OPC 0014 pelo
+File Interpreter; COE e DCE não têm layout. Nove cards novos no Monitor (os
+quatro DCE na zona Intrag). O §7 do `check_ndm_cards` passou a aceitar página
+servida por rota com variável quando ela abre com 200; o §5 do
+`check_unwind_catalog` deixou de esperar 501.
+
+**Swap Cashflow.** O parser do Deal Ticket e as regras compartilhadas saíram
+do Bullet para a platform (`swap_deal_ticket` puro, `swap_new_deals` com
+cadastros e efeitos), com o Bullet re-exportando e o `check_swap_bullet`
+idêntico. A vertical gera o 0301 de Fluxo Não Constante (4.2.7 v00003), o 0034
+do cronograma (template novo, 4.2.8) e o 0897, e dispara o mesmo `b3_mapped`.
+O `_conf_load_swap` passou a ler as duas páginas.
+
+**Decisões tomadas SEM a mesa — conferir antes do primeiro uso real:**
+
+- SWAP 0014 com **111** caracteres (a soma do template; o manual imprime 99);
+  código de operação `0014` nos três layouts, como dizem os templates;
+- SWAP 0014: papel `00` quando a conta Participante é nossa e `01` quando é a
+  Contraparte; campo 11 = |Result|; Mantém Prêmios só na antecipação parcial;
+- OPC 0014: literais `OPC  00014`/versão `00001`, contas do REGISTRO,
+  modalidade da posição (Bruta 2 · Bilateral 3 · Sem 1), pagador 1 = Titular;
+- TER 0014 de mercadoria: quantidade no campo 9, preço no 12, `FXRate` no 14;
+- re-import de recompra NÃO preserva o Status (volta a `Imported`);
+- COE/DCE fecham no Monitor sem Send; DCE de recompra na zona Intrag;
+- a recompra de swap já `Sent` segue aparecendo como pendente no aviso das
+  19h, porque soma nos cards de swap (que fecham em `Success`);
+- Cash Flow do DT da CEM: cabeçalhos em `_CF_HEADERS`, rótulos em
+  `_CEM_LABELS` — nenhum DT de cashflow da CEM foi visto;
+- Papel do 0034 = ponta pela conta menor (o critério do 0897);
+- nomes de arquivo `UNWIND_<PRODUTO>_<VISÃO>.txt` e `SWAP_CF_*`.
+
+**FICA EM ABERTO**: Termo/esteira/Intrag/Cockpit/Summary das recompras novas;
+parser do aviso de e-mail delas (pede amostra); linhas tipo 2 do asiático (TER
+e OPC); SOFR/TERM SOFR, IPCA e termo no cashflow; documento de confirmação
+próprio do cashflow; Options EDG de New Deals (stub). Se a mesa marcar campos
+como `Fixed` nos layouts de antecipação, rodar
+`scripts/import_file_interpreter_template.py --key swap-antecipacao` (e
+`antecipacao-opcao`).
