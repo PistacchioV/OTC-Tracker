@@ -1801,7 +1801,7 @@
   "about-feat-ndfvanilla-title": "NDF Vanilla",
   "about-feat-ndfvanilla-desc": "Operações de NDF vanilla (PTAX), com importação, validação, edição em massa e o mesmo ciclo de aprovação e envio ao Conecta das demais páginas de New Deals.",
   "about-feat-ndmonitor-title": "Deals Monitor",
-  "about-feat-ndmonitor-desc": "Visão por produto × status das operações importadas na data, com o histórico dia a dia e o e-mail automático de pendências às 19:00 e 19:30 (horário de Brasília).",
+  "about-feat-ndmonitor-desc": "Visão por produto × status das operações importadas na data, com o histórico dia a dia e o e-mail automático de pendências às 19:00, 19:30 e 20:00 (horário de Brasília).",
   "about-feat-conf-title": "Confirmações de Cliente",
   "about-feat-conf-desc": "Geração do documento de confirmação por contraparte × ativo — Word, PDF e XML gravados no Electronic Inventory —, com painel de edição, ciclo New → Generated → Success e checklist de validação. Cobre NDF Commodities, Opções de Commodities, Opção de Câmbio e Termo de Moeda a termo (FWD Start).",
   "about-feat-swadv-title": "Settlement Advice — Swap",

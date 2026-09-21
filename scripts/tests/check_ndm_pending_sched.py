@@ -1,4 +1,4 @@
-"""Deals Monitor › aviso de pendencias: o disparo das 19h00 e 19h30.
+"""Deals Monitor › aviso de pendencias: o disparo das 19h00, 19h30 e 20h00.
 
 O aviso e uma rotina que ninguem observa: quando ele nao chega, nao ha erro na
 tela, nao ha linha vermelha, nao ha nada — so um e-mail que nao veio. Este teste
@@ -107,7 +107,7 @@ class Bench(object):
 print('== 1. o dia normal ==')
 b = Bench()
 try:
-    check('os dois horarios', b.times, [(19, 0), (19, 30)])
+    check('os tres horarios', b.times, [(19, 0), (19, 30), (20, 0)])
     b.tick('2026-08-05 18:55')
     check('antes da hora nao dispara', b.sent, [])
     b.tick('2026-08-05 19:00')
@@ -116,16 +116,18 @@ try:
     check('e nao repete na volta seguinte', b.sent, ['05/08 19:00'])
     b.tick('2026-08-05 19:30')
     check('as 19h30 dispara o segundo', b.sent, ['05/08 19:00', '05/08 19:30'])
+    b.tick('2026-08-05 20:00')
+    check('as 20h00 dispara o terceiro', b.sent, ['05/08 19:00', '05/08 19:30', '05/08 20:00'])
     b.tick('2026-08-05 22:00')
-    check('e nada mais no resto do dia', len(b.sent), 2)
+    check('e nada mais no resto do dia', len(b.sent), 3)
 
     print('\n== 2. o restart depois do horario recupera o dia ==')
     # A instancia do time reinicia varias vezes por dia; subindo as 20h o aviso
     # simplesmente nao saia.
     b2 = Bench()
     try:
-        b2.tick('2026-08-06 20:00')
-        check('sobe as 20h e recupera os DOIS', b2.sent, ['06/08 20:00', '06/08 20:00'])
+        b2.tick('2026-08-06 20:15')
+        check('sobe as 20h15 e recupera os TRES', b2.sent, ['06/08 20:15'] * 3)
     finally:
         b2.close()
 
@@ -179,7 +181,7 @@ try:
         st = Q._ndm_pending_status()
         check('traz o desfecho do ultimo disparo', st['last'].get('result'), 'enviado')
         check('   com o horario', st['last'].get('slot'), '2026-08-10 19:00')
-        check('traz os horarios configurados', st['times'], ['19:00', '19:30'])
+        check('traz os horarios configurados', st['times'], ['19:00', '19:30', '20:00'])
         check('e o proximo horario', st['next'], '10/08/2026 19:30')
         # Depois do ultimo do dia, o proximo e o primeiro de amanha.
         b6.now = datetime(2026, 8, 10, 21, 0)

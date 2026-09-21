@@ -194,7 +194,7 @@ def _ndm_card_taxonomy(card, zone):
 
 _NDM_PENDING_DEFAULT_TO = 'brazil.otc.ops@jpmorgan.com'
 
-_NDM_PENDING_TIMES = os.getenv('DEALS_MONITOR_PENDING_TIMES', '19:00,19:30')
+_NDM_PENDING_TIMES = os.getenv('DEALS_MONITOR_PENDING_TIMES', '19:00,19:30,20:00')
 
 def _ndm_pending_times():
     """Horários do dia em (hh, mm), ordenados. Entrada inválida cai no padrão —
@@ -210,4 +210,4 @@ def _ndm_pending_times():
             continue
         if 0 <= hh <= 23 and 0 <= mm <= 59:
             out.append((hh, mm))
-    return sorted(set(out)) or [(19, 0), (19, 30)]
+    return sorted(set(out)) or [(19, 0), (19, 30), (20, 0)]
