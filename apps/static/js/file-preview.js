@@ -23,6 +23,12 @@
            extraHtml               // HTML depois da tabela (linhas tipo 2, etc.)
        }],
        buttons: { download: true|false, edit: true|false, send: true|false },
+       rawFrom: { url, body },     // opcional: o endpoint de DOWNLOAD da página
+                                   //   (`download: true`, não grava). O arquivo cru
+                                   //   da aba passa a ser o que o SERVIDOR gera —
+                                   //   o registro montado dos campos é o de TELA
+                                   //   (Valor Base em #,##0.00) e não traz as
+                                   //   linhas tipo 2 (datas da asiática).
        t                           // função de tradução (key, fallback) — opcional
    }) → a Promise do Swal (result.isConfirmed = download/send · result.isDenied = edit) */
 (function () {
@@ -133,6 +139,28 @@
         document.head.appendChild(st);
     }
 
+    /* Troca o arquivo cru de cada aba pelo conteúdo do servidor. Um arquivo por
+       aba casa pela posição; quantidade diferente vai tudo na primeira aba. Se
+       o servidor falha, fica o registro montado na tela — o preview não some. */
+    function loadRaw(popup, src, nPanes) {
+        fetch(src.url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify(src.body || {}) })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.ok) return;
+                var txt = (res.files || []).map(function (f) { return f && f.content ? String(f.content).replace(/\r?\n$/, '') : ''; });
+                if (!txt.length && res.content) txt = [String(res.content)];
+                txt = txt.filter(Boolean);
+                if (!txt.length) return;
+                var byPane = txt.length === nPanes ? txt : [txt.join('\n')];
+                byPane.forEach(function (content, i) {
+                    var el = popup && popup.querySelector('#otcPv' + i + ' .otc-preview-line');
+                    if (el) el.textContent = content.replace(/\r\n/g, '\n');
+                });
+            })
+            .catch(function () {});
+    }
+
     window.otcFilePreview = function (opts) {
         opts = opts || {};
         ensureCss();
@@ -158,7 +186,11 @@
             showDenyButton: !!b.edit, denyButtonText: '<i class="ti ti-edit"></i>', denyButtonColor: '#3abff8',
             showCancelButton: !!(b.download || b.send || b.edit), cancelButtonText: '<i class="ti ti-x"></i>', cancelButtonColor: '#dc3545',
             customClass: { htmlContainer: 'text-start', confirmButton: 'bg-gradient', denyButton: 'bg-gradient', cancelButton: 'bg-gradient' },
-            didOpen: function () { if (typeof opts.didOpen === 'function') opts.didOpen(Swal.getPopup()); }
+            didOpen: function () {
+                var popup = Swal.getPopup();
+                if (opts.rawFrom && opts.rawFrom.url) loadRaw(popup, opts.rawFrom, files.length);
+                if (typeof opts.didOpen === 'function') opts.didOpen(popup);
+            }
         };
         return Swal.fire(cfg);
     };

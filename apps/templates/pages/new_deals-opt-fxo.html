@@ -4559,15 +4559,15 @@ $(document).ready(function() {
 
             if (fixingRows && fixingRows.length > 0) {
                 var fxRows = fixingRows.map(function(r, i) {
-                    var bg = i % 2 === 0 ? '#f8f9fa' : '#ffffff';
+                    var bg = i % 2 === 0 ? 'rgba(0,0,0,.03)' : 'transparent';
                     return '<tr style="background:' + bg + '">' +
-                        '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none">OPC  00002</td>' +
-                        '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none;text-align:center">2</td>' +
-                        '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none">' + r.fixDate + '</td>' +
-                        '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none">' +
+                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;white-space:pre">OPC  00002</td>' +
+                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;white-space:pre;text-align:center">2</td>' +
+                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;white-space:pre">' + r.fixDate + '</td>' +
+                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;white-space:pre">' +
                             (r.fxDate ? r.fxDate : '<span style="color:#aaa">&mdash;</span>') +
                         '</td>' +
-                        '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none;color:#aaa">&mdash;</td>' +
+                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;white-space:pre;color:#aaa">&mdash;</td>' +
                     '</tr>';
                 }).join('');
                 // Cabeçalho direto do bloco tipo 2 do cadastro quando ele
@@ -4588,9 +4588,9 @@ $(document).ready(function() {
                         '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-ref-qty">Quantidade de refer&ecirc;ncia</span></th>';
                 }
                 _pvExtra +=
-                    '<div style="margin-top:14px;border:1px solid #dee2e6;border-radius:4px;overflow-x:auto">' +
+                    '<div style="margin-top:14px;overflow:auto;max-height:42vh;border:1px solid rgba(0,0,0,.12);border-radius:6px">' +
                     '<table style="width:100%;border-collapse:collapse;font-size:0.85em">' +
-                    '<thead><tr style="background:#495057;color:#fff">' +
+                    '<thead><tr style="background:#343a40;color:#fff;position:sticky;top:0">' +
                     fxHead +
                     '</tr></thead>' +
                     '<tbody>' + fxRows + '</tbody>' +
@@ -4604,6 +4604,8 @@ $(document).ready(function() {
                 banner: calBanner,
                 files: _pvFiles, t: t,
                 buttons: { download: true, edit: true },
+                rawFrom: { url: '/api/new-deals/opt-fxo/send-conecta',
+                           body: { deals: [(function () { var d = Object.assign({}, deal); delete d.Status; return d; })()], download: true } },
                 didOpen: function (popup) { applyTranslationsIn(popup); }
             }).then(function(result) {
                 if (result.isConfirmed) {
