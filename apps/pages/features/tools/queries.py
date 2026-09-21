@@ -780,7 +780,7 @@ def swap_prefill(b3_id):
         # buscava para calcular, e o campo em branco fazia a tela parecer que
         # ela precisava ser digitada.
         if campos.get('indexador') in liquidacao.COM_FIXING and f.get('inicio'):
-            quando = liquidacao.data_de_fixing(f['inicio'])
+            quando = liquidacao.data_de_fixing(f['inicio'], indexador=campos['indexador'])
             campos['data_fixing'] = quando.isoformat()
             taxa_idx, vigente, motivo = taxa_do_fixing(
                 campos['indexador'], campos.get('tenor') or '3 month', quando)

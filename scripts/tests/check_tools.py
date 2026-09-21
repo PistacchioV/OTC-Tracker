@@ -1047,6 +1047,51 @@ finally:
     bases.caminho, bases.caminho_do_seed, bases._semear = _cam_antes, _seed_antes, _sem_antes
     R._B3_DATA_DIR = _raiz_antes
 
+print('\n== 9. a data do fixing conta no calendario do INDICE (21/09/2026) ==')
+# O D-2 da taxa a termo contava pelo ANBIMA — no motor, no pre-preenchimento e
+# no JS da tela (que lia o anbima.json). Em todo feriado americano que nao e
+# brasileiro a data saia um dia depois: fluxo comecando na segunda 22/06/2026
+# dava 18/06, quando a sexta 19/06 e Juneteenth — D-1 e a quinta 18 e D-2 a
+# quarta 17. A taxa que entrava era a do dia errado, e a conta fechava consigo.
+from datetime import date as _date                                      # noqa: E402
+from apps.pages.precificador import calendario as _calmod               # noqa: E402
+_fer_real = _calmod._feriados_do_arquivo
+_calmod._feriados_do_arquivo = lambda nome: frozenset(
+    {'SOFR': [_date(2026, 6, 19)], 'ANBIMA': [_date(2026, 6, 4)], 'EURIBOR': []}.get(nome.upper(), []))
+try:
+    check('Term SOFR: D-2 de 22/06/2026 pula o Juneteenth (calendario SOFR)',
+          liquidacao.data_de_fixing('2026-06-22', indexador=liquidacao.TERM_SOFR), _date(2026, 6, 17))
+    check('   e o feriado BRASILEIRO nao conta para ele (04/06 e dia bom do SOFR)',
+          liquidacao.data_de_fixing('2026-06-05', indexador=liquidacao.TERM_SOFR), _date(2026, 6, 3))
+    check('EURIBOR conta pelo TARGET2/BCE — Juneteenth nao e feriado la',
+          liquidacao.data_de_fixing('2026-06-22', indexador=liquidacao.EURIBOR), _date(2026, 6, 18))
+    check('   e a Sexta-feira Santa e (regra do BCE no ano sem arquivo)',
+          liquidacao.data_de_fixing('2026-04-07', indexador=liquidacao.EURIBOR), _date(2026, 4, 1))
+    check('o calendario explicito ainda vence',
+          liquidacao.data_de_fixing('2026-06-22', calendario=_calmod.calendario_anbima(),
+                                    indexador=liquidacao.TERM_SOFR), _date(2026, 6, 18))
+    check('cada indice diz o seu calendario',
+          [liquidacao.calendario_do_fixing(i).nome for i in (liquidacao.TERM_SOFR, liquidacao.EURIBOR,
+                                                            liquidacao.CDI)],
+          ['SOFR', 'EURIBOR', 'ANBIMA'])
+    # A tela pergunta ao SERVIDOR: era a terceira copia da regra, no navegador.
+    _fd = _c.get('/api/tools/fixing-date?index=term_sofr&start=2026-06-22').get_json()
+    check('o endpoint da tela responde a mesma data, dizendo o calendario',
+          (_fd.get('success'), _fd.get('date'), _fd.get('calendar')), (True, '2026-06-17', 'SOFR'))
+    check('indice sem fixing a termo e 404',
+          _c.get('/api/tools/fixing-date?index=cdi&start=2026-06-22').status_code, 404)
+    check('data invalida e 400',
+          _c.get('/api/tools/fixing-date?index=term_sofr&start=xx').status_code, 400)
+    _js = io.open(os.path.join(ROOT, 'apps', 'static', 'js', 'pages', 'tools.js'), encoding='utf-8').read()
+    check('e o JS nao conta mais dias uteis por conta propria (nem le o anbima.json)',
+          ("fetch('/static/data/anbima.json'" in _js, 'minusBiz' in _js, '/api/tools/fixing-date' in _js),
+          (False, False, True))
+    _mot = io.open(os.path.join(ROOT, 'apps', 'pages', 'precificador', 'liquidacao.py'), encoding='utf-8').read()
+    check('o motor usa o calendario do indice, nao o do formulario',
+          'data_de_fixing(d0, indexador=ponta.indexador)' in _mot, True)
+finally:
+    _calmod._feriados_do_arquivo = _fer_real
+
 print()
 print('FALHAS: %d' % len(falhas) if falhas else 'TUDO OK')
 sys.exit(1 if falhas else 0)

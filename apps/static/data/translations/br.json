@@ -2254,7 +2254,7 @@
   "tl-flow-start": "Início do fluxo",
   "tl-formula": "Fórmula",
   "tl-forward-curve": "Curva a termo",
-  "tl-forward-help": "Taxa a termo: fixada antes de o fluxo começar. Em branco, a data do fixing é D-2 dias úteis do início.",
+  "tl-forward-help": "Taxa a termo: fixada antes do início do fluxo. Em branco, a data do fixing é 2 dias úteis antes do início, no calendário do próprio índice — feriados SOFR no Term SOFR, TARGET2 na EURIBOR (Holidays Calendar).",
   "tl-full-precision": "Precisão plena",
   "tl-future-value": "Valor futuro",
   "tl-fv-a-minus-p": "VF da ativa − VF da passiva",

@@ -173,7 +173,7 @@
                     <input class="form-control form-control-sm" id="{{ lado }}_taxa_indice" name="{{ lado }}_taxa_indice" value="{{ f[lado ~ '_taxa_indice'] }}" inputmode="decimal" data-format="rate">
                     <p class="tl-help" id="{{ lado }}_fixing_nota"></p>
                 </div>
-                <div class="col-12"><p class="tl-help" data-lang="tl-forward-help">Forward-looking rate: fixed before the flow starts. Blank, the fixing date is 2 business days before the start.</p></div>
+                <div class="col-12"><p class="tl-help" data-lang="tl-forward-help">Forward-looking rate: fixed before the flow starts. Blank, the fixing date is 2 business days before the start, on the index's own calendar — SOFR holidays for Term SOFR, TARGET2 for EURIBOR (Holidays Calendar).</p></div>
             </div>
         </div>
         <div class="col-12" data-leg="{{ lado }}" data-show-for="term_sofr">

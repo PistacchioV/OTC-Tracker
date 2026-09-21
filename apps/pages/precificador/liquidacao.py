@@ -34,7 +34,8 @@ from datetime import date, timedelta
 from typing import List, Optional
 
 from apps.pages.precificador import cambio, cdi, contagem, euribor, ipca, sofr, term_sofr
-from apps.pages.precificador.calendario import calendario_anbima, calendario_sofr, para_data
+from apps.pages.precificador.calendario import (calendario_anbima, calendario_bce,
+                                                calendario_sofr, para_data)
 from apps.pages.precificador.erros import ErroFerramenta
 from apps.pages.precificador.renda_fixa import aliquota_ir
 
@@ -353,9 +354,28 @@ def _ptax_do_dia_anterior(moeda, referencia):
     return cambio.ptax_moeda(moeda, referencia - timedelta(days=1))
 
 
-def data_de_fixing(inicio, calendario=None, defasagem=DEFASAGEM_FIXING):
-    """D-2 úteis do início do fluxo — a defasagem padrão da taxa a termo."""
-    cal = calendario or calendario_anbima()
+def calendario_do_fixing(indexador):
+    """O calendário em que a taxa a termo CONTA os dias até o fixing — é o do
+    ÍNDICE, não o do contrato: o Term SOFR é fixado dois *US Government
+    Securities business days* antes (o calendário SOFR do Holidays), e a
+    EURIBOR dois dias TARGET2. Índice sem calendário próprio cai no ANBIMA."""
+    if indexador == TERM_SOFR:
+        return calendario_sofr()
+    if indexador == EURIBOR:
+        return calendario_bce()
+    return calendario_anbima()
+
+
+def data_de_fixing(inicio, calendario=None, defasagem=DEFASAGEM_FIXING, indexador=None):
+    """D-2 úteis do início do fluxo — a defasagem padrão da taxa a termo —, no
+    calendário do ÍNDICE (`calendario_do_fixing`).
+
+    Contava pelo ANBIMA, e errava em todo feriado americano que não é
+    brasileiro: fluxo começando na segunda 22/06/2026 dava D-2 = quinta 18/06,
+    quando a sexta 19/06 é Juneteenth — D-1 é a quinta 18 e D-2 a quarta 17. A
+    taxa que entrava era a de um dia depois da que o contrato manda, e a conta
+    fechava consigo mesma (mesa, 21/09/2026). `calendario` explícito vence."""
+    cal = calendario or calendario_do_fixing(indexador)
     return cal.workday(para_data(inicio), -abs(defasagem))
 
 
@@ -502,7 +522,9 @@ def liquidar_ponta(ponta, nocional, inicio, fim, calendario=None, arredondar_di=
             obs_inicio=composto.obs_inicio, obs_fim=composto.obs_fim)
 
     if ponta.indexador in (TERM_SOFR, EURIBOR):
-        quando = ponta.data_fixing or data_de_fixing(d0, cal)
+        # o calendário do ÍNDICE, não o `cal` do formulário (que é o da contagem
+        # de dias úteis do contrato, ANBIMA por padrão)
+        quando = ponta.data_fixing or data_de_fixing(d0, indexador=ponta.indexador)
         if ponta.indexador == EURIBOR:
             quando, taxa_indice = _fixing_euribor(ponta.tenor, quando)
         elif ponta.taxa_indice is None:
