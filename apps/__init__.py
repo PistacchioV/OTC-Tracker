@@ -1,3 +1,4 @@
+import hashlib
 import io
 import os
 import logging
@@ -102,6 +103,51 @@ def _warn_wal_pendente():
             db, ', '.join('%s %.0f MB' % (s, b / 1e6) for s, b in sorted(irm.items())))
 
 
+_SEED_STAMP_NAME = '_seed_stamp.txt'
+
+
+def _seed_stamp_path(app):
+    """Onde mora o carimbo da semeadura: ao lado dos BANCOS, de propósito.
+
+    O carimbo diz "estes arquivos empacotados já entraram nestes bancos", e as
+    duas metades dessa frase têm de sumir JUNTAS. Guardado no disco local de
+    cada máquina, quem apagasse o `db/` do share ficaria com o carimbo aqui: a
+    semeadura nunca mais rodaria, o cadastro não voltaria e nada acusaria. No
+    `DATABASE_DIR` ele vai embora junto com os bancos — e as máquinas do time
+    compartilham a mesma resposta, que é o certo, porque compartilham os
+    bancos.
+    """
+    base = app.config.get('DATABASE_DIR')
+    return os.path.join(base, _SEED_STAMP_NAME) if base else None
+
+
+def _seed_stamp_lido(caminho):
+    """O carimbo gravado, ou `None` — inclusive quando `OTC_SEED_ALWAYS=1`."""
+    if not caminho or os.getenv('OTC_SEED_ALWAYS', '').strip() == '1':
+        return None
+    try:
+        with io.open(caminho, encoding='utf-8') as fh:
+            return fh.read().strip() or None
+    except (OSError, IOError, UnicodeDecodeError):
+        return None
+
+
+def _seed_stamp_grava(caminho, valor, logger):
+    """Grava o carimbo. Falhar aqui custa uma semeadura a mais na próxima
+    subida e nada além disso, então é AVISO — mas tem de aparecer, senão a
+    subida lenta volta sem explicação."""
+    if not caminho:
+        return
+    try:
+        os.makedirs(os.path.dirname(caminho), exist_ok=True)
+        with io.open(caminho, 'w', encoding='utf-8') as fh:
+            fh.write(valor)
+    except (OSError, IOError) as exc:
+        logger.warning('[data-dir] não consegui gravar o carimbo em %s (%s: %s) — a '
+                       'próxima subida vai semear tudo de novo', caminho,
+                       type(exc).__name__, exc)
+
+
 def _seed_data_dir(app):
     """Leva para o ARMAZÉM (os bancos) o que vem versionado no repositório e
     ainda não está lá — e copia para o `DATA_DIR` o que não é JSON.
@@ -138,6 +184,14 @@ def _seed_data_dir(app):
     # nem versionado é (`cache/**/*.json` é gitignorado: são os arquivos-dia
     # que as rotinas produzem). Ver o uso abaixo.
     mesma_pasta = os.path.normpath(destino) == PACKAGED_DIR
+
+    # PRIMEIRA passada: a lista do que semear e a IMPRESSÃO DIGITAL do que vem
+    # empacotado, na MESMA varredura. No Windows o `scandir` já traz tamanho e
+    # mtime na listagem do diretório, então a digital não custa uma ida à rede
+    # por arquivo — e é ela que deixa a subida pular todo o resto.
+    pendentes = []
+    digital = hashlib.sha256()
+    digital.update(os.path.normpath(destino).encode('utf-8', 'replace'))
     for raiz, _dirs, arquivos in os.walk(PACKAGED_DIR):
         rel = os.path.relpath(raiz, PACKAGED_DIR)
         top = rel.split(os.sep)[0]
@@ -146,99 +200,121 @@ def _seed_data_dir(app):
         if top == 'db':
             continue
         alvo_dir = os.path.join(destino, rel) if rel != '.' else destino
-        for nome in arquivos:
+        for nome in sorted(arquivos):
             # `.bak` e `.lock` são sujeira local de quem desenvolve, não dado.
             if nome.endswith(('.bak', '.lock', '.tmp')):
                 continue
             origem = os.path.join(raiz, nome)
-            alvo = os.path.join(alvo_dir, nome)
-            if data_store is not None and nome.endswith('.json') and top != 'translations':
-                if mesma_pasta and top == 'cache':
-                    # ARQUIVO-DIA não se semeia: ele não vem do repositório
-                    # (`cache/**/*.json` é gitignorado) e são os MILHARES de
-                    # dias que a mesa acumulou na pasta. Como aqui `origem` é
-                    # o próprio `alvo`, importar cada um na SUBIDA — ~2 s por
-                    # arquivo, sob trava exclusiva — é fazer o cutover dentro
-                    # do boot, com o app sem atender. Quem carrega
-                    # arquivo-dia é o `convert_json_to_duckdb.py` (uma vez,
-                    # com o app parado) ou a primeira leitura da data, que
-                    # responde pelo disco e importa em background.
-                    so_em_disco += 1
-                    continue
-                try:
-                    with open(origem, encoding='utf-8') as fh:
-                        payload = json.load(fh)
-                except Exception as exc:                    # noqa: BLE001
-                    # Falhou LENDO A CÓPIA DO REPOSITÓRIO — disco, não banco.
-                    # Ficava no mesmo `except` do banco, com a mensagem
-                    # "não consegui importar … para o banco", e mandava caçar
-                    # do lado errado (11/09/2026). O tipo e o motivo vão na
-                    # LINHA: o traceback rola para fora da tela.
-                    app.logger.warning('[data-dir] não consegui ler a cópia do repositório %s '
-                                       '(%s: %s) — o banco fica com o que já tem',
-                                       origem, type(exc).__name__, exc)
-                    continue
-                try:
-                    if data_store.isfile(alvo):
-                        # O banco tem — mas um payload-OBJETO convertido antes
-                        # do `__raw` (§442) é ilegível (o File Interpreter lia
-                        # "template missing"). Esse é reimportado da cópia do
-                        # repositório, avisando; lista é sempre legível.
-                        if not isinstance(payload, dict) or not data_store.sem_canal(alvo):
-                            continue
-                        if mesma_pasta:
-                            # O objeto está no banco sem o canal E o arquivo em
-                            # disco é este mesmo: o `read` cai para ele e manda
-                            # a reimportação para a thread `store-import`
-                            # (§434). Fazer isso aqui só ATRASA A SUBIDA — e na
-                            # instância de 11/09/2026 eram centenas de
-                            # `.meta.json` de `cache/`, 2 s cada, arquivo-dia
-                            # que nem vem do repositório. Quem quer tudo no
-                            # banco de uma vez roda o
-                            # `scripts/convert_json_to_duckdb.py`.
-                            continue
-                        app.logger.warning('[data-dir] %s estava no banco sem o canal exato '
-                                           '(objeto anterior ao __raw) — reimportado da cópia '
-                                           'do repositório', alvo)
-                    data_store.write(alvo, payload)
-                    importados += 1
-                except data_store.BancoIlegivel as exc:
-                    # ILEGÍVEL não é OCUPADO, e a diferença é o que o operador
-                    # faz a seguir: o ocupado sai sozinho na próxima subida,
-                    # este NÃO sai de nenhuma — nem o app nem a semeadura
-                    # abrem esse banco outra vez sem o recover. Como
-                    # `BancoIlegivel` é subclasse de `BancoOcupado`, sem este
-                    # ramo ANTES ele saía como "ocupado por outra instância",
-                    # com o nome picado do meio de um `Catalog Error` (o
-                    # `basename` de uma mensagem com caminho e aspas).
-                    db = getattr(exc, 'db', None) or alvo
-                    if db not in ilegiveis:
-                        ilegiveis.add(db)
-                        app.logger.warning('[data-dir] %s está ILEGÍVEL — a semeadura desse '
-                                           'banco NÃO volta sozinha na próxima subida: %s',
-                                           db, data_store.remedio_ilegivel(db, exc))
-                except data_store.BancoOcupado as exc:
-                    # A instância vizinha está gravando nesse banco: o que ele
-                    # tem fica como está (é a regra — a semeadura nunca
-                    # sobrescreve), e a próxima subida completa. Uma linha por
-                    # banco, sem traceback: não é defeito, é a mesa em uso.
-                    banco = os.path.basename(str(exc))
-                    if banco not in ocupados:
-                        ocupados.add(banco)
-                        app.logger.warning('[data-dir] %s está ocupado por outra instância — a '
-                                           'semeadura desse banco fica para a próxima subida', banco)
-                except Exception as exc:                    # noqa: BLE001
-                    app.logger.warning('[data-dir] não consegui importar %s para o banco '
-                                       '(%s: %s)', alvo, type(exc).__name__, exc, exc_info=True)
-                continue
-            if os.path.normpath(destino) == PACKAGED_DIR or os.path.exists(alvo):
+            try:
+                _st = os.stat(origem)
+                _marca = '%d:%d' % (int(_st.st_mtime), _st.st_size)
+            except OSError:
+                # Ilegível AGORA entra na digital como tal: quando ele voltar,
+                # a digital muda e a semeadura roda de novo.
+                _marca = '?'
+            digital.update(('%s/%s|%s' % (rel, nome, _marca)).encode('utf-8', 'replace'))
+            pendentes.append((origem, os.path.join(alvo_dir, nome), alvo_dir, top, nome))
+    carimbo = digital.hexdigest()
+
+    # O CARIMBO. Se nada mudou no que vem empacotado desde a última semeadura
+    # COMPLETA, não há o que fazer — e "não há o que fazer" custava 177
+    # aberturas de DuckDB no share, ~15 min de subida com o app sem atender
+    # (21/09/2026). `OTC_SEED_ALWAYS=1` força a passada inteira.
+    stamp = _seed_stamp_path(app)
+    if _seed_stamp_lido(stamp) == carimbo:
+        app.logger.info('[data-dir] o que vem empacotado não mudou desde a última '
+                        'semeadura completa — pulada. Force com OTC_SEED_ALWAYS=1 '
+                        '(carimbo em %s)', stamp)
+        return
+
+    for origem, alvo, alvo_dir, top, nome in pendentes:
+        if data_store is not None and nome.endswith('.json') and top != 'translations':
+            if mesma_pasta and top == 'cache':
+                # ARQUIVO-DIA não se semeia: ele não vem do repositório
+                # (`cache/**/*.json` é gitignorado) e são os MILHARES de
+                # dias que a mesa acumulou na pasta. Como aqui `origem` é
+                # o próprio `alvo`, importar cada um na SUBIDA — ~2 s por
+                # arquivo, sob trava exclusiva — é fazer o cutover dentro
+                # do boot, com o app sem atender. Quem carrega
+                # arquivo-dia é o `convert_json_to_duckdb.py` (uma vez,
+                # com o app parado) ou a primeira leitura da data, que
+                # responde pelo disco e importa em background.
+                so_em_disco += 1
                 continue
             try:
-                os.makedirs(alvo_dir, exist_ok=True)
-                shutil.copy2(origem, alvo)
-                copiados += 1
-            except OSError:
-                app.logger.warning('[data-dir] não consegui copiar %s', alvo)
+                with open(origem, encoding='utf-8') as fh:
+                    payload = json.load(fh)
+            except Exception as exc:                    # noqa: BLE001
+                # Falhou LENDO A CÓPIA DO REPOSITÓRIO — disco, não banco.
+                # Ficava no mesmo `except` do banco, com a mensagem
+                # "não consegui importar … para o banco", e mandava caçar
+                # do lado errado (11/09/2026). O tipo e o motivo vão na
+                # LINHA: o traceback rola para fora da tela.
+                app.logger.warning('[data-dir] não consegui ler a cópia do repositório %s '
+                                   '(%s: %s) — o banco fica com o que já tem',
+                                   origem, type(exc).__name__, exc)
+                continue
+            try:
+                if data_store.isfile(alvo):
+                    # O banco tem — mas um payload-OBJETO convertido antes
+                    # do `__raw` (§442) é ilegível (o File Interpreter lia
+                    # "template missing"). Esse é reimportado da cópia do
+                    # repositório, avisando; lista é sempre legível.
+                    if not isinstance(payload, dict) or not data_store.sem_canal(alvo):
+                        continue
+                    if mesma_pasta:
+                        # O objeto está no banco sem o canal E o arquivo em
+                        # disco é este mesmo: o `read` cai para ele e manda
+                        # a reimportação para a thread `store-import`
+                        # (§434). Fazer isso aqui só ATRASA A SUBIDA — e na
+                        # instância de 11/09/2026 eram centenas de
+                        # `.meta.json` de `cache/`, 2 s cada, arquivo-dia
+                        # que nem vem do repositório. Quem quer tudo no
+                        # banco de uma vez roda o
+                        # `scripts/convert_json_to_duckdb.py`.
+                        continue
+                    app.logger.warning('[data-dir] %s estava no banco sem o canal exato '
+                                       '(objeto anterior ao __raw) — reimportado da cópia '
+                                       'do repositório', alvo)
+                data_store.write(alvo, payload)
+                importados += 1
+            except data_store.BancoIlegivel as exc:
+                # ILEGÍVEL não é OCUPADO, e a diferença é o que o operador
+                # faz a seguir: o ocupado sai sozinho na próxima subida,
+                # este NÃO sai de nenhuma — nem o app nem a semeadura
+                # abrem esse banco outra vez sem o recover. Como
+                # `BancoIlegivel` é subclasse de `BancoOcupado`, sem este
+                # ramo ANTES ele saía como "ocupado por outra instância",
+                # com o nome picado do meio de um `Catalog Error` (o
+                # `basename` de uma mensagem com caminho e aspas).
+                db = getattr(exc, 'db', None) or alvo
+                if db not in ilegiveis:
+                    ilegiveis.add(db)
+                    app.logger.warning('[data-dir] %s está ILEGÍVEL — a semeadura desse '
+                                       'banco NÃO volta sozinha na próxima subida: %s',
+                                       db, data_store.remedio_ilegivel(db, exc))
+            except data_store.BancoOcupado as exc:
+                # A instância vizinha está gravando nesse banco: o que ele
+                # tem fica como está (é a regra — a semeadura nunca
+                # sobrescreve), e a próxima subida completa. Uma linha por
+                # banco, sem traceback: não é defeito, é a mesa em uso.
+                banco = os.path.basename(str(exc))
+                if banco not in ocupados:
+                    ocupados.add(banco)
+                    app.logger.warning('[data-dir] %s está ocupado por outra instância — a '
+                                       'semeadura desse banco fica para a próxima subida', banco)
+            except Exception as exc:                    # noqa: BLE001
+                app.logger.warning('[data-dir] não consegui importar %s para o banco '
+                                   '(%s: %s)', alvo, type(exc).__name__, exc, exc_info=True)
+            continue
+        if os.path.normpath(destino) == PACKAGED_DIR or os.path.exists(alvo):
+            continue
+        try:
+            os.makedirs(alvo_dir, exist_ok=True)
+            shutil.copy2(origem, alvo)
+            copiados += 1
+        except OSError:
+            app.logger.warning('[data-dir] não consegui copiar %s', alvo)
     if so_em_disco:
         # Não é defeito, é a divisão de trabalho — mas TEM de estar no log:
         # quem enumera dia (`listdir`/`walk`/`day_files`) só vê o que está no
@@ -261,6 +337,18 @@ def _seed_data_dir(app):
                            'é ela que segura a subida. Para pagar isso FORA do boot, rode '
                            'scripts/convert_json_to_duckdb.py --meses 0 com o app parado.',
                            gasto, importados)
+
+    # O carimbo só vale se a passada foi COMPLETA. Banco ocupado pela instância
+    # vizinha, ou ilegível, deixa arquivo por semear — carimbar aí congelaria a
+    # falta: as subidas seguintes pulariam a semeadura e o cadastro que não
+    # entrou não entraria nunca mais, sem erro nenhum. Sem carimbo a próxima
+    # subida paga os segundos de novo e completa, que é o preço certo.
+    if ocupados or ilegiveis:
+        app.logger.warning('[data-dir] semeadura INCOMPLETA (%d banco(s) ocupado(s), %d '
+                           'ilegível(is)) — sem carimbo, a próxima subida tenta de novo',
+                           len(ocupados), len(ilegiveis))
+        return
+    _seed_stamp_grava(stamp, carimbo, app.logger)
 
 
 def _secret_key_file():
