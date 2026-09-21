@@ -55,10 +55,39 @@
             <p class="tl-help" data-lang="tl-curve-desc-help">The VCP curve text from Live Position › Swap Characteristics. What it says and the characteristics do not — a multiplier on the rate, a spread, the day count, the fixing offset — is read into the fields and listed here; what could not be read is flagged for you to check.</p>
             <p class="tl-help" id="{{ lado }}_descricao_nota" hidden></p>
         </div>
-        <div class="col-12 tl-field" data-leg="{{ lado }}" data-show-for="pre,cdi,cambio,sofr,term_sofr,euribor,ipca,equity">
+        {# O multiplicador SÓ aparece quando existe um (mesa, 21/09/2026): a
+           denominação o declarou — `(3M SOFR + 0.75%)*1.1765` — ou ele já está
+           no formulário. Um campo vazio em toda perna VCP fazia a mesa procurar
+           um multiplicador num contrato que não tem nenhum. #}
+        {% set tem_mult = f[lado ~ '_multiplicador'] and f[lado ~ '_multiplicador'] not in ('1', '1.0', '1.00000000') %}
+        <div class="col-12 tl-field" id="{{ lado }}_mult_box" {{ '' if tem_mult else 'hidden' }}>
             <label for="{{ lado }}_multiplicador" data-lang="tl-rate-mult">Rate multiplier (blank = none)</label>
             <input class="form-control form-control-sm" id="{{ lado }}_multiplicador" name="{{ lado }}_multiplicador" value="{{ f[lado ~ '_multiplicador'] }}" inputmode="decimal" data-format="mult" placeholder="1">
             <p class="tl-help" data-lang="tl-rate-mult-help">Multiplies the annual rate before it compounds — (3M SOFR + 0.75%) × 1.1765 is 1.1765 here. In CDI it multiplies the spread; the % of CDI has its own field.</p>
+        </div>
+        {# Equity cujo preço inicial é um PERCENTUAL DE UM FECHAMENTO — `Preco in
+           ativo - 100.00% Close 20-Sep-24`. O Cupom Limpo da posição é esse
+           percentual, não o preço: o preço inicial é o fechamento daquele pregão
+           × o cupom. Os três lado a lado, e o terceiro se replica no Initial
+           price lá embaixo (que é o campo que o cálculo lê). #}
+        <div class="col-12" id="{{ lado }}_cupom_box" {{ '' if f[lado ~ '_cupom_limpo'] else 'hidden' }}>
+            <div class="row g-2">
+                <div class="col-4 tl-field">
+                    <label for="{{ lado }}_cupom_limpo" data-lang="tl-clean-coupon">Clean coupon (%)</label>
+                    <input class="form-control form-control-sm tl-cupom" id="{{ lado }}_cupom_limpo" name="{{ lado }}_cupom_limpo" value="{{ f[lado ~ '_cupom_limpo'] }}" inputmode="decimal" data-format="pct" data-leg="{{ lado }}">
+                </div>
+                <div class="col-4 tl-field">
+                    <label for="{{ lado }}_preco_close" data-lang="tl-close-price">Close price</label>
+                    <input class="form-control form-control-sm tl-cupom" id="{{ lado }}_preco_close" name="{{ lado }}_preco_close" value="{{ f[lado ~ '_preco_close'] }}" inputmode="decimal" data-format="price" data-leg="{{ lado }}">
+                    <p class="tl-help" id="{{ lado }}_close_nota"></p>
+                </div>
+                <div class="col-4 tl-field">
+                    <label for="{{ lado }}_preco_calc" data-lang="tl-initial-calc">Initial price (close × coupon)</label>
+                    <input class="form-control form-control-sm" id="{{ lado }}_preco_calc" value="" readonly tabindex="-1" data-format="price">
+                </div>
+                <input type="hidden" id="{{ lado }}_cupom_data" name="{{ lado }}_cupom_data" value="{{ f[lado ~ '_cupom_data'] }}">
+                <div class="col-12"><p class="tl-help mb-0" data-lang="tl-clean-coupon-help">The curve description sets the initial price as a percentage of a close: the clean coupon of the position is that percentage, not the price. Close × coupon goes into the Initial price below.</p></div>
+            </div>
         </div>
             </div>
         </div>

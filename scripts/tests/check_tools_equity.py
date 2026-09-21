@@ -164,6 +164,61 @@ try:
     v, _q, erro = queries._preco_do_fixing('FLRY3', '2026-09-14', 2)
     check('falha de rede vira campo vazio com o motivo, nunca um preço',
           (v, 'sem rede' in erro), (None, True))
+
+    print('\n== 7. o Cupom Limpo que é PERCENTUAL de um fechamento (21/09/2026) ==')
+    # A denominação diz `Preco in ativo - 100.00% Close 20-Sep-24`: o Cupom Limpo
+    # da posição é esse percentual, NÃO o preço. A tela mostrava `100.0000` como
+    # preço inicial do GLD — o percentual no lugar do preço, e a conta fechava
+    # consigo mesma. O preço inicial é o fechamento daquele pregão × o cupom.
+    quotes.fetch_ohlc = lambda sym, ini, fim: (list(quotes.OHLC_COLUMNS), list(SERIE))
+    DEN = ('GLD UP EQUITY : Indices Internacionais Codigo 10473 \u2016 Descricao: SPDR GOLD SHARES '
+           '\u2016 Preco Inicial: 100.00% \u2016 Fonte de informacao: Bloomberg \u2016 Data de cotacao: '
+           '17-set-2026 - Cupom limpo = Strike - Preco in ativo - {CUPOM} Close 14-Sep-26 - '
+           'Denominacao: Quanto (ausencia variacao cambial)')
+    campos, falt = domain.montar_ponta(regra, None, 0.0, 1.0, 'FLRY3 BZ EQUITY', 100.0, deslocamento=0)
+    check('antes da denominação, o montar_ponta ainda põe o cupom no preço (a perna comum)',
+          campos['preco_inicial'], '100.000000')
+    domain.aplicar_descricao(campos, DEN.replace('{CUPOM}', '100.00%'), falt)
+    check('a denominação diz o cupom e a data do pregão',
+          (campos['cupom_limpo'], campos['cupom_data']), ('100.0000', '2026-09-14'))
+    check('e nada dela fica "não entendido"', campos['nao_lido'], [])
+    queries.aplicar_cupom_limpo(campos, falt)
+    check('o fechamento é o do pregão da denominação', (campos['preco_close'], campos['close_data']),
+          ('21.080000', '2026-09-14'))
+    check('100% do fechamento É o fechamento', campos['preco_inicial'], '21.080000')
+    check('e o preço inicial não fica sinalizado', 'preco_inicial' in falt, False)
+
+    c2, f2 = domain.montar_ponta(regra, None, 0.0, 1.0, 'FLRY3 BZ EQUITY', 150.0, deslocamento=0)
+    domain.aplicar_descricao(c2, DEN.replace('{CUPOM}', '1.5'), f2)       # sem o `%`: é o FATOR
+    queries.aplicar_cupom_limpo(c2, f2)
+    check('`1.5 Close` é 150%: preço inicial = fechamento × 1,5',
+          (c2['cupom_limpo'], c2['preco_inicial']), ('150.0000', '31.620000'))
+
+    # `% Spot` não traz data: não há de onde puxar — BRANCO e sinalizado, nunca
+    # o percentual no lugar do preço.
+    c3, f3 = domain.montar_ponta(regra, None, 0.0, 1.0, 'FLRY3 BZ EQUITY', 100.0, deslocamento=0)
+    domain.aplicar_descricao(c3, 'Preco Inicial: 100.00% Spot', f3)
+    queries.aplicar_cupom_limpo(c3, f3)
+    check('Spot sem data: preço inicial em BRANCO e sinalizado',
+          (c3['preco_inicial'], 'preco_inicial' in f3, c3['preco_close']), ('', True, ''))
+
+    quotes.fetch_ohlc = _explode
+    c4, f4 = domain.montar_ponta(regra, None, 0.0, 1.0, 'FLRY3 BZ EQUITY', 100.0, deslocamento=0)
+    domain.aplicar_descricao(c4, DEN.replace('{CUPOM}', '100.00%'), f4)
+    queries.aplicar_cupom_limpo(c4, f4)
+    check('cotação fora do ar: branco, sinalizado e com o MOTIVO',
+          (c4['preco_inicial'], 'preco_inicial' in f4, 'sem rede' in c4.get('close_erro', '')),
+          ('', True, True))
+
+    # Sem denominação que declare o cupom, a perna segue como sempre.
+    c5, f5 = domain.montar_ponta(regra, None, 0.5, 1.0, 'FLRY3 BZ EQUITY', 20.5, deslocamento=2)
+    queries.aplicar_cupom_limpo(c5, f5)
+    check('perna sem cupom declarado não muda', (c5['preco_inicial'], c5['cupom_limpo']),
+          ('20.500000', ''))
+    check('e o percentual num índice que NÃO é equity é só informação',
+          [i['estado'] for i in domain.aplicar_descricao(
+              {'indexador': liquidacao.PRE}, '100.00% Close 14-Sep-26')['leitura']],
+          ['info', 'info'])
 finally:
     R._mapping_rows, quotes.fetch_ohlc = _rows_real, _ohlc_real
 

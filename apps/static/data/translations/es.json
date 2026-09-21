@@ -2612,5 +2612,9 @@
   "unw-col-fixing-dates": "Fechas de Verificación",
   "unw-col-unit-price": "Precio Unitario",
   "unw-col-termination-rate": "Tasa de Recompra",
-  "ops-col-settlement-type": "Tipo de Liquidación"
+  "ops-col-settlement-type": "Tipo de Liquidación",
+  "tl-clean-coupon": "Cupón limpio (%)",
+  "tl-close-price": "Precio de cierre",
+  "tl-initial-calc": "Precio inicial (cierre × cupón)",
+  "tl-clean-coupon-help": "La denominación de la curva define el precio inicial como un porcentaje de un cierre: el cupón limpio de la posición es ese porcentaje, no el precio. Cierre × cupón va al Precio inicial de abajo."
 }

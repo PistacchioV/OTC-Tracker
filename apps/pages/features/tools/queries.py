@@ -289,7 +289,10 @@ def regra_ir_do_cliente(counterparty):
 def ler_descricao(texto, atuais):
     """A leitura de uma denominação digitada na tela sobre os campos ATUAIS da
     ponta — a mesma função do pré-preenchimento, para a resposta ser a mesma."""
-    return domain.aplicar_descricao(dict(atuais), texto)
+    campos = domain.aplicar_descricao(dict(atuais), texto)
+    # O texto colado na tela que diz `100.00% Close 20-Sep-24` busca o
+    # fechamento como o pré-preenchimento — a regra é uma só.
+    return aplicar_cupom_limpo(campos)
 
 
 def memoria_de_calculo(form):
@@ -537,6 +540,43 @@ def _preco_do_fixing(ativo, fim_iso, deslocamento):
     return None, quando, 'no {} close up to {:%d/%m/%Y}'.format(simbolo, quando)
 
 
+def aplicar_cupom_limpo(campos, faltando=None):
+    """Equity cujo preço inicial é um PERCENTUAL DE UM FECHAMENTO (mesa,
+    21/09/2026): a denominação diz `Preco in ativo - 100.00% Close 20-Sep-24`, e
+    o `Cupom Limpo` da posição é esse percentual — NÃO o preço. O preço inicial
+    é o fechamento do papel naquele pregão × o cupom.
+
+    Só age quando a DENOMINAÇÃO declarou o cupom (`cupom_limpo` preenchido por
+    ela): sem isso a perna segue como sempre, com o Cupom Limpo da posição no
+    preço inicial. Busca o fechamento quando há data; sem data (`% Spot`) ou sem
+    cotação, o preço inicial fica em BRANCO e sinalizado — a mesa digita o
+    fechamento no campo ao lado e a tela refaz a conta."""
+    if campos.get('indexador') != liquidacao.EQUITY or not campos.get('cupom_limpo'):
+        return campos
+    try:
+        cupom = float(str(campos['cupom_limpo']).replace(',', '.'))
+    except ValueError:
+        cupom = None
+    fechamento = None
+    if campos.get('cupom_data'):
+        valor, quando, erro = _preco_do_fixing(campos.get('ativo'), campos['cupom_data'], 0)
+        if valor is None:
+            campos['close_erro'] = erro
+        else:
+            fechamento = valor
+            campos['preco_close'] = '{:.6f}'.format(valor)
+            campos['close_data'] = quando.isoformat()
+    preco = domain.preco_inicial_do_cupom(cupom, fechamento)
+    # O que o `montar_ponta` pôs ali era o PERCENTUAL: sai, mesmo sem o preço.
+    campos['preco_inicial'] = '' if preco is None else '{:.6f}'.format(preco)
+    if faltando is not None:
+        if preco is None and 'preco_inicial' not in faltando:
+            faltando.append('preco_inicial')
+        if preco is not None and 'preco_inicial' in faltando:
+            faltando.remove('preco_inicial')
+    return campos
+
+
 def swap_prefill(b3_id):
     """Tudo que o Swap Calculator consegue puxar da posição para um B3 ID.
 
@@ -750,11 +790,12 @@ def swap_prefill(b3_id):
             else:
                 campos['taxa_indice'] = '{:.8f}'.format(taxa_idx * 100.0)
                 campos['fixing_data'] = vigente.isoformat() if vigente else ''
-        # Equity: o preço FINAL é o fechamento do papel no fixing. O inicial
-        # segue sendo o do contrato (o Cupom Limpo da posição, posto pelo
-        # `montar_ponta`) — buscar os dois sobrescreveria a base contratada,
-        # que é o mesmo cuidado que o IPCA já toma com o número-índice.
+        # Equity: o preço FINAL é o fechamento do papel no fixing. O inicial é
+        # o do contrato — o Cupom Limpo da posição, posto pelo `montar_ponta` —,
+        # SALVO quando a denominação diz que esse cupom é um percentual de um
+        # fechamento: aí o preço é fechamento × cupom (`aplicar_cupom_limpo`).
         if campos.get('indexador') == liquidacao.EQUITY:
+            aplicar_cupom_limpo(campos, faltando)
             valor, quando, erro = _preco_do_fixing(campos.get('ativo'), f.get('fim'), desloc)
             if valor is None:
                 faltando.append('preco_final')

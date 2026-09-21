@@ -32,6 +32,7 @@
           noIndexCell: 'The position brings no index on this leg.',
           flow: 'flow', pickId: 'Type a B3 ID first.', fromBase: 'from the imported base of',
           closeOf: 'close of',
+          closeNoDate: 'no close date in the description — type the price',
           ipcaAuto: 'fetched from IBGE on Calculate',
           descRead: 'From the curve description:', descNone: 'Nothing in the curve description changes the calculation.',
           descConfirms: 'confirms the position', descDiffers: 'the position had', descApplied: 'applied',
@@ -61,6 +62,7 @@
           noIndexCell: 'A posição não traz índice nesta perna.',
           flow: 'fluxo', pickId: 'Digite um B3 ID primeiro.', fromBase: 'da base importada de',
           closeOf: 'fechamento de',
+          closeNoDate: 'a denominação não traz a data do fechamento — digite o preço',
           ipcaAuto: 'buscado no IBGE ao calcular',
           descRead: 'Da descrição da curva:', descNone: 'Nada na descrição da curva muda o cálculo.',
           descConfirms: 'confirma a posição', descDiffers: 'a posição trazia', descApplied: 'aplicado',
@@ -90,6 +92,7 @@
           noIndexCell: 'La posición no trae índice en esta pata.',
           flow: 'flujo', pickId: 'Escriba un B3 ID primero.', fromBase: 'de la base importada de',
           closeOf: 'cierre de',
+          closeNoDate: 'la denominación no trae la fecha del cierre — escriba el precio',
           ipcaAuto: 'traído del IBGE al calcular',
           descRead: 'De la descripción de la curva:', descNone: 'Nada en la descripción de la curva cambia el cálculo.',
           descConfirms: 'confirma la posición', descDiffers: 'la posición traía', descApplied: 'aplicado',
@@ -318,7 +321,47 @@
     page.querySelectorAll('[data-leg="' + lado + '"][data-show-for]').forEach(function (b) {
       b.hidden = (b.getAttribute('data-show-for') || '').split(',').indexOf(sel.value) === -1;
     });
+    if (typeof mostrarExtras === 'function') mostrarExtras(lado);
   }
+  // ── O que só aparece quando EXISTE (mesa, 21/09/2026) ────────────────────
+  // O multiplicador da taxa só tem campo quando há um multiplicador (≠ 1): um
+  // campo vazio em toda perna VCP fazia a mesa procurar um num contrato que não
+  // tem. E a perna de equity cujo preço inicial é um % de um fechamento
+  // (`100.00% Close 20-Sep-24`) ganha o trio cupom · fechamento · preço.
+  function mostrarExtras(lado) {
+    var sel = document.getElementById(lado + '_indexador');
+    var mult = document.getElementById(lado + '_multiplicador'), mbox = document.getElementById(lado + '_mult_box');
+    if (mbox && mult) { var mv = ler(mult.value); mbox.hidden = (mv === null || mv === 1); }
+    var cup = document.getElementById(lado + '_cupom_limpo'), cbox = document.getElementById(lado + '_cupom_box');
+    if (cbox && cup) cbox.hidden = !(sel && sel.value === 'equity' && (cup.value || '').trim());
+  }
+  // Preço inicial = fechamento × cupom limpo / 100. `replicar` leva o resultado
+  // ao Initial price — que é o campo que o cálculo lê. Sem uma das duas
+  // parcelas o calculado fica vazio e o Initial price NÃO é tocado: a mesa pode
+  // tê-lo digitado.
+  function refazerCupom(lado, replicar) {
+    var c = document.getElementById(lado + '_cupom_limpo'), f = document.getElementById(lado + '_preco_close'),
+        out = document.getElementById(lado + '_preco_calc');
+    if (!c || !f || !out) return;
+    var cv = ler(c.value), fv = ler(f.value);
+    if (cv === null || fv === null) { out.value = ''; return; }
+    var preco = fv * cv / 100;
+    out.value = String(preco); formatar(out);
+    if (replicar) {
+      var ini = document.getElementById(lado + '_preco_inicial');
+      if (ini) { ini.value = String(preco); formatar(ini); }
+    }
+  }
+  ['ativa', 'passiva'].forEach(function (lado) {
+    page.querySelectorAll('input.tl-cupom[data-leg="' + lado + '"]').forEach(function (el) {
+      el.addEventListener('input', function () { refazerCupom(lado, true); });
+      el.addEventListener('change', function () { refazerCupom(lado, true); mostrarExtras(lado); });
+    });
+    var m = document.getElementById(lado + '_multiplicador');
+    if (m) m.addEventListener('change', function () { mostrarExtras(lado); });
+    // Tela que volta do Calculate: o trio já vem preenchido pelo formulário.
+    refazerCupom(lado, false);
+  });
   function convencaoPadrao(lado, sel) {
     var tabela;
     try { tabela = JSON.parse(sel.getAttribute('data-defaults') || '{}'); } catch (e) { return; }
@@ -505,7 +548,25 @@
     // O texto colado ou corrigido na tela passa pela MESMA leitura do servidor
     // que o pré-preenchimento usa — os campos atuais vão junto para a resposta
     // dizer se cada achado preenche, confirma ou diverge do que está na tela.
-    var CAMPOS_DESC = ['indexador', 'taxa', 'percentual', 'convencao', 'regime', 'tenor', 'ptax_offset', 'multiplicador', 'lookback', 'shift'];
+    var CAMPOS_DESC = ['indexador', 'taxa', 'percentual', 'convencao', 'regime', 'tenor', 'ptax_offset', 'multiplicador', 'lookback', 'shift',
+                       'ativo', 'cupom_limpo', 'cupom_data'];
+    // De que pregão é o fechamento que multiplica o cupom — ou por que não veio.
+    function notaClose(lado, p) {
+      var n = document.getElementById(lado + '_close_nota');
+      if (!n) return;
+      n.textContent = p.close_data ? (t('closeOf') + ' ' + p.close_data.split('-').reverse().join('/'))
+                                   : (p.close_erro || (p.cupom_limpo && !p.cupom_data ? t('closeNoDate') : ''));
+      n.className = 'tl-help' + (p.close_erro ? ' text-danger' : '');
+    }
+    // O fechamento e o preço inicial que o servidor apurou pelo cupom limpo.
+    function aplicarCupom(lado, p) {
+      if (p.preco_close) setVal(lado + '_preco_close', p.preco_close);
+      if (p.cupom_limpo && p.preco_inicial !== undefined) setVal(lado + '_preco_inicial', p.preco_inicial);
+      notaClose(lado, p);
+      mostrarExtras(lado);
+      refazerCupom(lado, false);
+      if (p.cupom_limpo && !p.preco_inicial) mark(lado + '_preco_inicial', 'tl-missing');
+    }
     function lerDescricao(lado) {
       var ta = document.getElementById(lado + '_descricao');
       if (!ta) return;
@@ -526,6 +587,7 @@
             if (it.campo === 'taxa') { var sp = document.getElementById(lado + '_taxa_cdi'); if (sp) { sp.value = d.taxa; formatar(sp); } }
           });
           notaDescricao(lado, d);
+          aplicarCupom(lado, d);
         })
         .catch(function () { /* offline: fica o que está nos campos */ });
     }
@@ -588,7 +650,8 @@
         }
         ['taxa', 'percentual', 'convencao', 'regime', 'moeda', 'tenor', 'taxa_indice',
          'ptax_inicial', 'ptax_final', 'ptax_offset', 'ni_inicial', 'preco_inicial',
-         'preco_final', 'ativo', 'multiplicador', 'descricao', 'lookback', 'shift']
+         'preco_final', 'ativo', 'multiplicador', 'descricao', 'lookback', 'shift',
+         'cupom_limpo', 'cupom_data', 'preco_close']
           .forEach(function (k) { if (p[k] !== undefined && (p[k] !== '' || k === 'taxa')) setVal(lado + '_' + k, p[k]); });
         // O spread do CDI tem input PRÓPRIO (mesmo `name`, id diferente): sem
         // isto o campo visível da perna de CDI ficava com o valor anterior.
@@ -612,11 +675,12 @@
         if (mo && p.moeda) mo.value = p.moeda;
         // os campos que a ponta não usa voltam ao vazio
         ['ptax_inicial', 'ptax_final', 'ni_inicial', 'preco_inicial', 'preco_final', 'ativo',
-         'multiplicador', 'descricao'].forEach(function (k) {
+         'multiplicador', 'descricao', 'cupom_limpo', 'cupom_data', 'preco_close'].forEach(function (k) {
           if (!p[k]) setVal(lado + '_' + k, '');
         });
         notaDescricao(lado, p);
         mostrarVcp(lado, !!(p.vcp || p.descricao || p.multiplicador));
+        aplicarCupom(lado, p);
         // De que dia é a PTAX que entrou — ou por que ela não entrou. Sem isto
         // o campo de fixing é um número sem procedência.
         var nota = document.getElementById(lado + '_ptax_nota');
