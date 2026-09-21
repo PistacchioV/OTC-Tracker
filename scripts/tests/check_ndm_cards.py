@@ -138,6 +138,8 @@ print('\n== 7. card com pagina aponta para uma ROTA que existe ==')
 from run import app                                                    # noqa: E402
 _rotas = {str(r.rule) for r in app.url_map.iter_rules()}
 check('o url_map foi lido', len(_rotas) > 50, True)
+from datetime import datetime as _dt, timedelta as _td, timezone as _tz  # noqa: E402
+_cl = app.test_client()
 for c in D._NDM_CARDS:
     if not c.get('url'):
         continue
@@ -154,7 +156,14 @@ for c in D._NDM_CARDS:
             ROOT, 'apps', 'templates', 'pages', alvo.lstrip('/') + '.html'))
         check('   %-20s -> pages%s.html (catch-all)' % (c['key'], alvo), existe, True)
     else:
-        check('   %-20s -> rota %s' % (c['key'], alvo), alvo in _rotas, True)
+        # Rota com VARIAVEL (as onze recompras do catalogo sao UMA regra,
+        # `/unwinds/<group>/<product>`): o `url_map` casa qualquer texto ali, e
+        # quem diz se o link leva a uma pagina e a propria rota — abre com 200.
+        with _cl.session_transaction() as _ss:
+            _ss['authenticated'] = True
+            _ss['user_sid'] = 'T000000'
+            _ss['session_expires_at'] = (_dt.now(tz=_tz.utc) + _td(hours=8)).isoformat()
+        check('   %-20s -> pagina %s' % (c['key'], alvo), _cl.get(alvo).status_code, 200)
 
 print('\n== 8. swap: dois cards, e a LOB da linha decide ==')
 import json, tempfile                                                  # noqa: E402

@@ -156,8 +156,12 @@ def dashboard_counts(period, now):
             linhas = _store.read(fp)
         except Exception:                                   # noqa: BLE001
             continue
+        # A recompra da Fase 1 se identifica pelo Athena ID; as do catálogo, pelo
+        # `_id` interno (FXO e NDF/Opção de Commodities chegam sem id nenhum) —
+        # contar só o Athena ID as deixaria invisíveis no painel (§489).
         n = sum(1 for e in (linhas if isinstance(linhas, list) else [])
-                if isinstance(e, dict) and str(e.get('AthenaID') or '').strip())
+                if isinstance(e, dict) and (str(e.get('AthenaID') or '').strip()
+                                            or str(e.get('_id') or '').strip()))
         if not n:
             continue
         rotulo = _rotulo_do_caminho(raiz, fp)

@@ -14,6 +14,9 @@ from flask import jsonify, render_template, request, session
 from apps.pages import blueprint
 from apps.pages import data_store as _store
 from apps.pages.features.unwinds import catalog, commands, domain, queries
+from apps.pages.features.unwinds.product import commands as product_commands
+from apps.pages.features.unwinds.product import domain as product_domain
+from apps.pages.features.unwinds.product import queries as product_queries
 
 
 def _R():
@@ -332,18 +335,137 @@ def unwinds_product(group, product):
 
 @blueprint.route('/api/unwinds/<path:sub>', methods=['GET', 'POST'])
 def api_unwinds_product(sub):
-    """O contrato de colunas de cada página do catálogo — e só ele, por ora.
+    """A API das onze páginas do catálogo — UMA regra, o produto e a ação saem
+    do caminho (`catalog.page_and_action`). A Fase 1 tem rotas estáticas acima,
+    que o werkzeug prefere a esta.
 
-    O servidor destas páginas (import, conferência contra o Live Position,
-    arquivo da B3) ainda não existe. Enquanto isso o GET devolve o dia VAZIO
-    com o contrato, e toda ação responde 501 com CÓDIGO (§486): sem isto a
-    tela leria a página 404 em HTML e mostraria `Unexpected token '<'`."""
+    Toda recusa sai com CÓDIGO (§486) — `e_<code>` na tela, o `message` só de
+    fallback — e nunca a página 404 em HTML (`Unexpected token '<'`)."""
     err = _auth()
     if err:
         return err
-    pagina = catalog.page(sub)
-    if pagina is not None and request.method == 'GET':
-        return jsonify({'success': True, 'entries': [], 'backend': False,
-                        'fields': catalog.fields(pagina), 'labels': catalog.labels(pagina)})
-    return jsonify({'success': False, 'code': 'unwind_backend_pending',
-                    'message': 'This action is not available yet for this product'}), 501
+    pagina, acao = catalog.page_and_action(sub)
+    rota = _PRODUCT_ACTIONS.get((request.method, acao)) if pagina is not None else None
+    if rota is None:
+        return jsonify({'success': False, 'code': 'unwind_unknown_action',
+                        'message': 'Unknown unwind action: %s %s' % (request.method, sub)}), 404
+    try:
+        return rota(pagina)
+    except product_domain.Recusa as exc:
+        return jsonify(exc.payload()), exc.status
+
+
+def _sino(pagina, acao, detalhe):
+    """Toda ação que GRAVA toca o sino, com o rótulo da página (o `label` do
+    catálogo, que está nos TRÊS mapas — `check_unwind_products` prende)."""
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                              acao, pagina['label'], detalhe)
+
+
+def _payload():
+    return request.get_json(silent=True) or {}
+
+
+def _p_get(pagina):
+    return jsonify({'success': True, 'backend': True,
+                    'entries': product_queries.entries(pagina, request.args.get('date', '')),
+                    'fields': catalog.fields(pagina), 'labels': catalog.labels(pagina)})
+
+
+def _p_import(pagina):
+    """A planilha no dropzone (multipart `file`). `dry_run` só lê e devolve as
+    DUPLICATAS — a tela pergunta antes de substituir, e nada é gravado."""
+    f = request.files.get('file')
+    if f is None or not f.filename:
+        return jsonify({'success': False, 'code': 'unwind_no_file',
+                        'message': 'No file received'}), 400
+    ref = _R()._api_ref_date(request.form.get('date'))
+    dry_run = (request.args.get('dry_run') in ('1', 'true', 'yes')
+               or request.form.get('dry_run') in ('1', 'true', 'yes'))
+    try:
+        out = product_commands.importar(pagina, f.filename, f.read(), ref.date(),
+                                        dry_run=dry_run)
+    except product_domain.Recusa:
+        raise
+    except Exception as exc:                                # noqa: BLE001
+        _R().log.error('[UNWIND %s] import failed:\n%s', pagina['label'], traceback.format_exc())
+        return jsonify({'success': False, 'code': 'unwind_import_failed',
+                        'message': 'Import failed: %s: %s' % (type(exc).__name__, exc)}), 500
+    n = len(out.get('rows') or [])
+    if not dry_run and n:
+        _sino(pagina, 'Deals Imported', '%d unwind%s imported' % (n, '' if n == 1 else 's'))
+    out['success'] = True
+    return jsonify(out)
+
+
+def _p_preview(pagina):
+    rid = str(request.args.get('id') or '').strip()
+    files = product_commands.preview(pagina, rid, request.args.get('date', ''))
+    return jsonify({'success': True, 'id': rid, 'files': files,
+                    'record_length': (pagina.get('b3') or {}).get('length')})
+
+
+def _p_send(pagina):
+    """Body: {items: [{id}], date, download}. Com `download` devolve o conteúdo
+    e nada muda de status (é o preview do arquivo inteiro)."""
+    p = _payload()
+    items = p.get('items')
+    if not isinstance(items, list) or not items:
+        return jsonify({'success': False, 'code': 'unwind_no_rows',
+                        'message': 'No rows provided'}), 400
+    out = product_commands.enviar(pagina, items, sid=session.get('user_sid', ''),
+                                  download=bool(p.get('download')),
+                                  date_str=str(p.get('date') or ''))
+    if not p.get('download'):
+        _sino(pagina, 'Sent to B3', '%d unwind%s sent' % (out['count'],
+                                                          '' if out['count'] == 1 else 's'))
+    out['success'] = True
+    return jsonify(out)
+
+
+def _p_edit(pagina):
+    p = _payload()
+    rid = str(p.get('id') or '').strip()
+    linha = product_commands.editar(pagina, rid, str(p.get('date') or ''),
+                                    p.get('fields') or {}, sid=session.get('user_sid', ''))
+    if linha is None:
+        return jsonify({'success': False, 'code': 'unwind_not_found',
+                        'message': 'Entry not found'}), 404
+    _sino(pagina, 'Deal Updated', linha.get('Contract') or linha.get('DealID') or rid)
+    return jsonify({'success': True, 'status': linha.get('Status'), 'row': linha})
+
+
+def _p_approve(pagina):
+    p = _payload()
+    rid = str(p.get('id') or '').strip()
+    linha = product_commands.aprovar(pagina, rid, str(p.get('date') or ''),
+                                     sid=session.get('user_sid', ''))
+    if linha is None:
+        return jsonify({'success': False, 'code': 'unwind_not_found',
+                        'message': 'Entry not found'}), 404
+    _sino(pagina, 'Status Updated',
+          (linha.get('Contract') or linha.get('DealID') or rid) + ' → Approved')
+    return jsonify({'success': True, 'status': linha.get('Status'), 'row': linha})
+
+
+def _p_delete(pagina):
+    """A tela tira a linha DEPOIS do sucesso daqui (§430)."""
+    p = _payload()
+    rid = str(p.get('id') or '').strip()
+    apagada = product_commands.apagar(pagina, rid, str(p.get('date') or ''))
+    if apagada is None:
+        return jsonify({'success': False, 'code': 'unwind_not_found',
+                        'message': 'Entry not found'}), 404
+    _sino(pagina, 'Deal Deleted', apagada.get('Contract') or apagada.get('DealID') or rid)
+    return jsonify({'success': True})
+
+
+_PRODUCT_ACTIONS = {
+    ('GET', ''): _p_get,
+    ('POST', 'import-file'): _p_import,
+    ('GET', 'preview'): _p_preview,
+    ('POST', 'send-conecta'): _p_send,
+    ('POST', 'edit'): _p_edit,
+    ('POST', 'approve'): _p_approve,
+    ('POST', 'delete'): _p_delete,
+}
