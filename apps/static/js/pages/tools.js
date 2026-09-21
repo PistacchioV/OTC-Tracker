@@ -33,6 +33,7 @@
           flow: 'flow', pickId: 'Type a B3 ID first.', fromBase: 'from the imported base of',
           closeOf: 'close of',
           posLooking: 'Looking up the position…',
+          duCounted: 'counted, ANBIMA',
           n_parity_failed: 'the PTAX of the FX rate could not be fetched — {motivo}',
           n_quoted_in_cents: '{ativo} is quoted in CENTS in the B3 Index (conversion factor 0.01): the Quotes prices were multiplied by 0.01',
           n_parity_ptax: 'FX rate: PTAX {moeda} of {data} (BCB, ask)',
@@ -98,6 +99,7 @@
           flow: 'fluxo', pickId: 'Digite um B3 ID primeiro.', fromBase: 'da base importada de',
           closeOf: 'fechamento de',
           posLooking: 'Consultando a posição…',
+          duCounted: 'contados, ANBIMA',
           n_parity_failed: 'não foi possível buscar a PTAX da paridade — {motivo}',
           n_quoted_in_cents: '{ativo} é cotado em CENTAVOS no Index B3 (fator de conversão 0,01): os preços do Quotes foram multiplicados por 0,01',
           n_parity_ptax: 'paridade: PTAX {moeda} de {data} (BCB, venda)',
@@ -163,6 +165,7 @@
           flow: 'flujo', pickId: 'Escriba un B3 ID primero.', fromBase: 'de la base importada de',
           closeOf: 'cierre de',
           posLooking: 'Consultando la posición…',
+          duCounted: 'contados, ANBIMA',
           n_parity_failed: 'no se pudo obtener la PTAX de la paridad — {motivo}',
           n_quoted_in_cents: '{ativo} cotiza en CENTAVOS en el Index B3 (factor de conversión 0,01): los precios de Quotes se multiplicaron por 0,01',
           n_parity_ptax: 'paridad: PTAX {moeda} del {data} (BCB, venta)',
@@ -868,6 +871,40 @@
     });
   });
 
+  // ── Recompra: os dias úteis aparecem assim que as duas datas existem ─────
+  // Contados pelo SERVIDOR (ANBIMA), no campo em branco ou marcado como
+  // automático; digitar apaga a marca (o bloco acima) e aí vale o digitado.
+  // Dispara na carga, a cada troca de data e depois da busca pelo B3 ID.
+  var contarDU = (function () {
+    var du = page.querySelector('input[data-tl-du]');
+    if (!du) return function () {};
+    var marca = document.getElementById('du_auto'), nota = document.getElementById('du_auto_nota');
+    var ini = document.getElementById('liquidacao'), fim = document.getElementById('vencimento');
+    var pedido = 0;
+    function contar() {
+      if (!ini || !fim) return;
+      var automatico = marca && marca.value === '1';
+      if ((du.value || '').trim() && !automatico) return;      // o digitado manda
+      var a = ini.value, b = fim.value;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(a) || !/^\d{4}-\d{2}-\d{2}$/.test(b)) return;
+      var meu = ++pedido;
+      fetch('/api/tools/business-days?start=' + encodeURIComponent(a) + '&end=' + encodeURIComponent(b),
+            { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (meu !== pedido) return;                          // resposta de uma data antiga
+          if (!d || !d.success) { du.value = ''; if (marca) marca.value = ''; if (nota) nota.textContent = (d && d.error) || ''; return; }
+          du.value = String(d.days);
+          if (marca) marca.value = '1';
+          if (nota) nota.textContent = t('duCounted');
+        })
+        .catch(function () { /* offline: o Calculate conta */ });
+    }
+    [ini, fim].forEach(function (el) { if (el) el.addEventListener('change', contar); });
+    contar();
+    return contar;
+  })();
+
   // ── NDF · Unwind NDF · Option: o B3 ID puxa a POSIÇÃO (o esquema do Swap) ──
   // Genérico: o bloco `[data-tl-prefill]` diz o endpoint, e o servidor devolve
   // `fields` pelo id/nome do campo. O que não veio fica em branco e marcado
@@ -913,6 +950,7 @@
       Object.keys(d.fields || {}).forEach(function (k) { setCampo(k, d.fields[k]); });
       setCampo('b3_id', d.b3_id || inp.value);
       emissao();
+      contarDU();                                 // recompra: o DU das datas que acabaram de chegar
       // A procedência embaixo dos campos é da busca ANTERIOR: zera antes de
       // escrever a desta, senão um campo vazio ficaria com "PTAX USD …" embaixo.
       ['fixing_auto_nota', 'paridade_auto_nota'].forEach(function (id) {

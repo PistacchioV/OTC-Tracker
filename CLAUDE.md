@@ -1014,6 +1014,16 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `_ptax_do_fixing` do Swap Calculator e dizem de que dia é; sem PTAX e sem
   número é erro em frase com o motivo. **O menu de Tools é em ORDEM ALFABÉTICA
   pelo rótulo em inglês** — item novo entra no lugar, não no fim.
+- **Unwind NDF Calculator: os dias úteis aparecem NO CAMPO assim que as duas
+  datas existem** (§516): na busca pelo B3 ID, na carga e a cada troca de data,
+  contados pelo SERVIDOR no ANBIMA (`/api/tools/business-days`, a mesma
+  `derivativos.dias_uteis_ate` do motor — o JS não conta dia útil, §509) e
+  marcados como automáticos (`du_auto`, o esquema do fixing). Marcado, o
+  Calculate RECONTA (não sobra o DU da data anterior); digitar apaga a marca e
+  aí vale o digitado — é como se reproduz o DU do aviso do Athena. O prefill
+  deixa o DU em branco DE PROPÓSITO: a data de liquidação é do formulário, e a
+  posição não a conhece. Resposta de uma data antiga é descartada (contador de
+  pedidos), senão duas trocas rápidas deixariam o número da primeira.
 - **As três calculadoras têm Export — a memória de cálculo do swap, na MESMA
   lógica** (§515, `infra/memoria_derivativos.py`): fórmula encadeada até as
   entradas, com o VALOR gravado junto (o `_cache_das_formulas`/`_selar` do

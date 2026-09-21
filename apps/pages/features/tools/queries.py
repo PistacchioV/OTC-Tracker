@@ -902,7 +902,11 @@ def calcular_unwind_ndf(form):
     moeda = (form.get('moeda') or 'USD').strip().upper()
     liquidacao_dt = para_data(form.get('liquidacao') or '')
     vencimento = para_data(form.get('vencimento') or '')
-    du_digitado = str(form.get('du') or '').strip()
+    # DU em branco OU marcado como automático (`du_auto`) é CONTADO — a marca é o
+    # que impede o número de uma data anterior de sobreviver à troca da data. O
+    # digitado manda: é como se reproduz o DU do aviso do Athena.
+    du_digitado = (str(form.get('du') or '').strip()
+                   if str(form.get('du_auto') or '').strip() != '1' else '')
     du = (_inteiro(form, 'du', 0) if du_digitado
           else derivativos.dias_uteis_ate(liquidacao_dt, vencimento))
     original = str(form.get('nocional_original') or '').strip()
@@ -916,7 +920,8 @@ def calcular_unwind_ndf(form):
         nocional_original=domain.decimal(original, 'original notional') if original else None,
         ja_recomprado=domain.numero_do_form(form, 'ja_recomprado', 'unwound before', 0.0))
     return {'r': r, 'moeda': moeda, 'liquidacao': liquidacao_dt, 'vencimento': vencimento,
-            'du_contado': not du_digitado}
+            'du_contado': not du_digitado,
+            'form_update': {'du': str(int(du)), 'du_auto': '' if du_digitado else '1'}}
 
 
 def calcular_opcao(form):
@@ -1234,7 +1239,10 @@ def unwind_ndf_prefill(b3_id):
         campos['nocional'] = ''
         falt.append('nocional')
     campos['fixo_em_reais'] = False
-    campos['taxa_recompra'], campos['taxa_pre'], campos['du'] = '', '', ''
+    # o DU fica em branco AQUI de propósito: a tela o conta na hora (as duas datas
+    # acabaram de chegar) pelo `/api/tools/business-days`, com a data de
+    # liquidação que está no FORMULÁRIO — que a posição não conhece
+    campos['taxa_recompra'], campos['taxa_pre'], campos['du'], campos['du_auto'] = '', '', '', ''
     falt.extend(['taxa_recompra', 'taxa_pre'])
     campos.update(_do_contrato(pos))
     return {'found': True, 'b3_id': pos['contrato'] or b3_id, 'source_date': fonte,

@@ -228,6 +228,33 @@ def main():
         'posicao': 'vendido', 'moeda': 'USD', 'nocional': '1000', 'strike': '5.3', 'taxa_recompra': '5.1',
         'taxa_pre': '13.75', 'du': '', 'liquidacao': '2026-09-21', 'vencimento': '2026-09-28'}).data.decode('utf-8')
     check('DU em branco e CONTADO (ANBIMA), e a tela diz isso', 'counted, ANBIMA' in h)
+    # O numero aparece NO CAMPO (mesa, 21/09/2026), marcado como automatico: e o
+    # campo que a mesa le, e o Calculate devolve a ele o DU que usou.
+    check('o DU contado VOLTA para o campo, marcado como automatico',
+          ('id="du" name="du" value="5"' in h, 'id="du_auto" name="du_auto" value="1"' in h), (True, True))
+    h = cl.post('/tools/unwind-ndf-calculator', data={
+        'posicao': 'vendido', 'moeda': 'USD', 'nocional': '1000', 'strike': '5.3', 'taxa_recompra': '5.1',
+        'taxa_pre': '13.75', 'du': '5', 'du_auto': '1', 'liquidacao': '2026-09-21',
+        'vencimento': '2026-10-05'}).data.decode('utf-8')
+    check('DU automatico e RECONTADO quando a data muda (nao sobra o numero da data anterior)',
+          'id="du" name="du" value="10"' in h)
+    h = cl.post('/tools/unwind-ndf-calculator', data={
+        'posicao': 'vendido', 'moeda': 'USD', 'nocional': '1000', 'strike': '5.3', 'taxa_recompra': '5.1',
+        'taxa_pre': '13.75', 'du': '14', 'du_auto': '', 'liquidacao': '2026-09-21',
+        'vencimento': '2026-10-05'}).data.decode('utf-8')
+    check('o DU DIGITADO manda (e como se reproduz o numero do aviso), sem a marca',
+          ('id="du" name="du" value="14"' in h, 'id="du_auto" name="du_auto" value=""' in h, '>typed<' in h),
+          (True, True, True))
+    # A tela conta na hora, pelo SERVIDOR: a regra do calendario e uma so (§509).
+    bd = cl.get('/api/tools/business-days?start=2026-09-21&end=2026-09-28').get_json()
+    check('o endpoint dos dias uteis responde a MESMA conta do motor',
+          (bd.get('success'), bd.get('days'), bd.get('calendar')),
+          (True, D.dias_uteis_ate(date(2026, 9, 21), date(2026, 9, 28)), 'ANBIMA'))
+    check('vencimento antes da liquidacao: 400 com o motivo',
+          cl.get('/api/tools/business-days?start=2026-09-28&end=2026-09-21').status_code, 400)
+    check('data invalida: 400', cl.get('/api/tools/business-days?start=x&end=y').status_code, 400)
+    _js = io.open(os.path.join(ROOT, 'apps', 'static', 'js', 'pages', 'tools.js'), encoding='utf-8').read()
+    check('e a busca pelo B3 ID dispara a contagem', 'contarDU();' in _js and "/api/tools/business-days" in _js, True)
     h = cl.post('/tools/option-calculator', data={
         'tipo': 'put', 'lado': 'titular', 'moeda': 'BRL', 'strike': '80', 'quantidade': '1000',
         'fixings': '70\n72;74', 'exercicio': '2026-09-21', 'premio_unitario': '2'}).data.decode('utf-8')
