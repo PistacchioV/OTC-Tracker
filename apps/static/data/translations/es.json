@@ -2130,8 +2130,8 @@
   "ob-req-f-guarinfo": "Datos del garante",
   "ob-req-h-guarinfo": "Razón Social y CNPJ del garante",
   "ob-req-f-appx": "Apéndice",
-  "ob-req-h-appx": "Adjuntar la plantilla para emisión del CGD",
-  "ob-req-drop": "Suelte el archivo aquí o haga clic para elegir",
+  "ob-req-h-appx": "Adjuntar la(s) plantilla(s) para emisión del CGD",
+  "ob-req-drop": "Suelte los archivos aquí o haga clic para elegir",
   "ob-req-disclaimer": "La información debe ser la MISMA registrada en <strong>Party Central</strong>. Una razón social o CNPJ distintos de la fuente no coinciden con el cliente y la solicitud vuelve.",
   "ob-req-f-doctype": "Tipo de Documento",
   "ob-req-h-doctype": "Tipo de documento transaccional del Electronic Inventory",
@@ -2714,5 +2714,6 @@
   "tl-ndf-parity": "Paridad a reales (en blanco = PTAX)",
   "tl-ndf-underlying": "Activo subyacente",
   "tl-ndf-commodity-help": "Forward de mercancía: el nocional es cantidad, el fixing es el PRECIO del activo (de Quotes, × 0,01 cuando el Index B3 dice que cotiza en centavos) y la paridad lleva la diferencia a reales.",
-  "tl-nav-calculators": "Calculadoras"
+  "tl-nav-calculators": "Calculadoras",
+  "swal-mapping-failed-n": "operación(es) NO se guardaron — revise el log e intente de nuevo."
 }

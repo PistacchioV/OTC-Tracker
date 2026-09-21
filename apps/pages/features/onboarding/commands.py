@@ -76,9 +76,13 @@ def stamp_mo(row_id, sid):
     """CEM MO conferiu abonado + taxonomy: fecha a esteira. O documento sai das
     filas pelo `Status = Active`, e o `Conclusion - Stamp` é o que PARA o aging
     — sem ele o CGD concluído continuaria envelhecendo."""
+    # O Status sai do DOMÍNIO da coluna, não de um `.title()` sobre a constante
+    # normalizada: `ACTIVE_STATUS` é o valor com que `is_active` COMPARA, e
+    # derivar a grafia dele deixava a esteira gravando um valor que a lista do
+    # `select` não oferece no dia em que uma das duas mudasse.
     valores = {cgd_docs.MO_STAMP: _hoje(),
                'Conclusion - Stamp': _hoje(),
-               'Status': cgd_docs.ACTIVE_STATUS.title()}
+               cgd_docs.STATUS_COLUMN: cgd_docs.STATUS_OPTIONS[0]}
     cgd_docs.update_row(row_id, valores)
     return valores
 

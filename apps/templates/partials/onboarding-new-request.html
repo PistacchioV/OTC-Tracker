@@ -129,6 +129,7 @@
               <input type="file" class="ob-req-input ob-req-file d-none"
                      id="ob-req-{{ loop.index }}"
                      accept=".pdf,.doc,.docx,.xls,.xlsx,.msg,.eml,.png,.jpg,.jpeg,.gif,.txt,.zip"
+                     {% if f.multiple %}multiple{% endif %}
                      {% if f.required %}required{% endif %}>
             {% else %}
               <input type="text" class="form-control form-control-sm ob-req-input"
@@ -219,17 +220,17 @@
     'use strict';
 
     var TRANS = {
-        en: { chosen: 'Selected file:', missing: 'Fill in the required fields ({n} missing).',
+        en: { chosen: 'Selected file(s):', missing: 'Fill in the required fields ({n} missing).',
               failed: 'Could not create the request.',
-              upFailed: 'Could not save the appendix to the Electronic Inventory.',
+              upFailed: 'Could not save the attachment to the Electronic Inventory.',
               done: 'Request created' },
-        br: { chosen: 'Arquivo escolhido:', missing: 'Preencha os campos obrigatórios (faltam {n}).',
+        br: { chosen: 'Arquivos escolhidos:', missing: 'Preencha os campos obrigatórios (faltam {n}).',
               failed: 'Não consegui criar a solicitação.',
-              upFailed: 'Não consegui gravar o apêndice no Electronic Inventory.',
+              upFailed: 'Não consegui gravar o anexo no Electronic Inventory.',
               done: 'Solicitação criada' },
-        es: { chosen: 'Archivo elegido:', missing: 'Complete los campos obligatorios (faltan {n}).',
+        es: { chosen: 'Archivos elegidos:', missing: 'Complete los campos obligatorios (faltan {n}).',
               failed: 'No se pudo crear la solicitud.',
-              upFailed: 'No se pudo guardar el apéndice en el Electronic Inventory.',
+              upFailed: 'No se pudo guardar el adjunto en el Electronic Inventory.',
               done: 'Solicitud creada' }
     };
     function lang() {
@@ -349,13 +350,24 @@
     var drop = modalEl.querySelector('.ob-req-drop');
     var arquivo = modalEl.querySelector('.ob-req-file');
 
+    function escolhidos() {
+        return (arquivo && arquivo.files) ? [].slice.call(arquivo.files) : [];
+    }
+
     function pintaDrop() {
         if (!drop || !arquivo) { return; }
-        var f = arquivo.files && arquivo.files[0];
-        drop.classList.toggle('has-file', !!f);
+        var fs = escolhidos();
+        drop.classList.toggle('has-file', fs.length > 0);
         var alvo = drop.querySelector('.ob-req-drop-file');
-        if (alvo) { alvo.textContent = f ? (t('chosen') + ' ' + f.name) : ''; }
-        if (f) { drop.classList.remove('is-invalid'); }
+        // TODOS os nomes, um por linha: com vários anexos, mostrar só o
+        // primeiro (ou só a contagem) esconde justamente o que a pessoa
+        // precisa conferir antes de gravar — que os papéis certos estão ali.
+        if (alvo) {
+            alvo.textContent = fs.length
+                ? t('chosen') + ' ' + fs.map(function (f) { return f.name; }).join(' · ')
+                : '';
+        }
+        if (fs.length) { drop.classList.remove('is-invalid'); }
     }
 
     if (drop && arquivo) {
@@ -375,10 +387,25 @@
         drop.addEventListener('drop', function (e) {
             var dt = e.dataTransfer;
             if (!dt || !dt.files || !dt.files.length) { return; }
-            // Um arquivo só: a solicitação tem UM apêndice, e aceitar vários
-            // deixaria a pessoa achando que os dois subiram.
+            // Soltar ACUMULA, e é de propósito: arrastar é incremental por
+            // natureza — a pessoa traz um papel, depois outro —, e substituir a
+            // seleção a cada largada deixaria só o último, sem nada na tela
+            // dizendo que os anteriores saíram. O seletor de arquivo continua
+            // SUBSTITUINDO, que é o comportamento nativo dele; a lista de nomes
+            // embaixo da área mostra o resultado dos dois caminhos.
             var lista = new DataTransfer();
-            lista.items.add(dt.files[0]);
+            var vistos = {};
+            function junta(f) {
+                // Mesmo nome E mesmo tamanho é o mesmo papel largado duas vezes:
+                // sem isto ele subiria em duplicata e o inventário o numeraria
+                // como se fossem duas versões do documento.
+                var chave = f.name + '|' + f.size;
+                if (vistos[chave]) { return; }
+                vistos[chave] = true;
+                lista.items.add(f);
+            }
+            escolhidos().forEach(junta);
+            [].slice.call(dt.files).forEach(junta);
             arquivo.files = lista.files;
             pintaDrop();
         });
@@ -406,10 +433,9 @@
     // Sobe o Apêndice para o Electronic Inventory. Devolve uma promessa que
     // resolve para `true` quando não havia arquivo (o campo é opt-in em quem não
     // o declara) ou quando o upload deu certo.
-    function subeApendice(vals) {
-        var campo = modalEl.querySelector('.ob-req-file');
-        var arq = campo && campo.files && campo.files[0];
-        if (!arq) { return Promise.resolve(true); }
+    // UM arquivo. O erro leva o NOME dele: com vários anexos, "não consegui
+    // gravar o apêndice" não diz qual refazer.
+    function sobeUm(arq, vals) {
         var fd = new FormData();
         fd.append('client', contraparte(vals));
         fd.append('type', 'Transactional');
@@ -421,8 +447,28 @@
         }).then(function (r) { return r.json(); })
           .then(function (j) {
               if (j && j.success) { return true; }
-              throw new Error((j && j.message) || 'upload');
+              throw new Error(arq.name + ' — ' + ((j && j.message) || 'upload'));
           });
+    }
+
+    // Sobe os anexos para o Electronic Inventory. Devolve uma promessa que
+    // resolve quando não havia arquivo (o campo é opt-in em quem não o declara)
+    // ou quando TODOS subiram.
+    //
+    // EM SÉRIE, nunca em paralelo: cada upload é uma ida ao share, e três
+    // simultâneas disputam a mesma pasta enquanto o `_ei_next_ordinal` decide o
+    // número da cópia — duas ao mesmo tempo podem chegar ao mesmo número.
+    //
+    // Falhando no meio, a cadeia PARA e a linha não é criada: os que já subiram
+    // ficam no inventário e a pessoa refaz o pedido, que é o mesmo trade-off de
+    // quando havia um anexo só (ver o comentário do Save). Refeito, o inventário
+    // numera as cópias repetidas em vez de sobrescrevê-las.
+    function subeApendice(vals) {
+        var arqs = escolhidos();
+        if (!arqs.length) { return Promise.resolve(true); }
+        return arqs.reduce(function (cadeia, arq) {
+            return cadeia.then(function () { return sobeUm(arq, vals); });
+        }, Promise.resolve(true));
     }
 
     document.getElementById('ob-req-save').addEventListener('click', function () {

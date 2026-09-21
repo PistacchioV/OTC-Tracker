@@ -26,6 +26,68 @@ def _R():
     return routes
 
 
+# ── O mapeamento do B3 ID grava, e DIZ se gravou ────────────────────────────
+
+# O que a tela recebe quando o mapeamento não chegou ao arquivo-dia. Não é
+# `Error`: `Error` é o veredito da B3 (o retorno veio e não foi `EXECUCAO OK`),
+# e confundir os dois faria a mesa procurar no arquivo de retorno um problema
+# que está do lado de cá.
+MAPPING_NAO_GRAVADO = 'Failed'
+
+
+def _grava_mapeamento(finder, deal_text, client_name, updates):
+    """Aplica o resultado do mapping na linha do arquivo-dia e DIZ se gravou.
+
+    Devolve `(gravado, linha, motivo)` — a linha é a cópia JÁ atualizada, que
+    é o que alimenta Intrag e Pending Confirmation.
+
+    Os quatro endpoints de `mapping-b3` faziam isto no corpo, e os quatro
+    respondiam `Success` à tela **sem olhar se a gravação aconteceu**
+    (21/09/2026): o `new_status` era decidido pelo arquivo de retorno da B3 e ia
+    para o `results` adiante, enquanto a gravação ficava atrás de um
+    `if file_path is not None:` e de um `except Exception: pass`. Havia duas
+    saídas mudas:
+
+    1. **a linha não é achada** — o casamento é por `(Deal, Client)` EXATO, e
+       não achando, o código seguia em frente;
+    2. **a gravação estoura** — no share, `_store.read` e `_atomic_write_json`
+       levantam `BancoOcupado`/`BancoIlegivel` quando a instância vizinha está
+       com a trava (§4). Isso é ESPERADO ali, não excepcional, e o `pass`
+       engolia.
+
+    Nos dois casos o navegador recebia `Success`, pintava Status e B3 ID na
+    grade e anunciava *"N deal(s) mapped successfully"*; na abertura seguinte a
+    linha voltava do banco como estava — `Sent`. A mesa só descobria reabrindo a
+    tela, e como o defeito depende da trava do vizinho, ele pegava ALGUMAS
+    operações e não todas, que é o que mais atrapalha o diagnóstico.
+
+    Por isso as duas saídas agora LOGAM com o deal e o cliente, e o resultado
+    devolvido sai da gravação, nunca da intenção.
+    """
+    if not deal_text:
+        return False, None, 'deal_vazio'
+    file_path, idx = finder(deal_text, client_name)
+    if file_path is None:
+        # O finder já emitiu o diagnóstico detalhado (`[_find_ndf] CLIENT
+        # MISMATCH` / `DEAL NAME NOT MATCHED`, com os pares (Deal, Client) do
+        # arquivo). Esta linha é o que liga aquele diagnóstico ao mapeamento —
+        # sem ela, o aviso do finder fica no log sem dizer o que se perdeu.
+        _R().log.warning('[MAPPING-B3] linha NAO ENCONTRADA no arquivo-dia: '
+                         'deal=%r client=%r — o B3 ID nao foi gravado',
+                         deal_text, client_name)
+        return False, None, 'row_not_found'
+    with _R()._cache_lock:
+        try:
+            deals_list = _store.read(file_path)
+            deals_list[idx].update(updates)
+            _R()._atomic_write_json(file_path, deals_list)      # funil (§335)
+            return True, deals_list[idx].copy(), ''
+        except Exception as exc:                                # noqa: BLE001
+            _R().log.exception('[MAPPING-B3] falha ao GRAVAR deal=%r client=%r em %s',
+                               deal_text, client_name, file_path)
+            return False, None, '%s: %s' % (type(exc).__name__, exc)
+
+
 @blueprint.route('/api/new-deals/opt-commodities/cache', methods=['POST'])
 def api_save_deal_cache():
     if not session.get('authenticated'):
@@ -927,27 +989,21 @@ def api_fxo_mapping_b3():
         if info['ok']:
             updates['B3_ID'] = info['b3_id']
 
-        file_path, idx = _R()._find_fxo(deal_text, client_name)
-        if file_path is not None:
-            intrag_candidate = None
-            with _R()._cache_lock:
-                try:
-                    deals_list = _store.read(file_path)
-                    deals_list[idx].update(updates)
-                    _R()._atomic_write_json(file_path, deals_list)
-                    if new_status == 'Success':
-                        intrag_candidate = deals_list[idx].copy()
-                except Exception:
-                    pass
-            if intrag_candidate is not None:
-                _R()._intrag_engine()._maybe_save_intrag_fxo(intrag_candidate)
-                _R()._pc_save_from_deal(intrag_candidate, 'OPTION')      # → pending confirmation
+        gravado, linha, motivo = _grava_mapeamento(
+            _R()._find_fxo, deal_text, client_name, updates)
+
+        intrag_candidate = linha if (gravado and new_status == 'Success') else None
+        if intrag_candidate is not None:
+            _R()._intrag_engine()._maybe_save_intrag_fxo(intrag_candidate)
+            _R()._pc_save_from_deal(intrag_candidate, 'OPTION')      # → pending confirmation
 
         results.append({
             'id':     deal_text,
             'deal':   deal_text,
-            'b3_id':  info['b3_id'] if info['ok'] else '',
-            'status': new_status,
+            'b3_id':  (info['b3_id'] if info['ok'] else '') if gravado else '',
+            'status': new_status if gravado else MAPPING_NAO_GRAVADO,
+            'saved':  gravado,
+            'reason': motivo,
         })
 
     for fpath in files_to_delete:
@@ -956,10 +1012,14 @@ def api_fxo_mapping_b3():
         except Exception:
             pass
 
-    if results:
+    # O sino conta o que FICOU GRAVADO, não o que se tentou: escrito
+    # `len(results)`, ele anunciava para a mesa inteira um número que
+    # inclui o mapeamento que não chegou ao banco.
+    _n_gravados = sum(1 for r in results if r.get('saved'))
+    if _n_gravados:
         _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                              'B3 Mapped', 'Opt FXO',
-                             str(len(results)) + ' deal' + ('' if len(results) == 1 else 's') + ' mapped')
+                             str(_n_gravados) + ' deal' + ('' if _n_gravados == 1 else 's') + ' mapped')
     return jsonify({'ok': True, 'results': results})
 
 @blueprint.route('/api/new-deals/ndf-commodities/cache', methods=['POST'])
@@ -1400,20 +1460,10 @@ def api_ndf_mapping_b3():
             new_status = 'Error'
             updates    = {'Status': new_status}
 
-        intrag_candidate = None
-        if deal_text:
-            file_path, idx = _R()._find_ndf_deal_in_cache(deal_text, client_name)
-            if file_path is not None:
-                with _R()._cache_lock:
-                    try:
-                        deals_list = _store.read(file_path)
-                        deals_list[idx].update(updates)
-                        _R()._atomic_write_json(file_path, deals_list)   # funil (§335)
-                        if new_status == 'Success':
-                            intrag_candidate = deals_list[idx].copy()
-                    except Exception:
-                        pass
+        gravado, linha, motivo = _grava_mapeamento(
+            _R()._find_ndf_deal_in_cache, deal_text, client_name, updates)
 
+        intrag_candidate = linha if (gravado and new_status == 'Success') else None
         if intrag_candidate is not None:
             cl_low = (intrag_candidate.get('Client', '') or '').lower()
             if 'banco' in cl_low and 'morgan' in cl_low:
@@ -1423,11 +1473,15 @@ def api_ndf_mapping_b3():
                     _R().log.error('[MAPPING-B3] Intrag save failed for deal=%r: %s', deal_text, exc)
             _R()._pc_save_from_deal(intrag_candidate, 'NDF COMM')       # → pending confirmation
 
+        # O que volta é o que FICOU GRAVADO. Não gravou, não há B3 ID a mostrar:
+        # devolvê-lo faria a grade pintar na tela um número que o banco não tem.
         results.append({
             'id':     deal_text,
             'deal':   deal_text,
-            'b3_id':  b3_id,
-            'status': new_status,
+            'b3_id':  b3_id if gravado else '',
+            'status': new_status if gravado else MAPPING_NAO_GRAVADO,
+            'saved':  gravado,
+            'reason': motivo,
         })
 
     for fpath in files_to_delete:
@@ -1436,8 +1490,12 @@ def api_ndf_mapping_b3():
         except Exception:
             pass
 
-    if results:
-        _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''), 'B3 Mapped', 'NDF Comm', str(len(results)) + ' deal' + ('' if len(results) == 1 else 's') + ' mapped')
+    # O sino conta o que FICOU GRAVADO, não o que se tentou: escrito
+    # `len(results)`, ele anunciava para a mesa inteira um número que
+    # inclui o mapeamento que não chegou ao banco.
+    _n_gravados = sum(1 for r in results if r.get('saved'))
+    if _n_gravados:
+        _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''), 'B3 Mapped', 'NDF Comm', str(_n_gravados) + ' deal' + ('' if _n_gravados == 1 else 's') + ' mapped')
     return jsonify({'ok': True, 'results': results})
 
 @blueprint.route('/api/new-deals/opt-commodities/send-conecta', methods=['POST'])
@@ -1747,28 +1805,21 @@ def api_mapping_b3():
         if info['ok']:
             updates['B3_ID'] = info['b3_id']
 
-        if deal_text:
-            file_path, idx = _R()._find_deal_in_cache(deal_text, client_name)
-            if file_path is not None:
-                intrag_candidate = None
-                with _R()._cache_lock:
-                    try:
-                        deals_list = _store.read(file_path)
-                        deals_list[idx].update(updates)
-                        _R()._atomic_write_json(file_path, deals_list)   # funil (§335)
-                        if new_status == 'Success':
-                            intrag_candidate = deals_list[idx].copy()
-                    except Exception:
-                        pass
-                if intrag_candidate is not None:
-                    _R()._intrag_engine()._maybe_save_intrag_opt(intrag_candidate)
-                    _R()._pc_save_from_deal(intrag_candidate, 'OPTION COMM')   # → pending confirmation
+        gravado, linha, motivo = _grava_mapeamento(
+            _R()._find_deal_in_cache, deal_text, client_name, updates)
+
+        intrag_candidate = linha if (gravado and new_status == 'Success') else None
+        if intrag_candidate is not None:
+            _R()._intrag_engine()._maybe_save_intrag_opt(intrag_candidate)
+            _R()._pc_save_from_deal(intrag_candidate, 'OPTION COMM')   # → pending confirmation
 
         results.append({
             'id':     deal_text,
             'deal':   deal_text,
-            'b3_id':  info['b3_id'] if info['ok'] else '',
-            'status': new_status
+            'b3_id':  (info['b3_id'] if info['ok'] else '') if gravado else '',
+            'status': new_status if gravado else MAPPING_NAO_GRAVADO,
+            'saved':  gravado,
+            'reason': motivo
         })
 
     # ── delete processed return files ────────────────────────────────
@@ -1778,8 +1829,12 @@ def api_mapping_b3():
         except Exception:
             pass
 
-    if results:
-        _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''), 'B3 Mapped', 'Opt Comm', str(len(results)) + ' deal' + ('' if len(results) == 1 else 's') + ' mapped')
+    # O sino conta o que FICOU GRAVADO, não o que se tentou: escrito
+    # `len(results)`, ele anunciava para a mesa inteira um número que
+    # inclui o mapeamento que não chegou ao banco.
+    _n_gravados = sum(1 for r in results if r.get('saved'))
+    if _n_gravados:
+        _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''), 'B3 Mapped', 'Opt Comm', str(_n_gravados) + ' deal' + ('' if _n_gravados == 1 else 's') + ' mapped')
     return jsonify({'ok': True, 'results': results})
 
 @blueprint.route('/api/new-deals/opt-commodities/premium-email', methods=['POST'])
@@ -2509,20 +2564,17 @@ def api_generic_nd_mapping_b3(product):
                 new_status = 'Error'
                 updates    = {'Status': new_status}
 
-        success_deal = None
-        if deal_text and updates:
-            file_path, idx = _R()._find_generic_nd_deal(cfg, deal_text, client_name)
-            if file_path is not None:
-                with _R()._cache_lock:
-                    try:
-                        deals_list = _store.read(file_path)
-                        deals_list[idx].update(updates)
-                        _R()._atomic_write_json(file_path, deals_list)
-                        if new_status == 'Success':
-                            success_deal = deals_list[idx].copy()
-                    except Exception:
-                        pass
+        # `updates` vazio é a operação que NÃO estava esperando retorno: ela
+        # fica como está, e isso não é falha de gravação — não havia o que
+        # gravar. Ela também não entra no `results` (ver logo abaixo).
+        if not updates:
+            gravado, linha, motivo = True, None, ''
+        else:
+            gravado, linha, motivo = _grava_mapeamento(
+                lambda d, c: _R()._find_generic_nd_deal(cfg, d, c),
+                deal_text, client_name, updates)
 
+        success_deal = linha if (gravado and new_status == 'Success') else None
         if success_deal is not None:
             # Vanilla / Other Publisher contra o Lawton → Intrag NDF (layout
             # "Instrucao NDF Moeda"), mesmo gatilho do update manual.
@@ -2542,8 +2594,10 @@ def api_generic_nd_mapping_b3(product):
             results.append({
                 'id':     deal_text,
                 'deal':   deal_text,
-                'b3_id':  b3_id,
-                'status': new_status,
+                'b3_id':  b3_id if gravado else '',
+                'status': new_status if gravado else MAPPING_NAO_GRAVADO,
+                'saved':  gravado,
+                'reason': motivo,
             })
 
     for fpath in files_to_delete:
@@ -2552,10 +2606,14 @@ def api_generic_nd_mapping_b3(product):
         except Exception:
             pass
 
-    if results:
+    # O sino conta o que FICOU GRAVADO, não o que se tentou: escrito
+    # `len(results)`, ele anunciava para a mesa inteira um número que
+    # inclui o mapeamento que não chegou ao banco.
+    _n_gravados = sum(1 for r in results if r.get('saved'))
+    if _n_gravados:
         _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                              'B3 Mapped', cfg['label'],
-                             str(len(results)) + ' deal' + ('' if len(results) == 1 else 's') + ' mapped')
+                             str(_n_gravados) + ' deal' + ('' if _n_gravados == 1 else 's') + ' mapped')
     return jsonify({'ok': True, 'results': results})
 
 

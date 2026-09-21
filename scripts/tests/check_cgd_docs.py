@@ -399,6 +399,54 @@ check('a linha nova entra no fim', len(C.load_all()), 4)
 C.delete_row(novo_id)
 check('   e sai inteira', len(C.load_all()), 3)
 
+# ── A Razão Social é PADRONIZADA em maiúsculas (mesa, 21/09/2026) ────────────
+#
+# A coluna chegava da lista em caixa mista e se lê de cima a baixo: o nome em
+# minúscula salta como se fosse outro tipo de registro. A padronização é no
+# FUNIL, e é isso que este bloco prende — alcançando os TRÊS caminhos de
+# escrita. Só nos dois da tela, ela se desfaria sozinha na importação
+# seguinte, que REESCREVE a tabela inteira.
+print('\n== a Razão Social sai em MAIÚSCULAS pelos três caminhos ==')
+_id_novo = C.add_row({'Razão Social': 'Votorantim Cimentos N/NE S/A',
+                      'Status': 'Em elaboração'})
+_lida = [r for r in C.load_all() if r[C.ID_COLUMN] == str(_id_novo)][0]
+check('add_row (New Request)', _lida['Razão Social'], 'VOTORANTIM CIMENTOS N/NE S/A')
+C.update_row(_id_novo, {'Razão Social': 'Covestro Indústria e Com'})
+_lida = [r for r in C.load_all() if r[C.ID_COLUMN] == str(_id_novo)][0]
+# O ACENTO fica: `upper()` e não `_norm()`. Tirá-lo mudaria o nome da empresa,
+# e é por este texto que a pasta da contraparte é procurada no Electronic
+# Inventory.
+check('update_row (edição da grade), com o acento preservado',
+      _lida['Razão Social'], 'COVESTRO INDÚSTRIA E COM')
+C.delete_row(_id_novo)
+C.replace_all([pedido(**{'Razão Social': 'Casa do Adubo Sa', 'Status': 'Active'})])
+check('replace_all (a importação do SharePoint)',
+      C.load_all()[0]['Razão Social'], 'CASA DO ADUBO SA')
+C.replace_all(rows)
+check('   e as outras colunas NÃO são mexidas',
+      C.load_all()[1]['Signature Type'], 'DocuSign')
+
+# ── O domínio do Status ──────────────────────────────────────────────────────
+#
+# São TRÊS e não duas: `Cancelled` é um dos quatro cards do Track Docs, e fora
+# da lista ninguém consegue cancelar um CGD pela tela.
+print('\n== o Status é um domínio de TRÊS, e cada um cai no seu card ==')
+check('a coluna do domínio é o Status', C.STATUS_COLUMN, 'Status')
+check('as três opções', list(C.STATUS_OPTIONS), ['Active', 'Inactive', 'Cancelled'])
+check('todo card do Track Docs tem opção que o alcança',
+      sorted({C.outcome({'Status': s}) for s in C.STATUS_OPTIONS}),
+      ['active', 'cancelled', 'inactive'])
+# A grafia do domínio NÃO é a constante normalizada: `ACTIVE_STATUS` é com o
+# que `is_active` COMPARA, e oferecer `ACTIVE` numa lista cujos dados dizem
+# `Active` deixaria as duas grafias no mesmo dropdown.
+check('a grafia do domínio é a da lista, não a normalizada',
+      C.STATUS_OPTIONS[0] != C.ACTIVE_STATUS and C.is_active({'Status': C.STATUS_OPTIONS[0]}),
+      True)
+# E é ela que a esteira grava ao fechar — uma fonte só.
+from apps.pages.features.onboarding import commands as _ob_cmd   # noqa: E402
+check('o Status que a esteira grava sai do domínio',
+      _ob_cmd.cgd_docs.STATUS_OPTIONS[0], C.STATUS_OPTIONS[0])
+
 # `load_all` tem de se autocurar: um banco em disco anterior a uma coluna nova
 # (o caso real na instância do time foi o `Taxonomy`) não pode derrubar a
 # LEITURA com "column not found" — as outras funções já chamam `ensure_db`,

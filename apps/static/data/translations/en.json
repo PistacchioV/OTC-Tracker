@@ -2130,8 +2130,8 @@
   "ob-req-f-guarinfo": "Guarantor Details",
   "ob-req-h-guarinfo": "Legal name and Tax ID of the guarantor",
   "ob-req-f-appx": "Appendix",
-  "ob-req-h-appx": "Attach the template used to issue the CGD",
-  "ob-req-drop": "Drop the file here or click to choose",
+  "ob-req-h-appx": "Attach the template(s) used to issue the CGD",
+  "ob-req-drop": "Drop the files here or click to choose",
   "ob-req-disclaimer": "The information below must match exactly what is registered in <strong>Party Central</strong>. A legal name or Tax ID that differs from the source will not match the client and the request comes back.",
   "ob-req-f-doctype": "Document Type",
   "ob-req-h-doctype": "Transactional document type of the Electronic Inventory",
@@ -2714,5 +2714,6 @@
   "tl-ndf-parity": "FX rate to BRL (blank = PTAX)",
   "tl-ndf-underlying": "Underlying asset",
   "tl-ndf-commodity-help": "Commodity forward: the notional is a quantity, the fixing is the PRICE of the underlying (from Quotes, × 0.01 when the B3 Index says it is quoted in cents) and the FX rate takes the difference to BRL.",
-  "tl-nav-calculators": "Calculators"
+  "tl-nav-calculators": "Calculators",
+  "swal-mapping-failed-n": "deal(s) could NOT be saved — see the log and try again."
 }

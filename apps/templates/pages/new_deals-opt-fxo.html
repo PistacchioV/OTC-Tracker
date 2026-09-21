@@ -2135,13 +2135,21 @@ $(document).ready(function() {
                             return;
                         }
 
-                        var successCount = 0, errorCount = 0;
+                        var successCount = 0, errorCount = 0, failedCount = 0;
                         (res.results || []).forEach(function(result) {
                             // One backend result == one mapped deal; count per result so the
                             // total matches len(results)/the notification. Duplicate rows are
                             // already prevented upstream by the Deal+Client dedupe of sentDeals.
                             // The visual loop below may legitimately touch several rows.
-                            if (result.status === 'Success') {
+                            // `saved` vem primeiro: o servidor agora DIZ se o
+                            // mapeamento chegou ao arquivo-dia, e o que não chegou
+                            // não é sucesso nem veredito da B3 — é trabalho que não
+                            // aconteceu. Até 21/09/2026 ele respondia 'Success' sem
+                            // olhar a gravação, a grade pintava a linha e a mesa só
+                            // descobria ao reabrir a tela, com a linha em 'Sent'.
+                            if (result.saved === false) {
+                                failedCount++;
+                            } else if (result.status === 'Success') {
                                 successCount++;
                             } else if (result.status === 'Error') {
                                 errorCount++;
@@ -2167,13 +2175,14 @@ $(document).ready(function() {
 
                         var msg = '';
                         if (successCount) msg += successCount + ' ' + t('swal-mapping-success-n', 'deal(s) mapped successfully.') + ' ';
-                        if (errorCount)   msg += errorCount + ' ' + t('swal-mapping-error-n', 'deal(s) returned error from B3.');
+                        if (errorCount)   msg += errorCount + ' ' + t('swal-mapping-error-n', 'deal(s) returned error from B3.') + ' ';
+                        if (failedCount)  msg += failedCount + ' ' + t('swal-mapping-failed-n', 'deal(s) could NOT be saved \u2014 see the log and try again.');
                         if (!msg) msg = t('swal-mapping-no-match', 'No matching deals found in return files.');
 
                         Swal.fire({
                             title: t('swal-mapping-b3-title', 'Mapping B3 ID'),
                             text: msg.trim(),
-                            icon: successCount ? 'success' : (errorCount ? 'warning' : 'info'),
+                            icon: failedCount ? 'error' : (successCount ? 'success' : (errorCount ? 'warning' : 'info')),
                             confirmButtonText: t('swal-ok', 'OK'),
                             confirmButtonColor: '#198754',
                             timer: 3500,
