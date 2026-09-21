@@ -22,6 +22,11 @@ REM  Fica de fora, de proposito:
 REM    static\data  - o dado VIVO da instancia: os mappings editados pela tela,
 REM                   os caches por dia, os arquivos-dia. Mesma exclusao que o
 REM                   new-otc-deploy.bat faz, e pela mesma razao.
+REM                   MENOS static\data\translations: a i18n e CODIGO
+REM                   versionado, nao dado da mesa, e a instancia a le do
+REM                   DATA_DIR (Application\static\data), nao da pasta da
+REM                   versao. Sem esta passada propria, texto novo de tela
+REM                   chegava com o hotfix e aparecia em ingles/sem traducao.
 REM    __pycache__  - bytecode velho ao lado de fonte novo e ruido. O Python
 REM                   recompila o modulo alterado sozinho na primeira subida.
 REM    requirements.txt e os db.sqlite3 - dependencia nova nao e correcao
@@ -40,6 +45,11 @@ REM Mesma lista branca do deploy, menos os bancos e o requirements.
 set "DEPLOY_DIRS=pages static templates"
 set "DEPLOY_FILES=__init__.py config.py run.py"
 set "EXCLUDE_DIR=%SOURCE_ROOT%\static\data"
+
+REM A i18n vai para o DATA_DIR da instancia, que e onde o app a procura primeiro
+REM (static_data_file: data_dir() antes da copia empacotada).
+set "TRANS_SRC=%SOURCE_ROOT%\static\data\translations"
+set "TRANS_DST=%SHARE_ROOT%\static\data\translations"
 
 set "APPLY=0"
 if /i "%~1"=="apply" set "APPLY=1"
@@ -73,7 +83,9 @@ if not exist "%TARGET%\" (
 
 set "BACKUP=%LOCALAPPDATA%\OTC-Tracker\hotfix-backup\%VERSION%"
 set "LIST=%TEMP%\otc-hotfix-list.txt"
+set "TLIST=%TEMP%\otc-hotfix-translations.txt"
 type nul > "%LIST%"
+type nul > "%TLIST%"
 
 echo.
 echo Versao no ar : %VERSION%
@@ -87,15 +99,19 @@ robocopy "%SOURCE_ROOT%" "%TARGET%" %DEPLOY_FILES% /L /FP /NS /NC /NDL /NJH /NJS
 REM --- Pastas: recursivo, sem o dado vivo e sem bytecode. ---------------------
 for %%D in (%DEPLOY_DIRS%) do if exist "%SOURCE_ROOT%\%%D\" robocopy "%SOURCE_ROOT%\%%D" "%TARGET%\%%D" /E /L /FP /NS /NC /NDL /NJH /NJS /NP /XD "%EXCLUDE_DIR%" "__pycache__" >> "%LIST%"
 
+REM --- Traducoes: destino proprio, o DATA_DIR da instancia. -----------------
+if exist "%TRANS_SRC%\" robocopy "%TRANS_SRC%" "%TRANS_DST%" *.json /L /FP /NS /NC /NDL /NJH /NJS /NP >> "%TLIST%"
+
 set /a COUNT=0
 set "FAIL="
 
-for /f "usebackq tokens=* delims=" %%F in ("%LIST%") do call :considera "%%F"
+for /f "usebackq tokens=* delims=" %%F in ("%LIST%") do call :considera "%%F" "%SOURCE_ROOT%" "%TARGET%" "%BACKUP%" ""
+for /f "usebackq tokens=* delims=" %%F in ("%TLIST%") do call :considera "%%F" "%TRANS_SRC%" "%TRANS_DST%" "%BACKUP%\_data-translations" "static\data\translations\"
 
 echo.
 if %COUNT%==0 (
     echo Nada a copiar - a versao no ar ja esta igual a este checkout.
-    del "%LIST%" >nul 2>&1
+    del "%LIST%" "%TLIST%" >nul 2>&1
     pause
     exit /b 0
 )
@@ -120,7 +136,7 @@ if "%APPLY%"=="0" (
     )
 )
 
-del "%LIST%" >nul 2>&1
+del "%LIST%" "%TLIST%" >nul 2>&1
 echo.
 pause
 exit /b 0
@@ -142,15 +158,22 @@ REM deixava o preenchimento na frente do relativo: o destino virava
 REM "...\v15\<tabs>pages\routes.py" e o Windows respondia "The filename,
 REM directory name, or volume label syntax is incorrect" uma vez por arquivo.
 REM O SRC e remontado da raiz pelo mesmo motivo - ele carrega o mesmo lixo.
+REM Argumentos: %1 a linha do robocopy, %2 raiz de origem, %3 raiz de destino,
+REM %4 raiz do backup, %5 prefixo so para exibir (as traducoes nao moram sob
+REM a pasta da versao, e a lista tem de dizer de onde cada arquivo e).
 set "SRC=%~1"
-set "REL=!SRC:*%SOURCE_ROOT%\=!"
+set "SROOT=%~2"
+set "DROOT=%~3"
+set "BROOT=%~4"
+set "SHOW=%~5"
+set "REL=!SRC:*%SROOT%\=!"
 if "!REL!"=="!SRC!" goto :eof
-set "SRC=%SOURCE_ROOT%\!REL!"
+set "SRC=!SROOT!\!REL!"
 set /a COUNT+=1
-echo    !REL!
+echo    !SHOW!!REL!
 if not "%APPLY%"=="1" goto :eof
-set "DST=%TARGET%\!REL!"
-set "BKF=%BACKUP%\!REL!"
+set "DST=!DROOT!\!REL!"
+set "BKF=!BROOT!\!REL!"
 REM O backup guarda o arquivo COMO FOI IMPLANTADO: so grava se ainda nao houver
 REM copia, senao o segundo hotfix no mesmo arquivo apagaria o original.
 if not exist "!BKF!" if exist "!DST!" call :garante_pasta "!BKF!"
