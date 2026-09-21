@@ -22241,3 +22241,45 @@ Rede: `check_opb3_events.py` §8 (novo), `check_ops_trade_swap`,
 `check_ops_trade_equity`, `check_ted_release`. Falhas ANTERIORES a esta mudança
 (conferidas contra o HEAD): `check_swap_advice`, `check_summary_glow`,
 `check_config_names`.
+
+### Correção no mesmo dia: o tipo saía VAZIO nas linhas em Check
+
+A primeira versão do NDF Summary só respondia `Maturity`, na falta de evento da
+B3, quando o vencimento da POSIÇÃO era a data da tela. A mesa viu na hora: as
+linhas em `Check` saíam sem tipo. É a mesma causa duas vezes — a linha está em
+Check PORQUE o resgate da B3 não casou, então o cadastro não tinha o que
+responder; e o contrato dela vencia na B3 em D+1 da liquidação do Athena
+(22/09 numa tela de 21/09), então o teste da data também falhava. A linha que
+mais precisa do tipo era a que ficava sem ele.
+
+O padrão passou a ser da LINHA, não da data: o universo do Cockpit é o
+`getTradesBySettle`, que é a liquidação do vencimento do termo, e a recompra
+entra por outra porta dizendo `Unwind`. O evento da B3 continua vencendo quando
+existe (é por ele que um prêmio ou uma antecipação se dizem).
+
+Rede: `check_unwind_summary.py` §3b (novo — a linha sem resgate sai Maturity e
+fica em Check; com evento de prêmio, sai Premium).
+
+### Segunda correção: na instância o tipo saiu vazio em quase tudo
+
+No Other Products da instância só o swap de EQUITY mostrou tipo — e só porque
+caiu no remendo do vencimento. Opção e swap de CEM saíram em branco com o
+Settlement B3 batendo, ou seja: os eventos estavam lá e o cadastro não
+respondeu. É a consequência direta de uma regra antiga do `opb3-events`: "Tipo
+Título sem Consider próprio não é filtrado" — o evento ENTRA na liquidação sem
+passar por regra nenhuma, então não há linha do cadastro para dizer o tipo; e
+o evento da B3 chega depois, com a grafia do dia. Na dev nada disso aparece
+(não há Operations B3 aqui), e o teste que usava a seed passava.
+
+A mesa apontou a saída: **a contagem dos cards do topo**. Eles nunca tiveram o
+problema porque não perguntam nada ao evento — contam pela DATA NA POSIÇÃO
+(vencimento, liquidação do prêmio, evento do DFLUXO, agenda de prêmios). O tipo
+passou a sair da mesma leitura (`_ops_settle_type_dates`,
+`_ops_swap_event_contracts`), e o evento da B3 virou o plano B e a fonte do que
+data nenhuma diz (a antecipação → Unwind, quando a mesa cadastrar). E em
+**MAIÚSCULAS** nas duas páginas, a pedido.
+
+Rede: `check_opb3_events.py` §9 (novo — data vence evento, as duas datas no
+mesmo dia, datetime × date, vazio sem palpite), `check_ops_trade_swap` (o tipo
+de ponta a ponta nas fixtures), `check_unwind_summary` (maiúsculas).
+

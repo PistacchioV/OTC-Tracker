@@ -3508,6 +3508,8 @@ _OPS_SWAP_JOIN_TOKENS = _pf_settle._OPS_SWAP_JOIN_TOKENS
 _ops_src_latest_path = _pf_settle._ops_src_latest_path
 _ops_settlement_counts = _pf_settle._ops_settlement_counts
 _OPS_TRADE_COLS = _pf_settle._OPS_TRADE_COLS
+_ops_settle_type_dates = _pf_settle._ops_settle_type_dates
+_ops_settle_type_join = _pf_settle._ops_settle_type_join
 _swadv_indexador = _pf_settle._swadv_indexador
 _ops_swap_pos_terms = _pf_settle._ops_swap_pos_terms
 _ops_swap_ir_rate = _pf_settle._ops_swap_ir_rate
@@ -5822,7 +5824,11 @@ def _ndfadv_collect(ref, with_ir=True):
             # O TIPO de liquidação (Maturity · Premium · Unwind), pelo cadastro
             # `opb3-events`: é a coluna Settlement Type do Trade Level e o que a
             # geração do aviso lê para dizer que liquidação é esta.
-            'settle_type': _opb3_settle_types(
+            # Pela DATA na posição, como os cards do topo (o evento da B3 é o
+            # plano B — ver `_ops_settle_type_dates`).
+            'settle_type': _ops_settle_type_dates(ref, (
+                (_lcell(lrow, 'Data de Liquidacao do Premio'), 'Premium'),
+                (_lcell(lrow, 'Data de Vencimento'), 'Maturity')),
                 [x for x in opb3 if str(x.get('Título', '') or '').strip().upper() == titulo.upper()]),
         })
     # O imposto é do BALDE da contraparte no mês, então só dá para calculá-lo
@@ -6336,7 +6342,9 @@ def _optadv_collect(ref, with_ir=True):
             'b3': sum(b3_vals) if b3_vals else None,
             # Premium · Exercise · Unwind, pelo cadastro `opb3-events` (o mesmo
             # campo do termo): o Trade Level mostra e o aviso lê.
-            'settle_type': _opb3_settle_types(mine),
+            'settle_type': _ops_settle_type_dates(ref, (
+                (_lcell(lrow, 'Data de Liquidação do Prêmio'), 'Premium'),
+                (_lcell(lrow, 'Data Vencimento'), 'Exercise')), mine),
         })
     # O IR é do NET por contraparte, então só dá para calculá-lo com as linhas do
     # dia todas na mão — por isso ele é um passe depois do laço, e não parte
@@ -10015,7 +10023,6 @@ def _ndfsum_collect(ref):
         _t = str(_o.get('Título', '') or '').strip().upper()
         if _t:
             ops_by_titulo.setdefault(_t, []).append(_o)
-    ref_d = ref.date() if hasattr(ref, 'date') else ref
 
     def _ter_date(v):
         d = _fcst_parse_date(v)
@@ -10069,14 +10076,21 @@ def _ndfsum_collect(ref):
         b3_n = _ndfc_valnum(raw_b3)
         diff = settle_n - b3_n if (settle_n is not None and b3_n is not None) else None
         ok = diff is not None and -_NDFSUM_TOL < diff < _NDFSUM_TOL
-        # Settlement Type (mesa, 21/09/2026), à direita da COUNTERPARTY: o que
-        # os eventos da B3 daquele contrato dizem pelo cadastro. Sem evento
-        # ainda (o arquivo da B3 chega depois da API), o contrato que VENCE hoje
-        # na posição é Maturity — é fato da posição, não palpite; fora disso a
-        # célula fica vazia.
-        settle_type = _opb3_settle_types(ops_by_titulo.get(b3.upper(), [])) if b3 else ''
-        if not settle_type and _fcst_parse_date(lp.get('venc', '')) == ref_d:
-            settle_type = 'Maturity'
+        # Settlement Type (mesa, 21/09/2026), à direita da COUNTERPARTY. O
+        # evento da B3 daquele contrato VENCE quando existe (é por ele, pelo
+        # cadastro `opb3-events`, que um prêmio ou uma antecipação se dizem).
+        # Sem evento, a linha é **Maturity**: o universo do Cockpit é o
+        # `getTradesBySettle`, que é a liquidação do vencimento do termo — a
+        # recompra entra por outra porta, logo abaixo, e se diz Unwind.
+        #
+        # A primeira versão só respondia Maturity quando o vencimento da POSIÇÃO
+        # era a data da tela, e a célula saía vazia exatamente nas linhas em
+        # `Check`: é Check porque o resgate da B3 não casou, e sem ele a posição
+        # era a única fonte — que falha no contrato cujo vencimento na B3 é D+1
+        # da liquidação do Athena. A linha que mais precisa do tipo era a que
+        # ficava sem ele.
+        settle_type = _ops_settle_type_join(
+            (_opb3_settle_types(ops_by_titulo.get(b3.upper(), [])) if b3 else '').split(' \u00b7 ')) or 'MATURITY'
         trade.append({
             'cells': [row[ci['LEGAL']], row[ci['NM_COUNTERPARTY']], settle_type,
                       row[ci['ID_SOURCE_DEAL']], b3, trade_date, settle_date,
@@ -10130,7 +10144,7 @@ def _ndfsum_collect(ref):
             trade.append({
                 # A recompra É o Settlement Type `Unwind`: quem o diz é a
                 # vertical (não há evento da B3 para perguntar ao cadastro).
-                'cells': [u['legal'], u['counterparty'], 'Unwind', u['athena'], u['b3'],
+                'cells': [u['legal'], u['counterparty'], 'UNWIND', u['athena'], u['b3'],
                           u['trade_date'], u['settle_date'],
                           _swapchar_fmt_value('{:.2f}'.format(u['notional_fc'])),
                           u['ccy'], u['fixing'],

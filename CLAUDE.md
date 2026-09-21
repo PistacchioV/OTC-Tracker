@@ -1364,20 +1364,28 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 ### Liquidação (Other Products, NDF Summary, Settlement Advice)
 
 - **Settlement Type (Trade Level do Other Products e do NDF Summary, à direita
-  da Counterparty; mesa, 21/09/2026) sai do cadastro `opb3-events`**, coluna
-  `SETTLEMENT TYPE` (domínio fechado: Cashflow · Maturity · Premium · Exercise ·
-  Unwind): a linha que ADMITE o evento da B3 na liquidação diz que liquidação
-  ele é (`_opb3_settle_type`, a regra mais específica vence; `_opb3_settle_types`
-  junta os distintos do Título com ` · `). Evento sem regra fica VAZIO — pede
-  cadastro, não chuta. Duas coisas que o evento não diz: **no swap o ÚLTIMO
-  fluxo é `Maturity`** (na B3 ele é o mesmo pagamento de diferencial dos
-  intermediários; quem o distingue é o `venc` da POSIÇÃO), e **a recompra de NDF
-  é `Unwind` pela vertical** (não há evento da B3). No NDF Summary, sem evento
-  ainda, o contrato que vence hoje na posição é `Maturity`. As linhas dos avisos
-  de termo e de opção carregam `settle_type` — é o que a geração dos avisos vai
-  ler. Quem já tem o cadastro recebe a coluna pelo `upgrade`, e só na linha que
-  a ANTECEDE (sem a chave): branco que a mesa deixou não se desfaz. No NDF
-  Summary as `cells` são posicionais — o TAX virou `_NDFSUM_TAX_CELL`.
+  da Counterparty; mesa, 21/09/2026) sai da DATA NA POSIÇÃO — a MESMA leitura
+  dos cards do topo** (`_ops_settlement_counts`), em MAIÚSCULAS
+  (`_ops_settle_type_dates`/`_ops_settle_type_join`): opção que vence hoje é
+  `EXERCISE` e a de `Data de Liquidação do Prêmio` hoje é `PREMIUM`; termo que
+  vence é `MATURITY`; swap na agenda de prêmios do dia é `PREMIUM`, o que VENCE
+  hoje na posição é `MATURITY` e o que tem evento no DFLUXO sem vencer é
+  `CASHFLOW` (`_ops_swap_event_contracts`, os mesmos arquivos e a mesma coluna de
+  data do `_FORECAST_SOURCES`). **A primeira versão perguntava só ao EVENTO da
+  B3 e saiu VAZIA na instância em tudo que não era swap de equity**: o evento
+  chega depois, e onde o Tipo Título não tem Consider próprio ele entra na
+  liquidação sem regra nenhuma para dizer o tipo (§6, `opb3-events`) — nada
+  quebra, a coluna só não diz. O evento virou o PLANO B e a fonte do que data
+  nenhuma diz: a coluna `SETTLEMENT TYPE` do `opb3-events` (domínio fechado;
+  `_opb3_settle_type`, a regra mais específica vence) é onde a mesa cadastra a
+  antecipação como `Unwind`. Sem data e sem evento a célula fica VAZIA. **A
+  recompra de NDF é `UNWIND` pela vertical**, e **no NDF Summary a linha do
+  Cockpit sem evento é `MATURITY`, sempre** (o universo dela é o
+  `getTradesBySettle`; condicionar ao `venc` da posição deixava o tipo vazio
+  justamente nas linhas em `Check`, cujo resgate não casou). As linhas dos
+  avisos de termo e de opção carregam `settle_type` — é o que a geração dos
+  avisos vai ler. No NDF Summary as `cells` são posicionais: o TAX virou
+  `_NDFSUM_TAX_CELL`.
 - **`_ops_trade_rows(settle_ref)` é o único lugar que sabe quais famílias
   existem** (SWAP + NDF Commodities); página, cards e e-mail de TED chamam
   ele. Status do aviso vive no overlay `other-products-summary_YYYYMMDD.json`

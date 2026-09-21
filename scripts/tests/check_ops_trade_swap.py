@@ -193,6 +193,14 @@ check('A1 · status OK quando bate', a.get('status'), 'OK')
 # 926 dias -> 15% (a linha do aviso na planilha do usuario) -> 150 x 15%
 check('A1 · Tax Income pelo prazo do TRADE (926d = 15%)', a.get('tax_income'), '22.50')
 
+# Settlement Type (21/09/2026), em MAIUSCULAS. Nenhum dos dois vence na data e
+# a fixture nao tem DFLUXO nem agenda de premios: quem fala e o plano B, o
+# evento da B3 pelo cadastro `opb3-events` (A1 paga diferencial, C3 paga premio).
+check('A1 · Settlement Type pelo evento (diferencial = CASHFLOW)', a.get('settle_type'), 'CASHFLOW')
+check('C3 · Settlement Type pelo evento (premio = PREMIUM)',
+      by_id.get('C3', {}).get('settle_type'), 'PREMIUM')
+# (A precedencia data > evento, e o MATURITY do ultimo fluxo, estao presos no
+# `check_opb3_events.py` §9.)
 c = by_id.get('C3', {})
 check('C3 · sem Athena, Internal ID vazio', c.get('internal_id'), '')
 check('C3 · sem OTM, Settlement vazio', c.get('settlement'), '')

@@ -288,5 +288,36 @@ check('o upgrade preenche a linha que antecede a coluna',
 check('e NAO mexe no branco que a mesa deixou', por[('TER', 'RESGATE')], '')
 check('nem altera a lista que recebeu', 'SETTLEMENT TYPE' in antigas[0], False)
 
+print('\n== 9. o tipo sai da DATA NA POSICAO, como os cards do topo ==')
+# Na instancia o tipo pelo evento saiu vazio em tudo que nao era swap de equity:
+# o evento chega depois e, onde o Tipo Titulo nao tem Consider proprio, entra na
+# liquidacao sem regra que diga o tipo. Os cards do topo contam pela data na
+# posicao (vencimento, liquidacao do premio) — o tipo sai da mesma leitura, em
+# MAIUSCULAS, e o evento da B3 e o plano B (o que data nenhuma diz: o Unwind).
+from datetime import date as _date, datetime as _dt
+HOJE = _date(2026, 9, 21)
+check('opcao que VENCE hoje e EXERCISE',
+      R._ops_settle_type_dates(HOJE, (('', 'Premium'), ('21/09/2026', 'Exercise'))), 'EXERCISE')
+check('opcao cujo PREMIO liquida hoje e PREMIUM',
+      R._ops_settle_type_dates(HOJE, (('21/09/2026', 'Premium'), ('15/12/2026', 'Exercise'))), 'PREMIUM')
+check('as duas datas hoje dizem os dois',
+      R._ops_settle_type_dates(HOJE, (('21/09/2026', 'Premium'), ('21/09/2026', 'Exercise'))),
+      'PREMIUM \u00b7 EXERCISE')
+check('a data vence o evento (o evento e o plano B)',
+      R._ops_settle_type_dates(HOJE, (('21/09/2026', 'Maturity'),), [rec('TER', 'PAGAMENTO DE PREMIO')]),
+      'MATURITY')
+check('sem data que responda, fala o evento da B3 — em maiusculas',
+      R._ops_settle_type_dates(HOJE, (('22/09/2026', 'Exercise'),), [rec('OPC', 'PAGAMENTO DE PREMIO')]),
+      'PREMIUM')
+check('sem data e sem evento: vazio, nunca um palpite',
+      R._ops_settle_type_dates(HOJE, (('22/09/2026', 'Exercise'), ('', 'Premium'))), '')
+check('a referencia pode chegar como datetime (os avisos mandam assim)',
+      R._ops_settle_type_dates(_dt(2026, 9, 21), (('2026-09-21', 'Maturity'),)), 'MATURITY')
+blk_sw = SRC.split('def _ops_swap_trade_rows', 1)[1] if 'def _ops_swap_trade_rows' in SRC else SRC
+check('o swap le a agenda de premios e o DFLUXO do dia',
+      "ev_contracts['premium']" in SRC and "ev_contracts['flow']" in SRC, True)
+check('e o vencimento da posicao vence o fluxo (o ultimo fluxo e MATURITY)',
+      "if venc and venc == settle_ref:\n            tipos.append('Maturity')\n        elif cid in ev_contracts['flow']:" in SRC, True)
+
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)
