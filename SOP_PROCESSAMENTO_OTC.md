@@ -151,9 +151,31 @@ Em cada cartão o operador define a Reference date (Data Base), as listas de **T
 
 ![Painel de Controle](docs/sop-screenshots/control-panel.png)
 
+#### Tools — Calculators, Quotes e as curvas
+
+Ferramentas de conferência, fora do fluxo do dia. **Calculators** reúne quatro
+calculadoras — **NDF**, **Option**, **Swap** e **Unwind NDF** —, todas com o
+mesmo uso: digitar o **B3 ID**, deixar a posição do último dia útil preencher a
+tela, completar o que ficou em vermelho (o que a posição não trouxe fica em
+branco, nunca um palpite) e clicar em **Calculate**. O resultado é sempre o do
+banco (`RECEIVE`/`PAY`), com a conta aberta em parcelas, e **Export** baixa a
+memória de cálculo em Excel, com as fórmulas (`Memória de Cálculo <produto> - B3
+ID - contraparte - data.xlsx`).
+
+Pontos de atenção: o fixing e a paridade em branco buscam a **PTAX de venda** do
+BCB e a taxa usada volta para o próprio campo, com a data; os preços de
+verificação da opção e do termo de mercadoria vêm do **Quotes**, multiplicados
+por 0,01 quando o **Index B3** indica que o ativo é cotado em centavos; e a data
+do fixing do **Term SOFR** conta no calendário **SOFR** do Holidays Calendar (a
+da EURIBOR, no TARGET2), não no ANBIMA.
+
+**Quotes** consulta a série histórica de PTAX, ações e mercadorias — os campos
+de período aceitam digitação direta da data. **Fixed Income**, **SOFR Index**,
+**Term SOFR** e **Euribor** completam o menu.
+
 #### NDF — Summary
 
-Batch de liquidação de NDF do dia. Os cards Vanilla / Other Publisher / T+0 / Total classificam a posição. As grades editáveis "Settlement Summary" e "Trade Level" permitem adicionar, editar, remover e confirmar linhas antes de gerar o batch.
+Batch de liquidação de NDF do dia. Os cards Vanilla / Other Publisher / T+0 / Total classificam a posição. As grades editáveis "Settlement Summary" e "Trade Level" permitem adicionar, editar, remover e confirmar linhas antes de gerar o batch. No **Trade Level**, a coluna **Settlement Type** (à direita da contraparte) diz que liquidação é aquela — `MATURITY`, `PREMIUM` ou `UNWIND` (a recompra) —, inclusive nas linhas em *Check*.
 
 ![NDF — Summary](docs/sop-screenshots/ndf-summary.png)
 
@@ -165,7 +187,7 @@ Cockpit operacional do NDF. Importa o arquivo do dia e permite adicionar, editar
 
 #### Other Products — Summary
 
-Resumo consolidado dos demais produtos (COE, NDF, Option, Swap) com widgets de total, vencimentos (maturity), prêmio e fluxo por produto.
+Resumo consolidado dos demais produtos (COE, NDF, Option, Swap) com widgets de total, vencimentos (maturity), prêmio e fluxo por produto. No **Trade Level**, a coluna **Settlement Type** diz que liquidação é aquela — swap: `CASHFLOW`, `MATURITY`, `PREMIUM`, `UNWIND`; opção: `PREMIUM`, `EXERCISE`, `UNWIND`; termo: `PREMIUM`, `MATURITY`, `UNWIND` —, decidida pela posição (o contrato vence hoje, o prêmio liquida hoje, há fluxo hoje). Célula vazia pede o cadastro do evento em **Mapping › `opb3-events`**, coluna *Settlement Type*.
 
 ![Other Products — Summary](docs/sop-screenshots/other-products-summary.png)
 
@@ -337,9 +359,24 @@ A recompra é acompanhada pelo **New Deals Monitor** (card *Unwind NDF FX*, na
 coluna B3 Registration, grupo NDF) e entra no aviso diário de pendências
 enquanto houver linha não enviada; o estado que a encerra é **Sent**.
 
-> **Em construção nesta fase:** Termo de Resilição, arquivo da Intrag, entrada
-> na esteira de confirmação e no Summary de NDF. Até que entrem, essas etapas
-> seguem por fora do sistema.
+O ciclo da recompra de NDF de moeda está completo no sistema: além do arquivo da
+B3, a operação gera o **Termo de Resilição** (pelo Confirmations Monitor), a
+linha da **Intrag** quando há fundo numa das pontas (Intrag › Unwind), entra na
+**esteira de confirmação** e aparece no **NDF Summary** do dia da liquidação,
+com o *Settlement Type* `UNWIND`.
+
+#### Unwinds — demais produtos
+
+As telas de recompra de **Swap (CEM · EDG)**, **NDF Commodities**, **Options
+(FXO · Commodities · EDG)**, **COE** e **DCE** já abrem, com a grade e as
+colunas de cada produto, mas **ainda não importam nem enviam**: ao acionar
+Import, Send ou os botões da linha, a tela avisa que o servidor daquele produto
+ainda não existe. Até que entrem, essas recompras seguem por fora do sistema. O
+mesmo vale para as telas novas de **New Deals › Swap › Cashflow** e **New Deals
+› Options › EDG**.
+
+Para conferir o valor de uma recompra de NDF fora do fluxo do dia, use **Apps ›
+Tools › Calculators › Unwind NDF Calculator**, que faz a mesma conta desta tela.
 
 ### Base de Dados & Administração (Data Base)
 
@@ -423,18 +460,18 @@ Os módulos abaixo estão previstos no menu lateral mas **ainda não foram desen
 - [ ] **NDF** — `/new-deals/dce/ndf`
 - [ ] **Option** — `/new-deals/dce/option`
 - [ ] **Swap** — `/new_deals-dce-swap`
-- [ ] **CEM** — `/unwinds/swap/cem`
-- [ ] **EDG** — `/unwinds/swap/edg`
-- [ ] **FX** — `/unwinds/ndf/fx`
-- [ ] **Commodities** — `/unwinds/ndf/commodities`
-- [ ] **FXO** — `/unwinds/options/fxo`
-- [ ] **Commodities** — `/unwinds/options/commodities`
-- [ ] **EDG** — `/unwinds/options/edg`
-- [ ] **COE** — `/unwinds/coe`
-- [ ] **Deliverable Forward** — `/unwinds/dce/deliverable-forward`
-- [ ] **NDF** — `/unwinds/dce/ndf`
-- [ ] **Option** — `/unwinds/dce/option`
-- [ ] **Swap** — `/unwinds/dce/swap`
+- [x] **CEM** — `/unwinds/swap/cem` — *tela pronta (21/09/2026); importação e envio em construção*
+- [x] **EDG** — `/unwinds/swap/edg` — *tela pronta (21/09/2026); importação e envio em construção*
+- [x] **FX** — `/unwinds/ndf/fx` — *implementado de ponta a ponta*
+- [x] **Commodities** — `/unwinds/ndf/commodities` — *tela pronta (21/09/2026); importação e envio em construção*
+- [x] **FXO** — `/unwinds/options/fxo` — *tela pronta (21/09/2026); importação e envio em construção*
+- [x] **Commodities** — `/unwinds/options/commodities` — *tela pronta (21/09/2026); importação e envio em construção*
+- [x] **EDG** — `/unwinds/options/edg` — *tela pronta (21/09/2026); importação e envio em construção*
+- [x] **COE** — `/unwinds/coe` — *tela pronta (21/09/2026); importação e envio em construção*
+- [x] **Deliverable Forward** — `/unwinds/dce/deliverable-forward` — *tela pronta (21/09/2026); importação e envio em construção*
+- [x] **NDF** — `/unwinds/dce/ndf` — *tela pronta (21/09/2026); importação e envio em construção*
+- [x] **Option** — `/unwinds/dce/option` — *tela pronta (21/09/2026); importação e envio em construção*
+- [x] **Swap** — `/unwinds/dce/swap` — *tela pronta (21/09/2026); importação e envio em construção*
 
 ## 6. Tratamento de Exceções
 
