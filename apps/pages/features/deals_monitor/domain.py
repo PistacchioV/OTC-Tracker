@@ -40,10 +40,9 @@ _NDM_CARDS = [
     # recompra (`Unwind/Swap/...`) seguem a convenção do `cache/unwinds/` da
     # Fase 1: o backend delas ainda não existe, e quando nascer cai aqui.
     {'key': 'swap-equities',      'label': 'Swap Equities',       'url': '/new_deals-swap-bullet',        'dirs': _NDM_SWAP_DIRS, 'lob': 'EDG',                  'les': ('JPM', 'ATA')},
-    # `soon` enquanto o backend do Cashflow é 501 (`nd_backend_pending`): o
-    # selo só aparece com o card VAZIO, então no dia em que a CEM tiver
-    # operação a tela mostra o número e o link, sem mexer aqui.
-    {'key': 'swap-cem',           'label': 'Swap CEM',            'url': '/new_deals-swap-cashflow', 'soon': True, 'dirs': _NDM_SWAP_DIRS, 'lob': 'CEM',       'les': ('JPM', 'ATA')},
+    # O backend do Cashflow existe desde 21/09/2026 (`features/swap_cashflow`,
+    # arquivo-dia em `Swap/Cashflow`): o selo `soon` saiu.
+    {'key': 'swap-cem',           'label': 'Swap CEM',            'url': '/new_deals-swap-cashflow', 'dirs': _NDM_SWAP_DIRS, 'lob': 'CEM',       'les': ('JPM', 'ATA')},
     # Recompra (unwind): registro na B3 como os demais desta coluna — o TER
     # 0014 vai para o mesmo Batch Conecta —, e por isso a chave NÃO leva
     # prefixo `intrag-`, que é o único teste de zona do e-mail.
@@ -59,6 +58,18 @@ _NDM_CARDS = [
     # pendência no aviso das 19h, todos os dias — o falso alarme diário é o
     # jeito mais rápido de a mesa parar de ler o e-mail.
     {'key': 'unwind-ndf-fx',      'label': 'Unwind NDF FX',       'url': '/unwinds/ndf/fx',               'dirs': (PREFIXO_UNWIND + 'NDF/FX',),                  'done': ('Sent',)},
+    # As recompras do CATÁLOGO (`unwinds/catalog.py`): a pasta é o `dir` da
+    # entrada, e o mesmo raciocínio do card acima — registro na B3, fecha em
+    # `Sent`, sem `les`. O swap NÃO tem card de recompra: `Unwind/Swap/CEM` e
+    # `Unwind/Swap/EDG` já somam nos dois cards de swap pela LOB da linha (§517).
+    {'key': 'unwind-ndf-commodities', 'label': 'Unwind NDF Commodities', 'url': '/unwinds/ndf/commodities', 'dirs': (PREFIXO_UNWIND + 'NDF/Commodities',), 'done': ('Sent',)},
+    {'key': 'unwind-opt-fxo',     'label': 'Unwind Options FXO',  'url': '/unwinds/options/fxo',          'dirs': (PREFIXO_UNWIND + 'Options/FXO',),             'done': ('Sent',)},
+    {'key': 'unwind-opt-commodities', 'label': 'Unwind Options Commodities', 'url': '/unwinds/options/commodities', 'dirs': (PREFIXO_UNWIND + 'Options/Commodities',), 'done': ('Sent',)},
+    {'key': 'unwind-opt-edg',     'label': 'Unwind Options EDG',  'url': '/unwinds/options/edg',          'dirs': (PREFIXO_UNWIND + 'Options/EDG',),             'done': ('Sent',)},
+    # COE e DCE não têm arquivo da B3 (`b3: None` no catálogo): não existe
+    # `Sent` para eles. Fecham na linha CONFERIDA — `Imported` (intocada) ou
+    # `Approved`; só a edição sem segundo par de olhos (`Pending`) fica pendente.
+    {'key': 'unwind-coe',         'label': 'Unwind COE',          'url': '/unwinds/coe',                  'dirs': (PREFIXO_UNWIND + 'COE',),                     'done': ('Imported', 'Approved')},
     {'key': 'intrag-ndf',         'label': 'Intrag NDF',          'url': '/intrag-ndf',                   'dirs': ('Intrag/NDF',),                               'les': ('LAW', 'ATA')},
     {'key': 'intrag-option',      'label': 'Intrag Option',       'url': '/intrag-option',                'dirs': ('Intrag/Option',),                            'les': ('LAW', 'ATA')},
     {'key': 'intrag-swap',        'label': 'Intrag Swap',         'url': '/intrag-swap',                  'dirs': ('Intrag/Swap',),                              'les': ('LAW', 'ATA')},
@@ -83,6 +94,13 @@ _NDM_CARDS = [
     {'key': 'intrag-dce-option',  'label': 'Intrag DCE Option',   'url': '/intrag-dce-option',            'dirs': ('Intrag/DCE Option',)},
     {'key': 'intrag-dce-ndf',     'label': 'Intrag DCE NDF',      'url': '/intrag-dce-ndf',               'dirs': ('Intrag/DCE NDF',)},
     {'key': 'intrag-dce-swap',    'label': 'Intrag DCE Swap',     'url': '/intrag-dce-swap',              'dirs': ('Intrag/DCE Swap',)},
+    # A recompra de DCE: o DCE vive na zona Intrag (os quatro cards acima), e a
+    # recompra dele também — por isso o prefixo `intrag-`, que é o teste de zona
+    # do e-mail. Sem arquivo da B3, fecha na linha conferida (ver `unwind-coe`).
+    {'key': 'intrag-unwind-dce-deliverable-forward', 'label': 'Unwind DCE Deliverable Forward', 'url': '/unwinds/dce/deliverable-forward', 'dirs': (PREFIXO_UNWIND + 'DCE/Deliverable Forward',), 'done': ('Imported', 'Approved')},
+    {'key': 'intrag-unwind-dce-ndf',    'label': 'Unwind DCE NDF',    'url': '/unwinds/dce/ndf',    'dirs': (PREFIXO_UNWIND + 'DCE/NDF',),    'done': ('Imported', 'Approved')},
+    {'key': 'intrag-unwind-dce-option', 'label': 'Unwind DCE Option', 'url': '/unwinds/dce/option', 'dirs': (PREFIXO_UNWIND + 'DCE/Option',), 'done': ('Imported', 'Approved')},
+    {'key': 'intrag-unwind-dce-swap',   'label': 'Unwind DCE Swap',   'url': '/unwinds/dce/swap',   'dirs': (PREFIXO_UNWIND + 'DCE/Swap',),   'done': ('Imported', 'Approved')},
 ]
 
 _NDM_JPM_RE = re.compile(r'J\.?P\.?\s*MORGAN', re.IGNORECASE)
@@ -161,6 +179,15 @@ _NDM_TAXONOMY = {
     'swap-equities':      ('Swap', 'Equities'),
     'swap-cem':           ('Swap', 'CEM'),
     'unwind-ndf-fx':      ('NDF', 'Unwind FX'),
+    'unwind-ndf-commodities': ('NDF', 'Unwind Commodities'),
+    'unwind-opt-fxo':     ('Option', 'Unwind FX'),
+    'unwind-opt-commodities': ('Option', 'Unwind Commodities'),
+    'unwind-opt-edg':     ('Option', 'Unwind Equity'),
+    'unwind-coe':         ('COE', 'Unwind'),
+    'intrag-unwind-dce-deliverable-forward': ('NDF', 'Unwind DCE Deliverable Forward'),
+    'intrag-unwind-dce-ndf': ('NDF', 'Unwind DCE'),
+    'intrag-unwind-dce-option': ('Option', 'Unwind DCE'),
+    'intrag-unwind-dce-swap': ('Swap', 'Unwind DCE'),
     # Intrag não tem sub-variante: o tipo da linha já diz Intrag, e repetir a
     # palavra na coluna Detail não acrescenta nada.
     'intrag-ndf':         ('NDF', '—'),

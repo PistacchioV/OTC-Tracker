@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 
 from apps.pages import data_store as _store
+from apps.pages.platform import swap_new_deals as _sw
 from apps.pages.features.swap_bullet import domain, queries
 from apps.pages.features.swap_bullet.infra import dt_reader, persistence
 
@@ -116,65 +117,10 @@ def persist_deals(deals, sid=''):
     return n
 
 
-def enrich(deal):
-    """Completa o deal com o que NÃO está no DT: a conta B3 e o CNPJ da
-    contraparte (Reference Data pela SPN; sem conta própria, o omnibus de
-    clientes do Banco + o Tax ID), e o código D-n da Data de Cotação (dias
-    úteis ANBIMA até o vencimento). Só preenche o que está em branco — o que
-    a mesa editou fica."""
-    # SPN de entidade NOSSA (cadastro le-spn): a contraparte é a Atacama (o
-    # B2B), ou outra perna intragrupo — nome e conta vêm do cadastro, não do
-    # Reference Data, onde essa SPN nunca esteve.
-    le = queries.le_by_spn(deal.get('SPN', '')) if deal.get('SPN') else None
-    if le:
-        deal['LE'] = 'ATACAMA' if le['LE'] == 'ATACAMA' else deal.get('LE') or 'JPM'
-        deal['Pair'] = 'JPM x ATACAMA' if le['LE'] == 'ATACAMA' else 'JPM x CLI'
-        deal['Client'] = le['NAME'] or le['LE']
-        deal['ClientRefData'] = 'ok'
-        deal['ClientTaxId'] = ''
-        deal.pop('ClientAccountNote', None)
-        conta = queries.own_accounts().get(le['LE'], '')
-        if conta:
-            deal['ClientAccount'] = conta
-    if not le and not domain.is_b2b(deal):
-        # A contraparte é IDENTIFICADA pela SPN do DT (o nome no DT é um
-        # apelido — 'Safra'): quem responde nome, CNPJ e conta B3 é o
-        # Reference Data. Sem SPN, tenta o nome do DT como último recurso.
-        rec = queries.refdata_by_spn(deal.get('SPN', '')) if deal.get('SPN') else {}
-        if not rec and not deal.get('SPN') and deal.get('ClientDT'):
-            alvo = domain.norm(deal.get('ClientDT'))
-            for r in _R()._refdata_records():
-                if domain.norm(r.get('COUNTERPARTY', '')) == alvo:
-                    rec = r
-                    break
-        deal['ClientRefData'] = 'ok' if rec else ''
-        if rec:
-            nome = str(rec.get('COUNTERPARTY', '') or '').strip()
-            if nome:
-                deal['Client'] = nome
-            if not deal.get('SPN'):
-                deal['SPN'] = re.sub(r'\.0$', '', str(rec.get('SPN', '') or ''))
-            if not deal.get('ClientTaxId'):
-                deal['ClientTaxId'] = re.sub(r'\D', '', str(rec.get('TAX ID', '') or ''))
-            if not deal.get('ClientAccount'):
-                acc = re.sub(r'\D', '', str(rec.get('B3 ACCOUNT', '') or ''))
-                if acc:
-                    deal['ClientAccount'] = acc
-                    deal['ClientTaxId'] = ''        # conta própria do cliente: sem CNPJ no registro
-        if not deal.get('ClientAccount'):
-            omni = queries.omnibus_account('JPM', 'CLIENT 2')
-            if omni:
-                deal['ClientAccount'] = omni
-                deal['ClientAccountNote'] = 'omnibus'
-    if not str(deal.get('QuoteDateCode') or '').strip():
-        q = domain.parse_date(deal.get('QuoteDate'))
-        m = domain.parse_date(deal.get('MaturityDate'))
-        if q and m:
-            n = _R()._anbima_biz_diff(datetime(q.year, q.month, q.day), datetime(m.year, m.month, m.day))
-            deal['QuoteDateCode'] = str(min(max(n, 0), 5)).zfill(2)
-    if not str(deal.get('VcpText') or '').strip():
-        deal['VcpText'] = domain.vcp_text(deal)
-    return deal
+# O `enrich` (conta B3, CNPJ e D-n pelos cadastros) mora na horizontal
+# `platform/swap_new_deals.py` desde 21/09/2026 — o Swap Cashflow completa o
+# deal do mesmo jeito.
+enrich = _sw.enrich
 
 
 # ── Os arquivos ──────────────────────────────────────────────────────────────
@@ -183,12 +129,7 @@ def _today_ymd():
     return datetime.now().strftime('%Y%m%d')
 
 
-def _participant(le):
-    nome = _R()._b3_participant_name(le)
-    if not nome:
-        raise ValueError('B3 Accounts: no Simplified Name registered for legal entity %r '
-                         '— register it at /mapping › B3 Accounts' % le)
-    return nome
+_participant = _sw.participant
 
 
 def _file_name(key, view, default, deal=None):
@@ -267,21 +208,7 @@ def deal_files(deal, view, today_ymd=None):
     return out
 
 
-def _fields_of(key, per_block, record_vals):
-    """[{seq, block, field, value}] na ordem do template — rótulo do
-    cadastro, valor do gerador (o que o motor vai posicionar)."""
-    rows = []
-    for b in queries.template_blocks(key):
-        src = per_block.get(b.get('id'))
-        if src is None:
-            src = record_vals or {}
-        for f in b.get('fields') or []:
-            seq = str(f.get('seq', '')).strip()
-            rows.append({'seq': seq, 'block': b.get('title', ''), 'field': f.get('field', ''),
-                         'format': f.get('format', ''), 'position': f.get('position', ''),
-                         'source': f.get('source', ''),
-                         'value': str(src.get(seq, src.get(seq.lstrip('0') or '0', '')))})
-    return rows
+_fields_of = _sw.fields_of
 
 
 def preview(deal):
@@ -533,41 +460,13 @@ def delete(items):
 # ── Depois do B3 ID (§481) ───────────────────────────────────────────────────
 
 def b3_mapped(deal):
-    """O deal ganhou B3 ID. No B2B, a linha da **Intrag Swap** (a visão da
-    Atacama, na carteira dela); contra cliente, a linha do **Pending
-    Confirmation** e a da esteira de **Manual Confirmations** (Produto SWAP /
-    SWAP CORPORATE, chave = B3 ID, LOB do deal). Cada braço se protege: a
-    falha vai para o log com o traceback e não derruba a gravação da grade."""
-    import traceback
-    b3 = str(deal.get('B3ID') or '').strip()
-    if not b3:
-        return
-    try:
-        if domain.is_b2b(deal):
-            entry = domain.intrag_swap_entry(deal, queries.codes_for(deal))
-            start = domain.parse_date(deal.get('StartDate')) or domain.parse_date(deal.get('TradeDate'))
-            start_dt = datetime(start.year, start.month, start.day) if start else None
-            _R()._intrag_engine()._save_intrag_swap_entry(entry, start_dt)
-        else:
-            tipo = domain.confirmation_source(deal)
-            # A mesma porta das outras páginas: o `_pc_save_from_deal` pula a
-            # perna interna sozinho e é ele quem chama o `_mc_save_from_deal`.
-            _R()._pc_save_from_deal(confirmation_deal(deal), tipo, pending_status='Pending OTC',
-                                    trade_number=b3, source=tipo)
-    except Exception:                                       # noqa: BLE001
-        _R().log.warning('[SWAP BULLET] post-mapping flow failed for %s:\n%s', b3, traceback.format_exc())
+    """O deal ganhou B3 ID → Intrag Swap (B2B) ou Pending Confirmation +
+    esteira (contra cliente). A regra é a mesma do Swap Cashflow e mora na
+    horizontal (`platform/swap_new_deals.b3_mapped`)."""
+    _sw.b3_mapped(deal, tag='SWAP BULLET')
 
 
-def confirmation_deal(deal):
-    """O deal no formato das confirmações (`domain.confirmation_deal`) com o
-    CNPJ da contraparte do Reference Data — o `enrich` o apaga da linha
-    quando o cliente tem conta B3 própria (não vai no registro), e o
-    documento e o XML precisam dele."""
-    out = domain.confirmation_deal(deal)
-    if not re.sub(r'\D', '', str(out.get('TaxID') or '')):
-        rec = queries.refdata_by_spn(deal.get('SPN', '')) if deal.get('SPN') else {}
-        out['TaxID'] = re.sub(r'\D', '', str((rec or {}).get('TAX ID', '') or ''))
-    return out
+confirmation_deal = _sw.confirmation_deal
 
 
 def confirmation_deals(ref_dt):

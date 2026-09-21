@@ -1027,9 +1027,26 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `swap-amortizacao`) chega resolvido pelo servidor (`selects_from_mapping`).
   **A API de cada página tem prefixo ESTÁTICO**, não `/api/new-deals/<path>`:
   as genéricas `/api/new-deals/<product>/cache/search` e `/send-conecta` casam o
-  slug como `product` e respondem "Unknown product". O servidor ainda NÃO
-  existe: `cache/search` devolve vazio com o contrato e o resto é 501
-  `nd_backend_pending`.
+  slug como `product` e respondem "Unknown product". O `opt-edg` segue em
+  stub (`cache/search` vazio, o resto 501 `nd_backend_pending`).
+- **Swap Cashflow é o backend do swap da CEM** (`features/swap_cashflow/`,
+  §526). O Deal Ticket é o MESMO do Bullet, e feature não importa feature:
+  parser, visões, 0897, lacunas, Intrag e o deal das confirmações moram em
+  `platform/swap_deal_ticket.py` (puro) e `platform/swap_new_deals.py`
+  (leitura pelo CONTEÚDO, cadastros, `enrich`, `b3_mapped`) — o `domain` do
+  Bullet só RE-EXPORTA, e o `check_swap_bullet` segue byte a byte. O cashflow
+  soma a tabela **Cash Flow** → `CashFlows` (`_CF_HEADERS`) e os rótulos do DT
+  da CEM (`_CEM_LABELS`) — as duas são SUPOSIÇÃO sem amostra, isoladas de
+  propósito. **A LOB não é chutada**: sem o DT dizer, é lacuna `swc_no_lob`.
+  Arquivos: o **0301 de Fluxo Não Constante** (4.2.7 v00003,
+  `swap-fluxo-nao-constante-v3`, 2021 caracteres), o **0034 do cronograma**
+  (4.2.8, template novo `swap-fluxo-contrato-nao-constante`) e o 0897; cp1252,
+  `SWAP_CF_`/`FLUXO_SWAP_CF_`/`PREMIO_SWAP_CF_<LOB>_<VISÃO>.txt`. Perna JUROS
+  INTERNACIONAIS é RECUSADA (`swc_intl_curve`: os campos SOFR/TERM SOFR não são
+  gerados), IPCA e termo também faltam. O `_conf_load_swap` lê Bullet E
+  Cashflow (`routes._swap_cashflow_engine`) — sem isso o Generate do Monitor não
+  achava a operação —, e o backfill tem as famílias da pasta `Swap/Cashflow`.
+  `check_swap_cashflow.py`.
 - **Swap Calculator: a `Denominação` da curva VCP é CONTRATO, e o IR sai do
   CADASTRO** (§479). A posição traz nas colunas 70/75 o texto livre da curva
   (`(3M SOFR + 0.75%)*1.1765 A/360`), e o `*1.1765` só existe ali. Quem o lê é
@@ -1304,11 +1321,30 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   o RÓTULO — e por isso a chave de tradução da coluna sai do rótulo
   (`unw-col-original-quantity`), não do campo. **A chave da linha é o `_id`
   interno** (coluna escondida, a última): NDF/Opção de Commodities e FXO chegam
-  sem identificador. **O servidor dessas páginas ainda NÃO existe**: o GET
-  devolve o dia vazio com o contrato e toda ação responde 501
-  `unwind_backend_pending` (uma rota só, `/api/unwinds/<path:sub>`, que a
-  regra estática da Fase 1 vence) — quando o backend de um produto nascer, as
-  rotas estáticas dele tiram o produto desse stub sem mexer nele.
+  sem identificador.
+- **O backend das onze é UM, e o produto é parâmetro**
+  (`features/unwinds/product/` + `infra/product_store.py`, §526): pasta
+  (`dir`), posição (`position`: swap/option/ndf/None), conferências (`checks`)
+  e layout da B3 saem da entrada do `catalog.py`; a API é a regra
+  `/api/unwinds/<path:sub>` (que a estática da Fase 1 vence;
+  `page_and_action` separa produto de um ou dois segmentos da ação). **Entra
+  PLANILHA**, lida pelo conteúdo, com cabeçalho de rótulos OU campos da grade;
+  **e-mail responde `unwind_email_format_pending`** — não há amostra do aviso
+  destes produtos, e o parser da Fase 1 não se aplica. A posição (os MESMOS
+  coletores do Live Position) só preenche o que a planilha deixou em BRANCO:
+  divergência vira aviso e a planilha vence. **Sem B3 ID, casa por
+  características só com candidato ÚNICO** (≥ 2 critérios, todos batendo);
+  ambíguo não chuta. Chave natural = Contract (ou DealID) + UnwindDate;
+  re-import volta a linha a `Imported` mantendo `_id`/Nº de controle, e linha
+  `Sent` não se sobrescreve. Check de três estados (`balance`, `termo`,
+  `premio`): OK só com TODAS rodando e fechando. Arquivo da B3 pelo motor do
+  File Interpreter: TER 0014 (quantidade no 9, paridade no 14), SWAP 0014
+  (**111** caracteres pela soma do template, não os 99 que o manual imprime;
+  papel pela conta NOSSA; Mantém Prêmios só na parcial) e OPC 0014 (contas do
+  REGISTRO, modalidade da posição). Asiático é RECUSADO (faltam as linhas tipo
+  2). COE/DCE não têm layout: `unwind_no_b3_file`, e no Monitor fecham em
+  `Imported`/`Approved`. **Ainda NÃO têm** Termo de Resilição, esteira, Intrag,
+  Cockpit nem Settlement Summary — só a Fase 1 tem. `check_unwind_products.py`.
 - **A ponte até o contrato é o `Código Identificador` do Live Position, e ele
   vem de DUAS formas**: TRUNCADO nos 14 da direita (o aviso traz
   `STP-XE-10G5U5X-0-0` e a posição, `XE-10G5U5X-0-0`) ou INTEIRO

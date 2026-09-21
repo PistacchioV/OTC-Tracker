@@ -109,6 +109,12 @@ FAMILIES = {
     # confirmação de cliente e fica de fora pelo `_pc_is_internal_counterparty`.
     'Swap Bullet':        {'dir': ('Swap', 'Bullet'),        'source': 'SWAP',           'key': 'b3id', 'swap': True},
     'Swap Bullet Corp':   {'dir': ('Swap', 'Bullet'),        'source': 'SWAP CORPORATE', 'key': 'b3id', 'swap': True},
+    # Swap Cashflow (21/09/2026): o mesmo par de sources e a mesma regra por
+    # deal (o `confirmation_deal` é um só, na horizontal `swap_new_deals`),
+    # noutra pasta. Sem estas duas famílias a operação de cashflow mapeada
+    # antes de a esteira a conhecer ficaria invisível no Monitor para sempre.
+    'Swap Cashflow':      {'dir': ('Swap', 'Cashflow'),      'source': 'SWAP',           'key': 'b3id', 'swap': True},
+    'Swap Cashflow Corp': {'dir': ('Swap', 'Cashflow'),      'source': 'SWAP CORPORATE', 'key': 'b3id', 'swap': True},
     # A RECOMPRA de termo de moeda (§488). A árvore dela fica FORA de
     # `cache/new deals/` de propósito (o New Deals Monitor varre aquela pasta e
     # criaria um card sozinho), então a família declara a raiz por FUNÇÃO — a

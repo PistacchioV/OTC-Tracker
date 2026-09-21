@@ -13,8 +13,9 @@ UMA tela (`pages/unwinds-product.html`) com o contrato vindo de
   3. toda pagina abre, com a tabela, o dropzone e os QUATRO botoes da casa;
   4. a pagina da Fase 1 continua sendo a DELA (a regra com variavel nao a
      sombreia), e o que o catalogo nao conhece e 404;
-  5. o GET devolve o contrato com o dia vazio, e toda acao responde 501 em
-     JSON com CODIGO — nunca a pagina 404 em HTML (`Unexpected token '<'`).
+  5. o GET devolve o contrato, e toda recusa de acao responde em JSON com
+     CODIGO — nunca a pagina 404 em HTML (`Unexpected token '<'`). O backend
+     em si e do `check_unwind_products`.
 """
 import io
 import os
@@ -89,20 +90,27 @@ def main():
     check('pagina fora do catalogo e 404', cl.get('/unwinds/ndf/nada').status_code == 404)
     check('e grupo fora do catalogo tambem', cl.get('/unwinds/nada').status_code == 404)
 
-    print('\n== 5. o GET devolve o contrato; a acao responde 501 com codigo ==')
+    print('\n== 5. o GET devolve o contrato; a acao responde JSON com codigo ==')
+    # O backend das onze paginas existe (`features/unwinds/product/`, o teste
+    # dele e o `check_unwind_products`): aqui so se prende que nenhuma resposta
+    # e a pagina 404 em HTML e que toda recusa leva CODIGO (§486).
     p = catalog.PAGES['/unwinds/options/fxo']
-    api = cl.get(p['api'] + '?date=2026-09-21').get_json()
-    check('GET: dia vazio com o contrato',
-          api.get('success') and api['entries'] == []
+    api = cl.get(p['api'] + '?date=2021-01-04').get_json()
+    check('GET: o contrato, com o backend ligado',
+          api.get('success') and api.get('backend') is True and isinstance(api['entries'], list)
           and api['fields'] == catalog.fields(p) and api['labels'] == catalog.labels(p))
     coe = cl.get('/api/unwinds/coe').get_json()
-    check('GET do COE (dois segmentos)', coe.get('success') and coe['fields'][0] == 'Status')
-    for verbo, url in (('POST', p['api'] + '/import-file'), ('POST', p['api'] + '/send-conecta'),
-                       ('GET', p['api'] + '/preview?id=x'), ('POST', '/api/unwinds/coe/delete')):
+    check('GET do COE (um segmento)', coe.get('success') and coe['fields'][0] == 'Status')
+    for verbo, url, st, code in (
+            ('POST', p['api'] + '/import-file', 400, 'unwind_no_file'),
+            ('POST', p['api'] + '/send-conecta', 400, 'unwind_no_rows'),
+            ('GET', p['api'] + '/preview?id=x&date=2021-01-04', 404, 'unwind_not_found'),
+            ('POST', '/api/unwinds/coe/delete', 404, 'unwind_not_found'),
+            ('POST', p['api'] + '/nada', 404, 'unwind_unknown_action')):
         r = cl.open(url, method=verbo)
         j = r.get_json(silent=True) or {}
-        check('%s %s: 501 JSON com codigo' % (verbo, url),
-              r.status_code == 501 and j.get('code') == 'unwind_backend_pending', (r.status_code, j))
+        check('%s %s: %d JSON com codigo' % (verbo, url, st),
+              r.status_code == st and j.get('code') == code, (r.status_code, j))
     fase1 = cl.get('/api/unwinds/ndf/fx?date=2026-09-21').get_json()
     check('a API da Fase 1 nao foi sombreada', fase1.get('success') and 'backend' not in fase1)
     sem = app.test_client().get(p['api'])

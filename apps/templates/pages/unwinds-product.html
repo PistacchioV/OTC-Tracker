@@ -107,7 +107,7 @@
         <div class="col-12">
             <div class="card nd-deal-card">
 
-                <!-- ── Dropzone: o CORPO do e-mail, salvo como .htm/.html/.txt ── -->
+                <!-- ── Dropzone: a PLANILHA (xlsx/xls/csv; o servidor lê pelo conteúdo) ── -->
                 <div class="card-body" style="padding: 10px;">
                     <form action="/" class="dropzone" data-plugin="dropzone"
                           data-previews-container="#file-previews"
@@ -120,8 +120,8 @@
                                     <i class="fs-24 ti ti-cloud-upload"></i>
                                 </span>
                             </div>
-                            <h4 class="mb-2" data-lang="unw-dropzone-title-generic">Drop the unwind e-mail here, or click to upload.</h4>
-                            <p class="text-muted fst-italic mb-3" data-lang="unw-dropzone-hint-generic">Drag the e-mail straight from Outlook (.msg, .eml or .htm) and click Import.</p>
+                            <h4 class="mb-2" data-lang="unw-dropzone-title-generic">Drop the unwind spreadsheet here, or click to upload.</h4>
+                            <p class="text-muted fst-italic mb-3" data-lang="unw-dropzone-hint-generic">Excel or CSV with the grid columns as the header (labels or field names) — then click Import.</p>
                             <button class="btn btn-sm shadow btn-default" type="button" data-lang="nd-browse">Browse</button>
                         </div>
                     </form>
@@ -228,47 +228,170 @@ var _TRANS = {
     en: {
         'unw_imported': 'Imported',
         'unw_nothing_imported': 'Nothing imported',
-        'e_unwind_backend_pending': 'This product\'s server side is not available yet — the page is ready, the import and the B3 file come next',
         'unw_nothing_to_import': 'Nothing to import',
-        'unw_drop_first': 'Drop the unwind e-mail in the box above first.',
+        'unw_drop_first': 'Drop the unwind spreadsheet in the box above first.',
         'unw_nothing_sent': 'Nothing sent',
         'unw_no_b3_file': 'Cannot build the B3 file',
         'unw_not_saved': 'Not saved',
         'unw_not_confirmed': 'Not confirmed',
+        'unw_replace_title': 'Replace existing unwinds?',
+        'unw_replace_text': '{n} row(s) of this spreadsheet are already in the day file (same B3 ID / Deal ID and unwind date) and will be replaced.',
+        'unw_replace_btn': 'Replace',
+        'unw_check_before': 'Check before sending',
+        'e_unwind_email_format_pending': 'The unwind e-mail of {produto} has no known format yet (no sample) — import the spreadsheet with the grid columns instead',
+        'e_unwind_sheet_header_unknown': 'No header row with the columns of this page was found — use the column labels or field names of the grid',
+        'e_unwind_sheet_unreadable': 'The spreadsheet could not be read: {motivo}',
+        'e_unwind_sheet_empty': 'The spreadsheet has no data rows',
+        'e_unwind_file_empty': 'The file is empty',
+        'e_unwind_file_too_large': 'The file is too large',
+        'e_unwind_no_file': 'No file received',
+        'e_unwind_import_failed': 'Import failed',
+        'e_unwind_no_b3_file': '{produto} has no B3 file — this product is not anticipated through a B3 layout',
+        'e_unwind_account_not_registered': 'Account {conta} is not in B3 Accounts — the party of an unwind has to be one of ours (/mapping › B3 Accounts)',
+        'e_unwind_no_participant_name': 'No Simplified Name in B3 Accounts for {visao}',
+        'e_unwind_b3_missing': 'The B3 file is missing: {campos}',
+        'e_unwind_b3_length': 'The B3 record has {tem} characters and the template wants {quer}',
+        'e_unwind_template_missing': 'File Interpreter template missing: {key}',
+        'e_unwind_bad_value': '{campo}: "{valor}" is not valid for this column',
+        'e_unwind_nothing_sent': 'Nothing sent — {motivos}',
+        'e_unwind_no_rows': 'No rows selected',
+        'e_unwind_unknown_action': 'Unknown action',
         'e_unwind_already_sent': 'This unwind was already sent to B3',
         'e_unwind_not_found': 'Entry not found',
         'e_unwind_only_pending': 'Only Pending unwinds can be confirmed',
-        'e_unwind_maker_is_checker': 'You edited this row — a different user must confirm it'
+        'e_unwind_maker_is_checker': 'You edited this row — a different user must confirm it',
+        'w_unwind_sheet_columns_ignored': 'Columns not in this page were ignored: {colunas}',
+        'w_unwind_bad_date': 'A date could not be read: {campo} "{valor}"',
+        'w_unwind_bad_number': 'A number could not be read: {campo} "{valor}"',
+        'w_unwind_position_not_found': 'B3 ID {contrato} is not in the Live Position',
+        'w_unwind_match_not_enough': 'No B3 ID and not enough characteristics to find the contract in the Live Position ({criterios})',
+        'w_unwind_matched_by_characteristics': 'B3 ID {contrato} found in the Live Position by {criterios} — check it',
+        'w_unwind_match_none': 'No Live Position contract matches {criterios}',
+        'w_unwind_match_ambiguous': '{n} Live Position contracts match {criterios} — fill in the B3 ID',
+        'w_unwind_differs_from_position': '{campo} differs from the Live Position (sheet {planilha}, position {posicao})',
+        'w_unwind_lob_differs_from_page': 'The Live Position says LOB {lob}, not this page',
+        'w_unwind_check_missing': 'Check not possible — missing: {campos}',
+        'w_unwind_exceeds_balance': 'The unwound amount {recomprado} exceeds the open balance {saldo}',
+        'w_unwind_result_mismatch': 'The result {informado} does not match the recomputed {calculado}',
+        'w_unwind_amount_mismatch': 'The settlement amount {informado} does not match quantity × unit premium {calculado}',
+        'w_unwind_cpty_not_registered': 'The counterparty {taxid} is not in the Reference Data (umbrella account: the holder is the bank)',
+        'w_unwind_cpty_short_name': 'Account {conta} has no Reference Data name — the B3 short name {apelido} was kept',
+        'w_unwind_no_counterparty': 'The position identifies no counterparty',
+        'w_unwind_party_not_ours': 'Account {conta} of the position is not in B3 Accounts',
+        'w_unwind_already_sent': 'Row {contrato} was already sent to B3 and was kept as it is',
+        'w_unwind_check_unknown': 'Unknown check {teste}'
     },
     br: {
         'unw_imported': 'Importado',
         'unw_nothing_imported': 'Nada foi importado',
-        'e_unwind_backend_pending': 'O servidor deste produto ainda não existe — a tela está pronta, o import e o arquivo da B3 vêm em seguida',
         'unw_nothing_to_import': 'Nada para importar',
-        'unw_drop_first': 'Solte primeiro o e-mail da recompra na caixa acima.',
+        'unw_drop_first': 'Solte primeiro a planilha da recompra na caixa acima.',
         'unw_nothing_sent': 'Nada foi enviado',
         'unw_no_b3_file': 'Não foi possível montar o arquivo da B3',
         'unw_not_saved': 'Não foi salvo',
         'unw_not_confirmed': 'Não foi confirmado',
+        'unw_replace_title': 'Substituir recompras existentes?',
+        'unw_replace_text': '{n} linha(s) desta planilha já estão no arquivo do dia (mesmo B3 ID / Deal ID e data da recompra) e serão substituídas.',
+        'unw_replace_btn': 'Substituir',
+        'unw_check_before': 'Confira antes de enviar',
+        'e_unwind_email_format_pending': 'O e-mail de recompra de {produto} ainda não tem formato conhecido (sem amostra) — importe a planilha com as colunas da grade',
+        'e_unwind_sheet_header_unknown': 'Nenhuma linha de cabeçalho com as colunas desta página — use os rótulos ou os nomes de campo da grade',
+        'e_unwind_sheet_unreadable': 'Não foi possível ler a planilha: {motivo}',
+        'e_unwind_sheet_empty': 'A planilha não tem linhas de dado',
+        'e_unwind_file_empty': 'O arquivo está vazio',
+        'e_unwind_file_too_large': 'O arquivo é grande demais',
+        'e_unwind_no_file': 'Nenhum arquivo recebido',
+        'e_unwind_import_failed': 'O import falhou',
+        'e_unwind_no_b3_file': '{produto} não tem arquivo da B3 — este produto não se antecipa por layout da B3',
+        'e_unwind_account_not_registered': 'A conta {conta} não está no B3 Accounts — a parte de uma recompra tem de ser nossa (/mapping › B3 Accounts)',
+        'e_unwind_no_participant_name': 'Sem Nome Simplificado no B3 Accounts para {visao}',
+        'e_unwind_b3_missing': 'Falta no arquivo da B3: {campos}',
+        'e_unwind_b3_length': 'O registro da B3 tem {tem} caracteres e o template pede {quer}',
+        'e_unwind_template_missing': 'Template do File Interpreter ausente: {key}',
+        'e_unwind_bad_value': '{campo}: "{valor}" não é válido para esta coluna',
+        'e_unwind_nothing_sent': 'Nada foi enviado — {motivos}',
+        'e_unwind_no_rows': 'Nenhuma linha selecionada',
+        'e_unwind_unknown_action': 'Ação desconhecida',
         'e_unwind_already_sent': 'Esta recompra já foi enviada à B3',
         'e_unwind_not_found': 'Linha não encontrada',
         'e_unwind_only_pending': 'Só recompras Pending podem ser confirmadas',
-        'e_unwind_maker_is_checker': 'Você editou esta linha — quem confirma tem de ser outro usuário'
+        'e_unwind_maker_is_checker': 'Você editou esta linha — quem confirma tem de ser outro usuário',
+        'w_unwind_sheet_columns_ignored': 'Colunas que não são desta página foram ignoradas: {colunas}',
+        'w_unwind_bad_date': 'Uma data não pôde ser lida: {campo} "{valor}"',
+        'w_unwind_bad_number': 'Um número não pôde ser lido: {campo} "{valor}"',
+        'w_unwind_position_not_found': 'O B3 ID {contrato} não está no Live Position',
+        'w_unwind_match_not_enough': 'Sem B3 ID e sem características suficientes para achar o contrato no Live Position ({criterios})',
+        'w_unwind_matched_by_characteristics': 'B3 ID {contrato} achado no Live Position por {criterios} — confira',
+        'w_unwind_match_none': 'Nenhum contrato do Live Position casa com {criterios}',
+        'w_unwind_match_ambiguous': '{n} contratos do Live Position casam com {criterios} — preencha o B3 ID',
+        'w_unwind_differs_from_position': '{campo} diverge do Live Position (planilha {planilha}, posição {posicao})',
+        'w_unwind_lob_differs_from_page': 'O Live Position diz LOB {lob}, não a desta página',
+        'w_unwind_check_missing': 'Conferência impossível — falta: {campos}',
+        'w_unwind_exceeds_balance': 'O recomprado {recomprado} passa do saldo aberto {saldo}',
+        'w_unwind_result_mismatch': 'O resultado {informado} não bate com o recalculado {calculado}',
+        'w_unwind_amount_mismatch': 'O valor financeiro {informado} não bate com quantidade × prêmio unitário {calculado}',
+        'w_unwind_cpty_not_registered': 'A contraparte {taxid} não está no Reference Data (conta guarda-chuva: o titular é o banco)',
+        'w_unwind_cpty_short_name': 'A conta {conta} não tem nome no Reference Data — ficou o apelido da B3 {apelido}',
+        'w_unwind_no_counterparty': 'A posição não identifica a contraparte',
+        'w_unwind_party_not_ours': 'A conta {conta} da posição não está no B3 Accounts',
+        'w_unwind_already_sent': 'A linha {contrato} já foi enviada à B3 e ficou como estava',
+        'w_unwind_check_unknown': 'Conferência desconhecida {teste}'
     },
     es: {
         'unw_imported': 'Importado',
         'unw_nothing_imported': 'No se importó nada',
-        'e_unwind_backend_pending': 'El servidor de este producto aún no existe — la pantalla está lista, la importación y el archivo de la B3 vienen después',
         'unw_nothing_to_import': 'Nada para importar',
-        'unw_drop_first': 'Suelte primero el correo de la recompra en el cuadro de arriba.',
+        'unw_drop_first': 'Suelte primero la planilla de la recompra en el cuadro de arriba.',
         'unw_nothing_sent': 'No se envió nada',
         'unw_no_b3_file': 'No se pudo generar el archivo de la B3',
         'unw_not_saved': 'No se guardó',
         'unw_not_confirmed': 'No se confirmó',
+        'unw_replace_title': '¿Reemplazar recompras existentes?',
+        'unw_replace_text': '{n} línea(s) de esta planilla ya están en el archivo del día (mismo B3 ID / Deal ID y fecha de la recompra) y serán reemplazadas.',
+        'unw_replace_btn': 'Reemplazar',
+        'unw_check_before': 'Revise antes de enviar',
+        'e_unwind_email_format_pending': 'El correo de recompra de {produto} aún no tiene formato conocido (sin muestra) — importe la planilla con las columnas de la grilla',
+        'e_unwind_sheet_header_unknown': 'Ninguna fila de encabezado con las columnas de esta página — use los rótulos o los nombres de campo de la grilla',
+        'e_unwind_sheet_unreadable': 'No se pudo leer la planilla: {motivo}',
+        'e_unwind_sheet_empty': 'La planilla no tiene filas de datos',
+        'e_unwind_file_empty': 'El archivo está vacío',
+        'e_unwind_file_too_large': 'El archivo es demasiado grande',
+        'e_unwind_no_file': 'No se recibió ningún archivo',
+        'e_unwind_import_failed': 'La importación falló',
+        'e_unwind_no_b3_file': '{produto} no tiene archivo de la B3 — este producto no se anticipa por layout de la B3',
+        'e_unwind_account_not_registered': 'La cuenta {conta} no está en B3 Accounts — la parte de una recompra tiene que ser nuestra (/mapping › B3 Accounts)',
+        'e_unwind_no_participant_name': 'Sin Nombre Simplificado en B3 Accounts para {visao}',
+        'e_unwind_b3_missing': 'Falta en el archivo de la B3: {campos}',
+        'e_unwind_b3_length': 'El registro de la B3 tiene {tem} caracteres y el template pide {quer}',
+        'e_unwind_template_missing': 'Template del File Interpreter ausente: {key}',
+        'e_unwind_bad_value': '{campo}: "{valor}" no es válido para esta columna',
+        'e_unwind_nothing_sent': 'No se envió nada — {motivos}',
+        'e_unwind_no_rows': 'Ninguna línea seleccionada',
+        'e_unwind_unknown_action': 'Acción desconocida',
         'e_unwind_already_sent': 'Esta recompra ya fue enviada a la B3',
         'e_unwind_not_found': 'Línea no encontrada',
         'e_unwind_only_pending': 'Solo las recompras Pending pueden confirmarse',
-        'e_unwind_maker_is_checker': 'Usted editó esta línea — quien confirma debe ser otro usuario'
+        'e_unwind_maker_is_checker': 'Usted editó esta línea — quien confirma debe ser otro usuario',
+        'w_unwind_sheet_columns_ignored': 'Columnas que no son de esta página fueron ignoradas: {colunas}',
+        'w_unwind_bad_date': 'Una fecha no pudo leerse: {campo} "{valor}"',
+        'w_unwind_bad_number': 'Un número no pudo leerse: {campo} "{valor}"',
+        'w_unwind_position_not_found': 'El B3 ID {contrato} no está en el Live Position',
+        'w_unwind_match_not_enough': 'Sin B3 ID y sin características suficientes para hallar el contrato en el Live Position ({criterios})',
+        'w_unwind_matched_by_characteristics': 'B3 ID {contrato} hallado en el Live Position por {criterios} — verifíquelo',
+        'w_unwind_match_none': 'Ningún contrato del Live Position coincide con {criterios}',
+        'w_unwind_match_ambiguous': '{n} contratos del Live Position coinciden con {criterios} — complete el B3 ID',
+        'w_unwind_differs_from_position': '{campo} difiere del Live Position (planilla {planilha}, posición {posicao})',
+        'w_unwind_lob_differs_from_page': 'El Live Position dice LOB {lob}, no la de esta página',
+        'w_unwind_check_missing': 'Verificación imposible — falta: {campos}',
+        'w_unwind_exceeds_balance': 'Lo recomprado {recomprado} supera el saldo abierto {saldo}',
+        'w_unwind_result_mismatch': 'El resultado {informado} no coincide con el recalculado {calculado}',
+        'w_unwind_amount_mismatch': 'El valor financiero {informado} no coincide con cantidad × prima unitaria {calculado}',
+        'w_unwind_cpty_not_registered': 'La contraparte {taxid} no está en el Reference Data (cuenta paraguas: el titular es el banco)',
+        'w_unwind_cpty_short_name': 'La cuenta {conta} no tiene nombre en el Reference Data — quedó el apodo de la B3 {apelido}',
+        'w_unwind_no_counterparty': 'La posición no identifica a la contraparte',
+        'w_unwind_party_not_ours': 'La cuenta {conta} de la posición no está en B3 Accounts',
+        'w_unwind_already_sent': 'La línea {contrato} ya fue enviada a la B3 y quedó como estaba',
+        'w_unwind_check_unknown': 'Verificación desconocida {teste}'
     }
 };
 function _lang() { try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) { return 'en'; } }
@@ -281,18 +404,31 @@ function t(key, fallback) {
     } catch (e) {}
     return fallback;
 }
+// `{nome}` no texto traduzido sai dos `params` do servidor. O parâmetro que não
+// veio (o Check lê só o CÓDIGO da linha) some, em vez de aparecer como `{x}`.
+function fmtParams(s, params) {
+    return String(s == null ? '' : s).replace(/\{(\w+)\}/g, function (_m, k) {
+        var v = params && params[k];
+        return v == null ? '' : String(v);
+    }).replace(/\s+([,.:)])/g, '$1').replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim();
+}
 // O aviso do servidor é {code, params, text}: a tela diz pelo código e só cai
 // no `text` quando o código é novo aqui.
 // O erro do servidor também chega por código (§486): `e_<code>`, com o
 // `message` só de fallback para o código que esta tela ainda não conhece.
 function erroTexto(res, padrao) {
     if (!res) return padrao || '';
-    return t('e_' + (res.code || ''), res.message || padrao || '');
+    var k = 'e_' + (res.code || '');
+    var tr = t(k, null);
+    return tr ? fmtParams(tr, res.params) : (res.message || padrao || '');
 }
 function avisoTexto(a) {
     if (!a) return '';
-    if (typeof a === 'string') return t('w_' + a, a);
-    return t('w_' + a.code, a.text || a.code || '');
+    if (typeof a === 'string') return fmtParams(t('w_' + a, a), {});
+    var tr = t('w_' + a.code, null);
+    var txt = tr ? fmtParams(tr, a.params) : (a.text || a.code || '');
+    var linha = a.params && a.params.linha;
+    return linha ? ('#' + linha + ' ' + txt) : txt;
 }
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function _isoToDmy(s){var m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?(m[3]+'/'+m[2]+'/'+m[1]):String(s||'');}
@@ -466,7 +602,7 @@ $(document).ready(function () {
                 ib.className = 'btn btn-sm btn-warning bg-gradient btn-toolbar-all btn-toolbar-import';
                 ib.setAttribute('data-bs-toggle', 'tooltip');
                 ib.setAttribute('data-bs-placement', 'bottom');
-                ib.setAttribute('data-bs-title', 'Process the e-mails in the dropzone');
+                ib.setAttribute('data-bs-title', 'Process the spreadsheets in the dropzone');
                 ib.setAttribute('data-bs-custom-class', 'tooltip-teal');
                 ib.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
                 importWrap.appendChild(ib);
@@ -567,40 +703,57 @@ $(document).ready(function () {
     function runImport() {
         var btn = document.getElementById('importBtn');
         var dz = window.myDropzone || ((typeof Dropzone !== 'undefined') ? Dropzone.forElement('#myAwesomeDropzone') : null);
-        // `.msg`, `.eml` e o corpo salvo como `.htm` — os mesmos formatos das
-        // páginas de New Deals. Quem decide de fato é o CONTEÚDO, no servidor
-        // (`infra/email_file.py`): a extensão aqui só evita mandar um .xlsx.
-        var files = (dz && dz.files) ? dz.files.filter(function (f) { return /\.(msg|eml|html?|txt)$/i.test(f.name); }) : [];
-        // Sem arquivo não há o que importar: a varredura do box é da Fase 1
-        // (o aviso do Athena). Estes produtos chegam por e-mail avulso, e a
-        // regra de qual e-mail é de quem ainda não existe.
+        // A PLANILHA (xlsx/xls/csv) é o que estes produtos importam. `.msg`,
+        // `.eml` e `.htm` também sobem — quem decide é o CONTEÚDO, no servidor,
+        // e ele responde por código que o e-mail destes produtos ainda não tem
+        // formato conhecido, em vez de a tela descartar o arquivo calada.
+        var files = (dz && dz.files) ? dz.files.filter(function (f) { return /\.(xlsx|xlsm|xls|csv|txt|msg|eml|html?)$/i.test(f.name); }) : [];
         if (!files.length) {
             Swal.fire({ icon: 'info', title: t('unw_nothing_to_import', 'Nothing to import'),
-                        text: t('unw_drop_first', 'Drop the unwind e-mail in the box above first.'), confirmButtonColor: '#0066cc' });
+                        text: t('unw_drop_first', 'Drop the unwind spreadsheet in the box above first.'), confirmButtonColor: '#0066cc' });
             return;
         }
         btn.disabled = true;
         btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i> Importing...';
         function _restore() { btn.disabled = false; btn.innerHTML = '<i class="ti ti-upload me-1"></i> Import'; }
+        // Um arquivo por vez, EM SÉRIE — e cada um em DOIS passos, o molde das
+        // páginas de New Deals: o `dry_run` só lê e devolve as DUPLICATAS (a
+        // chave natural já no dia), a tela pergunta, e só então grava.
+        function _post(f, dry) {
+            var fd = new FormData();
+            fd.append('file', f);
+            fd.append('date', refDateIso());
+            if (dry) fd.append('dry_run', '1');
+            return fetch(PAGE.api + '/import-file', { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); });
+        }
         var rows = [], warns = [], errors = [];
         var chain = Promise.resolve();
         files.forEach(function (f) {
             chain = chain.then(function () {
-                var fd = new FormData();
-                fd.append('file', f);
-                fd.append('date', refDateIso());
-                return fetch(PAGE.api + '/import-file', { method: 'POST', body: fd, credentials: 'same-origin' })
-                    .then(function (r) { return r.json(); })
-                    .then(function (res) {
-                        if (!res || !res.success) { errors.push(f.name + ': ' + erroTexto(res, 'Import failed')); return; }
-                        rows = rows.concat(res.rows || []);
-                        warns = warns.concat(res.warnings || []);
+                return _post(f, true).then(function (dry) {
+                    if (!dry || !dry.success) { errors.push(f.name + ': ' + erroTexto(dry, 'Import failed')); return; }
+                    var dup = (dry.duplicates || []).length;
+                    var ask = dup ? Swal.fire({
+                        icon: 'question', title: t('unw_replace_title', 'Replace existing unwinds?'),
+                        text: f.name + ' — ' + fmtParams(t('unw_replace_text', '{n} row(s) will be replaced.'), { n: dup }),
+                        showCancelButton: true, confirmButtonText: t('unw_replace_btn', 'Replace'), confirmButtonColor: '#0066cc'
+                    }).then(function (r) { return r.isConfirmed; }) : Promise.resolve(true);
+                    return ask.then(function (ok) {
+                        if (!ok) return;
+                        return _post(f, false).then(function (res) {
+                            if (!res || !res.success) { errors.push(f.name + ': ' + erroTexto(res, 'Import failed')); return; }
+                            rows = rows.concat(res.rows || []);
+                            warns = warns.concat(res.warnings || []);
+                        });
                     });
+                });
             });
         });
         chain.then(function () {
             _restore();
             if (dz && rows.length) dz.removeAllFiles(true);
+            if (window.fetchNotifications) window.fetchNotifications();
             load();
             reportImport(rows.length, warns, errors);
         }).catch(function (e) { _restore(); Swal.fire({ icon: 'error', title: 'Error', text: String(e) }); });
@@ -613,7 +766,7 @@ $(document).ready(function () {
         var linhas = (warns || []).map(avisoTexto).filter(Boolean);
         var uniq = linhas.filter(function (v, i) { return linhas.indexOf(v) === i; });
         var extra = '';
-        if (uniq.length) extra += '<div class="text-start mt-2 fs-xs"><b>Check before sending:</b><ul class="mb-0 ps-3">' + uniq.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul></div>';
+        if (uniq.length) extra += '<div class="text-start mt-2 fs-xs"><b>' + esc(t('unw_check_before', 'Check before sending')) + ':</b><ul class="mb-0 ps-3">' + uniq.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul></div>';
         if ((errors || []).length) extra += '<div class="text-start mt-2 fs-xs text-danger">' + esc(errors.join('; ')) + '</div>';
         Swal.fire({
             icon: (errors || []).length ? 'error' : (uniq.length ? 'warning' : 'success'),

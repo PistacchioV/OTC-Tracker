@@ -1467,15 +1467,21 @@ _CONF_NA_CAP = 'Não Aplicável'
 
 
 def _conf_load_swap(ref):
-    """Os deals do Swap Bullet contra cliente do dia, no formato das
-    confirmações (o B2B fica de fora: é linha da Intrag). Busca atrasada
-    no routes — platform não importa feature."""
+    """Os deals de SWAP contra cliente do dia — Swap Bullet E Swap Cashflow
+    (21/09/2026) —, no formato das confirmações (o B2B fica de fora: é linha
+    da Intrag). As duas páginas mandam para a esteira o MESMO Produto (`SWAP`
+    / `SWAP CORPORATE`, chave = B3 ID), então o Generate do Monitor tem de
+    achar a operação nas duas — lendo só o Bullet, o card do cashflow abria
+    "nenhuma operação encontrada". Uma que falha não derruba a outra. Busca
+    atrasada no routes — platform não importa feature."""
     from apps.pages import routes
-    try:
-        return routes._swap_bullet_engine().confirmation_deals(ref)
-    except Exception:
-        log.warning('[conf] swap bullet day load failed:\n%s', traceback.format_exc())
-        return []
+    out = []
+    for nome, engine in (('bullet', '_swap_bullet_engine'), ('cashflow', '_swap_cashflow_engine')):
+        try:
+            out.extend(getattr(routes, engine)().confirmation_deals(ref))
+        except Exception:
+            log.warning('[conf] swap %s day load failed:\n%s', nome, traceback.format_exc())
+    return out
 
 
 def _conf_swap_family(deal, subj):

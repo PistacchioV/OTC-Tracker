@@ -10851,6 +10851,15 @@ def _swap_bullet_engine():
     return commands
 
 
+def _swap_cashflow_engine():
+    """Gancho para a vertical Swap Cashflow (features/swap_cashflow), pelo
+    mesmo motivo do `_swap_bullet_engine`: a segregação das confirmações de
+    Swap e o backfill da esteira leem os deals do dia por aqui. Devolve o
+    `commands` (`confirmation_deals`, `confirmation_deal`)."""
+    from apps.pages.features.swap_cashflow import commands
+    return commands
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Horário de Brasília — mora em `platform/anbima.py` (fatia platform/); alias.
 # ──────────────────────────────────────────────────────────────────────────
@@ -14473,5 +14482,6 @@ from apps.pages.features.daily_settlement import entrypoint as _f_daily_settleme
 from apps.pages.features.tools import entrypoint as _f_tools                      # noqa: E402,F401
 from apps.pages.features.new_deals import entrypoint as _f_new_deals              # noqa: E402,F401
 from apps.pages.features.swap_bullet import entrypoint as _f_swap_bullet          # noqa: E402,F401
+from apps.pages.features.swap_cashflow import entrypoint as _f_swap_cashflow      # noqa: E402,F401
 from apps.pages.features.unwinds import entrypoint as _f_unwinds                # noqa: E402,F401
 _schedule_on_start('unwind-boxscan', _f_unwinds.start_scheduler)
