@@ -714,6 +714,24 @@ def main():
         'vencimento': '2026-09-21', 'b3_id': '26C03202688',
         'counterparty': 'USINA ALTO ALEGRE SA'}).headers.get('Content-Disposition', '')
     check('o nome leva CETIP ID, contraparte e a data', ('26C03202688' in nome, '21-09-2026' in nome), (True, True))
+    # O PRODUTO no nome (mesa, 21/09/2026): e o que distingue os arquivos na pasta
+    # de quem baixou. O cabecalho manda o nome em RFC 5987 (percent-encoded).
+    from urllib.parse import unquote
+    nomes = {}
+    for tool, dados in (
+            ('ndf-calculator', {'posicao': 'vendido', 'moeda': 'USD', 'nocional': '1000000',
+                                'taxa_termo': '5.2', 'fixing': '5.35', 'vencimento': '2026-09-21'}),
+            ('unwind-ndf-calculator', {'posicao': 'vendido', 'moeda': 'USD', 'nocional': '42227.42',
+                                       'strike': '5.3748', 'taxa_recompra': '5.109', 'taxa_pre': '13.75',
+                                       'du': '14', 'liquidacao': '2026-09-10', 'vencimento': '2026-09-30'}),
+            ('option-calculator', {'tipo': 'put', 'lado': 'titular', 'moeda': 'BRL', 'strike': '80',
+                                   'quantidade': '1000', 'fixings': '70', 'exercicio': '2026-09-18'})):
+        nomes[tool] = unquote(cl.post('/tools/%s/extract' % tool, data=dados).headers.get('Content-Disposition', ''))
+    check('cada calculadora diz o SEU produto no nome do arquivo',
+          ('Memória de Cálculo NDF - 21-09-2026.xlsx' in nomes['ndf-calculator'],
+           'Memória de Cálculo Recompra NDF - 10-09-2026.xlsx' in nomes['unwind-ndf-calculator'],
+           'Memória de Cálculo Opção - 18-09-2026.xlsx' in nomes['option-calculator']),
+          (True, True, True))
     rx = cl.post('/tools/option-calculator/extract', data={'tipo': 'call', 'lado': 'titular', 'strike': ''},
                  headers={'X-Requested-With': 'XMLHttpRequest'})
     check('conta que nao fecha: 422 em JSON para o botao (nunca um download quebrado)',

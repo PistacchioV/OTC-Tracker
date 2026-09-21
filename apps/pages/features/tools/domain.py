@@ -78,8 +78,12 @@ def fx8(valor):
 _PROIBIDOS_NO_NOME = '\\/:*?"<>|'
 
 
-def nome_memoria(cetip_id, contraparte, quando, extensao='.xlsx'):
-    """`Memória de Cálculo - <CETIP ID> - <contraparte> - <liquidação>.xlsx`.
+def nome_memoria(cetip_id, contraparte, quando, extensao='.xlsx', produto=''):
+    """`Memória de Cálculo <produto> - <CETIP ID> - <contraparte> - <liquidação>.xlsx`.
+
+    O PRODUTO vai no nome (mesa, 21/09/2026): `Swap`, `NDF`, `Recompra NDF`,
+    `Opção`. Quatro calculadoras exportando `Memória de Cálculo - …` davam, na
+    pasta de quem baixou, arquivos que só se distinguiam abrindo.
 
     O que não veio não vira um traço solto: o segmento VAZIO some, em vez de
     entregar um `Memória de Cálculo -  -  - 30-06-2026.xlsx` para o arquivo do
@@ -90,7 +94,7 @@ def nome_memoria(cetip_id, contraparte, quando, extensao='.xlsx'):
                     for c in str(texto or ''))
         return ' '.join(t.split())
 
-    partes = ['Memória de Cálculo']
+    partes = [' '.join(x for x in ('Memória de Cálculo', limpo(produto)) if x)]
     for bruto in (cetip_id, contraparte):
         t = limpo(bruto)
         if t:

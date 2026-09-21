@@ -22575,3 +22575,14 @@ Cálculo - 26C03202688 - 21-09-2026.xlsx` com R$ 11.144,00 gravado.
 Rede: `check_tools_calculators.py` §8 (paridade), §1 (menu), §10–§11 (Export),
 `check_tools`, `check_tools_memoria`.
 
+### O produto no nome do arquivo exportado
+
+Com quatro calculadoras exportando `Memória de Cálculo - <id> - <contraparte> -
+<data>.xlsx`, os arquivos na pasta de quem baixou só se distinguiam abrindo. O
+nome passou a dizer o produto logo depois do título — `Memória de Cálculo Swap`,
+`NDF`, `Recompra NDF`, `Opção` — pelo mesmo `domain.nome_memoria`, que ganhou o
+parâmetro `produto` (passa pela mesma limpeza do resto do nome; segmento vazio
+continua sumindo).
+
+Rede: `check_tools_memoria.py` §1, `check_tools_calculators.py` §11.
+
