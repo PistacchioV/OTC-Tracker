@@ -169,6 +169,34 @@ def main():
             'posicao': 'comprado', 'moeda': 'USD', 'nocional': '1000000', 'taxa_termo': '5.2',
             'fixing': '', 'vencimento': '2026-09-21', 'ptax_offset': '1'}).data.decode('utf-8')
         check('fixing em branco busca a PTAX e DIZ de que dia', 'PTAX USD 18/09/2026' in h)
+        # A taxa USADA volta para o CAMPO da esquerda (mesa, 21/09/2026): e ele
+        # que a mesa confere, e so no quadro do resultado ela ficava do outro
+        # lado da tela. Vai marcada como automatica, com a procedencia embaixo.
+        check('e a taxa usada VOLTA para o campo do formulario, marcada como automatica',
+              ('id="fixing" name="fixing" value="5.4321"' in h,
+               'id="fixing_auto" name="fixing_auto" value="1"' in h,
+               'id="fixing_auto_nota">PTAX USD 18/09/2026' in h), (True, True, True))
+        # Com a marca, o Calculate REBUSCA: trocar o vencimento nao pode deixar a
+        # PTAX do vencimento anterior no campo, calada.
+        queries._ptax_do_fixing = lambda moeda, fim, n: (5.5555, date(2026, 9, 17), '')
+        h = cl.post('/tools/ndf-calculator', data={
+            'posicao': 'comprado', 'moeda': 'USD', 'nocional': '1000000', 'taxa_termo': '5.2',
+            'fixing': '5.4321', 'fixing_auto': '1', 'vencimento': '2026-09-18',
+            'ptax_offset': '1'}).data.decode('utf-8')
+        check('campo marcado como automatico e REBUSCADO no Calculate',
+              'id="fixing" name="fixing" value="5.5555"' in h)
+        h = cl.post('/tools/ndf-calculator', data={
+            'posicao': 'comprado', 'moeda': 'USD', 'nocional': '1000000', 'taxa_termo': '5.2',
+            'fixing': '5.4000', 'fixing_auto': '', 'vencimento': '2026-09-18',
+            'ptax_offset': '1'}).data.decode('utf-8')
+        check('o DIGITADO manda: sem a marca nao ha busca nem procedencia',
+              ('id="fixing" name="fixing" value="5.4000"' in h,
+               'id="fixing_auto" name="fixing_auto" value=""' in h), (True, True))
+        h = cl.post('/tools/ndf-calculator', data={
+            'posicao': 'comprado', 'moeda': 'USD', 'nocional': '1000000', 'taxa_termo': '5.2',
+            'fixing': '', 'vencimento': '2030-01-15', 'ptax_offset': '1'}).data.decode('utf-8')
+        check('fixing no FUTURO nao tem PTAX: erro em frase, nunca a ultima cotacao no lugar',
+              ('still in the future' in h, 'Settlement at maturity' in h), (True, False))
         queries._ptax_do_fixing = lambda moeda, fim, n: (None, None, 'sem rede')
         h = cl.post('/tools/ndf-calculator', data={
             'posicao': 'comprado', 'moeda': 'USD', 'nocional': '1000000', 'taxa_termo': '5.2',
@@ -228,9 +256,14 @@ def main():
     ]
     _o = (R._lpndf_collect, R._lpopt_collect, R._b3_is_omnibus, R._ndfc_ir_exempt,
           R._mapping_rows, Q.fetch_ohlc, Q.fetch_ptax)
+    _subj_real = R._subjacente_by_code
+    SUBJ = {}                       # o Index B3 do teste: vazio = ninguem cotado em centavos
+    R._subjacente_by_code = lambda: SUBJ
     R._lpndf_collect = lambda ref, exact=False: {'columns': NDF_COLS, 'rows': LINHAS_NDF,
                                                  'source_date': '2026-09-18'}
-    R._b3_is_omnibus = lambda conta: '73760.10' in str(conta)
+    # por DIGITOS, como o `_b3_is_omnibus` de verdade: a posicao de NDF escreve
+    # `73760.10-2` e a de opcao `73760102`
+    R._b3_is_omnibus = lambda conta: ''.join(ch for ch in str(conta) if ch.isdigit()) == '73760102'
     R._ndfc_ir_exempt = lambda nome: 'ALTO ALEGRE' in str(nome)
     try:
         d = queries.ndf_prefill('26c03202688')
@@ -249,6 +282,25 @@ def main():
         check('a isencao de IR sai do cadastro, pelo nome do CLIENTE', f['isento_ir'], True)
         check('e a nota diz quanto ja foi recomprado',
               [n['code'] for n in d['notes']], ['unwound_before'])
+        # O vencimento da fixture (30/09/2026) ainda nao chegou: o fixing fica em
+        # BRANCO. Com a data do fixing ja passada, a PTAX vem no CAMPO.
+        check('fixing no futuro: campo em branco, sem marca', (f['fixing'], f['fixing_auto']), ('', ''))
+        _venc = LINHAS_NDF[0][NDF_COLS.index('Data de Vencimento')]
+        _fixd = LINHAS_NDF[0][NDF_COLS.index('Data de Fixing da Moeda')]
+        LINHAS_NDF[0][NDF_COLS.index('Data de Vencimento')] = '18/09/2026'
+        LINHAS_NDF[0][NDF_COLS.index('Data de Fixing da Moeda')] = '17/09/2026'
+        _ptax_real = queries._ptax_do_fixing
+        queries._ptax_do_fixing = lambda moeda, fim, n: (5.4321, date(2026, 9, 17), '')
+        try:
+            dp = queries.ndf_prefill('26C03202688')
+            check('fixing ja passado: a PTAX vem no CAMPO, marcada, com a nota da data',
+                  (dp['fields']['fixing'], dp['fields']['fixing_auto'],
+                   [n for n in dp['notes'] if n['code'] == 'fixing_ptax'][0]['params']),
+                  ('5.4321', '1', {'moeda': 'USD', 'data': '17/09/2026'}))
+        finally:
+            queries._ptax_do_fixing = _ptax_real
+            LINHAS_NDF[0][NDF_COLS.index('Data de Vencimento')] = _venc
+            LINHAS_NDF[0][NDF_COLS.index('Data de Fixing da Moeda')] = _fixd
         check('o Codigo Identificador tambem acha', queries.ndf_prefill('XE-10G5U5X-0-0')['b3_id'],
               '26C03202688')
         d2 = queries.ndf_prefill('26C09999999')
@@ -322,13 +374,80 @@ def main():
         check('asiatica: os TRES precos vem do Quotes, o Close (nao o Adj Close), numa chamada so',
               (of['fixings'], len(pedidos)), ('70.0000\n72.0000\n74.0000', 1))
         check('o simbolo sai do cadastro quotes-commodity (o "MY" do vencimento)', pedidos[0], 'CTZ26.NYB')
+        # COTADO EM CENTAVOS (mesa, 21/09/2026): o Index B3 diz `Fator Conversao`
+        # 0,01 para o CTZ6 — a bolsa cota 81,15 c/lb e o strike da B3 e 0,6960
+        # US$/lb. Sem o fator a opcao sairia CEM vezes dentro do dinheiro.
+        SUBJ['CTZ6'] = {'Fator Conversao': 0.01, 'Moeda': 'DOLAR DOS EUA'}
+        oc = queries.opcao_prefill('CHASM26081V')
+        check('cotado em centavos: os precos do Quotes saem x 0,01',
+              oc['fields']['fixings'], '0.7000\n0.7200\n0.7400')
+        check('e a nota DIZ que multiplicou, com o ativo',
+              [n['params'] for n in oc['notes'] if n['code'] == 'quoted_in_cents'], [{'ativo': 'CTZ6'}])
+        SUBJ['CTZ6'] = {'Fator Conversao': '0,01'}
+        check('o fator escrito como texto brasileiro tambem e centavos',
+              queries.opcao_prefill('CHASM26081V')['fields']['fixings'].split('\n')[0], '0.7000')
+        SUBJ['CTZ6'] = {'Fator Conversao': 5000.0}
+        check('so 0,01 e centavos: outro fator NAO mexe no preco (a regra da casa)',
+              queries.opcao_prefill('CHASM26081V')['fields']['fixings'].split('\n')[0], '70.0000')
+        # a moeda vem por NOME na posicao: quem traduz e o cadastro currency-base
+        i_moeda = OPT_COLS.index('Moeda do ativo / Moeda cotada')
+        LINHAS_OPT[0][i_moeda] = 'DOLAR DOS EUA'
+        _map_prev = R._mapping_rows
+        R._mapping_rows = lambda k: ([{'DESCRICAO DO CAMPO': 'DOLAR DOS EUA', 'CODIGO DE CADASTRO': '220',
+                                       'SIMBOLO': 'USD'}] if k == 'currency-base' else _map_prev(k))
+        mo = queries.opcao_prefill('CHASM26081V')
+        check('`DOLAR DOS EUA` vira USD pelo cadastro — e sai da lista do que faltou',
+              (mo['fields']['moeda'], 'moeda' in mo['missing']), ('USD', False))
+        LINHAS_OPT[0][i_moeda] = ''
+        SUBJ['CTZ6'] = {'Fator Conversao': 0.01, 'Moeda': 'DOLAR DOS EUA'}
+        check('coluna vazia: responde a Moeda do proprio ativo no Index B3',
+              queries.opcao_prefill('CHASM26081V')['fields']['moeda'], 'USD')
+        check('o codigo Sisbacen tambem traduz', queries._moeda_iso('220'), 'USD')
+        LINHAS_OPT[0][i_moeda] = 'USD'
+        R._mapping_rows = _map_prev
+        SUBJ.clear()
         check('o lado vai marcado como aproximacao — e o da PARTE do registro',
               ('lado' in o['assumed'], [n['code'] for n in o['notes']][:1]), (True, ['side_of_party']))
         check('e as notas dizem de onde os precos vieram',
               'fixings_from_quotes' in [n['code'] for n in o['notes']], True)
-        check('contraparte, registro e classe · ativo na tela',
-              (o['counterparty'], of['data_emissao'], of['classe']),
-              ('BASF SA', '2026-03-10', 'COMMODITIES \u00b7 CTZ6'))
+        check('registro e classe · ativo na tela', (of['data_emissao'], of['classe']),
+              ('2026-03-10', 'COMMODITIES \u00b7 CTZ6'))
+        # A contraparte da OPCAO (mesa, 21/09/2026): o `Nome simplificado` e
+        # apelido de conta (JPMORGANBM, INTRAGLAWTONFDO) e nao identifica ninguem.
+        # Guarda-chuva -> o CNPJ pelo Reference Data; outra conta -> a CONTA CETIP
+        # pelo Reference Data. Quem diz que a conta e guarda-chuva e o cadastro
+        # `b3-accounts`, nunca o numero no codigo.
+        _conta_real = R._lp_cpty_by_account
+        R._lp_cpty_by_account = lambda c: {'00041007': 'LAWTON MULTIMERCADO EXCLUSIVO'}.get(
+            ''.join(ch for ch in str(c) if ch.isdigit()), '')
+        try:
+            i_conta, i_doc = OPT_COLS.index('Contraparte (Conta)'), OPT_COLS.index('CPF/CNPJ Cliente Contraparte')
+            i_ap = OPT_COLS.index('Contraparte (Nome simplificado)')
+            LINHAS_OPT[0][i_conta], LINHAS_OPT[0][i_doc], LINHAS_OPT[0][i_ap] = '73760102', 'SUZANO SA', 'JPMORGANBM'
+            check('guarda-chuva (73760102): o nome sai do CNPJ resolvido, NAO do apelido',
+                  queries.opcao_prefill('CHASM26081V')['counterparty'], 'SUZANO SA')
+            LINHAS_OPT[0][i_doc] = '12.345.678/0001-90'
+            g = queries.opcao_prefill('CHASM26081V')
+            check('guarda-chuva com CNPJ sem cadastro: nome VAZIO avisando, nunca o banco',
+                  (g['counterparty'], 'cpty_not_registered' in [n['code'] for n in g['notes']]), ('', True))
+            LINHAS_OPT[0][i_conta], LINHAS_OPT[0][i_doc], LINHAS_OPT[0][i_ap] = '00041007', '', 'INTRAGLAWTONFDO'
+            check('outra conta (00041007): o nome sai do Reference Data pela CONTA CETIP',
+                  queries.opcao_prefill('CHASM26081V')['counterparty'], 'LAWTON MULTIMERCADO EXCLUSIVO')
+            LINHAS_OPT[0][i_conta] = '99999000'
+            s2 = queries.opcao_prefill('CHASM26081V')
+            check('conta fora do Reference Data: fica o apelido, AVISANDO que e ele',
+                  (s2['counterparty'], 'cpty_short_name' in [n['code'] for n in s2['notes']]),
+                  ('INTRAGLAWTONFDO', True))
+        finally:
+            R._lp_cpty_by_account = _conta_real
+        # `Strike/Limitador/Barreiras em Reais` = S: o preco ja esta em reais.
+        i_sr = OPT_COLS.index('Strike/Limitador/Barreiras em Reais')
+        LINHAS_OPT[0][i_sr] = 'S'
+        check('strike em reais (S): sem conversao, mesmo com moeda cotada estrangeira',
+              queries.opcao_prefill('CHASM26081V')['fields']['moeda'], 'BRL')
+        LINHAS_OPT[0][i_sr] = 'N'
+        check('strike fora de reais (N): a moeda cotada, e a paridade leva a reais',
+              queries.opcao_prefill('CHASM26081V')['fields']['moeda'], 'USD')
         check('o numero da confirmacao tambem acha', queries.opcao_prefill('D5YJ-QD5YF')['b3_id'],
               'CHASM26081V')
         # cambio: a PTAX de VENDA da moeda base, pela data de fixing do ativo
@@ -351,6 +470,52 @@ def main():
         check('simbolo fora do cadastro: o MOTIVO vai na nota (pede cadastro)',
               'quotes-commodity' in [n for n in s['notes'] if n['code'] == 'fixings_missing'][0]['params']['motivo'],
               True)
+
+        print('\n== 8b. o termo de MERCADORIA no NDF Calculator ==')
+        # O nocional e QUANTIDADE, o fixing e o PRECO do ativo — do Quotes, x 0,01
+        # quando o Index B3 diz centavos — e a paridade (a PTAX) leva a reais.
+        LINHAS_NDF.append(ndf_row(**{
+            'Contrato': '26C05550000', 'Codigo da Contraparte': '04880.00-6',
+            'Nome da Contraparte': 'COFCO INTERNATIONAL BRASIL SA', 'Simbolo da Moeda': 'USD',
+            'Classe do Ativo Subjacente': 'COMMODITIES', 'Codigo do Ativo Subjacente': 'CTZ6',
+            'Data de Vencimento': '18/09/2026', 'Data de Fixing da Moeda': '17/09/2026',
+            'Data de Fixing do Ativo Subjacente': '16/09/2026',
+            'Valor Base no registro': '100,000.00', 'Taxa Forward': '0.696',
+            'Descricao da posicao do Participante': 'COMPRADOR'}))
+        R._mapping_rows = lambda k: ([{'LABEL': 'CT"MY"', 'SYMBOL': 'CT"MY".NYB'}]
+                                     if k == 'quotes-commodity' else [])
+        Q.fetch_ohlc = _ohlc
+        SUBJ['CTZ6'] = {'Fator Conversao': 0.01}
+        _ptax_real2 = queries._ptax_do_fixing
+        queries._ptax_do_fixing = lambda moeda, fim, n: (5.4, date(2026, 9, 17), '')
+        try:
+            c = queries.ndf_prefill('26C05550000')
+            cf = c['fields']
+            check('mercadoria: o fixing e o PRECO do Quotes x 0,01 (74 c -> 0,74), nao a PTAX',
+                  (cf['fixing'], cf['fixing_auto']), ('0.7400', ''))
+            check('a paridade e a PTAX, marcada como automatica; e o ativo vai para a tela',
+                  (cf['paridade'], cf['paridade_auto'], cf['ativo']), ('5.4000', '1', 'CTZ6'))
+            check('as notas dizem Quotes, centavos e a PTAX da paridade',
+                  [n['code'] for n in c['notes']], ['fixings_from_quotes', 'quoted_in_cents', 'parity_ptax'])
+            h = cl.post('/tools/ndf-calculator', data={
+                'posicao': 'comprado', 'moeda': 'USD', 'nocional': '100000', 'taxa_termo': '0.696',
+                'fixing': '0.74', 'vencimento': '2026-09-18', 'ptax_offset': '1',
+                'classe': 'COMMODITIES', 'ativo': 'CTZ6', 'paridade': '', 'paridade_auto': ''}).data.decode('utf-8')
+            # 100.000 x (0,74 - 0,696) x 5,4 = 23.760,00
+            check('a conta: quantidade x (preco - termo) x paridade, em reais',
+                  ('23,760.00' in h, 'id="paridade" name="paridade" value="5.4000"' in h,
+                   'id="tl-ndf-commodity" >' in h or 'id="tl-ndf-commodity"  >' in h), (True, True, True))
+            h = cl.post('/tools/ndf-calculator', data={
+                'posicao': 'comprado', 'moeda': 'USD', 'nocional': '100000', 'taxa_termo': '0.696',
+                'fixing': '', 'vencimento': '2026-09-18', 'classe': 'COMMODITIES'}).data.decode('utf-8')
+            check('mercadoria com o fixing em branco NAO vira PTAX: erro dizendo de onde ele vem',
+                  ('PRICE of the underlying' in h, 'Settlement at maturity' in h), (True, False))
+            check('no termo de MOEDA o bloco da mercadoria nao aparece',
+                  'id="tl-ndf-commodity" hidden' in cl.get('/tools/ndf-calculator').data.decode('utf-8'), True)
+        finally:
+            queries._ptax_do_fixing = _ptax_real2
+            SUBJ.clear()
+            LINHAS_NDF.pop()
 
         print('\n== 9. o endpoint e as tres telas ==')
         R._mapping_rows = _o[4]
@@ -377,6 +542,7 @@ def main():
     finally:
         (R._lpndf_collect, R._lpopt_collect, R._b3_is_omnibus, R._ndfc_ir_exempt,
          R._mapping_rows, Q.fetch_ohlc, Q.fetch_ptax) = _o
+        R._subjacente_by_code = _subj_real
 
     print('\n%s' % ('TUDO OK' if not FALHAS else '%d FALHA(S): %s' % (len(FALHAS), FALHAS)))
     return 1 if FALHAS else 0

@@ -1014,6 +1014,42 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `_ptax_do_fixing` do Swap Calculator e dizem de que dia é; sem PTAX e sem
   número é erro em frase com o motivo. **O menu de Tools é em ORDEM ALFABÉTICA
   pelo rótulo em inglês** — item novo entra no lugar, não no fim.
+- **Calculadoras de NDF e de opção: mercadoria COTADA EM CENTAVOS multiplica o
+  preço do Quotes por 0,01** (§514, `_fator_de_centavos`): quem diz é o
+  `Fator Conversao` = 0,01 do Index B3 (`Subjacente`), pela MESMA regra da casa
+  do booking recap (`otc_boxparse._is_cents_factor` — só 0,01 é centavos, e a
+  regra é do ATIVO, nunca da moeda). O registro na B3 é em UNIDADE de moeda (o
+  strike do CTZ6 é 0,6960 US$/lb) e a bolsa cota em centavos (81,15 ¢/lb): sem
+  o fator a opção saía CEM vezes dentro do dinheiro, e a conta fechava consigo
+  mesma. A nota da tela DIZ que multiplicou. **O NDF Calculator cobre o termo de
+  MERCADORIA** (a classe do ativo que a posição trouxe): o nocional é
+  quantidade, o fixing é o PREÇO do ativo (do Quotes; média na asiática — série
+  pela metade não é média) e a PARIDADE, que é a PTAX, leva a diferença a reais;
+  ali o fixing em branco NÃO vira PTAX (seria a cotação da moeda no lugar do
+  preço) — é erro dizendo de onde ele vem. **A moeda da posição vem por NOME**
+  (`DOLAR DOS EUA`) ou código Sisbacen (`220`): quem traduz é o cadastro
+  `currency-base` (`_moeda_iso`), e coluna vazia cai na `Moeda` do ativo no
+  Index B3.
+- **Option Calculator: a contraparte NÃO é o `Nome simplificado` da posição**
+  (§513 — ele é apelido de conta: `JPMORGANBM`, `INTRAGLAWTONFDO`). Conta
+  GUARDA-CHUVA (a 73760.10-2; quem diz é o `b3-accounts` pelo TIPO, nunca o
+  número no código) → o cliente é o `CPF/CNPJ Cliente Contraparte`, que a tela
+  já resolve pelo Reference Data; documento sem cadastro deixa o nome VAZIO
+  avisando. Qualquer outra conta → o nome sai do Reference Data pela CONTA
+  CETIP (`_lp_cpty_by_account`, que recusa guarda-chuva e conta com mais de um
+  nome); sem cadastro fica o apelido, AVISANDO. **A comparação de conta é por
+  DÍGITOS**: a posição de NDF escreve `73760.10-2` e a de opção `73760102`. E
+  **a moeda do preço sai do `Strike/Limitador/Barreiras em Reais` (S/N)**: `S`
+  = sem conversão; `N` = a moeda cotada, com a paridade levando a reais.
+- **A taxa que a conta USOU volta para o CAMPO** (§512, NDF `fixing` e opção
+  `paridade`): em branco o Calculate busca a PTAX e a escreve no campo da
+  esquerda com a procedência embaixo, marcada como automática (`<campo>_auto`,
+  hidden). **Enquanto a marca existe o Calculate REBUSCA** — senão trocar o
+  vencimento deixaria a PTAX do vencimento anterior no campo, calada; digitar
+  no campo apaga a marca (`input[data-tl-auto]` no `tools.js`) e aí vale o
+  digitado. O prefill já traz a PTAX quando a data do fixing passou. **Data de
+  fixing no FUTURO não tem PTAX**: o `ptax_moeda` anda para trás sozinho e
+  devolveria a última cotação como se fosse a do fixing — é erro em frase.
 - **As três calculadoras puxam a POSIÇÃO pelo B3 ID** (§511, o esquema do Swap
   Calculator; `partials/tools-position-lookup.html` + `/api/tools/<tool>/prefill`
   + o IIFE `[data-tl-prefill]` do `tools.js`). A fonte é o MESMO coletor da tela

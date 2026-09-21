@@ -33,6 +33,13 @@
           flow: 'flow', pickId: 'Type a B3 ID first.', fromBase: 'from the imported base of',
           closeOf: 'close of',
           posLooking: 'Looking up the position…',
+          n_quoted_in_cents: '{ativo} is quoted in CENTS in the B3 Index (conversion factor 0.01): the Quotes prices were multiplied by 0.01',
+          n_parity_ptax: 'FX rate: PTAX {moeda} of {data} (BCB, ask)',
+          f_paridade: 'FX rate',
+          n_cpty_short_name: 'the account {conta} is not in the Reference Data — showing the position short name ({apelido})',
+          n_fixing_ptax: 'fixing: PTAX {moeda} of {data} (BCB, ask)',
+          n_fixing_failed: 'the PTAX of the fixing could not be fetched — {motivo}',
+          f_fixing: 'fixing',
           posFilled: 'Filled from the position of',
           posMissing: 'Could not pull (left blank):',
           posAssumed: 'Filled by approximation — check:',
@@ -90,6 +97,13 @@
           flow: 'fluxo', pickId: 'Digite um B3 ID primeiro.', fromBase: 'da base importada de',
           closeOf: 'fechamento de',
           posLooking: 'Consultando a posição…',
+          n_quoted_in_cents: '{ativo} é cotado em CENTAVOS no Index B3 (fator de conversão 0,01): os preços do Quotes foram multiplicados por 0,01',
+          n_parity_ptax: 'paridade: PTAX {moeda} de {data} (BCB, venda)',
+          f_paridade: 'FX rate',
+          n_cpty_short_name: 'a conta {conta} não está no Reference Data — mostrando o apelido da posição ({apelido})',
+          n_fixing_ptax: 'fixing: PTAX {moeda} de {data} (BCB, venda)',
+          n_fixing_failed: 'não foi possível buscar a PTAX do fixing — {motivo}',
+          f_fixing: 'fixing',
           posFilled: 'Preenchido pela posição de',
           posMissing: 'Não deu para puxar (ficou em branco):',
           posAssumed: 'Preenchido por aproximação — confira:',
@@ -147,6 +161,13 @@
           flow: 'flujo', pickId: 'Escriba un B3 ID primero.', fromBase: 'de la base importada de',
           closeOf: 'cierre de',
           posLooking: 'Consultando la posición…',
+          n_quoted_in_cents: '{ativo} cotiza en CENTAVOS en el Index B3 (factor de conversión 0,01): los precios de Quotes se multiplicaron por 0,01',
+          n_parity_ptax: 'paridad: PTAX {moeda} del {data} (BCB, venta)',
+          f_paridade: 'FX rate',
+          n_cpty_short_name: 'la cuenta {conta} no está en el Reference Data — mostrando el apodo de la posición ({apelido})',
+          n_fixing_ptax: 'fixing: PTAX {moeda} del {data} (BCB, venta)',
+          n_fixing_failed: 'no se pudo obtener la PTAX del fixing — {motivo}',
+          f_fixing: 'fixing',
           posFilled: 'Completado con la posición de',
           posMissing: 'No se pudo traer (quedó en blanco):',
           posAssumed: 'Completado por aproximación — verifique:',
@@ -832,6 +853,18 @@
     });
   })();
 
+  // ── Taxa que veio da PTAX: digitar no campo apaga a marca de automática ──
+  // O Calculate REBUSCA a PTAX enquanto a marca estiver lá (trocar o vencimento
+  // não pode deixar a cotação antiga no campo). Quem digita passa a mandar.
+  page.querySelectorAll('input[data-tl-auto]').forEach(function (el) {
+    el.addEventListener('input', function () {
+      var marca = document.getElementById(el.getAttribute('data-tl-auto'));
+      var nota = document.getElementById(el.getAttribute('data-tl-auto') + '_nota');
+      if (marca) marca.value = '';
+      if (nota) nota.textContent = '';
+    });
+  });
+
   // ── NDF · Unwind NDF · Option: o B3 ID puxa a POSIÇÃO (o esquema do Swap) ──
   // Genérico: o bloco `[data-tl-prefill]` diz o endpoint, e o servidor devolve
   // `fields` pelo id/nome do campo. O que não veio fica em branco e marcado
@@ -877,6 +910,20 @@
       Object.keys(d.fields || {}).forEach(function (k) { setCampo(k, d.fields[k]); });
       setCampo('b3_id', d.b3_id || inp.value);
       emissao();
+      // NDF: o bloco do termo de MERCADORIA (paridade + ativo) segue a classe
+      var merc = document.getElementById('tl-ndf-commodity');
+      if (merc) merc.hidden = !/commodit/i.test((d.fields || {}).classe || '');
+      (d.notes || []).forEach(function (n) {
+        if (n.code !== 'parity_ptax') return;
+        var np = document.getElementById('paridade_auto_nota');
+        if (np) np.textContent = 'PTAX ' + n.params.moeda + ' ' + n.params.data;
+      });
+      // a taxa que veio da PTAX diz de que dia é, embaixo do próprio campo
+      (d.notes || []).forEach(function (n) {
+        if (n.code !== 'fixing_ptax') return;
+        var nota = document.getElementById('fixing_auto_nota');
+        if (nota) nota.textContent = 'PTAX ' + n.params.moeda + ' ' + n.params.data;
+      });
       (d.missing || []).forEach(function (n) { mark(n, 'tl-missing'); marcados.push(n); });
       (d.assumed || []).forEach(function (n) { mark(n, 'tl-assumed'); marcados.push(n); });
       var html = '<strong>' + t('posFilled') + ' ' + esc((d.source_date || '').split('-').reverse().join('/')) + '</strong>';

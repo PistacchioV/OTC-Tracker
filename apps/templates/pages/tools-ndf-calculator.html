@@ -66,11 +66,36 @@
                     </div>
                     <div class="col-6 tl-field">
                         <label for="fixing" data-lang="tl-ndf-fixing">Fixing (blank = PTAX)</label>
-                        <input class="form-control form-control-sm" id="fixing" name="fixing" value="{{ form.fixing }}" inputmode="decimal" data-format="fx">
+                        <input class="form-control form-control-sm" id="fixing" name="fixing" value="{{ form.fixing }}" inputmode="decimal" data-format="fx" data-tl-auto="fixing_auto">
+                        {# A taxa que a conta USOU volta para cá, com a procedência. A marca
+                           `fixing_auto` diz que ela veio da PTAX: o Calculate a REBUSCA (trocar
+                           o vencimento não deixa a PTAX antiga), e digitar no campo a apaga. #}
+                        <input type="hidden" id="fixing_auto" name="fixing_auto" value="{{ form.fixing_auto }}">
+                        <p class="tl-help" id="fixing_auto_nota">{{ resultado.fixing_nota if resultado and form.fixing_auto else '' }}</p>
                     </div>
                     <div class="col-6 tl-field">
                         <label for="ptax_offset" data-lang="tl-ndf-offset">Fixing offset (business days)</label>
                         <input class="form-control form-control-sm" id="ptax_offset" name="ptax_offset" value="{{ form.ptax_offset }}" inputmode="numeric" data-format="int">
+                    </div>
+                    {# Termo de MERCADORIA (a classe do ativo que a posição trouxe): o
+                       nocional é QUANTIDADE, o fixing é o PREÇO do ativo — do Quotes, × 0,01
+                       quando o Index B3 diz que ele é cotado em centavos — e a paridade leva a
+                       diferença a reais. No termo de moeda este bloco não aparece. #}
+                    {% set e_mercadoria = 'commodit' in (form.classe or '') | lower %}
+                    <div class="col-12" id="tl-ndf-commodity" {{ '' if e_mercadoria else 'hidden' }}>
+                        <div class="row g-2">
+                            <div class="col-6 tl-field">
+                                <label for="paridade" data-lang="tl-ndf-parity">FX rate to BRL (blank = PTAX)</label>
+                                <input class="form-control form-control-sm" id="paridade" name="paridade" value="{{ form.paridade }}" inputmode="decimal" data-format="fx" data-tl-auto="paridade_auto">
+                                <input type="hidden" id="paridade_auto" name="paridade_auto" value="{{ form.paridade_auto }}">
+                                <p class="tl-help" id="paridade_auto_nota">{{ resultado.paridade_nota if resultado and form.paridade_auto else '' }}</p>
+                            </div>
+                            <div class="col-6 tl-field">
+                                <label for="ativo" data-lang="tl-ndf-underlying">Underlying asset</label>
+                                <input class="form-control form-control-sm" id="ativo" name="ativo" value="{{ form.ativo }}" readonly tabindex="-1">
+                            </div>
+                            <div class="col-12"><p class="tl-help mb-0" data-lang="tl-ndf-commodity-help">Commodity forward: the notional is a quantity, the fixing is the PRICE of the underlying (from Quotes, × 0.01 when the B3 Index says it is quoted in cents) and the FX rate takes the difference to BRL.</p></div>
+                        </div>
                     </div>
                     <div class="col-12"><p class="tl-help" data-lang="tl-ndf-fixing-help">Blank, the fixing is the BCB selling PTAX of the maturity minus the offset (ANBIMA business days) — 1 is the usual D-1. Outside the currencies the BCB publishes, type it in.</p></div>
                     <div class="col-12">
@@ -102,6 +127,9 @@
                     <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-ndf-forward-s">Forward rate</div><div class="tl-stat__value">{{ r.taxa_termo | tl_fixed(8) }}</div></div>
                     <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-ndf-fixing-s">Fixing</div><div class="tl-stat__value">{{ r.fixing | tl_fixed(8) }}</div><div class="tl-stat__note">{{ resultado.fixing_nota or '' }}</div></div>
                     <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-ndf-diff">Fixing − forward</div><div class="tl-stat__value">{{ r.diferenca | tl_fixed(8) }}</div></div>
+                    {% if r.paridade != 1 %}
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-opt-fx-s">FX rate</div><div class="tl-stat__value">{{ r.paridade | tl_fixed(8) }}</div><div class="tl-stat__note">{{ resultado.paridade_nota or '' }}</div></div>
+                    {% endif %}
                     <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-ndf-ir">Income tax (0.005%)</div><div class="tl-stat__value">R$ {{ r.ir | tl_money(2) }}</div><div class="tl-stat__note">{% if r.isento %}<span data-lang="tl-ndf-ir-exempt">exempt counterparty</span>{% elif r.direcao != 'PAY' %}<span data-lang="tl-ndf-ir-none">only when the bank pays</span>{% endif %}</div></div>
                     {% if r.liquido_cliente is not none %}
                     <div class="tl-stat tl-stat--hi"><div class="tl-stat__label" data-lang="tl-ndf-net-client">Net to the client</div><div class="tl-stat__value">R$ {{ r.liquido_cliente | tl_money(2) }}</div></div>
@@ -110,7 +138,7 @@
             </div>
             <div class="tl-card">
                 <p class="tl-title" data-lang="tl-how">How the number is built</p>
-                <p class="tl-sub mb-0">{{ r.nocional_me | tl_money(2) }} {{ resultado.moeda }} × ({{ r.fixing | tl_fixed(8) }} − {{ r.taxa_termo | tl_fixed(8) }}) × {{ '+1' if r.sinal > 0 else '−1' }} = <strong>R$ {{ r.liquidacao | tl_money(2) }}</strong></p>
+                <p class="tl-sub mb-0">{{ r.nocional_me | tl_money(2) }} {{ resultado.moeda }} × ({{ r.fixing | tl_fixed(8) }} − {{ r.taxa_termo | tl_fixed(8) }}) × {{ '+1' if r.sinal > 0 else '−1' }}{% if r.paridade != 1 %} × {{ r.paridade | tl_fixed(8) }}{% endif %} = <strong>R$ {{ r.liquidacao | tl_money(2) }}</strong></p>
             </div>
             <div class="tl-note" data-lang="tl-ndf-ir-note">The 0.005% is withheld on the settlement the BANK pays. A tax below R$ 1.00 is not withheld and accrues against the counterparty for the month — that floor depends on the month's bucket and cannot be decided from one trade, so this page shows the tax of the trade alone.</div>
             {% else %}

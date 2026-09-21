@@ -79,7 +79,9 @@
                     </div>
                     <div class="col-4 tl-field">
                         <label for="paridade" data-lang="tl-opt-fx">FX rate (blank = PTAX)</label>
-                        <input class="form-control form-control-sm" id="paridade" name="paridade" value="{{ form.paridade }}" inputmode="decimal" data-format="fx">
+                        <input class="form-control form-control-sm" id="paridade" name="paridade" value="{{ form.paridade }}" inputmode="decimal" data-format="fx" data-tl-auto="paridade_auto">
+                        <input type="hidden" id="paridade_auto" name="paridade_auto" value="{{ form.paridade_auto }}">
+                        <p class="tl-help" id="paridade_auto_nota">{{ resultado.paridade_nota if resultado and form.paridade_auto else '' }}</p>
                     </div>
                     <div class="col-4 tl-field">
                         <label for="ptax_offset" data-lang="tl-ndf-offset">Fixing offset (business days)</label>

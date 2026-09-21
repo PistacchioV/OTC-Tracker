@@ -814,19 +814,43 @@ def swap_prefill(b3_id):
 # MESMA função do Swap Calculator — e a resposta diz de que dia ela é.
 
 def _ptax_ou_digitado(form, campo, rotulo, moeda, data_iso, deslocamento):
-    """`(valor, nota)`: o que a mesa digitou, ou a PTAX do dia (D-n úteis ANBIMA
-    de `data_iso`). Sem número e sem PTAX é erro com o MOTIVO — fixing chutado
-    muda a conta inteira e ela continua fechando consigo mesma."""
+    """`(valor, nota)`: o que a mesa digitou, ou a PTAX de venda do dia (D-n úteis
+    ANBIMA de `data_iso`). Sem número e sem PTAX é erro com o MOTIVO — fixing
+    chutado muda a conta inteira e ela continua fechando consigo mesma.
+
+    **O campo volta PREENCHIDO com a taxa usada** (mesa, 21/09/2026), marcado
+    como automático (`<campo>_auto`): é ele que a mesa confere, e a taxa só no
+    quadro do resultado obrigava a procurar do outro lado da tela o número que a
+    conta usou. Enquanto a marca estiver lá o Calculate REBUSCA — senão trocar o
+    vencimento deixaria a PTAX do vencimento anterior no campo, calada; digitar
+    no campo apaga a marca (o `tools.js`), e aí vale o digitado.
+
+    **Data de fixing no FUTURO não tem PTAX**: o `ptax_moeda` anda para trás
+    sozinho e devolveria a última cotação como se fosse a do fixing."""
     bruto = str(form.get(campo) or '').strip()
-    if bruto:
+    automatico = str(form.get(campo + '_auto') or '').strip() == '1'
+    if bruto and not automatico:
         return domain.decimal(bruto, rotulo), ''
     if str(moeda or '').upper() == liquidacao.SEM_CONVERSAO:
         return 1.0, ''
+    n = int(deslocamento or 0)
+    alvo = para_data(data_iso)
+    quando = calendario.calendario_anbima().workday(alvo, -n) if n else alvo
+    if quando > date.today():
+        raise domain.ErroFormulario(
+            '{rotulo}: the fixing date ({quando}) is still in the future — there is no PTAX '
+            'for it yet, type the rate', rotulo=rotulo, quando='{:%d/%m/%Y}'.format(quando))
     valor, quando, erro = _ptax_do_fixing(moeda, data_iso, deslocamento)
     if valor is None:
         raise domain.ErroFormulario('{rotulo}: type it in — {motivo}', rotulo=rotulo,
                                     motivo=erro or 'no PTAX for that day')
     return valor, 'PTAX {} {:%d/%m/%Y}'.format(str(moeda).upper(), quando)
+
+
+def _de_volta_ao_campo(campo, valor, nota):
+    """O que o Calculate escreve de volta no formulário: a taxa USADA e a marca
+    de automática (só quando ela veio da PTAX)."""
+    return {campo: domain.fx8(valor), campo + '_auto': '1' if nota else ''}
 
 
 def _inteiro(form, campo, padrao):
@@ -843,15 +867,33 @@ def calcular_ndf(form):
     from apps.pages.precificador import derivativos
     moeda = (form.get('moeda') or 'USD').strip().upper()
     vencimento = para_data(form.get('vencimento') or '')
-    fixing, nota = _ptax_ou_digitado(form, 'fixing', 'fixing', moeda, vencimento.isoformat(),
-                                     _inteiro(form, 'ptax_offset', 1))
+    offset = _inteiro(form, 'ptax_offset', 1)
+    mercadoria = _e_mercadoria(form.get('classe') or '')
+    paridade, nota_par, update = 1.0, '', {}
+    if mercadoria:
+        # O fixing é o PREÇO do ativo (do Quotes, pelo B3 ID) — a PTAX aqui
+        # seria a cotação da moeda no lugar do preço da mercadoria. Em branco é
+        # erro dizendo de onde ele vem; a PTAX é a PARIDADE, que leva a reais.
+        bruto = str(form.get('fixing') or '').strip()
+        if not bruto:
+            raise domain.ErroFormulario(
+                'fixing: for a commodity forward it is the PRICE of the underlying — pull it '
+                'with the B3 ID (it comes from Quotes) or type it in')
+        fixing, nota = domain.decimal(bruto, 'fixing'), ''
+        paridade, nota_par = _ptax_ou_digitado(form, 'paridade', 'FX rate', moeda,
+                                               vencimento.isoformat(), offset)
+        update = _de_volta_ao_campo('paridade', paridade, nota_par)
+    else:
+        fixing, nota = _ptax_ou_digitado(form, 'fixing', 'fixing', moeda, vencimento.isoformat(), offset)
+        update = _de_volta_ao_campo('fixing', fixing, nota)
     r = derivativos.liquidar_ndf(
         nocional=domain.numero_do_form(form, 'nocional', 'notional'),
         taxa_termo=domain.numero_do_form(form, 'taxa_termo', 'forward rate'),
         fixing=fixing, posicao=form.get('posicao') or '',
         fixo_em_reais=domain.ligado(form, 'fixo_em_reais'),
-        isento_ir=domain.ligado(form, 'isento_ir'))
-    return {'r': r, 'moeda': moeda, 'vencimento': vencimento, 'fixing_nota': nota}
+        isento_ir=domain.ligado(form, 'isento_ir'), paridade=paridade)
+    return {'r': r, 'moeda': moeda, 'vencimento': vencimento, 'fixing_nota': nota,
+            'paridade_nota': nota_par, 'mercadoria': mercadoria, 'form_update': update}
 
 
 def calcular_unwind_ndf(form):
@@ -893,7 +935,9 @@ def calcular_opcao(form):
         fixings=fixings, paridade=paridade,
         premio_unitario=domain.numero_do_form(form, 'premio_unitario', 'unit premium', 0.0),
         paridade_premio=domain.decimal(par_premio, 'premium FX rate') if par_premio else None)
-    return {'r': r, 'moeda': moeda, 'exercicio': exercicio, 'paridade_nota': nota}
+    return {'r': r, 'moeda': moeda, 'exercicio': exercicio, 'paridade_nota': nota,
+            'form_update': (_de_volta_ao_campo('paridade', paridade, nota)
+                            if moeda != liquidacao.SEM_CONVERSAO else {})}
 
 
 # ── B3 ID → a posição preenche a calculadora (NDF, recompra e opção) ─────────
@@ -1000,6 +1044,29 @@ def _contraparte_ndf(cel):
     return (titular or nome_cnpj), None
 
 
+def _datas_de_verificacao_ndf(cel):
+    """As datas em que o termo de MERCADORIA verifica o preço: o bloco `Média
+    Asiática (data) N`; sem ele, a `Data de Fixing do Ativo Subjacente`; sem
+    ela, o vencimento."""
+    asiaticas = []
+    for coluna, valor in cel.items():
+        if domain.norm(coluna).startswith('media asiatica (data)'):
+            iso = _data_tela(valor)
+            if iso:
+                asiaticas.append(para_data(iso))
+    if asiaticas:
+        return sorted(set(asiaticas))
+    for coluna in ('Data de Fixing do Ativo Subjacente', 'Data de Vencimento'):
+        iso = _data_tela(cel.get(coluna))
+        if iso:
+            return [para_data(iso)]
+    return []
+
+
+def _e_mercadoria(classe):
+    return 'commodit' in domain.norm(classe)
+
+
 def _ndf_da_posicao(b3_id):
     from apps.pages.precificador import derivativos
     cel, fonte = _linha_da_posicao(_R()._lpndf_collect, b3_id, ('Contrato', 'Codigo Identificador'))
@@ -1023,11 +1090,15 @@ def _ndf_da_posicao(b3_id):
         except ErroDeDado:
             offset = None
     return {
+        'ativo': cel.get('Codigo do Ativo Subjacente', ''),
+        'datas_ativo': _datas_de_verificacao_ndf(cel),
         'contrato': cel.get('Contrato', ''), 'contraparte': contraparte,
         'aviso_contraparte': aviso_cpty,
         'emissao': _data_tela(cel.get('Data de Emissao')),
         'classe': cel.get('Classe do Ativo Subjacente', ''),
-        'moeda': cel.get('Simbolo da Moeda', '').upper(), 'posicao': posicao,
+        'moeda': (_moeda_iso(cel.get('Simbolo da Moeda', ''))
+                  or _moeda_iso(_subjacente(cel.get('Codigo do Ativo Subjacente', '')).get('Moeda'))),
+        'posicao': posicao,
         'registro': registro, 'antecipado': antecipado,
         'saldo': None if registro is None else max(registro - antecipado, 0.0),
         'taxa': (_num_tela(cel.get('Taxa Forward'), taxa=True)
@@ -1076,9 +1147,57 @@ def ndf_prefill(b3_id):
     # dividido pelo strike no registro — §488)
     campos['fixo_em_reais'] = False
     campos['isento_ir'] = bool(pos['contraparte'] and _R()._ndfc_ir_exempt(pos['contraparte']))
-    campos['fixing'] = ''            # em branco = a PTAX do BCB no Calculate
+    # O fixing já vem no CAMPO quando a data dele passou (a PTAX de venda do
+    # BCB, D-n do vencimento); no futuro fica em branco — ainda não existe.
+    campos['fixing'], campos['fixing_auto'] = '', ''
+    campos['paridade'], campos['paridade_auto'], campos['ativo'] = '', '', pos['ativo']
+    nota_fix = None
+    notas_merc = []
+    if _e_mercadoria(pos['classe']):
+        # Termo de MERCADORIA: o nocional é QUANTIDADE, o fixing é o PREÇO do
+        # ativo — do Quotes, × 0,01 quando o Index B3 diz que ele é cotado em
+        # centavos —, e a PARIDADE (a PTAX) leva a diferença a reais. Na
+        # asiática o fixing é a média da série; série pela metade não é média.
+        precos, sem, fonte_q, erro_q = _fixings_do_quotes(pos['classe'], pos['ativo'], pos['datas_ativo'])
+        if precos and not sem:
+            campos['fixing'] = domain.fx8(sum(p for _d, p, _dia in precos) / len(precos))
+            notas_merc.append({'code': 'fixings_from_quotes', 'params': {
+                'n': len(precos), 'fonte': fonte_q, 'de': '{:%d/%m/%Y}'.format(precos[0][0]),
+                'ate': '{:%d/%m/%Y}'.format(precos[-1][0])}})
+            if '\u00d7' in fonte_q:
+                notas_merc.append({'code': 'quoted_in_cents', 'params': {'ativo': pos['ativo']}})
+        else:
+            falt.append('fixing')
+            notas_merc.append({'code': 'fixings_missing', 'params': {
+                'n': len(sem), 'motivo': erro_q,
+                'datas': ', '.join('{:%d/%m/%Y}'.format(d) for d in sem[:6])}})
+        if pos['vencimento'] and campos['moeda']:
+            n = int(pos['offset']) if pos['offset'] is not None else 1
+            alvo = para_data(pos['vencimento'])
+            quando = calendario.calendario_anbima().workday(alvo, -n) if n else alvo
+            if quando <= date.today():
+                valor, quando, erro = _ptax_do_fixing(campos['moeda'], pos['vencimento'], n)
+                if valor is not None:
+                    campos['paridade'], campos['paridade_auto'] = domain.fx8(valor), '1'
+                    notas_merc.append({'code': 'parity_ptax', 'params': {
+                        'moeda': campos['moeda'], 'data': '{:%d/%m/%Y}'.format(quando)}})
+    elif pos['vencimento'] and campos['moeda']:
+        n = int(pos['offset']) if pos['offset'] is not None else 1
+        alvo = para_data(pos['vencimento'])
+        quando = calendario.calendario_anbima().workday(alvo, -n) if n else alvo
+        if quando <= date.today():
+            valor, quando, erro = _ptax_do_fixing(campos['moeda'], pos['vencimento'], n)
+            if valor is not None:
+                campos['fixing'], campos['fixing_auto'] = domain.fx8(valor), '1'
+                nota_fix = {'code': 'fixing_ptax', 'params': {
+                    'moeda': campos['moeda'], 'data': '{:%d/%m/%Y}'.format(quando)}}
+            else:
+                falt.append('fixing')
+                nota_fix = {'code': 'fixing_failed', 'params': {'motivo': erro}}
     campos.update(_do_contrato(pos))
-    notas = [{'code': 'unwound_before', 'params': {'valor': pos['antecipado']}}] if pos['antecipado'] else []
+    notas = ([nota_fix] if nota_fix else []) + notas_merc
+    if pos['antecipado']:
+        notas.append({'code': 'unwound_before', 'params': {'valor': pos['antecipado']}})
     if pos['aviso_contraparte']:
         notas.append(pos['aviso_contraparte'])
     return {'found': True, 'b3_id': pos['contrato'] or b3_id, 'source_date': fonte,
@@ -1123,6 +1242,90 @@ def unwind_ndf_prefill(b3_id):
             'notes': [pos['aviso_contraparte']] if pos['aviso_contraparte'] else []}
 
 
+def _moeda_iso(texto):
+    """O código ISO de uma moeda como a POSIÇÃO a escreve — o próprio código
+    (`USD`), o nome (`DOLAR DOS EUA`) ou o código Sisbacen (`220`). Quem traduz é
+    o cadastro `currency-base` (`DESCRICAO DO CAMPO`/`CODIGO DE CADASTRO` →
+    `SIMBOLO`): nome de moeda não se fixa no código. '' quando nada responde."""
+    bruto = str(texto or '').strip().upper()
+    if not bruto:
+        return ''
+    conhecidas = {m.codigo for m in liquidacao.MOEDAS}
+    if bruto in conhecidas:
+        return bruto
+    if 'REAL' in bruto or bruto in ('R$', 'BRR'):
+        return liquidacao.SEM_CONVERSAO
+    alvo, digitos = domain.norm(bruto), bruto.lstrip('0')
+    try:
+        linhas = _R()._mapping_rows('currency-base') or []
+    except Exception:                                       # noqa: BLE001
+        linhas = []
+    for row in linhas:
+        simbolo = str(row.get('SIMBOLO') or '').strip().upper()
+        if not simbolo:
+            continue
+        if (domain.norm(row.get('DESCRICAO DO CAMPO', '')) == alvo
+                or (bruto.isdigit() and str(row.get('CODIGO DE CADASTRO') or '').strip().lstrip('0') == digitos)):
+            return simbolo if simbolo in conhecidas else ''
+    return ''
+
+
+def _subjacente(ativo):
+    """A linha do Index B3 (`Subjacente`) do ativo, ou {}."""
+    try:
+        return _R()._subjacente_by_code().get(str(ativo or '').strip().upper()) or {}
+    except Exception:                                       # noqa: BLE001
+        return {}
+
+
+def _fator_de_centavos(ativo):
+    """0.01 quando a mercadoria é COTADA EM CENTAVOS — `Fator Conversao` = 0,01
+    no Index B3 —, senão 1.0 (mesa, 21/09/2026). É a MESMA regra da casa para o
+    strike do booking recap (`_is_cents_factor`: só 0,01 é centavos, e a regra é
+    do ATIVO, nunca da moeda): o registro na B3 é em UNIDADE de moeda (o strike
+    do CTZ6 é 0,6960 US$/lb) e a bolsa cota em centavos (81,15 ¢/lb) — sem o
+    fator a opção sairia cem vezes dentro do dinheiro."""
+    from apps.pages import otc_boxparse
+    return 0.01 if otc_boxparse._is_cents_factor(_subjacente(ativo).get('Fator Conversao')) else 1.0
+
+
+def _contraparte_opcao(cel):
+    """`(nome, nota)` da contraparte de uma OPÇÃO (mesa, 21/09/2026) — o `Nome
+    simplificado` da posição é apelido de conta (`JPMORGANBM`,
+    `INTRAGLAWTONFDO`) e não identifica ninguém:
+
+      * conta GUARDA-CHUVA (a 73760.10-2 — quem diz é o `b3-accounts`, pelo
+        TIPO, nunca o número no código): o cliente é o `CPF/CNPJ Cliente
+        Contraparte`, que a tela já resolve pelo Reference Data. Documento sem
+        cadastro deixa o nome VAZIO avisando — o titular ali é o banco;
+      * qualquer outra conta: o nome sai do Reference Data pela CONTA CETIP
+        (`_lp_cpty_by_account`, que recusa guarda-chuva e conta com mais de um
+        nome). Sem cadastro, fica o apelido da posição — AVISANDO que é ele."""
+    R = _R()
+    conta = cel.get('Contraparte (Conta)', '')
+    doc = cel.get('CPF/CNPJ Cliente Contraparte', '')
+    apelido = cel.get('Contraparte (Nome simplificado)', '')
+    try:
+        omnibus = bool(R._b3_is_omnibus(conta))
+    except Exception:                                       # noqa: BLE001
+        omnibus = False
+    if omnibus:
+        if doc and not _e_documento(doc):
+            return doc, None
+        return '', {'code': 'cpty_not_registered', 'params': {'taxid': doc}}
+    nome = ''
+    try:
+        nome = R._lp_cpty_by_account(conta) or ''
+    except Exception:                                       # noqa: BLE001
+        nome = ''
+    if nome:
+        return nome, None
+    # a coluna do documento, quando a posição a traz resolvida, também responde
+    if doc and not _e_documento(doc):
+        return doc, None
+    return apelido, {'code': 'cpty_short_name', 'params': {'conta': conta, 'apelido': apelido}}
+
+
 def _fixings_do_quotes(classe, ativo, datas):
     """Os preços de verificação de uma opção, do QUOTES (mesa, 21/09/2026) —
     `(precos, faltando, fonte, erro)`: `precos` = [(data pedida, preço, data do
@@ -1164,9 +1367,16 @@ def _fixings_do_quotes(classe, ativo, datas):
     except Exception as exc:                                # noqa: BLE001
         _R().log.warning('[tools] fixings de %s (%s) falharam: %s', ativo, classe, exc)
         return [], datas, '', str(exc)
+    # Commodity cotada em CENTAVOS (Fator Conversão 0,01 no Index B3): o preço do
+    # Quotes é multiplicado pelo fator, para ficar na unidade do strike da B3.
+    fator = _fator_de_centavos(ativo) if 'commodit' in cl else 1.0
+    if fator != 1.0:
+        fonte = '{} \u00d7 {:g}'.format(fonte, fator)
     pregoes = []
     for dia_txt, celula in serie:
         preco = _preco_da_celula(celula)
+        if preco is not None:
+            preco = preco * fator
         try:
             dia = datetime.strptime(str(dia_txt), '%d/%m/%Y').date()
         except (ValueError, TypeError):
@@ -1248,16 +1458,20 @@ def opcao_prefill(b3_id):
         falt.append('exercicio')
     premio = _num_tela(cel.get('Prêmio Unitário'), taxa=True)
     campos['premio_unitario'] = domain.fx8(premio) if premio else ''
-    # a moeda do PREÇO: a cotada. Real (ou nada reconhecível) = sem conversão.
-    cotada = cel.get('Moeda do ativo / Moeda cotada', '').upper()
-    conhecidas = {m.codigo for m in liquidacao.MOEDAS}
-    if cotada in conhecidas:
-        campos['moeda'] = cotada
-    elif 'REAL' in cotada or cotada in ('BRL', 'R$'):
+    # A moeda do PREÇO. Quem diz se o strike já está em reais é a própria
+    # posição — `Strike/Limitador/Barreiras em Reais` (S/N): com `S` não há
+    # conversão; com `N` o preço é na moeda cotada e a paridade leva a reais.
+    em_reais = domain.norm(cel.get('Strike/Limitador/Barreiras em Reais', ''))[:1]
+    # O nome da moeda (`DOLAR DOS EUA`) vira código pelo cadastro `currency-base`;
+    # coluna vazia, responde a `Moeda` do próprio ativo no Index B3.
+    ativo = cel.get('Ativo subjacente / Moeda base', '')
+    if em_reais == 's':
         campos['moeda'] = liquidacao.SEM_CONVERSAO
     else:
-        campos['moeda'] = ''
-        falt.append('moeda')
+        campos['moeda'] = (_moeda_iso(cel.get('Moeda do ativo / Moeda cotada', ''))
+                           or _moeda_iso(_subjacente(ativo).get('Moeda')))
+        if not campos['moeda']:
+            falt.append('moeda')
     campos['paridade'], campos['paridade_premio'] = '', ''
     # Os preços de verificação vêm do QUOTES: um na vanilla, a série na asiática.
     datas = _datas_de_verificacao(cel)
@@ -1266,6 +1480,8 @@ def opcao_prefill(b3_id):
     campos['fixings'] = '\n'.join(domain.fx8(p) for _d, p, _dia in precos)
     if len(datas) > 1:
         notas.append({'code': 'asian', 'params': {'n': len(datas)}})
+    if precos and '\u00d7' in fonte_q:
+        notas.append({'code': 'quoted_in_cents', 'params': {'ativo': ativo}})
     if precos:
         notas.append({'code': 'fixings_from_quotes',
                       'params': {'n': len(precos), 'fonte': fonte_q,
@@ -1280,11 +1496,14 @@ def opcao_prefill(b3_id):
                                  'datas': ', '.join('{:%d/%m/%Y}'.format(d) for d in sem[:6])}})
     if any(_num_tela(cel.get(c)) for c in ('Barreira de KI', 'Barreira de KO')):
         notas.append({'code': 'has_barrier', 'params': {}})
-    campos.update({'counterparty': cel.get('Contraparte (Nome simplificado)', ''),
+    contraparte, nota_cpty = _contraparte_opcao(cel)
+    if nota_cpty:
+        notas.append(nota_cpty)
+    campos.update({'counterparty': contraparte,
                    'data_emissao': _data_tela(cel.get('Data Registro')),
                    'classe': ' · '.join(x for x in (cel.get('Classe do ativo subjacente', ''),
                                                     cel.get('Ativo subjacente / Moeda base', '')) if x)})
     return {'found': True, 'b3_id': cel.get('Código IF', '') or b3_id, 'source_date': fonte,
-            'counterparty': cel.get('Contraparte (Nome simplificado)', ''),
+            'counterparty': contraparte,
             'fields': campos, 'missing': falt, 'assumed': assumido, 'notes': notas}
 

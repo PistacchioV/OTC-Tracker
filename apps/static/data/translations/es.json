@@ -2710,5 +2710,8 @@
   "tl-pos-class": "Clase del activo subyacente",
   "tl-ndf-lookup-help": "Contrato o Código Identificador de Live Position › NDF. La posición del último día hábil completa contraparte, moneda, el nocional aún abierto (valor base − recomprado), tasa forward, vencimiento y el lado del banco; el fixing queda en blanco para la PTAX.",
   "tl-unw-lookup-help": "Contrato o Código Identificador de Live Position › NDF. La posición completa el contrato ORIGINAL — contraparte, moneda, strike, vencimiento, lado, valor base y lo ya recomprado. La tasa de la recompra y la tasa pre son del negocio del día y quedan para usted.",
-  "tl-opt-lookup-help": "Código IF o número de confirmación de Live Position › Option. La posición completa tipo, lado, strike, cantidad abierta, fecha de ejercicio y prima unitaria, y los precios de verificación vienen de Quotes — uno en la vanilla, la serie completa en la asiática."
+  "tl-opt-lookup-help": "Código IF o número de confirmación de Live Position › Option. La posición completa tipo, lado, strike, cantidad abierta, fecha de ejercicio y prima unitaria, y los precios de verificación vienen de Quotes — uno en la vanilla, la serie completa en la asiática.",
+  "tl-ndf-parity": "Paridad a reales (en blanco = PTAX)",
+  "tl-ndf-underlying": "Activo subyacente",
+  "tl-ndf-commodity-help": "Forward de mercancía: el nocional es cantidad, el fixing es el PRECIO del activo (de Quotes, × 0,01 cuando el Index B3 dice que cotiza en centavos) y la paridad lleva la diferencia a reales."
 }
