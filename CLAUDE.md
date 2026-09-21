@@ -997,6 +997,21 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   do `swap-ir-client` vence a direção (a regra do Trade Level, pelas mesmas
   `_swap_ir_excecao`/`_swap_ir_faixas` da platform), fora dela as faixas do
   `swap-ir-term` só com o banco pagando. `check_tools_descricao.py`.
+- **Swap Calculator, perna de EQUITY: o `Cupom Limpo` da posição pode ser um
+  PERCENTUAL, e quem diz é a Denominação** (§507). `Preco in ativo - 100.00%
+  Close 20-Sep-24` = o preço inicial é o FECHAMENTO do papel naquele pregão ×
+  o cupom (`queries.aplicar_cupom_limpo`, `domain.preco_inicial_do_cupom`); a
+  tela punha o `100.0000` no Initial price e a conta fechava consigo mesma. O
+  interpretador lê `cupom_limpo` e `cupom_data` (`% Close`, `1.5 Close` = fator
+  150%, `% Spot`, `Preco Inicial: x%`; meses em inglês e português), e a tela
+  mostra o trio cupom · fechamento · preço lado a lado, replicando o terceiro
+  no Initial price — que continua sendo o campo que o cálculo lê. **Só age
+  quando a denominação declarou o cupom**: sem isso a perna segue com o Cupom
+  Limpo como preço. Sem data (`Spot`) ou sem cotação, o Initial price fica em
+  BRANCO e sinalizado, com o motivo (símbolo fora do `quotes-equity`, rede) —
+  nunca o percentual no lugar do preço. E **o campo Rate multiplier só existe
+  quando HÁ multiplicador (≠ 1)**: vazio em toda perna VCP, ele fazia a mesa
+  procurar um num contrato que não tem. `check_tools_equity.py` §7.
 - **Swap Calculator: o remanescente PODE ser maior que o original** (§478).
   Swap com atualização de notional (principal corrigido pelo índice ou por
   aditivo) carrega um saldo acima do valor registrado, e o motor recusava a
@@ -1648,6 +1663,17 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `is_active` compara EXATO — `INACTIVE` contém `ACTIVE`). `Signature Type` é
   domínio fechado (`SIGNATURE_TYPES`), valor gravado entra na lista. `_id` não
   é estável entre importações.
+
+### Quotes
+
+- **Os campos From/To se DIGITAM** (§508, `typeableDate` no `quotes.js`): o
+  clique seleciona o texto, a máscara põe as barras (`22082026` → 22/08/2026),
+  e o calendário acompanha — com dia e mês ele vai para o mês, com a data
+  inteira ele a marca. Só a data INTEIRA vale para a busca. **O `keyup` do
+  daterangepicker é desligado nesses campos**: ele relê o texto com parse
+  frouxo do moment e desfazia a navegação no meio da digitação. Data futura é
+  puxada para hoje (o `maxDate`), e texto pela metade volta à última data
+  válida no blur — quem reescreve é o próprio plugin, no `hide`.
 
 ### Save CETIP Files
 

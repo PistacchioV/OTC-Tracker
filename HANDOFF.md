@@ -22283,3 +22283,49 @@ Rede: `check_opb3_events.py` §9 (novo — data vence evento, as duas datas no
 mesmo dia, datetime × date, vazio sem palpite), `check_ops_trade_swap` (o tipo
 de ponta a ponta nas fixtures), `check_unwind_summary` (maiúsculas).
 
+## §507 — Swap Calculator: o Cupom Limpo do equity era um percentual e entrava como preço (2026-09-21)
+
+**O relato.** Numa perna de equity (GLD), o Initial price saía `100.0000` com o
+Final price em `398.36` — e a nota da denominação dizia "Not understood" sobre o
+texto inteiro. A denominação da curva é quem explica: `Preco in ativo - 100.00%
+Close 20-Sep-24`. O `Cupom Limpo` da posição é o PERCENTUAL sobre o fechamento
+daquele pregão, não o preço. Com o percentual no lugar do preço a conta fechava
+consigo mesma, e nada acusava.
+
+**A correção.** O interpretador (`precificador/descricao_curva.py`, que é de
+REGRAS de propósito — §479) ganhou dois campos: `cupom_limpo` (`100.00% Close`,
+`1.5 Close` = fator 150%, `% Spot`, `Preco Inicial: x%`) e `cupom_data` (o
+pregão, com os meses em inglês e português). `queries.aplicar_cupom_limpo` busca
+o fechamento daquele dia pela MESMA `_preco_do_fixing` do preço final e grava
+`preco_inicial = fechamento × cupom/100`. É uma função para o pré-preenchimento e
+para a denominação colada na tela (`/curve`), como o resto do §479.
+
+**Só age quando a denominação DECLAROU o cupom.** Sem isso a perna segue como
+sempre (Cupom Limpo = preço): a mesa pediu a mudança "para esses casos", e o
+teste antigo (`20.5` como preço) continua valendo. Sem data (`Spot`) ou sem
+cotação, o Initial price fica em BRANCO e sinalizado, com o motivo — na dev foi
+o que apareceu: `no symbol registered for GLD in the quotes-equity mapping`.
+
+**Na tela**: o trio Clean coupon (%) · Close price · Initial price lado a lado,
+com o terceiro replicado no Initial price (o campo que o cálculo lê); digitar o
+fechamento ou o cupom refaz a conta na hora. E o **Rate multiplier só aparece
+quando há multiplicador (≠ 1)** — a pedido: vazio em toda perna VCP, ele fazia a
+mesa procurar um multiplicador num contrato que não tem.
+
+Rede: `check_tools_equity.py` §7 (novo), `check_tools_descricao`, `check_tools`,
+`check_tools_memoria`.
+
+## §508 — Quotes: os campos From/To passam a ser digitáveis (2026-09-21)
+
+Eram `readonly` com o daterangepicker por cima: um período de dois anos atrás
+eram vinte e tantos cliques nas setas. Agora o clique SELECIONA o texto, a
+máscara põe as barras (só dígitos entram) e o calendário ACOMPANHA a digitação —
+com dia e mês ele vai para o mês, com a data inteira ele a marca. Só a data
+inteira vale para a busca; Enter busca.
+
+O que não era óbvio: o plugin tem um `keyup` próprio que relê o campo com o
+parse FROUXO do moment (`22/0` vira uma data válida em janeiro) e desfazia a
+navegação no meio da digitação — ele é desligado nesses dois campos e fica só o
+nosso, com parse estrito. Data futura é puxada para hoje (o `maxDate`), e texto
+pela metade volta à última data válida no blur, reescrito pelo próprio plugin.
+

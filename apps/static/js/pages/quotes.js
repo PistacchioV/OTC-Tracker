@@ -382,6 +382,53 @@
   }
 
   // ── Datas ────────────────────────────────────────────────────────────────
+  // O campo se DIGITA (mesa, 21/09/2026), não só se escolhe pelas setas: um
+  // período de dois anos atrás eram vinte e tantos cliques no calendário.
+  //   · clicar (ou entrar por Tab) SELECIONA o texto — digitar já substitui;
+  //   · a MÁSCARA põe as barras: só dígitos entram, `22082026` vira 22/08/2026;
+  //   · o CALENDÁRIO acompanha: com dia e mês ele já vai para o mês, e com a
+  //     data inteira ele a marca. Data depois de hoje é puxada para hoje (o
+  //     `maxDate` do picker), e texto pela metade volta à última data válida
+  //     quando o campo perde o foco — quem reescreve é o próprio picker, no hide.
+  function typeableDate(inp, key) {
+    if (!inp) return;
+    inp.removeAttribute('readonly');
+    inp.setAttribute('inputmode', 'numeric');
+    inp.setAttribute('maxlength', '10');
+    function selectAll() { setTimeout(function () { try { inp.select(); } catch (e) {} }, 0); }
+    inp.addEventListener('focus', selectAll);
+    inp.addEventListener('click', selectAll);
+    inp.addEventListener('input', function () {
+      var d = (inp.value || '').replace(/\D/g, '').slice(0, 8);
+      var txt = d.slice(0, 2) + (d.length > 2 ? '/' + d.slice(2, 4) : '') + (d.length > 4 ? '/' + d.slice(4) : '');
+      if (txt !== inp.value) inp.value = txt;
+      var drp = window.jQuery && jQuery(inp).data('daterangepicker');
+      if (!drp || d.length < 4) return;
+      // Dia e mês bastam para o calendário andar; o ano, enquanto não vem
+      // inteiro, é o que o calendário já mostra.
+      var ano = d.length === 8 ? d.slice(4) : String(drp.startDate.year());
+      var m = moment(d.slice(0, 2) + '/' + d.slice(2, 4) + '/' + ano, 'DD/MM/YYYY', true);
+      if (!m.isValid()) return;
+      if (m.isAfter(moment(), 'day')) m = moment();
+      drp.setStartDate(m); drp.setEndDate(m);
+      if (drp.isShowing) drp.updateView();
+      // Só a data INTEIRA vale para a busca: dia/mês com o ano do calendário é
+      // navegação, não escolha.
+      if (d.length === 8) state[key] = m.format('YYYY-MM-DD');
+    });
+    // O keyup do próprio plugin relê o campo com parse FROUXO e desfaria o
+    // passo acima no meio da digitação (`22/0` vira janeiro): fica só o nosso.
+    jQuery(inp).off('keyup.daterangepicker');
+    inp.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      var drp = jQuery(inp).data('daterangepicker');
+      if (drp && drp.isShowing) drp.hide();
+      inp.blur();
+      var btn = document.getElementById('qtSearch');
+      if (btn && !btn.disabled) btn.click();
+    });
+  }
+
   function wireDates(attempt) {
     if (window.jQuery && jQuery.fn.daterangepicker && window.moment) {
       [['#qt-from', 'from'], ['#qt-to', 'to']].forEach(function (pair) {
@@ -393,6 +440,7 @@
           maxDate: moment()
         }, function (start) { state[key] = start.format('YYYY-MM-DD'); });
         $d.closest('.qt-datewrap').find('.qt-cal-btn').on('click', function () { $d.trigger('click'); });
+        typeableDate($d[0], key);
       });
       return;
     }
