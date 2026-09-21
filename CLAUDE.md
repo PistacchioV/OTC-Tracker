@@ -185,7 +185,16 @@ exista no módulo (`__module__` mente sob `functools.wraps`; quem diz é o
   o que a mesa editou), e copia o que não é JSON; `db/` fica de fora.
   Ela é SÍNCRONA — enquanto roda, o app não atende —, então acima de 30 s
   avisa que é ela que segura a subida e aponta o
-  `convert_json_to_duckdb.py`. E na DEV, onde o checkout É o `DATA_DIR`
+  `convert_json_to_duckdb.py`. **E ela só roda quando o que vem empacotado
+  MUDOU** (§519): o carimbo `_seed_stamp.txt`, a impressão digital de
+  (caminho, mtime, tamanho) de cada arquivo, calculada na mesma varredura.
+  Igual ao gravado, a passada inteira é pulada — ela era idempotente e
+  pagava **177 aberturas de DuckDB no share** para descobrir que não tinha o
+  que fazer, ~15 min de subida com o app sem atender. O carimbo mora no
+  `DATABASE_DIR` de propósito (apagar os bancos apaga o carimbo junto; no
+  disco local ele sobreviveria a um `db/` apagado e o cadastro nunca
+  voltaria), passada INCOMPLETA (banco ocupado/ilegível) **não** carimba, e
+  `OTC_SEED_ALWAYS=1` força. E na DEV, onde o checkout É o `DATA_DIR`
   (`origem` e `alvo` o mesmo arquivo), ela NÃO reimporta na subida o objeto
   que o banco tem sem canal: o `read` cai para esse mesmo arquivo e importa
   em background. Na mesma situação, `cache/` inteiro fica FORA da semeadura:
@@ -910,9 +919,19 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `NDF/FX` de lá soma no mesmo card de um `NDF/FX` daqui. E **o card pode
   declarar onde FECHA** (`done`): quem não fecha em `Success` — a recompra
   acaba em `Sent`, porque o B3 ID de volta ainda não existe para ela — ficaria
-  pendente no aviso das 19h para sempre. `check_ndm_cards.py`, cujo §7 resolve
+  pendente no aviso das 19h para sempre. E **o card pode declarar uma `lob`**
+  (§517): os DOIS cards de swap — Equities (`EDG`) e CEM (`CEM`) — leem as
+  MESMAS pastas, e quem decide é a coluna LOB da LINHA (`_ndm_bucket`, balde
+  `<pasta>#<LOB>`; a contagem é por linha, não por arquivo). **Não existe card
+  `Swap Bullet`**: bullet e cashflow são FORMATO de contrato, e a CEM também
+  tem bullet — é a mesma razão de não existir página "Swap CEM". LOB que não
+  diz o card NÃO é chutada: vira `<pasta>/No LOB` e aparece no Others, porque
+  escolher um dos dois somaria a operação na mesa errada em silêncio.
+  `check_ndm_cards.py`, cujo §7 resolve
   o link do card pelo `url_map` e não pelo nome do arquivo (página com rota
-  própria não segue a convenção do catch-all).
+  própria não segue a convenção do catch-all) — e aceita rota ESTÁTICA de um
+  segmento antes do catch-all, que é o caso das páginas do catálogo de New
+  Deals.
 
 - **Swap Bullet (New Deals › Swap › Bullet) nasce do DEAL TICKET, não da
   API** (§480, `features/swap_bullet/`): xlsx (uma aba por operação: cliente
@@ -1924,7 +1943,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 - **`PYTHONPYCACHEPREFIX` no `.bat`** apontando para `%LOCALAPPDATA%` (nunca
   `%TEMP%`, nunca `PYTHONDONTWRITEBYTECODE`): sem isso a subida fica minutos
   gravando `__pycache__` no share sem imprimir nada. O `start-otc-tracker.bat`
-  mora no share, fora do repo (§322).
+  roda do share, mas desde 21/09/2026 é VERSIONADO (§518) — fora do repo ele
+  ficava fora da revisão e do `check_bat_blocks.py`, e foi por isso que a linha
+  do §322 nunca chegou nele. Copie o do repositório por cima do que está no
+  share; o que a instância executa é o de lá. **Todo `ds` do `.bat` leva
+  `call`**: `ds` é script do shell, e um `.bat` que chama outro sem `call`
+  entrega o controle de vez — o pipe da versão antiga escondia isso.
 - **Parêntese dentro de bloco `( … )` do `.bat` vai escapado** (`^(`/`^)`) —
   erro de PARSE. `check_bat_blocks.py`.
 - **`SECRET_KEY` é estado da máquina**: sem variável, o app mantém
@@ -1967,7 +1991,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (149 scripts)
+### `scripts/tests/` (151 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

@@ -22609,3 +22609,130 @@ pedidos, senão duas trocas rápidas deixariam no campo o número da primeira.
 Rede: `check_tools_calculators.py` §6 (o DU no campo, a recontagem, o digitado
 mandando, o endpoint e a chamada na busca).
 
+
+## §517 — Monitor: os cards de swap se dividem pela LOB, não pela página (2026-09-21)
+
+**O pedido da mesa.** O grupo Swaps do New Deals Monitor tinha três cards —
+Swap Bullet, Swap Equities e Swap CEM —, e os dois últimos eram *In
+development*. Ficam DOIS: Equities e CEM, com a linha caindo num ou noutro pela
+coluna **LOB**.
+
+**Por que o card `Swap Bullet` estava errado desde sempre.** Bullet e Cashflow
+são FORMATO de contrato, não mesa: a CEM tem swap bullet e a EDG pode ter
+cashflow. É a mesma razão de não existir uma página "Swap CEM" (§catalog,
+21/09/2026) — o que encaixa as duas mesas na mesma tela é a LOB, que é coluna do
+Bullet, do Cashflow e das páginas de recompra. Um card com o nome do formato
+somava as duas mesas num número que nenhuma delas conferia.
+
+**A mudança.** Os dois cards declaram as MESMAS `dirs` (`Swap/Bullet`,
+`Swap/Cashflow`, `Swap/Equities`, `Swap/CEM` e as duas de recompra em
+`cache/unwinds/`) e um `lob`. A contagem deixou de ser por ARQUIVO e passou a
+ser por LINHA, num balde `<pasta>#<LOB>` (`domain._ndm_bucket`,
+`domain.card_buckets`): o mesmo arquivo-dia alimenta os dois cards.
+
+**A decisão que não é óbvia: LOB que não diz o card NÃO é chutada.** Ela vira
+`<pasta>/No LOB`, que card nenhum pede, e aparece no grupo *Others* como
+"Swap Bullet No LOB". Escolher um dos dois somaria a operação na mesa errada em
+silêncio — e é justamente a linha com o cadastro incompleto que precisa
+aparecer. No Others a tela diz o que falta.
+
+O card da CEM mantém `soon` enquanto o backend do Cashflow responde 501: o selo
+só aparece com o card VAZIO, então no dia em que houver operação a tela mostra o
+número e o link sem mexer no catálogo.
+
+Rede: `check_ndm_cards.py` §8 monta uma árvore em tmp com as três origens e
+prova a separação, os LEs, a cancelada fora e a linha sem LOB no Others. O §7
+dele passou a aceitar rota ESTÁTICA de um segmento antes do catch-all —
+`/new_deals-swap-cashflow` é página do catálogo de New Deals e não tem
+`pages/<url>.html` para conferir.
+
+## §518 — O `.bat` da instância entra no repositório (2026-09-21)
+
+**O que o §322 não resolveu.** A correção do `PYTHONPYCACHEPREFIX` foi escrita
+lá como "a linha tem de ser colada à mão no `start-otc-tracker.bat`, que mora no
+share e não está no repo". Ela nunca foi colada: um mês depois o arquivo real
+continuava sem ela. Um arquivo fora do repositório está fora da revisão, fora do
+`check_bat_blocks.py` e fora do alcance de qualquer correção futura — então ele
+entrou.
+
+Quatro defeitos no que estava rodando:
+
+1. **Sem `PYTHONPYCACHEPREFIX`** (§322). O `%VERSION_PATH%` vai no caminho
+   porque a raiz que o `pushd` mapeia já É a pasta da versão.
+2. **`ds tool install python3.12` grudado** com um `cd ... && flask run
+   --port=8051` de outra colagem. Só dispara em máquina sem o Python 3.12 — e
+   nela o install falhava pelo nome de tool inexistente, o `if errorlevel 1`
+   seguinte disparava e o script saía. Máquina nova nunca subia.
+3. **waitress com `threads=8`**, contra os 16 do desenho (CLAUDE.md §2).
+4. **`ds tool list` duas vezes** — duas idas à rede antes de qualquer coisa
+   aparecer na tela.
+
+**E o defeito que a correção 4 CRIOU, que é a lição.** Trocar o pipe por
+redirecionamento para arquivo matou a subida: ela imprimia o primeiro `[TIME]` e
+devolvia o prompt, calada. O `ds` é um script do shell (`.cmd`/`.bat`), e no
+`cmd` **um `.bat` que chama outro sem `call` entrega o controle de vez** — o
+segundo roda e o primeiro nunca volta. A versão antiga não tinha o defeito POR
+ACIDENTE: `ds tool list | findstr` é um PIPE, e o `cmd` roda cada lado de um pipe
+num processo próprio, então o `ds` morria no subprocesso e o script seguia. O
+`call` está nas TRÊS invocações; os dois `install` estavam expostos desde sempre
+e só não davam sinal porque só rodam em máquina sem as tools.
+
+**Os marcadores `[TIME]`** existem para separar o que é `.bat` do que é app.
+Medido na instância: 8,0 s de `.bat` (1,9 s de `ds tool list`, 5,0 s do `pushd`
+no share, 1,1 s de dependências) e ~15 min dentro do Python — que é o §519.
+
+Dois detalhes do arquivo: o padrão do `findstr` do Python ganhou um `.*)` no fim
+só para o parêntese FECHAR (o `check_bat_blocks.py` conta parênteses sem olhar
+aspas, e um `(` sozinho fazia todo o resto parecer estar dentro de um bloco; em
+`cmd` as aspas já protegiam), e ele é gravado em **CRLF** — o `.gitattributes` já
+registra que `.bat` em LF faz a janela abrir e fechar sem rodar nem o `pause`.
+
+## §519 — A subida de 18 minutos eram 177 aberturas de banco da semeadura (2026-09-21)
+
+**O relato.** A instância levava 18 minutos para atender. O log mostrava seis
+`file_lock_held_slow` espalhados por quinze minutos e nada mais: a subida
+parecia travada, sem nada que dissesse onde.
+
+**A medição, que é o que separa este caso das três tentativas de adivinhação.**
+Contando `duckdb.connect` durante uma subida real: **185 aberturas, das quais
+177 são o laço do `_seed_data_dir`** e 7 são o import inteiro do `routes` e das
+49 features. O import não era o problema (1,35 s na dev), e ele nem roda antes da
+semeadura — quem o dispara é o primeiro `data_store.isfile`, por dentro dela
+(`data_root()` faz a busca atrasada no `routes`), e é por isso que o
+`logging.basicConfig` já está de pé quando os avisos do farol começam a sair.
+
+Elas ficavam invisíveis por duas razões somadas: quase todas abaixo do teto de
+5 s do farol, e o app ainda sem atender, então não havia request lento para
+acusar.
+
+**E não faziam nada.** A semeadura é idempotente: leva aos bancos o JSON
+versionado que eles não têm, e na segunda subida não tem o que levar. Pagava 177
+idas ao share para descobrir isso, a cada restart, e a instância reinicia várias
+vezes por dia.
+
+**O carimbo.** A impressão digital do que vem empacotado — caminho, mtime e
+tamanho de cada arquivo —, calculada na MESMA varredura que já existia (no
+Windows o `scandir` traz tamanho e mtime na listagem do diretório, então ela não
+custa uma ida à rede por arquivo). Igual ao gravado, a passada inteira é pulada.
+Medido de ponta a ponta numa subida real: **184 aberturas → 0**.
+
+Três decisões que o teste prende, porque nenhuma é óbvia depois:
+
+- **O carimbo mora no `DATABASE_DIR`, não em `%LOCALAPPDATA%`.** Ele afirma
+  "estes arquivos empacotados já entraram nestes bancos", e as duas metades têm
+  de sumir JUNTAS: no disco local de cada máquina, quem apagasse o `db/` do
+  share ficaria com o carimbo, a semeadura nunca mais rodaria e o cadastro não
+  voltaria — sem erro nenhum. Ao lado dos bancos ele vai embora com eles, e as
+  máquinas do time compartilham a resposta, que é o certo porque compartilham os
+  bancos.
+- **Passada INCOMPLETA não carimba.** Banco ocupado pela instância vizinha, ou
+  ilegível, deixa arquivo por semear; carimbar ali congelaria a falta para
+  sempre. Sem carimbo a próxima subida paga os segundos de novo e completa.
+- **O carimbo não afrouxa o §434.** A semeadura continua nunca sobrescrevendo o
+  que está no banco, que é o que a mesa editou; corrigir um cadastro no
+  repositório continua exigindo o `import_file_interpreter_template.py` (§488).
+  O teste afirma isso explicitamente para que ninguém leia "voltou a rodar" como
+  "passou a sobrescrever".
+
+`OTC_SEED_ALWAYS=1` força a passada inteira. Rede: `check_seed_stamp.py`, que
+MEDE as aberturas em vez de conferir texto.
