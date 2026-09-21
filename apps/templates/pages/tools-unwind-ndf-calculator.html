@@ -16,14 +16,26 @@
        página Unwinds › NDF › FX confere contra o aviso do Athena (§488):
        valor futuro pela diferença de taxas, trazido a valor presente pela pré
        nos dias úteis até o vencimento. O resultado é o do BANCO. #}
-    <form method="post" class="row g-3">
+    {# `action` EXPLÍCITO: o Export troca o destino por `formaction`, e sem ele o
+       Calculate seguinte postaria na rota do arquivo e baixaria uma planilha. #}
+    <form method="post" action="/tools/unwind-ndf-calculator" class="row g-3">
         <div class="col-lg-5">
             <div class="tl-card">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <p class="tl-kicker mb-0" data-lang="tl-unw-trade">The unwind</p>
-                    <button type="submit" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all">
-                        <i class="ti ti-calculator me-1"></i><span data-lang="tl-calculate">Calculate</span>
-                    </button>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all">
+                            <i class="ti ti-calculator me-1"></i><span data-lang="tl-calculate">Calculate</span>
+                        </button>
+                        {# Export é info (§7), pelo MESMO formulário (`formaction`): o que vai
+                           para o arquivo é o que está nos campos. O `tools.js` (`#tl-export`)
+                           só intercepta para o spinner ter FIM. #}
+                        <button type="submit" id="tl-export" class="btn btn-sm btn-info bg-gradient btn-toolbar-all"
+                                formaction="/tools/unwind-ndf-calculator/extract"
+                                title="Calculation memo in Excel, with the formulas">
+                            <i class="ti ti-file-spreadsheet me-1"></i><span data-lang="tl-export">Export</span>
+                        </button>
+                    </div>
                 </div>
                 {% set tool='unwind-ndf-calculator' %}{% set lookup_placeholder='26C03202688' %}
                 {% set lookup_hint_key='tl-unw-lookup-help' %}

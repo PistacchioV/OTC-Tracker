@@ -15,14 +15,26 @@
     {# O EXERCÍCIO de uma opção flexível (FX, commodities, equity): o payoff é
        de quem é titular, o prêmio é pago pelo titular, e o resultado é o do
        BANCO. Vários preços de verificação = asiática (média aritmética). #}
-    <form method="post" class="row g-3">
+    {# `action` EXPLÍCITO: o Export troca o destino por `formaction`, e sem ele o
+       Calculate seguinte postaria na rota do arquivo e baixaria uma planilha. #}
+    <form method="post" action="/tools/option-calculator" class="row g-3">
         <div class="col-lg-5">
             <div class="tl-card">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <p class="tl-kicker mb-0" data-lang="tl-opt-trade">The option</p>
-                    <button type="submit" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all">
-                        <i class="ti ti-calculator me-1"></i><span data-lang="tl-calculate">Calculate</span>
-                    </button>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all">
+                            <i class="ti ti-calculator me-1"></i><span data-lang="tl-calculate">Calculate</span>
+                        </button>
+                        {# Export é info (§7), pelo MESMO formulário (`formaction`): o que vai
+                           para o arquivo é o que está nos campos. O `tools.js` (`#tl-export`)
+                           só intercepta para o spinner ter FIM. #}
+                        <button type="submit" id="tl-export" class="btn btn-sm btn-info bg-gradient btn-toolbar-all"
+                                formaction="/tools/option-calculator/extract"
+                                title="Calculation memo in Excel, with the formulas">
+                            <i class="ti ti-file-spreadsheet me-1"></i><span data-lang="tl-export">Export</span>
+                        </button>
+                    </div>
                 </div>
                 {% set tool='option-calculator' %}{% set lookup_placeholder='CHASM26081V' %}
                 {% set lookup_hint_key='tl-opt-lookup-help' %}

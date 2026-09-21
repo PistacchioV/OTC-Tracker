@@ -188,6 +188,37 @@ def tools_option_calculator():
         lados=derivativos.LADOS_OPCAO)
 
 
+_MEMORIAS = {
+    'ndf-calculator': ('memoria_ndf', 'tools_ndf_calculator'),
+    'unwind-ndf-calculator': ('memoria_unwind_ndf', 'tools_unwind_ndf_calculator'),
+    'option-calculator': ('memoria_opcao', 'tools_option_calculator'),
+}
+
+
+@blueprint.route('/tools/<tool>/extract', methods=['POST'])
+def tools_calculator_extract(tool):
+    """A memória de cálculo do formulário, em .xlsx — o MESMO contrato do Export
+    do Swap Calculator (cuja rota estática vence esta): POST do próprio `<form>`
+    por `formaction`; conta que não fecha volta em JSON para o fetch do botão
+    (que é quem desliga o spinner) e, sem JavaScript, devolve a TELA com a
+    mensagem."""
+    r = _auth_page()
+    if r:
+        return r
+    alvo = _MEMORIAS.get(tool)
+    if alvo is None:
+        return render_template('pages/error-404.html'), 404
+    try:
+        conteudo, nome = getattr(queries, alvo[0])(request.form)
+    except _ERROS_DE_TELA as exc:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'error': str(exc)}), 422
+        return globals()[alvo[1]]()
+    return send_file(io.BytesIO(conteudo), as_attachment=True, download_name=nome,
+                     mimetype='application/vnd.openxmlformats-officedocument'
+                              '.spreadsheetml.sheet')
+
+
 _PREFILLS = {
     'ndf-calculator': ('ndf_prefill', 'Live Position \u203a NDF'),
     'unwind-ndf-calculator': ('unwind_ndf_prefill', 'Live Position \u203a NDF'),

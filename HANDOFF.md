@@ -22537,3 +22537,41 @@ Rede: `check_tools_calculators.py` §8 (centavos em três grafias, "só 0,01",
 moeda por nome/código/Index B3) e §8b (o termo de mercadoria ponta a ponta),
 `check_quoted_in_cents`.
 
+## §515 — Calculadoras: a paridade no prefill da opção, o grupo Calculators e o Export (2026-09-21)
+
+Três pedidos da mesa na mesma rodada.
+
+**1. A paridade no prefill da opção.** Ao buscar pelo B3 ID o FX rate ficava em
+branco (a PTAX só era buscada no Calculate). Passou a vir no campo, marcada como
+automática e com a procedência embaixo — o tratamento do fixing do NDF (§512). O
+D-n sai da própria posição (`Data de fixing da moeda do ativo subjacente`; sem
+ela, D-1); exercício no futuro deixa em branco, preço em reais não busca nada. No
+print da mesa a procedência "PTAX USD 18/09/2026" aparecia embaixo de um campo
+VAZIO: era a nota da conta anterior sobrevivendo à busca nova — o JS agora zera
+as duas procedências antes de escrever.
+
+**2. Tools › Calculators.** As quatro calculadoras (NDF, Option, Swap, Unwind NDF)
+viraram subitens de um grupo, terceiro nível como New Deals › Swap. O Fixed
+Income ficou fora: a mesa pediu "as calculadoras", e ele não leva o nome. Cada
+nível é alfabético por conta própria. Os dois guardas do menu andaram junto.
+
+**3. Export.** A memória de cálculo do swap, na mesma lógica (§455), para as
+três: `infra/memoria_derivativos.py` REAPROVEITA o timbre, a `_Folha`, o
+`_cache_das_formulas` e o `_selar` do `memoria_xlsx` — a parte difícil (o valor
+gravado junto com a fórmula, nas duas grafias do `<v>` vazio) não foi reescrita.
+A restrição que isso impõe: só as funções que o avaliador conhece. A média da
+asiática é a soma explícita das células dividida pela contagem; um AVERAGE
+sairia com o cache errado, e é o cache que o Modo Protegido mostra.
+
+O botão e o JS já eram genéricos (`#tl-export` + `formaction`); a rota é uma
+(`/tools/<tool>/extract`, que a estática do swap vence) e o `<form>` das três
+ganhou `action` explícito — sem ele o Calculate seguinte baixaria uma planilha.
+
+Conferido: o cache das planilhas é o número do MOTOR (NDF de moeda, de
+mercadoria e fixo em reais; as TRÊS recompras reais do §488; opção asiática e
+banco lançador), e no navegador o arquivo da recompra real sai como `Memória de
+Cálculo - 26C03202688 - 21-09-2026.xlsx` com R$ 11.144,00 gravado.
+
+Rede: `check_tools_calculators.py` §8 (paridade), §1 (menu), §10–§11 (Export),
+`check_tools`, `check_tools_memoria`.
+
