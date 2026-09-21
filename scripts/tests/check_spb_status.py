@@ -1,5 +1,19 @@
-"""Col A ('Status') = 'Sucesso' e o unico que entra na recon, nas DUAS trilhas
-do HistoricoMensagens (JPM e MGT): cliente de derivativos e interbancario LTR.
+"""Col A ('Status') = 'Sucesso' e o unico que entra na recon, nas TRES trilhas
+do HistoricoMensagens (JPM e MGT): cliente de derivativos, cliente por STR
+(a via do BACEN) e interbancario LTR.
+
+A trilha do STR entrou em 21/09/2026. Ela nao casava com nenhuma das outras
+duas -- nem `Derivativos`/`LMA-COMM-BR` na descricao, nem `LTR000x` no codigo --
+e caia no `continue` mudo do fim do laco: a perna do cliente nao existia, e a
+operacao aparecia na tela como Pending Payment com `Client Value` VAZIO, com a
+linha paga e `Sucesso` no arquivo o tempo todo. Foi um swap de R$ 253.194,78 da
+SUZANO.
+
+Ela exige o CODIGO e o PREFIXO juntos, e e isso que este guarda prende: o
+`STR0007` sozinho e a mensagem de transferencia do SPB e carrega mais coisa que
+liquidacao de cliente; o `STS - ` sozinho nao diz por qual via foi. Casar por um
+so criaria perna de cliente SEM DINHEIRO atras -- que ou casa com uma perna JPM
+legitima, escondendo uma quebra de verdade, ou vira pendencia fantasma.
 """
 import sys
 import os
@@ -19,6 +33,7 @@ def row(status, evt='', ltr='', val='1000,00', conta='123'):
             'Valor (R$)': val, 'LTR': ltr, 'Descrição Evento': evt}
 
 DERIV = 'OPERACAO DE DERIVATIVOS-ACME COMERCIAL LTDA'
+STS = 'STS - SUZANO SA'                     # a linha real do relato
 
 CASES = [
     # (label, linhas, quantos registros devem sair)
@@ -28,6 +43,16 @@ CASES = [
     ('deriv status vazio NAO entra',   [row('', evt=DERIV)],                   0),
     ('deriv LMA-COMM-BR Sucesso',      [row('Sucesso', evt='LMA-COMM-BR XPTO')], 1),
     ('deriv LMA-COMM-BR Erro',         [row('Erro', evt='LMA-COMM-BR XPTO')],  0),
+    ('STR0007 + STS Sucesso entra',    [row('Sucesso', evt=STS, ltr='STR0007')], 1),
+    ('STR0007 + STS Erro NAO entra',   [row('Erro',    evt=STS, ltr='STR0007')], 0),
+    # Os dois sao exigidos JUNTOS -- e o que impede perna sem dinheiro atras.
+    ('STR0007 SEM o prefixo STS',      [row('Sucesso', evt='PAGAMENTO XPTO',
+                                            ltr='STR0007')],                   0),
+    ('prefixo STS SEM o STR0007',      [row('Sucesso', evt=STS, ltr='LTR9999')], 0),
+    ('STS no MEIO do nome nao vale',   [row('Sucesso', evt='ACME STS - LTDA',
+                                            ltr='STR0007')],                   0),
+    ('STR0007 sem contraparte',        [row('Sucesso', evt='STS - ',
+                                            ltr='STR0007')],                   0),
     ('LTR0004 Sucesso entra',          [row('Sucesso', ltr='LTR0004')],        1),
     ('LTR0004 Erro NAO entra',         [row('Erro', ltr='LTR0004')],           0),
     ('LTR0005 Sucesso entra',          [row('Sucesso', ltr='LTR0005')],        1),
@@ -53,6 +78,25 @@ pay_ok = d['pay_receive'] == 'Pay' and d['value'] < 0 and d['client'] == 'ACME C
 print(('  ok  ' if pay_ok else ' FAIL ') + 'deriv continua Pay/negativo/nome limpo  %r' % (d,))
 if not pay_ok:
     fails.append('deriv shape')
+
+# O STR de cliente sai com o NOME limpo e no formato da trilha 1 -- e NAO como
+# `bank`: ele tem contraparte, entao casa por nome, e um `bank=True` o faria
+# casar por VALOR com tolerancia de R$20 contra qualquer perna do dia.
+t = _cli_spb([row('Sucesso', evt=STS, ltr='STR0007', val='253194,77')], COLS)[0]
+sts_ok = (t['pay_receive'] == 'Pay' and t['value'] == -253194.77
+          and t['client'] == 'SUZANO SA' and not t.get('bank')
+          and not t.get('drop_if_unmatched'))
+print(('  ok  ' if sts_ok else ' FAIL ') + 'STR0007 Pay/negativo/nome limpo/nao-bank  %r' % (t,))
+if not sts_ok:
+    fails.append('sts shape')
+
+# Hifen DENTRO da razao social sobrevive: so o prefixo sai.
+h = _cli_spb([row('Sucesso', evt='STS - CIA BRASILEIRA - FILIAL SP',
+                  ltr='STR0007')], COLS)[0]
+hif_ok = h['client'] == 'CIA BRASILEIRA - FILIAL SP'
+print(('  ok  ' if hif_ok else ' FAIL ') + 'hifen no nome sobrevive  %r' % (h['client'],))
+if not hif_ok:
+    fails.append('sts hifen')
 
 b = _cli_spb([row('Sucesso', ltr='LTR0005')], COLS)[0]
 rec_ok = b['pay_receive'] == 'Receive' and b['value'] > 0 and b.get('bank') is True
