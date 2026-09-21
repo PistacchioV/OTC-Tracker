@@ -2026,7 +2026,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   (robocopy `/MIR` + `pushd` no espelho, ~45 MB e ~770 arquivos, `static\data`
   já fora): na instância, **11m49s → 63s**. SÓ O CÓDIGO se move — `DATA_DIR`,
   `DATABASE_DIR` e `SHARED_DRIVE_ROOT` são UNC absolutos no `config.py`, não
-  relativos ao diretório atual. Hoje isso vive no `start-otc-tracker_teste.bat`
+  relativos ao diretório atual. Hoje isso vive no `start-otc-tracker_naeast.bat`
   (para MEDIR), e o §524 lista o que falta promover. **O código de saída do
   robocopy é um BITMASK**: 0–7 é sucesso, 8+ é falha — `if errorlevel 1`
   abortaria em toda cópia bem-sucedida. E **`/COPY:DAT` PRESERVA o timestamp da
