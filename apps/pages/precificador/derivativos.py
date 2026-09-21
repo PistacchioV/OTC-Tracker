@@ -103,9 +103,11 @@ class LiquidacaoNDF:
     ir: float                        # 0,005% quando o banco paga
     liquido_cliente: Optional[float]  # o que o cliente recebe, líquido de IR
     isento: bool = False
+    paridade: float = 1.0            # termo de MERCADORIA: o preço é em ME, a paridade leva a reais
 
 
-def liquidar_ndf(nocional, taxa_termo, fixing, posicao, fixo_em_reais=False, isento_ir=False):
+def liquidar_ndf(nocional, taxa_termo, fixing, posicao, fixo_em_reais=False, isento_ir=False,
+                 paridade=1.0):
     if not taxa_termo or taxa_termo <= 0:
         raise ErroDerivativo('the forward rate must be greater than zero')
     if not fixing or fixing <= 0:
@@ -113,13 +115,19 @@ def liquidar_ndf(nocional, taxa_termo, fixing, posicao, fixo_em_reais=False, ise
     me = nocional_me(nocional, taxa_termo, fixo_em_reais)
     s = _sinal(posicao)
     dif = float(fixing) - float(taxa_termo)
-    liq = round(me * dif * s, 2)
+    # No termo de MERCADORIA o nocional é QUANTIDADE e o preço é em moeda
+    # estrangeira: a paridade leva a diferença a reais. No termo de moeda ela é 1.
+    par = float(paridade or 1.0)
+    if par <= 0:
+        raise ErroDerivativo('the FX rate must be greater than zero')
+    liq = round(me * dif * s * par, 2)
     # O imposto é sobre o ganho do CLIENTE: só quando o banco paga.
     ir = 0.0 if (isento_ir or liq >= 0) else round(abs(liq) * ALIQUOTA_IR_TERMO, 2)
     return LiquidacaoNDF(
         nocional_me=me, taxa_termo=float(taxa_termo), fixing=float(fixing), diferenca=dif,
         sinal=s, liquidacao=liq, direcao=_quem(liq), ir=ir,
-        liquido_cliente=(round(abs(liq) - ir, 2) if liq < 0 else None), isento=bool(isento_ir))
+        liquido_cliente=(round(abs(liq) - ir, 2) if liq < 0 else None), isento=bool(isento_ir),
+        paridade=par)
 
 
 # ── Recompra (unwind) de NDF ─────────────────────────────────────────────────

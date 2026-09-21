@@ -22446,3 +22446,94 @@ desejada.
 Rede: `check_tools_calculators.py` §7–§9 (novos), `check_tools`,
 `check_soc_layers`.
 
+## §512 — NDF Calculator: a taxa do fixing só aparecia no quadro do resultado (2026-09-21)
+
+**O relato.** Com o fixing em branco a calculadora busca a PTAX e calcula — mas
+a taxa usada só aparecia à DIREITA, no quadro do resultado. O campo da esquerda,
+que é o que a mesa confere e o que vai para o próximo Calculate, seguia vazio.
+
+**A correção.** O Calculate escreve de volta no campo a taxa que usou, com a
+procedência embaixo (`PTAX EUR 18/09/2026`), e a marca como automática num
+hidden (`fixing_auto`). O mesmo para a `paridade` da opção. O prefill pelo B3 ID
+já traz a PTAX no campo quando a data do fixing passou.
+
+**O que a marca resolve.** Campo preenchido normalmente significa "a mesa
+digitou" e o Calculate o respeita. Se a PTAX escrita de volta fosse tratada
+assim, trocar o vencimento deixaria a cotação do vencimento ANTERIOR no campo,
+calada. Com a marca o Calculate REBUSCA; digitar no campo apaga a marca (e a
+procedência) e aí vale o digitado.
+
+**De passagem: fixing no futuro.** O `ptax_moeda` anda para trás sozinho até dez
+dias — para uma data de fixing que ainda não chegou ele devolveria a ÚLTIMA
+cotação publicada como se fosse a do fixing. Passou a ser erro em frase, e o
+prefill deixa o campo em branco.
+
+Rede: `check_tools_calculators.py` (a taxa de volta ao campo, a rebusca, o
+digitado mandando, o fixing no futuro, e o prefill com a data já passada).
+
+## §513 — Option Calculator: a contraparte saía com o apelido da conta (2026-09-21)
+
+**O relato, com os prints da posição.** O prefill punha em Counterparty o
+`Contraparte (Nome simplificado)`, que é apelido de conta — `JPMORGANBM` nas
+linhas da guarda-chuva e `INTRAGLAWTONFDO` nas do fundo. A regra da mesa:
+
+- conta **73760102** (a guarda-chuva) → o cliente é o `CPF/CNPJ Cliente
+  Contraparte`, resolvido pelo Reference Data (na tela já aparece `SUZANO SA`);
+- **outra conta** → o nome sai do Reference Data pela CONTA CETIP.
+
+Os dois resolvedores já existiam na plataforma (a coluna do documento resolvida
+pelo `_lp_cpty_by_taxid`, e o `_lp_cpty_by_account`, que recusa guarda-chuva e
+conta com mais de um nome — o lado perigoso do índice). E a pergunta "é
+guarda-chuva?" vai ao `b3-accounts` pelo TIPO da conta, não ao número no código:
+CLIENT 2 entra pela mesma porta sem mudança nenhuma.
+
+Documento sem cadastro numa guarda-chuva deixa o nome VAZIO avisando (o titular
+ali é o banco); conta fora do Reference Data fica com o apelido, avisando que é
+ele — a mesa vê o que falta cadastrar.
+
+**O que o teste achou.** O stub da conta guarda-chuva comparava `73760.10`
+(com pontuação), e a posição de OPÇÃO traz só dígitos (`73760102`) — a de NDF
+traz `73760.10-2`. O código de verdade compara por dígitos; o stub passou a
+fazer o mesmo, senão a asserção do caso guarda-chuva passava pelo motivo errado.
+
+**De passagem.** A moeda do preço passou a respeitar a coluna
+`Strike/Limitador/Barreiras em Reais`: `S` = o strike já está em reais (sem
+conversão), `N` = a moeda cotada, e a paridade leva a reais.
+
+Rede: `check_tools_calculators.py` §8.
+
+## §514 — Calculadoras: mercadoria cotada em centavos, a moeda por nome e o termo de mercadoria (2026-09-21)
+
+**O relato, com o print da instância.** Opção sobre CTZ6 (algodão): o strike da
+posição é `0,6960` e o fixing puxado do Quotes veio `81,150002`. A bolsa cota o
+algodão em CENTAVOS de dólar por libra; o registro na B3 é em dólar. O Index B3
+diz isso — `Conversion Factor` 0,01 —, e a calculadora não perguntava: a opção
+saía cem vezes dentro do dinheiro, e a conta fechava consigo mesma. No mesmo
+print, "Could not pull: currency": a posição traz a moeda por NOME (`DOLAR DOS
+EUA`), e a tela só reconhecia o código.
+
+**A correção.**
+
+- **Centavos** (`_fator_de_centavos`): `Fator Conversao` = 0,01 no `Subjacente`
+  → os preços do Quotes saem × 0,01. É a regra que a casa já tinha para o strike
+  do booking recap (`_is_cents_factor`: só 0,01 é centavos, e a regra é do
+  ATIVO, não da moeda — §check_quoted_in_cents), reaproveitada em vez de
+  reescrita. A nota da tela diz que multiplicou e por quê.
+- **Moeda por nome** (`_moeda_iso`): o cadastro `currency-base` já traz
+  `DESCRICAO DO CAMPO` e `CODIGO DE CADASTRO` → `SIMBOLO`. Nome ou código
+  Sisbacen viram ISO por ele; coluna vazia cai na `Moeda` do ativo no Index B3.
+- **O termo de MERCADORIA no NDF Calculator.** A mesa pediu a regra "no NDF e na
+  opção", e o NDF só sabia termo de moeda — para uma mercadoria ele punha a PTAX
+  no fixing, que é a cotação da MOEDA no lugar do PREÇO do ativo. Pela classe do
+  ativo que a posição traz, o fixing passa a vir do Quotes (× 0,01 se centavos;
+  média na asiática), e a PTAX vira a PARIDADE que leva a diferença a reais
+  (`liquidar_ndf(..., paridade=)`). Ali o fixing em branco não busca PTAX: é
+  erro dizendo de onde ele vem.
+
+Conferido contra os cadastros REAIS da dev: CTZ6 → fator 0,01 → 81,150002 vira
+0,81150002; `DOLAR DOS EUA`, `220` → USD.
+
+Rede: `check_tools_calculators.py` §8 (centavos em três grafias, "só 0,01",
+moeda por nome/código/Index B3) e §8b (o termo de mercadoria ponta a ponta),
+`check_quoted_in_cents`.
+

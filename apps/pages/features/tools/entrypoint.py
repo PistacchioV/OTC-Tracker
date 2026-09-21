@@ -137,6 +137,11 @@ def _calculadora(template, segment, form_padrao, calcular, **extra):
             ctx['resultado'] = calcular(request.form)
         except _ERROS_DE_TELA as exc:
             ctx['erro'] = str(exc)
+        else:
+            # O que a conta USOU volta para o campo (a PTAX que entrou no lugar
+            # do fixing em branco): é o campo que a mesa confere — o mesmo que o
+            # Swap Calculator faz com o número-índice do IPCA.
+            ctx['form'].update(ctx['resultado'].get('form_update') or {})
     return render_template(template, segment=segment, **ctx)
 
 
