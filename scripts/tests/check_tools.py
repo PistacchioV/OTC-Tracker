@@ -880,20 +880,26 @@ for rota in ('/tools/fixed-income', '/tools/swap-calculator', '/tools/sofr-index
 nav = ler('apps/templates/partials/sidenav.html')
 import re                                                              # noqa: E402
 filhas = re.findall(r'href="(/quotes|/tools/[a-z-]+)"', nav)
-check('o Tools tem o Quotes e as cinco ferramentas, nesta ordem', filhas,
-      ['/quotes', '/tools/fixed-income', '/tools/swap-calculator', '/tools/sofr-index',
-       '/tools/term-sofr', '/tools/euribor'])
+# Em ORDEM ALFABETICA pelo rotulo em ingles (mesa, 21/09/2026), com as tres
+# calculadoras novas: Euribor, Fixed Income, NDF Calculator, Option Calculator,
+# Quotes, SOFR Index, Swap Calculator, Term SOFR, Unwind NDF Calculator.
+check('o Tools tem o Quotes e as oito ferramentas, em ordem alfabetica', filhas,
+      ['/tools/euribor', '/tools/fixed-income', '/tools/ndf-calculator',
+       '/tools/option-calculator', '/quotes', '/tools/sofr-index', '/tools/swap-calculator',
+       '/tools/term-sofr', '/tools/unwind-ndf-calculator'])
 check('o item pai traduz por data-lang', 'data-lang="tools"' in nav, True)
 # O Page_Access enxerga o que tem href + class="side-nav-link": as filhas
 # precisam ser concediveis uma a uma.
 from apps.pages.platform import authz                                  # noqa: E402
-check('as cinco entram na allowlist do Page_Access',
+check('as oito entram na allowlist do Page_Access',
       sorted(u for u in authz._load_nav_urls() if u.startswith('/tools/')),
-      ['/tools/euribor', '/tools/fixed-income', '/tools/sofr-index',
-       '/tools/swap-calculator', '/tools/term-sofr'])
+      ['/tools/euribor', '/tools/fixed-income', '/tools/ndf-calculator',
+       '/tools/option-calculator', '/tools/sofr-index', '/tools/swap-calculator',
+       '/tools/term-sofr', '/tools/unwind-ndf-calculator'])
 
 TELAS = ['tools-fixed-income', 'tools-swap-calculator', 'tools-sofr-index',
-         'tools-term-sofr', 'tools-euribor']
+         'tools-term-sofr', 'tools-euribor', 'tools-ndf-calculator',
+         'tools-unwind-ndf-calculator', 'tools-option-calculator']
 for t in TELAS:
     html = ler('apps/templates/pages/%s.html' % t)
     # `.card` do tema vence a regra da pagina sem !important (§7) — widget proprio.

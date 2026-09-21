@@ -1,0 +1,143 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Unwind NDF Calculator{% endblock title %}
+
+{% block extra_css %}
+{% include 'partials/tools-assets-css.html' %}
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="tl-unwind-ndf-calculator" class="container-fluid tl-page">
+    {% set title='Unwind NDF Calculator' %}
+    {% set crumbs=['OTC Tracker', 'Tools', 'Unwind NDF Calculator'] %}
+    {% include 'partials/page-title.html' %}
+
+    {# A recompra (antecipação) de um termo de moeda. É a MESMA fórmula que a
+       página Unwinds › NDF › FX confere contra o aviso do Athena (§488):
+       valor futuro pela diferença de taxas, trazido a valor presente pela pré
+       nos dias úteis até o vencimento. O resultado é o do BANCO. #}
+    <form method="post" class="row g-3">
+        <div class="col-lg-5">
+            <div class="tl-card">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <p class="tl-kicker mb-0" data-lang="tl-unw-trade">The unwind</p>
+                    <button type="submit" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all">
+                        <i class="ti ti-calculator me-1"></i><span data-lang="tl-calculate">Calculate</span>
+                    </button>
+                </div>
+                <div class="row g-2">
+                    <div class="col-12 tl-field">
+                        <label for="posicao" data-lang="tl-ndf-position">Bank position</label>
+                        <select class="form-select form-select-sm" id="posicao" name="posicao">
+                            {% for valor, rotulo in posicoes %}
+                            <option value="{{ valor }}" {{ 'selected' if form.posicao == valor }} data-lang="tl-ndf-pos-{{ valor }}">{{ rotulo }}</option>
+                            {% endfor %}
+                        </select>
+                        <p class="tl-help" data-lang="tl-unw-position-help">The position of the ORIGINAL contract — it is the sign of the result, not the Direction of the notification.</p>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="moeda" data-lang="tl-ndf-currency">Foreign currency</label>
+                        <select class="form-select form-select-sm" id="moeda" name="moeda">
+                            {% for m in moedas %}
+                            <option value="{{ m.codigo }}" {{ 'selected' if form.moeda == m.codigo }}>{{ m.codigo }} — {{ m.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="nocional" data-lang="tl-unw-notional">Unwound notional</label>
+                        <input class="form-control form-control-sm" id="nocional" name="nocional" value="{{ form.nocional }}" inputmode="decimal" data-format="money" required>
+                    </div>
+                    <div class="col-12">
+                        <label class="tl-check">
+                            <input type="checkbox" name="fixo_em_reais" value="1" class="form-check-input" {{ 'checked' if form.fixo_em_reais }}>
+                            <div><strong data-lang="tl-ndf-brl-fixed">The notional is fixed in BRL</strong>
+                                <span data-lang="tl-unw-brl-fixed-help">The amounts come in BRL and are divided by the strike — at B3 the contract is in foreign currency.</span></div>
+                        </label>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="strike" data-lang="tl-unw-strike">Strike (original forward rate)</label>
+                        <input class="form-control form-control-sm" id="strike" name="strike" value="{{ form.strike }}" inputmode="decimal" data-format="fx" required>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="taxa_recompra" data-lang="tl-unw-termination">Termination rate</label>
+                        <input class="form-control form-control-sm" id="taxa_recompra" name="taxa_recompra" value="{{ form.taxa_recompra }}" inputmode="decimal" data-format="fx" required>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="liquidacao" data-lang="tl-unw-settlement-date">Unwind settlement date</label>
+                        <input class="form-control form-control-sm tl-date" id="liquidacao" name="liquidacao" value="{{ form.liquidacao }}" autocomplete="off" placeholder="dd/mm/yyyy" required>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="vencimento" data-lang="tl-unw-maturity">Contract maturity</label>
+                        <input class="form-control form-control-sm tl-date" id="vencimento" name="vencimento" value="{{ form.vencimento }}" autocomplete="off" placeholder="dd/mm/yyyy" required>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="taxa_pre" data-lang="tl-unw-pre">Pre FWD rate (% p.a.)</label>
+                        <input class="form-control form-control-sm" id="taxa_pre" name="taxa_pre" value="{{ form.taxa_pre }}" inputmode="decimal" data-format="pct" required>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="du" data-lang="tl-unw-du">Business days (blank = counted)</label>
+                        <input class="form-control form-control-sm" id="du" name="du" value="{{ form.du }}" inputmode="numeric" data-format="int">
+                    </div>
+                    <div class="col-12"><p class="tl-help" data-lang="tl-unw-du-help">Blank, the business days are counted on the ANBIMA calendar from the unwind settlement to the maturity. Type the DU of the notification to reproduce its number.</p></div>
+                </div>
+                <p class="tl-kicker mt-3 mb-2" data-lang="tl-unw-balance">What is left in the contract (optional)</p>
+                <div class="row g-2">
+                    <div class="col-6 tl-field">
+                        <label for="nocional_original" data-lang="tl-unw-original">Original notional</label>
+                        <input class="form-control form-control-sm" id="nocional_original" name="nocional_original" value="{{ form.nocional_original }}" inputmode="decimal" data-format="money">
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="ja_recomprado" data-lang="tl-unw-before">Unwound before</label>
+                        <input class="form-control form-control-sm" id="ja_recomprado" name="ja_recomprado" value="{{ form.ja_recomprado }}" inputmode="decimal" data-format="money">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            {% if erro %}<div class="alert alert-danger py-2 fs-xs"><i class="ti ti-alert-triangle me-1"></i>{{ erro }}</div>{% endif %}
+            {% if resultado %}
+            {% set r = resultado.r %}
+            <div class="tl-card tl-card--accent">
+                <div class="d-flex justify-content-between align-items-start gap-3">
+                    <div>
+                        <p class="tl-kicker" data-lang="tl-unw-result">Unwind result (present value)</p>
+                        <div class="tl-big">R$ {{ r.resultado | abs | tl_money(2) }}</div>
+                        <p class="tl-sub">{% if r.direcao == 'RECEIVE' %}<span data-lang="tl-bank-receives">the bank receives</span>{% elif r.direcao == 'PAY' %}<span data-lang="tl-bank-pays">the bank pays</span>{% else %}<span data-lang="tl-unw-nothing">nothing settles — the termination rate is the strike</span>{% endif %}</p>
+                    </div>
+                    <div class="d-flex flex-column align-items-end gap-1">
+                        {% if r.direcao %}<span class="badge rounded-pill {{ 'text-bg-success' if r.direcao == 'RECEIVE' else 'text-bg-warning' }} bg-gradient">{{ r.direcao }}</span>{% endif %}
+                        {% if r.total is not none %}<span class="badge rounded-pill text-bg-secondary bg-gradient">{% if r.total %}<span data-lang="tl-unw-total">Total unwind</span>{% else %}<span data-lang="tl-unw-partial">Partial unwind</span>{% endif %}</span>{% endif %}
+                    </div>
+                </div>
+                <div class="tl-stats mt-3">
+                    <div class="tl-stat"><div class="tl-stat__label"><span data-lang="tl-ndf-notional-fc">Notional in</span> {{ resultado.moeda }}</div><div class="tl-stat__value">{{ r.nocional_me | tl_money(2) }}</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-unw-diff">Termination − strike</div><div class="tl-stat__value">{{ r.diferenca | tl_fixed(8) }}</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-unw-fv">Future value</div><div class="tl-stat__value">R$ {{ r.valor_futuro | tl_money(2) }}</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-bizdays">Business days</div><div class="tl-stat__value">{{ r.du | tl_num }}</div><div class="tl-stat__note">{% if resultado.du_contado %}<span data-lang="tl-unw-du-counted">counted, ANBIMA</span>{% else %}<span data-lang="tl-unw-du-typed">typed</span>{% endif %}</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-unw-discount">Discount factor</div><div class="tl-stat__value">{{ r.fator_desconto | tl_fixed(10) }}</div><div class="tl-stat__note">(1 + {{ r.taxa_pre | tl_pct(4) }}) ^ ({{ r.du }}/252)</div></div>
+                    {% if r.saldo is not none %}
+                    <div class="tl-stat tl-stat--hi"><div class="tl-stat__label"><span data-lang="tl-unw-new-base">New base value</span> ({{ resultado.moeda }})</div><div class="tl-stat__value">{% if r.total %}<span data-lang="tl-zero">Zero</span>{% else %}{{ r.saldo | tl_money(2) }}{% endif %}</div></div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="tl-card">
+                <p class="tl-title" data-lang="tl-how">How the number is built</p>
+                <p class="tl-sub mb-1"><span data-lang="tl-unw-fv">Future value</span> = {{ r.nocional_me | tl_money(2) }} {{ resultado.moeda }} × ({{ r.taxa_recompra | tl_fixed(8) }} − {{ r.strike | tl_fixed(8) }}) × {{ '+1' if r.sinal > 0 else '−1' }} = R$ {{ r.valor_futuro | tl_money(2) }}</p>
+                <p class="tl-sub mb-0"><span data-lang="tl-unw-result-s">Result</span> = R$ {{ r.valor_futuro | tl_money(2) }} ÷ {{ r.fator_desconto | tl_fixed(10) }} = <strong>R$ {{ r.resultado | tl_money(2) }}</strong></p>
+            </div>
+            <div class="tl-note" data-lang="tl-unw-note">This is the formula the Unwinds › NDF › FX page checks against the Athena notification. The direction is the SIGN of the result — the notification's Direction field has been wrong on BRL-fixed trades.</div>
+            {% else %}
+            <div class="tl-card tl-card--dashed">
+                <i class="ti ti-rotate-2"></i>
+                <span data-lang="tl-unw-empty">Enter the unwound notional, the two rates, the pre rate and the dates.</span>
+            </div>
+            {% endif %}
+        </div>
+    </form>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+{% include 'partials/tools-assets-js.html' %}
+{% endblock extra_javascript %}

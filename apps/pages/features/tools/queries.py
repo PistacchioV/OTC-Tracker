@@ -806,3 +806,92 @@ def swap_prefill(b3_id):
         out[lado] = campos
         missing.extend('{}.{}'.format(lado, c) for c in faltando)
     return out
+
+
+# ── NDF Calculator · Unwind NDF Calculator · Option Calculator ───────────────
+# O motor é o `precificador/derivativos.py` (puro). Aqui se lê o formulário e,
+# quando o fixing/a paridade vêm em BRANCO, busca-se a PTAX de venda do BCB pela
+# MESMA função do Swap Calculator — e a resposta diz de que dia ela é.
+
+def _ptax_ou_digitado(form, campo, rotulo, moeda, data_iso, deslocamento):
+    """`(valor, nota)`: o que a mesa digitou, ou a PTAX do dia (D-n úteis ANBIMA
+    de `data_iso`). Sem número e sem PTAX é erro com o MOTIVO — fixing chutado
+    muda a conta inteira e ela continua fechando consigo mesma."""
+    bruto = str(form.get(campo) or '').strip()
+    if bruto:
+        return domain.decimal(bruto, rotulo), ''
+    if str(moeda or '').upper() == liquidacao.SEM_CONVERSAO:
+        return 1.0, ''
+    valor, quando, erro = _ptax_do_fixing(moeda, data_iso, deslocamento)
+    if valor is None:
+        raise domain.ErroFormulario('{rotulo}: type it in — {motivo}', rotulo=rotulo,
+                                    motivo=erro or 'no PTAX for that day')
+    return valor, 'PTAX {} {:%d/%m/%Y}'.format(str(moeda).upper(), quando)
+
+
+def _inteiro(form, campo, padrao):
+    bruto = str(form.get(campo) or '').strip()
+    if not bruto:
+        return padrao
+    try:
+        return int(float(bruto.replace(',', '.')))
+    except ValueError:
+        raise domain.ErroFormulario('{campo}: a whole number of business days', campo=campo)
+
+
+def calcular_ndf(form):
+    from apps.pages.precificador import derivativos
+    moeda = (form.get('moeda') or 'USD').strip().upper()
+    vencimento = para_data(form.get('vencimento') or '')
+    fixing, nota = _ptax_ou_digitado(form, 'fixing', 'fixing', moeda, vencimento.isoformat(),
+                                     _inteiro(form, 'ptax_offset', 1))
+    r = derivativos.liquidar_ndf(
+        nocional=domain.numero_do_form(form, 'nocional', 'notional'),
+        taxa_termo=domain.numero_do_form(form, 'taxa_termo', 'forward rate'),
+        fixing=fixing, posicao=form.get('posicao') or '',
+        fixo_em_reais=domain.ligado(form, 'fixo_em_reais'),
+        isento_ir=domain.ligado(form, 'isento_ir'))
+    return {'r': r, 'moeda': moeda, 'vencimento': vencimento, 'fixing_nota': nota}
+
+
+def calcular_unwind_ndf(form):
+    from apps.pages.precificador import derivativos
+    moeda = (form.get('moeda') or 'USD').strip().upper()
+    liquidacao_dt = para_data(form.get('liquidacao') or '')
+    vencimento = para_data(form.get('vencimento') or '')
+    du_digitado = str(form.get('du') or '').strip()
+    du = (_inteiro(form, 'du', 0) if du_digitado
+          else derivativos.dias_uteis_ate(liquidacao_dt, vencimento))
+    original = str(form.get('nocional_original') or '').strip()
+    r = derivativos.recomprar_ndf(
+        nocional=domain.numero_do_form(form, 'nocional', 'unwound notional'),
+        strike=domain.numero_do_form(form, 'strike', 'strike'),
+        taxa_recompra=domain.numero_do_form(form, 'taxa_recompra', 'termination rate'),
+        taxa_pre=domain.taxa_do_form(form, 'taxa_pre', 'pre rate', 0.0),
+        du=du, posicao=form.get('posicao') or '',
+        fixo_em_reais=domain.ligado(form, 'fixo_em_reais'),
+        nocional_original=domain.decimal(original, 'original notional') if original else None,
+        ja_recomprado=domain.numero_do_form(form, 'ja_recomprado', 'unwound before', 0.0))
+    return {'r': r, 'moeda': moeda, 'liquidacao': liquidacao_dt, 'vencimento': vencimento,
+            'du_contado': not du_digitado}
+
+
+def calcular_opcao(form):
+    from apps.pages.precificador import derivativos
+    moeda = (form.get('moeda') or liquidacao.SEM_CONVERSAO).strip().upper()
+    exercicio = para_data(form.get('exercicio') or '')
+    # Um preço por linha (ou separados por `;`): um é a vanilla, vários a asiática.
+    brutos = [b for b in str(form.get('fixings') or '').replace(';', '\n').split('\n') if b.strip()]
+    fixings = [domain.decimal(b, 'fixing price') for b in brutos]
+    paridade, nota = _ptax_ou_digitado(form, 'paridade', 'FX rate', moeda, exercicio.isoformat(),
+                                       _inteiro(form, 'ptax_offset', 1))
+    par_premio = str(form.get('paridade_premio') or '').strip()
+    r = derivativos.liquidar_opcao(
+        tipo=form.get('tipo') or '', lado=form.get('lado') or '',
+        strike=domain.numero_do_form(form, 'strike', 'strike'),
+        quantidade=domain.numero_do_form(form, 'quantidade', 'quantity'),
+        fixings=fixings, paridade=paridade,
+        premio_unitario=domain.numero_do_form(form, 'premio_unitario', 'unit premium', 0.0),
+        paridade_premio=domain.decimal(par_premio, 'premium FX rate') if par_premio else None)
+    return {'r': r, 'moeda': moeda, 'exercicio': exercicio, 'paridade_nota': nota}
+

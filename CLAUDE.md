@@ -997,6 +997,23 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   do `swap-ir-client` vence a direção (a regra do Trade Level, pelas mesmas
   `_swap_ir_excecao`/`_swap_ir_faixas` da platform), fora dela as faixas do
   `swap-ir-term` só com o banco pagando. `check_tools_descricao.py`.
+- **Tools › NDF Calculator, Unwind NDF Calculator e Option Calculator** (§510):
+  o motor é o `precificador/derivativos.py` (PURO), e as três telas são o
+  desenho da Fixed Income — formulário à esquerda, a conta ABERTA em parcelas à
+  direita (`entrypoint._calculadora`). **O resultado é sempre o do BANCO, e a
+  direção é o SINAL dele**, nunca um campo digitado (§488). NDF: `Nocional ME ×
+  (Fixing − Termo) × sinal`, IR de 0,005% só quando o banco PAGA — o piso de
+  R$ 1,00 é do balde MENSAL e a tela DIZ que não o decide. Recompra: a MESMA
+  fórmula do `unwinds.domain.conferir_apuracao` (feature não importa feature,
+  então a conta está em dois lugares — o `check_tools_calculators.py` cobra a
+  paridade nas TRÊS operações reais do §488); DU em branco é contado no ANBIMA,
+  e o saldo são as três parcelas do Termo (`Zero` quando zera). Opção: payoff de
+  quem é TITULAR, prêmio separado do exercício (liquidam em dias diferentes),
+  vários preços = asiática (média aritmética); barreira e rebate NÃO são
+  apurados. Fixing/paridade em branco buscam a PTAX de venda pela MESMA
+  `_ptax_do_fixing` do Swap Calculator e dizem de que dia é; sem PTAX e sem
+  número é erro em frase com o motivo. **O menu de Tools é em ORDEM ALFABÉTICA
+  pelo rótulo em inglês** — item novo entra no lugar, não no fim.
 - **Swap Calculator: a data do fixing da taxa a termo conta no calendário do
   ÍNDICE, não no ANBIMA** (§509, `liquidacao.calendario_do_fixing`): Term SOFR =
   calendário SOFR do Holidays (*US Government Securities business days*),
@@ -1864,7 +1881,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (148 scripts)
+### `scripts/tests/` (149 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

@@ -22356,3 +22356,46 @@ Rede: `check_tools.py` §9 (novo — o caso da mesa, o feriado brasileiro que N�
 conta para o SOFR, a EURIBOR pelo TARGET2, o endpoint, e o JS sem a cópia da
 regra).
 
+## §510 — Tools: três calculadoras novas e o menu em ordem alfabética (2026-09-21)
+
+**O pedido.** Ordenar o menu de Tools alfabeticamente e criar NDF Calculator,
+Option Calculator e Unwind NDF Calculator.
+
+**O desenho.** As três seguem a Fixed Income: formulário à esquerda, a conta
+ABERTA em parcelas à direita ("How the number is built"), porque número sem
+parcela não se confere. O motor é `precificador/derivativos.py`, puro; a
+vertical lê o formulário e busca a PTAX (`queries.calcular_ndf`,
+`calcular_unwind_ndf`, `calcular_opcao`), e as três rotas saem de um ajudante só
+(`entrypoint._calculadora`).
+
+**As decisões que não se leem no código:**
+
+- **o resultado é o do BANCO e a direção é o SINAL dele** — nunca um campo de
+  direção digitado, pela mesma razão do §488 (o Direction do aviso do Athena
+  erra nas operações fixas em reais);
+- **NDF**: `Nocional ME × (Fixing − Termo) × sinal`. O IR de 0,005% só existe
+  quando o banco PAGA (é sobre o ganho do cliente), e a tela DIZ que o piso de
+  R$ 1,00 não é decidido ali — ele é do balde mensal da contraparte (§423), e
+  uma calculadora de uma operação afirmando "retém/não retém" estaria errada
+  metade das vezes;
+- **recompra**: é a MESMA fórmula que a página de Unwinds confere contra o aviso
+  (`conferir_apuracao`). Feature não importa feature e a vertical de Unwinds não
+  pode importar o precificador sem virar dependência cruzada de tela, então a
+  conta vive em dois lugares — e o teste cobra que os dois batam nas TRÊS
+  operações reais do §488 (R$ 11.144,00 · R$ 42,80 · R$ 398,81). DU em branco é
+  contado no ANBIMA; digitado, reproduz o número do aviso. O saldo são as três
+  parcelas do Termo (§503), e zerado a tela escreve `Zero`;
+- **opção**: payoff de quem é TITULAR, prêmio SEPARADO do exercício (liquidam em
+  dias diferentes — somá-los num número só esconde os dois caixas), vários
+  preços de verificação = asiática. Na opção de câmbio o fixing É a taxa:
+  escolhe-se BRL e digita-se o fixing como preço. **Barreira e rebate não são
+  apurados** — a tela diz.
+
+**O menu** ficou: Euribor · Fixed Income · NDF Calculator · Option Calculator ·
+Quotes · SOFR Index · Swap Calculator · Term SOFR · Unwind NDF Calculator. O
+`check_tools.py` prendia a ordem antiga e a allowlist de cinco; andou junto.
+
+Rede: `check_tools_calculators.py` (novo), `check_tools` (menu, allowlist e as
+conferências de padrão estendidas às três telas), `check_soc_layers`,
+`check_export_padrao`, `check_modal_standard`, `check_table_center`.
+
