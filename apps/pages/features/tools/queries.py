@@ -315,7 +315,8 @@ def memoria_de_calculo(form):
         reter_ir=domain.ligado(form, 'reter_ir'),
         arredondar_di=domain.ligado(form, 'arredondar_di'),
         regra_ir=calculo['regra_ir'])
-    return conteudo, domain.nome_memoria(form.get('b3_id'), form.get('counterparty'), r.fim)
+    return conteudo, domain.nome_memoria(form.get('b3_id'), form.get('counterparty'), r.fim,
+                                         produto='Swap')
 
 
 def contagens_lado_a_lado(inicio, fim, cal_nome='ANBIMA'):
@@ -1563,7 +1564,7 @@ def memoria_ndf(form):
         fixo_em_reais=domain.ligado(form, 'fixo_em_reais'),
         fixing_nota=c.get('fixing_nota') or '', paridade_nota=c.get('paridade_nota') or '',
         ativo=str(form.get('ativo') or '').strip() if c.get('mercadoria') else '')
-    return conteudo, domain.nome_memoria(cetip, cpty, c['vencimento'])
+    return conteudo, domain.nome_memoria(cetip, cpty, c['vencimento'], produto='NDF')
 
 
 def memoria_unwind_ndf(form):
@@ -1577,7 +1578,7 @@ def memoria_unwind_ndf(form):
         fixo_em_reais=domain.ligado(form, 'fixo_em_reais'), du_contado=c['du_contado'],
         original_informado=_num_opcional(form, 'nocional_original'),
         ja_recomprado=_num_opcional(form, 'ja_recomprado') or 0.0)
-    return conteudo, domain.nome_memoria(cetip, cpty, c['liquidacao'])
+    return conteudo, domain.nome_memoria(cetip, cpty, c['liquidacao'], produto='Recompra NDF')
 
 
 def memoria_opcao(form):
@@ -1590,5 +1591,5 @@ def memoria_opcao(form):
         paridade_nota=c.get('paridade_nota') or '',
         premio_unitario=_num_opcional(form, 'premio_unitario') or 0.0,
         paridade_premio=_num_opcional(form, 'paridade_premio'))
-    return conteudo, domain.nome_memoria(cetip, cpty, c['exercicio'])
+    return conteudo, domain.nome_memoria(cetip, cpty, c['exercicio'], produto='Opção')
 

@@ -1018,7 +1018,8 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   lógica** (§515, `infra/memoria_derivativos.py`): fórmula encadeada até as
   entradas, com o VALOR gravado junto (o `_cache_das_formulas`/`_selar` do
   `memoria_xlsx`, reaproveitados — não reescritos), timbre do banco, parte
-  devedora NOMEADA, nome `Memória de Cálculo - CETIP ID - contraparte - data`.
+  devedora NOMEADA, nome `Memória de Cálculo <produto> - CETIP ID - contraparte -
+  data` (`NDF`, `Recompra NDF`, `Opção`; o swap diz `Swap`).
   **Só as funções que o avaliador conhece** (as quatro operações, `^`,
   IF/AND/MAX/ABS/ROUND): a média da asiática é a SOMA explícita das células
   dividida pela contagem, não AVERAGE — função fora do avaliador sai com o cache
@@ -1198,8 +1199,9 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   uma planilha; ele é `submit` de verdade (baixa sem JS) e o `tools.js` só
   intercepta para DESLIGAR o spinner, porque navegação que baixa arquivo não
   emite evento nenhum. O documento é do BANCO: timbre em A1, nada do sistema
-  que o gerou (nem no `docProps/app.xml`), e nome `Memória de Cálculo - CETIP
-  ID - contraparte - data`, com segmento vazio sumindo. Ele se lê como
+  que o gerou (nem no `docProps/app.xml`), e nome `Memória de Cálculo <produto>
+  - CETIP ID - contraparte - data` (`Swap`, `NDF`, `Recompra NDF`, `Opção` — é o
+  que distingue os arquivos na pasta de quem baixou), com segmento vazio sumindo. Ele se lê como
   DOCUMENTO: valores à ESQUERDA, timbre ancorado com deslocamento em EMU
   (`add_image(img, 'A1')` cola no canto e esconde a imagem), e texto
   EXECUTIVO — sem linguagem de conversa nem de aula, com a parte devedora

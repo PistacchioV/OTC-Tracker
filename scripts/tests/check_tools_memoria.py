@@ -144,6 +144,15 @@ check('o que o Windows recusa vira espaco',
 check('segmento vazio SOME, em vez de virar um traco solto',
       domain.nome_memoria('', '   ', date(2026, 1, 2)),
       'Memória de Cálculo - 02-01-2026.xlsx')
+# O PRODUTO vai no nome (mesa, 21/09/2026): quatro calculadoras exportando
+# `Memoria de Calculo - ...` davam, na pasta de quem baixou, arquivos que so se
+# distinguiam abrindo.
+check('o produto entra logo depois de "Memoria de Calculo"',
+      domain.nome_memoria('26G53382860', 'FUNDO ABC', date(2026, 6, 30), produto='Swap'),
+      'Memória de Cálculo Swap - 26G53382860 - FUNDO ABC - 30-06-2026.xlsx')
+check('e passa pela mesma limpeza do resto do nome',
+      domain.nome_memoria('X', '', date(2026, 1, 2), produto='Recompra/NDF'),
+      'Memória de Cálculo Recompra NDF - X - 02-01-2026.xlsx')
 
 # ─────────────────────────────────────────────────────────────────────────────
 print('\n== 2. a conta: o Excel recalcula o que o motor calculou ==')
@@ -183,8 +192,8 @@ FORM = {
 
 conteudo, nome = queries.memoria_de_calculo(FORM)
 r = queries.liquidar(FORM)['r']
-check('o nome sai do CETIP ID, da contraparte e da liquidacao', nome,
-      'Memória de Cálculo - 26G53382860 - FUNDO DE INVESTIMENTO ABC - 02-03-2026.xlsx')
+check('o nome sai do PRODUTO, do CETIP ID, da contraparte e da liquidacao', nome,
+      'Memória de Cálculo Swap - 26G53382860 - FUNDO DE INVESTIMENTO ABC - 02-03-2026.xlsx')
 
 import openpyxl                                                         # noqa: E402
 wb = openpyxl.load_workbook(io.BytesIO(conteudo))
