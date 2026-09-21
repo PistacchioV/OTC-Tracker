@@ -30,6 +30,8 @@ def field_domains():
             'signature_column': cgd_docs.SIGNATURE_COLUMN,
             'doc_types': list(cgd_docs.DOC_TYPES),
             'doc_type_column': cgd_docs.DOC_TYPE_COLUMN,
+            'status_options': list(cgd_docs.STATUS_OPTIONS),
+            'status_column': cgd_docs.STATUS_COLUMN,
             'guarantor_options': list(cgd_docs.GUARANTOR_OPTIONS)}
 
 

@@ -486,6 +486,8 @@
     var SIGCOL = '';          // e qual coluna o usa
     var DOCTYPES = [];        // domínio do Doc Type (Transactional Type do EI)
     var DOCTYPECOL = '';
+    var STATUSOPTS = [];      // Active/Inactive/Cancelled — os desfechos da tela
+    var STATUSCOL = '';
     var GUAROPTS = [];        // Yes/No do Garantidor
     var table = null;
     var dados = [];
@@ -753,6 +755,8 @@
                 SIGCOL = j.signature_column || '';
                 DOCTYPES = j.doc_types || [];
                 DOCTYPECOL = j.doc_type_column || '';
+                STATUSOPTS = j.status_options || [];
+                STATUSCOL = j.status_column || '';
                 GUAROPTS = j.guarantor_options || [];
                 dados = j.rows || [];
                 $('#ob-src').html(
@@ -792,6 +796,8 @@
             campo = selectDe(SIGTYPES, v, id);
         } else if (DOCTYPECOL && c === DOCTYPECOL && DOCTYPES.length) {
             campo = selectDe(DOCTYPES, v, id);
+        } else if (STATUSCOL && c === STATUSCOL && STATUSOPTS.length) {
+            campo = selectDe(STATUSOPTS, v, id);
         } else if (c === 'Garantidor' && GUAROPTS.length) {
             campo = selectDe(GUAROPTS, v, id);
         } else if (DATECOLS.indexOf(c) !== -1) {
@@ -810,15 +816,34 @@
                '</div>';
     }
 
+    // Duas grafias do MESMO valor. A comparação do domínio é cega à caixa e ao
+    // espaço porque o servidor já é: `is_active` normaliza antes de comparar, e
+    // para ele `ACTIVE` e `Active` são o mesmo status. Comparado letra a letra,
+    // o `selectDe` abaixo mostraria os dois lado a lado no mesmo dropdown —
+    // que é como a lista do SharePoint chega à instância.
+    function mesmoValor(a, b) {
+        return String(a || '').trim().toUpperCase() === String(b || '').trim().toUpperCase();
+    }
+
     function selectDe(opcoes, v, id) {
-        // O valor JÁ GRAVADO entra na lista mesmo fora do domínio: escondê-lo
-        // faria o primeiro Save trocar o valor da linha sem ninguém pedir.
+        // O valor JÁ GRAVADO entra na lista quando está fora do domínio:
+        // escondê-lo faria o primeiro Save trocar o valor da linha sem ninguém
+        // pedir. É o que preserva o Status de texto livre do SharePoint
+        // (`Em Analise Legal`, `Pendente Cliente`), que é o que o cadastro
+        // `cgd-stage` traduz em etapa.
+        //
+        // Fora do domínio é medido pelo `mesmoValor`: `ACTIVE` gravado CASA com
+        // a opção `Active` e seleciona ELA. O Save passa a gravar a grafia do
+        // domínio, o que padroniza a coluna e não muda semântica nenhuma —
+        // `is_active`, `is_closed` e `outcome` comparam normalizado.
         var lista = opcoes.slice();
-        if (v && lista.indexOf(v) === -1) { lista.unshift(v); }
+        var casada = null;
+        lista.forEach(function (o) { if (mesmoValor(o, v)) { casada = o; } });
+        if (v && casada === null) { lista.unshift(v); casada = v; }
         return '<select class="form-select form-select-sm ob-fld" id="' + id + '">' +
                '<option value=""></option>' +
                lista.map(function (o) {
-                   return '<option value="' + esc(o) + '"' + (o === v ? ' selected' : '') + '>' +
+                   return '<option value="' + esc(o) + '"' + (o === casada ? ' selected' : '') + '>' +
                           esc(o) + '</option>';
                }).join('') + '</select>';
     }
@@ -967,6 +992,7 @@
         var $w = $('#ob-mass-val').empty();
         var dominio = (SIGCOL && col === SIGCOL) ? SIGTYPES
                     : (DOCTYPECOL && col === DOCTYPECOL) ? DOCTYPES
+                    : (STATUSCOL && col === STATUSCOL) ? STATUSOPTS
                     : (col === 'Garantidor') ? GUAROPTS : null;
         if (dominio && dominio.length) {
             var s = $('<select class="form-select form-select-sm" id="ob-mass-value">')

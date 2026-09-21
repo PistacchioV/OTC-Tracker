@@ -254,6 +254,10 @@ def replace_all(rows, path=None):
     ph = ', '.join('?' for _ in DB_COLUMNS)
     dados = []
     for i, r in enumerate(rows, start=1):
+        # A padronização é aqui e não só na tela: esta função REESCREVE a
+        # tabela inteira a cada importação, e sem ela a Razão Social voltaria
+        # em caixa mista na rodada seguinte (ver `UPPERCASE_COLUMNS`).
+        r = padroniza(r)
         linha = [str(i)]
         for c in COLUMNS:
             v = r.get(c, '')
@@ -306,6 +310,7 @@ def update_row(row_id, values, path=None):
     path = ensure_db(path)
     if duckdb is None:
         return 0
+    values = padroniza(values)
     campos = [(c, values[c]) for c in COLUMNS if c in values]
     if not campos:
         return 0
@@ -332,6 +337,7 @@ def add_row(values, path=None):
     path = ensure_db(path)
     if duckdb is None:
         return 0
+    values = padroniza(values)
     with duckdb_write(path) as con:
         prox = con.execute('SELECT COALESCE(MAX(CAST("{}" AS INTEGER)), 0) + 1 FROM {}'
                            .format(ID_COLUMN, TABLE)).fetchone()[0]
@@ -562,9 +568,14 @@ REQUEST_FORM = (
     # documento `Transactional` — que é onde os documentos por cliente já vivem
     # e onde a mesa os procura. Guardá-lo numa pasta nova, só do Onboarding,
     # criaria um segundo lugar para o mesmo tipo de papel.
+    # `multiple`: a solicitação leva MAIS DE UM documento (mesa, 21/09/2026) —
+    # o template do CGD, o cartão de assinaturas, o contrato social. Todos vão
+    # para a MESMA pasta e com o mesmo prefixo: o que os separa na listagem é o
+    # marcador de cópia do próprio inventário (`_ei_version_prefix`), que já
+    # numera o segundo e o terceiro papel do mesmo tipo.
     {'label': 'Appendix', 'lang': 'ob-req-f-appx', 'column': '', 'type': 'file',
-     'required': True, 'col': 'col-12',
-     'hint': 'Attach the template used to issue the CGD',
+     'required': True, 'col': 'col-12', 'multiple': True,
+     'hint': 'Attach the template(s) used to issue the CGD',
      'hint_lang': 'ob-req-h-appx'},
 )
 
@@ -619,6 +630,61 @@ ACTIVE_STATUS = 'ACTIVE'
 # `ACTIVE`: o teste do encerrado vem antes do de ativo em todo lugar que os
 # dois convivem.
 CLOSED_MARKS = ('INACTIV', 'INATIV', 'CANCEL')
+
+# A coluna do Status e o DOMÍNIO que a tela oferece, pela mesma razão do
+# `SIGNATURE_COLUMN`: a tela precisa saber QUAL das trinta colunas vira um
+# `select`, e casar pelo texto no navegador seria o nome da coluna escrito em
+# dois lugares.
+#
+# São TRÊS e não duas (mesa, 21/09/2026 pediu Active/Inactive): `Cancelled` é
+# um dos QUATRO cards do Track Docs (`OUTCOMES`), e sem ele na lista ninguém
+# consegue cancelar um CGD pela tela — o card continuaria contando só o que
+# viesse cancelado do SharePoint, e a única saída seria editar a lista de lá e
+# reimportar.
+#
+# A grafia é a de TÍTULO porque é a que a lista já usa (`Active`, `Inactive`) e
+# a que o `stamp_mo` grava ao fechar a esteira. Ela NÃO é o `ACTIVE_STATUS`:
+# aquele é o valor NORMALIZADO com que `is_active` compara, e trocar um pelo
+# outro faria a tela oferecer `ACTIVE` numa lista cujos dados dizem `Active`.
+#
+# O domínio não fecha o campo: o Status é texto livre do SharePoint (`Doc
+# Transacional`, `Em Analise Legal`, `Pendente Cliente`) e é ele que o cadastro
+# `cgd-stage` traduz em etapa. O valor já gravado continua na lista — ver o
+# `selectDe` da tela.
+STATUS_COLUMN = 'Status'
+STATUS_OPTIONS = ('Active', 'Inactive', 'Cancelled')
+
+# As colunas que a GRAVAÇÃO padroniza em MAIÚSCULAS (mesa, 21/09/2026).
+#
+# A Razão Social chegava da lista em caixa mista (`Votorantim Cimentos N/NE
+# S/A` ao lado de `CASA DO ADUBO SA`), e a coluna é lida de cima a baixo: o
+# nome em minúscula salta como se fosse outro tipo de registro.
+#
+# A padronização é no FUNIL, não na tela, e alcança os TRÊS caminhos de escrita
+# — New Request, edição da grade e a importação do SharePoint. Só nos dois
+# primeiros, ela se desfaria sozinha: a importação REESCREVE a tabela inteira
+# (ver o cabeçalho do módulo), e o nome voltaria em caixa mista na rodada
+# seguinte, sem erro nenhum.
+#
+# É `upper()` e não `_norm()`: o acento FICA (`COVESTRO INDÚSTRIA`). Tirá-lo
+# mudaria o nome da empresa, não a caixa — e é por este texto que a pasta da
+# contraparte é procurada no Electronic Inventory.
+#
+# A pasta do Electronic Inventory não se duplica com isto: o `_ei_match_key`
+# compara em maiúsculas e sem pontuação, então a pasta que já existe continua
+# sendo a mesma.
+UPPERCASE_COLUMNS = ('Razão Social',)
+
+
+def padroniza(values):
+    """As colunas de `UPPERCASE_COLUMNS` em maiúsculas. Devolve um dicionário
+    NOVO — o chamador passa o payload do request, e alterá-lo no lugar mudaria
+    o que ele lê depois."""
+    out = dict(values or {})
+    for c in UPPERCASE_COLUMNS:
+        if c in out and out[c] is not None:
+            out[c] = str(out[c]).upper()
+    return out
 
 _STAGE_MAP = {'mtime': None, 'rows': None}
 
