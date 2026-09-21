@@ -153,7 +153,45 @@ def is_available():
 
 _MAPPINGS_DIR = data_write("mappings")
 MAPPING_KEY = "api-links"
-API_LINKS_FILE = mapping_file(MAPPING_KEY, _MAPPINGS_DIR)
+
+
+def _api_links_file():
+    """O caminho do cadastro `api-links`, resolvido no PRIMEIRO USO.
+
+    Era `API_LINKS_FILE = mapping_file(...)` no nível de módulo, e
+    `mapping_file()` cai em `data_path()`, que pergunta ao ARMAZÉM se o arquivo
+    existe — o que ABRE UM DUCKDB. No share, frio, isso custa segundos, e
+    acontecia durante o IMPORT: este módulo é importado pelo `quotes`, que é
+    importado pela vertical de Quotes, no bloco de imports do fim do
+    `routes.py`. Ou seja, dentro da subida (21/09/2026 — ver
+    `scripts/tests/check_boot_lazy_paths.py`).
+
+    O valor vai para o global do módulo e vira atributo de verdade, então a
+    resolução acontece UMA vez por processo — que é o que a constante fazia, só
+    que no momento certo.
+
+    Ele é lido pelos dois lados, e por isso existem as duas formas: aqui dentro
+    a leitura é por esta FUNÇÃO (um nome global lido de dentro do arquivo não
+    passa pelo `__getattr__` de módulo — daria `NameError`), e de fora
+    continua sendo o ATRIBUTO `athena_api.API_LINKS_FILE`, que é o que o
+    `check_ndfc_api.py` e o `check_api_links.py` TROCAM para apontar o teste a
+    um tmp. O patch deles cria o global e vence esta função, como sempre
+    venceu.
+    """
+    caminho = globals().get('API_LINKS_FILE')
+    if caminho is None:
+        caminho = mapping_file(MAPPING_KEY, _MAPPINGS_DIR)
+        globals()['API_LINKS_FILE'] = caminho
+    return caminho
+
+
+def __getattr__(name):
+    """`API_LINKS_FILE` sob demanda; qualquer outro nome levanta, como o Python
+    faria sem este gancho — é o que mantém `getattr(..., padrão)` e `hasattr`
+    respondendo o que sempre responderam."""
+    if name == 'API_LINKS_FILE':
+        return _api_links_file()
+    raise AttributeError('module %r has no attribute %r' % (__name__, name))
 
 USE_NEW_DEALS = "New Deals"
 USE_UNWINDS = "Unwinds"
@@ -181,7 +219,10 @@ def _api_link_rows():
     # rotina carrega o proprio fallback: e ele que responde nesse meio-tempo.
     try:
         from apps.pages import duck_read
-        rows = duck_read.dataset_rows(API_LINKS_FILE)
+        # Pela FUNÇÃO, não pelo nome: o global só existe depois do primeiro uso
+        # (ou do patch do teste), e lido cru aqui dentro daria `NameError` —
+        # `__getattr__` de módulo não responde a nome global do próprio arquivo.
+        rows = duck_read.dataset_rows(_api_links_file())
     except Exception:
         return []
     return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []

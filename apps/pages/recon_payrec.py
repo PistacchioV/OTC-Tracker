@@ -317,9 +317,24 @@ def _norm_cpty(name):
 #   No Net    → every individual trade/cashflow settles on its own (no netting)
 # Resolved by joining the recon counterparty NAME → SPN (RefData.json) → NET.value
 # (CounterpartyDetails.json). Unconfigured / not-yet-approved → Total Net.
-_REFDATA_PATH = data_path('RefData.json')
-_CPD_PATH = data_path('CounterpartyDetails.json')
 _VALID_NET_TYPES = ('Total Net', 'Pay/Rec', 'No Net')
+
+
+# Os dois caminhos saem de FUNÇÃO e não de constante de módulo: `data_path()`
+# parece montagem de caminho e não é — ele pergunta ao ARMAZÉM se o arquivo
+# existe, o que ABRE UM DUCKDB, e no share isso custa segundos. Como constante,
+# a abertura acontecia no IMPORT, dentro da subida, com o app sem atender
+# (21/09/2026 — ver `scripts/tests/check_boot_lazy_paths.py`).
+#
+# Função e não `__getattr__` de módulo: os dois nomes são lidos só AQUI DENTRO,
+# e nome global lido do próprio arquivo não passa pelo gancho. Nenhum teste os
+# troca, então a forma de função não tira patch de ninguém.
+def _refdata_path():
+    return data_path('RefData.json')
+
+
+def _cpd_path():
+    return data_path('CounterpartyDetails.json')
 
 
 def _load_net_type_map():
@@ -338,7 +353,7 @@ def _load_net_type_map():
 
     name_to_spn = {}
     try:
-        refs = _db('refdata_rows', _REFDATA_PATH) or []
+        refs = _db('refdata_rows', _refdata_path()) or []
         for r in refs:
             nm = _norm(r.get('COUNTERPARTY', ''))
             spn = str(r.get('SPN', '') or '').strip()
@@ -348,7 +363,7 @@ def _load_net_type_map():
         return {}
     spn_to_net = {}
     try:
-        cpds = _db('cpd_records', _CPD_PATH) or []
+        cpds = _db('cpd_records', _cpd_path()) or []
         for r in cpds:
             spn = str(r.get('SPN', '') or '').strip()
             net = r.get('NET') or {}
