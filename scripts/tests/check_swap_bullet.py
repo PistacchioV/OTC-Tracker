@@ -641,9 +641,14 @@ def main():
     check('cadastro swap-bullet-curve existe', 'swap-bullet-curve' in R._MAPPING_DEFS and any(r.get('B3 CODE') == 'C99' for r in R._mapping_rows('swap-bullet-curve')))
     check('swap-code-labels ganhou a Adesão (upgrade)', any(str(r.get('FIELD')) == 'Adesão' and r.get('LABEL') == 'CGD' for r in R._mapping_rows('swap-code-labels')))
     from apps.pages.features.deals_monitor import domain as ND
-    check('card swap-bullet no Monitor apontando para a pasta gravada',
-          any(c['key'] == 'swap-bullet' and c['dirs'] == ('Swap/Bullet',) and c['url'] == '/new_deals-swap-bullet' for c in ND._NDM_CARDS)
-          and 'swap-bullet' in ND._NDM_TAXONOMY)
+    # O card `Swap Bullet` deixou de existir (21/09/2026): a pasta gravada
+    # alimenta Swap Equities e Swap CEM, e quem decide e a LOB da linha.
+    check('a pasta gravada alimenta os dois cards de swap do Monitor, pela LOB',
+          all(any(c['key'] == k and 'Swap/Bullet' in c['dirs'] and c.get('lob') == lob for c in ND._NDM_CARDS)
+              for k, lob in (('swap-equities', 'EDG'), ('swap-cem', 'CEM')))
+          and ND._ndm_bucket('Swap/Bullet', {'LOB': 'EDG'}) in ND.card_buckets(
+              next(c for c in ND._NDM_CARDS if c['key'] == 'swap-equities'))
+          and not any(c['key'] == 'swap-bullet' for c in ND._NDM_CARDS))
     check('B2B do Swap Bullet conta como ATA no Monitor', ND._ndm_deal_le('Swap/Bullet', {'Client': 'Atacama'}) == 'ATA'
           and ND._ndm_deal_le('Swap/Bullet', {'Client': 'Safra'}) == 'JPM')
     rules = {str(r.rule) for r in app.url_map.iter_rules()}

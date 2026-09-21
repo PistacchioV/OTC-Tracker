@@ -136,6 +136,7 @@ O menu é em **níveis**: um item com **›** à direita tem submenu. Clicar nel
 |---|---|
 | **NAVIGATION** | Dashboards › Dashboard 1 · Dashboard 2 — About |
 | **APPS** | Holidays Calendar · Electronic Inventory · Control Panel · File Interpreter · Tools |
+| **APPS › Tools** | **Calculators** (NDF Calculator · Option Calculator · Swap Calculator · Unwind NDF Calculator) · Euribor · Fixed Income · Quotes · SOFR Index · Term SOFR |
 | **APPS › Daily Settlement › NDF** | NDF Summary · NDF Cockpit · Other Publisher |
 | **APPS › Daily Settlement › Other Products** | Other Products Summary · OTM Settlements · Latam Desk Position · **Swap** (Settlement Advice · Athena · VCP · Events · Kapital Hybrids) · **NDF** (Settlement Advice) · **Option** (Settlement Advice · Cognos) |
 | **APPS › Daily Settlement** | Operations B3 |
@@ -145,17 +146,18 @@ O menu é em **níveis**: um item com **›** à direita tem submenu. Clicar nel
 | **DOCUMENTATION › Manual Confirmation** | Confirmations Monitor · Track Confirmations |
 | **DOCUMENTATION › Onboarding** | Overview · Tracking Docs |
 | **PRODUCTS** | Monitor (New Deals Monitor) |
+| **PRODUCTS › New Deals › Swap** | Bullet · Cashflow *(tela pronta; importação em construção)* |
 | **PRODUCTS › New Deals › NDF** | FWD Start · Other Publisher · Vanilla · Commodities |
-| **PRODUCTS › New Deals › Options** | FXO · Commodities |
+| **PRODUCTS › New Deals › Options** | FXO · Commodities · EDG *(tela pronta; importação em construção)* |
 | **PRODUCTS › New Deals › DCE** | Deliverable Forward · NDF · Option · Swap *(em construção)* |
-| **PRODUCTS › Unwinds** | **NDF › FX** · Swap · NDF Commodities · Options · COE · DCE *(só a de NDF › FX existe; as demais em construção)* |
+| **PRODUCTS › Unwinds** | **NDF › FX** · Swap (CEM · EDG) · NDF Commodities · Options (FXO · Commodities · EDG) · COE · DCE *(a de NDF › FX funciona de ponta a ponta; nas demais a tela está pronta e a importação em construção — ver 5.11)* |
 | **PRODUCTS › Intrag** | NDF · Option · Swap |
 | **PRODUCTS › Regulatory** | e-Financeira · WHT *(em construção)* |
 | **PRODUCTS** | Accrual Swap · MtM Swap |
 | **SETTINGS** | Reference Data · Index B3 · Mapping · Manage Roles · Page Access |
 | **SUPPORT** | Tickets · Ticket Details |
 
-> Os itens marcados **(em construção)** aparecem no menu mas ainda não têm tela: clicar neles devolve uma página de "não encontrado". A lista completa está no anexo 18.3.
+> Os itens marcados **(em construção)** aparecem no menu mas ainda não têm tela: clicar neles devolve uma página de "não encontrado". Os marcados **(tela pronta; importação em construção)** abrem normalmente, com a grade e as colunas do produto, mas ainda não importam nem enviam — a tela avisa isso em vez de falhar. A lista completa está no anexo 18.3.
 
 ### 3.6. Por que uma tela não aparece no seu menu
 
@@ -547,6 +549,19 @@ A recompra aparece no **Monitor** (capítulo 5.1) como *Unwind NDF FX*, na colun
 
 > **Uma coisa que o e-mail erra.** Em contrato com nocional em reais (*BRL fixed*), o campo *Direction* do aviso pode dizer **PAY** numa recompra **a receber** — e os campos *Future Value*, *Present Value* e *Calculated Termination Fee* vêm errados junto. A tela usa o **Input Termination Fee** e decide a direção pelo sinal do resultado, então a coluna *Direction* dela pode discordar do e-mail. Quando isso acontece, **a tela está certa** e o aviso registra a divergência.
 
+### 5.11. As telas novas de Swap, de opção de EDG e das demais recompras
+
+**Menu › PRODUCTS › New Deals › Swap › Cashflow** · **New Deals › Options › EDG** · **Unwinds › (todos os produtos)**
+
+Estas telas já abrem, com a grade, as colunas do produto, o filtro por coluna, o **Columns**, o **Export** e a área de upload — mas **ainda não importam nem enviam para a B3**. Ao clicar em **Import**, **Send** ou nos botões da linha, a tela responde com o aviso *"o servidor deste produto ainda não existe"*. Não é defeito nem falta de acesso: a parte de importação de cada produto está sendo construída, uma de cada vez. A recompra de **NDF › FX** (5.10) é a única que já funciona de ponta a ponta.
+
+Duas coisas para saber desde já:
+
+- **Não existe uma tela "Swap CEM".** O swap da mesa de CEM é *bullet* ou *cashflow*, como o da EDG: o que os distingue é a coluna **LOB** (`EDG` ou `CEM`), que aparece nas duas telas de swap e no modal de edição.
+- **As colunas das recompras foram montadas a partir do arquivo de antecipação da B3 de cada produto** (swap, opção e termo) e ainda estão em validação com a mesa. Se faltar ou sobrar uma coluna, avise — é um ajuste simples.
+
+A tela de **Swap Bullet** e a de **Swap Cashflow** ganharam as informações que o *Deal Ticket* da CEM traz e o da EDG não trazia: **FX Início**, **Valor Base em moeda estrangeira**, **Cotação**, **DCC** e **Cupom Limpo** de cada curva, o bloco de **Atualização de Notional** e as **Observações**. No deal da EDG esses campos ficam em branco. No *Cashflow*, o **cronograma de fluxos** (data inicial, data de pagamento, amortização, dias úteis e corridos, data do fixing) é editado dentro do modal da operação; na grade aparece só a quantidade de fluxos.
+
 ---
 
 ## 6. Daily Settlement — a liquidação do dia
@@ -587,6 +602,8 @@ A tela tem, de cima para baixo: as **abas de produto** (Vanilla · Other Publish
 1. Clique em **TEDs**, ao lado do Print Advice.
 2. O sistema monta o pedido de liberação com as instruções de pagamento (SSI) anexadas por contraparte e envia para OTC Ops e Settlements.
 3. Uma janela confirma quantas TEDs foram pedidas e quantos anexos foram. **Se faltar a SSI de alguma contraparte, o aviso diz de quem** — providencie e rode de novo.
+
+**A coluna *Settlement Type* do Trade Level** (logo à direita da contraparte) diz que liquidação é aquela: **MATURITY** (o termo venceu), **PREMIUM** ou **UNWIND** (a recompra, que entra na tela pela página de Unwinds). Ela aparece também nas linhas em *Check* — é justamente nelas que ajuda saber que caixa é aquele. Essa coluna é o que a geração dos avisos vai passar a usar.
 
 > **Operação intragrupo não gera aviso nem TED.** Não se manda documento nem se transfere dinheiro para a própria casa. A linha continua no Trade Level e no Settlement Summary — a liquidação existe e o total tem de fechar —, mas fica de fora do documento e do pedido de transferência.
 
@@ -640,6 +657,7 @@ Duas coisas próprias desta tela:
 
 - **O Trade Level abre agrupado por Produto → LOB → Contraparte**, nessa ordem, que é a ordem da conferência. Sem isso, swap, termo e opção do mesmo cliente ficariam intercalados.
 - **Uma linha que neta zero mostra `0,00` no Receive**, e não duas células vazias: o zero é o resultado — a operação liquida por valores que se anulam —, enquanto vazio se leria como "não deu para calcular".
+- **A coluna *Settlement Type* do Trade Level** (à direita da contraparte) diz que liquidação é aquela. No **swap**: `CASHFLOW` (fluxo intermediário), `MATURITY` (o último fluxo, no vencimento), `PREMIUM` e `UNWIND`. Na **opção**: `PREMIUM`, `EXERCISE` e `UNWIND`. No **termo de mercadoria**: `PREMIUM`, `MATURITY` e `UNWIND`. O sistema decide olhando a **posição** — o contrato vence hoje, o prêmio liquida hoje, há fluxo hoje —, do mesmo jeito que os cartões do topo contam. Quando uma operação liquida duas coisas no mesmo dia, as duas aparecem (`CASHFLOW · PREMIUM`). **Célula vazia** quer dizer que nem a posição nem o evento da B3 responderam: cadastre o evento em **Mapping › `opb3-events`**, coluna *Settlement Type* (13.3).
 
 ### 6.5. OTM Settlements
 
@@ -1404,7 +1422,7 @@ No **MtM** há ainda o botão **New Mapping**, para cadastrar um de-para novo se
 |---|---|
 | `commodities-b3` | O código B3 de cada mercadoria, por tipo de trade (Vanilla / Asian) |
 | `api-links` | O endereço da API da Athena, por uso e produto |
-| `opb3-events` | Quais linhas do Operations B3 entram numa apuração de liquidação |
+| `opb3-events` | Quais linhas do Operations B3 entram numa apuração de liquidação — e, na coluna **Settlement Type**, que liquidação cada evento representa (*Cashflow*, *Maturity*, *Premium*, *Exercise*, *Unwind*). É aqui que se cadastra, por exemplo, a antecipação como *Unwind* |
 | `b3-accounts` | As contas B3 das nossas entidades — quem é o participante, e por qual conta sai a mensageria |
 | `manual-conf-validation` | Quem valida a confirmação de cada produto (OTC / MO / FO) |
 | `manual-conf-sla` | Os prazos de cada mesa da esteira |
@@ -1419,12 +1437,12 @@ No **MtM** há ainda o botão **New Mapping**, para cadastrar um de-para novo se
 
 **Menu › Apps › Tools**
 
-O item que se chamava *Quotes* virou **Tools**, e agora abre seis telas de
-mercado: **Quotes**, **Fixed Income**, **Swap Calculator**, **SOFR Index**,
-**Term SOFR** e **Euribor**. As cinco novas vieram do projeto *Precificação
-Swap*; as três de taxa (SOFR Index, Term SOFR e Euribor) leem a base local que
-o dropzone de cada uma alimenta, porque a curva a termo é licenciada e não se
-baixa de fonte pública.
+O item que se chamava *Quotes* virou **Tools**. Ele abre, em ordem alfabética:
+o grupo **Calculators** — **NDF Calculator**, **Option Calculator**, **Swap
+Calculator** e **Unwind NDF Calculator** (13.4.2) — e, ao lado dele, **Euribor**,
+**Fixed Income**, **Quotes**, **SOFR Index** e **Term SOFR**. As três de taxa
+(SOFR Index, Term SOFR e Euribor) leem a base local que o dropzone de cada uma
+alimenta, porque a curva a termo é licenciada e não se baixa de fonte pública.
 
 O **Swap Calculator** liquida um fluxo de swap, e o campo **B3 ID** preenche a
 tela a partir da posição: contraparte, datas, notionais, amortização e as duas
@@ -1443,6 +1461,25 @@ pontas. Duas coisas para ler com atenção:
 - **Clicar num campo seleciona o valor inteiro**, para você digitar por cima sem
   apagar caractere a caractere. Se quiser corrigir só um pedaço, arraste sobre o
   trecho — a seleção que você fez é preservada.
+- **A data do fixing do Term SOFR conta no calendário SOFR** (e a da EURIBOR, no
+  TARGET2) — não no ANBIMA. É o D-2 do início do fluxo pulando os feriados
+  *americanos*: para um fluxo que começa na segunda 22/06/2026 o fixing é a
+  quarta **17/06**, porque a sexta 19/06 é feriado lá (Juneteenth). Os feriados
+  são os do **Holidays Calendar** (13.5): cadastrou lá, vale aqui.
+- **Perna de equity: o *Cupom Limpo* pode ser um percentual, não um preço.**
+  Quando a descrição da curva diz algo como `100.00% Close 20-Sep-24`, o preço
+  inicial é o **fechamento do papel naquele dia × o percentual**. A tela mostra
+  os três lado a lado — **Clean coupon (%)**, **Close price** e o **preço
+  calculado** — e copia o resultado para o **Initial price**. Se o fechamento não
+  vier (o papel não está em **Mapping › `quotes-equity`**, ou a fonte está fora
+  do ar), o campo fica em branco e em vermelho com o motivo: digite o fechamento
+  e a conta se refaz na hora.
+- **O campo *Rate multiplier* só aparece quando existe um multiplicador** — por
+  exemplo quando a descrição da curva traz `(3M SOFR + 0.75%)*1.1765`. Em
+  contrato sem multiplicador ele não aparece.
+- **Export** baixa a memória de cálculo em Excel — as fórmulas, não só os
+  números. O arquivo se chama `Memória de Cálculo Swap - B3 ID - contraparte -
+  data.xlsx`.
 
 #### 13.4.1. Quotes
 
@@ -1456,11 +1493,35 @@ pontas. Duas coisas para ler com atenção:
 
 1. Escolha o **Quote Type**: *PTAX*, *Equities* ou *Commodities*.
 2. O campo **Instrument** só habilita depois disso. Comece a digitar e escolha o instrumento na lista que abre logo abaixo do campo — a lista acompanha a largura do campo e rola.
-3. Preencha **From** e **To** com o período.
+3. Preencha **From** e **To** com o período. **Dá para digitar:** clicar no campo seleciona a data inteira, e basta digitar os números — as barras entram sozinhas (`22082026` vira `22/08/2026`) e o calendário abaixo acompanha. Também dá para escolher pelo calendário, como antes. Data depois de hoje é trazida para hoje.
 4. Clique em **Search**.
 5. A tabela abaixo traz a série. **Export** baixa (4.6).
 
 > **Se o sistema responder que o código não está cadastrado**, é porque falta a tradução do código B3 para o símbolo de mercado. Cadastre em **Mapping › `quotes-equity`** ou **`quotes-commodity`** — o sistema nunca tenta o código como ticker às cegas, justamente para não devolver um erro obscuro da fonte no lugar de "falta cadastrar".
+
+#### 13.4.2. Calculators — NDF, Option e Unwind NDF
+
+**Menu › Apps › Tools › Calculators**
+
+**Para que servem:** conferir, fora do fluxo do dia, quanto uma operação liquida. As três têm o mesmo desenho: o formulário à esquerda, e à direita o resultado com a conta **aberta em parcelas** (*How the number is built*). O resultado é sempre o **do banco** — `RECEIVE` quando o banco recebe, `PAY` quando paga —, decidido pelo sinal da conta.
+
+**Passo a passo (vale para as três):**
+
+1. Digite o **B3 ID** e clique na **lupa**. A posição do último dia útil preenche a tela: contraparte, data de emissão, classe do ativo e os dados do contrato.
+2. Confira o que veio. **Campo em vermelho** é o que a posição não trouxe — ficou em branco, nunca um palpite. **Campo em laranja** veio por aproximação e pede conferência. A caixa logo abaixo do B3 ID explica cada um.
+3. Complete o que falta e clique em **Calculate**.
+4. **Export** baixa a memória de cálculo em Excel, com as fórmulas. O nome do arquivo diz o produto: `Memória de Cálculo NDF - …`, `Recompra NDF - …` ou `Opção - …`.
+
+**NDF Calculator** — a liquidação do termo no vencimento: *nocional × (fixing − taxa a termo)*, com o sinal da posição do banco. O nocional que vem da posição é o que **ainda está aberto** (valor base menos o que já foi recomprado). Com o **Fixing** em branco, o sistema busca a **PTAX de venda** do vencimento menos o deslocamento (o D-1 de costume) e **escreve a taxa usada no próprio campo**, com a data embaixo. Enquanto a taxa for a que o sistema buscou, trocar o vencimento busca de novo; se você digitar, vale o digitado. O imposto de 0,005% aparece quando o banco paga — o piso de R$ 1,00 **não** é decidido ali, porque depende do acumulado do mês da contraparte.
+No **termo de mercadoria** (a classe do ativo que a posição traz), o nocional é quantidade, o fixing é o **preço do ativo** — vindo do **Quotes** — e aparece o campo **FX rate to BRL**, que é a PTAX que leva o resultado a reais.
+
+**Unwind NDF Calculator** — a recompra: *nocional × (taxa da recompra − strike)*, trazido a valor presente pela taxa pré nos dias úteis até o vencimento. É a **mesma conta** que a página de recompra (5.10) confere contra o aviso do Athena. A posição preenche o contrato **original**; a **taxa da recompra** e a **taxa pré** são do negócio do dia e ficam para você. Os **dias úteis** aparecem sozinhos assim que as duas datas existem e recontam quando você troca uma data — digite o número do aviso se quiser reproduzir exatamente o valor dele. Informando o nocional original, a tela mostra também o **novo valor base** e se a recompra é total ou parcial.
+
+**Option Calculator** — o exercício: *call* paga o preço menos o strike, *put* o strike menos o preço, nunca negativo. O **prêmio aparece separado do exercício**, porque os dois liquidam em dias diferentes. Os **preços de verificação vêm do Quotes**: um na opção comum, a série inteira na **asiática** (a média é feita pela tela). Se faltar preço de alguma data — data futura, ou dia sem pregão — o campo fica em vermelho e a nota diz quantas faltam: **série pela metade não é média**. Barreiras e rebates **não** são calculados; se o contrato tiver barreira, a tela avisa.
+
+> **Mercadoria cotada em centavos.** Algodão, milho e outras são cotadas na bolsa em *centavos*, e o contrato na B3 é registrado na unidade da moeda. Quando o **Index B3** (13.2) traz *Conversion Factor* **0,01** para o ativo, os preços do Quotes são multiplicados por 0,01 — e a caixa de avisos diz isso. Sem esse ajuste a opção pareceria cem vezes dentro do dinheiro.
+
+> **A contraparte da opção.** O nome que a posição traz é só um apelido de conta (`JPMORGANBM`). Na conta guarda-chuva, o cliente é o do **CPF/CNPJ**, resolvido pelo Reference Data; nas outras contas, o nome sai do Reference Data pela **conta CETIP**. Se aparecer vazio ou com o apelido, a caixa de avisos diz o que falta cadastrar em **Reference Data** (13.1).
 
 ### 13.5. Holidays Calendar
 
@@ -1774,7 +1835,7 @@ Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de pa
 Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devolve "página não encontrada". Não é defeito do seu acesso:
 
 - **New Deals › DCE** — Deliverable Forward · NDF · Option · Swap
-- **Unwinds** — Swap (CEM · EDG) · NDF **Commodities** · Options (FXO · Commodities · EDG) · COE · DCE (todos). **NDF › FX já existe** (capítulo 5.10)
+- **Unwinds** e **New Deals › Swap › Cashflow / Options › EDG** — *estas telas já abrem*, mas ainda **não importam nem enviam** (capítulo 5.11): Unwinds de Swap (CEM · EDG) · NDF Commodities · Options (FXO · Commodities · EDG) · COE · DCE. **Unwinds › NDF › FX funciona de ponta a ponta** (capítulo 5.10)
 - **Regulatory › e-Financeira** — Kapital · Athena NDF · Athena FXO · Pyramid
 - **Regulatory › WHT**
 
@@ -1806,7 +1867,8 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 | Electronic Inventory | Apps | 13.7 |
 | Control Panel | Apps | 14 |
 | File Interpreter | Apps | 13.6 |
-| Tools (Quotes · Fixed Income · Swap Calculator · SOFR Index · Term SOFR · Euribor) | Apps | 13.4 |
+| Tools (Euribor · Fixed Income · Quotes · SOFR Index · Term SOFR) | Apps | 13.4 |
+| Calculators (NDF · Option · Swap · Unwind NDF) | Apps › Tools › Calculators | 13.4.2 |
 | NDF Summary | Daily Settlement › NDF | 6.1 |
 | NDF Cockpit | Daily Settlement › NDF | 6.2 |
 | Other Publisher | Daily Settlement › NDF | 6.3 |

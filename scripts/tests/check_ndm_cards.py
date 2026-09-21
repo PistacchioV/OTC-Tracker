@@ -38,6 +38,11 @@ O que este teste prende:
      `GROUPS` do template — chave fora dele cai no *Others* de novo, agora por
      esquecimento do front;
   6. **o front nao inventa card**: nenhum placeholder fabricado no JS.
+  7. **o link**: card com pagina aponta para uma rota que existe;
+  8. **swap se divide pela LOB** (21/09/2026): so existem os cards Swap
+     Equities e Swap CEM, e a LINHA cai num ou noutro pela coluna LOB, venha
+     da pagina que vier (Bullet, Cashflow, recompra). LOB que nao diz o card
+     NAO e chutada: vira o generico `... No LOB` no Others.
 """
 import io, os, re, sys
 
@@ -139,12 +144,90 @@ for c in D._NDM_CARDS:
     alvo = str(c['url'])
     # O catch-all `/<template>` atende qualquer nome de um segmento so, entao
     # nele o que se confere continua sendo o ARQUIVO.
-    if alvo.count('/') == 1 and '/<template>' in _rotas:
+    # Mas a rota ESTATICA de um segmento vence o catch-all (as paginas do
+    # catalogo de New Deals, `/new_deals-swap-cashflow`, usam um template so):
+    # ali quem responde e o `url_map`, e o arquivo com o nome da URL nao existe.
+    if alvo in _rotas:
+        check('   %-20s -> rota %s' % (c['key'], alvo), True, True)
+    elif alvo.count('/') == 1 and '/<template>' in _rotas:
         existe = os.path.isfile(os.path.join(
             ROOT, 'apps', 'templates', 'pages', alvo.lstrip('/') + '.html'))
         check('   %-20s -> pages%s.html (catch-all)' % (c['key'], alvo), existe, True)
     else:
         check('   %-20s -> rota %s' % (c['key'], alvo), alvo in _rotas, True)
+
+print('\n== 8. swap: dois cards, e a LOB da linha decide ==')
+import json, tempfile                                                  # noqa: E402
+from datetime import datetime                                          # noqa: E402
+from apps.pages.features.deals_monitor import queries as Q             # noqa: E402
+
+check('o card Swap Bullet deixou de existir', 'swap-bullet' in chaves, False)
+swap_cards = [c for c in D._NDM_CARDS if c.get('lob')]
+check('os cards com LOB sao Swap Equities (EDG) e Swap CEM (CEM)',
+      sorted((c['key'], c['lob']) for c in swap_cards),
+      [('swap-cem', 'CEM'), ('swap-equities', 'EDG')])
+check('os dois leem as MESMAS pastas (quem separa e a LOB)',
+      len({c['dirs'] for c in swap_cards}), 1)
+for pasta in ('Swap/Bullet', 'Swap/Cashflow',
+              D.PREFIXO_UNWIND + 'Swap/EDG', D.PREFIXO_UNWIND + 'Swap/CEM'):
+    check('   %-22s esta entre elas' % pasta, pasta in swap_cards[0]['dirs'], True)
+check('o GROUPS da tela tem so os dois',
+      re.search(r"b3:\s*\['swap-equities',\s*'swap-cem'\]", TPL) is not None, True)
+check('a LOB e lida sem caixa nem pontuacao',
+      [D._ndm_bucket('Swap/Bullet', {'LOB': v}) for v in ('edg', ' C.E.M ', 'EDG')],
+      ['Swap/Bullet#EDG', 'Swap/Bullet#CEM', 'Swap/Bullet#EDG'])
+check('LOB vazia ou desconhecida NAO e chutada',
+      [D._ndm_bucket('Swap/Bullet', {'LOB': v}) for v in ('', 'RATES')],
+      ['Swap/Bullet/No LOB'] * 2)
+check('pasta que nao e de swap nao olha a LOB',
+      D._ndm_bucket('NDF/Vanilla', {'LOB': 'CEM'}), 'NDF/Vanilla')
+
+# O snapshot de verdade, numa arvore em tmp (caminho fora do DATA_DIR e disco).
+tmp = tempfile.mkdtemp(prefix='otc-ndm-')
+R.NEW_DEALS_CACHE_ROOT = os.path.join(tmp, 'new deals')
+Q.unwinds_cache_root = lambda: os.path.join(tmp, 'unwinds')
+
+
+def _dia(raiz, pasta, nome, linhas):
+    d = os.path.join(raiz, *(pasta.split('/') + ['2026', '09']))
+    os.makedirs(d)
+    with io.open(os.path.join(d, nome), 'w', encoding='utf-8') as fh:
+        json.dump(linhas, fh)
+
+
+_dia(R.NEW_DEALS_CACHE_ROOT, 'Swap/Bullet', '20260921_swapbullet.json', [
+    {'_id': 'a', 'LOB': 'EDG', 'Status': 'New', 'Client': 'Safra'},
+    {'_id': 'b', 'LOB': 'EDG', 'Status': 'Success', 'Client': 'Atacama'},
+    {'_id': 'c', 'LOB': 'CEM', 'Status': 'New', 'Client': 'Vale'},
+    {'_id': 'd', 'LOB': '', 'Status': 'New', 'Client': 'Sem Mesa'},
+    {'_id': 'e', 'LOB': 'CEM', 'Status': 'Canceled', 'Client': 'Fora'}])
+_dia(R.NEW_DEALS_CACHE_ROOT, 'Swap/Cashflow', '20260921_swapcashflow.json', [
+    {'_id': 'f', 'LOB': 'CEM', 'Status': 'Pending', 'Client': 'Petrobras'},
+    {'_id': 'g', 'LOB': 'EDG', 'Status': 'New', 'Client': 'Itau'}])
+_dia(Q.unwinds_cache_root(), 'Swap/CEM', '20260921_unwindswapcem.json', [
+    {'_id': 'h', 'LOB': 'EDG', 'Status': 'Imported', 'Client': 'Trocada'},
+    {'_id': 'i', 'LOB': 'CEM', 'Status': 'Imported', 'Client': 'Certa'}])
+
+with app.test_request_context():
+    cards, _conf = Q._ndm_monitor_snapshot(datetime(2026, 9, 21))
+por = {c['key']: c for c in cards}
+check('Swap Equities soma as EDG das TRES paginas', por['swap-equities']['total'], 4)
+check('   com os status de cada uma', por['swap-equities']['statuses'],
+      {'New': 2, 'Success': 1, 'Imported': 1})
+check('   e a perna da Atacama como ATA',
+      por['swap-equities']['les'], [{'le': 'JPM', 'count': 3}, {'le': 'ATA', 'count': 1}])
+check('Swap CEM soma as CEM (cancelada fora)', por['swap-cem']['total'], 3)
+check('   a recompra gravada na pagina CEM com LOB EDG foi para Equities',
+      por['swap-cem']['statuses'], {'New': 1, 'Pending': 1, 'Imported': 1})
+check('os dois cards abrem uma pagina',
+      (por['swap-equities']['url'], por['swap-cem']['url']),
+      ('/new_deals-swap-bullet', '/new_deals-swap-cashflow'))
+extras = {c['key']: c for c in cards if c['key'].startswith('extra-')}
+check('a linha sem LOB aparece no Others, com nome que diz o que falta',
+      [(k, c['label'], c['total']) for k, c in extras.items() if 'swap' in k],
+      [('extra-swap-bullet-no-lob', 'Swap Bullet No LOB', 1)])
+check('nenhuma operacao sumiu: 9 linhas validas = 4 + 3 + 1 + a cancelada',
+      por['swap-equities']['total'] + por['swap-cem']['total'] + 1, 8)
 
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)

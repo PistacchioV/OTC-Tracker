@@ -58,8 +58,6 @@ def _ndm_monitor_snapshot(ref):
             rel = os.path.relpath(root, raiz).replace('\\', '/')
             pkey = prefixo + '/'.join([p for p in rel.split('/') if not p.isdigit()][:2])
             data = _R()._day_json(fpath, mtime, size)
-            bucket = found.setdefault(pkey, _R().Counter())
-            les    = found_les.setdefault(pkey, _R().Counter())
             for d in (data if isinstance(data, list) else [data]):
                 if isinstance(d, dict):
                     # Intrag entries carry lowercase 'status' — without the
@@ -67,8 +65,12 @@ def _ndm_monitor_snapshot(ref):
                     st = str(d.get('Status') or d.get('status') or 'New').strip() or 'New'
                     if st == 'Canceled':      # cancelado via API: fora das métricas
                         continue
-                    bucket[st] += 1
-                    les[domain._ndm_deal_le(pkey, d)] += 1
+                    # O balde é da LINHA, não do arquivo: nas pastas de swap a
+                    # LOB de cada operação decide o card (`domain._ndm_bucket`),
+                    # e o mesmo arquivo-dia alimenta Swap Equities e Swap CEM.
+                    balde = domain._ndm_bucket(pkey, d)
+                    found.setdefault(balde, _R().Counter())[st] += 1
+                    found_les.setdefault(balde, _R().Counter())[domain._ndm_deal_le(pkey, d)] += 1
 
     _varre(_R().NEW_DEALS_CACHE_ROOT)
     # As RECOMPRAS: outra árvore, mesmo Monitor. O caminho vem do `data_paths`
@@ -79,7 +81,7 @@ def _ndm_monitor_snapshot(ref):
     cards, claimed = [], set()
     for c in domain._NDM_CARDS:
         agg, agg_le = _R().Counter(), _R().Counter()
-        for dkey in c['dirs']:
+        for dkey in domain.card_buckets(c):
             if dkey in found:
                 agg.update(found[dkey])
                 agg_le.update(found_les.get(dkey, {}))
