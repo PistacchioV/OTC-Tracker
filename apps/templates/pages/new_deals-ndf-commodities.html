@@ -4458,14 +4458,14 @@ $(document).ready(function() {
 
             if (fixingRows && fixingRows.length > 0) {
                 var fxRows = fixingRows.map(function(r, i) {
-                    var bg = i % 2 === 0 ? '#f8f9fa' : '#ffffff';
+                    var bg = i % 2 === 0 ? 'rgba(0,0,0,.03)' : 'transparent';
                     return '<tr style="background:' + bg + '">' +
-                        '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none">TER  </td>' +
-                        '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none;text-align:center">2</td>' +
-                        '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none">0001</td>' +
-                        '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none">' + r.fixDate + '</td>' +
-                        '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none">0000000000000000</td>' +
-                        '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none">' +
+                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;white-space:pre">TER  </td>' +
+                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;white-space:pre;text-align:center">2</td>' +
+                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;white-space:pre">0001</td>' +
+                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;white-space:pre">' + r.fixDate + '</td>' +
+                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;white-space:pre">0000000000000000</td>' +
+                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;white-space:pre">' +
                             (r.fxDate ? r.fxDate : '<span style="color:#aaa">&mdash;</span>') +
                         '</td>' +
                     '</tr>';
@@ -4486,9 +4486,9 @@ $(document).ready(function() {
                       '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-ref-qty">Reference Quantity</span></th>' +
                       '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fx-date">Currency Fixing Date</span></th>';
                 _pvExtra +=
-                    '<div style="margin-top:14px;border:1px solid #dee2e6;border-radius:4px;overflow-x:auto">' +
+                    '<div style="margin-top:14px;overflow:auto;max-height:42vh;border:1px solid rgba(0,0,0,.12);border-radius:6px">' +
                     '<table style="width:100%;border-collapse:collapse;font-size:0.85em">' +
-                    '<thead><tr style="background:#495057;color:#fff">' + _fxHead + '</tr></thead>' +
+                    '<thead><tr style="background:#343a40;color:#fff;position:sticky;top:0">' + _fxHead + '</tr></thead>' +
                     '<tbody>' + fxRows + '</tbody>' +
                     '</table></div>';
             }
@@ -4500,6 +4500,8 @@ $(document).ready(function() {
                 banner: calBanner,
                 files: _pvFiles, t: t,
                 buttons: { download: true, edit: true },
+                rawFrom: { url: '/api/new-deals/ndf-commodities/send-conecta',
+                           body: { deals: [(function () { var d = Object.assign({}, deal); delete d.Status; return d; })()], download: true } },
                 didOpen: function (popup) { applyTranslationsIn(popup); }
             }).then(function(result) {
                 if (result.isConfirmed) {
