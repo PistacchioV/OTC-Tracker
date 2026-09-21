@@ -21,7 +21,10 @@ rem      os dados no share a thread passa a maior parte do request PARADA
 rem      esperando rede, e 8 contra os 8 leitores por banco
 rem      (DATABASE_READ_CONCURRENCY) param o servidor inteiro.
 rem   4. `ds tool list` rodava DUAS vezes -- duas idas a rede antes de
-rem      qualquer coisa aparecer na tela.  Agora e uma, com a saida em cache.
+rem      qualquer coisa aparecer na tela.  Agora e uma, com a saida em cache
+rem      e com `call` (ver o comentario la embaixo: sem ele o .bat entrega o
+rem      controle ao `ds` e NUNCA VOLTA -- o pipe da versao antiga escondia
+rem      isso, porque cada lado de um pipe roda num processo proprio).
 rem
 rem  E acrescenta marcadores [TIME]: eles respondem quanto da subida e este
 rem  .bat e quanto e o app.  O app so comeca a imprimir depois do ultimo
@@ -41,8 +44,16 @@ set "PIP_NO_INPUT=1"
 
 rem UMA chamada ao `ds tool list` para as duas perguntas abaixo: cada uma era
 rem uma ida a rede, e a resposta e a mesma nas duas.
+rem
+rem O `call` NAO e enfeite: o `ds` e um script do shell (.cmd/.bat), e um .bat
+rem que chama outro SEM `call` entrega o controle de vez -- o segundo roda, o
+rem PRIMEIRO NUNCA VOLTA.  Na versao de antes isso nao aparecia porque o
+rem `ds tool list | findstr ...` era um PIPE, e o `cmd` roda cada lado de um
+rem pipe num processo proprio; trocar o pipe por redirecionamento para arquivo
+rem tirou essa protecao acidental e a subida morria aqui, calada, logo depois
+rem do primeiro [TIME] (21/09/2026).  Vale para todo `ds` deste arquivo.
 set "DS_TOOLS=%TEMP%\otc-ds-tools.txt"
-ds tool list > "%DS_TOOLS%" 2>&1
+call ds tool list > "%DS_TOOLS%" 2>&1
 
 rem O `)` no fim do padrao e literal (o findstr /r nao tem agrupamento) e casa
 rem o mesmo `python3.12 (3.12.x)` de antes -- esta ali para o parentese FECHAR:
@@ -51,7 +62,7 @@ rem faz o resto do arquivo parecer estar dentro de um bloco.
 findstr /r /c:"python3\.12 (3\.12\..*)" "%DS_TOOLS%" >nul
 if errorlevel 1 (
     echo Python 3.12 was not found. Installing it...
-    ds tool install python3.12
+    call ds tool install python3.12
     if errorlevel 1 (
         echo Error: Could not install Python 3.12.
         exit /b 1
@@ -61,7 +72,7 @@ if errorlevel 1 (
 findstr /c:"localproxy-cfg" "%DS_TOOLS%" >nul
 if errorlevel 1 (
     echo localproxy-cfg was not found. Installing it...
-    ds tool install localproxy-cfg
+    call ds tool install localproxy-cfg
     if errorlevel 1 (
         echo Error: Could not install localproxy-cfg.
         exit /b 1
