@@ -92,7 +92,13 @@
                     </div>
                     <div class="col-6 tl-field">
                         <label for="du" data-lang="tl-unw-du">Business days (blank = counted)</label>
-                        <input class="form-control form-control-sm" id="du" name="du" value="{{ form.du }}" inputmode="numeric" data-format="int">
+                        <input class="form-control form-control-sm" id="du" name="du" value="{{ form.du }}" inputmode="numeric" data-format="int" data-tl-auto="du_auto" data-tl-du>
+                        {# O número aparece ASSIM QUE as duas datas existem (mesa, 21/09/2026) —
+                           na busca pelo B3 ID e a cada troca de data —, contado pelo servidor
+                           no ANBIMA e marcado como automático. Digitar apaga a marca, e aí
+                           vale o digitado (é como se reproduz o DU do aviso). #}
+                        <input type="hidden" id="du_auto" name="du_auto" value="{{ form.du_auto }}">
+                        <p class="tl-help" id="du_auto_nota">{% if form.du_auto %}<span data-lang="tl-unw-du-counted">counted, ANBIMA</span>{% endif %}</p>
                     </div>
                     <div class="col-12"><p class="tl-help" data-lang="tl-unw-du-help">Blank, the business days are counted on the ANBIMA calendar from the unwind settlement to the maturity. Type the DU of the notification to reproduce its number.</p></div>
                 </div>

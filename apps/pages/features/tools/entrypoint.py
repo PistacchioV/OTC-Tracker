@@ -542,6 +542,25 @@ def api_tools_fixing_date():
                     'calendar': liquidacao.calendario_do_fixing(idx).nome})
 
 
+@blueprint.route('/api/tools/business-days')
+def api_tools_business_days():
+    """Dias úteis ANBIMA entre duas datas — a MESMA conta do motor da recompra
+    (`derivativos.dias_uteis_ate`). A tela pergunta aqui em vez de contar no
+    navegador: a regra do calendário é uma só, e o §509 mostrou o que acontece
+    quando o JS guarda uma cópia dela."""
+    r = _auth_api()
+    if r:
+        return r
+    from apps.pages.precificador import derivativos
+    try:
+        ini = para_data(request.args.get('start') or '')
+        fim = para_data(request.args.get('end') or '')
+        dias = derivativos.dias_uteis_ate(ini, fim)
+    except (ErroDeDado, ErroFerramenta) as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    return jsonify({'success': True, 'days': int(dias), 'calendar': 'ANBIMA'})
+
+
 @blueprint.route('/tools/term-sofr/csv')
 def tools_term_sofr_csv():
     """A curva IMPORTADA em CSV — o que a tela mostra. Exportar a base do Fed

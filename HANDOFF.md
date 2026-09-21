@@ -22586,3 +22586,26 @@ continua sumindo).
 
 Rede: `check_tools_memoria.py` §1, `check_tools_calculators.py` §11.
 
+## §516 — Unwind NDF Calculator: os dias úteis só apareciam depois do Calculate (2026-09-21)
+
+**O relato.** A busca pelo B3 ID preenchia o contrato e o campo Business Days
+ficava vazio: o DU só era contado dentro do Calculate, e aparecia à direita, no
+quadro do resultado. É o mesmo defeito do fixing do NDF (§512) — o número que a
+conta usa longe do campo que a mesa confere.
+
+**A correção.** O campo se preenche assim que as duas datas existem — na busca,
+na carga e a cada troca de data. Quem conta é o SERVIDOR
+(`/api/tools/business-days`, a mesma `dias_uteis_ate` do motor): depois do §509
+a tela não guarda cópia de regra de calendário. O número vai marcado como
+automático (`du_auto`); marcado, o Calculate RECONTA, então trocar a data nunca
+deixa o DU da data anterior. Digitar apaga a marca e passa a valer o digitado,
+que é como se reproduz o DU do aviso do Athena.
+
+Dois detalhes: o prefill deixa o DU em branco de propósito (a data de liquidação
+é do formulário, a posição não a conhece — quem conta é a tela, com as duas
+datas na mão), e a resposta de uma data antiga é descartada por um contador de
+pedidos, senão duas trocas rápidas deixariam no campo o número da primeira.
+
+Rede: `check_tools_calculators.py` §6 (o DU no campo, a recontagem, o digitado
+mandando, o endpoint e a chamada na busca).
+
