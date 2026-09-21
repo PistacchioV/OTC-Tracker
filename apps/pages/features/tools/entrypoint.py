@@ -183,6 +183,46 @@ def tools_option_calculator():
         lados=derivativos.LADOS_OPCAO)
 
 
+_PREFILLS = {
+    'ndf-calculator': ('ndf_prefill', 'Live Position \u203a NDF'),
+    'unwind-ndf-calculator': ('unwind_ndf_prefill', 'Live Position \u203a NDF'),
+    'option-calculator': ('opcao_prefill', 'Live Position \u203a Option'),
+}
+
+
+@blueprint.route('/api/tools/<tool>/prefill')
+def api_tools_position_prefill(tool):
+    """O que a POSIÇÃO sabe sobre um B3 ID, para a calculadora se preencher — o
+    mesmo esquema do Swap Calculator (cuja rota estática vence esta). 404
+    quando o contrato não está na posição do último dia útil; falha de leitura
+    volta com o MOTIVO (§476), e o traceback vai para o log."""
+    r = _auth_api()
+    if r:
+        return r
+    alvo = _PREFILLS.get(tool)
+    if alvo is None:
+        return jsonify({'success': False, 'error': 'Unknown tool.'}), 404
+    b3_id = str(request.args.get('id') or '').strip()
+    if not b3_id:
+        return jsonify({'success': False, 'code': 'pick_id', 'error': 'Type a B3 ID.'}), 400
+    try:
+        dados = getattr(queries, alvo[0])(b3_id)
+    except Exception as exc:                                # noqa: BLE001
+        import traceback as _tb
+        _R().log.error('[tools] prefill %s %s falhou:\n%s', tool, b3_id, _tb.format_exc())
+        return jsonify({'success': False, 'code': 'position_unreadable',
+                        'error': 'Could not read the position \u2014 {}: {}'.format(
+                            type(exc).__name__, exc)}), 500
+    if not dados.get('found'):
+        return jsonify({'success': False, 'code': 'not_in_position',
+                        'params': {'id': b3_id, 'fonte': alvo[1],
+                                   'data': dados.get('source_date') or ''},
+                        'error': '{} is not in the position of the last business day ({}).'
+                                 .format(b3_id, alvo[1])}), 404
+    dados['success'] = True
+    return jsonify(dados)
+
+
 # ── Swap Calculator ─────────────────────────────────────────────────────────
 
 def _form_padrao_swap(hoje):

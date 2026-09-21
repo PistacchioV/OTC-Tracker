@@ -24,6 +24,10 @@
                         <i class="ti ti-calculator me-1"></i><span data-lang="tl-calculate">Calculate</span>
                     </button>
                 </div>
+                {% set tool='ndf-calculator' %}{% set lookup_placeholder='26C03202688' %}
+                {% set lookup_hint_key='tl-ndf-lookup-help' %}
+                {% set lookup_hint="Contract or Código Identificador from Live Position › NDF. The position of the last business day fills counterparty, currency, the notional still open (base value − unwound), forward rate, maturity and the bank side; the fixing is left blank for the PTAX." %}
+                {% include 'partials/tools-position-lookup.html' %}
                 <div class="row g-2">
                     <div class="col-12 tl-field">
                         <label for="posicao" data-lang="tl-ndf-position">Bank position</label>

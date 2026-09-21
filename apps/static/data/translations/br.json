@@ -2705,5 +2705,10 @@
   "tl-opt-premium": "Prêmio",
   "tl-opt-net": "Resultado do banco (exercício + prêmio)",
   "tl-opt-note": "O exercício e o prêmio liquidam em dias diferentes: os dois aparecem separados, e o resultado do banco é só a soma. Barreiras e rebates não são apurados aqui.",
-  "tl-opt-empty": "Informe o strike, a quantidade e o preço de verificação."
+  "tl-opt-empty": "Informe o strike, a quantidade e o preço de verificação.",
+  "tl-pos-issue-date": "Data de emissão",
+  "tl-pos-class": "Classe do ativo subjacente",
+  "tl-ndf-lookup-help": "Contrato ou Código Identificador do Live Position › NDF. A posição do último dia útil preenche contraparte, moeda, o nocional ainda aberto (valor base − recomprado), taxa forward, vencimento e o lado do banco; o fixing fica em branco para a PTAX.",
+  "tl-unw-lookup-help": "Contrato ou Código Identificador do Live Position › NDF. A posição preenche o contrato ORIGINAL — contraparte, moeda, strike, vencimento, lado, valor base e o que já foi recomprado. A taxa da recompra e a taxa pré são do negócio do dia e ficam para você.",
+  "tl-opt-lookup-help": "Código IF ou número da confirmação do Live Position › Option. A posição preenche tipo, lado, strike, quantidade aberta, data de exercício e prêmio unitário, e os preços de verificação vêm do Quotes — um na vanilla, a série inteira na asiática."
 }

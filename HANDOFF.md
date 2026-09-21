@@ -22399,3 +22399,50 @@ Rede: `check_tools_calculators.py` (novo), `check_tools` (menu, allowlist e as
 conferências de padrão estendidas às três telas), `check_soc_layers`,
 `check_export_padrao`, `check_modal_standard`, `check_table_center`.
 
+## §511 — As três calculadoras puxam a posição pelo B3 ID, e a opção busca os fixings no Quotes (2026-09-21)
+
+**O pedido.** O mesmo esquema do Swap Calculator nas calculadoras de NDF, de
+recompra e de opção: digitar o B3 ID e a posição preencher o resto. Depois, a
+mesa apontou DE ONDE ler: como a vertical de recompra já lê a posição de NDF
+(contraparte, vencimento, valor base − recomprado, moeda, taxa forward, emissão,
+classe do ativo) — e pediu que os fixings da opção, únicos ou asiáticos, saiam
+do Quotes.
+
+**A fonte é a tela, e a leitura é a da vertical.** O prefill usa o MESMO coletor
+do Live Position (`_lpndf_collect`/`_lpopt_collect`) — a calculadora e a posição
+têm de mostrar o mesmo contrato do mesmo jeito — e repete as três regras que a
+vertical de Unwinds aprendeu com dado real (§488), porque feature não importa
+feature:
+
+- **número de tela**: o último separador manda (`587,224.31` = `587.224,31`).
+  A minha primeira versão lia vírgula sozinha como DECIMAL (`1,234` = 1,234) —
+  o leitor do formulário, não o da posição. A exceção é a TAXA: `5.374` tem três
+  casas e é 5,374, não 5374 (`taxa=True`);
+- **saldo = `Valor Base no registro − Valor Antecipado`**;
+- **conta guarda-chuva**: o `Nome da Contraparte` é o TITULAR (o banco); o
+  cliente é a coluna do CPF/CNPJ. Sem cadastro o nome fica vazio AVISANDO.
+
+O lado ilegível não se chuta; a moeda que a tela não conhece fica sinalizada; na
+recompra o nocional nasce com o saldo marcado como APROXIMAÇÃO (a recompra total
+é o caso comum, mas é do negócio) e as duas taxas do dia ficam para a mesa.
+
+**Os fixings da opção vêm do Quotes** (`_fixings_do_quotes`): as datas saem do
+bloco `Média Asiática (data) N` da posição (ou da data de fixing do ativo, ou do
+vencimento), e a fonte sai da CLASSE — câmbio → PTAX de venda da moeda base;
+commodities → `quotes-commodity`; o resto → `quotes-equity`. Uma chamada para a
+série inteira, o Close (não o Adj Close) do pregão ou o último antes dele.
+**Série pela metade não é média**: data futura ou sem preço deixa o campo
+sinalizado e a nota diz quantas faltam; símbolo fora do cadastro diz QUAL
+cadastro. O `lado` é o da PARTE do registro e vai marcado como aproximação — num
+registro cliente × cliente a parte não é o banco, e o lado decide o sinal.
+
+**Limite conhecido.** A dev só tem posições de mentira e antigas (o coletor não
+as alcança hoje), então o caminho "achou" foi provado com fixtures no formato
+real das COLUNAS e com a resposta simulada no navegador. A grafia real de
+`Tipo de Opção`, `Posição da Parte` e `Moeda do ativo / Moeda cotada` só a
+instância mostra — o que não casar fica em branco e sinalizado, que é a falha
+desejada.
+
+Rede: `check_tools_calculators.py` §7–§9 (novos), `check_tools`,
+`check_soc_layers`.
+

@@ -24,6 +24,10 @@
                         <i class="ti ti-calculator me-1"></i><span data-lang="tl-calculate">Calculate</span>
                     </button>
                 </div>
+                {% set tool='option-calculator' %}{% set lookup_placeholder='CHASM26081V' %}
+                {% set lookup_hint_key='tl-opt-lookup-help' %}
+                {% set lookup_hint="Código IF or confirmation number from Live Position › Option. The position fills type, side, strike, open quantity, exercise date and unit premium, and the fixing prices come from Quotes — one for a vanilla, the whole series for an Asian." %}
+                {% include 'partials/tools-position-lookup.html' %}
                 <div class="row g-2">
                     <div class="col-4 tl-field">
                         <label for="tipo" data-lang="tl-opt-type">Type</label>

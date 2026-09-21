@@ -2705,5 +2705,10 @@
   "tl-opt-premium": "Premium",
   "tl-opt-net": "Bank result (exercise + premium)",
   "tl-opt-note": "The exercise and the premium settle on different days: the two are shown apart, and the bank result is only their sum. Barriers and rebates are not priced here.",
-  "tl-opt-empty": "Enter the strike, the quantity and the fixing price."
+  "tl-opt-empty": "Enter the strike, the quantity and the fixing price.",
+  "tl-pos-issue-date": "Issue date",
+  "tl-pos-class": "Underlying asset class",
+  "tl-ndf-lookup-help": "Contract or Código Identificador from Live Position › NDF. The position of the last business day fills counterparty, currency, the notional still open (base value − unwound), forward rate, maturity and the bank side; the fixing is left blank for the PTAX.",
+  "tl-unw-lookup-help": "Contract or Código Identificador from Live Position › NDF. The position fills the ORIGINAL contract — counterparty, currency, strike, maturity, side, base value and what was already unwound. The termination rate and the pre rate belong to the deal of the day and stay for you.",
+  "tl-opt-lookup-help": "Código IF or confirmation number from Live Position › Option. The position fills type, side, strike, open quantity, exercise date and unit premium, and the fixing prices come from Quotes — one for a vanilla, the whole series for an Asian."
 }

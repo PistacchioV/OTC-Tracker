@@ -895,3 +895,396 @@ def calcular_opcao(form):
         paridade_premio=domain.decimal(par_premio, 'premium FX rate') if par_premio else None)
     return {'r': r, 'moeda': moeda, 'exercicio': exercicio, 'paridade_nota': nota}
 
+
+# ── B3 ID → a posição preenche a calculadora (NDF, recompra e opção) ─────────
+# O mesmo esquema do Swap Calculator: a mesa digita o B3 ID e a posição do último
+# dia útil preenche o que sabe. O que não veio fica em BRANCO e vai em `missing`
+# (a tela sinaliza em vermelho); o que veio por aproximação vai em `assumed`.
+#
+# A fonte é o MESMO coletor da tela de Live Position (`_lpndf_collect`,
+# `_lpopt_collect`), não uma segunda leitura do arquivo: a calculadora e a
+# posição têm de mostrar o mesmo contrato do mesmo jeito. As células vêm
+# FORMATADAS para a tela, então número e data são lidos com tolerância.
+
+def _num_tela(texto, taxa=False):
+    """Número de uma célula de TELA da posição, ou None — a mesma regra do
+    `numero_flex` da vertical de Unwinds (que lê esta MESMA posição): o ÚLTIMO
+    separador manda, `587,224.31` e `587.224,31` são o mesmo número, e com um
+    separador só três dígitos depois dele é MILHAR (`1,234` = 1234).
+
+    `taxa=True` desliga essa última parte: uma taxa `5.374` tem três casas e é
+    5,374 — lida como milhar viraria 5374, e a conta fecharia consigo mesma."""
+    t = str(texto or '').strip()
+    if not t or t in ('-', '\u2014'):
+        return None
+    neg = t.startswith('-') or (t.startswith('(') and t.endswith(')'))
+    t = t.strip('()').lstrip('+-').replace('%', '').replace(' ', '').strip()
+    ult_v, ult_p = t.rfind(','), t.rfind('.')
+    if ult_v >= 0 and ult_p >= 0:
+        dec = max(ult_v, ult_p)
+        t = t[:dec].replace(',', '').replace('.', '') + '.' + t[dec + 1:]
+    elif ult_v >= 0 or ult_p >= 0:
+        i = max(ult_v, ult_p)
+        milhar = (not taxa) and len(t) - i - 1 == 3
+        t = (t[:i] + t[i + 1:]) if milhar else (t[:i] + '.' + t[i + 1:])
+    try:
+        v = float(t)
+    except ValueError:
+        return None
+    return -v if neg else v
+
+
+def _data_tela(texto):
+    """`dd/mm/aaaa`, ISO ou `aaaammdd` → ISO; o que não é data → ''."""
+    s = str(texto or '').strip()
+    if len(s) == 8 and s.isdigit():
+        s = '{}-{}-{}'.format(s[:4], s[4:6], s[6:])
+    try:
+        return para_data(s).isoformat()
+    except ErroDeDado:
+        return ''
+
+
+def _linha_da_posicao(coletor, b3_id, chaves):
+    """(células por coluna, source_date) da linha cujo valor numa das `chaves`
+    é o id pedido — a PRIMEIRA chave em todas as linhas antes da segunda (um
+    identificador repetido não pode vencer o contrato que se pediu)."""
+    alvo = domain.norm(b3_id).replace(' ', '')
+    if not alvo:
+        return None, None
+    dados = coletor(datetime.now())
+    ci = {c: i for i, c in enumerate(dados.get('columns') or [])}
+    for chave in chaves:
+        i = ci.get(chave)
+        if i is None:
+            continue
+        for row in dados.get('rows') or []:
+            if i < len(row) and domain.norm(row[i]).replace(' ', '') == alvo:
+                return ({c: (str(row[k] or '').strip() if k < len(row) else '')
+                         for c, k in ci.items()}, dados.get('source_date'))
+    return None, dados.get('source_date')
+
+
+_POS_COMPRADO = ('COMPRAD', 'COMPRA', 'LONG')
+_POS_VENDIDO = ('VENDED', 'VENDID', 'VENDA', 'SHORT')
+
+
+def _e_documento(v):
+    """A célula é um CPF/CNPJ (cru ou mascarado), e não um nome? O teste é a
+    ausência de LETRA — o mesmo `parece_documento` da vertical de Unwinds."""
+    t = str(v or '').strip()
+    if not t or any(ch not in '0123456789./- ' for ch in t):
+        return False
+    return 10 <= len(''.join(ch for ch in t if ch.isdigit())) <= 14
+
+
+def _contraparte_ndf(cel):
+    """`(nome, aviso)` da contraparte — a MESMA regra da vertical de Unwinds
+    (`contraparte_da_posicao`, §488). Numa conta GUARDA-CHUVA o `Nome da
+    Contraparte` é o TITULAR (o banco), e quem identifica o cliente é a coluna
+    do CPF/CNPJ, que a tela já troca pelo NOME quando o documento tem cadastro.
+    Quem diz se a conta é guarda-chuva é o `b3-accounts` (`_b3_is_omnibus`).
+    Sem cadastro o nome fica VAZIO avisando — nunca cai no titular."""
+    cru = cel.get('CPF/CNPJ da Contraparte', '')
+    titular = cel.get('Nome da Contraparte', '')
+    doc = cru if _e_documento(cru) else ''
+    nome_cnpj = '' if (doc or not cru) else cru
+    try:
+        omnibus = bool(_R()._b3_is_omnibus(cel.get('Codigo da Contraparte', '')))
+    except Exception:                                       # noqa: BLE001
+        omnibus = False
+    if omnibus:
+        if nome_cnpj:
+            return nome_cnpj, None
+        return '', {'code': 'cpty_not_registered', 'params': {'taxid': doc}}
+    return (titular or nome_cnpj), None
+
+
+def _ndf_da_posicao(b3_id):
+    from apps.pages.precificador import derivativos
+    cel, fonte = _linha_da_posicao(_R()._lpndf_collect, b3_id, ('Contrato', 'Codigo Identificador'))
+    if cel is None:
+        return None, fonte
+    lado = cel.get('Descricao da posicao do Participante', '').upper()
+    posicao = (derivativos.COMPRADO if any(t in lado for t in _POS_COMPRADO)
+               else derivativos.VENDIDO if any(t in lado for t in _POS_VENDIDO) else '')
+    # O SALDO é `Valor Base no registro − Valor Antecipado` (§488): o antecipado
+    # é o acumulado JÁ recomprado, em moeda estrangeira; coluna vazia numa
+    # posição que existe é "nunca foi recomprado", zero.
+    registro = _num_tela(cel.get('Valor Base no registro'))
+    antecipado = _num_tela(cel.get('Valor Antecipado')) or 0.0
+    contraparte, aviso_cpty = _contraparte_ndf(cel)
+    venc = _data_tela(cel.get('Data de Vencimento'))
+    fix = _data_tela(cel.get('Data de Fixing da Moeda'))
+    offset = None
+    if venc and fix:
+        try:
+            offset = calendario.calendario_anbima().dias_uteis(para_data(fix), para_data(venc))
+        except ErroDeDado:
+            offset = None
+    return {
+        'contrato': cel.get('Contrato', ''), 'contraparte': contraparte,
+        'aviso_contraparte': aviso_cpty,
+        'emissao': _data_tela(cel.get('Data de Emissao')),
+        'classe': cel.get('Classe do Ativo Subjacente', ''),
+        'moeda': cel.get('Simbolo da Moeda', '').upper(), 'posicao': posicao,
+        'registro': registro, 'antecipado': antecipado,
+        'saldo': None if registro is None else max(registro - antecipado, 0.0),
+        'taxa': (_num_tela(cel.get('Taxa Forward'), taxa=True)
+                 or _num_tela(cel.get('Taxa a Termo em Reais'), taxa=True)),
+        'vencimento': venc, 'offset': offset,
+    }, fonte
+
+
+def _do_contrato(pos):
+    """O que a tela mostra do CONTRATO, só para leitura: contraparte, data de
+    emissão e classe do ativo subjacente (mesa, 21/09/2026)."""
+    return {'counterparty': pos['contraparte'], 'data_emissao': pos['emissao'],
+            'classe': pos['classe']}
+
+
+def _moeda_do_form(codigo, faltando, campo='moeda'):
+    conhecidas = {m.codigo for m in liquidacao.MOEDAS}
+    if codigo in conhecidas and codigo != liquidacao.SEM_CONVERSAO:
+        return codigo
+    faltando.append(campo)
+    return ''
+
+
+def ndf_prefill(b3_id):
+    """NDF Calculator: a liquidação no vencimento do que SOBRA no contrato."""
+    pos, fonte = _ndf_da_posicao(b3_id)
+    if pos is None:
+        return {'found': False, 'b3_id': b3_id, 'source_date': fonte}
+    falt, campos = [], {}
+    campos['moeda'] = _moeda_do_form(pos['moeda'], falt)
+    for campo, valor, fmt in (('nocional', pos['saldo'], '{:.2f}'), ('taxa_termo', pos['taxa'], None)):
+        if valor:
+            campos[campo] = fmt.format(valor) if fmt else domain.fx8(valor)
+        else:
+            campos[campo] = ''
+            falt.append(campo)
+    campos['vencimento'] = pos['vencimento'] or ''
+    if not pos['vencimento']:
+        falt.append('vencimento')
+    campos['posicao'] = pos['posicao']
+    if not pos['posicao']:
+        falt.append('posicao')
+    if pos['offset'] is not None:
+        campos['ptax_offset'] = str(int(pos['offset']))
+    # a posição da B3 é SEMPRE em moeda estrangeira (o fixo em reais já foi
+    # dividido pelo strike no registro — §488)
+    campos['fixo_em_reais'] = False
+    campos['isento_ir'] = bool(pos['contraparte'] and _R()._ndfc_ir_exempt(pos['contraparte']))
+    campos['fixing'] = ''            # em branco = a PTAX do BCB no Calculate
+    campos.update(_do_contrato(pos))
+    notas = [{'code': 'unwound_before', 'params': {'valor': pos['antecipado']}}] if pos['antecipado'] else []
+    if pos['aviso_contraparte']:
+        notas.append(pos['aviso_contraparte'])
+    return {'found': True, 'b3_id': pos['contrato'] or b3_id, 'source_date': fonte,
+            'counterparty': pos['contraparte'], 'fields': campos, 'missing': falt, 'assumed': [],
+            'notes': notas}
+
+
+def unwind_ndf_prefill(b3_id):
+    """Unwind NDF Calculator: o contrato original. A taxa da recompra e a pré
+    são do NEGÓCIO de hoje — não existem na posição e ficam para a mesa."""
+    pos, fonte = _ndf_da_posicao(b3_id)
+    if pos is None:
+        return {'found': False, 'b3_id': b3_id, 'source_date': fonte}
+    falt, assumido, campos = [], [], {}
+    campos['moeda'] = _moeda_do_form(pos['moeda'], falt)
+    campos['strike'] = domain.fx8(pos['taxa']) if pos['taxa'] else ''
+    if not pos['taxa']:
+        falt.append('strike')
+    campos['vencimento'] = pos['vencimento'] or ''
+    if not pos['vencimento']:
+        falt.append('vencimento')
+    campos['posicao'] = pos['posicao']
+    if not pos['posicao']:
+        falt.append('posicao')
+    campos['nocional_original'] = '{:.2f}'.format(pos['registro']) if pos['registro'] else ''
+    campos['ja_recomprado'] = '{:.2f}'.format(pos['antecipado'])
+    # O nocional recomprado é do negócio; nasce com o SALDO (a recompra total),
+    # que é o caso comum — e marcado como aproximação, para a mesa conferir.
+    if pos['saldo']:
+        campos['nocional'] = '{:.2f}'.format(pos['saldo'])
+        assumido.append('nocional')
+    else:
+        campos['nocional'] = ''
+        falt.append('nocional')
+    campos['fixo_em_reais'] = False
+    campos['taxa_recompra'], campos['taxa_pre'], campos['du'] = '', '', ''
+    falt.extend(['taxa_recompra', 'taxa_pre'])
+    campos.update(_do_contrato(pos))
+    return {'found': True, 'b3_id': pos['contrato'] or b3_id, 'source_date': fonte,
+            'counterparty': pos['contraparte'], 'fields': campos, 'missing': falt,
+            'assumed': assumido,
+            'notes': [pos['aviso_contraparte']] if pos['aviso_contraparte'] else []}
+
+
+def _fixings_do_quotes(classe, ativo, datas):
+    """Os preços de verificação de uma opção, do QUOTES (mesa, 21/09/2026) —
+    `(precos, faltando, fonte, erro)`: `precos` = [(data pedida, preço, data do
+    pregão)], `faltando` = as datas que ainda não têm preço (futuras ou sem
+    pregão até lá).
+
+    A fonte sai da CLASSE do ativo, que é como a tela de Quotes se divide:
+    taxa de câmbio → a PTAX de VENDA do BCB da moeda base; commodities → o
+    cadastro `quotes-commodity` (com o `"MY"` do vencimento); o resto →
+    `quotes-equity`. Nenhum de-para no código: símbolo que falta é CADASTRO.
+
+    UMA chamada para a série inteira (a asiática tem dezenas de datas), e a
+    mesma regra do `_preco_do_fixing`: vale o Close — não o Adj Close — do
+    pregão da data ou, sem pregão nela, o último ANTES dela."""
+    from apps.pages import quotes
+    datas = sorted({d for d in datas if d})
+    if not datas:
+        return [], [], '', 'the position has no verification date'
+    hoje = date.today()
+    passadas = [d for d in datas if d <= hoje]
+    futuras = [d for d in datas if d > hoje]
+    if not passadas:
+        return [], futuras, '', ''
+    ini, fim = passadas[0] - timedelta(days=15), passadas[-1]
+    cl = domain.norm(classe)
+    try:
+        if 'cambio' in cl:
+            moeda = str(ativo or '').strip().upper()[:3]
+            _cols, linhas = quotes.fetch_ptax(moeda, ini, fim)
+            serie, fonte = [(l[0], l[3]) for l in linhas], 'PTAX {} (BCB, ask)'.format(moeda)
+        else:
+            chave = 'quotes-commodity' if 'commodit' in cl else 'quotes-equity'
+            simbolo = quotes.symbol_for(_R()._mapping_rows(chave), ativo)
+            if not simbolo:
+                return [], datas, '', ('no symbol registered for {} in the {} mapping'
+                                       .format(ativo or '(blank)', chave))
+            _cols, linhas = quotes.fetch_ohlc(simbolo, ini, fim)
+            serie, fonte = [(l[0], l[2] if len(l) > 2 else None) for l in linhas], simbolo
+    except Exception as exc:                                # noqa: BLE001
+        _R().log.warning('[tools] fixings de %s (%s) falharam: %s', ativo, classe, exc)
+        return [], datas, '', str(exc)
+    pregoes = []
+    for dia_txt, celula in serie:
+        preco = _preco_da_celula(celula)
+        try:
+            dia = datetime.strptime(str(dia_txt), '%d/%m/%Y').date()
+        except (ValueError, TypeError):
+            continue
+        if preco is not None:
+            pregoes.append((dia, preco))
+    pregoes.sort(reverse=True)                  # do mais recente ao mais antigo
+    precos, sem = [], list(futuras)
+    for d in passadas:
+        achado = next(((dia, p) for dia, p in pregoes if dia <= d), None)
+        if achado is None:
+            sem.append(d)
+        else:
+            precos.append((d, achado[1], achado[0]))
+    return precos, sorted(sem), fonte, ''
+
+
+def _datas_de_verificacao(cel):
+    """As datas em que a opção verifica o preço: o bloco `Média Asiática (data)
+    N` da posição (a asiática); sem ele, a `Data de fixing do ativo subjacente`;
+    sem ela, o vencimento."""
+    asiaticas = []
+    for coluna, valor in cel.items():
+        if domain.norm(coluna).startswith('media asiatica (data)'):
+            iso = _data_tela(valor)
+            if iso:
+                asiaticas.append(para_data(iso))
+    if asiaticas:
+        return sorted(set(asiaticas))
+    for coluna in ('Data de fixing do ativo subjacente', 'Data Vencimento'):
+        iso = _data_tela(cel.get(coluna))
+        if iso:
+            return [para_data(iso)]
+    return []
+
+
+def opcao_prefill(b3_id):
+    """Option Calculator: o contrato da posição de opções. Os preços de
+    verificação são do mercado e ficam para a mesa."""
+    from apps.pages.precificador import derivativos
+    cel, fonte = _linha_da_posicao(_R()._lpopt_collect, b3_id,
+                                   ('Código IF', 'Combinação de operações'))
+    if cel is None:
+        return {'found': False, 'b3_id': b3_id, 'source_date': fonte}
+    falt, assumido, campos, notas = [], [], {}, []
+    tipo = domain.norm(cel.get('Tipo de Opção', ''))
+    campos['tipo'] = (derivativos.CALL if ('call' in tipo or 'compra' in tipo)
+                      else derivativos.PUT if ('put' in tipo or 'venda' in tipo) else '')
+    if not campos['tipo']:
+        falt.append('tipo')
+    # `Posição da Parte` é a da PARTE do registro. Na posição do banco a parte é
+    # o banco — mas num registro de cliente × cliente não é, e o lado decide o
+    # SINAL: vai preenchido e marcado como aproximação, com a parte na nota.
+    lado = domain.norm(cel.get('Posição da Parte', ''))
+    campos['lado'] = (derivativos.TITULAR if 'titular' in lado
+                      else derivativos.LANCADOR if ('lancador' in lado or 'lançador' in lado) else '')
+    if campos['lado']:
+        assumido.append('lado')
+        notas.append({'code': 'side_of_party',
+                      'params': {'parte': cel.get('Parte (Nome simplificado)', '')}})
+    else:
+        falt.append('lado')
+    strike = _num_tela(cel.get('Strike (valor)'), taxa=True)
+    campos['strike'] = domain.fx8(strike) if strike else ''
+    if not strike:
+        falt.append('strike')
+        if _num_tela(cel.get('Strike (percentual)')):
+            notas.append({'code': 'strike_in_percent',
+                          'params': {'pct': cel.get('Strike (percentual)', '')}})
+    qtd = _num_tela(cel.get('Quantidade'))
+    antecipada = _num_tela(cel.get('Quantidade Antecipada')) or 0.0
+    if qtd:
+        campos['quantidade'] = '{:.8f}'.format(max(qtd - antecipada, 0.0)).rstrip('0').rstrip('.')
+    else:
+        campos['quantidade'] = ''
+        falt.append('quantidade')
+    campos['exercicio'] = _data_tela(cel.get('Data Vencimento'))
+    if not campos['exercicio']:
+        falt.append('exercicio')
+    premio = _num_tela(cel.get('Prêmio Unitário'), taxa=True)
+    campos['premio_unitario'] = domain.fx8(premio) if premio else ''
+    # a moeda do PREÇO: a cotada. Real (ou nada reconhecível) = sem conversão.
+    cotada = cel.get('Moeda do ativo / Moeda cotada', '').upper()
+    conhecidas = {m.codigo for m in liquidacao.MOEDAS}
+    if cotada in conhecidas:
+        campos['moeda'] = cotada
+    elif 'REAL' in cotada or cotada in ('BRL', 'R$'):
+        campos['moeda'] = liquidacao.SEM_CONVERSAO
+    else:
+        campos['moeda'] = ''
+        falt.append('moeda')
+    campos['paridade'], campos['paridade_premio'] = '', ''
+    # Os preços de verificação vêm do QUOTES: um na vanilla, a série na asiática.
+    datas = _datas_de_verificacao(cel)
+    precos, sem, fonte_q, erro_q = _fixings_do_quotes(
+        cel.get('Classe do ativo subjacente', ''), cel.get('Ativo subjacente / Moeda base', ''), datas)
+    campos['fixings'] = '\n'.join(domain.fx8(p) for _d, p, _dia in precos)
+    if len(datas) > 1:
+        notas.append({'code': 'asian', 'params': {'n': len(datas)}})
+    if precos:
+        notas.append({'code': 'fixings_from_quotes',
+                      'params': {'n': len(precos), 'fonte': fonte_q,
+                                 'de': '{:%d/%m/%Y}'.format(precos[0][0]),
+                                 'ate': '{:%d/%m/%Y}'.format(precos[-1][0])}})
+    if sem or not precos:
+        # Série pela metade NÃO é média: o campo fica sinalizado e a nota diz
+        # quantas datas faltam (futuras, sem pregão) ou por que nada veio.
+        falt.append('fixings')
+        notas.append({'code': 'fixings_missing',
+                      'params': {'n': len(sem), 'motivo': erro_q,
+                                 'datas': ', '.join('{:%d/%m/%Y}'.format(d) for d in sem[:6])}})
+    if any(_num_tela(cel.get(c)) for c in ('Barreira de KI', 'Barreira de KO')):
+        notas.append({'code': 'has_barrier', 'params': {}})
+    campos.update({'counterparty': cel.get('Contraparte (Nome simplificado)', ''),
+                   'data_emissao': _data_tela(cel.get('Data Registro')),
+                   'classe': ' · '.join(x for x in (cel.get('Classe do ativo subjacente', ''),
+                                                    cel.get('Ativo subjacente / Moeda base', '')) if x)})
+    return {'found': True, 'b3_id': cel.get('Código IF', '') or b3_id, 'source_date': fonte,
+            'counterparty': cel.get('Contraparte (Nome simplificado)', ''),
+            'fields': campos, 'missing': falt, 'assumed': assumido, 'notes': notas}
+

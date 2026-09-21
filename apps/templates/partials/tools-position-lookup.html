@@ -1,0 +1,30 @@
+{# B3 ID → a POSIÇÃO preenche a calculadora — o mesmo esquema do Swap
+   Calculator, para NDF, recompra e opção. Quem inclui define `tool` (o slug da
+   rota, que é também o do `/api/tools/<tool>/prefill`) e `lookup_hint` (a
+   frase de ajuda, com a chave `lookup_hint_key`). O JS é o `tools.js`
+   (`[data-tl-prefill]`): o que a posição não trouxe fica em branco e
+   SINALIZADO; o que veio por aproximação fica marcado como tal. #}
+<div class="row g-2 mb-2" data-tl-prefill="/api/tools/{{ tool }}/prefill">
+    <div class="col-md-4 tl-field">
+        <label for="b3_id">B3 ID</label>
+        <div class="input-group input-group-sm">
+            <input class="form-control form-control-sm" id="b3_id" name="b3_id" value="{{ form.b3_id }}" autocomplete="off" placeholder="{{ lookup_placeholder }}">
+            <button class="btn btn-success bg-gradient" type="button" id="tl-pos-lookup" title="Fill from the position"><i class="ti ti-search"></i></button>
+        </div>
+    </div>
+    <div class="col-md-8 tl-field">
+        <label for="counterparty" data-lang="tl-counterparty">Counterparty</label>
+        <input class="form-control form-control-sm" id="counterparty" name="counterparty" value="{{ form.counterparty }}" readonly tabindex="-1">
+    </div>
+    <div class="col-md-4 tl-field">
+        <label for="data_emissao" data-lang="tl-pos-issue-date">Issue date</label>
+        <input class="form-control form-control-sm" id="data_emissao_txt" value="" readonly tabindex="-1">
+        <input type="hidden" id="data_emissao" name="data_emissao" value="{{ form.data_emissao }}">
+    </div>
+    <div class="col-md-8 tl-field">
+        <label for="classe" data-lang="tl-pos-class">Underlying asset class</label>
+        <input class="form-control form-control-sm" id="classe" name="classe" value="{{ form.classe }}" readonly tabindex="-1">
+    </div>
+    <div class="col-12"><p class="tl-help" data-lang="{{ lookup_hint_key }}">{{ lookup_hint }}</p></div>
+    <div class="col-12"><div class="tl-note mt-0" id="tl-pos-status" hidden></div></div>
+</div>
