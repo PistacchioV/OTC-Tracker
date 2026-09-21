@@ -1801,7 +1801,7 @@
   "about-feat-ndfvanilla-title": "NDF Vanilla",
   "about-feat-ndfvanilla-desc": "Vanilla NDF trades (PTAX) with import, validation, mass edit and the same approval and Conecta submission cycle as the other New Deals pages.",
   "about-feat-ndmonitor-title": "Deals Monitor",
-  "about-feat-ndmonitor-desc": "Product × status view of the trades imported on the date, with day-by-day history and the automatic pending-items e-mail at 19:00 and 19:30 (Brazil time).",
+  "about-feat-ndmonitor-desc": "Product × status view of the trades imported on the date, with day-by-day history and the automatic pending-items e-mail at 19:00, 19:30 and 20:00 (Brazil time).",
   "about-feat-conf-title": "Client Confirmations",
   "about-feat-conf-desc": "Confirmation document per counterparty × asset — Word, PDF and XML written to the Electronic Inventory — with an editing panel, a New → Generated → Success cycle and a validation checklist. Covers NDF Commodities, Commodity Options, FX Options and forward-start currency forwards.",
   "about-feat-swadv-title": "Settlement Advice — Swap",
