@@ -22329,3 +22329,30 @@ navegação no meio da digitação — ele é desligado nesses dois campos e fic
 nosso, com parse estrito. Data futura é puxada para hoje (o `maxDate`), e texto
 pela metade volta à última data válida no blur, reescrito pelo próprio plugin.
 
+## §509 — Swap Calculator: o D-2 do Term SOFR contava pelo calendário ANBIMA (2026-09-21)
+
+**O relato da mesa.** Fluxo começando na segunda 22/06/2026: a tela pôs o
+fixing em 18/06 e puxou a taxa desse dia. A sexta 19/06 é feriado no calendário
+SOFR (Juneteenth), então D-1 é a quinta 18 e **D-2 é a quarta 17**. O feriado
+está no `sofr.json` do Holidays Calendar — só não era consultado.
+
+**A causa, em três cópias.** `liquidacao.data_de_fixing` caía no ANBIMA por
+padrão; o motor ainda lhe passava o `cal` do formulário, que é o calendário da
+CONTAGEM de dias úteis do contrato (ANBIMA); o pré-preenchimento chamava sem
+calendário; e o JS da tela refazia a conta no navegador lendo o `anbima.json`.
+A data errada não parece errada, e a conta fecha consigo mesma com a taxa do
+dia vizinho.
+
+**A correção.** O calendário do fixing é o do ÍNDICE
+(`calendario_do_fixing`): Term SOFR → SOFR (*US Government Securities business
+days*), EURIBOR → TARGET2/BCE, o resto ANBIMA. O motor e o prefill passam o
+indexador; o calendário explícito ainda vence. A tela deixou de contar dia
+útil: pergunta ao servidor (`/api/tools/fixing-date`, que devolve a data e o
+nome do calendário) e, com a data nova, busca a taxa daquele dia. Sem resposta
+o campo fica como está — data pelo calendário errado é pior que nenhuma. O SOFR
+composto já usava o calendário SOFR (lookback/shift), e não mudou.
+
+Rede: `check_tools.py` §9 (novo — o caso da mesa, o feriado brasileiro que NÃO
+conta para o SOFR, a EURIBOR pelo TARGET2, o endpoint, e o JS sem a cópia da
+regra).
+

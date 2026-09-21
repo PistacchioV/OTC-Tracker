@@ -997,6 +997,18 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   do `swap-ir-client` vence a direção (a regra do Trade Level, pelas mesmas
   `_swap_ir_excecao`/`_swap_ir_faixas` da platform), fora dela as faixas do
   `swap-ir-term` só com o banco pagando. `check_tools_descricao.py`.
+- **Swap Calculator: a data do fixing da taxa a termo conta no calendário do
+  ÍNDICE, não no ANBIMA** (§509, `liquidacao.calendario_do_fixing`): Term SOFR =
+  calendário SOFR do Holidays (*US Government Securities business days*),
+  EURIBOR = TARGET2/BCE. O D-2 contava pelo ANBIMA em TRÊS lugares — o motor
+  (que recebia o `cal` do formulário, que é o da contagem de dias do contrato),
+  o pré-preenchimento e o JS da tela, que lia o `anbima.json` — e errava em todo
+  feriado americano que não é brasileiro: fluxo começando na segunda 22/06/2026
+  dava 18/06, quando a sexta 19/06 é Juneteenth e o certo é 17/06. A taxa que
+  entrava era a do dia errado e a conta fechava consigo mesma. A tela não conta
+  mais dia útil nenhum: pergunta ao servidor (`/api/tools/fixing-date`), e sem
+  resposta deixa o campo como está. O SOFR COMPOSTO já usava o calendário SOFR.
+  `check_tools.py` §9.
 - **Swap Calculator, perna de EQUITY: o `Cupom Limpo` da posição pode ser um
   PERCENTUAL, e quem diz é a Denominação** (§507). `Preco in ativo - 100.00%
   Close 20-Sep-24` = o preço inicial é o FECHAMENTO do papel naquele pregão ×

@@ -380,6 +380,30 @@ def api_tools_fixing_rate():
                     'index': idx, 'tenor': tenor})
 
 
+@blueprint.route('/api/tools/fixing-date')
+def api_tools_fixing_date():
+    """A data PADRÃO do fixing de uma taxa a termo: D-2 úteis do início do
+    fluxo, no calendário do ÍNDICE (SOFR no Term SOFR, TARGET2/BCE na EURIBOR).
+
+    A tela fazia essa conta no navegador com o `anbima.json`, e era a terceira
+    cópia da regra — a que punha a data no campo. Ela pergunta aqui, e a regra
+    é UMA: a do motor (`liquidacao.data_de_fixing`)."""
+    r = _auth_api()
+    if r:
+        return r
+    idx = (request.args.get('index') or liquidacao.TERM_SOFR).strip()
+    if idx not in liquidacao.COM_FIXING:
+        return jsonify({'success': False,
+                        'error': '{} has no forward fixing.'.format(idx)}), 404
+    try:
+        inicio = para_data(request.args.get('start') or '')
+    except ErroDeDado:
+        return jsonify({'success': False, 'error': 'Invalid date.'}), 400
+    quando = liquidacao.data_de_fixing(inicio, indexador=idx)
+    return jsonify({'success': True, 'date': quando.isoformat(), 'index': idx,
+                    'calendar': liquidacao.calendario_do_fixing(idx).nome})
+
+
 @blueprint.route('/tools/term-sofr/csv')
 def tools_term_sofr_csv():
     """A curva IMPORTADA em CSV — o que a tela mostra. Exportar a base do Fed

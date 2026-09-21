@@ -2254,7 +2254,7 @@
   "tl-flow-start": "Flow start",
   "tl-formula": "Formula",
   "tl-forward-curve": "Forward curve",
-  "tl-forward-help": "Forward-looking rate: fixed before the flow starts. Blank, the fixing date is 2 business days before the start.",
+  "tl-forward-help": "Forward-looking rate: fixed before the flow starts. Blank, the fixing date is 2 business days before the start, on the index's own calendar — SOFR holidays for Term SOFR, TARGET2 for EURIBOR (Holidays Calendar).",
   "tl-full-precision": "Full precision",
   "tl-future-value": "Future value",
   "tl-fv-a-minus-p": "receiving FV − paying FV",

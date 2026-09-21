@@ -379,27 +379,8 @@
 
   // ── a data do fixing (Term SOFR / EURIBOR) é D-2 úteis do início do fluxo ──
   // O motor já assume D-2 quando o campo está em branco; o campo vem preenchido
-  // para a mesa VER de que dia é a taxa. Feriados: o ANBIMA do app; sem o
-  // arquivo, só o fim de semana conta.
-  var _hol = null;
-  function loadHolidays() {
-    if (_hol) return Promise.resolve(_hol);
-    return fetch('/static/data/anbima.json', { credentials: 'same-origin' })
-      .then(function (r) { return r.ok ? r.json() : []; })
-      .then(function (l) { _hol = {}; (l || []).forEach(function (h) { var d = String((h && h.date) || h || '').slice(0, 10); if (d) _hol[d] = 1; }); return _hol; })
-      .catch(function () { _hol = {}; return _hol; });
-  }
-  function isoOf(d) { return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + d.getUTCDate()).slice(-2); }
-  function minusBiz(iso, n, hol) {
-    var d = new Date(iso + 'T00:00:00Z');
-    if (isNaN(d.getTime())) return '';
-    while (n > 0) {
-      d.setUTCDate(d.getUTCDate() - 1);
-      var w = d.getUTCDay(), k = isoOf(d);
-      if (w !== 0 && w !== 6 && !hol[k]) n -= 1;
-    }
-    return isoOf(d);
-  }
+  // para a mesa VER de que dia é a taxa. O calendário é o do ÍNDICE, e quem
+  // conta é o servidor (`/api/tools/fixing-date`).
   function fixingPadrao(lado, force) {
     var sel = document.getElementById(lado + '_indexador');
     var fx = document.getElementById(lado + '_data_fixing');
@@ -409,13 +390,23 @@
     if (fx.value && !force && !fx.hasAttribute('data-auto')) return;
     var start = ini.value;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) return;
-    loadHolidays().then(function (hol) {
-      var v = minusBiz(start, 2, hol);
-      if (!v) return;
-      fx.value = v;
-      fx.setAttribute('data-auto', '1');
-      if (fx._flatpickr) fx._flatpickr.setDate(v, false);
-    });
+    // Quem conta é o SERVIDOR, no calendário do ÍNDICE (SOFR no Term SOFR,
+    // TARGET2 na EURIBOR): a conta local usava o `anbima.json` e errava em todo
+    // feriado americano que não é brasileiro — 19/06/2026 (Juneteenth) fazia o
+    // D-2 de 22/06 sair 18/06 em vez de 17/06. Sem resposta o campo fica como
+    // está: uma data pelo calendário errado é pior que nenhuma.
+    fetch('/api/tools/fixing-date?index=' + encodeURIComponent(sel.value) +
+          '&start=' + encodeURIComponent(start), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d.success || !d.date) return;
+        fx.value = d.date;
+        fx.setAttribute('data-auto', '1');
+        if (fx._flatpickr) fx._flatpickr.setDate(d.date, false);
+        // a data mudou: a taxa daquele dia vem junto (a base é a mesma pergunta)
+        if (typeof buscarFixing === 'function') buscarFixing(lado);
+      })
+      .catch(function () { /* offline: fica o que está no campo */ });
   }
   ['ativa', 'passiva'].forEach(function (lado) {
     fixingPadrao(lado);
