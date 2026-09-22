@@ -1804,6 +1804,20 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   status diz que foto está no share.
 - **`_pc_metrics_history` cresce um snapshot por dia**: enumeração pelo
   `_manifest`, `_day_prefetch`, `once_per_request` (§429).
+- **O intervalo do Advanced Export daqui é por COLUNA de data, não por
+  arquivo-dia** (mesa, 22/09/2026; `/api/pending-confirmation/range` + o modo
+  `range` do `export-advanced.js`, que EXCLUI o `daily`): um combobox escolhe
+  `Trade Date` (o padrão) ou `Maturity Date`, e a busca vai aos **três** bancos
+  numa requisição só. A operação daqui não vive num dia — ela anda entre
+  `pending`, `ok` e `backlog` conforme o status resolve e o prazo vira —, e as
+  fotos das 11:30 respondiam outra pergunta: a FILA de cada dia, com a mesma
+  operação repetida em todas as fotos em que ainda estava pendente e em nenhuma
+  se já estivesse resolvida antes da primeira. Sem Reference Date (não há
+  arquivo a carimbar), deduplicado por Trade Number (a linha fica nos dois
+  bancos até a manutenção reencaminhá-la), coluna por LISTA BRANCA (o nome vem
+  do navegador), linha sem a data pedida fora e CONTADA, e leitura `strict` —
+  banco ilegível responde com o motivo, porque planilha curta não se distingue
+  de intervalo sem movimento. `check_pc_export_range.py`.
 - **Os dois Summaries são AQUECIDOS em background** (`summary-warm`, 4 min
   após a subida e a cada 30 min na janela 08–20 BRT; `OTC_SUMMARY_WARM_MINUTES`,
   `0` desliga): as MESMAS coletas do request para hoje, num
