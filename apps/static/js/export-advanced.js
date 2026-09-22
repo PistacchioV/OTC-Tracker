@@ -1318,15 +1318,56 @@
        Exposto como `window.otcDateField` para as páginas que já carregam este
        arquivo (é o único helper de data do app; ver o comentário do padrão em
        `pages/index.html`). */
+    /* A MÁSCARA: digita-se só os NÚMEROS e as barras se escrevem sozinhas
+       (mesa, 22/09/2026) — `22082026` vira `22/08/2026`. O campo já era
+       editável (`allowInput`), mas quem digitava tinha de pôr as duas barras à
+       mão, e um dígito a mais ou uma barra esquecida dava um texto que o
+       flatpickr lê no seu parse frouxo: `2208/2026` vira uma data QUALQUER, sem
+       erro nenhum. Com a máscara só entra dígito, e o que sai do campo é sempre
+       dd/mm/aaaa — a mesma leitura do resto do app.
+
+       É a regra do §508 da Quotes, que lá vive sobre o daterangepicker; aqui
+       ela mora no helper e não na página, porque a tela que copia o campo copia
+       o comportamento junto (a duplicação é que deixou o Import laranja numa
+       sétima página, §490).
+
+       Completada a data, ela é ESCRITA no picker na hora (`setDate`): o valor
+       que o código em volta lê é o do input original, em ISO, e ele só nasceria
+       no blur — clicar direto no Run com a data digitada exportaria o intervalo
+       anterior. */
+    function dateMask(inp, fp) {
+        if (!inp || inp._otcMask) return;
+        inp._otcMask = 1;
+        inp.setAttribute('inputmode', 'numeric');
+        inp.setAttribute('maxlength', '10');
+        inp.addEventListener('input', function () {
+            var d = String(inp.value || '').replace(/\D/g, '').slice(0, 8);
+            var txt = d.slice(0, 2) + (d.length > 2 ? '/' + d.slice(2, 4) : '') +
+                                      (d.length > 4 ? '/' + d.slice(4) : '');
+            if (txt !== inp.value) {
+                inp.value = txt;
+                try { inp.setSelectionRange(txt.length, txt.length); } catch (e) {}
+            }
+            // Só a data INTEIRA é escolha; o que está pela metade é digitação em
+            // curso, e escrevê-la no picker faria o campo pular para um dia que
+            // ninguém pediu no meio do que se digita.
+            if (d.length === 8 && fp) fp.setDate(txt, true, 'd/m/Y');
+        });
+    }
+    window.otcDateMask = dateMask;
+
     function dateField(el, opts) {
         if (typeof el === 'string') el = document.querySelector(el);
         if (!el || el._flatpickr || typeof flatpickr === 'undefined') return null;
-        return flatpickr(el, jQuery.extend({
+        var fp = flatpickr(el, jQuery.extend({
             dateFormat: 'Y-m-d',       // o que fica no value — é o que a API espera
             altInput: true, altFormat: 'd/m/Y',
             altInputClass: el.className,
             allowInput: true, disableMobile: true
         }, opts || {}));
+        // O campo que se VÊ (e em que se digita) é o altInput, nunca o original.
+        if (fp && fp.altInput) dateMask(fp.altInput, fp);
+        return fp;
     }
     window.otcDateField = dateField;
 

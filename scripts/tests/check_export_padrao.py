@@ -171,6 +171,26 @@ for nome, texto in fontes():
         incompleto[nome] = falta
 check('  so as telas conhecidas tem o menu pela metade', incompleto, MENU_INCOMPLETO)
 
+# ── 5. O campo de data se DIGITA ───────────────────────────────────────────
+# Data e SEMPRE dd/mm/aaaa (§7), e o campo do app e o `otcDateField`. Digitar
+# nele era pôr as barras a mao: um digito a mais ou uma barra esquecida dava um
+# texto que o parse frouxo do flatpickr le como uma data QUALQUER, sem erro
+# nenhum. A mascara mora no HELPER — copiada por pagina, ela chega a umas e
+# falta noutras, que e a historia do Import laranja da setima tela (§490).
+print('=== 5. A mascara de data (dd/mm/aaaa, so os numeros) ===')
+XA = io.open(os.path.join(ROOT, 'apps', 'static', 'js', 'export-advanced.js'),
+             encoding='utf-8').read()
+check('  o helper expoe a mascara', 'window.otcDateMask = dateMask;' in XA, True)
+# O campo que se VE e o altInput; mascarar o original nao alcanca quem digita.
+check('  e a aplica ao campo VISIVEL', 'if (fp && fp.altInput) dateMask(fp.altInput, fp);' in XA, True)
+# So a data inteira e escolha: escrever no picker no meio da digitacao faria o
+# campo pular para um dia que ninguem pediu.
+check('  so a data INTEIRA e escrita no picker',
+      "if (d.length === 8 && fp) fp.setDate(txt, true, 'd/m/Y');" in XA, True)
+# Completada, ela vale na hora: o codigo em volta le o ISO do input original, e
+# ele so nasceria no blur — clicar direto no Run exportaria o intervalo anterior.
+check('  o ISO nao espera o blur', 'fp.setDate(txt' in XA, True)
+
 print()
 if fails:
     print('FALHOU (%d):' % len(fails))
