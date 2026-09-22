@@ -7766,8 +7766,9 @@ def _ndfc_api_iso(v):
     return d.strftime('%Y-%m-%d') if d else str(v or '').strip()
 
 
-def _ndfc_api_rolled(sn):
-    """O valor de liquidação do evento: o PRIMEIRO item de `Rolled Positions`.
+def _ndfc_api_rolled(sn, cross=False):
+    """O valor de liquidação do evento: o PRIMEIRO item de `Rolled Positions` —
+    salvo no CROSS sem BRL (`cross=True`), em que é o SEGUNDO.
 
     A lista traz as duas pernas do rolamento — o caixa em BRL primeiro e o
     notional da moeda depois (`[-33273.3984, -113872.0]` com Quantity 113872) —,
@@ -7775,14 +7776,24 @@ def _ndfc_api_rolled(sn):
     começo **não existe** no payload de produção: a coluna saía vazia, sem erro
     em lugar nenhum, e com ela o NDF Summary somava zero. Ele fica como plano B
     só para o registro histórico que o tinha.
+
+    **No cross sem BRL (USD × GBP, USD × EUR…) a ordem se inverte** (mesa,
+    22/09/2026): o primeiro item é o notional da moeda (`[-43000000.0,
+    -5167299.25]` com Quantity 43.000.000 GBP) e o caixa em BRL é o SEGUNDO.
+    Lido o primeiro, o Cockpit mostrava o notional como liquidação e o NDF
+    Summary somava 43 milhões. Sem o segundo item a célula fica VAZIA, com
+    aviso no log — o primeiro ali é notional, não caixa.
     """
     rolled = _ndf_api_get(sn, 'ROLLED POSITIONS', 'ROLLEDPOSITIONS')
     if isinstance(rolled, (list, tuple)):
-        for v in rolled:
-            n = _fxo_num(v)
-            if n is not None:
-                return n
-        return None
+        nums = [n for n in (_fxo_num(v) for v in rolled) if n is not None]
+        if cross:
+            if len(nums) >= 2:
+                return nums[1]
+            log.warning('[ndfc] cross sem BRL com Rolled Positions sem o 2º item '
+                        '(o caixa): %r — liquidação fica vazia', list(rolled))
+            return None
+        return nums[0] if nums else None
     n = _fxo_num(rolled)
     if n is not None:
         return n
@@ -7840,7 +7851,8 @@ def _ndfc_rec_from_api(rec, refmap_acr, refmap_spn, stl=None):
                          que o aviso imprime, imune a uma edição da grade ou ao
                          SETTLEMENT.xlsx reescrevendo as colunas;
       [PROD] Cockpit.SETTLEMENT ← o PRIMEIRO `Rolled Positions` do evento (o caixa
-                         em BRL; o segundo é o notional da moeda), DUAS casas half-up;
+                         em BRL; o segundo é o notional da moeda) — no cross SEM
+                         BRL é o SEGUNDO, a ordem ali se inverte —, DUAS casas half-up;
       PUBLISHER        ← Publisher;
       NB_BANK, CD_BRANCH, CD_BANK_ACCOUNT ← em branco: a API não os traz;
       VL_TAX_INCOME    ← CALCULADO no `_ndfc_apply_ir` depois de o dia inteiro
@@ -7924,7 +7936,8 @@ def _ndfc_rec_from_api(rec, refmap_acr, refmap_spn, stl=None):
         'PUBLISHER': str(get('PUBLISHER') or '').strip(),
         'VL_TAX_INCOME': '',
         'ID_DEAL': str(sn.get('EVENT NAME') or '').strip(),
-        '[PROD] Cockpit.SETTLEMENT': _ndfc_api_money(_ndfc_api_rolled(sn)),
+        '[PROD] Cockpit.SETTLEMENT': _ndfc_api_money(_ndfc_api_rolled(
+            sn, cross=bool(qty_ccy and oth_ccy and 'BRL' not in (qty_ccy, oth_ccy)))),
         'NB_BANK': '', 'CD_BRANCH': '', 'CD_BANK_ACCOUNT': '',
     }
     out['_nc_fixing'] = _rate(sn.get('SPOT'))

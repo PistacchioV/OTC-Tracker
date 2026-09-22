@@ -201,6 +201,25 @@ try:
                         'Other Quantity Units': 'MXN', 'Other Quantity': -1800.0})
     row3, _ = R._ndfc_rec_from_api(rec3, REF, {})
     check('cross sem BRL: LC = Quantity, FC = Other', (row3['CCY_NOTIONAL_LC'], row3['CCY_NOTIONAL_FC']), ('USD', 'MXN'))
+    # Cross SEM BRL (mesa, 22/09/2026): a ordem do Rolled Positions se inverte
+    # — o 1o e o notional da moeda, o caixa em BRL e o SEGUNDO. O payload real
+    # do D5VL-2IEJOX (GBP x USD).
+    rec_x = dict(REC, **{'Quantity Currency': 'GBB', 'Quantity': 43000000.0,
+                         'Other Quantity Units': 'USB', 'Other Quantity': -58501500.0,
+                         'settlement': [dict(REC['settlement'][0], **{
+                             'Rolled Positions': [-43000000.0, -5167299.250000021]})]})
+    row_x, _ = R._ndfc_rec_from_api(rec_x, REF, {})
+    check('cross sem BRL: liquidacao e o 2o Rolled Positions',
+          row_x['[PROD] Cockpit.SETTLEMENT'], '-5167299.25')
+    rec_x1 = dict(rec_x, settlement=[dict(REC['settlement'][0], **{'Rolled Positions': [-43000000.0]})])
+    check('cross sem o 2o item: vazio, nunca o notional',
+          R._ndfc_rec_from_api(rec_x1, REF, {})[0]['[PROD] Cockpit.SETTLEMENT'], '')
+    rec_b = dict(REC, **{'Quantity Currency': 'USB', 'Quantity': 113872.0,
+                         'Other Quantity Units': 'BRR', 'Other Quantity': -600000.0,
+                         'settlement': [dict(REC['settlement'][0], **{
+                             'Rolled Positions': [-33273.3984, -113872.0]})]})
+    check('com BRL segue o 1o',
+          R._ndfc_rec_from_api(rec_b, REF, {})[0]['[PROD] Cockpit.SETTLEMENT'], '-33273.40')
     WEAK.add('MXN')
     rec4 = dict(REC, **{'Quantity Currency': 'BRR', 'Other Quantity Units': 'MXN', 'Strike': 3.2,
                         'settlement': [dict(REC['settlement'][0], Spot=3.33)]})

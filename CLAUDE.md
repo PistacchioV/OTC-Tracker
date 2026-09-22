@@ -606,7 +606,8 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `Daily Settlement` × NDF = `getTradesBySettle`); `SOURCE` API × Bob Report;
   `YYYYMMDD` é a data; produto é o parâmetro da API, não a página. O
   `settlement` da API é LISTA e o valor é o primeiro item numérico de `Rolled
-  Positions` (§425).
+  Positions` (§425) — **no cross SEM BRL (USD × GBP, USD × EUR) é o SEGUNDO**:
+  ali o primeiro é o notional da moeda (mesa, 22/09/2026; `_ndfc_api_rolled`).
 - **`fxo-internal-cpty`** — `INVERT DIRECTION = Yes` é a perna espelhada e só
   entra com Ctpty e Dir os dois NOK; `USE = Disregard` corta ANTES do merge, por
   `_nome_cru`, nas DUAS colunas de contraparte, avisando no painel. O `upgrade`
@@ -693,6 +694,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   digitar não faz nada, sem erro nenhum. Tabela `scrollX: false` não tem clone
   e funciona dos dois jeitos — o container cobre os dois casos. E **quem tem
   linha de filtro tem Clear Filters** alcançando as DUAS cópias do cabeçalho.
+  **Filtro aceita LISTA** (`123; 456`, `,`/`;`/quebra de linha — os Trade IDs
+  colados de uma coluna do Excel): a linha passa se QUALQUER valor casar. No
+  navegador é o `sf-multi.js` (`otcSfMulti.columnSearch`, regex OR — a busca
+  padrão do DataTables faria E entre as palavras; e o colar troca as quebras
+  por `; `, que o `<input>` comeria), no servidor o `_filter_tokens` do
+  `_deal_matches`. Milhar (`1,250,000`) é UM valor. `check_sf_multi.py`.
   `check_export_padrao.py` recusa `#tabela thead` em página `scrollX` **sem
   lista de exceção**: é bug silencioso, não dívida de estilo.
 - **Botões de ação: squircle 32×32** travado nos DOIS eixos, `padding:0`,
@@ -2111,7 +2118,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (152 scripts)
+### `scripts/tests/` (155 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

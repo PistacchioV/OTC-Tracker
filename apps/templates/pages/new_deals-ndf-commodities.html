@@ -1143,6 +1143,7 @@
 <script src="{{ config.ASSETS_ROOT }}/js/pages/form-choice.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/pages/form-select2.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/sf-multi.js?v={{ asset_v('js/sf-multi.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.responsive.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.js"></script>
@@ -1736,9 +1737,7 @@ $(document).ready(function() {
                     // "missing counterparty" não é dado de célula (o badge é DOM):
                     // quem trata esse termo é o helper compartilhado (§174).
                     if (window._cpInst && window._cpInst.columnSearch(columnIndex, this.value)) return;
-                    if (api.column(columnIndex).search() !== this.value) {
-                        api.column(columnIndex).search(this.value).draw();
-                    }
+                    if (otcSfMulti.columnSearch(api.column(columnIndex), this.value)) api.draw();
                 });
             });
 
@@ -2300,6 +2299,9 @@ $(document).ready(function() {
 
     function sfCandidates(val) {
         if (!val) return [];
+        // Lista de valores (`123; 456`, Trade IDs colados do Excel) → colunas de
+        // texto, mesmo começando com dígito (sf-multi.js).
+        if (otcSfMulti.isMulti(val)) return SF_COLS.filter(function(c) { return c.type === 'text'; }).map(function(c) { return { col: c, mode: 'text', label: c.label }; });
         if (!/^\d/.test(val)) {
             // starts with letter → all text columns
             return SF_COLS.filter(function(c) { return c.type === 'text'; })
@@ -2315,6 +2317,8 @@ $(document).ready(function() {
             if (c.type === 'number') out.push({ col: c, mode: 'number', label: c.label });
             else if (c.type === 'date') out.push({ col: c, mode: 'exact', label: c.label });
         });
+        // ID de texto que começa com dígito (Deal, B3 ID, conta) também é candidato.
+        out = out.concat(SF_COLS.filter(function(c) { return c.type === 'text'; }).map(function(c) { return { col: c, mode: 'text', label: c.label }; }));
         return out;
     }
 
