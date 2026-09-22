@@ -732,10 +732,11 @@
       mark('fim', flow.p_fim ? '' : 'tl-missing');
       mark('amortizacao', flow.p_amort ? '' : 'tl-missing');
       mark('base_amortizacao', flow.p_base_amort ? '' : 'tl-missing');
-      // A taxa contratada é do FLUXO (o DFLUXO traz uma por evento, e o spread
-      // pode mudar de um para o outro): trocar o evento troca a taxa das duas
-      // pontas, já com o sinal. Evento sem taxa deixa o campo como está.
+      // Só na ponta cuja taxa VEIO do DFLUXO (a posição estava vazia): ali a
+      // taxa é do evento, e trocar o evento troca a taxa, já com o sinal. Na
+      // ponta em que a posição respondeu, a taxa é dela e fica.
       ['ativa', 'passiva'].forEach(function (lado, k) {
+        if (!lastData || !((lastData[lado] || {}).fonte || {}).taxa) return;
         var v = (flow.taxa_juros || [])[k];
         if (v === null || v === undefined || isNaN(v)) return;
         var txt = Number(v).toFixed(4);
