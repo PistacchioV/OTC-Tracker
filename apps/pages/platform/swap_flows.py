@@ -55,9 +55,35 @@ FLX = {'contrato': 0, 'identificador': 10, 'tipo_amort': 8, 'evento': 11,
         'taxa_amort': (16, 21), 'inicio': 22, 'fim': 23,
         # `Sinal/Taxa de Juros Parte` e `... Contraparte`: a taxa contratada
         # DAQUELE fluxo, na mesma ordem das pontas da posição (Parte → ativa,
-        # Contraparte → passiva). É o plano B do Swap Calculator quando a
-        # coluna de taxa da posição vem vazia.
+        # Contraparte → passiva). No Swap Calculator ela VENCE a da posição
+        # (`taxa_do_fluxo`).
         'sinal_juros': (12, 17), 'taxa_juros': (13, 18)}
+
+
+# Códigos de sinal NEGATIVO — os da posição (`01`, §swap-code-labels) e as
+# grafias por extenso que um relatório pode trazer. Normalizados (sem zero à
+# esquerda, maiúsculas).
+_SINAL_NEGATIVO = {'1', '-', 'N', 'NEG', 'NEGATIVO', 'D'}
+
+
+def taxa_do_fluxo(taxa, sinal):
+    """A taxa de UMA ponta de um evento do DFLUXO, JÁ COM O SINAL — ou `None`.
+
+    O sinal pode vir de dois jeitos, e os dois valem: na coluna própria
+    (`Sinal Juros …`, código `1` = negativo) ou embutido na célula da taxa
+    (`-3,13`). Quando vêm OS DOIS, o número não vira duas vezes: negativo é
+    "a célula é negativa OU o código diz negativo", e o valor é o módulo com
+    esse sinal. Multiplicar um pelo outro transformava o `-3,13` com código
+    `1` em +3,13 — o spread do Term SOFR entrava invertido na conta."""
+    v = numero_da_posicao(taxa)
+    if v is None:
+        return None
+    s = str(sinal or '').strip().upper()
+    if s.endswith('.0'):
+        s = s[:-2]
+    s = s.lstrip('0') or ('0' if s else '')
+    neg = v < 0 or s in _SINAL_NEGATIVO
+    return -abs(v) if neg else abs(v)
 
 
 def norm(s):
@@ -284,8 +310,8 @@ def fluxos_do_contrato(contrato, ident, dia_posicao=None):
             'taxa_amort': numero_da_posicao(celula(vals, FLX['taxa_amort'][0]))
             if celula(vals, FLX['taxa_amort'][0]) else
             numero_da_posicao(celula(vals, FLX['taxa_amort'][1])),
-            'taxa_juros': [numero_da_posicao(celula(vals, i)) for i in FLX['taxa_juros']],
-            'sinal_juros': [celula(vals, i) for i in FLX['sinal_juros']],
+            'taxa_juros': [taxa_do_fluxo(celula(vals, t), celula(vals, sg))
+                           for t, sg in zip(FLX['taxa_juros'], FLX['sinal_juros'])],
         })
     return sorted(saida, key=lambda f: f['evento'])
 
