@@ -1613,9 +1613,7 @@
   "nav-products-monitor": "Monitor",
   "ndm-sub": "Imported operations by product and status for the reference date — what still needs action on each page.",
   "ndm-ref-date": "Reference date",
-  "ndm-empty": "No operations imported for this date.",
   "ndm-dev": "In development",
-  "ndm-open": "Open page",
   "ndm-zone-b3": "B3 Registration",
   "ndm-zone-intrag": "Intrag",
   "ndm-grp-ndf": "NDF",
@@ -2715,5 +2713,16 @@
   "tl-ndf-underlying": "Underlying asset",
   "tl-ndf-commodity-help": "Commodity forward: the notional is a quantity, the fixing is the PRICE of the underlying (from Quotes, × 0.01 when the B3 Index says it is quoted in cents) and the FX rate takes the difference to BRL.",
   "tl-nav-calculators": "Calculators",
-  "swal-mapping-failed-n": "deal(s) could NOT be saved — see the log and try again."
+  "swal-mapping-failed-n": "deal(s) could NOT be saved — see the log and try again.",
+  "ndm-col-product": "Product",
+  "ndm-col-total": "Total",
+  "ndm-sum-total": "imported",
+  "ndm-sum-none": "nothing imported today",
+  "ndm-sum-clear": "all done",
+  "ndm-zero-many": "products with nothing imported today",
+  "ndm-zero-one": "product with nothing imported today",
+  "ndm-col-open": "Open",
+  "ndm-sum-open": "open",
+  "ndm-sum-open-one": "open",
+  "ndm-zone-conf": "Confirmations"
 }

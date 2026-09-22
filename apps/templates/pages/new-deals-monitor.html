@@ -27,218 +27,160 @@
     color: var(--ins-secondary-color); cursor: pointer;
 }
 
-/* ── Card bento ────────────────────────────────────────────────────────── */
-#ndm-page .ndm-card {
-    height: 100%;
+
+/* ── A TABELA ───────────────────────────────────────────────────────────────
+   O desenho anterior era um cartão por produto: 34 cartões, quase todos
+   zerados, repetindo "No operations imported for this date." e ocupando 2.900px
+   de rolagem para dizer que o dia estava parado. A pergunta da tela é uma só —
+   o que ainda precisa de ação, e onde —, e ela se responde comparando produtos:
+   é leitura de TABELA. Uma linha por produto, as contagens por status em
+   colunas ALINHADAS entre si (num cartão, cada chip fica onde couber), e o dia
+   inteiro numa tela. */
+#ndm-page .ndm-zone {
     background: var(--vr-card-bg, var(--ins-secondary-bg));
     border: 1px solid var(--vr-card-border, var(--ins-border-color));
     border-radius: var(--vr-card-radius, 18px);
     box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
-    padding: 1.15rem 1.25rem 1.05rem;
-    display: flex; flex-direction: column; gap: .8rem;
-    transition: transform 260ms var(--ndm-ease), box-shadow 260ms var(--ndm-ease),
-                border-color 260ms var(--ndm-ease);
+    padding: 1rem 1.1rem 1.1rem;
+    margin-bottom: 1.25rem;
 }
-#ndm-page .ndm-card.is-soon { opacity: .68; }
+#ndm-page .ndm-zone-head {
+    display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+    margin-bottom: .75rem;
+}
+#ndm-page .ndm-zone-sum {
+    margin-left: auto; display: flex; align-items: center; gap: .9rem;
+    font-size: .78rem; color: var(--ins-secondary-color);
+}
+#ndm-page .ndm-zone-sum b { font-variant-numeric: tabular-nums; font-size: .95rem; }
+#ndm-page .ndm-zone-sum .ndm-sum-pend b { color: #b45309; }
+#ndm-page .ndm-zone-sum .ndm-sum-zero b  { color: #1a8a4a; }
+[data-bs-theme=dark] #ndm-page .ndm-zone-sum .ndm-sum-pend b { color: #ffd54f; }
+[data-bs-theme=dark] #ndm-page .ndm-zone-sum .ndm-sum-zero b { color: #7ed6a2; }
 
-#ndm-page .ndm-card__head { display: flex; align-items: center; gap: .75rem; }
-#ndm-page .ndm-card__icon {
-    width: 42px; height: 42px; flex: 0 0 auto;
+/* Nove colunas não cabem num telefone. Quem rola de lado é a TABELA, nunca a
+   página: com a página rolando, o menu e o cabeçalho saem da tela junto e a
+   pessoa perde a referência de onde está. */
+#ndm-page .ndm-tbl-wrap { overflow-x: auto; }
+#ndm-page .ndm-tbl { width: 100%; border-collapse: collapse; min-width: 540px; }
+/* O nome do produto fica com a sobra e as colunas de número são ESTREITAS e
+   fixas: espalhadas pela largura da tela, elas obrigam a percorrer meio metro
+   de branco para ler uma linha. */
+#ndm-page .ndm-tbl th:not(:first-child),
+#ndm-page .ndm-tbl td:not(:first-child) { width: 78px; }
+#ndm-page .ndm-tbl th:last-child, #ndm-page .ndm-tbl td:last-child { width: 28px; }
+#ndm-page .ndm-tbl th {
+    font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ins-secondary-color, #8a8a8f);
+    padding: .35rem .5rem; text-align: center; white-space: nowrap;
+    border-bottom: 1px solid var(--ins-border-color, rgba(0,0,0,.1));
+}
+#ndm-page .ndm-tbl th:first-child { text-align: left; }
+#ndm-page .ndm-tbl td {
+    padding: .42rem .5rem; font-size: .82rem; text-align: center; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    border-bottom: 1px solid var(--ins-border-color, rgba(0,0,0,.06));
+}
+#ndm-page .ndm-tbl tbody tr:last-child td { border-bottom: 0; }
+#ndm-page .ndm-tbl td:first-child { text-align: left; white-space: normal; }
+
+/* A linha inteira é o link da página do produto. O <a> está no nome (é ele que
+   o teclado alcança); o clique no resto da linha é conveniência. */
+#ndm-page .ndm-row { transition: background-color 140ms var(--ndm-ease); }
+#ndm-page .ndm-row.is-clickable { cursor: pointer; }
+@media (hover: hover) and (pointer: fine) {
+    #ndm-page .ndm-row.is-clickable:hover { background: var(--ins-tertiary-bg, rgba(0,102,204,.05)); }
+}
+#ndm-page .ndm-prod { display: flex; align-items: center; gap: .55rem; }
+#ndm-page .ndm-prod-ico {
+    width: 26px; height: 26px; flex: 0 0 auto; border-radius: 8px;
     display: inline-flex; align-items: center; justify-content: center;
-    border-radius: 12px;
     background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
-    color: #fff; font-size: 1.25rem;
-    box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
-    transition: transform 260ms var(--ndm-ease), box-shadow .2s var(--ndm-ease);
+    color: #fff; font-size: .9rem;
 }
-#ndm-page .ndm-card__title { font-size: .95rem; font-weight: 700; letter-spacing: -.01em; margin: 0; color: var(--ins-body-color); }
-#ndm-page .ndm-card__total {
-    margin-left: auto; font-size: 1.45rem; font-weight: 800; letter-spacing: -.02em;
-    font-variant-numeric: tabular-nums; color: var(--ins-body-color);
-}
-
-/* Status chips — contagem visível por status */
-#ndm-page .ndm-chips { display: flex; flex-wrap: wrap; gap: .4rem; min-height: 26px; }
-#ndm-page .ndm-chip {
-    display: inline-flex; align-items: center; gap: .3rem;
-    font-size: .7rem; font-weight: 700; letter-spacing: .015em;
-    padding: .18rem .55rem; border-radius: 999px;
-    background: var(--ins-tertiary-bg, #eef0f4); color: var(--ins-secondary-color, #6e6e73);
-}
-#ndm-page .ndm-chip b { font-variant-numeric: tabular-nums; font-weight: 800; }
-#ndm-page .ndm-chip--new      { background: rgba(67, 191, 229, .16);  color: #1d7ea8; }
-#ndm-page .ndm-chip--generated{ background: rgba(139, 92, 246, .16);  color: #7c3aed; }
-#ndm-page .ndm-chip--pending  { background: rgba(247, 184, 75, .20);  color: #8a6100; }
-#ndm-page .ndm-chip--approved { background: rgba(94, 92, 230, .16);   color: #5e5ce6; }
-#ndm-page .ndm-chip--sent     { background: rgba(0, 102, 204, .14);   color: #0066cc; }
-#ndm-page .ndm-chip--success  { background: rgba(26, 138, 74, .16);   color: #1a8a4a; }
-/* As etapas da ESTEIRA de confirmação, que continuam o ciclo depois do
-   documento gerado. As cores são as MESMAS do Confirmations Monitor (OTC azul,
-   MO âmbar, FO ciano, Ok verde): as duas telas mostram a mesma fila, e cores
-   diferentes fariam parecer estados diferentes. */
-#ndm-page .ndm-chip--pending-otc   { background: rgba(0, 102, 204, .14);  color: #0066cc; }
-#ndm-page .ndm-chip--pending-mo,
-#ndm-page .ndm-chip--pending-mo-fo { background: rgba(247, 184, 75, .20); color: #8a6100; }
-#ndm-page .ndm-chip--pending-fo    { background: rgba(67, 191, 229, .16); color: #1d7ea8; }
-#ndm-page .ndm-chip--ok            { background: rgba(26, 138, 74, .16);  color: #1a8a4a; }
-[data-bs-theme=dark] #ndm-page .ndm-chip--new      { color: #7fd4f2; }
-[data-bs-theme=dark] #ndm-page .ndm-chip--generated{ color: #c4b5fd; }
-[data-bs-theme=dark] #ndm-page .ndm-chip--pending  { color: #ffd54f; }
-[data-bs-theme=dark] #ndm-page .ndm-chip--approved { color: #a5a3ff; }
-[data-bs-theme=dark] #ndm-page .ndm-chip--sent     { color: #7db4f5; }
-[data-bs-theme=dark] #ndm-page .ndm-chip--success  { color: #7ed6a2; }
-[data-bs-theme=dark] #ndm-page .ndm-chip--pending-otc   { color: #7db4f5; }
-[data-bs-theme=dark] #ndm-page .ndm-chip--pending-mo,
-[data-bs-theme=dark] #ndm-page .ndm-chip--pending-mo-fo { color: #ffd54f; }
-[data-bs-theme=dark] #ndm-page .ndm-chip--pending-fo    { color: #7fd4f2; }
-[data-bs-theme=dark] #ndm-page .ndm-chip--ok            { color: #7ed6a2; }
-
-/* Barra proporcional por status (leitura instantânea do que falta) */
-#ndm-page .ndm-bar { display: flex; height: 6px; border-radius: 999px; overflow: hidden; background: var(--ins-tertiary-bg, #eef0f4); }
-#ndm-page .ndm-bar span { height: 100%; }
-#ndm-page .ndm-bar .sg-new      { background: #43bfe5; }
-#ndm-page .ndm-bar .sg-generated{ background: #8b5cf6; }
-#ndm-page .ndm-bar .sg-pending  { background: #f7b84b; }
-#ndm-page .ndm-bar .sg-approved { background: #5e5ce6; }
-#ndm-page .ndm-bar .sg-sent     { background: #0066cc; }
-#ndm-page .ndm-bar .sg-success  { background: #1a8a4a; }
-#ndm-page .ndm-bar .sg-pending-otc   { background: #0066cc; }
-#ndm-page .ndm-bar .sg-pending-mo,
-#ndm-page .ndm-bar .sg-pending-mo-fo { background: #f7b84b; }
-#ndm-page .ndm-bar .sg-pending-fo    { background: #43bfe5; }
-#ndm-page .ndm-bar .sg-ok            { background: #1a8a4a; }
-#ndm-page .ndm-bar .sg-other    { background: #8a969c; }
-
-/* Subitens por LE (JPM / MGT / LAW / ATA) — contagem por entidade do card */
-#ndm-page .ndm-les { display: flex; flex-wrap: wrap; gap: .4rem; }
-#ndm-page .ndm-le {
-    display: inline-flex; align-items: center; gap: .35rem;
-    font-size: .68rem; font-weight: 700; letter-spacing: .03em;
-    padding: .16rem .55rem; border-radius: 8px;
-    border: 1px dashed var(--ins-border-color, rgba(0, 0, 0, .14));
-    color: var(--ins-secondary-color, #6e6e73); background: transparent;
-}
-#ndm-page .ndm-le b {
-    font-variant-numeric: tabular-nums; font-weight: 800;
-    color: var(--ins-body-color);
-}
-
-#ndm-page .ndm-card__foot {
-    margin-top: auto; display: flex; align-items: center; justify-content: space-between;
-    font-size: .76rem; color: var(--ins-secondary-color);
-}
-#ndm-page .ndm-open { display: inline-flex; align-items: center; gap: .3rem; font-weight: 600; color: #0066cc; text-decoration: none; }
-#ndm-page .ndm-open i { transition: transform 200ms var(--ndm-ease); }
-#ndm-page .ndm-soon-pill {
-    font-size: .66rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
-    padding: .16rem .55rem; border-radius: 999px;
-    background: linear-gradient(100deg, rgba(0,102,204,.14), rgba(139,92,246,.14));
+#ndm-page .ndm-prod-name { font-weight: 600; color: var(--ins-body-color); text-decoration: none; }
+#ndm-page .ndm-prod-name:hover { text-decoration: underline; }
+#ndm-page .ndm-prod-les {
+    display: block; font-size: .68rem; font-weight: 600; letter-spacing: .02em;
     color: var(--ins-secondary-color);
 }
-#ndm-page .ndm-empty-note { font-size: .76rem; color: var(--ins-secondary-color); font-style: italic; }
 
-/* Hover: card levanta + ícone com a animação padrão (about → sidenav → aqui) */
-@media (hover: hover) and (pointer: fine) {
-    #ndm-page .ndm-card:hover {
-        transform: translateY(-6px);
-        box-shadow: var(--vr-card-shadow-hover, 0 14px 34px rgba(15, 23, 42, .12));
-        border-color: rgba(0, 102, 204, .28);
-    }
-    #ndm-page .ndm-card:hover .ndm-card__icon {
-        transform: scale(1.1) rotate(-4deg);
-        box-shadow: 0 8px 20px rgba(94, 92, 230, .38);
-    }
-    #ndm-page .ndm-open:hover i { transform: translateX(3px); }
-    /* Títulos das zonas: mesma animação padrão nos ícones (B3 / Confirmations / Intrag) */
-    #ndm-page .ndm-zone-title:hover .ndm-zone-ico {
-        transform: scale(1.1) rotate(-4deg);
-        box-shadow: 0 8px 20px rgba(94, 92, 230, .38);
-    }
-}
+/* Número por status. Zero não é número aqui: é ausência, e escrevê-lo 150 vezes
+   afogava os poucos que importam — vira um ponto apagado. */
+#ndm-page .ndm-tbl .ndm-nil { color: var(--ins-border-color, #c9ced6); }
+#ndm-page .ndm-tbl .ndm-n { font-weight: 700; }
+#ndm-page .st-new       { color: #1d7ea8; }
+#ndm-page .st-pending   { color: #8a6100; }
+#ndm-page .st-generated { color: #7c3aed; }
+#ndm-page .st-approved  { color: #5e5ce6; }
+#ndm-page .st-sent      { color: #0066cc; }
+#ndm-page .st-success,
+#ndm-page .st-ok        { color: #1a8a4a; }
+#ndm-page .st-pending-otc { color: #0066cc; }
+#ndm-page .st-pending-mo, #ndm-page .st-pending-mo-fo { color: #8a6100; }
+#ndm-page .st-pending-fo  { color: #1d7ea8; }
+[data-bs-theme=dark] #ndm-page .st-new       { color: #7fd4f2; }
+[data-bs-theme=dark] #ndm-page .st-pending   { color: #ffd54f; }
+[data-bs-theme=dark] #ndm-page .st-generated { color: #c4b5fd; }
+[data-bs-theme=dark] #ndm-page .st-approved  { color: #a5a3ff; }
+[data-bs-theme=dark] #ndm-page .st-sent      { color: #7db4f5; }
+[data-bs-theme=dark] #ndm-page .st-success,
+[data-bs-theme=dark] #ndm-page .st-ok        { color: #7ed6a2; }
+[data-bs-theme=dark] #ndm-page .st-pending-otc { color: #7db4f5; }
+[data-bs-theme=dark] #ndm-page .st-pending-mo,
+[data-bs-theme=dark] #ndm-page .st-pending-mo-fo { color: #ffd54f; }
+[data-bs-theme=dark] #ndm-page .st-pending-fo    { color: #7fd4f2; }
 
-/* Sombreado de progresso — cor calculada no JS (--ndm-prog = "r, g, b"):
-   vermelho enquanto as operações não saíram do New, âmbar no meio do caminho,
-   verde quando o card inteiro está Success. Só em cards COM operações.
-   Sombra em CAMADAS (contato + média + halo largo), não um contorno chapado:
-   é a receita de elevação — o card parece flutuar sobre uma luz colorida. A
-   borda fica quase neutra de propósito, para não ler como "cor do card".
-   Sem animação própria (é um estado, não um evento — a transição do card já
-   cobre a troca de data). Fica DEPOIS do bloco :hover para vencer o azul. */
-#ndm-page .ndm-card--prog {
-    border-color: rgba(var(--ndm-prog), .3);
-    box-shadow: 0 2px 5px rgba(var(--ndm-prog), .12),
-                0 10px 24px rgba(var(--ndm-prog), .22),
-                0 22px 50px rgba(var(--ndm-prog), .14);
+/* As duas colunas que resumem a linha, separadas do detalhe por uma régua: a
+   pendência é a resposta da tela. */
+#ndm-page .ndm-tbl .ndm-c-pend { border-left: 1px solid var(--ins-border-color, rgba(0,0,0,.1)); }
+#ndm-page .ndm-pend-n {
+    font-weight: 800; font-size: .9rem; color: #b45309;
+    padding: .05rem .45rem; border-radius: 7px; background: rgba(247, 184, 75, .18);
 }
-/* Concluído (tudo Success). No DARK ele fala mais baixo — o card resolvido não
-   precisa gritar — e é por isso que estes valores são menores que os do card em
-   andamento. No CLARO essa mesma redução apagava o verde: halo verde escuro
-   sobre fundo branco quase não se lê, enquanto o vermelho do card pendente se lê
-   inteiro. Aqui (base = tema claro) o verde volta ao peso do card em andamento;
-   o bloco [data-bs-theme=dark] mais abaixo vence estes valores e mantém o dark
-   como estava.
-   O verde do gradiente (#1a8a4a) também é escuro demais para virar halo no
-   claro, então aqui a cor é LITERAL (#16a34a, mais vivo) em vez de
-   `var(--ndm-prog)`: o JS escreve `--ndm-prog` no atributo `style` do card, e
-   declaração inline vence qualquer seletor — redefinir a variável no CSS não
-   teria efeito. Como `.is-done` é sempre 100% Success, a cor é conhecida e
-   escrevê-la direto é mais simples do que disputar a cascata. */
-#ndm-page .ndm-card--prog.is-done {
-    border-color: rgba(22, 163, 74, .34);
-    box-shadow: 0 2px 5px rgba(22, 163, 74, .14),
-                0 10px 24px rgba(22, 163, 74, .28),
-                0 22px 50px rgba(22, 163, 74, .18);
-}
-[data-bs-theme=dark] #ndm-page .ndm-card--prog {
-    border-color: rgba(var(--ndm-prog), .38);
-    box-shadow: 0 2px 6px rgba(var(--ndm-prog), .18),
-                0 12px 28px rgba(var(--ndm-prog), .3),
-                0 26px 58px rgba(var(--ndm-prog), .2);
-}
-/* Hover: o card já sobe 6px — a sombra acompanha, mais espalhada e mais funda */
-@media (hover: hover) and (pointer: fine) {
-    #ndm-page .ndm-card--prog:hover {
-        border-color: rgba(var(--ndm-prog), .42);
-        box-shadow: 0 4px 10px rgba(var(--ndm-prog), .16),
-                    0 18px 38px rgba(var(--ndm-prog), .3),
-                    0 34px 70px rgba(var(--ndm-prog), .2);
-    }
-    #ndm-page .ndm-card--prog.is-done:hover {
-        border-color: rgba(22, 163, 74, .42);
-        box-shadow: 0 4px 10px rgba(22, 163, 74, .18),
-                    0 18px 38px rgba(22, 163, 74, .32),
-                    0 34px 70px rgba(22, 163, 74, .21);
-    }
-    /* No escuro o hover do concluído volta a ser o discreto de antes. */
-    [data-bs-theme=dark] #ndm-page .ndm-card--prog.is-done:hover {
-        border-color: rgba(var(--ndm-prog), .3);
-        box-shadow: 0 4px 10px rgba(var(--ndm-prog), .1),
-                    0 18px 38px rgba(var(--ndm-prog), .19),
-                    0 34px 70px rgba(var(--ndm-prog), .12);
-    }
-}
+#ndm-page .ndm-total-n { font-weight: 700; color: var(--ins-body-color); }
+[data-bs-theme=dark] #ndm-page .ndm-pend-n { color: #ffd54f; background: rgba(247, 184, 75, .16); }
 
-/* Entrada em cascata */
+#ndm-page .ndm-go { color: var(--ins-secondary-color); display: inline-flex; }
+#ndm-page .ndm-row.is-clickable:hover .ndm-go { color: #0066cc; }
+
+/* Linha de família (NDF / Options / Swaps) dentro da zona */
+#ndm-page .ndm-fam td {
+    padding: .7rem .5rem .3rem; border-bottom: 0;
+    font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--ins-secondary-color, #8a8a8f); text-align: left;
+}
+#ndm-page .ndm-tbl tr:first-child.ndm-fam td { padding-top: .2rem; }
+
+/* Os zerados: recolhidos atrás de uma linha que DIZ quantos são. Sumir sem
+   dizer faria "sem movimento" e "produto que não existe" virarem a mesma coisa
+   na tela. */
+#ndm-page .ndm-zero-toggle td {
+    padding: .5rem; text-align: left; border-bottom: 0;
+    font-size: .76rem; font-weight: 600; color: var(--ins-secondary-color); cursor: pointer;
+    user-select: none;
+}
+#ndm-page .ndm-zero-toggle:hover td { color: #0066cc; }
+#ndm-page .ndm-zero-toggle .ndm-caret { transition: transform 180ms var(--ndm-ease); display: inline-block; }
+#ndm-page .ndm-zone.is-open .ndm-zero-toggle .ndm-caret { transform: rotate(90deg); }
+#ndm-page tr.is-zero { display: none; }
+#ndm-page .ndm-zone.is-open tr.is-zero { display: table-row; }
+#ndm-page tr.is-zero td:first-child { color: var(--ins-secondary-color); }
+#ndm-page tr.is-zero .ndm-prod-ico { opacity: .45; filter: grayscale(1); }
+#ndm-page .ndm-soon-pill {
+    font-size: .62rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    padding: .1rem .45rem; border-radius: 999px; margin-left: .4rem;
+    background: var(--ins-tertiary-bg, #eef0f4); color: var(--ins-secondary-color);
+}
+#ndm-page .ndm-zone-empty { font-size: .8rem; color: var(--ins-secondary-color); padding: .4rem .5rem; }
+
+/* Entrada: as zonas aparecem em cascata (uma por vez, não 34 cartões) */
 @media (prefers-reduced-motion: no-preference) {
-    #ndm-page .ndm-col { opacity: 0; transform: translateY(12px); animation: ndmIn 420ms var(--ndm-ease) both; }
-    #ndm-page .ndm-col:nth-child(1)  { animation-delay:   0ms; }
-    #ndm-page .ndm-col:nth-child(2)  { animation-delay:  45ms; }
-    #ndm-page .ndm-col:nth-child(3)  { animation-delay:  90ms; }
-    #ndm-page .ndm-col:nth-child(4)  { animation-delay: 135ms; }
-    #ndm-page .ndm-col:nth-child(5)  { animation-delay: 180ms; }
-    #ndm-page .ndm-col:nth-child(6)  { animation-delay: 225ms; }
-    #ndm-page .ndm-col:nth-child(7)  { animation-delay: 270ms; }
-    #ndm-page .ndm-col:nth-child(8)  { animation-delay: 315ms; }
-    #ndm-page .ndm-col:nth-child(9)  { animation-delay: 360ms; }
-    #ndm-page .ndm-col:nth-child(10) { animation-delay: 405ms; }
-    #ndm-page .ndm-col:nth-child(n+11) { animation-delay: 450ms; }
+    #ndm-page .ndm-zone { opacity: 0; transform: translateY(10px); animation: ndmIn 380ms var(--ndm-ease) both; }
+    #ndm-page .ndm-zone:nth-child(2) { animation-delay:  60ms; }
+    #ndm-page .ndm-zone:nth-child(3) { animation-delay: 120ms; }
+    #ndm-page .ndm-zone:nth-child(4) { animation-delay: 180ms; }
     @keyframes ndmIn { to { opacity: 1; transform: none; } }
-}
-@media (prefers-reduced-motion: reduce) {
-    #ndm-page .ndm-card, #ndm-page .ndm-card__icon, #ndm-page .ndm-open i,
-    #ndm-page .ndm-zone-title .ndm-zone-ico { transition: none; }
-    #ndm-page .ndm-card:hover, #ndm-page .ndm-card:hover .ndm-card__icon,
-    #ndm-page .ndm-zone-title:hover .ndm-zone-ico { transform: none; }
 }
 
 /* daterangepicker fora do #ndm-page (anexa no body) — fundo sólido + seleção azul */
@@ -269,22 +211,17 @@
 }
 #ndm-page .ndm-zone-title .ndm-zone-ico i { font-size: 15px; }
 #ndm-page .ndm-zone-title .ndm-zone-ico svg { width: 15px; height: 15px; display: block; fill: currentColor; }
-#ndm-page .ndm-grp { margin-top: 1rem; }
-#ndm-page .ndm-grp-title {
-    font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-    color: var(--ins-secondary-color, #8a8a8f);
-    display: flex; align-items: center; gap: .6rem; margin-bottom: .55rem;
-}
-#ndm-page .ndm-grp-title::after {
-    content: ''; flex: 1; height: 1px;
-    background: var(--ins-border-color, rgba(0,0,0,.1));
-}
-@media (min-width: 1200px) {
-    #ndm-page .ndm-zone--intrag,
-    #ndm-page .ndm-zone--conf {
-        border-left: 1px dashed var(--ins-border-color, rgba(0,0,0,.12));
-        padding-left: 1.25rem; height: 100%;
+/* Hover: o ícone da zona com a animação padrão da casa */
+@media (hover: hover) and (pointer: fine) {
+    #ndm-page .ndm-zone-title:hover .ndm-zone-ico {
+        transform: scale(1.1) rotate(-4deg);
+        box-shadow: 0 8px 20px rgba(94, 92, 230, .38);
     }
+}
+@media (prefers-reduced-motion: reduce) {
+    #ndm-page .ndm-zone-title .ndm-zone-ico, #ndm-page .ndm-row,
+    #ndm-page .ndm-zero-toggle .ndm-caret { transition: none; }
+    #ndm-page .ndm-zone-title:hover .ndm-zone-ico { transform: none; }
 }
 </style>
 {% endblock extra_css %}
@@ -380,183 +317,225 @@
     }
     function known(status) { return STATUS_ORDER.indexOf(status) !== -1; }
 
-    /* ── Anel de progresso do card ────────────────────────────────────────────
-       Card com operações ganha um contorno que sai do VERMELHO (nada saiu do
-       New) e caminha pelo âmbar até o VERDE quando tudo está Success. O peso é
-       por status, não só "é Success ou não" — assim a cor já se move quando as
-       operações avançam para Sent/Approved. Status desconhecido pesa 0 (ainda
-       não está pronto), o que mantém o vermelho honesto. */
-    // A esteira pesa DEPOIS do documento: gerar não é confirmar, e o anel só
-    // fecha em verde quando a confirmação foi assinada por todas as mesas.
-    var STATUS_WEIGHT = { 'New': 0, 'Pending': 0.25, 'Generated': 0.4, 'Approved': 0.6, 'Sent': 0.8, 'Success': 1,
-                          'Pending OTC': 0.5, 'Pending MO/FO': 0.7, 'Pending MO': 0.75, 'Pending FO': 0.75, 'Ok': 1 };
-    var PROG_STOPS = [[220, 53, 69], [247, 184, 75], [26, 138, 74]];  // #dc3545 → #f7b84b → #1a8a4a
-    function progressOf(c) {
-        if (!c.total) return null;
-        var sum = 0;
-        Object.keys(c.statuses || {}).forEach(function (s) {
-            sum += (STATUS_WEIGHT[s] || 0) * (c.statuses[s] || 0);
-        });
-        return Math.max(0, Math.min(1, sum / c.total));
+    /* ── Pendente ─────────────────────────────────────────────────────────────
+       A MESMA regra do aviso das 19h (`queries._ndm_pending_blocks`): fechado é
+       `Success` ou `Ok`, mais o que o card DECLARA em `done` (a recompra acaba
+       em `Sent`, porque o B3 ID de volta ainda não existe para ela), comparado
+       SEM caixa — o cache do Intrag grava 'success' em minúsculo. Duas
+       definições de "pendente" fariam a tela e o e-mail cobrarem números
+       diferentes da mesma mesa no mesmo dia. */
+    function fechados(c) {
+        var set = { success: 1, ok: 1 };
+        (c.done || []).forEach(function (s) { set[String(s).trim().toLowerCase()] = 1; });
+        return set;
     }
-    function progressRgb(p) {
-        var half = p <= 0.5, a = PROG_STOPS[half ? 0 : 1], b = PROG_STOPS[half ? 1 : 2];
-        var k = half ? p * 2 : (p - 0.5) * 2;
-        return [0, 1, 2].map(function (n) { return Math.round(a[n] + (b[n] - a[n]) * k); }).join(', ');
+    function pendingOf(c) {
+        var fim = fechados(c), n = 0;
+        Object.keys(c.statuses || {}).forEach(function (s) {
+            if (!fim[String(s).trim().toLowerCase()]) n += (c.statuses[s] || 0);
+        });
+        return n;
     }
 
-    function cardHtml(c) {
-        var statuses = Object.keys(c.statuses || {});
-        statuses.sort(function (a, b) {
+    function ordenaStatus(lista) {
+        return lista.slice().sort(function (a, b) {
             var ia = STATUS_ORDER.indexOf(a), ib = STATUS_ORDER.indexOf(b);
+            if (ia === -1 && ib === -1) return a < b ? -1 : 1;
             return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
         });
-        var chips = statuses.map(function (s) {
-            var cls = known(s) ? ' ndm-chip--' + slug(s) : '';
-            return '<span class="ndm-chip' + cls + '">' + esc(s) + ' <b>' + c.statuses[s] + '</b></span>';
-        }).join('');
-        var bar = '';
-        if (c.total > 0) {
-            bar = '<div class="ndm-bar">' + statuses.map(function (s) {
-                var cls = known(s) ? 'sg-' + slug(s) : 'sg-other';
-                var pct = (c.statuses[s] / c.total * 100).toFixed(2);
-                return '<span class="' + cls + '" style="width:' + pct + '%"></span>';
-            }).join('') + '</div>';
-        }
-        // Subitens por LE (ordem definida pelo servidor; zeros aparecem)
-        var les = '';
-        if (c.total > 0 && (c.les || []).length) {
-            les = '<div class="ndm-les">' + c.les.map(function (e) {
-                return '<span class="ndm-le">' + esc(e.le) + ' <b>' +
-                       Number(e.count || 0).toLocaleString('en-US') + '</b></span>';
-            }).join('') + '</div>';
-        }
-        // Cards de Confirmations: um pill por grupo segregado (cpty × mercadoria)
-        if (c.total > 0 && (c.groups || []).length) {
-            les += '<div class="ndm-les">' + c.groups.map(function (g) {
-                return '<span class="ndm-le">' + esc(g.label) + ' <b>' +
-                       Number(g.count || 0).toLocaleString('en-US') + '</b></span>';
-            }).join('') + '</div>';
-        }
-        var body = c.total > 0
-            ? '<div class="ndm-chips">' + chips + '</div>' + bar + les
-            : '<div class="ndm-chips"><span class="ndm-empty-note" data-lang-ignore>' +
-              esc(t('ndm-empty', 'No operations imported for this date.')) + '</span></div>';
-        var foot;
-        if (c.soon && !c.total) {
-            foot = '<span class="ndm-soon-pill" data-lang-ignore>' + esc(t('ndm-dev', 'In development')) + '</span><span></span>';
-        } else if (c.url) {
-            foot = '<span></span><a class="ndm-open" href="' + esc(c.url) + '">' +
-                   esc(t('ndm-open', 'Open page')) + ' <i class="ti ti-arrow-right"></i></a>';
-        } else {
-            foot = '<span></span><span></span>';
-        }
-        var prog = progressOf(c);
-        var progCls = prog === null ? '' : ' ndm-card--prog' + (prog >= 1 ? ' is-done' : '');
-        var progVar = prog === null ? '' : ' style="--ndm-prog: ' + progressRgb(prog) + '"';
-        return (
-            '<div class="col ndm-col">' +
-              '<div class="ndm-card' + (c.soon && !c.total ? ' is-soon' : '') + progCls + '"' + progVar + '>' +
-                '<div class="ndm-card__head">' +
-                  '<span class="ndm-card__icon"><i class="ti ' + (ICONS[c.key] || 'ti-package') + '"></i></span>' +
-                  '<h3 class="ndm-card__title">' + esc(c.label) + '</h3>' +
-                  '<span class="ndm-card__total">' + Number(c.total || 0).toLocaleString('en-US') + '</span>' +
-                '</div>' +
-                body +
-                '<div class="ndm-card__foot">' + foot + '</div>' +
-              '</div>' +
-            '</div>');
     }
 
-    // Zonas alinhadas por LINHA: cada subgrupo (NDF / Options / Swaps) é uma
-    // linha com o lado B3 à esquerda e o card Intrag correspondente à direita,
-    // então os cards da mesma família ficam sempre na mesma altura.
+    /* As colunas de status são a UNIÃO do que aparece na zona, não uma lista
+       fixa: B3 fala New/Pending/Approved/Sent/Success e a esteira das
+       Confirmations fala Pending OTC/MO/FO/Ok. Uma lista fixa mostraria colunas
+       vazias numa zona e esconderia status na outra. */
+    function colunasDe(cards) {
+        var vistos = {};
+        cards.forEach(function (c) {
+            Object.keys(c.statuses || {}).forEach(function (s) {
+                if (c.statuses[s]) vistos[s] = 1;
+            });
+        });
+        return ordenaStatus(Object.keys(vistos));
+    }
+
+    function celulaNum(n, cls) {
+        if (!n) return '<td class="ndm-nil">·</td>';
+        return '<td class="ndm-n ' + cls + '">' + Number(n).toLocaleString('en-US') + '</td>';
+    }
+
+    function linhaHtml(c, cols) {
+        var pend = pendingOf(c);
+        var zero = !c.total;
+        var ico = '<span class="ndm-prod-ico"><i class="ti ' + (ICONS[c.key] || 'ti-package') + '"></i></span>';
+        // O nome é o link (é ele que o teclado alcança); a linha inteira
+        // também clica, por conveniência.
+        var nome = c.url
+            ? '<a class="ndm-prod-name" href="' + esc(c.url) + '">' + esc(c.label) + '</a>'
+            : '<span class="ndm-prod-name">' + esc(c.label) + '</span>';
+        if (c.soon && !c.total) {
+            nome += '<span class="ndm-soon-pill" data-lang-ignore>' +
+                    esc(t('ndm-dev', 'In development')) + '</span>';
+        }
+        // A quebra por entidade (JPM/LAW/MGT/ATA) e os grupos da confirmação
+        // ficam sob o nome, e só quando há movimento: numa linha zerada eles
+        // seriam três zeros a mais para ler.
+        var detalhe = [];
+        if (c.total) {
+            (c.les || []).forEach(function (e) {
+                if (e.count) detalhe.push(esc(e.le) + ' ' + Number(e.count).toLocaleString('en-US'));
+            });
+            (c.groups || []).forEach(function (g) {
+                if (g.count) detalhe.push(esc(g.label) + ' ' + Number(g.count).toLocaleString('en-US'));
+            });
+        }
+        var tds = cols.map(function (s) {
+            return celulaNum((c.statuses || {})[s] || 0, known(s) ? 'st-' + slug(s) : '');
+        }).join('');
+        return '<tr class="ndm-row' + (zero ? ' is-zero' : '') + (c.url ? ' is-clickable' : '') + '"' +
+                    (c.url ? ' data-url="' + esc(c.url) + '"' : '') + '>' +
+                 '<td><div class="ndm-prod">' + ico + '<span>' + nome +
+                   (detalhe.length ? '<small class="ndm-prod-les">' + detalhe.join(' · ') + '</small>' : '') +
+                 '</span></div></td>' + tds +
+                 '<td class="ndm-c-pend">' + (pend
+                     ? '<span class="ndm-pend-n">' + Number(pend).toLocaleString('en-US') + '</span>'
+                     : '<span class="ndm-nil">·</span>') + '</td>' +
+                 '<td>' + (c.total
+                     ? '<span class="ndm-total-n">' + Number(c.total).toLocaleString('en-US') + '</span>'
+                     : '<span class="ndm-nil">·</span>') + '</td>' +
+                 '<td>' + (c.url ? '<span class="ndm-go"><i class="ti ti-chevron-right"></i></span>' : '') + '</td>' +
+               '</tr>';
+    }
+
+    /* Uma zona = uma tabela. `familias` é [[rótulo, cards]] na ordem da
+       taxonomia (NDF / Options / Swaps); família sem nenhum card com movimento
+       recolhe junto com as linhas dela. */
+    function zonaHtml(titulo, icoHtml, familias) {
+        var todos = [];
+        familias.forEach(function (f) { todos = todos.concat(f[1]); });
+        if (!todos.length) return '';
+        var cols = colunasDe(todos);
+        var pend = 0, total = 0, zerados = 0;
+        todos.forEach(function (c) {
+            pend += pendingOf(c); total += (c.total || 0);
+            if (!c.total) zerados++;
+        });
+        var corpo = familias.map(function (f) {
+            if (!f[1].length) return '';
+            var semMov = f[1].every(function (c) { return !c.total; });
+            if (!f[0]) return f[1].map(function (c) { return linhaHtml(c, cols); }).join('');
+            return '<tr class="ndm-fam' + (semMov ? ' is-zero' : '') + '"><td colspan="' +
+                   (cols.length + 4) + '" data-lang-ignore>' + esc(f[0]) + '</td></tr>' +
+                   f[1].map(function (c) { return linhaHtml(c, cols); }).join('');
+        }).join('');
+        var visiveis = todos.filter(function (c) { return c.total; }).length;
+        var cabec = !visiveis ? '' : '<tr><th data-lang-ignore>' + esc(t('ndm-col-product', 'Product')) + '</th>' +
+            cols.map(function (s) { return '<th data-lang-ignore>' + esc(s) + '</th>'; }).join('') +
+            '<th class="ndm-c-pend" data-lang-ignore>' + esc(t('ndm-col-open', 'Open')) + '</th>' +
+            '<th data-lang-ignore>' + esc(t('ndm-col-total', 'Total')) + '</th><th></th></tr>';
+        // O resumo da zona é PENDENTE e TOTAL — nunca a soma das três zonas: a
+        // mesma operação aparece no registro da B3 e no espelho da Intrag, e
+        // somá-las inventaria um total que nenhuma das duas telas confere.
+        var resumo = total
+            ? '<span class="ndm-sum-pend"><b>' + pend + '</b> ' +
+                esc(t(pend === 1 ? 'ndm-sum-open-one' : 'ndm-sum-open', 'open')) + '</span>' +
+              '<span><b>' + total + '</b> ' + esc(t('ndm-sum-total', 'imported')) + '</span>'
+            : '<span class="ndm-sum-zero"><b>' + esc(t('ndm-sum-none', 'nothing imported today')) + '</b></span>';
+        if (total && !pend) {
+            resumo = '<span class="ndm-sum-zero"><b>' + esc(t('ndm-sum-clear', 'all done')) + '</b></span>' +
+                     '<span><b>' + total + '</b> ' + esc(t('ndm-sum-total', 'imported')) + '</span>';
+        }
+        var toggle = zerados
+            ? '<tr class="ndm-zero-toggle"><td colspan="' + (cols.length + 4) + '">' +
+                '<span class="ndm-caret">▸</span> ' + zerados + ' ' +
+                esc(t(zerados === 1 ? 'ndm-zero-one' : 'ndm-zero-many',
+                      'products with nothing imported today')) + '</td></tr>'
+            : '';
+        return '<section class="ndm-zone">' +
+                 '<div class="ndm-zone-head">' +
+                   '<h5 class="ndm-zone-title"><span class="ndm-zone-ico">' + icoHtml + '</span>' +
+                   esc(titulo) + '</h5>' +
+                   '<span class="ndm-zone-sum">' + resumo + '</span>' +
+                 '</div>' +
+                 '<div class="ndm-tbl-wrap"><table class="ndm-tbl"><thead>' + cabec +
+                   '</thead><tbody>' + corpo + toggle + '</tbody></table></div>' +
+               '</section>';
+    }
+
+    // As três zonas da tela, cada uma com as famílias na ordem da taxonomia.
+    // Quem diz que um produto EXISTE é o `_NDM_CARDS` do servidor (§454): as
+    // listas abaixo só dizem em que zona e em que família ele aparece. Chave que
+    // o servidor não mandar não desenha linha — card que falta é card que falta
+    // LÁ, nunca um placeholder inventado aqui.
     var GROUPS = [
         { key: 'ndm-grp-ndf',     label: 'NDF',
           b3: ['ndf-commodities', 'ndf-fwdstart', 'ndf-otherpublisher', 'ndf-vanilla', 'unwind-ndf-fx',
                'unwind-ndf-commodities'],
+          conf: ['conf-ndf-commodities', 'conf-ndf-fwdstart', 'conf-ndf-mgt'],
           intrag: ['intrag-ndf', 'intrag-unwind', 'intrag-unwind-dce-ndf',
                    'intrag-unwind-dce-deliverable-forward'] },
         { key: 'ndm-grp-options', label: 'Options',
           b3: ['opt-commodities', 'opt-fxo', 'opt-equity', 'unwind-opt-commodities', 'unwind-opt-fxo',
                'unwind-opt-edg', 'unwind-coe'],
+          conf: ['conf-opt-commodities', 'conf-opt-fxo'],
           intrag: ['intrag-option', 'intrag-dce-option', 'intrag-dce-ndf', 'intrag-unwind-dce-option'] },
         { key: 'ndm-grp-swaps',   label: 'Swaps',
           b3: ['swap-equities', 'swap-cem'],
+          conf: [],
           intrag: ['intrag-swap', 'intrag-dce-swap', 'intrag-unwind-dce-swap'] }
     ];
 
-    // Cards de Confirmations por família de produto (só produtos com lógica de
-    // confirmação — Other Publisher e Vanilla ficam de fora por definição).
-    var CONF_BY_GROUP = {
-        'ndm-grp-ndf':     ['conf-ndf-commodities', 'conf-ndf-fwdstart', 'conf-ndf-mgt'],
-        'ndm-grp-options': ['conf-opt-commodities', 'conf-opt-fxo'],
-        'ndm-grp-swaps':   []
-    };
-
     function render(cards, confCards) {
-        var byKey = {};
+        var byKey = {}, confByKey = {}, usados = {};
         cards.forEach(function (c) { byKey[c.key] = c; });
-        var confByKey = {};
         (confCards || []).forEach(function (c) { confByKey[c.key] = c; });
-        // Nenhum card é inventado aqui. O 'intrag-swap' nascia deste bloco como
-        // "In development" porque o catálogo do servidor não o tinha — e, com
-        // arquivo na pasta `Intrag/Swap`, o MESMO produto aparecia duas vezes:
-        // zerado na zona Intrag (este placeholder) e com o número real no grupo
-        // Others (o card genérico "e etc"). Quem diz que cards existem é o
-        // `_NDM_CARDS`; página sem card é card que falta lá, não aqui.
-        var used = {};
-        function pick(keys) {
-            return keys.filter(function (k) { return byKey[k]; })
-                       .map(function (k) { used[k] = true; return cardHtml(byKey[k]); }).join('');
+
+        function pega(mapa, chaves, marca) {
+            return (chaves || []).filter(function (k) { return mapa[k]; })
+                .map(function (k) { if (marca) usados[k] = true; return mapa[k]; });
         }
-        // Ícones das zonas B3/Intrag: mesmos SVGs do sidenav (bloco oculto no fim do template)
+        function familias(campo, mapa, marca) {
+            return GROUPS.map(function (g) {
+                return [t(g.key, g.label), pega(mapa, g[campo], marca)];
+            });
+        }
         function zoneSvg(id) {
             var el = document.getElementById(id);
             return el ? el.innerHTML : '';
         }
-        // Cabeçalhos das zonas (uma vez, no topo das três colunas)
+
         var html =
-            '<div class="col-xl-6">' +
-              '<h5 class="ndm-zone-title"><span class="ndm-zone-ico">' + zoneSvg('ndm-svg-b3') + '</span>' +
-              esc(t('ndm-zone-b3', 'B3 Registration')) + '</h5></div>' +
-            '<div class="col-xl-3 d-none d-xl-block"><div class="ndm-zone--conf">' +
-              '<h5 class="ndm-zone-title"><span class="ndm-zone-ico"><i class="ti ti-file-check"></i></span>' +
-              esc(t('ndm-zone-conf', 'Confirmations')) + '</h5></div></div>' +
-            '<div class="col-xl-3 d-none d-xl-block"><div class="ndm-zone--intrag">' +
-              '<h5 class="ndm-zone-title"><span class="ndm-zone-ico">' + zoneSvg('ndm-svg-intrag') + '</span>' +
-              esc(t('ndm-zone-intrag', 'Intrag')) + '</h5></div></div>';
-        GROUPS.forEach(function (g) {
-            var left  = pick(g.b3);
-            var conf  = (CONF_BY_GROUP[g.key] || [])
-                .filter(function (k) { return confByKey[k]; })
-                .map(function (k) { return cardHtml(confByKey[k]); }).join('');
-            var right = pick(g.intrag);
-            var title = '<div class="ndm-grp-title"><span data-lang-ignore>' + esc(t(g.key, g.label)) + '</span></div>';
-            html +=
-                '<div class="col-xl-6"><div class="ndm-grp">' + title +
-                    '<div class="row row-cols-xxl-2 row-cols-md-2 row-cols-1 g-3">' + left + '</div>' +
-                '</div></div>' +
-                '<div class="col-xl-3"><div class="ndm-zone--conf h-100"><div class="ndm-grp">' +
-                    '<div class="ndm-grp-title"><span class="d-xl-none" data-lang-ignore>' +
-                    esc(t('ndm-zone-conf', 'Confirmations')) + ' — </span><span data-lang-ignore>' + esc(t(g.key, g.label)) + '</span></div>' +
-                    '<div class="row row-cols-1 g-3">' + conf + '</div>' +
-                '</div></div></div>' +
-                '<div class="col-xl-3"><div class="ndm-zone--intrag h-100"><div class="ndm-grp">' +
-                    '<div class="ndm-grp-title"><span class="d-xl-none" data-lang-ignore>' +
-                    esc(t('ndm-zone-intrag', 'Intrag')) + ' — </span><span data-lang-ignore>' + esc(t(g.key, g.label)) + '</span></div>' +
-                    '<div class="row row-cols-1 g-3">' + right + '</div>' +
-                '</div></div></div>';
-        });
-        // Produtos fora do catálogo ("e etc") — grupo Others no fim, largura total
-        var extras = cards.filter(function (c) { return !used[c.key]; });
+            zonaHtml(t('ndm-zone-b3', 'B3 Registration'), zoneSvg('ndm-svg-b3'),
+                     familias('b3', byKey, true)) +
+            zonaHtml(t('ndm-zone-conf', 'Confirmations'), '<i class="ti ti-file-check"></i>',
+                     familias('conf', confByKey, false)) +
+            zonaHtml(t('ndm-zone-intrag', 'Intrag'), zoneSvg('ndm-svg-intrag'),
+                     familias('intrag', byKey, true));
+
+        // Produtos fora do catálogo de zonas ("e etc", §454): o pkey sem card
+        // desenha aqui, sem link de página, em vez de sumir da tela.
+        var extras = cards.filter(function (c) { return !usados[c.key]; });
         if (extras.length) {
-            html += '<div class="col-12"><div class="ndm-grp">' +
-                    '<div class="ndm-grp-title"><span data-lang-ignore>' + esc(t('ndm-grp-others', 'Others')) + '</span></div>' +
-                    '<div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1 g-3">' +
-                    extras.map(cardHtml).join('') + '</div></div></div>';
+            html += zonaHtml(t('ndm-grp-others', 'Others'), '<i class="ti ti-dots"></i>',
+                             [['', extras]]);
         }
-        document.getElementById('ndmZones').innerHTML = html;
+        var alvo = document.getElementById('ndmZones');
+        alvo.innerHTML = html;
+
+        // Recolher/expandir os zerados, e a linha inteira levando à página.
+        alvo.querySelectorAll('.ndm-zero-toggle').forEach(function (tr) {
+            tr.addEventListener('click', function () {
+                tr.closest('.ndm-zone').classList.toggle('is-open');
+            });
+        });
+        alvo.querySelectorAll('.ndm-row.is-clickable').forEach(function (tr) {
+            tr.addEventListener('click', function (ev) {
+                // O clique no próprio link já navega; interceptá-lo aqui
+                // navegaria duas vezes (e mataria o ctrl+clique).
+                if (ev.target.closest('a')) return;
+                window.location.href = tr.getAttribute('data-url');
+            });
+        });
     }
 
     function load(ymd) {
@@ -594,9 +573,17 @@
 </script>
 <!-- Chaves de tradução usadas pelo JS (invisíveis; applyTranslations preenche) -->
 <div class="d-none" aria-hidden="true">
-    <span data-lang="ndm-empty">No operations imported for this date.</span>
     <span data-lang="ndm-dev">In development</span>
-    <span data-lang="ndm-open">Open page</span>
+    <span data-lang="ndm-col-product">Product</span>
+    <span data-lang="ndm-col-open">Open</span>
+    <span data-lang="ndm-col-total">Total</span>
+    <span data-lang="ndm-sum-open">open</span>
+    <span data-lang="ndm-sum-open-one">open</span>
+    <span data-lang="ndm-sum-total">imported</span>
+    <span data-lang="ndm-sum-none">nothing imported today</span>
+    <span data-lang="ndm-sum-clear">all done</span>
+    <span data-lang="ndm-zero-many">products with nothing imported today</span>
+    <span data-lang="ndm-zero-one">product with nothing imported today</span>
     <span data-lang="ndm-zone-b3">B3 Registration</span>
     <span data-lang="ndm-zone-conf">Confirmations</span>
     <span data-lang="ndm-zone-intrag">Intrag</span>

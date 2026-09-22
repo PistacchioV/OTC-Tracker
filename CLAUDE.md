@@ -947,6 +947,26 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   ANTIGAS ficam invisíveis para sempre no Confirmations Monitor, sem erro
   nenhum — foi o que aconteceu com o `NDF VANILLA` de MGT. Mercadoria e FXO são
   sempre JPM (`_MC_JPM_SOURCES`); razão social do `le-spn`.
+- **O Monitor é uma TABELA por zona, não uma parede de cartões** (mesa,
+  22/09/2026). Eram 34 cartões, um por produto, quase todos zerados: a frase
+  "No operations imported for this date." repetida 28 vezes e 2.900px de
+  rolagem para dizer que o dia estava parado. A pergunta da tela é uma só — o
+  que ainda precisa de ação, e onde —, e ela se responde COMPARANDO produtos,
+  que é leitura de tabela: uma linha por produto, contagens por status em
+  colunas alinhadas, 1.563px e o dia inteiro numa tela. As colunas de status
+  são a UNIÃO do que aparece NA ZONA (B3 fala New/Pending/Approved/Sent/Success
+  e a esteira das Confirmations fala Pending OTC/MO/FO/Ok — lista fixa mostraria
+  coluna vazia de um lado e esconderia status do outro), e a coluna-resumo se
+  chama **Open**, nunca "Pending": já existe um STATUS com esse nome, e duas
+  colunas homônimas na mesma tabela não se distinguem. **O que é "em aberto" é
+  a MESMA regra do aviso das 19h** (`Success`/`Ok` mais o que o card declara em
+  `done`, comparado sem caixa): duas definições fariam a tela e o e-mail
+  cobrarem números diferentes da mesma mesa no mesmo dia. Produto sem movimento
+  fica RECOLHIDO atrás de uma linha que diz quantos são — sumir calado faria
+  "sem movimento" e "produto que não existe" virarem a mesma coisa na tela. E
+  **as três zonas não se somam num total**: a mesma operação aparece no registro
+  da B3 e no espelho da Intrag, e somá-las inventaria um número que nenhuma das
+  duas telas confere.
 - **O Monitor não recebe lista de produto: ele VARRE o `cache/new deals/`**
   e agrupa pelos dois primeiros níveis não numéricos do caminho (§454). Quem
   diz que um produto EXISTE é o `_NDM_CARDS` (`deals_monitor/domain.py`); o
