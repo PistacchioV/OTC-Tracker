@@ -733,6 +733,18 @@ def swap_prefill(b3_id):
         pct = domain.numero_da_posicao(_celula(vals, _POS['pct'][k]))
         taxa = domain.numero_da_posicao(_celula(vals, _POS['taxa'][k]))
         sinal = domain.sinal_da_posicao(_celula(vals, _POS['sinal'][k]))
+        # Plano B da taxa (mesa, 22/09/2026): com a célula da posição VAZIA, a
+        # taxa contratada sai do DFLUXO — `Taxa de Juros Parte/Contraparte` do
+        # FLUXO que está sendo calculado, com o sinal dele. Só quando a posição
+        # não respondeu: vazio ali seria lido como 0%, e o spread negativo de um
+        # CDI − x% sumiria da conta sem aviso nenhum.
+        taxa_do_fluxo = False
+        if taxa is None and escolhido:
+            t_fx = (escolhido.get('taxa_juros') or [None, None])[k]
+            if t_fx is not None:
+                taxa = t_fx
+                sinal = domain.sinal_da_posicao((escolhido.get('sinal_juros') or ['', ''])[k])
+                taxa_do_fluxo = True
         cot = domain.numero_da_posicao(_celula(vals, _POS['cupom_limpo'][k]))
         desloc = domain.numero_da_posicao(_celula(vals, _POS['data_cotacao'][k]))
         campos, faltando = domain.montar_ponta(
@@ -740,6 +752,8 @@ def swap_prefill(b3_id):
             deslocamento=None if desloc is None else int(desloc),
             fixing_ipca_posicao=_celula(vals, _POS['fixing_ipca'][k]))
         campos['fonte'] = {'codigo': codigo, 'curva': nome_curva, 'classe': nome_classe}
+        if taxa_do_fluxo:
+            campos['fonte']['taxa'] = 'dfluxo'
         # A `Denominação` da curva (VCP) diz o que as colunas não dizem — o
         # multiplicador da taxa, o spread, a contagem, o D-n da PTAX (§479).
         # Lida ANTES das buscas de fixing abaixo, que dependem do que ela diz.

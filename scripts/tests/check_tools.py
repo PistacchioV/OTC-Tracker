@@ -698,6 +698,20 @@ try:
     check('linha de DFLUXO sem contrato nao entra pelo identificador da LOB',
           [x['evento'] for x in queries.swap_prefill('26G53382860')['flows']],
           [(date.today() - timedelta(days=40)).isoformat()])
+    # Plano B da TAXA (mesa, 22/09/2026): a ponta 2 da posicao vem com a taxa
+    # VAZIA (vals[53] = ''), e o DFLUXO do fluxo calculado traz `Sinal/Taxa de
+    # Juros Contraparte` = 1 / 11,9000 — um CDI - 11,90%. Sem o plano B o campo
+    # saia 0%, e o spread negativo sumia da conta sem aviso nenhum.
+    fl_tx = list(fl)
+    fl_tx[12], fl_tx[13] = '0', '0,1500'            # Parte (a posicao ja responde)
+    fl_tx[17], fl_tx[18] = '1', '11,9000'           # Contraparte, negativa
+    _grava_fluxo(fl_tx)
+    _tx = queries.swap_prefill('26G53382860')
+    check('posicao sem taxa: a taxa sai do DFLUXO do fluxo, com o sinal',
+          (_tx['passiva']['taxa'], _tx['passiva']['fonte'].get('taxa')), ('-11.9000', 'dfluxo'))
+    check('posicao com taxa: vale a da posicao, o DFLUXO nao se mete',
+          (_tx['ativa']['fonte'].get('taxa'), _tx['ativa']['taxa'] != '0.1500'), (None, True))
+    _grava_fluxo(fl, sem_contrato)
     os.remove(os.path.join(pasta, '73760_%s_DFLUXO.json' % dref))
 
     # A janela de dez dias uteis do `_swap_day_path` e um TETO, e o que esta
