@@ -191,6 +191,18 @@ class Cadastro(object):
         return str((self.by_name.get(chave_norm) or {}).get('COUNTERPARTY', '') or chave_norm)
 
 
+def _amostra(guardadas, motivo, d, teto):
+    """Guarda as primeiras linhas puladas de cada motivo.
+
+    Uma contagem diz QUANTAS ficaram de fora; só a linha diz POR QUÊ. Foi o que
+    faltou quando 80 mil linhas viraram mil e quinhentas: o número estava na
+    tela e não havia como saber se era Trade Number em branco, fórmula sem valor
+    em cache ou a aba errada do arquivo."""
+    l = guardadas.setdefault(motivo, [])
+    if len(l) < max(0, teto):
+        l.append(d)
+
+
 def insere(categoria, linhas):
     """INSERT em lote, UMA abertura por banco.
 
@@ -214,16 +226,37 @@ def insere(categoria, linhas):
         con.executemany('INSERT INTO {} ({}) VALUES ({})'.format(PC._PC_TABLE, cols, ph), dados)
 
 
-def le_planilha(caminho, erros_xl):
+def le_planilha(caminho, erros_xl, aba=None):
     """(linhas, resolvidos, faltando) — cada linha é {coluna da página: texto}."""
     import openpyxl
     wb = openpyxl.load_workbook(caminho, read_only=True, data_only=True)
-    ws = wb.active
+    # A aba: a ATIVA é a que estava aberta quando salvaram o arquivo, e num
+    # arquivo de várias abas ela pode ser a errada — daí sair uma carga pequena
+    # sem erro nenhum. As abas e o tamanho de cada uma vão para a tela; `--aba`
+    # escolhe pelo nome.
+    print('abas: %s' % '  '.join(
+        '%s(%d linhas)' % (s.title, s.max_row or 0) for s in wb.worksheets))
+    ws = wb[aba] if aba else wb.active
+    print('aba lida: %s' % ws.title)
     it = ws.iter_rows(values_only=True)
-    try:
-        cab = next(it)
-    except StopIteration:
+    # O cabeçalho nem sempre é a primeira linha (título, logo, linha em branco
+    # acima). É cabeçalho a primeira linha que trouxer o Trade Number ou o
+    # Client; sem isso, as colunas resolvem por engano contra a linha de título
+    # e a planilha inteira sai vazia.
+    cab, pulados_topo = None, 0
+    for row in it:
+        if row is None:
+            continue
+        nomes = {_norm(v) for v in row if v not in (None, '')}
+        if nomes & {_norm(a) for pc in ('Trade Number', 'Client') for a in FONTES[pc]}:
+            cab = row
+            break
+        pulados_topo += 1
+    if cab is None:
         return [], {}, sorted(FONTES)
+    if pulados_topo:
+        print('cabeçalho na linha %d (%d linha(s) acima dele ignoradas)'
+              % (pulados_topo + 1, pulados_topo))
     idx = {}
     for i, h in enumerate(cab):
         n = _norm(h)
@@ -262,6 +295,9 @@ def main():
     ap.add_argument('--margem', type=float, default=3.0,
                     help='pontos de vantagem sobre o 2º colocado (padrão: 3)')
     ap.add_argument('--relatorio', default=None, help='CSV dos nomes (padrão: ao lado da planilha)')
+    ap.add_argument('--aba', default=None, help='nome da aba (padrão: a ativa)')
+    ap.add_argument('--amostra', type=int, default=5,
+                    help='quantas linhas puladas mostrar de cada motivo (padrão: 5)')
     ap.add_argument('--gravar', action='store_true', help='grava (sem isto, só relata)')
     args = ap.parse_args()
 
@@ -285,7 +321,8 @@ def main():
     print('modo     : %s' % ('GRAVA' if args.gravar else 'só relata (use --gravar)'))
     print('-' * 78)
 
-    linhas, resolvidos, faltando = le_planilha(caminho, getattr(R, '_XL_ERROR_TEXT', set()))
+    linhas, resolvidos, faltando = le_planilha(
+        caminho, getattr(R, '_XL_ERROR_TEXT', set()), args.aba)
     print('linhas na planilha: %d' % len(linhas))
     print('colunas lidas     : %s' % ', '.join(
         '%s←%s' % (pc, src) for pc, (_i, src) in sorted(resolvidos.items())))
@@ -323,7 +360,7 @@ def main():
     print('corte dos 12 meses: %s' % corte.strftime('%d/%m/%Y'))
     print('-' * 78)
 
-    lote, vistos = [], set()
+    lote, vistos, amostras = [], set(), {}
     pulados_tn, sem_tn, repetidos, sem_trade_date = 0, 0, 0, 0
     por_nome, por_status, por_pending = {}, {}, {}
     desalinhadas = 0
@@ -339,12 +376,15 @@ def main():
         tn = str(d.get('Trade Number', '') or '').strip()
         if not tn:
             sem_tn += 1
+            _amostra(amostras, 'sem Trade Number', d, args.amostra)
             continue
         if tn in existentes:
             pulados_tn += 1
+            _amostra(amostras, 'já nos bancos', d, args.amostra)
             continue
         if tn in vistos:                 # a mesma linha duas vezes na planilha
             repetidos += 1
+            _amostra(amostras, 'repetido na planilha', d, args.amostra)
             continue
         vistos.add(tn)
 
@@ -402,10 +442,26 @@ def main():
         lote.append((destino, r))
         info['inseridas'] += 1
 
-    print('a inserir         : %d' % len(lote))
-    print('já nos bancos     : %d (Trade Number existente — pulados)' % pulados_tn)
-    print('sem Trade Number  : %d' % sem_tn)
-    print('repetidos na planilha: %d' % repetidos)
+    # A conta FECHA com o total lido, e é impressa fechando: sem ela, "1.530 a
+    # inserir" numa planilha de 80 mil não diz se as outras 78 mil foram
+    # puladas por um motivo conhecido ou se o script simplesmente não as viu.
+    print('linhas lidas      : %d' % len(linhas))
+    print('  a inserir       : %d' % len(lote))
+    print('  já nos bancos   : %d (Trade Number existente)' % pulados_tn)
+    print('  sem Trade Number: %d' % sem_tn)
+    print('  repetidos na planilha: %d' % repetidos)
+    soma = len(lote) + pulados_tn + sem_tn + repetidos
+    if soma != len(linhas):
+        print('  ATENÇÃO: a conta não fecha (%d ≠ %d) — avise quem mantém o script'
+              % (soma, len(linhas)))
+    for motivo, exemplos in sorted(amostras.items()):
+        if not exemplos:
+            continue
+        print('  exemplo(s) de "%s":' % motivo)
+        for d in exemplos:
+            print('     Trade Number=%-18r Client=%-28r Status=%-10r Trade Date=%r' % (
+                d.get('Trade Number', ''), str(d.get('Client', ''))[:28],
+                d.get('Status', ''), d.get('Trade Date', '')))
     contagem = {}
     for destino, _r in lote:
         contagem[destino] = contagem.get(destino, 0) + 1

@@ -167,6 +167,30 @@ check('a grafia do Pending Update resolve nas mesmas colunas',
       ('End Counterparty Desc', 'Booking Date', 'Deal Name'))
 check('coluna que nao veio e RELATADA', 'Status' in f2, True)
 
+# ── 2b. a aba certa e o cabecalho que nao esta na primeira linha ────────────
+# Duas causas de uma carga pequena SEM ERRO NENHUM: a aba ativa do arquivo nao
+# e a dos dados, e o cabecalho vem depois de um titulo. Nos dois casos as
+# colunas resolvem contra a linha errada e a planilha "nao tem nada".
+import openpyxl                                                       # noqa: E402
+XLSX3 = os.path.join(TMP, 'duas-abas.xlsx')
+wb = openpyxl.Workbook()
+resumo = wb.active
+resumo.title = 'Resumo'
+resumo.append(['Outstanding Confirmation OTC'])
+resumo.append(['gerado em', '22/09/2026'])
+dados = wb.create_sheet('Dados')
+dados.append(['PENDING - Outstanding Confirmation OTC'])   # titulo
+dados.append([])                                           # linha em branco
+dados.append(CAB)                                          # o cabecalho de verdade
+dados.append(linha('BANCO SAFRA S/A', 'T-ABA'))
+wb.save(XLSX3)
+
+l3, r3, f3 = S.le_planilha(XLSX3, R._XL_ERROR_TEXT)
+check('a aba ATIVA sem cabecalho nao inventa colunas', (len(l3), len(r3)), (0, 0))
+l4, r4, f4 = S.le_planilha(XLSX3, R._XL_ERROR_TEXT, 'Dados')
+check('--aba le a aba certa', len(l4), 1)
+check('   achando o cabecalho abaixo do titulo', l4[0]['Trade Number'], 'T-ABA')
+
 # ── 3. a carga ──────────────────────────────────────────────────────────────
 print('\n== 3. insere o que falta, pula o que ja existe ==')
 DBS = os.path.join(TMP, 'db')
