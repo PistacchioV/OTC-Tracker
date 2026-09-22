@@ -124,8 +124,8 @@ CAB = ['LOB', 'Client', 'Aging', 'Status', 'Product Type', 'Trade Date',
        'Trade Number IS FEP WEB', 'Pendência']
 
 
-def linha(client, tn, trade='10/03/2026', mat='10/09/2027', pend='Pending Original',
-          lob='EDG', prod='NDF', status='0-30', ea='', comments=''):
+def linha(client, tn, trade='10/03/2026', mat='10/09/2027', pend='Concluded',
+          lob='EDG', prod='NDF', status='Ok', ea='', comments=''):
     return [lob, client, '', status, prod, trade, mat, tn, pend, 'QUEM MANDOU',
             ea, '', '', '', comments, '', '', '', '']
 
@@ -141,10 +141,18 @@ escreve_planilha(XLSX, CAB, [
     linha('BANCO SAFRA S/A', 'T-REPETIDO'),            # a mesma, duas vezes
     linha('BANCO SAFRA S/A', 'T-ANTIGA', trade='10/03/2023', mat='10/09/2023'),
     linha('BANCO SAFRA S/A', 'T-ERRO-XL', comments='#NULL!'),
+    # Status != Ok e a UNICA coisa que manda para o pending — mesmo velha, que
+    # e onde a regra da mesa se separa do `_pc_target_category` do app.
+    linha('BANCO SAFRA S/A', 'T-PENDENTE', status='0-30', pend='Pending Original'),
+    linha('BANCO SAFRA S/A', 'T-PENDENTE-ANTIGA', status='31-60', pend='Pending MO',
+          trade='10/03/2023', mat='10/09/2023'),
+    # Status Ok com um Pending Status que o app NAO considera resolvido: entra
+    # no ok, e o script AVISA que a manutencao das 11:30 vai move-la.
+    linha('BANCO SAFRA S/A', 'T-DESALINHADA', pend='Pending Original'),
 ])
 
 linhas, resolvidos, faltando = S.le_planilha(XLSX, R._XL_ERROR_TEXT)
-check('leu todas as linhas', len(linhas), 10)
+check('leu todas as linhas', len(linhas), 13)
 check('resolveu Trade Date pelo nome do cabecalho', resolvidos['Trade Date'][1], 'Trade Date')
 check('resolveu Comments pela grafia da planilha', resolvidos['Comments'][1], 'Overall Comments')
 check('#NULL! de formula quebrada vira vazio', linhas[9]['Comments'], '')
@@ -208,7 +216,7 @@ for cat in ('pending', 'ok', 'backlog'):
         todas[str(r.get('Trade Number') or '')] = (cat, r)
 check('inseriu as novas', sorted(todas), sorted([
     'T-EXATO', 'T-SEMELHANTE', 'T-SEM-SPN', 'T-AMBIGUO', 'T-REPETIDO', 'T-ANTIGA',
-    'T-ERRO-XL', 'T-JA-EXISTE']))
+    'T-ERRO-XL', 'T-JA-EXISTE', 'T-PENDENTE', 'T-PENDENTE-ANTIGA', 'T-DESALINHADA']))
 check('a linha que ja existia nao foi duplicada',
       sum(1 for tn in todas if tn == 'T-JA-EXISTE'), 1)
 # A linha repetida na planilha entra UMA vez: duas seriam duas pendencias para a
@@ -232,8 +240,27 @@ check('sem match, a linha ENTRA com o SPN vazio', r['SPN'], '')
 check('   e mantem o nome da planilha', r['Client'], 'PETROBRAS DISTRIBUIDORA')
 cat, r = todas['T-AMBIGUO']
 check('o ambiguo tambem entra sem SPN', r['SPN'], '')
-check('a de mais de 12 meses foi para o BACKLOG', todas['T-ANTIGA'][0], 'backlog')
-check('a recente ficou em pending', todas['T-EXATO'][0], 'pending')
+# ── o banco de destino: coluna Status × Trade Date (mesa, 22/09/2026) ───────
+check('Ok e recente vai para o OK', todas['T-EXATO'][0], 'ok')
+check('Ok e mais velha que 12 meses vai para o BACKLOG', todas['T-ANTIGA'][0], 'backlog')
+check('Status != Ok vai para o PENDING', todas['T-PENDENTE'][0], 'pending')
+# Aqui a regra da mesa se separa da do app: pelo `_pc_target_category` esta
+# linha seria backlog (ele olha a data antes do status). Quem manda na carga e
+# a coluna Status.
+check('Status != Ok vai para o PENDING mesmo sendo velha',
+      todas['T-PENDENTE-ANTIGA'][0], 'pending')
+# A planilha toda Ok nao pode deixar nada no pending: e a confer&encia que a
+# mesa faz depois da carga.
+so_ok = [c for tn, (c, _r) in todas.items()
+         if tn in ('T-EXATO', 'T-SEMELHANTE', 'T-SEM-SPN', 'T-AMBIGUO', 'T-ERRO-XL',
+                   'T-REPETIDO', 'T-DESALINHADA')]
+check('nenhuma linha Ok caiu no pending', sorted(set(so_ok)), ['ok'])
+
+# O Pending Status que o app nao le como resolvido e CONTADO e avisado: sem
+# isso a linha volta para o pending na manutencao das 11:30, calada.
+check('avisa sobre Status Ok com Pending Status nao resolvido',
+      ('ATENÇÃO' in saida and '11:30' in saida), True)
+check('   e diz quantas sao', '1 linha(s) com Status = Ok' in saida, True)
 
 rel = io.open(os.path.join(TMP, 'rel.csv'), encoding='utf-8-sig').read()
 check('o relatorio lista os nomes por tipo de match',
