@@ -784,7 +784,15 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   escreve por código chama `el._flatpickr.setDate`; largura em CLASSE porque o
   `style=` fica no campo escondido; ícone como background SVG embutido) ou
   daterangepicker `singlePicker` `DD/MM/YYYY`. `type="date"` só invisível atrás
-  de texto readonly (`.date-wrap` das recons).
+  de texto readonly (`.date-wrap` das recons). **E o campo se DIGITA: só os
+  NÚMEROS, as barras se escrevem sozinhas** (mesa, 22/09/2026;
+  `otcDateMask`, aplicada pelo `otcDateField` ao **altInput**, que é o campo que
+  se vê). Sem ela o parse frouxo do flatpickr lê `2208/2026` como uma data
+  QUALQUER, sem erro nenhum. A data INTEIRA vai ao picker na hora
+  (`setDate`) — o código em volta lê o ISO do input original, e ele só nasceria
+  no blur: clicar direto no botão exportaria o intervalo anterior. A mesma
+  regra da Quotes (§508) mora aqui no HELPER, não na página.
+  `check_export_padrao.py` §5.
 
 ### Layout e vidro
 
@@ -2113,6 +2121,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 | Script | Para quê |
 |---|---|
 | `update_pending_confirmation_dbs.py` · `..._bankers.py` | migrações de schema do Pending Confirmation |
+| `import_pending_confirmation_missing.py [--xlsx] [--db-dir] [--limiar 90] [--margem 3] [--relatorio] [--gravar]` | ACRESCENTA aos três bancos o que a planilha `PENDING - Outstanding Confirmation OTC.xlsx` tem e eles não têm (mesa, 22/09/2026). **Trade Number que já está em qualquer um dos três é PULADO** — este não corrige linha existente e não apaga nada; quem reconstrói é o `import_pending_confirmation.py`, e aquele APAGA o que não estiver na planilha, backlog inclusive. **SPN, Client e Owner saem do Reference Data** (é o cadastro que liga a operação ao Economic Group, ao Signature Type e ao banker); o resto vem da planilha. O nome casa por IGUALDADE e, sem ela, pelo mais parecido — **só acima do limiar e com vantagem sobre o segundo colocado**, senão o SPN fica em branco e o nome vai para o relatório CSV: um SPN quase certo leva a operação para outra contraparte, com o Owner e o grupo de outra contraparte junto, e nada na tela acusa. Leitura dos bancos `strict` (banco que não abre PARA o script — lido como vazio, ele reinseriria tudo como novo), gravação pelo `_pc_upsert_rows` do app (mesmo reencaminhamento entre baldes), e **sem `--gravar` não escreve nada**. `check_pc_import_missing.py` |
 | `import_manual_confirmations.py` | cria os dois DuckDB da esteira e semeia do `MANUAIS.xlsx` |
 | `backfill_manual_confirmations.py` | traz para a esteira o que foi mapeado antes dela (FWD Start pelo B3 ID; `--dry-run` lembra as chaves da passada). A família de página genérica tira a PASTA do `_GENERIC_ND_PRODUCTS` e o SOURCE do `_generic_nd_mc_source`, por deal — é o que faz o Vanilla entrar só no de MGT (§453) e o que impede o rótulo de tela (`NDF/FWD Start`) de virar caminho. Source de `_MC_CONFIRMATION_SOURCES` sem família aqui = operação antiga invisível para sempre no Monitor: `check_mc_backfill.py` |
 | os scripts que leem RefData/calendário/arquivos-dia (`create_counterparty_folders`, `create_cetip_folders`, `import_pending_confirmation`, `update_pending_confirmation_*`, `backfill_manual_confirmations`, `export_new_deals_excel`, `fix_cgd_economic_group`) | leem pelo ARMAZÉM e pelo `data_path` (§440): o `apps/static/data/*.json` do checkout é a seed, não o dado |
@@ -2127,6 +2136,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 | `scripts/standalone/` (40, GERADOS por `build_duckdb_standalone.py`) | os mesmos conversores para máquina sem o código (`pip install duckdb` só) — nunca editar à mão |
 | `build_sop_docx.py` | SOP e Guia em Word a partir do `.md` |
 | `diag_ndfsum_account.py [AAAA-MM-DD]` | DIAGNÓSTICO da coluna Account do Settlement Summary: nome da linha → SPN no Reference Data → registro do Counterparty Details → defaults → conta, dizendo onde a cadeia quebra (§436) |
+| `diag_pending_confirmation_db.py [--db backlog\|pending\|ok\|todos] [--db-dir] [--out] [--csv] [--so-resumo]` | DESPEJA o conteúdo dos três bancos do Pending Confirmation (uma aba por banco) e, na tela, o RESUMO que costuma responder a pergunta: linhas, a Trade Date mais velha e a mais nova, o histograma por ano e **quantas linhas têm data ILEGÍVEL**, com amostra do texto cru. "A busca não traz nada antes de tal dia" tem duas causas que se parecem e se consertam ao contrário — não há nada mais velho, ou há e a data está num formato que o app não lê (serial do Excel, `26/8/25`), e aí a linha some de todo filtro por data sem erro nenhum. Só LÊ, roda com o app de pé (abre pelo `duckdb_read`), e banco em uso ou ilegível **para com o motivo** em vez de imprimir zero linha. O `.xlsx` sai com toda célula como TEXTO (o contrato `26E04610365` vira `#NULL!` numa célula numérica, §477) |
 | `diag_boot_imports.py` | DIAGNÓSTICO da SUBIDA (§522/§524): `python -X importtime` num subprocesso, com o farol do app passando direto para a tela e um pulso a cada 5 s (segundos · módulos · último módulo) — saída que demora tem de dizer que está viva, senão doze minutos de subida são indistinguíveis de um travamento. Rodá-lo de um clone LOCAL é o CONTROLE do experimento, não erro de uso: mesmos dados no share, só o código em disco local — caiu de minutos para segundos, o custo é ler o código pelo SMB; não caiu, é o que o import EXECUTA. Vale rodar os dois |
 
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
