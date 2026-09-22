@@ -769,8 +769,8 @@ def _conf_xml_doc(numero, tipo, valor, ccy_num, valor_estr, cnpj_cli, trade_dt, 
     igual aos campos que o FepWeb já recebe em branco.
 
     `evento` é o `tipoEvento`: **N** de novo, que é o que toda confirmação de
-    operação nova declara, e **R** de RECOMPRA no Termo de Resilição (mesa,
-    18/09/2026) — o FepWeb precisa distinguir o registro do distrato, e um
+    operação nova declara, e **RE** de RESILIÇÃO no Termo de Resilição (mesa,
+    18/09/2026; era `R` até 22/09/2026) — o FepWeb precisa distinguir o registro do distrato, e um
     'N' ali cadastraria a resilição como uma operação nova."""
     return (
         '<contrato>\n'
@@ -1767,9 +1767,9 @@ def _conf_unwind_xml(picked, merc, ref):
 
     `tipoOperacao` é **NDF** (mesa): a operação resilida é um termo de moeda, e
     é assim que a confirmação dela já se declara ao FepWeb. O `tipoEvento` é
-    **R**, de recompra — é o que separa o distrato do registro. A moeda vai
+    **RE**, de resilição (mesa, 22/09/2026; era `R`) — é o que separa o distrato do registro. A moeda vai
     EXPLÍCITA — é a Moeda Base do grupo, o mesmo eixo do documento (§457) —
     porque o deal da recompra não tem campo de moeda de strike."""
     return _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='Termo_Resilicao',
                          warn_no_spot=False, legs_fn=_conf_unwind_legs, ccy=merc,
-                         evento='R')
+                         evento='RE')

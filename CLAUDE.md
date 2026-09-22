@@ -1423,7 +1423,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   recompra** — não pelo strike do registro, que é o que nomeia o Valor Base
   Liquidado do Anexo I: os dois números do XML falam da liquidação, os do Anexo
   falam do contrato. `tipoOperacao` é `NDF` (a operação resilida é um termo de
-  moeda) e **`tipoEvento` é `R`, de recompra** — com o `N` de novo o FepWeb
+  moeda) e **`tipoEvento` é `RE`, de resilição** (mesa, 22/09/2026; era `R`) — com o `N` de novo o FepWeb
   cadastraria o distrato como operação nova.
 - **Campo 13 do TER 0014 é PERCENTUAL ao ano** (13,75 → `1375000000`);
   **campo 14** é `1` com a taxa termo em BRL e a paridade USD/BRL fora dela —

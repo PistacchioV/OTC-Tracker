@@ -273,9 +273,9 @@ def main():
     xml = io.open(xmls[0], encoding='utf-8').read() if xmls else ''
     check('tipoOperacao e NDF (a operacao resilida e um termo de moeda)',
           '<tipoOperacao>NDF</tipoOperacao>' in xml)
-    # O tipoEvento e R de RECOMPRA (mesa): com o 'N' de novo, o FepWeb
+    # O tipoEvento e RE de RESILICAO (mesa, 22/09/2026; era R): com o 'N' de novo, o FepWeb
     # cadastraria o distrato como uma operacao nova.
-    check('tipoEvento e R, de recompra', '<tipoEvento>R</tipoEvento>' in xml, xml)
+    check('tipoEvento e RE, de resilicao', '<tipoEvento>RE</tipoEvento>' in xml, xml)
     # Regra da mesa: `valor` = o liquidado em REAIS; `valorEstrangeiro` = ele
     # dividido pela TAXA DA RECOMPRA (nao pelo strike do registro, que e o que
     # nomeia o Valor Base Liquidado do Anexo I).
