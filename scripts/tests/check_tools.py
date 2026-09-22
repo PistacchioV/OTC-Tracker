@@ -698,9 +698,9 @@ try:
     check('linha de DFLUXO sem contrato nao entra pelo identificador da LOB',
           [x['evento'] for x in queries.swap_prefill('26G53382860')['flows']],
           [(date.today() - timedelta(days=40)).isoformat()])
-    # A taxa DO FLUXO vence a da posicao (mesa, 22/09/2026): o spread pode
-    # mudar de um fluxo para o outro, e a posicao guarda um numero so. No
-    # 25C04803529 a posicao dizia CDI - 11,95% e o fluxo, - 11,90%.
+    # Plano B da TAXA (mesa, 22/09/2026): so quando a celula da posicao vem
+    # VAZIA. A ponta 2 da posicao esta vazia (vals[53] = ''); a ponta 1 tem
+    # 0,14 e a posicao vence — no 25C04803529 o - 11,95% da posicao era o certo.
     fl_tx = list(fl)
     fl_tx[12], fl_tx[13] = '0', '0,1500'            # Parte: 15% no fluxo
     fl_tx[17], fl_tx[18] = '1', '11,9000'           # Contraparte: codigo 1 = negativa
@@ -708,8 +708,8 @@ try:
     _tx = queries.swap_prefill('26G53382860')
     check('a taxa sai do DFLUXO do fluxo, com o sinal do codigo',
           (_tx['passiva']['taxa'], _tx['passiva']['fonte'].get('taxa')), ('-11.9000', 'dfluxo'))
-    check('e vence a da posicao (0,14 na posicao, 0,15 no fluxo)',
-          (_tx['ativa']['fonte'].get('taxa'),), ('dfluxo',))
+    check('posicao com taxa: vale a da posicao (0,14), nao a do fluxo (0,15)',
+          (_tx['ativa']['fonte'].get('taxa'), _tx['ativa']['taxa'] != '0.1500'), (None, True))
     # O sinal EMBUTIDO na celula (-3,13) com o codigo 1 ao lado nao vira duas
     # vezes: era o spread do Term SOFR entrando como +3,13.
     fl_tx[17], fl_tx[18] = '1', '-3,1300'
@@ -730,7 +730,7 @@ try:
     fl_tx[13], fl_tx[18] = '', ''
     _grava_fluxo(fl_tx)
     _px = queries.swap_prefill('26G53382860')
-    check('fluxo sem taxa: vale a da posicao',
+    check('posicao e fluxo sem taxa: nenhum plano B',
           (_px['ativa']['fonte'].get('taxa'), _px['passiva']['fonte'].get('taxa')), (None, None))
     _grava_fluxo(fl, sem_contrato)
     os.remove(os.path.join(pasta, '73760_%s_DFLUXO.json' % dref))
