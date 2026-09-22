@@ -606,7 +606,8 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `Daily Settlement` × NDF = `getTradesBySettle`); `SOURCE` API × Bob Report;
   `YYYYMMDD` é a data; produto é o parâmetro da API, não a página. O
   `settlement` da API é LISTA e o valor é o primeiro item numérico de `Rolled
-  Positions` (§425).
+  Positions` (§425) — **no cross SEM BRL (USD × GBP, USD × EUR) é o SEGUNDO**:
+  ali o primeiro é o notional da moeda (mesa, 22/09/2026; `_ndfc_api_rolled`).
 - **`fxo-internal-cpty`** — `INVERT DIRECTION = Yes` é a perna espelhada e só
   entra com Ctpty e Dir os dois NOK; `USE = Disregard` corta ANTES do merge, por
   `_nome_cru`, nas DUAS colunas de contraparte, avisando no painel. O `upgrade`
