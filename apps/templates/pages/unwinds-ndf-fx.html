@@ -185,6 +185,7 @@
 {% block extra_javascript %}
 <script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/sf-multi.js?v={{ asset_v('js/sf-multi.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.responsive.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.js"></script>
@@ -444,7 +445,7 @@ $(document).ready(function () {
             $c.on('click', '.column-search-input-bar th, .column-search-input-bar th input', function (e) { e.stopPropagation(); });
             $c.on('keyup input change', '.column-search-input-bar th input', function () {
                 var ci = $(this).closest('th').index();
-                if (api.column(ci).search() !== this.value) api.column(ci).search(this.value).draw();
+                if (otcSfMulti.columnSearch(api.column(ci), this.value)) api.draw();
             });
 
             var columnToggleWrapper = document.querySelector('.columnToggleWrapper');

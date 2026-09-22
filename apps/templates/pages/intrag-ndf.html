@@ -506,6 +506,7 @@ i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline
 <script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/intrag-delete.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/sf-multi.js?v={{ asset_v('js/sf-multi.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.responsive.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.js"></script>
@@ -659,7 +660,7 @@ $(document).ready(function() {
                 $(inp).on('click', function(e) { e.stopPropagation(); });
                 $(inp).on('keyup', function() {
                     var ci = inp.closest('th').cellIndex;
-                    if (api.column(ci).search() !== this.value) api.column(ci).search(this.value).draw();
+                    if (otcSfMulti.columnSearch(api.column(ci), this.value)) api.draw();
                 });
             });
 
@@ -1106,6 +1107,9 @@ $(document).ready(function() {
 
     function sfCandidates(val) {
         if (!val) return [];
+        // Lista de valores (`123; 456`, Trade IDs colados do Excel) → colunas de
+        // texto, mesmo começando com dígito (sf-multi.js).
+        if (otcSfMulti.isMulti(val)) return SF_COLS.filter(function(c) { return c.type === 'text'; }).map(function(c) { return { col: c, mode: 'text', label: c.label }; });
         if (!/^\d/.test(val)) {
             return SF_COLS.filter(function(c){ return c.type === 'text'; })
                           .map(function(c){ return { col: c, mode: 'text', label: c.label }; });
@@ -1116,6 +1120,8 @@ $(document).ready(function() {
             if (c.type === 'number') out.push({ col: c, mode: 'number', label: c.label });
             else if (c.type === 'date') out.push({ col: c, mode: 'exact', label: c.label });
         });
+        // ID de texto que começa com dígito (Deal, B3 ID, conta) também é candidato.
+        out = out.concat(SF_COLS.filter(function(c) { return c.type === 'text'; }).map(function(c) { return { col: c, mode: 'text', label: c.label }; }));
         return out;
     }
 
@@ -1218,7 +1224,7 @@ $(document).ready(function() {
                         intragDateRanges[f.col.dtCol] = intragDateRanges[f.col.dtCol] || { from: null, to: null };
                         intragDateRanges[f.col.dtCol][f.mode] = sfToDate(f.value);
                     } else {
-                        table.column(f.col.dtCol).search(f.value);
+                        otcSfMulti.columnSearch(table.column(f.col.dtCol), f.value, f.col.type === 'number');
                     }
                 });
                 table.draw();

@@ -180,12 +180,31 @@ def _nd_fix_underlying_marker(deal):
                     '(deal=%r · cliente com JS antigo em cache?)',
                     ua, fixed, deal.get('Deal', ''))
 
+_FILTER_SEP = re.compile(r'[,;\t\r\n]+')
+_FILTER_SEP_NUMBER = re.compile(r'[;\t\r\n]+')
+_FILTER_THOUSANDS = re.compile(r'^-?\d{1,3}(,\d{3})+(\.\d+)?$')   # 1,250,000.50 is ONE value
+
+
+def _filter_tokens(value, number=False):
+    """Split a smart-filter value into its alternatives (see `_deal_matches`).
+    A value without separator comes back as a single-item list."""
+    sep = (_FILTER_SEP_NUMBER if number or _FILTER_THOUSANDS.match(value.strip())
+           else _FILTER_SEP)
+    toks = [t.strip() for t in sep.split(value) if t.strip()]
+    return toks or [value]
+
+
 def _deal_matches(deal, filters):
     """Return True when a deal dict satisfies every filter.
 
     Date filters support a `mode` of 'from' (cell >= value), 'to'
     (cell <= value) or 'exact'/absent (equality, both bounds inclusive when a
     'from'+'to' pair is supplied for the same field).
+
+    Text and number filters accept SEVERAL values separated by `,`, `;`, tab
+    or line break (a list of Trade IDs pasted from Excel): the cell matches
+    when ANY of them matches — `_filter_tokens`. The `not` mode stays a single
+    value (it is the Status <> Success chip).
     """
     from apps.pages import routes
     for f in filters:
@@ -201,7 +220,7 @@ def _deal_matches(deal, filters):
             if (f.get('mode') or '').lower() == 'not':
                 if value.lower() == cell_val.lower():
                     return False
-            elif value.lower() not in cell_val.lower():
+            elif not any(t.lower() in cell_val.lower() for t in _filter_tokens(value)):
                 return False
         elif ftype == 'date':
             mode = (f.get('mode') or 'exact').lower()
@@ -224,7 +243,11 @@ def _deal_matches(deal, filters):
                 elif value not in cell_val:
                     return False
         elif ftype == 'number':
-            if value.replace(',', '') not in cell_val.replace(',', ''):
+            # `,` is the thousands separator here, so only `;`/tab/line break
+            # split a number list.
+            cell_num = cell_val.replace(',', '')
+            if not any(t.replace(',', '') in cell_num
+                       for t in _filter_tokens(value, number=True)):
                 return False
     return True
 
