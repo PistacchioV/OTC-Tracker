@@ -698,19 +698,40 @@ try:
     check('linha de DFLUXO sem contrato nao entra pelo identificador da LOB',
           [x['evento'] for x in queries.swap_prefill('26G53382860')['flows']],
           [(date.today() - timedelta(days=40)).isoformat()])
-    # Plano B da TAXA (mesa, 22/09/2026): a ponta 2 da posicao vem com a taxa
-    # VAZIA (vals[53] = ''), e o DFLUXO do fluxo calculado traz `Sinal/Taxa de
-    # Juros Contraparte` = 1 / 11,9000 — um CDI - 11,90%. Sem o plano B o campo
-    # saia 0%, e o spread negativo sumia da conta sem aviso nenhum.
+    # A taxa DO FLUXO vence a da posicao (mesa, 22/09/2026): o spread pode
+    # mudar de um fluxo para o outro, e a posicao guarda um numero so. No
+    # 25C04803529 a posicao dizia CDI - 11,95% e o fluxo, - 11,90%.
     fl_tx = list(fl)
-    fl_tx[12], fl_tx[13] = '0', '0,1500'            # Parte (a posicao ja responde)
-    fl_tx[17], fl_tx[18] = '1', '11,9000'           # Contraparte, negativa
+    fl_tx[12], fl_tx[13] = '0', '0,1500'            # Parte: 15% no fluxo
+    fl_tx[17], fl_tx[18] = '1', '11,9000'           # Contraparte: codigo 1 = negativa
     _grava_fluxo(fl_tx)
     _tx = queries.swap_prefill('26G53382860')
-    check('posicao sem taxa: a taxa sai do DFLUXO do fluxo, com o sinal',
+    check('a taxa sai do DFLUXO do fluxo, com o sinal do codigo',
           (_tx['passiva']['taxa'], _tx['passiva']['fonte'].get('taxa')), ('-11.9000', 'dfluxo'))
-    check('posicao com taxa: vale a da posicao, o DFLUXO nao se mete',
-          (_tx['ativa']['fonte'].get('taxa'), _tx['ativa']['taxa'] != '0.1500'), (None, True))
+    check('e vence a da posicao (0,14 na posicao, 0,15 no fluxo)',
+          (_tx['ativa']['fonte'].get('taxa'),), ('dfluxo',))
+    # O sinal EMBUTIDO na celula (-3,13) com o codigo 1 ao lado nao vira duas
+    # vezes: era o spread do Term SOFR entrando como +3,13.
+    fl_tx[17], fl_tx[18] = '1', '-3,1300'
+    _grava_fluxo(fl_tx)
+    check('sinal na celula E no codigo: continua negativo',
+          queries.swap_prefill('26G53382860')['passiva']['taxa'], '-3.1300')
+    fl_tx[17], fl_tx[18] = '', '-3,1300'
+    _grava_fluxo(fl_tx)
+    check('so na celula: negativo',
+          queries.swap_prefill('26G53382860')['passiva']['taxa'], '-3.1300')
+    fl_tx[17], fl_tx[18] = '0', '3,1300'
+    _grava_fluxo(fl_tx)
+    check('codigo 0 e celula positiva: positivo',
+          queries.swap_prefill('26G53382860')['passiva']['taxa'], '3.1300')
+    check('cada evento leva a taxa das duas pontas para o seletor da tela',
+          queries.swap_prefill('26G53382860')['flows'][0]['taxa_juros'], [0.15, 3.13])
+    # Sem taxa no fluxo, vale a da posicao.
+    fl_tx[13], fl_tx[18] = '', ''
+    _grava_fluxo(fl_tx)
+    _px = queries.swap_prefill('26G53382860')
+    check('fluxo sem taxa: vale a da posicao',
+          (_px['ativa']['fonte'].get('taxa'), _px['passiva']['fonte'].get('taxa')), (None, None))
     _grava_fluxo(fl, sem_contrato)
     os.remove(os.path.join(pasta, '73760_%s_DFLUXO.json' % dref))
 

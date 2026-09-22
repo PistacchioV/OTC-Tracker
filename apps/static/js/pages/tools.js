@@ -732,6 +732,17 @@
       mark('fim', flow.p_fim ? '' : 'tl-missing');
       mark('amortizacao', flow.p_amort ? '' : 'tl-missing');
       mark('base_amortizacao', flow.p_base_amort ? '' : 'tl-missing');
+      // A taxa contratada é do FLUXO (o DFLUXO traz uma por evento, e o spread
+      // pode mudar de um para o outro): trocar o evento troca a taxa das duas
+      // pontas, já com o sinal. Evento sem taxa deixa o campo como está.
+      ['ativa', 'passiva'].forEach(function (lado, k) {
+        var v = (flow.taxa_juros || [])[k];
+        if (v === null || v === undefined || isNaN(v)) return;
+        var txt = Number(v).toFixed(4);
+        setVal(lado + '_taxa', txt);
+        var sp = document.getElementById(lado + '_taxa_cdi');
+        if (sp) { sp.value = txt; formatar(sp); }
+      });
     }
     function fill(d) {
       lastData = d;

@@ -733,17 +733,18 @@ def swap_prefill(b3_id):
         pct = domain.numero_da_posicao(_celula(vals, _POS['pct'][k]))
         taxa = domain.numero_da_posicao(_celula(vals, _POS['taxa'][k]))
         sinal = domain.sinal_da_posicao(_celula(vals, _POS['sinal'][k]))
-        # Plano B da taxa (mesa, 22/09/2026): com a célula da posição VAZIA, a
-        # taxa contratada sai do DFLUXO — `Taxa de Juros Parte/Contraparte` do
-        # FLUXO que está sendo calculado, com o sinal dele. Só quando a posição
-        # não respondeu: vazio ali seria lido como 0%, e o spread negativo de um
-        # CDI − x% sumiria da conta sem aviso nenhum.
+        # A taxa DO FLUXO vence a da posição (mesa, 22/09/2026): o DFLUXO traz
+        # `Taxa de Juros Parte/Contraparte` por EVENTO, e o contrato pode ter
+        # um spread diferente em cada fluxo — a posição guarda um número só. No
+        # 25C04803529 a posição dizia CDI − 11,95% e o fluxo calculado, − 11,90%:
+        # R$ 535 mil de diferença contra a planilha da mesa. Sem taxa no fluxo
+        # (ou sem DFLUXO), vale a da posição; o sinal já vem aplicado
+        # (`swap_flows.taxa_do_fluxo`).
         taxa_do_fluxo = False
-        if taxa is None and escolhido:
+        if escolhido:
             t_fx = (escolhido.get('taxa_juros') or [None, None])[k]
             if t_fx is not None:
-                taxa = t_fx
-                sinal = domain.sinal_da_posicao((escolhido.get('sinal_juros') or ['', ''])[k])
+                taxa, sinal = abs(t_fx), (-1.0 if t_fx < 0 else 1.0)
                 taxa_do_fluxo = True
         cot = domain.numero_da_posicao(_celula(vals, _POS['cupom_limpo'][k]))
         desloc = domain.numero_da_posicao(_celula(vals, _POS['data_cotacao'][k]))
