@@ -92,9 +92,17 @@ check('so a pontuacao muda: exato mesmo assim (o _norm tira)',
 rec, tipo, pct, _alt = cad.casa('ITAU UNIBANCO')
 check('falta um pedaco do nome: SEMELHANTE e aplicado',
       (tipo, rec.get('SPN'), pct >= 90.0), ('semelhante', '1000002', True))
+# Entre o piso do relatorio e o limiar: nao entra, mas o relatorio DIZ com quem
+# se pareceu — e o que deixa alguem decidir de fora.
+rec, tipo, pct, alt = cad.casa('BANCO SAFRA INVESTIMENTOS S.A.')
+check('parecido demais para ignorar, pouco para aplicar: FRACO e sem SPN',
+      (tipo, rec.get('SPN')), ('fraco', None))
+check('   e o relatorio diz com quem se pareceu', (bool(alt), 60.0 <= pct < 90.0), (True, True))
+# Abaixo do piso nao ha candidato: ha o nome menos distante do cadastro, que
+# nao ajuda ninguem (era `PETROBRAS DISTRIBUIDORA` → `CARGILL ALIMENTOS, 57%`).
 rec, tipo, pct, alt = cad.casa('PETROBRAS DISTRIBUIDORA')
-check('nome que nao existe no cadastro fica SEM SPN', (tipo, rec.get('SPN')), ('fraco', None))
-check('   e o relatorio ainda diz qual era o melhor', bool(alt), True)
+check('sem nada parecido: nao se inventa um candidato',
+      (tipo, rec.get('SPN'), alt), ('sem-cadastro', None, ''))
 # Duas contrapartes parecidissimas entre si: escolher uma e sortear.
 rec, tipo, pct, alt = cad.casa('VOTORANTIM CIMENTOS NE S.A.')
 check('duas igualmente parecidas: AMBIGUO, sem SPN', (tipo, rec.get('SPN')), ('ambiguo', None))
@@ -288,7 +296,7 @@ check('   e diz quantas sao', '1 linha(s) com Status = Ok' in saida, True)
 
 rel = io.open(os.path.join(TMP, 'rel.csv'), encoding='utf-8-sig').read()
 check('o relatorio lista os nomes por tipo de match',
-      all(x in rel for x in ('exato', 'semelhante', 'fraco', 'ambiguo')), True)
+      all(x in rel for x in ('exato', 'semelhante', 'sem-cadastro', 'ambiguo')), True)
 
 # Rodar de novo nao insere nada: e o que torna a carga repetivel sem duplicar.
 antes = sum(len(PC._pc_load_rows(c)) for c in ('pending', 'ok', 'backlog'))

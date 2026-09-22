@@ -66,6 +66,7 @@ import io
 import os
 import re
 import sys
+import time
 import unicodedata
 from datetime import datetime
 
@@ -108,6 +109,11 @@ FONTES = {
 # Guardadas dd/mm/aaaa, que é como o filtro da tela as lê. `Pendência` NÃO está
 # aqui: ela virou texto livre quando as colunas de abono saíram da página.
 DATAS = {'Trade Date', 'Maturity Date', 'EA', 'Send Date', 'Return Date'}
+# Piso do "melhor candidato" do relatório (só informativo — aplicar é só acima
+# do limiar). Abaixo disto não é parecido com nada: é o nome menos distante do
+# cadastro, e dizê-lo custa uma varredura caractere a caractere do cadastro
+# inteiro, por nome.
+PISO_RELATORIO = 0.60
 
 
 def _norm(s):
@@ -171,8 +177,14 @@ class Cadastro(object):
                                                     cutoff=self.limiar / 100.0)]
         if not pares:
             # Ninguém passou do limiar: o melhor parecido ainda serve ao
-            # RELATÓRIO — é o que deixa alguém decidir de fora.
-            melhor = difflib.get_close_matches(chave, self.nomes, n=1, cutoff=0.0)
+            # RELATÓRIO — é o que deixa alguém decidir de fora. Mas com PISO:
+            # abaixo de 60% não existe candidato, existe o nome menos distante
+            # do cadastro inteiro, que não ajuda ninguém (`PETROBRAS
+            # DISTRIBUIDORA` → `CARGILL ALIMENTOS, 57%`). E procurar sem piso
+            # custa caro: sem corte o difflib compara caractere a caractere
+            # contra TODOS os nomes, e eram 156 s dos 178 s de uma carga de 80
+            # mil linhas — o script parecia travado logo depois do cabeçalho.
+            melhor = difflib.get_close_matches(chave, self.nomes, n=1, cutoff=PISO_RELATORIO)
             if melhor:
                 pct = difflib.SequenceMatcher(None, chave, melhor[0]).ratio() * 100
                 return {}, 'fraco', pct, self._nome(melhor[0])
@@ -335,6 +347,7 @@ def main():
 
     # Os Trade Numbers que JÁ existem. `strict=True`: banco que não abre PARA o
     # script — lido como vazio, ele reinseriria como novo tudo que já está lá.
+    print('ANTES da carga, o que os bancos já tinham:')
     existentes = set()
     for cat in ('backlog', 'pending', 'ok'):
         try:
@@ -349,7 +362,10 @@ def main():
             if tn:
                 existentes.add(tn)
                 n += 1
-        print('banco %-8s %d linha(s), %d com Trade Number' % (cat + ':', len(rows), n))
+        # O rótulo diz que isto é o ANTES: lido como resultado da carga, ele
+        # responde a pergunta errada — foi o que aconteceu na primeira corrida.
+        print('  já no banco %-8s %d linha(s), %d com Trade Number'
+              % (cat + ':', len(rows), n))
 
     cad = Cadastro(PC._pc_refdata_by_name(), args.limiar, args.margem)
     print('Reference Data    : %d contraparte(s)' % len(cad.nomes))
@@ -364,13 +380,20 @@ def main():
     pulados_tn, sem_tn, repetidos, sem_trade_date = 0, 0, 0, 0
     por_nome, por_status, por_pending = {}, {}, {}
     desalinhadas = 0
-    for d in linhas:
+    t0 = time.time()
+    for n_linha, d in enumerate(linhas, 1):
+        # Uma linha de vida a cada 10 mil: no share, uma planilha deste tamanho
+        # leva minutos, e saída que demora tem de dizer que está viva — parada,
+        # ela é indistinguível de travada, e foi lida como o fim da carga.
+        if n_linha % 10000 == 0:
+            print('   ... %d/%d linhas (%.0f%%), %d a inserir, %.0fs'
+                  % (n_linha, len(linhas), 100.0 * n_linha / len(linhas),
+                     len(lote), time.time() - t0))
+            sys.stdout.flush()
         cliente = d.get('Client', '')
-        rec, tipo, pct, alt = cad.casa(cliente)
         info = por_nome.setdefault(_norm(cliente), {
-            'nome': cliente, 'tipo': tipo, 'pct': pct, 'alt': alt,
-            'refdata': str(rec.get('COUNTERPARTY', '') or ''),
-            'spn': str(rec.get('SPN', '') or ''), 'linhas': 0, 'inseridas': 0})
+            'nome': cliente, 'tipo': '(não consultado)', 'pct': 0.0, 'alt': '',
+            'refdata': '', 'spn': '', 'linhas': 0, 'inseridas': 0})
         info['linhas'] += 1
 
         tn = str(d.get('Trade Number', '') or '').strip()
@@ -387,6 +410,16 @@ def main():
             _amostra(amostras, 'repetido na planilha', d, args.amostra)
             continue
         vistos.add(tn)
+
+        # O de-para só roda para a linha que VAI ENTRAR. Ele varre as ~7 mil
+        # contrapartes do cadastro a cada nome novo, e rodá-lo antes dos pulos
+        # fazia a planilha inteira pagar o custo para descartar 98% dela — a
+        # corrida parecia travada logo depois do cabeçalho.
+        rec, tipo, pct, alt = cad.casa(cliente)
+        if info['tipo'] == '(não consultado)':
+            info.update({'tipo': tipo, 'pct': pct, 'alt': alt,
+                         'refdata': str(rec.get('COUNTERPARTY', '') or ''),
+                         'spn': str(rec.get('SPN', '') or '')})
 
         trade_dt = R._parse_date_any(d.get('Trade Date', ''))
         mat_dt = R._parse_date_any(d.get('Maturity Date', ''))
@@ -445,11 +478,12 @@ def main():
     # A conta FECHA com o total lido, e é impressa fechando: sem ela, "1.530 a
     # inserir" numa planilha de 80 mil não diz se as outras 78 mil foram
     # puladas por um motivo conhecido ou se o script simplesmente não as viu.
-    print('linhas lidas      : %d' % len(linhas))
-    print('  a inserir       : %d' % len(lote))
-    print('  já nos bancos   : %d (Trade Number existente)' % pulados_tn)
-    print('  sem Trade Number: %d' % sem_tn)
-    print('  repetidos na planilha: %d' % repetidos)
+    print('=' * 78)
+    print('RESULTADO (a planilha tem %d linhas, em %.0fs)' % (len(linhas), time.time() - t0))
+    print('  A INSERIR       : %d' % len(lote))
+    print('  puladas, já nos bancos: %d (o Trade Number já existe)' % pulados_tn)
+    print('  puladas, sem Trade Number: %d' % sem_tn)
+    print('  puladas, repetidas na planilha: %d' % repetidos)
     soma = len(lote) + pulados_tn + sem_tn + repetidos
     if soma != len(linhas):
         print('  ATENÇÃO: a conta não fecha (%d ≠ %d) — avise quem mantém o script'
