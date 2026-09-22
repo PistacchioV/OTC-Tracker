@@ -23,6 +23,21 @@ O que ele faz, e por quê cada coisa é assim:
     Maturity Date, Trade Number, Pending Status, EA, datas de envio e retorno,
     Break Reason, comentários, FepWeb ID) vem da planilha.
 
+  · **O banco de destino sai da coluna `Status` e da `Trade Date`** (mesa,
+    22/09/2026):
+
+        Status = Ok  e Trade Date dentro de 12 meses  →  ok
+        Status = Ok  e Trade Date anterior a isso     →  backlog
+        Status ≠ Ok                                    →  pending
+
+    É a leitura da mesa sobre o arquivo dela. O `_pc_target_category` do app
+    responde pelo PENDING STATUS, e por isso não serve para a carga: numa
+    planilha inteira de operações já resolvidas ele jogaria no `pending` toda
+    linha cujo Pending Status não estivesse na lista de resolvidos do app.
+    Quem tem Status Ok e um Pending Status que o app não considera resolvido é
+    CONTADO e avisado — a tela deriva o Status do Pending Status, e a
+    manutenção das 11:30 vai mover essas linhas para o `pending`.
+
   · **O nome casa por IGUALDADE primeiro.** Sem match exato, procura o mais
     parecido — e só o aplica se ele passar do limiar (padrão 90%) E ganhar do
     segundo colocado por uma margem (padrão 3 pontos). Abaixo disso, ou empatado,
@@ -34,10 +49,11 @@ O que ele faz, e por quê cada coisa é assim:
     vizinha com a trava, `.wal` de outra versão), o script PARA. Lida como
     "banco vazio", a falha faria ele reinserir como novo tudo que já estava lá.
 
-  · A gravação é a do app (`_pc_upsert_rows`): a linha é reencaminhada ao banco
-    a que pertence AGORA (backlog acima de 12 meses, ok se resolvida, senão
-    pending) e passa pelas regras automáticas de Aging/Status. Reescrever isso
-    aqui faria a planilha entrar com uma regra e a tela ler com outra.
+  · A gravação é um INSERT em lote, UMA abertura por banco, pela camada do app
+    (`duckdb_write`: trava exclusiva e semáforo, que é o que a faz conviver com
+    a instância do time). Não há o que apagar — só entra Trade Number que não
+    existe em banco nenhum —, e o upsert do app faria 3 deletes por linha: numa
+    planilha de 80 mil, 240 mil operações no share, uma a uma.
 
 Relatório dos nomes (`--relatorio`, padrão ao lado da planilha): uma linha por
 nome DISTINTO da planilha, com o tipo do match, o %, o nome e o SPN do Reference
@@ -145,14 +161,14 @@ class Cadastro(object):
             return rec, 'exato', 100.0, ''
         if not self.nomes:
             return {}, 'sem-cadastro', 0.0, ''
-        pares = []
-        for n in self.nomes:
-            m = difflib.SequenceMatcher(None, chave, n)
-            # `real_quick_ratio`/`quick_ratio` são tetos baratos: quem não
-            # alcança o limiar nem no teto não precisa da conta inteira.
-            if m.real_quick_ratio() * 100 < self.limiar or m.quick_ratio() * 100 < self.limiar:
-                continue
-            pares.append((m.ratio() * 100, n))
+        # `get_close_matches` compara o nome procurado contra a lista inteira
+        # REUSANDO o índice interno do texto procurado (ele fixa a `seq2` uma vez
+        # e troca a `seq1`): num arquivo de 80 mil linhas com milhares de nomes
+        # distintos, montar um comparador por par — que é o jeito óbvio de
+        # escrever isto — custa minutos.
+        pares = [(difflib.SequenceMatcher(None, chave, n).ratio() * 100, n)
+                 for n in difflib.get_close_matches(chave, self.nomes, n=3,
+                                                    cutoff=self.limiar / 100.0)]
         if not pares:
             # Ninguém passou do limiar: o melhor parecido ainda serve ao
             # RELATÓRIO — é o que deixa alguém decidir de fora.
@@ -173,6 +189,29 @@ class Cadastro(object):
 
     def _nome(self, chave_norm):
         return str((self.by_name.get(chave_norm) or {}).get('COUNTERPARTY', '') or chave_norm)
+
+
+def insere(categoria, linhas):
+    """INSERT em lote, UMA abertura por banco.
+
+    Não passa pelo `_pc_upsert_rows` do app de propósito: ele apaga o Trade
+    Number nos TRÊS bancos antes de inserir (é o que move a linha de balde) e
+    decide o destino pelo PENDING STATUS. Aqui nada precisa ser apagado — só
+    entra Trade Number que não existe em banco nenhum —, o destino é a coluna
+    Status, e 80 mil linhas × 3 deletes seriam 240 mil operações no share, uma
+    a uma, contra as três aberturas desta função.
+
+    A abertura é a do app (`duckdb_write`): trava exclusiva de arquivo e
+    semáforo, que é o que faz a gravação conviver com a instância do time."""
+    from apps.pages import routes as R
+    from apps.pages.platform import pending_confirmation as PC
+    caminho = os.path.join(R._PC_DB_DIR, PC._PC_DBS[categoria])
+    PC._pc_ensure_db(caminho)
+    cols = ', '.join('"{}"'.format(c) for c in PC._PC_COLUMNS)
+    ph = ', '.join('?' for _ in PC._PC_COLUMNS)
+    dados = [[r.get(c, '') for c in PC._PC_COLUMNS] for r in linhas]
+    with R.duckdb_write(caminho) as con:
+        con.executemany('INSERT INTO {} ({}) VALUES ({})'.format(PC._PC_TABLE, cols, ph), dados)
 
 
 def le_planilha(caminho, erros_xl):
@@ -279,9 +318,15 @@ def main():
     print('Reference Data    : %d contraparte(s)' % len(cad.nomes))
     print('-' * 78)
 
+    corte = PC._pc_cutoff_date()
+    hoje = datetime.now().date()
+    print('corte dos 12 meses: %s' % corte.strftime('%d/%m/%Y'))
+    print('-' * 78)
+
     lote, vistos = [], set()
-    pulados_tn, sem_tn, repetidos = 0, 0, 0
-    por_nome = {}
+    pulados_tn, sem_tn, repetidos, sem_trade_date = 0, 0, 0, 0
+    por_nome, por_status, por_pending = {}, {}, {}
+    desalinhadas = 0
     for d in linhas:
         cliente = d.get('Client', '')
         rec, tipo, pct, alt = cad.casa(cliente)
@@ -320,11 +365,41 @@ def main():
         r['Owner'] = str(rec.get('BANKER', '') or '') or PC._pc_banker_for_spn(r['SPN'])
         r['Economic Group'] = str(rec.get('ECONOMIC GROUP', '') or '')
         r['Signature Type'] = str(rec.get('SIGNATURE TYPE', '') or '')
-        if not str(r.get('Pending Status', '') or '').strip():
-            # Em branco na planilha, vale a regra do app (prazo × assinatura) —
-            # não o vazio, que na tela é uma pendência sem nome.
-            r['Pending Status'], r['Status'] = PC._pc_signature_status(rec, trade_dt, mat_dt, '')
-        lote.append(r)
+        r['Aging'] = str((hoje - trade_dt).days) if trade_dt else ''
+
+        # ── O banco de destino (mesa, 22/09/2026) ────────────────────────────
+        # Quem decide é a coluna **Status** da planilha, não o Pending Status:
+        #   Status = Ok  e Trade Date dentro de 12 meses → ok
+        #   Status = Ok  e Trade Date anterior           → backlog
+        #   Status ≠ Ok                                   → pending
+        # É a leitura da mesa sobre o arquivo dela. O `_pc_target_category` do
+        # app responde pelo PENDING STATUS, e por isso não serve aqui: numa
+        # planilha inteira de operações já resolvidas ele jogaria no `pending`
+        # toda linha cujo Pending Status não estivesse na lista de resolvidos.
+        status_ok = _norm(r.get('Status', '')) == 'ok'
+        if not trade_dt:
+            sem_trade_date += 1
+        if not status_ok:
+            destino = 'pending'
+        elif trade_dt and trade_dt < corte:
+            destino = 'backlog'
+        else:
+            # Sem Trade Date não há como dizer se passou dos 12 meses: fica no
+            # `ok`, que é o que a coluna Status afirma, e a contagem acima
+            # denuncia quantas são.
+            destino = 'ok'
+        por_status[r.get('Status', '') or '(vazio)'] = \
+            por_status.get(r.get('Status', '') or '(vazio)', 0) + 1
+        ps = r.get('Pending Status', '') or '(vazio)'
+        por_pending[ps] = por_pending.get(ps, 0) + 1
+        # A tela e a manutenção das 11:30 derivam o Status do PENDING STATUS. Uma
+        # linha que a planilha diz Ok com um Pending Status que o app não
+        # considera resolvido volta para o `pending` na primeira manutenção — e
+        # some da fila de resolvidas sem que ninguém tenha mexido nela.
+        if status_ok and trade_dt and trade_dt >= corte \
+                and not PC._pc_is_ok_status(r.get('Pending Status', '')):
+            desalinhadas += 1
+        lote.append((destino, r))
         info['inseridas'] += 1
 
     print('a inserir         : %d' % len(lote))
@@ -332,10 +407,22 @@ def main():
     print('sem Trade Number  : %d' % sem_tn)
     print('repetidos na planilha: %d' % repetidos)
     contagem = {}
-    for r in lote:
-        contagem[PC._pc_target_category(r)] = contagem.get(PC._pc_target_category(r), 0) + 1
-    print('destino           : %s' % ('  '.join('%s=%d' % kv for kv in sorted(contagem.items()))
-                                      or '—'))
+    for destino, _r in lote:
+        contagem[destino] = contagem.get(destino, 0) + 1
+    print('destino           : %s' % ('  '.join('%s=%d' % (k, contagem.get(k, 0))
+                                                for k in ('ok', 'backlog', 'pending')) or '—'))
+    print('Status na planilha: %s' % '  '.join(
+        '%s=%d' % kv for kv in sorted(por_status.items(), key=lambda x: -x[1])[:8]))
+    print('Pending Status    : %s' % '  '.join(
+        '%s=%d' % kv for kv in sorted(por_pending.items(), key=lambda x: -x[1])[:8]))
+    if sem_trade_date:
+        print('sem Trade Date    : %d  (não dá para dizer se passou dos 12 meses)' % sem_trade_date)
+    if desalinhadas:
+        # Não é erro deste script: é o que a tela fará com estas linhas amanhã.
+        print('\nATENÇÃO: %d linha(s) com Status = Ok e um Pending Status que o app NÃO\n'
+              'considera resolvido (%s). A tela deriva o Status do Pending Status,\n'
+              'e a manutenção das 11:30 vai mover essas linhas para o banco pending.'
+              % (desalinhadas, ', '.join(sorted(PC._PC_OK_STATUSES)) + ' ou "Exception *"'))
 
     ruins = {t: [] for t in ('fraco', 'ambiguo', 'sem-cadastro', 'sem-nome')}
     semelhantes = []
@@ -381,7 +468,12 @@ def main():
     if not lote:
         print('\nnada a inserir.')
         return 0
-    PC._pc_upsert_rows(lote)
+    for cat in ('ok', 'backlog', 'pending'):
+        novas = [r for destino, r in lote if destino == cat]
+        if not novas:
+            continue
+        insere(cat, novas)
+        print('GRAVADO %-8s %d linha(s)' % (cat + ':', len(novas)))
     print('\nGRAVADO: %d linha(s) inserida(s).' % len(lote))
     return 0
 
