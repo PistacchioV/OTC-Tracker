@@ -3195,11 +3195,22 @@ $(document).ready(function() {
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
 <script>
     jQuery(function () {
-        // O intervalo de dias lê a FOTO de cada dia (a que a manutenção das
-        // 11:30 grava): a tela mostra a situação de agora, e a série só existe
-        // no snapshot.
+        // O intervalo aqui é por COLUNA DE DATA, não por arquivo-dia (mesa,
+        // 22/09/2026): a operação do Pending Confirmation não vive num dia —
+        // ela vive nos três bancos (pending, ok e backlog) e anda entre eles
+        // conforme o status resolve e o prazo vira. O que se pede é "as
+        // operações cuja Trade Date (ou Maturity Date) cai neste intervalo", e
+        // as fotos diárias respondiam outra coisa: a FILA de cada dia — a mesma
+        // operação em todas as fotos em que ainda estava pendente, e em nenhuma
+        // se já estivesse resolvida antes da primeira foto.
         if (window.otcExportAdvanced) otcExportAdvanced('#pending-confirmation-table', {
-            daily: '/api/pending-confirmation/snapshot'
+            range: {
+                url: '/api/pending-confirmation/range',
+                // O primeiro é o padrão — e é a Trade Date, que é por onde a
+                // mesa recorta o que entrou no período.
+                fields: [{ v: 'Trade Date', l: 'Trade Date' },
+                         { v: 'Maturity Date', l: 'Maturity Date' }]
+            }
         });
     });
 </script>

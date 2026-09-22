@@ -23,8 +23,13 @@ def _R():
 
 @blueprint.route('/api/pending-confirmation/snapshot')
 def api_pending_confirmation_snapshot():
-    """A FOTO de um dia do Pending Confirmation, no formato {columns, rows} —
-    é o que o Advanced Export consulta para montar um arquivo de vários dias.
+    """A FOTO de um dia do Pending Confirmation, no formato {columns, rows}.
+
+    Era o que o Advanced Export consultava para montar um arquivo de vários
+    dias; desde 22/09/2026 o intervalo da tela pergunta às COLUNAS de data dos
+    três bancos (`/range`, aqui embaixo) e não ao calendário de fotos. Ele fica
+    como a única porta para a foto de um dia — é por ela que se responde "como
+    estava a fila naquele dia", que o `/range` não responde.
 
     A tela mostra a situação de AGORA, que é viva: o Aging e o Status são
     recalculados na leitura, e a linha muda de banco quando o prazo vira. A
@@ -63,6 +68,77 @@ def api_pending_confirmation_snapshot():
             for r in recs if isinstance(r, dict)]
     return jsonify({'success': True, 'columns': list(_R()._PC_COLUMNS), 'rows': rows,
                     'date': ref.strftime('%Y-%m-%d'), 'found': _store.isfile(path)})
+
+# As colunas de data que o intervalo do Advanced Export oferece. É LISTA BRANCA
+# porque o nome chega do navegador e vai escolher uma coluna do `_PC_COLUMNS`:
+# aceitar o que vier deixaria a busca responder por uma coluna que não é data
+# (comparando texto com texto, sem erro nenhum e com o arquivo saindo errado).
+_PC_RANGE_FIELDS = ('Trade Date', 'Maturity Date')
+
+
+@blueprint.route('/api/pending-confirmation/range')
+def api_pending_confirmation_range():
+    """O intervalo de datas do Advanced Export: as linhas dos TRÊS bancos cuja
+    coluna escolhida (`Trade Date` ou `Maturity Date`) cai entre `from` e `to`.
+
+    Os três bancos, e não só o `pending`: a linha ANDA entre eles conforme o
+    status resolve e o prazo vira (`_pc_target_category`), então um intervalo de
+    datas passadas pedido só ao `pending` sairia exatamente sem o que já foi
+    confirmado e sem o que tem mais de 12 meses — que é a maior parte do que se
+    pede num intervalo.
+
+    É o que substitui, NESTA tela, o intervalo por arquivo-dia do resto do app
+    (o `/snapshot` aqui ao lado): a foto das 11:30 responde "como estava a fila
+    naquele dia", e o que a mesa pede aqui é "as operações cuja data cai neste
+    intervalo", que é uma pergunta às colunas e não ao calendário.
+
+    A leitura é `strict=True` de propósito: a tolerante devolve `[]` quando o
+    banco está ocupado ou ilegível (§4), e num EXPORT isso é uma planilha curta
+    que ninguém tem como distinguir de um intervalo sem movimento. Levantando,
+    o tratador global responde 503 `database_busy` / 500 com o motivo, e a tela
+    diz o que houve em vez de baixar um arquivo incompleto.
+    """
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    field = (request.args.get('field') or _PC_RANGE_FIELDS[0]).strip()
+    if field not in _PC_RANGE_FIELDS:
+        return jsonify({'success': False,
+                        'message': 'Invalid field: {}'.format(field)}), 400
+    ini = _R()._parse_date_any(request.args.get('from') or '')
+    fim = _R()._parse_date_any(request.args.get('to') or '')
+    # Uma ponta só é o dia dela nas duas pontas — a mesma leitura do intervalo
+    # de arquivos-dia, para o campo não querer dizer uma coisa em cada tela.
+    ini, fim = (ini or fim), (fim or ini)
+    if not ini or not fim:
+        return jsonify({'success': False, 'message': 'from/to required'}), 400
+    if fim < ini:
+        ini, fim = fim, ini
+
+    seen, achadas, sem_data = set(), [], 0
+    for cat in ('backlog', 'pending', 'ok'):
+        for r in _R()._pc_load_rows(cat, strict=True):
+            # A linha pode estar fisicamente em dois bancos até a manutenção
+            # das 11:30 reencaminhá-la; sem isto ela sairia duas vezes.
+            tn = str(r.get('Trade Number', '') or '').strip()
+            if tn:
+                if tn in seen:
+                    continue
+                seen.add(tn)
+            d = _R()._parse_date_any(r.get(field, ''))
+            if d is None:
+                sem_data += 1
+                continue
+            if ini <= d <= fim:
+                achadas.append((d, r))
+    # Ordem pela data pedida: o arquivo sai na ordem em que se lê um intervalo.
+    achadas.sort(key=lambda p: (p[0], str(p[1].get('Client', '') or ''),
+                                str(p[1].get('Trade Number', '') or '')))
+    rows = [[('' if r.get(c) is None else str(r.get(c, ''))) for c in _R()._PC_COLUMNS]
+            for _d, r in achadas]
+    return jsonify({'success': True, 'columns': list(_R()._PC_COLUMNS), 'rows': rows,
+                    'field': field, 'undated': sem_data,
+                    'from': ini.strftime('%Y-%m-%d'), 'to': fim.strftime('%Y-%m-%d')})
+
 
 @blueprint.route('/api/pending-confirmation/search', methods=['POST'])
 def api_pending_confirmation_search():

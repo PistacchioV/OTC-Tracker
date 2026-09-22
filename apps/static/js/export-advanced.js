@@ -36,6 +36,16 @@
  * o de agora e nada mais —, e a seção do intervalo nasce desabilitada dizendo
  * por quê, em vez de sumir (um campo que some lê-se como defeito).
  *
+ * `range` é a OUTRA pergunta que um intervalo pode ser, e exclui o `daily`: em
+ * vez da série de arquivos-dia, um intervalo sobre uma COLUNA de data da
+ * própria base (Pending Confirmation, cujas linhas não vivem num dia — vivem
+ * nos três bancos e andam entre eles). A seção ganha o combobox da coluna e a
+ * leitura é uma requisição só:
+ *
+ *     range: { url: '/api/pending-confirmation/range',
+ *              fields: [{ v: 'Trade Date', l: 'Trade Date' },
+ *                       { v: 'Maturity Date', l: 'Maturity Date' }] }
+ *
  * Sem `menu` o item entra na COLLECTION do DataTables Buttons (o dropdown que
  * o próprio Buttons desenha), no fim da lista. Com `menu`, num <ul> da página.
  * Chamar duas vezes na mesma tabela não duplica o item.
@@ -163,6 +173,15 @@
             daysTooLong: 'Range too long — at most {n} days',
             daysBackwards: 'The end date comes before the start date',
             refDate: 'Reference Date',
+            rangeTitle: 'Range — dates', rangeField: 'Date column',
+            rangeHelp: 'Leave empty to export what is on screen. With a range, the rows are '
+                    + 'searched in the three databases (pending, ok and backlog) by the date '
+                    + 'column chosen here. One date alone means that single day.',
+            rangeWill: 'The three databases will be searched by {f}',
+            rangeDone: '{n} row(s) from the three databases',
+            rangeUndated: '{n} row(s) with no {f}',
+            rangeEmpty: 'No row in the range',
+            rangeFailed: 'Could not search the databases',
             critTitle: 'Filters', critAdd: 'Add filter', critCol: 'Column',
             op: 'Condition', value: 'Value',
             opContains: 'contains', opNot: 'does not contain', opEquals: 'is exactly',
@@ -206,6 +225,15 @@
             daysTooLong: 'Intervalo longo demais — no máximo {n} dias',
             daysBackwards: 'A data final é anterior à inicial',
             refDate: 'Reference Date',
+            rangeTitle: 'Intervalo — datas', rangeField: 'Coluna de data',
+            rangeHelp: 'Em branco, exporta o que está na tela. Com intervalo, as linhas são '
+                    + 'buscadas nos três bancos (pending, ok e backlog) pela coluna de data '
+                    + 'escolhida aqui. Uma data só vale como aquele dia.',
+            rangeWill: 'A busca vai aos três bancos pela {f}',
+            rangeDone: '{n} linha(s) dos três bancos',
+            rangeUndated: '{n} linha(s) sem {f}',
+            rangeEmpty: 'Nenhuma linha no intervalo',
+            rangeFailed: 'Não consegui buscar nos bancos',
             critTitle: 'Filtros', critAdd: 'Adicionar filtro', critCol: 'Coluna',
             op: 'Condição', value: 'Valor',
             opContains: 'contém', opNot: 'não contém', opEquals: 'é exatamente',
@@ -249,6 +277,15 @@
             daysTooLong: 'Intervalo demasiado largo — como máximo {n} días',
             daysBackwards: 'La fecha final es anterior a la inicial',
             refDate: 'Reference Date',
+            rangeTitle: 'Intervalo — fechas', rangeField: 'Columna de fecha',
+            rangeHelp: 'En blanco, exporta lo que está en la pantalla. Con intervalo, las filas '
+                    + 'se buscan en las tres bases (pending, ok y backlog) por la columna de '
+                    + 'fecha elegida aquí. Una sola fecha vale como ese día.',
+            rangeWill: 'La búsqueda va a las tres bases por la {f}',
+            rangeDone: '{n} fila(s) de las tres bases',
+            rangeUndated: '{n} fila(s) sin {f}',
+            rangeEmpty: 'Ninguna fila en el intervalo',
+            rangeFailed: 'No pude buscar en las bases',
             critTitle: 'Filtros', critAdd: 'Añadir filtro', critCol: 'Columna',
             op: 'Condición', value: 'Valor',
             opContains: 'contiene', opNot: 'no contiene', opEquals: 'es exactamente',
@@ -376,18 +413,27 @@
                  DESABILITADA com o motivo escrito — em branco, ela pareceria
                  defeito. */
               '<div class="xa-sec" id="xaDaySec">' +
-                '<div class="xa-sec-h">' + esc(t('daysTitle')) + '</div>' +
+                '<div class="xa-sec-h" id="xaDayTitle">' + esc(t('daysTitle')) + '</div>' +
                 /* NUNCA `type="date"`: o campo nativo desenha no locale do
                    SISTEMA, e no Windows do JP isso é mm/dd/yyyy. A data do app
                    é dd/mm/yyyy em toda tela. O flatpickr vem do vendors.min.js
                    (global) e o `altInput` é o que dá as duas coisas: o campo
                    que se vê em dd/mm/yyyy e o `value` em ISO, que é o que o
                    endpoint do dia espera. */
+                /* A COLUNA de data só existe onde o intervalo pergunta a uma
+                   coluna (o `range`), e não ao calendário de arquivos-dia: ali
+                   a data é a do ARQUIVO e não há o que escolher. Por isso o
+                   campo nasce escondido, em vez de desabilitado como a seção
+                   inteira — desabilitado ele prometeria uma escolha que a
+                   página não tem. */
                 '<div class="row g-2">' +
-                  '<div class="col-md-6"><label class="form-label">' + esc(t('from')) + '</label>' +
+                  '<div class="col-md-4 d-none" id="xaDayFieldWrap">' +
+                    '<label class="form-label">' + esc(t('rangeField')) + '</label>' +
+                    '<select class="form-select form-select-sm" id="xaDayField"></select></div>' +
+                  '<div class="col-md-6 xa-day-col"><label class="form-label">' + esc(t('from')) + '</label>' +
                     '<input type="text" class="form-control form-control-sm" id="xaDayFrom" ' +
                       'placeholder="dd/mm/aaaa" autocomplete="off"></div>' +
-                  '<div class="col-md-6"><label class="form-label">' + esc(t('to')) + '</label>' +
+                  '<div class="col-md-6 xa-day-col"><label class="form-label">' + esc(t('to')) + '</label>' +
                     '<input type="text" class="form-control form-control-sm" id="xaDayTo" ' +
                       'placeholder="dd/mm/aaaa" autocomplete="off"></div>' +
                 '</div>' +
@@ -561,19 +607,34 @@
         // Sem arquivo diário a seção fica visível e DESABILITADA, com o motivo
         // escrito. Escondê-la faria a mesma tela parecer duas conforme a
         // página, e um campo que some sem explicação lê-se como defeito.
+        // As duas leituras de intervalo são exclusivas: ou a série de
+        // arquivos-dia (`daily`), ou a busca por COLUNA de data nos bancos da
+        // própria tela (`range`). Declarar as duas seria a mesma seção com dois
+        // significados, e o rodapé teria de escolher um.
         var daily = normDaily(opts.daily);
+        var rango = normRange(opts.range);
+        if (rango) daily = null;
+        var temDia = !!(daily || rango);
+        $el.find('#xaDayTitle').text(t(rango ? 'rangeTitle' : 'daysTitle'));
+        $el.find('#xaDayFieldWrap').toggleClass('d-none', !rango);
+        $el.find('.xa-day-col').toggleClass('col-md-6', !rango).toggleClass('col-md-4', !!rango);
+        if (rango) {
+            $el.find('#xaDayField').html(rango.fields.map(function (f) {
+                return '<option value="' + esc(f.v) + '">' + esc(f.l) + '</option>';
+            }).join('')).val(rango.fields[0].v);
+        }
         $el.find('#xaDayFrom,#xaDayTo').each(function () {
             // Limpar pelo flatpickr, e não pelo .val(''): o campo que se VÊ é o
             // altInput, e zerar só o original deixaria a data anterior na tela.
             if (this._flatpickr) this._flatpickr.clear(); else this.value = '';
             dateField(this);
-            jQuery(this).prop('disabled', !daily);
+            jQuery(this).prop('disabled', !temDia);
             if (this._flatpickr && this._flatpickr.altInput) {
-                this._flatpickr.altInput.disabled = !daily;
+                this._flatpickr.altInput.disabled = !temDia;
             }
         });
-        $el.find('#xaDaySec').toggleClass('xa-off', !daily);
-        $el.find('#xaDayHelp').text(daily ? t('daysHelp') : t('daysNone'));
+        $el.find('#xaDaySec').toggleClass('xa-off', !temDia);
+        $el.find('#xaDayHelp').text(rango ? t('rangeHelp') : daily ? t('daysHelp') : t('daysNone'));
         $el.find('#xaPosFrom,#xaPosTo').val('');
         $el.find('#xaScope').val('all');
         $el.find('#xaPosWrap').addClass('d-none');
@@ -637,6 +698,7 @@
                 orient: $el.find('#xaOrient').val(),
                 dayFrom: isoDay($el.find('#xaDayFrom').val()),
                 dayTo:   isoDay($el.find('#xaDayTo').val()),
+                dayField: rango ? ($el.find('#xaDayField').val() || rango.fields[0].v) : '',
                 crits: crits,
                 cols: checked,
                 colLabels: checked.map(function (i) {
@@ -697,7 +759,7 @@
         function finalName(o) {
             if (o.name !== baseName) return o.name;
             var a = o.dayFrom || o.dayTo, b = o.dayTo || o.dayFrom;
-            if (daily && a) {
+            if (temDia && a) {
                 return baseName + ' - ' + flatDay(a) +
                        (b && b !== a ? ' a ' + flatDay(b) : '');
             }
@@ -840,6 +902,17 @@
                 $el.find('#xaRun').prop('disabled', true);
                 return;
             }
+            if (rango && (o.dayFrom || o.dayTo)) {
+                // Aqui não há número a prometer: quem conta são os bancos, e a
+                // contagem só existe depois da busca. O que o rodapé diz é POR
+                // ONDE ela vai perguntar — que é a escolha que se pode errar.
+                var rotulo = (rango.fields.filter(function (f) {
+                    return f.v === o.dayField;
+                })[0] || rango.fields[0]).l;
+                $c.text(t('rangeWill', { f: rotulo })).removeClass('xa-zero');
+                $el.find('#xaRun').prop('disabled', false);
+                return;
+            }
             if (o.dayFrom || o.dayTo) {
                 // Quantos dias ele VAI ler — a ajuda inteira não cabe no rodapé,
                 // e este número é o que diz se o intervalo é o que se quis: 14
@@ -859,11 +932,88 @@
 
         /* O intervalo pedido, ou a mensagem do que está errado nele. */
         function dayRangeError(o) {
-            if (!daily || (!o.dayFrom && !o.dayTo)) return '';
+            if (!temDia || (!o.dayFrom && !o.dayTo)) return '';
             var a = o.dayFrom || o.dayTo, b = o.dayTo || o.dayFrom;
             if (b < a) return t('daysBackwards');
-            if (dayList(a, b).length > MAX_DAYS) return t('daysTooLong', { n: MAX_DAYS });
+            // O teto de dias é do intervalo por ARQUIVO (uma requisição por dia
+            // útil, em série). A busca nos bancos é UMA só, e o mês de um ano
+            // atrás custa o mesmo que o de ontem: limitá-la pelo calendário
+            // proibiria justamente o pedido que ela existe para atender.
+            if (daily && dayList(a, b).length > MAX_DAYS) return t('daysTooLong', { n: MAX_DAYS });
             return '';
+        }
+
+        /* O caminho COMUM das duas leituras de intervalo — a série de
+           arquivos-dia e a busca nos bancos: a tabela oculta, os filtros do
+           modal e o MESMO export de sempre, cada etapa num quadro para o
+           spinner continuar girando. `res.refDate` diz se a primeira coluna é a
+           Reference Date (ela existe onde a linha vem de um ARQUIVO de um dia;
+           na busca por coluna de data não há arquivo, e cada linha já carrega a
+           sua data nas colunas de sempre). */
+        function montar(res, o, resumoDe) {
+            var tbl = null;
+            busy(res.rows.length).then(function () {
+                return step(t('stepTable', { n: res.rows.length }), function () {
+                    tbl = buildDailyTable(res);
+                });
+            }).then(function () {
+                return step(t('stepFilter'), function () {
+                    // A tabela do intervalo não tem checkbox nem Actions, e as
+                    // colunas podem estar noutra ordem: o casamento com o que a
+                    // pessoa escolheu na tela é pelo RÓTULO, nunca pelo índice.
+                    return pick(o, tbl, function (c) {
+                        var i = res.columns.indexOf(c.label);
+                        return i === -1 ? null : i;
+                    });
+                });
+            }).then(function (keep) {
+                if (!keep.length) { fail(t('noRows')); return; }
+                var cols = (res.refDate ? [0] : []).concat(o.colLabels.map(function (l) {
+                    return res.columns.indexOf(l);
+                }).filter(function (i) { return res.refDate ? i > 0 : i >= 0; }));
+                return step(t('stepFile', { n: keep.length }), function () {
+                    run(tbl, jQuery.extend({}, o, { cols: cols }), keep);
+                    finish(!!(res.failed && res.failed.length), o, resumoDe(keep));
+                });
+            }).catch(function (err) {
+                // A rede das três etapas. Fora da cadeia da leitura, um erro
+                // aqui não teria mais quem o pegue e o spinner giraria para
+                // sempre — a tela de travamento por outro motivo.
+                fail(t('daysFailed', { n: 0 }) +
+                     ((err && err.message) ? ' — ' + err.message : ''));
+            });
+        }
+
+        /* Exporta o intervalo pela COLUNA de data: uma busca só nos bancos da
+           própria tela, e daí em diante o caminho de sempre. */
+        function runRange(o) {
+            var $c = $el.find('#xaCount');
+            var rotulo = (rango.fields.filter(function (f) {
+                return f.v === o.dayField;
+            })[0] || rango.fields[0]).l;
+            $el.find('#xaRun').prop('disabled', true);
+            $c.text(t('rangeWill', { f: rotulo })).removeClass('xa-zero');
+            fetchRange(rango, o).then(function (res) {
+                $el.find('#xaRun').prop('disabled', false);
+                if (res.erro) { $c.text(res.erro).addClass('xa-zero'); return; }
+                if (!res.rows.length) {
+                    // Intervalo sem linha não é falha — mas DIZER quantas linhas
+                    // ficaram de fora por não terem a data pedida é o que separa
+                    // "não há nada neste intervalo" de "a coluna está em branco
+                    // nessas linhas", que são conversas diferentes.
+                    $c.text(t('rangeEmpty') + (res.undated
+                            ? ' · ' + t('rangeUndated', { n: res.undated, f: rotulo })
+                            : '')).addClass('xa-zero');
+                    return;
+                }
+                montar(res, o, function (keep) {
+                    var resumo = t('rangeDone', { n: keep.length });
+                    if (res.undated) {
+                        resumo += ' · ' + t('rangeUndated', { n: res.undated, f: rotulo });
+                    }
+                    return resumo;
+                });
+            });
         }
 
         /* Exporta o intervalo: lê um arquivo por dia, junta tudo numa tabela
@@ -900,45 +1050,15 @@
                 // O "Reading" acabou e começa a parte que congela a aba: o
                 // spinner entra AQUI, no lugar dele, e as três etapas seguintes
                 // vão uma por quadro.
-                var tbl = null;
-                busy(res.rows.length).then(function () {
-                    return step(t('stepTable', { n: res.rows.length }), function () {
-                        tbl = buildDailyTable(res);
-                    });
-                }).then(function () {
-                    return step(t('stepFilter'), function () {
-                        // A tabela dos arquivos não tem checkbox nem Actions e ganha
-                        // a Reference Date na frente: o casamento com o que a pessoa
-                        // escolheu na tela é pelo RÓTULO, e a Reference Date entra
-                        // sempre — sem ela, um arquivo de vinte dias não diz de que
-                        // dia é cada linha.
-                        return pick(o, tbl, function (c) {
-                            var i = res.columns.indexOf(c.label);
-                            return i === -1 ? null : i;
-                        });
-                    });
-                }).then(function (keep) {
-                    if (!keep.length) { fail(t('noRows')); return; }
-                    var cols = [0].concat(o.colLabels.map(function (l) {
-                        return res.columns.indexOf(l);
-                    }).filter(function (i) { return i > 0; }));
-                    return step(t('stepFile', { n: keep.length }), function () {
-                        run(tbl, jQuery.extend({}, o, { cols: cols }), keep);
-                        var dias_ok = res.rows.length ? (new Set(res.rows.map(function (r) { return r[0]; }))).size : 0;
-                        var resumo = t('daysDone', { n: keep.length, d: dias_ok });
-                        if (res.empty.length) resumo += ' · ' + t('daysNoFile', { n: res.empty.length });
-                        if (res.failed.length) {
-                            resumo += ' · ' + t('daysFailed', { n: res.failed.length }) +
-                                      (res.why ? ' (' + res.why + ')' : '');
-                        }
-                        finish(!!res.failed.length, o, resumo);
-                    });
-                }).catch(function (err) {
-                    // A rede das três etapas. Fora da cadeia da leitura, um erro
-                    // aqui não teria mais quem o pegue e o spinner giraria para
-                    // sempre — a tela de travamento por outro motivo.
-                    fail(t('daysFailed', { n: 0 }) +
-                         ((err && err.message) ? ' — ' + err.message : ''));
+                montar(res, o, function (keep) {
+                    var dias_ok = res.rows.length ? (new Set(res.rows.map(function (r) { return r[0]; }))).size : 0;
+                    var resumo = t('daysDone', { n: keep.length, d: dias_ok });
+                    if (res.empty.length) resumo += ' · ' + t('daysNoFile', { n: res.empty.length });
+                    if (res.failed.length) {
+                        resumo += ' · ' + t('daysFailed', { n: res.failed.length }) +
+                                  (res.why ? ' (' + res.why + ')' : '');
+                    }
+                    return resumo;
                 });
             }).catch(function (e) {
                 $el.find('#xaRun').prop('disabled', false);
@@ -983,6 +1103,7 @@
                var o = read();
                if (!o.cols.length || dayRangeError(o)) return;
                o.name = finalName(o);
+               if (rango && (o.dayFrom || o.dayTo)) { runRange(o); return; }
                if (daily && (o.dayFrom || o.dayTo)) { runDaily(o); return; }
                if (!lastKeep.length) return;
                // O mesmo spinner do intervalo: a tela do dia também pode ter
@@ -1078,6 +1199,99 @@
         if (!d.url) return null;
         return { url: d.url, param: d.param || 'date',
                  rows: d.rows || 'rows', columns: d.columns || 'columns' };
+    }
+
+    /* ══════ O intervalo por COLUNA de data ═════════════════════════════════
+       A outra pergunta que um intervalo pode ser. Nas telas de arquivo-dia a
+       data é a do ARQUIVO: "o que havia em cada um destes dias". No Pending
+       Confirmation a operação não vive num dia — ela vive nos três bancos e
+       anda entre eles conforme o status resolve e o prazo vira —, e o que a
+       mesa pede é "as operações cuja Trade Date (ou Maturity Date) cai neste
+       intervalo". Ler as fotos diárias para responder isso daria a fila de cada
+       dia, que é outra coisa: a operação de julho apareceria em todas as fotos
+       em que ainda estava pendente, e nenhuma vez se já tivesse sido resolvida
+       antes da primeira foto.
+
+       Por isso aqui é UMA busca, no endpoint da própria tela, que devolve
+       `{columns, rows}` no mesmo formato do dia. A página declara:
+
+           range: { url: '/api/pending-confirmation/range',
+                    fields: [{ v: 'Trade Date', l: 'Trade Date' },
+                             { v: 'Maturity Date', l: 'Maturity Date' }] }
+
+       O PRIMEIRO campo é o padrão. Sem `fields` não há modo `range`: o combobox
+       é a escolha que dá sentido ao intervalo, e um intervalo sobre uma coluna
+       que ninguém escolheu não se confere. */
+    var RANGE_TIMEOUT_MS = 180000;   // é o share: a busca abre os três bancos
+
+    function normRange(r) {
+        if (!r || !r.url || !r.fields || !r.fields.length) return null;
+        var fields = r.fields.map(function (f) {
+            if (typeof f === 'string') return { v: f, l: f };
+            return { v: f.v, l: f.l || f.v };
+        }).filter(function (f) { return f.v; });
+        if (!fields.length) return null;
+        return { url: r.url, fields: fields,
+                 from: r.from || 'from', to: r.to || 'to', field: r.field || 'field',
+                 rows: r.rows || 'rows', columns: r.columns || 'columns' };
+    }
+
+    /* Uma requisição só. Devolve o MESMO formato do intervalo de arquivos
+       (`{columns, rows, …}`) para o caminho de montagem ser um só, com
+       `refDate: false` — aqui não há arquivo de um dia a carimbar na frente da
+       linha, e uma coluna "Reference Date" com a data de hoje em todas elas
+       seria uma data inventada.
+
+       Falha NÃO vira arquivo: uma planilha curta é indistinguível de um
+       intervalo sem movimento, e é assinada por quem a mandou. O motivo volta
+       em `erro` — do corpo JSON quando o servidor o manda (é dele que vêm o 503
+       de banco ocupado e o 500 com o tipo da exceção), senão o status. */
+    function fetchRange(rng, o) {
+        var a = o.dayFrom || o.dayTo, b = o.dayTo || o.dayFrom;
+        var sep = rng.url.indexOf('?') === -1 ? '?' : '&';
+        var url = rng.url + sep +
+            rng.from + '=' + encodeURIComponent(a) +
+            '&' + rng.to + '=' + encodeURIComponent(b) +
+            '&' + rng.field + '=' + encodeURIComponent(o.dayField || rng.fields[0].v);
+        var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+        var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, RANGE_TIMEOUT_MS);
+        var opts = { credentials: 'same-origin' };
+        if (ctrl) opts.signal = ctrl.signal;
+        var vazio = { columns: [], rows: [], refDate: false, undated: 0, failed: [], empty: [] };
+        function falhou(motivo) {
+            return jQuery.extend({}, vazio, { erro: t('rangeFailed') + (motivo ? ' — ' + motivo : '') });
+        }
+        return fetch(url, opts).then(function (r) {
+            clearTimeout(timer);
+            return r.json().catch(function () {
+                // 200 com corpo que não é JSON é a assinatura do
+                // redirecionamento para o login: o pedido "deu certo" e voltou
+                // uma página HTML.
+                return { __naoJson: true, __status: r.status };
+            }).then(function (j) {
+                if (j && j.__naoJson) {
+                    return falhou(r.ok ? 'resposta não-JSON' : 'HTTP ' + j.__status);
+                }
+                var motivo = (j && (j.message || j.error || j.erro)) || '';
+                if (!r.ok || (j && j.success === false)) {
+                    return falhou(String(motivo || 'HTTP ' + r.status).slice(0, 120));
+                }
+                return {
+                    columns: (j[rng.columns] || []).map(String),
+                    rows: (j[rng.rows] || []).map(function (row) {
+                        return Array.isArray(row)
+                            ? row.map(function (v) { return v == null ? '' : v; })
+                            : (j[rng.columns] || []).map(function (c) {
+                                return row[c] == null ? '' : row[c];
+                            });
+                    }),
+                    refDate: false, undated: +(j.undated || 0), failed: [], empty: []
+                };
+            });
+        }).catch(function (e) {
+            clearTimeout(timer);
+            return falhou((e && e.message) ? String(e.message).slice(0, 120) : 'erro de rede');
+        });
     }
 
     /* ══════ Campo de data — o PADRÃO do app ════════════════════════════════
@@ -1283,8 +1497,12 @@
             });
         });
         return chain.then(function () {
+            // `refDate`: a primeira coluna é a Reference Date do arquivo de
+            // onde a linha veio. É o que o `montar` lê para saber se a coluna 0
+            // entra sempre (aqui entra; na busca por coluna de data não há
+            // arquivo e ela não existe).
             return { columns: columns, rows: rows, failed: failed, empty: empty,
-                     why: Object.keys(why).join(' · ') };
+                     refDate: true, why: Object.keys(why).join(' · ') };
         });
     }
 
