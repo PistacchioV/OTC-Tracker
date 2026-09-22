@@ -37,26 +37,79 @@
    colunas ALINHADAS entre si (num cartão, cada chip fica onde couber), e o dia
    inteiro numa tela. */
 #ndm-page .ndm-zone {
+    position: relative; overflow: hidden;
     background: var(--vr-card-bg, var(--ins-secondary-bg));
     border: 1px solid var(--vr-card-border, var(--ins-border-color));
     border-radius: var(--vr-card-radius, 18px);
     box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
-    padding: 1rem 1.1rem 1.1rem;
+    padding: 1.05rem 1.15rem 1.15rem;
     margin-bottom: 1.25rem;
 }
+/* O fio do gradiente da casa no topo: sem ele as três zonas são três lajotas
+   brancas idênticas, e num dia parado a tela inteira é só isso. */
+#ndm-page .ndm-zone::before {
+    content: ''; position: absolute; inset: 0 0 auto; height: 3px;
+    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
+    opacity: .9;
+}
+/* Zona sem movimento não precisa da altura de uma com tabela. */
+#ndm-page .ndm-zone.is-empty { padding-bottom: .5rem; }
+#ndm-page .ndm-zone.is-empty .ndm-zone-head { margin-bottom: .25rem; }
+
 #ndm-page .ndm-zone-head {
-    display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
-    margin-bottom: .75rem;
+    display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+    margin-bottom: .85rem;
 }
-#ndm-page .ndm-zone-sum {
-    margin-left: auto; display: flex; align-items: center; gap: .9rem;
-    font-size: .78rem; color: var(--ins-secondary-color);
+#ndm-page .ndm-zone-id { display: flex; flex-direction: column; gap: .1rem; min-width: 0; }
+#ndm-page .ndm-zone-meta {
+    font-size: .72rem; font-weight: 600; letter-spacing: .02em;
+    color: var(--ins-secondary-color);
 }
-#ndm-page .ndm-zone-sum b { font-variant-numeric: tabular-nums; font-size: .95rem; }
-#ndm-page .ndm-zone-sum .ndm-sum-pend b { color: #b45309; }
-#ndm-page .ndm-zone-sum .ndm-sum-zero b  { color: #1a8a4a; }
-[data-bs-theme=dark] #ndm-page .ndm-zone-sum .ndm-sum-pend b { color: #ffd54f; }
-[data-bs-theme=dark] #ndm-page .ndm-zone-sum .ndm-sum-zero b { color: #7ed6a2; }
+#ndm-page .ndm-zone-meta b { color: var(--ins-body-color); font-variant-numeric: tabular-nums; }
+
+/* O resumo da zona vira NÚMERO, não uma frase cinza de .78rem jogada à direita:
+   é a resposta da tela, e era o que menos pesava nela. */
+#ndm-page .ndm-zone-stats { margin-left: auto; display: flex; align-items: stretch; gap: .5rem; }
+#ndm-page .ndm-stat {
+    min-width: 88px; padding: .35rem .7rem; border-radius: 12px; text-align: right;
+    display: flex; flex-direction: column; justify-content: center; gap: .02rem;
+    background: var(--ins-tertiary-bg, rgba(15, 23, 42, .045));
+}
+#ndm-page .ndm-stat b {
+    font-size: 1.3rem; line-height: 1.15; font-weight: 800;
+    font-variant-numeric: tabular-nums; color: var(--ins-body-color);
+}
+#ndm-page .ndm-stat span {
+    font-size: .63rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--ins-secondary-color);
+}
+#ndm-page .ndm-stat.is-open { background: rgba(247, 184, 75, .18); }
+#ndm-page .ndm-stat.is-open b    { color: #b45309; }
+#ndm-page .ndm-stat.is-open span { color: #8a6100; }
+#ndm-page .ndm-stat.is-clear { background: rgba(26, 138, 74, .14); }
+#ndm-page .ndm-stat.is-clear b    { color: #1a8a4a; }
+#ndm-page .ndm-stat.is-clear span { color: #1a8a4a; }
+[data-bs-theme=dark] #ndm-page .ndm-stat.is-open  b,
+[data-bs-theme=dark] #ndm-page .ndm-stat.is-open  span { color: #ffd54f; }
+[data-bs-theme=dark] #ndm-page .ndm-stat.is-clear b,
+[data-bs-theme=dark] #ndm-page .ndm-stat.is-clear span { color: #7ed6a2; }
+
+/* Dia parado: uma pílula que DIZ, em vez de meia tela de branco. */
+#ndm-page .ndm-zone-quiet {
+    margin-left: auto; display: inline-flex; align-items: center; gap: .4rem;
+    font-size: .76rem; font-weight: 700; color: #1a8a4a;
+    background: rgba(26, 138, 74, .12); padding: .35rem .8rem; border-radius: 999px;
+}
+[data-bs-theme=dark] #ndm-page .ndm-zone-quiet { color: #7ed6a2; background: rgba(126, 214, 162, .14); }
+
+/* A composição do dia numa barra: é a forma da zona antes de ler número nenhum,
+   e as cores são as MESMAS das colunas — a tabela é a legenda dela. */
+#ndm-page .ndm-prog {
+    display: flex; height: 6px; border-radius: 999px; overflow: hidden;
+    background: var(--ins-tertiary-bg, rgba(15, 23, 42, .07));
+    margin-bottom: .9rem;
+}
+#ndm-page .ndm-prog i { display: block; height: 100%; background: currentColor; }
 
 /* Nove colunas não cabem num telefone. Quem rola de lado é a TABELA, nunca a
    página: com a página rolando, o menu e o cabeçalho saem da tela junto e a
@@ -66,8 +119,10 @@
 /* O nome do produto fica com a sobra e as colunas de número são ESTREITAS e
    fixas: espalhadas pela largura da tela, elas obrigam a percorrer meio metro
    de branco para ler uma linha. */
-#ndm-page .ndm-tbl th:not(:first-child),
-#ndm-page .ndm-tbl td:not(:first-child) { width: 78px; }
+/* A coluna da composição fica FORA desta regra de propósito: ela é quem recebe
+   a sobra da largura, e com 78px a barra nascia do tamanho de uma pastilha. */
+#ndm-page .ndm-tbl th:not(:first-child):not(.ndm-c-mix),
+#ndm-page .ndm-tbl td:not(:first-child):not(.ndm-c-mix) { width: 78px; }
 #ndm-page .ndm-tbl th:last-child, #ndm-page .ndm-tbl td:last-child { width: 28px; }
 #ndm-page .ndm-tbl th {
     font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
@@ -82,64 +137,114 @@
     border-bottom: 1px solid var(--ins-border-color, rgba(0,0,0,.06));
 }
 #ndm-page .ndm-tbl tbody tr:last-child td { border-bottom: 0; }
-#ndm-page .ndm-tbl td:first-child { text-align: left; white-space: normal; }
+/* A coluna da composição pede toda a sobra, e sem um piso aqui o navegador
+   espreme o nome do produto até ele quebrar em duas linhas (e as etiquetas de
+   entidade empilharem uma sobre a outra). */
+#ndm-page .ndm-tbl th:first-child,
+#ndm-page .ndm-tbl td:first-child { text-align: left; white-space: nowrap; min-width: 220px; }
 
 /* A linha inteira é o link da página do produto. O <a> está no nome (é ele que
    o teclado alcança); o clique no resto da linha é conveniência. */
 #ndm-page .ndm-row { transition: background-color 140ms var(--ndm-ease); }
 #ndm-page .ndm-row.is-clickable { cursor: pointer; }
+/* O traço à esquerda diz QUAL linha está sob o cursor numa grade de nove
+   colunas — só o fundo mais claro se perde na varredura horizontal. */
+#ndm-page .ndm-row td:first-child { box-shadow: inset 2px 0 0 transparent; }
 @media (hover: hover) and (pointer: fine) {
     #ndm-page .ndm-row.is-clickable:hover { background: var(--ins-tertiary-bg, rgba(0,102,204,.05)); }
+    #ndm-page .ndm-row.is-clickable:hover td:first-child { box-shadow: inset 2px 0 0 #0066cc; }
 }
 #ndm-page .ndm-prod { display: flex; align-items: center; gap: .55rem; }
 #ndm-page .ndm-prod-ico {
-    width: 26px; height: 26px; flex: 0 0 auto; border-radius: 8px;
+    width: 28px; height: 28px; flex: 0 0 auto; border-radius: 9px;
     display: inline-flex; align-items: center; justify-content: center;
     background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
-    color: #fff; font-size: .9rem;
+    color: #fff; font-size: .95rem;
+    box-shadow: 0 3px 8px rgba(94, 92, 230, .25);
 }
 #ndm-page .ndm-prod-name { font-weight: 600; color: var(--ins-body-color); text-decoration: none; }
 #ndm-page .ndm-prod-name:hover { text-decoration: underline; }
-#ndm-page .ndm-prod-les {
-    display: block; font-size: .68rem; font-weight: 600; letter-spacing: .02em;
-    color: var(--ins-secondary-color);
+/* A quebra por entidade e os grupos da confirmação viram etiquetas: soltos e
+   separados por ponto, eles pareciam continuação do nome do produto. */
+#ndm-page .ndm-prod-les { display: block; margin-top: .15rem; white-space: nowrap; }
+#ndm-page .ndm-le-pill {
+    display: inline-block; margin-right: .25rem;
+    font-size: .62rem; font-weight: 700; letter-spacing: .03em;
+    padding: .05rem .38rem; border-radius: 6px;
+    background: var(--ins-tertiary-bg, #eef0f4); color: var(--ins-secondary-color);
 }
+#ndm-page .ndm-le-pill b { color: var(--ins-body-color); font-variant-numeric: tabular-nums; }
 
 /* Número por status. Zero não é número aqui: é ausência, e escrevê-lo 150 vezes
-   afogava os poucos que importam — vira um ponto apagado. */
+   afogava os poucos que importam — vira um ponto apagado. O que é número vira
+   PASTILHA: um dígito colorido solto na célula se perde no branco da linha.
+   Cada status carrega o par cor/fundo em variáveis, e a mesma cor pinta a
+   barra de composição da zona. */
 #ndm-page .ndm-tbl .ndm-nil { color: var(--ins-border-color, #c9ced6); }
-#ndm-page .ndm-tbl .ndm-n { font-weight: 700; }
-#ndm-page .st-new       { color: #1d7ea8; }
-#ndm-page .st-pending   { color: #8a6100; }
-#ndm-page .st-generated { color: #7c3aed; }
-#ndm-page .st-approved  { color: #5e5ce6; }
-#ndm-page .st-sent      { color: #0066cc; }
+#ndm-page .ndm-tbl .ndm-n {
+    display: inline-block; min-width: 2.15rem; padding: .14rem .42rem;
+    border-radius: 8px; font-weight: 700; font-size: .8rem; line-height: 1.25;
+    color: var(--st-fg, var(--ins-body-color));
+    background: var(--st-bg, var(--ins-tertiary-bg, rgba(15, 23, 42, .06)));
+}
+#ndm-page .st-new         { --st-fg: #1d7ea8; --st-bg: rgba(29, 126, 168, .13); }
+#ndm-page .st-pending     { --st-fg: #8a6100; --st-bg: rgba(214, 158, 46, .18); }
+#ndm-page .st-generated   { --st-fg: #7c3aed; --st-bg: rgba(124, 58, 237, .13); }
+#ndm-page .st-approved    { --st-fg: #5e5ce6; --st-bg: rgba(94, 92, 230, .13); }
+#ndm-page .st-sent        { --st-fg: #0066cc; --st-bg: rgba(0, 102, 204, .12); }
 #ndm-page .st-success,
-#ndm-page .st-ok        { color: #1a8a4a; }
-#ndm-page .st-pending-otc { color: #0066cc; }
-#ndm-page .st-pending-mo, #ndm-page .st-pending-mo-fo { color: #8a6100; }
-#ndm-page .st-pending-fo  { color: #1d7ea8; }
-[data-bs-theme=dark] #ndm-page .st-new       { color: #7fd4f2; }
-[data-bs-theme=dark] #ndm-page .st-pending   { color: #ffd54f; }
-[data-bs-theme=dark] #ndm-page .st-generated { color: #c4b5fd; }
-[data-bs-theme=dark] #ndm-page .st-approved  { color: #a5a3ff; }
-[data-bs-theme=dark] #ndm-page .st-sent      { color: #7db4f5; }
+#ndm-page .st-ok          { --st-fg: #1a8a4a; --st-bg: rgba(26, 138, 74, .14); }
+#ndm-page .st-pending-otc { --st-fg: #0066cc; --st-bg: rgba(0, 102, 204, .12); }
+#ndm-page .st-pending-mo,
+#ndm-page .st-pending-mo-fo { --st-fg: #8a6100; --st-bg: rgba(214, 158, 46, .18); }
+#ndm-page .st-pending-fo  { --st-fg: #1d7ea8; --st-bg: rgba(29, 126, 168, .13); }
+[data-bs-theme=dark] #ndm-page .st-new         { --st-fg: #7fd4f2; --st-bg: rgba(127, 212, 242, .16); }
+[data-bs-theme=dark] #ndm-page .st-pending     { --st-fg: #ffd54f; --st-bg: rgba(255, 213, 79, .16); }
+[data-bs-theme=dark] #ndm-page .st-generated   { --st-fg: #c4b5fd; --st-bg: rgba(196, 181, 253, .16); }
+[data-bs-theme=dark] #ndm-page .st-approved    { --st-fg: #a5a3ff; --st-bg: rgba(165, 163, 255, .16); }
+[data-bs-theme=dark] #ndm-page .st-sent        { --st-fg: #7db4f5; --st-bg: rgba(125, 180, 245, .16); }
 [data-bs-theme=dark] #ndm-page .st-success,
-[data-bs-theme=dark] #ndm-page .st-ok        { color: #7ed6a2; }
-[data-bs-theme=dark] #ndm-page .st-pending-otc { color: #7db4f5; }
+[data-bs-theme=dark] #ndm-page .st-ok          { --st-fg: #7ed6a2; --st-bg: rgba(126, 214, 162, .16); }
+[data-bs-theme=dark] #ndm-page .st-pending-otc { --st-fg: #7db4f5; --st-bg: rgba(125, 180, 245, .16); }
 [data-bs-theme=dark] #ndm-page .st-pending-mo,
-[data-bs-theme=dark] #ndm-page .st-pending-mo-fo { color: #ffd54f; }
-[data-bs-theme=dark] #ndm-page .st-pending-fo    { color: #7fd4f2; }
+[data-bs-theme=dark] #ndm-page .st-pending-mo-fo { --st-fg: #ffd54f; --st-bg: rgba(255, 213, 79, .16); }
+[data-bs-theme=dark] #ndm-page .st-pending-fo  { --st-fg: #7fd4f2; --st-bg: rgba(127, 212, 242, .16); }
+
+/* As barras de composição herdam a MESMA variável de cor das pastilhas. */
+#ndm-page .ndm-prog i, #ndm-page .ndm-mix i { color: var(--st-fg, var(--ins-secondary-color)); }
+
+/* O vão entre o nome do produto e as colunas de número era meio metro de branco
+   numa tela larga (o nome fica com toda a sobra). Quem fica com a sobra agora é
+   a composição da LINHA: a mesma leitura da barra da zona, produto a produto —
+   dá para ver a forma do dia de cada um sem ler dígito nenhum. */
+#ndm-page .ndm-tbl .ndm-c-mix { width: 100%; padding: .42rem 1.15rem; }
+#ndm-page .ndm-mix {
+    display: flex; height: 5px; min-width: 60px; border-radius: 999px; overflow: hidden;
+    background: var(--ins-tertiary-bg, rgba(15, 23, 42, .07));
+}
+#ndm-page .ndm-mix i { display: block; height: 100%; background: currentColor; }
+/* Numa tela estreita a composição da linha é a primeira coisa a sair: ela vive
+   da sobra de largura, e ali não há sobra — o que tem de caber é o nome do
+   produto e as contagens. A barra da ZONA continua, que é a mesma leitura. */
+@media (max-width: 900px) {
+    #ndm-page .ndm-tbl .ndm-c-mix { display: none; }
+}
 
 /* As duas colunas que resumem a linha, separadas do detalhe por uma régua: a
-   pendência é a resposta da tela. */
-#ndm-page .ndm-tbl .ndm-c-pend { border-left: 1px solid var(--ins-border-color, rgba(0,0,0,.1)); }
+   pendência é a resposta da tela, e a coluna inteira leva uma faixa de cor —
+   é onde o olho tem de cair primeiro. */
+#ndm-page .ndm-tbl .ndm-c-pend {
+    border-left: 1px solid var(--ins-border-color, rgba(0,0,0,.1));
+    background: rgba(247, 184, 75, .06);
+}
+[data-bs-theme=dark] #ndm-page .ndm-tbl .ndm-c-pend { background: rgba(247, 184, 75, .05); }
 #ndm-page .ndm-pend-n {
-    font-weight: 800; font-size: .9rem; color: #b45309;
-    padding: .05rem .45rem; border-radius: 7px; background: rgba(247, 184, 75, .18);
+    display: inline-block; font-weight: 800; font-size: .88rem; color: #b45309;
+    min-width: 2.15rem; padding: .14rem .42rem; line-height: 1.25;
+    border-radius: 8px; background: rgba(247, 184, 75, .22);
 }
 #ndm-page .ndm-total-n { font-weight: 700; color: var(--ins-body-color); }
-[data-bs-theme=dark] #ndm-page .ndm-pend-n { color: #ffd54f; background: rgba(247, 184, 75, .16); }
+[data-bs-theme=dark] #ndm-page .ndm-pend-n { color: #ffd54f; background: rgba(247, 184, 75, .18); }
 
 #ndm-page .ndm-go { color: var(--ins-secondary-color); display: inline-flex; }
 #ndm-page .ndm-row.is-clickable:hover .ndm-go { color: #0066cc; }
@@ -198,30 +303,28 @@
 
 /* ── Zonas (B3 × Intrag) e subgrupos (NDF / Options / Swaps) ─────────────── */
 #ndm-page .ndm-zone-title {
-    display: flex; align-items: center; gap: .5rem;
-    font-size: .95rem; font-weight: 700; margin: 0 0 .35rem;
-    color: var(--ins-body-color);
+    font-size: 1rem; font-weight: 700; margin: 0; color: var(--ins-body-color);
 }
-#ndm-page .ndm-zone-title .ndm-zone-ico {
-    width: 28px; height: 28px; border-radius: 8px; display: inline-flex;
-    align-items: center; justify-content: center; color: #fff;
+#ndm-page .ndm-zone-ico {
+    width: 36px; height: 36px; flex: 0 0 auto; border-radius: 11px;
+    display: inline-flex; align-items: center; justify-content: center; color: #fff;
     background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
-    box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
+    box-shadow: 0 5px 14px rgba(94, 92, 230, .3);
     transition: transform 260ms var(--ndm-ease), box-shadow .2s var(--ndm-ease);
 }
-#ndm-page .ndm-zone-title .ndm-zone-ico i { font-size: 15px; }
-#ndm-page .ndm-zone-title .ndm-zone-ico svg { width: 15px; height: 15px; display: block; fill: currentColor; }
+#ndm-page .ndm-zone-ico i { font-size: 19px; }
+#ndm-page .ndm-zone-ico svg { width: 19px; height: 19px; display: block; fill: currentColor; }
 /* Hover: o ícone da zona com a animação padrão da casa */
 @media (hover: hover) and (pointer: fine) {
-    #ndm-page .ndm-zone-title:hover .ndm-zone-ico {
-        transform: scale(1.1) rotate(-4deg);
-        box-shadow: 0 8px 20px rgba(94, 92, 230, .38);
+    #ndm-page .ndm-zone-head:hover .ndm-zone-ico {
+        transform: scale(1.08) rotate(-4deg);
+        box-shadow: 0 9px 22px rgba(94, 92, 230, .4);
     }
 }
 @media (prefers-reduced-motion: reduce) {
-    #ndm-page .ndm-zone-title .ndm-zone-ico, #ndm-page .ndm-row,
+    #ndm-page .ndm-zone-ico, #ndm-page .ndm-row,
     #ndm-page .ndm-zero-toggle .ndm-caret { transition: none; }
-    #ndm-page .ndm-zone-title:hover .ndm-zone-ico { transform: none; }
+    #ndm-page .ndm-zone-head:hover .ndm-zone-ico { transform: none; }
 }
 </style>
 {% endblock extra_css %}
@@ -291,7 +394,15 @@
         'intrag-unwind-dce-swap': 'ti-rotate-2',
         'intrag-dce-option':  'ti-file-invoice',
         'intrag-dce-ndf':     'ti-file-invoice',
-        'intrag-dce-swap':    'ti-file-invoice'
+        'intrag-dce-swap':    'ti-file-invoice',
+        // A esteira desenha o MESMO produto da zona da B3: sem estes, todos os
+        // cards de Confirmations caíam no genérico e a zona inteira ficava com
+        // a mesma caixinha cinza repetida.
+        'conf-ndf-commodities': 'ti-wheat',
+        'conf-ndf-fwdstart':    'ti-player-skip-forward',
+        'conf-ndf-mgt':         'ti-building-bank',
+        'conf-opt-commodities': 'ti-chart-candle',
+        'conf-opt-fxo':         'ti-currency-dollar'
     };
     // Ordem canônica de exibição dos status (demais entram no fim, cor neutra)
     // O ciclo inteiro da confirmação numa ordem só: o documento (New →
@@ -359,9 +470,26 @@
         return ordenaStatus(Object.keys(vistos));
     }
 
+    function num(n) { return Number(n).toLocaleString('en-US'); }
+
+    // A cor e o fundo da pastilha saem das variáveis da CLASSE do status, postas
+    // na célula: assim a mesma definição serve à pastilha e ao segmento da barra
+    // de composição da zona.
     function celulaNum(n, cls) {
         if (!n) return '<td class="ndm-nil">·</td>';
-        return '<td class="ndm-n ' + cls + '">' + Number(n).toLocaleString('en-US') + '</td>';
+        return '<td class="' + cls + '"><span class="ndm-n">' + num(n) + '</span></td>';
+    }
+
+    /* Os segmentos de uma barra de composição, na ordem das colunas. A MESMA
+       função serve à barra da zona e à da linha: duas montagens sairiam com
+       proporções diferentes no dia em que uma delas mudasse de regra. */
+    function segmentos(cols, conta, total) {
+        return cols.map(function (s) {
+            var n = conta(s);
+            if (!n) return '';
+            return '<i class="' + (known(s) ? 'st-' + slug(s) : '') + '" style="width:' +
+                   (n * 100 / total).toFixed(2) + '%" title="' + esc(s + ': ' + num(n)) + '"></i>';
+        }).join('');
     }
 
     function linhaHtml(c, cols) {
@@ -382,26 +510,30 @@
         // seriam três zeros a mais para ler.
         var detalhe = [];
         if (c.total) {
-            (c.les || []).forEach(function (e) {
-                if (e.count) detalhe.push(esc(e.le) + ' ' + Number(e.count).toLocaleString('en-US'));
-            });
-            (c.groups || []).forEach(function (g) {
-                if (g.count) detalhe.push(esc(g.label) + ' ' + Number(g.count).toLocaleString('en-US'));
-            });
+            function pill(rotulo, n) {
+                detalhe.push('<span class="ndm-le-pill">' + esc(rotulo) + ' <b>' + num(n) + '</b></span>');
+            }
+            (c.les || []).forEach(function (e) { if (e.count) pill(e.le, e.count); });
+            (c.groups || []).forEach(function (g) { if (g.count) pill(g.label, g.count); });
         }
         var tds = cols.map(function (s) {
             return celulaNum((c.statuses || {})[s] || 0, known(s) ? 'st-' + slug(s) : '');
         }).join('');
+        var mix = '<td class="ndm-c-mix">' + (c.total
+            ? '<span class="ndm-mix">' + segmentos(cols, function (s) {
+                  return (c.statuses || {})[s] || 0;
+              }, c.total) + '</span>'
+            : '') + '</td>';
         return '<tr class="ndm-row' + (zero ? ' is-zero' : '') + (c.url ? ' is-clickable' : '') + '"' +
                     (c.url ? ' data-url="' + esc(c.url) + '"' : '') + '>' +
                  '<td><div class="ndm-prod">' + ico + '<span>' + nome +
-                   (detalhe.length ? '<small class="ndm-prod-les">' + detalhe.join(' · ') + '</small>' : '') +
-                 '</span></div></td>' + tds +
+                   (detalhe.length ? '<small class="ndm-prod-les">' + detalhe.join('') + '</small>' : '') +
+                 '</span></div></td>' + mix + tds +
                  '<td class="ndm-c-pend">' + (pend
-                     ? '<span class="ndm-pend-n">' + Number(pend).toLocaleString('en-US') + '</span>'
+                     ? '<span class="ndm-pend-n">' + num(pend) + '</span>'
                      : '<span class="ndm-nil">·</span>') + '</td>' +
                  '<td>' + (c.total
-                     ? '<span class="ndm-total-n">' + Number(c.total).toLocaleString('en-US') + '</span>'
+                     ? '<span class="ndm-total-n">' + num(c.total) + '</span>'
                      : '<span class="ndm-nil">·</span>') + '</td>' +
                  '<td>' + (c.url ? '<span class="ndm-go"><i class="ti ti-chevron-right"></i></span>' : '') + '</td>' +
                '</tr>';
@@ -425,38 +557,63 @@
             var semMov = f[1].every(function (c) { return !c.total; });
             if (!f[0]) return f[1].map(function (c) { return linhaHtml(c, cols); }).join('');
             return '<tr class="ndm-fam' + (semMov ? ' is-zero' : '') + '"><td colspan="' +
-                   (cols.length + 4) + '" data-lang-ignore>' + esc(f[0]) + '</td></tr>' +
+                   (cols.length + 5) + '" data-lang-ignore>' + esc(f[0]) + '</td></tr>' +
                    f[1].map(function (c) { return linhaHtml(c, cols); }).join('');
         }).join('');
         var visiveis = todos.filter(function (c) { return c.total; }).length;
         var cabec = !visiveis ? '' : '<tr><th data-lang-ignore>' + esc(t('ndm-col-product', 'Product')) + '</th>' +
+            '<th class="ndm-c-mix"></th>' +
             cols.map(function (s) { return '<th data-lang-ignore>' + esc(s) + '</th>'; }).join('') +
             '<th class="ndm-c-pend" data-lang-ignore>' + esc(t('ndm-col-open', 'Open')) + '</th>' +
             '<th data-lang-ignore>' + esc(t('ndm-col-total', 'Total')) + '</th><th></th></tr>';
         // O resumo da zona é PENDENTE e TOTAL — nunca a soma das três zonas: a
         // mesma operação aparece no registro da B3 e no espelho da Intrag, e
-        // somá-las inventaria um total que nenhuma das duas telas confere.
-        var resumo = total
-            ? '<span class="ndm-sum-pend"><b>' + pend + '</b> ' +
-                esc(t(pend === 1 ? 'ndm-sum-open-one' : 'ndm-sum-open', 'open')) + '</span>' +
-              '<span><b>' + total + '</b> ' + esc(t('ndm-sum-total', 'imported')) + '</span>'
-            : '<span class="ndm-sum-zero"><b>' + esc(t('ndm-sum-none', 'nothing imported today')) + '</b></span>';
-        if (total && !pend) {
-            resumo = '<span class="ndm-sum-zero"><b>' + esc(t('ndm-sum-clear', 'all done')) + '</b></span>' +
-                     '<span><b>' + total + '</b> ' + esc(t('ndm-sum-total', 'imported')) + '</span>';
+        // somá-las inventaria um total que nenhuma das duas telas confere. Ele
+        // sai em número GRANDE: é a resposta da tela, e como frase cinza à
+        // direita era o que menos pesava nela.
+        var resumo;
+        if (!total) {
+            resumo = '<span class="ndm-zone-quiet"><i class="ti ti-check"></i>' +
+                     esc(t('ndm-sum-none', 'nothing imported today')) + '</span>';
+        } else {
+            resumo = '<div class="ndm-zone-stats">' +
+                (pend
+                    ? '<div class="ndm-stat is-open"><b>' + num(pend) + '</b><span data-lang-ignore>' +
+                        esc(t(pend === 1 ? 'ndm-sum-open-one' : 'ndm-sum-open', 'open')) + '</span></div>'
+                    : '<div class="ndm-stat is-clear"><b>' + num(total - pend) + '</b><span data-lang-ignore>' +
+                        esc(t('ndm-sum-clear', 'all done')) + '</span></div>') +
+                '<div class="ndm-stat"><b>' + num(total) + '</b><span data-lang-ignore>' +
+                    esc(t('ndm-sum-total', 'imported')) + '</span></div>' +
+              '</div>';
         }
+        // Quantos produtos da zona se moveram hoje: é o que o cabeçalho tinha
+        // de dizer e não dizia, e é o contexto do "N recolhidos" lá embaixo. Num
+        // dia parado ele não vai: "0/15 com movimento" e "15 sem movimento" são
+        // a mesma frase duas vezes, uma em cima da outra.
+        var meta = !total ? '' :
+            '<span class="ndm-zone-meta" data-lang-ignore><b>' + visiveis + '</b>/' + todos.length +
+            ' ' + esc(t('ndm-zone-products', 'products with movement')) + '</span>';
+        // A composição do dia numa barra: a forma da zona antes de ler número
+        // nenhum. As cores são as das colunas — a tabela é a legenda dela.
+        var barra = !total ? '' : '<div class="ndm-prog">' + segmentos(cols, function (s) {
+            var n = 0;
+            todos.forEach(function (c) { n += ((c.statuses || {})[s] || 0); });
+            return n;
+        }, total) + '</div>';
         var toggle = zerados
-            ? '<tr class="ndm-zero-toggle"><td colspan="' + (cols.length + 4) + '">' +
+            ? '<tr class="ndm-zero-toggle"><td colspan="' + (cols.length + 5) + '">' +
                 '<span class="ndm-caret">▸</span> ' + zerados + ' ' +
                 esc(t(zerados === 1 ? 'ndm-zero-one' : 'ndm-zero-many',
                       'products with nothing imported today')) + '</td></tr>'
             : '';
-        return '<section class="ndm-zone">' +
+        return '<section class="ndm-zone' + (total ? '' : ' is-empty') + '">' +
                  '<div class="ndm-zone-head">' +
-                   '<h5 class="ndm-zone-title"><span class="ndm-zone-ico">' + icoHtml + '</span>' +
-                   esc(titulo) + '</h5>' +
-                   '<span class="ndm-zone-sum">' + resumo + '</span>' +
-                 '</div>' +
+                   '<span class="ndm-zone-ico">' + icoHtml + '</span>' +
+                   '<span class="ndm-zone-id">' +
+                     '<h5 class="ndm-zone-title">' + esc(titulo) + '</h5>' + meta +
+                   '</span>' +
+                   resumo +
+                 '</div>' + barra +
                  '<div class="ndm-tbl-wrap"><table class="ndm-tbl"><thead>' + cabec +
                    '</thead><tbody>' + corpo + toggle + '</tbody></table></div>' +
                '</section>';
@@ -472,7 +629,7 @@
           b3: ['ndf-commodities', 'ndf-fwdstart', 'ndf-otherpublisher', 'ndf-vanilla', 'unwind-ndf-fx',
                'unwind-ndf-commodities'],
           conf: ['conf-ndf-commodities', 'conf-ndf-fwdstart', 'conf-ndf-mgt'],
-          intrag: ['intrag-ndf', 'intrag-unwind', 'intrag-unwind-dce-ndf',
+          intrag: ['intrag-ndf', 'intrag-unwind-dce-ndf',
                    'intrag-unwind-dce-deliverable-forward'] },
         { key: 'ndm-grp-options', label: 'Options',
           b3: ['opt-commodities', 'opt-fxo', 'opt-equity', 'unwind-opt-commodities', 'unwind-opt-fxo',
@@ -482,7 +639,15 @@
         { key: 'ndm-grp-swaps',   label: 'Swaps',
           b3: ['swap-equities', 'swap-cem'],
           conf: [],
-          intrag: ['intrag-swap', 'intrag-dce-swap', 'intrag-unwind-dce-swap'] }
+          intrag: ['intrag-swap', 'intrag-dce-swap', 'intrag-unwind-dce-swap'] },
+        // A tela da Intrag Unwind é de TODOS os produtos (mesa, 22/09/2026) —
+        // dentro do bloco de NDF ela afirmava que a recompra espelhada é de
+        // termo de moeda, e a de opção e a de swap caem na mesma página. As
+        // `intrag-unwind-dce-*` continuam cada uma na família do SEU produto:
+        // essas sim são uma tela por produto.
+        { key: 'ndm-grp-unwinds', label: 'Unwinds',
+          b3: [], conf: [],
+          intrag: ['intrag-unwind'] }
     ];
 
     function render(cards, confCards) {
@@ -582,6 +747,7 @@
     <span data-lang="ndm-sum-total">imported</span>
     <span data-lang="ndm-sum-none">nothing imported today</span>
     <span data-lang="ndm-sum-clear">all done</span>
+    <span data-lang="ndm-zone-products">products with movement</span>
     <span data-lang="ndm-zero-many">products with nothing imported today</span>
     <span data-lang="ndm-zero-one">product with nothing imported today</span>
     <span data-lang="ndm-zone-b3">B3 Registration</span>
@@ -590,6 +756,7 @@
     <span data-lang="ndm-grp-ndf">NDF</span>
     <span data-lang="ndm-grp-options">Options</span>
     <span data-lang="ndm-grp-swaps">Swaps</span>
+    <span data-lang="ndm-grp-unwinds">Unwinds</span>
     <span data-lang="ndm-grp-others">Others</span>
 </div>
 <!-- Ícones das zonas — mesmos SVGs do sidenav (Index B3 e Intrag); o JS clona daqui -->

@@ -967,6 +967,29 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   **as três zonas não se somam num total**: a mesma operação aparece no registro
   da B3 e no espelho da Intrag, e somá-las inventaria um número que nenhuma das
   duas telas confere.
+- **A tabela do Monitor tem PESO** (mesa, 22/09/2026). A primeira versão dela
+  respondia certo e parecia vazia: o resumo da zona era uma frase cinza de
+  .78rem jogada à direita, e num dia parado a tela inteira era três lajotas
+  brancas com uma linha de texto. O que mudou: o resumo virou NÚMERO grande
+  (aberto em âmbar, importado em neutro), a zona ganhou o fio do gradiente da
+  casa no topo, as contagens viraram PASTILHAS (um dígito colorido solto se
+  perde no branco da linha) e o dia parado virou uma pílula verde que DIZ, no
+  lugar de meia tela de branco. O vão entre o nome do produto e as colunas de
+  número — meio metro de branco numa tela larga, porque o nome fica com toda a
+  sobra — é hoje a **composição da linha**: a mesma barra da zona, produto a
+  produto, que dá a forma do dia sem ler dígito nenhum. As duas barras saem da
+  MESMA função (`segmentos`) e a cor de cada status mora numa variável
+  (`--st-fg`/`--st-bg`) que serve à pastilha e ao segmento — duas definições
+  sairiam com proporções diferentes no dia em que uma mudasse. A coluna da
+  composição é a única sem largura fixa (é ela que recebe a sobra), a primeira
+  tem piso de 220px (sem ele o nome quebra em duas linhas) e abaixo de 900px a
+  barra da linha some: ali não há sobra, e o que tem de caber é o nome e as
+  contagens.
+- **A Intrag Unwind é bloco PRÓPRIO, fora do de NDF** (mesa, 22/09/2026): a
+  tela dela é de todos os produtos, e dentro do bloco de NDF ela afirmava que a
+  recompra espelhada é de termo de moeda — a de opção e a de swap caem na mesma
+  página. As `intrag-unwind-dce-*` continuam cada uma na família do SEU produto:
+  essas sim são uma tela por produto.
 - **O Monitor não recebe lista de produto: ele VARRE o `cache/new deals/`**
   e agrupa pelos dois primeiros níveis não numéricos do caminho (§454). Quem
   diz que um produto EXISTE é o `_NDM_CARDS` (`deals_monitor/domain.py`); o
