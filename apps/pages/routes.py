@@ -13831,6 +13831,7 @@ _conf_mgt_family = _pf_conf._conf_mgt_family
 _conf_mgt_groups = _pf_conf._conf_mgt_groups
 _conf_pick_mgt = _pf_conf._conf_pick_mgt
 _conf_mgt_rows = _pf_conf._conf_mgt_rows
+_conf_mgt_num_field = _pf_conf._conf_mgt_num_field
 # Swap Bullet — Swap com Opção de Arrependimento (§481)
 _CONF_SWAP_FAMILY_TEMPLATES = _pf_conf._CONF_SWAP_FAMILY_TEMPLATES
 _CONF_SWAP_FAMILY_LABEL = _pf_conf._CONF_SWAP_FAMILY_LABEL

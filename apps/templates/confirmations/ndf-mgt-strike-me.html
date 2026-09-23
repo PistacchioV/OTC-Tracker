@@ -4144,7 +4144,7 @@ var rows = (__CONF__ && __CONF__.rows && __CONF__.rows.length)
     ? JSON.parse(JSON.stringify(__CONF__.rows)) : [];
 
 var fields = [
-  { k: 'num',           label: 'Nº (Athena ID)' },
+  { k: 'num',           label: 'Nº (' + ((__CONF__ && __CONF__.num_label) || 'Athena ID') + ')' },
   { k: 'comprador',     label: 'Comprador' },
   { k: 'moedaBase',     label: 'Moeda Base' },
   { k: 'premio',        label: 'Prêmio' },

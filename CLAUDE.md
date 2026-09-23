@@ -936,10 +936,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   confirmação quando a LE é MGT (`_generic_nd_mc_source`) e nasce `Pending
   OTC`; o do BANCO segue sem esteira. O FWD Start do BANCO deixou de listar
   os de MGT, e o Generate do Monitor escolhe o editor pela Legal Entity.
-  **No documento MGT o Nº do Anexo I é o Athena ID** (o `Deal`; §484,
-  `num_field` do `_conf_fwdstart_rows`) e o título é só "CONFIRMAÇÃO DE
-  OPERAÇÕES DE DERIVATIVOS", sem "Nº" nem número; no do BANCO o Nº segue
-  sendo o B3 ID. As chaves da esteira não mudam com isso.
+  **FWD Start é numerado pelo B3 ID em QUALQUER LE** (mesa, 23/09/2026):
+  coluna Nº do Anexo I E `numeroContrato` do XML, no documento do BANCO e no
+  de MGT (`_conf_mgt_num_field`, `num_field` do `_conf_ndf_xml`; sem B3 ID o
+  XML cai no Athena ID avisando). O **Vanilla de MGT** segue com o Athena ID
+  (o `Deal`, §484). O título do documento MGT é só "CONFIRMAÇÃO DE
+  OPERAÇÕES DE DERIVATIVOS", sem "Nº" nem número. As chaves da esteira não
+  mudam com isso.
 - **O eixo do ATIVO da confirmação é UM, e vale nos TRÊS lugares** (§457):
   a segregação dos grupos (`_conf_segregate`), a escolha do grupo na geração
   (`_conf_pick_eligible`) e a coluna `Moeda` da ESTEIRA, que é quem monta o

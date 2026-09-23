@@ -887,7 +887,10 @@ def api_conf_fwdstart_save():
             numero_contrato, xml_str, xml_warns = _R()._conf_ndf_xml(
                 picked, merc, ref, tipo='NDF', prefixo='NDF_FwdStart',
                 ccy_field='QuantityCurrency', warn_no_spot=False,
-                legs_fn=_R()._conf_fx_legs, ccy=merc)
+                legs_fn=_R()._conf_fx_legs, ccy=merc,
+                # O contrato é o B3 ID, como o Nº do Anexo I deste documento —
+                # o Athena ID não é número que a contraparte encontre.
+                num_field='B3_ID')
             xcand, xn = candidate, 0
             while _store.exists(_R()._ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
                 xn += 1
@@ -1051,7 +1054,8 @@ def confirmation_mgt(family):
     trade_date = first.get('TradeDate') or ref
     # O título do documento MGT não leva "Nº" nem número (§484): o `num_conf`
     # segue no payload por paridade com o editor do BANCO, mas nada o imprime.
-    # A coluna Nº do Anexo I é o Athena ID (o `Deal`), vindo de `_conf_mgt_rows`.
+    # A coluna Nº do Anexo I vem de `_conf_mgt_rows`: B3 ID no FWD Start,
+    # Athena ID (o `Deal`) no Vanilla.
     conf = {
         'ref_date':     ref.strftime('%Y-%m-%d'),
         'num_conf':     '',
@@ -1067,6 +1071,7 @@ def confirmation_mgt(family):
         'family':       family,
         'family_label': _R()._CONF_MGT_FAMILY_LABEL.get(family, family),
         'rows':         rows,
+        'num_label':    'B3 ID' if _R()._conf_mgt_num_field(picked) == 'B3_ID' else 'Athena ID',
         'warnings':     warnings,
     }
     return render_template(_R()._CONF_MGT_FAMILY_TEMPLATES[family][0], conf=conf)
@@ -1178,7 +1183,9 @@ def api_conf_mgt_save():
                 picked, merc, ref, tipo='NDF',
                 prefixo='NDF_FwdStart' if family == 'fwd-start' else 'NDF_Vanilla',
                 ccy_field='QuantityCurrency', warn_no_spot=False,
-                legs_fn=_R()._conf_fx_legs, ccy=merc)
+                legs_fn=_R()._conf_fx_legs, ccy=merc,
+                # FWD Start = B3 ID em qualquer LE; Vanilla segue o Athena ID.
+                num_field=_R()._conf_mgt_num_field(picked))
             xcand, xn = candidate, 0
             while _store.exists(_R()._ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
                 xn += 1
