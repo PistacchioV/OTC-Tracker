@@ -24,6 +24,8 @@ O que este script prova (`_UnlockedReadGate` no `database_access.py`):
      `enter_write` devolve False e a escrita segue para o connect;
   5. contadores voltam a zero (leitura e escrita pareiam enter/exit mesmo com
      falha) e o ciclo seguinte funciona;
+  5b. leitores unlocked em laço (várias abas) não furam a fila: o que chega com
+     escritor declarado DESISTE no teto em vez de abrir, e a escrita completa;
   6. o portão é só do DuckDB — sqlite não passa por ele.
 
 Roda com bancos em tempfile; não toca em dado real.
@@ -177,6 +179,51 @@ except Exception as e:                                        # noqa: BLE001
     ok5.append(e)
 # 5 linhas: a inicial + os inserts dos passos 1, 2, 3 e deste.
 check('5. ciclo seguinte (escrita + leitura unlocked) limpo', ok5, [5])
+
+# ── 5b. leitores em LAÇO não furam a fila do escritor (a imagem de 23/09) ───
+# Várias abas: um poll chega enquanto o outro ainda está aberto. Antes, o leitor
+# novo esperava o teto e ENTRAVA assim mesmo, a contagem nunca zerava, a
+# drenagem do escritor vencia e o connect dele batia no read_only aberto.
+old_read_wait = da._GATE_READ_WAIT_SECONDS
+old_write_wait = da._GATE_WRITE_WAIT_SECONDS
+da._GATE_READ_WAIT_SECONDS = 0.1
+da._GATE_WRITE_WAIT_SECONDS = 1.5
+parar = threading.Event()
+recusados = []
+
+
+def leitor_em_laco():
+    while not parar.is_set():
+        try:
+            with da.duckdb_read_unlocked(DB) as conn:
+                conn.execute("SELECT count(*) FROM t").fetchone()
+                time.sleep(0.5)
+        except da.DatabaseLockTimeout:
+            recusados.append(1)
+            time.sleep(0.02)
+        except Exception:                                     # noqa: BLE001
+            time.sleep(0.02)
+
+
+leitores = [threading.Thread(target=leitor_em_laco, daemon=True) for _ in range(4)]
+for th in leitores:                   # escalonados: os abertos se sobrepõem
+    th.start()
+    time.sleep(0.13)
+write_err = []
+try:
+    with da.duckdb_write(DB) as conn:
+        conn.execute("INSERT INTO t VALUES (5)")
+except Exception as e:                                        # noqa: BLE001
+    write_err.append(e)
+parar.set()
+for th in leitores:
+    th.join(5)
+da._GATE_READ_WAIT_SECONDS = old_read_wait
+da._GATE_WRITE_WAIT_SECONDS = old_write_wait
+check('5b. escrita com leitores unlocked em laco COMPLETA', write_err, [])
+check('5b. leitor recusado pelo portao (nao furou a fila)', bool(recusados))
+check('5b. recusa nao registra leitor (contadores zerados)',
+      (gate._readers, gate._writers), (0, 0))
 
 # ── 6. sqlite não passa pelo portão ─────────────────────────────────────────
 SDB = os.path.join(tmp, 'gate.sqlite3')
