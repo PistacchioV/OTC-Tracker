@@ -646,7 +646,7 @@ def termo_salvar(payload, sid=''):
     carimbo do documento nas linhas da recompra.
 
     O caminho é o MESMO das confirmações de New Deals, e de propósito:
-    `<Cliente>\Confirmations\AAAA\mm. Month\dd\<pasta do TIPO>`, com o
+    `<Cliente>\\Confirmations\\AAAA\\mm. Month\\dd\\<pasta do TIPO>`, com o
     cliente resolvido pelo `_ei_resolve_client_dir` e a pasta do produto saindo
     do `TYPE_FOLDER` (a pasta É o código do tipo). Escrito à mão aqui, ele
     voltaria a divergir do upload manual da tela no primeiro ajuste.
