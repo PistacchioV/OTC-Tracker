@@ -936,7 +936,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   confirmação quando a LE é MGT (`_generic_nd_mc_source`) e nasce `Pending
   OTC`; o do BANCO segue sem esteira. O FWD Start do BANCO deixou de listar
   os de MGT, e o Generate do Monitor escolhe o editor pela Legal Entity.
-  **FWD Start é numerado pelo B3 ID em QUALQUER LE** (mesa, 23/09/2026):
+  **FWD Start é numerado pelo B3 ID em QUALQUER LE** (mesa, 23/09/2026; §539):
   coluna Nº do Anexo I E `numeroContrato` do XML, no documento do BANCO e no
   de MGT (`_conf_mgt_num_field`, `num_field` do `_conf_ndf_xml`; sem B3 ID o
   XML cai no Athena ID avisando). O **Vanilla de MGT** segue com o Athena ID
@@ -1901,6 +1901,14 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `_aplicar_perna_espelhada` só nas linhas com os dois lados. Justificativa é
   do TRADE (`recon-fxo-comments.json`, `aplicar_comentarios` na gravação e na
   leitura; `_status` cru fora de `COLUMNS`).
+- **Pay/Rec: o NDF do lado JPM é a liquidação do dia como o Cockpit a monta**
+  (§538, `routes._ndfc_liquidacao_do_dia`): a API `getTradesBySettle` mais as
+  RECOMPRAS que ela ainda não traz (decidido pelo DEAL,
+  `_ndfc_unwinds_fora_da_api`, a mesma regra do import do Cockpit), com o IR
+  calculado, **sem regravar o dia do Cockpit**. O `settlement.csv` da pasta é
+  IGNORADO (dobraria o NDF). A conta é a dele: `SETTLEMENT + TAX` por cliente
+  × LE, e LEGAL fora do JPM fica de fora (`_jpm_cockpit`). API fora do ar PARA
+  o Run (`ndf_source_failed`): sem NDF, toda perna de cliente vira pendência.
 - **Pay/Rec**: `SPB - outros bancos` casa só com BANCO (`_match_allowed`, pelo
   `bank-name`, por PALAVRA nunca substring, `banco` é token significativo,
   direção entra pela mesma porta, vale nos três estágios; fora do cadastro
@@ -2200,7 +2208,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (155 scripts)
+### `scripts/tests/` (160 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
