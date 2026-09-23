@@ -313,7 +313,23 @@ def api_mc_upsert():
             # anterior sem chave e ficaria uma só. Recusa em vez de perder linha.
             return jsonify({'success': False,
                             'message': 'Trade ID é obrigatório — é a chave da linha.'}), 400
-        row = _mc.find_row(key) or _mc.blank_row()
+        # Linha NOVA só pelo Add Row, que diz `_new`. A edição da grade e a em
+        # massa mandam só a chave e as células mexidas: se a linha "não existe"
+        # ali, ou ela foi apagada depois de a tela carregar, ou a leitura não
+        # a viu — e criar a partir do branco gravava uma CASCA (Trade ID,
+        # Callback Date e mais nada) por cima da operação, que o upsert apaga
+        # dos dois bancos antes de inserir (§546). O `find_row` levanta quando
+        # não consegue ler; `None` aqui é ausência de verdade.
+        existente = _mc.find_row(key)
+        nova = bool(src.get('_new'))
+        if existente is None and not nova:
+            return jsonify({'success': False, 'code': 'mc_row_missing', 'key': key,
+                            'message': ('{} is no longer in Track Confirmations — '
+                                        'reload the page.'.format(key))}), 404
+        if existente is not None and nova:
+            return jsonify({'success': False, 'code': 'mc_row_exists', 'key': key,
+                            'message': '{} already exists — edit the existing row.'.format(key)}), 409
+        row = existente or _mc.blank_row()
         # Estado ANTES da edição: é ele que diz se esta gravação é uma validação
         # nova (a coluna estava vazia e passou a ter data) ou só um ajuste de
         # cadastro numa linha que já estava validada.

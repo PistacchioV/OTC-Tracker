@@ -433,6 +433,8 @@
               delText: 'The rows leave the trail for good. There is no undo.',
               delOk: 'Delete', delDone: '{n} row(s) deleted', delFail: 'Could not delete',
               saveFail: 'Could not save',
+              e_mc_row_missing: '{key} is no longer in Track Confirmations. Reload the page.',
+              e_mc_row_exists: '{key} already exists. Edit the existing row instead.',
               saveDone: 'Confirmation saved', addDone: 'Confirmation added',
               delOneTitle: 'Delete this confirmation?',
               delOneText: 'Trade ID {k}. There is no undo.',
@@ -450,6 +452,8 @@
               delText: 'As linhas saem da esteira de vez. Não tem desfazer.',
               delOk: 'Excluir', delDone: '{n} linha(s) excluída(s)', delFail: 'Não consegui excluir',
               saveFail: 'Não foi possível gravar',
+              e_mc_row_missing: '{key} não está mais no Track Confirmations. Recarregue a página.',
+              e_mc_row_exists: '{key} já existe. Edite a linha que já está na tabela.',
               saveDone: 'Confirmação gravada', addDone: 'Confirmação criada',
               delOneTitle: 'Excluir esta confirmação?',
               delOneText: 'Trade ID {k}. Não tem desfazer.',
@@ -467,6 +471,8 @@
               delText: 'Las filas salen de la cadena definitivamente. No hay deshacer.',
               delOk: 'Eliminar', delDone: '{n} fila(s) eliminada(s)', delFail: 'No se pudo eliminar',
               saveFail: 'No se pudo guardar',
+              e_mc_row_missing: '{key} ya no está en Track Confirmations. Recargue la página.',
+              e_mc_row_exists: '{key} ya existe. Edite la fila que ya está en la tabla.',
               saveDone: 'Confirmación guardada', addDone: 'Confirmación creada',
               delOneTitle: '¿Eliminar esta confirmación?',
               delOneText: 'Trade ID {k}. No hay deshacer.',
@@ -902,7 +908,9 @@
             body: JSON.stringify({ rows: payload })
         }).then(function (r) { return r.json(); }).then(function (j) {
             if (!j.success) {
-                Swal.fire({ icon: 'error', title: t('saveFail'), text: j.message || '' });
+                var txt = (j.code && t('e_' + j.code) !== 'e_' + j.code)
+                    ? t('e_' + j.code, { key: j.key || '' }) : (j.message || '');
+                Swal.fire({ icon: 'error', title: t('saveFail'), text: txt });
                 return false;
             }
             // As derivadas (Pending, Aging) são recalculadas NO SERVIDOR e vêm de
@@ -1184,6 +1192,9 @@
             // `adding` é de fora e o openEditor pode reescrevê-lo antes de a
             // gravação responder — o rótulo do aviso é decidido agora.
             var wasAdding = adding;
+            // Só o Add Row cria linha: o servidor recusa a edição de uma chave
+            // que não está mais na esteira (§546).
+            if (wasAdding) o._new = true;
             save([o]).then(function (ok) {
                 if (!ok) return;
                 bootstrap.Modal.getInstance(document.getElementById('mcEditModal')).hide();
