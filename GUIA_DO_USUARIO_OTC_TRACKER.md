@@ -879,6 +879,8 @@ São cinco batimentos, cada um comparando duas fontes que deveriam dizer a mesma
 4. Escreva a explicação na coluna **Comment** da linha que divergiu.
 5. Quando tudo estiver resolvido ou justificado, clique em **End process** (botão verde) — ele só habilita depois de o Run rodar, e é ele que fecha e comunica o resultado.
 
+**De onde vem o NDF do nosso lado:** da API da Athena (as operações que liquidam na data) mais as **recompras de NDF** que a API ainda não traz, com o IR já calculado — é o mesmo dia que o NDF Cockpit mostra. O arquivo `settlement.csv` **não é mais usado**: se ele estiver na pasta do Pay/Rec, é ignorado. Se a API não responder, o Run para e diz o motivo; tente de novo em alguns minutos, e se persistir, chame o suporte com a mensagem.
+
 ### 8.3. FXO
 
 **Menu › Reconciliations › FXO**

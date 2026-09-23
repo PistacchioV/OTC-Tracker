@@ -243,7 +243,7 @@ Concilia as posições por comitente entre a base interna e o retorno da câmara
 
 #### Conciliação — Pay/Rec
 
-Concilia os valores a pagar e a receber (Pay/Rec), apontando as diferenças a tratar antes do encerramento.
+Concilia os valores a pagar e a receber (Pay/Rec), apontando as diferenças a tratar antes do encerramento. O lado de NDF do banco vem da API da Athena (liquidações da data) somada às recompras de NDF que a API ainda não traz, com o IR calculado — o mesmo dia do NDF Cockpit; o `settlement.csv` da pasta deixou de ser insumo.
 
 ![Conciliação — Pay/Rec](docs/sop-screenshots/reconciliation-payrec.png)
 

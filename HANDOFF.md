@@ -23505,3 +23505,57 @@ o Buttons usa para ISO é a "data curta" do sistema de quem abre, e no Windows
 do JP ela é `mm/dd`. `check_export_excel_ids.py` §6 executa o export e lê a
 célula pelo openpyxl como data.
 
+
+## §538 — O NDF da Recon Pay/Rec sai da API + recompras, não do settlement.csv (2026-09-23)
+
+O lado JPM de NDF da recon era o `settlement.csv` exportado do Cockpit para a
+pasta de insumos: uma foto do dia tirada por quem exportou, e que **não trazia
+as recompras de NDF**. Elas não existem no `getTradesBySettle`; a vertical das
+recompras as projeta no arquivo-dia do Cockpit (§488), e o CSV só as teria se
+alguém as lançasse à mão.
+
+Agora o `commands.run` busca a liquidação do dia por
+`routes._ndfc_liquidacao_do_dia(ref)`, que é a MESMA montagem do Cockpit: a API,
+mais as recompras que ela ainda não traz, com o IR calculado pelo
+`_ndfc_apply_ir` (a regra do §423). O resultado vai ao motor como `ndf_rows`, e
+o `_jpm_cockpit` o reduz pela conta que o CSV tinha: `SETTLEMENT + TAX`
+(`Amount + Tax Income`) por cliente e LE, com o LEGAL fora do JPM de fora, como
+na tela do Cockpit. **O dia do Cockpit não é regravado**: rodar a recon não pode
+apagar a edição de maker/checker que a mesa fez na tela. Para isso o
+`_ndfc_import` foi partido em `_ndfc_fetch_api` (só a API, sem gravar) e na
+gravação.
+
+**"Recompra que ainda não está na API" é decidida pelo DEAL**
+(`_ndfc_unwinds_fora_da_api`): o `ID_SOURCE_DEAL` da recompra (o Athena ID)
+contra o `Deal Name` da API, com `_`/`-` normalizados. É uma suposição: quando
+a API passar a trazer recompras, confira se é esse o número. O
+`_ndfc_keep_unwinds` do import do Cockpit passou a usar a mesma função. Ele já
+queria deduplicar, mas comparava pelo `_nc_id`, que a linha da API não tem, e
+a comparação nunca casava.
+
+Um `settlement.csv` esquecido na pasta é **ignorado com aviso no log**: lido,
+ele dobraria o lado NDF. **API fora do ar PARA o Run** com o motivo (502,
+código `ndf_source_failed`, traduzido em en/br/es): uma recon sem o NDF
+acusaria toda perna de cliente de NDF como pendente, e o problema real seria
+outro. No log, `[ndfc] liquidação de <dia>: N da API + M recompra(s) fora dela`
+diz de onde veio cada linha. `check_payrec_ndf_source.py`. d4ef43c3.
+
+## §539 — FWD Start é numerado pelo B3 ID em qualquer LE; Vanilla, pelo Athena ID (2026-09-23)
+
+O `numeroContrato` do XML do FepWeb saía do `Deal` (Athena ID) em toda
+confirmação de uma operação, e o documento de MGT numerava o Anexo I também
+pelo Athena ID (§484). O documento do BANCO já usava o B3 ID na coluna Nº, e o
+XML dele não: documento e XML falavam números diferentes da mesma operação.
+
+Regra da mesa: **FWD Start = B3 ID, independente da LE**, na coluna Nº do Anexo
+I e no XML; **Vanilla = Athena ID**. O `_conf_ndf_xml` ganhou `num_field`
+(padrão `Deal`, então as outras confirmações não mudam), e o FWD Start do BANCO
+passa `B3_ID`. No MGT, uma função só (`_conf_mgt_num_field`, pela família do
+grupo) responde às DUAS perguntas: a coluna do documento e o XML. Duas
+respostas separadas divergiriam no primeiro ajuste. O editor rotula a coluna
+pelo mesmo campo (`num_label`). Sem B3 ID, o XML cai no Athena ID AVISANDO e a
+coluna Nº sai vazia com o aviso de sempre. O número de FepWeb gravado no
+Pending Confirmation (`_conf_pc_set_fepweb`) é o do XML, e portanto também
+passou a ser o B3 ID no FWD Start. O título do documento MGT segue sem "Nº", e
+as chaves da esteira não mudam. `check_mgt_conf.py`, `check_fwdstart_conf.py` §9.
+e06a50ff.
