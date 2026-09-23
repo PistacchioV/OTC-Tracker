@@ -10,7 +10,9 @@ recompras de NDF que a API ainda não traz, com o IR calculado. O que se prova:
   3. recompra cujo DEAL já veio da API não entra duas vezes — e a que não veio
      entra;
   4. a liquidação do dia junta API + recompras e calcula o IR, SEM gravar o
-     dia do Cockpit; API fora do ar LEVANTA com o motivo.
+     dia do Cockpit; API fora do ar LEVANTA com o motivo;
+  4b. dia JÁ IMPORTADO no Cockpit (carimbo `.meta.json`) é lido de lá, sem API
+     — o getTradesBySettle segurava o Run por minutos.
 
 Sem dado real: API, dia do Cockpit e IR são stubs.
 """
@@ -90,8 +92,15 @@ dia = [ck('SUZANO SA', '-100.00', deal='TERMO-1', _nc_id='x1'),
 api_rows = [ck('SUZANO SA', '-100.00', deal='TERMO-1'),
             ck('VALE SA', '-50.00', deal='STP-XE-BBB-0-0')]     # a API já trouxe a BBB
 
-saved = {k: getattr(R, k) for k in ('_ndfc_load', '_ndfc_fetch_api', '_ndfc_apply_ir', '_ndfc_save')}
+import tempfile                                                  # noqa: E402
+TMP = tempfile.mkdtemp(prefix='payrec-ndfc-')
+DAY_JP = os.path.join(TMP, 'ndf-cockpit_20260923.json')
+saved = {k: getattr(R, k) for k in ('_ndfc_load', '_ndfc_fetch_api', '_ndfc_apply_ir',
+                                    '_ndfc_save', '_ndfc_json_path')}
 gravou = []
+# O dia do Cockpit num tmp SEM o carimbo `.meta.json`: é o dia que a vertical
+# das recompras criou ao projetar, não um dia importado — vai à API.
+R._ndfc_json_path = lambda ref: DAY_JP
 R._ndfc_load = lambda ref: ('x.json', [dict(r) for r in dia])
 R._ndfc_save = lambda jp, data: gravou.append(jp)
 try:
@@ -117,6 +126,31 @@ try:
     check('e o dia do Cockpit NÃO é regravado', gravou, [])
     check('a lista da API não é alterada por dentro', api_rows[0]['VL_TAX_INCOME'], '')
 
+    print('\n== 4b. dia JA IMPORTADO no Cockpit: lido de la, sem API ==')
+    import io as _io                                              # noqa: E402
+    _io.open(DAY_JP[:-5] + '.meta.json', 'w', encoding='utf-8').write('{"updated": "09:15:00"}')
+
+    def _sem_api(ref):
+        raise AssertionError('a API nao pode ser chamada com o dia importado')
+    R._ndfc_fetch_api = _sem_api
+    chamou_ir = []
+    R._ndfc_apply_ir = lambda ref, rows: chamou_ir.append(1)
+    rows = R._ndfc_liquidacao_do_dia(REF)
+    check('devolve o dia inteiro do Cockpit (recompras incluidas)',
+          [r['ID_SOURCE_DEAL'] for r in rows], [r['ID_SOURCE_DEAL'] for r in dia])
+    check('   com o IR como o Cockpit gravou (nao recalcula)', chamou_ir, [])
+    check('   e nao grava nada', gravou, [])
+    rows[0]['VL_TAX_INCOME'] = 'X'
+    check('   copia: mexer no resultado nao mexe no dia', dia[0]['VL_TAX_INCOME'], '')
+    # Carimbo presente e dia ilegivel (`_ndfc_load` devolve None): vai a API.
+    R._ndfc_load = lambda ref: (DAY_JP, None)
+    R._ndfc_fetch_api = lambda ref: {'success': True, 'rows': [dict(api_rows[0])],
+                                     'skipped': {}, 'url': 'u'}
+    rows = R._ndfc_liquidacao_do_dia(REF)
+    check('dia importado mas ilegivel cai para a API', [r['ID_SOURCE_DEAL'] for r in rows], ['TERMO-1'])
+    os.remove(DAY_JP[:-5] + '.meta.json')
+    R._ndfc_load = lambda ref: ('x.json', [dict(r) for r in dia])
+
     R._ndfc_fetch_api = lambda ref: {'success': False, 'error': 'Athena API: 401', 'url': 'u'}
     try:
         R._ndfc_liquidacao_do_dia(REF)
@@ -126,6 +160,8 @@ try:
 finally:
     for k, v in saved.items():
         setattr(R, k, v)
+    import shutil                                                 # noqa: E402
+    shutil.rmtree(TMP, ignore_errors=True)
 
 print('\n== 5. o import do Cockpit usa a mesma regra de recompra ==')
 import inspect                                                    # noqa: E402

@@ -1909,7 +1909,10 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   (§538, `routes._ndfc_liquidacao_do_dia`): a API `getTradesBySettle` mais as
   RECOMPRAS que ela ainda não traz (decidido pelo DEAL,
   `_ndfc_unwinds_fora_da_api`, a mesma regra do import do Cockpit), com o IR
-  calculado, **sem regravar o dia do Cockpit**. O `settlement.csv` da pasta é
+  calculado, **sem regravar o dia do Cockpit**. **Dia já importado no Cockpit
+  (carimbo `.meta.json`, NÃO o arquivo-dia, que a projeção da recompra cria)
+  é lido de lá sem chamar a API** (§541): o `getTradesBySettle` segurava o Run
+  por minutos. O `settlement.csv` da pasta é
   IGNORADO (dobraria o NDF). A conta é a dele: `SETTLEMENT + TAX` por cliente
   × LE, e LEGAL fora do JPM fica de fora (`_jpm_cockpit`). API fora do ar PARA
   o Run (`ndf_source_failed`): sem NDF, toda perna de cliente vira pendência.
