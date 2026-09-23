@@ -9173,6 +9173,7 @@ _ndf_publisher_is_bacen = _pf_nd._ndf_publisher_is_bacen
 _ndf_publisher_codes = _pf_nd._ndf_publisher_codes
 _ndf_publisher_fonte_info = _pf_nd._ndf_publisher_fonte_info
 _generic_ndf_ter_line = _pf_nd._generic_ndf_ter_line
+_asian_verification_dates = _pf_nd._asian_verification_dates
 _nd_lawton_mirror = _pf_nd._nd_lawton_mirror
 _nd_lawton_sig = _pf_nd._nd_lawton_sig
 _nd_mgt_mirror = _pf_nd._nd_mgt_mirror
@@ -14232,30 +14233,15 @@ def _vanilla_verification_lines(deal, page_url, le_pair):
     """Linhas tipo 2 (Dados Variáveis) do DOWNLOAD do Vanilla — só ele as
     emite: o registro oficial do Vanilla é de outra ferramenta, e o arquivo
     dos demais produtos genéricos nunca as carregou (o asiático vai só na
-    contagem do campo 59). Uma linha por dia útil da janela de fixing, no
-    calendário do deal (FX Holiday Schedule; sem cadastro, Seg–Sex, como o
-    preview). Com a Cotação para o Vencimento EFETIVA preenchida (> 0 — Fixed
-    da variante ou fórmula cadastrada), cada data sai deslocada N dias úteis
-    PARA FRENTE, no mesmo calendário."""
-    def _s(v):
-        return re.sub(r'<[^>]+>', '', str(v or '')).strip()
-    a = _parse_date_any(_s(deal.get('FirstFixingDate')))
-    b = _parse_date_any(_s(deal.get('LastFixingDate')))
-    if not a or not b or a >= b:
+    contagem do campo 59). Uma linha por data de `_asian_verification_dates`
+    — a MESMA lista que o campo 59 conta: calendário do deal e, sem ele, o
+    ANBIMA (sem cadastro saía Seg–Sex, e o 07/09 virou data de verificação);
+    calendário ilegível levanta. Com a Cotação para o Vencimento EFETIVA
+    preenchida (> 0 — Fixed da variante ou fórmula cadastrada), cada data sai
+    deslocada N dias úteis PARA FRENTE, no mesmo calendário."""
+    datas, hols = _asian_verification_dates(deal)
+    if not datas:
         return []
-    hols = set()
-    sched = re.sub(r'[^A-Za-z0-9_]', '',
-                   _s(deal.get('FXHolidaySchedule')).replace('-', '_').lower())
-    if sched:
-        try:
-            from apps.pages import duck_read       # DB-first (fase 3): o schedule é um calendário do registro.
-            _cal = os.path.join(_B3_DATA_DIR, sched + '.json')
-            _itens = duck_read.calendar_rows(_cal)
-            if _itens is None:
-                _itens = _store.read(_cal)
-            hols = {(x.get('date') if isinstance(x, dict) else x) for x in _itens}
-        except Exception:
-            hols = set()
     cotv = _fi_effective_seq_value(_TER_FI_KEY, 'registro-dados-fixos', '15', {},
                                    page_url, le_pair, deal).strip()
     shift = int(cotv) if cotv.isdigit() and int(cotv) > 0 else 0
@@ -14271,15 +14257,13 @@ def _vanilla_verification_lines(deal, page_url, le_pair):
                 left -= 1
         return cur
 
-    lines, cur = [], a
-    while cur <= b:
-        if _is_biz(cur):
-            d8 = _shifted(cur).strftime('%Y%m%d')
-            lines.append(_fi_build_line(
-                _TER_FI_KEY, 'registro-dados-variaveis',
-                {'4': d8.ljust(8), '6': ''.ljust(18)},
-                page_url=page_url, le_pair=le_pair, deal=deal))
-        cur += timedelta(days=1)
+    lines = []
+    for cur in datas:
+        d8 = _shifted(cur).strftime('%Y%m%d')
+        lines.append(_fi_build_line(
+            _TER_FI_KEY, 'registro-dados-variaveis',
+            {'4': d8.ljust(8), '6': ''.ljust(18)},
+            page_url=page_url, le_pair=le_pair, deal=deal))
     return lines
 
 
