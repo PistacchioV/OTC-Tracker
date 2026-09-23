@@ -139,7 +139,7 @@ print('\n== 4. o agrupamento, pelo endpoint de verdade ==')
 # A2 de premio (contraparte igual, e outro e-mail), e C1 de termo de commodity.
 
 
-def run_day(recs, internal_swap=None, internal_ndfc=None, participants=None, ids=None):
+def run_day(recs, internal_swap=None, internal_ndfc=None, participants=None, ids=None, athena=None):
     """Chama /api/operations-b3/mensageria e devolve os `group` de cada draft."""
     from apps import create_app
     from apps.config import DebugConfig
@@ -148,7 +148,8 @@ def run_day(recs, internal_swap=None, internal_ndfc=None, participants=None, ids
     real = (R._opb3_msg_load_recipients, R._opb3_refdata_by_account,
             R._opb3_participant_name_by_account,
             R._opb3_tipo_maps, R._opb3_internal_ter_map, R._opb3_internal_swapprem_map,
-            R._opb3_internal_swap_map, R._opb3_internal_ndfc_map, R.OTM_JSON_ROOT)
+            R._opb3_internal_swap_map, R._opb3_internal_ndfc_map, R.OTM_JSON_ROOT,
+            R._opb3_athena_id_map)
 
     def spy(group):
         out = real_build(group)
@@ -165,6 +166,7 @@ def run_day(recs, internal_swap=None, internal_ndfc=None, participants=None, ids
     R._opb3_internal_swapprem_map = lambda ref: {}
     R._opb3_internal_swap_map = lambda ref: dict(internal_swap or {})
     R._opb3_internal_ndfc_map = lambda ref: dict(internal_ndfc or {})
+    R._opb3_athena_id_map = lambda ref: dict(athena or {})
     tmp = tempfile.mkdtemp(prefix='opb3-msg-')
     try:
         R.OTM_JSON_ROOT = tmp
@@ -187,7 +189,8 @@ def run_day(recs, internal_swap=None, internal_ndfc=None, participants=None, ids
         (R._opb3_msg_load_recipients, R._opb3_refdata_by_account,
          R._opb3_participant_name_by_account,
          R._opb3_tipo_maps, R._opb3_internal_ter_map, R._opb3_internal_swapprem_map,
-         R._opb3_internal_swap_map, R._opb3_internal_ndfc_map, R.OTM_JSON_ROOT) = real
+         R._opb3_internal_swap_map, R._opb3_internal_ndfc_map, R.OTM_JSON_ROOT,
+         R._opb3_athena_id_map) = real
         shutil.rmtree(tmp, ignore_errors=True)
 
 
@@ -342,7 +345,7 @@ check('duas contas, mesmo nome -> DOIS drafts no dia (um por contraparte)',
 mesma = next((d for d in drafts if d.get('cpty') == 'MESMA CONTRAPARTE S.A.'), {})
 check('o e-mail unido tem as DUAS linhas', len(mesma.get('rows') or []), 2)
 check('e o total soma as duas contas', mesma.get('total'), 300.0)
-contas = sorted(r[11] for r in (mesma.get('rows') or []))
+contas = sorted(r[12] for r in (mesma.get('rows') or []))
 check('cada linha mantem a SUA conta na tabela', contas,
       ['44444.44-4', '55555.55-5'])
 outra = next((d for d in drafts if d.get('cpty') == 'OUTRA CONTRAPARTE LTDA'), {})
@@ -364,6 +367,77 @@ check('nenhum draft foi gerado', len(drafts), 0)
 resp, drafts = run_day([gen], ids=['K-GEN'])
 check('id valido -> regenera a Generated marcada', resp.status_code, 200)
 check('com o draft dela', len(drafts), 1)
+
+
+# ── §543: o Athena ID à ESQUERDA do B3 ID (Título) ──────────────────────────
+print('\n== o Athena ID na tabela, a esquerda do Titulo ==')
+check('o cabecalho tem Athena ID logo antes do Titulo',
+      otc_emails._MSG_TABLE_HEADERS.index('Athena ID') + 1, otc_emails._MSG_TABLE_HEADERS.index('Título'))
+r, seen = run_day([rec('26H00000001', 'PAGAMENTO DE PREMIO', '100,00'),
+                   rec('26H00000002', 'PAGAMENTO DE PREMIO', '50,00')],
+                  athena={'26H00000001': 'STP-XE-AAA111-0-0'})
+g = seen[0] if seen else {}
+linhas = {row[5]: row[4] for row in (g.get('rows') or [])}
+check('cada linha traz o Athena ID do SEU contrato', linhas.get('26H00000001'), 'STP-XE-AAA111-0-0')
+check('contrato sem Athena ID conhecido fica em branco (nunca chute)', linhas.get('26H00000002'), '')
+check('a linha tem uma celula por cabecalho',
+      {len(row) for row in (g.get('rows') or [])}, {len(otc_emails._MSG_TABLE_HEADERS)})
+check('o HTML mostra a coluna', 'Athena ID' in (g.get('_html') or '') and 'STP-XE-AAA111-0-0' in (g.get('_html') or ''), True)
+
+print('\n== o mapa B3 ID -> Athena ID ==')
+_real_map = (R._ndfc_collect, R._ops_swap_trade_rows, R._ops_ndfc_trade_rows, R._ops_opt_trade_rows)
+_ci = {c: i for i, c in enumerate(R._NDFC_COLUMNS)}
+
+
+def _ck(b3, deal, unwind=False):
+    row = [''] * (len(R._NDFC_COLUMNS) + 5)
+    row[_ci['CD_CETIP_RETURN']] = b3
+    row[_ci['ID_SOURCE_DEAL']] = deal
+    row[len(R._NDFC_COLUMNS) + 4] = '1' if unwind else ''
+    return row
+
+
+R._ndfc_collect = lambda ref: {'rows': [_ck('26E00000001', 'NDF-DEAL-1'),
+                                        _ck('26E00000002', 'UNW-ATH-2', unwind=True),
+                                        _ck('26E00000003', 'UNW-ATH-3', unwind=True),
+                                        _ck('26E00000003', 'NDF-DEAL-3'),
+                                        _ck(R._NDFC_MISSING_B3, 'SEM-B3')]}
+R._ops_swap_trade_rows = lambda d: [{'id_b3': '26S00000001', 'internal_id': 'KAP-9'}]
+R._ops_ndfc_trade_rows = lambda d: [{'id_b3': '26C00000001', 'internal_id': 'XE-COMM-0-0'}]
+
+def _boom(d):
+    raise RuntimeError('fonte fora')
+R._ops_opt_trade_rows = _boom
+try:
+    mp = R._opb3_athena_id_map(datetime(2026, 8, 5))
+finally:
+    (R._ndfc_collect, R._ops_swap_trade_rows, R._ops_ndfc_trade_rows, R._ops_opt_trade_rows) = _real_map
+check('NDF de moeda pelo Cockpit (ID_SOURCE_DEAL)', mp.get('26E00000001'), 'NDF-DEAL-1')
+check('a recompra so entra se o contrato nao tem a original', mp.get('26E00000002'), 'UNW-ATH-2')
+check('   e a original vence a recompra', mp.get('26E00000003'), 'NDF-DEAL-3')
+check('swap e termo de commodities pelo internal_id do Trade Level',
+      (mp.get('26S00000001'), mp.get('26C00000001')), ('KAP-9', 'XE-COMM-0-0'))
+check('fonte que falha nao derruba as outras, e Missing B3 ID nao vira chave',
+      len(mp), 5)
+
+
+print('\n== o batimento e o Athena ID leem o Cockpit UMA vez por request ==')
+from apps import create_app as _ca                                 # noqa: E402
+from apps.config import DebugConfig as _DC                         # noqa: E402
+_chamadas = []
+_real_nc = R._ndfc_collect
+R._ndfc_collect = lambda ref: (_chamadas.append(ref) or {'rows': [_ck('26E00000009', 'NDF-9')]})
+try:
+    with _ca(_DC).test_request_context('/'):
+        R._opb3_internal_ter_map(datetime(2026, 8, 5))
+        R._opb3_athena_id_map(datetime(2026, 8, 5))
+    check('dentro do request: uma montagem do Cockpit', len(_chamadas), 1)
+    _chamadas.clear()
+    R._opb3_internal_ter_map(datetime(2026, 8, 5))
+    R._opb3_athena_id_map(datetime(2026, 8, 5))
+    check('fora do request nao memoiza (a rotina ve o dado mudar)', len(_chamadas), 2)
+finally:
+    R._ndfc_collect = _real_nc
 
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)

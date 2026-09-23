@@ -283,6 +283,8 @@ def api_opb3_mensageria():
     prem_map = _R()._opb3_internal_swapprem_map(ref)
     swap_map = _R()._opb3_internal_swap_map(ref)
     ndfc_map = _R()._opb3_internal_ndfc_map(ref)
+    # O Athena ID de cada linha, das mesmas fontes do batimento (§543).
+    athena = _R()._opb3_athena_id_map(ref)
 
     ref_fmt = ref.strftime('%d/%m/%Y')
     drafts, missing, used = [], set(), []
@@ -323,6 +325,7 @@ def api_opb3_mensageria():
             str(r.get('Conta', '') or ''),
             str(r.get('Tipo Operação', '') or ''),
             str(r.get('C/V', '') or ''),
+            athena.get(str(r.get('Título', '') or '').strip().upper(), ''),
             str(r.get('Título', '') or ''),
             str(r.get('Tipo Título', '') or ''),
             _R()._swapchar_fmt_value(r.get('Valor', '')),

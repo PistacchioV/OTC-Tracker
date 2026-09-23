@@ -3657,6 +3657,7 @@ _opb3_internal_swapprem_map = _pf_opb3._opb3_internal_swapprem_map
 _opb3_internal_trade_map = _pf_opb3._opb3_internal_trade_map
 _opb3_internal_swap_map = _pf_opb3._opb3_internal_swap_map
 _opb3_internal_ndfc_map = _pf_opb3._opb3_internal_ndfc_map
+_opb3_athena_id_map = _pf_opb3._opb3_athena_id_map
 _opb3_events_upgrade = _pf_opb3._opb3_events_upgrade
 _ops_norm_event = _pf_opb3._ops_norm_event
 
