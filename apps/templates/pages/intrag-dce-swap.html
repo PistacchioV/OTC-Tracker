@@ -672,7 +672,10 @@ $(document).ready(function() {
             otcFilePreview({
                 title: _t('intrag-dces-preview-title', 'Intrag file preview'), subtitle: dealId,
                 files: [{ label: 'Intrag', file_name: o.data.file_name || '', fields: _fields, records: [o.data.line || ''] }],
-                t: _t, width: 900
+                t: _t, width: 900,
+                // O rodapé da casa (Export · Edit · Close), o mesmo do New Deals.
+                buttons: { download: 'raw', edit: true },
+                onEdit: function(){ if (DEALS[dealId]) openModal(DEALS[dealId]); }
             });
         }).catch(function(err){
             Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });

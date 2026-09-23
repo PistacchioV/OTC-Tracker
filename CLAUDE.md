@@ -774,7 +774,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   (§480): uma aba por arquivo/visão, tabela Bloco · Campo · Formato · Valor
   com o badge da origem do cadastro e o arquivo cru embaixo. A página passa
   `files` (campos do servidor ou do gerador do navegador + `blockFields` do
-  template) e os botões do rodapé; não desenha tabela própria.
+  template) e os botões do rodapé; não desenha tabela própria. **O rodapé é
+  Export · Edit · Close em toda tela que gera arquivo** (`buttons`): página
+  sem endpoint de download usa `download: 'raw'` — o helper baixa o arquivo
+  cru de cada aba, com o `file_name` e o `encoding` dela (`cp1252` onde a B3
+  conta bytes, §480) — e o Edit é um `onEdit` que dispara o Edit da LINHA
+  (some junto, em `Sent`). `check_file_preview_buttons.py`.
 - **Autocomplete nunca é `<datalist>`**: dropdown próprio abaixo do campo, mesma
   largura, `max-height` ~220px, item por `mousedown` (antes do `blur`),
   reemitindo `input`/`change` (`mapAttachDrop`, `.ar-ac-drop`).

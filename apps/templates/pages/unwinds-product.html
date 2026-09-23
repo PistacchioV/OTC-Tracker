@@ -781,7 +781,7 @@ $(document).ready(function () {
 
     // ── Preview do arquivo da B3 (otcFilePreview, §480) ────────────────────
     // Produto sem layout da B3 no catálogo (COE, DCE) não tem o que prever.
-    function previewRow(aid) {
+    function previewRow(aid, tr) {
         var e = ROWS[aid]; if (!e || !PAGE.b3) return;
         fetch(PAGE.api + '/preview?id=' + encodeURIComponent(aid) + '&date=' + encodeURIComponent(refDateIso()),
               { credentials: 'same-origin' })
@@ -797,14 +797,17 @@ $(document).ready(function () {
                     files: (o.data.files || []).map(function (f) {
                         return { label: 'Antecipação ' + PAGE.b3.label + ' · ' + f.view, file_name: f.file_name,
                                  fields: f.fields, header: f.header, records: f.records };
-                    }), t: t
+                    }), t: t,
+                    // O rodapé da casa (Export · Edit · Close), o mesmo do New Deals.
+                    buttons: { download: 'raw', edit: !!tr && e.Status !== 'Sent' },
+                    onEdit: function () { $(tr).find('.btn-row-edit').trigger('click'); }
                 });
             })
             .catch(function (err) { Swal.fire({ icon: 'error', title: 'Error', text: 'Request failed: ' + err.message }); });
     }
     $('#unw-table tbody').on('dblclick', 'tr', function (e) {
         if ($(e.target).closest('td').index() <= 1) return;
-        var d = table.row(this).data(); if (d) previewRow(d[C_KEY]);
+        var d = table.row(this).data(); if (d) previewRow(d[C_KEY], this);
     });
 
     function sendRows(ids) {
