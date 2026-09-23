@@ -145,9 +145,10 @@ class _UnlockedReadGate:
     - o leitor espera um pouco (`_GATE_READ_WAIT_SECONDS`) por um escritor em
       curso — na maioria das vezes a escrita fecha em milissegundos e a leitura
       que hoje falharia passa a responder com dado — e, esgotada a espera,
-      SEGUE para o connect e falha como sempre falhou (o poll já devolve o sino
-      vazio). Esperar sem teto seria devolver ao sino a fila que o `unlocked`
-      existe para evitar;
+      DESISTE com `DatabaseLockTimeout` sem abrir nada (`try_enter_read`; o
+      poll serve a última resposta boa). Seguir para o connect furava a fila
+      do escritor e fazia a escrita perder. Esperar sem teto seria devolver ao
+      sino a fila que o `unlocked` existe para evitar;
     - o escritor declara a intenção (leitor novo recua), espera os leitores em
       voo fecharem (`_GATE_WRITE_WAIT_SECONDS` — eles são SELECTs curtos) e,
       esgotada a espera, segue e deixa o connect decidir. O teto é o que impede
@@ -169,6 +170,28 @@ class _UnlockedReadGate:
                     break
                 self._cond.wait(remaining)
             self._readers += 1
+
+    def try_enter_read(self, timeout_seconds: float) -> bool:
+        """`enter_read` que NÃO entra com escritor declarado: esgotado o teto,
+        devolve False sem se registrar.
+
+        É o do leitor SEM lock (o poll do sino). O `enter_read` entra assim
+        mesmo depois do teto, e com várias abas o poll de uma chegava enquanto
+        o da outra ainda abria o banco pelo share: cada leitor novo esperava
+        1 s e furava a fila, a contagem nunca zerava, o escritor esgotava os
+        10 s da drenagem e o `connect` dele batia no `read_only` aberto —
+        *"different configuration than existing connections"*, e a notificação
+        se perdia. Recusado aqui, o poll serve a última resposta boa
+        (`_notif_last_good`); o escritor só espera quem JÁ estava em voo."""
+        deadline = time.monotonic() + timeout_seconds
+        with self._cond:
+            while self._writers:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                self._cond.wait(remaining)
+            self._readers += 1
+            return True
 
     def exit_read(self) -> None:
         with self._cond:
@@ -927,7 +950,9 @@ def _database_context(
                     _unlocked_warned.add(normalized_path)
                     _log_event("file_lock_skipped", operation, logging.WARNING)
                 if gate is not None:
-                    gate.enter_read(_GATE_READ_WAIT_SECONDS)
+                    if not gate.try_enter_read(_GATE_READ_WAIT_SECONDS):
+                        raise DatabaseLockTimeout(
+                            normalized_path, "read", _GATE_READ_WAIT_SECONDS)
                     gate_read = True
             else:
                 if write and gate is not None:

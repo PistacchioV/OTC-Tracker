@@ -260,6 +260,22 @@ def _opb3_load(ref):
     return jp, (None if data is None else [dict(r) for r in data])
 
 
+def _opb3_load_for_write(ref):
+    """(json_path, data|None) para quem vai GRAVAR o dia — chamado sob o
+    `_cache_lock`, no ciclo ler → alterar → gravar inteiro.
+
+    O `_opb3_load` é do leitor: engole a falha como "sem arquivo" e responde
+    do cache de 5 s. Para quem grava, as duas coisas perdem dado: com a
+    instância vizinha segurando o banco, o add recebia `None`, fazia
+    `data = []` e gravava UMA linha por cima do dia importado inteiro; e o
+    cache devolvia o dia de antes da edição de outro usuário, que o save
+    desfazia calado. Aqui só AUSENTE é `None`; ocupado/ilegível sobe (o
+    tratador global responde 503) e a leitura é sempre fresca."""
+    from apps.pages import routes
+    jp = _opb3_json_path(ref)
+    return jp, routes._day_records_for_write(jp, _opb3_ensure_meta)
+
+
 def _opb3_find(data, rid):
     for rec in data:
         if str(rec.get('_ob_id', '')) == str(rid):
@@ -374,17 +390,17 @@ def _opb3_side_write(recs, raw, ref, src_key):
     from apps.pages import routes
     b3_new = _opb3_map_recs(recs)
     b3_jp = _opb3_json_path(ref)
-    existing = []
-    if _store.isfile(b3_jp):
-        try:
-            existing = _store.read(b3_jp) or []
-        except Exception:
-            existing = []
-    b3_rows = _opb3_merge(existing, b3_new, src_key)
-    os.makedirs(os.path.dirname(b3_jp), exist_ok=True)
-    # Pelo FUNIL (auditoria §335): o bump que era manual vem junto, e o
-    # espelho DuckDB fica sabendo da gravação.
-    routes._atomic_write_json(b3_jp, b3_rows)
+    # Ler → mesclar → gravar sob o lock, e a leitura ESTRITA: o merge é o que
+    # preserva as linhas manuais, o meta de maker/checker e a OUTRA fonte (JPM
+    # × MGT). Com o banco ocupado lido como "vazio", o import gravava só o
+    # arquivo desta fonte por cima do dia inteiro. Ocupado agora sobe.
+    with routes._cache_lock:
+        existing = routes._day_records_for_write(b3_jp, lambda _d: False) or []
+        b3_rows = _opb3_merge(existing, b3_new, src_key)
+        os.makedirs(os.path.dirname(b3_jp), exist_ok=True)
+        # Pelo FUNIL (auditoria §335): o bump que era manual vem junto, e o
+        # espelho DuckDB fica sabendo da gravação.
+        routes._atomic_write_json(b3_jp, b3_rows)
     routes._ds_write_updated(b3_jp, _opb3_updated_from(routes._ds_read_rows(raw)) or ref.strftime('%H:%M:%S'))
 
 

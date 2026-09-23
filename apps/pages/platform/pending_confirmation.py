@@ -493,8 +493,9 @@ def _pc_target_category(row):
     return 'pending'
 
 
-def _pc_write_exec(category, ops):
-    """Run (sql, params) operations in one shared exclusive transaction."""
+def _pc_write_exec(category, ops, raise_errors=False):
+    """Run (sql, params) operations in one shared exclusive transaction.
+    `raise_errors`: a falha SOBE (depois do WARNING) em vez de virar `False`."""
     from apps.pages import routes
     path = os.path.join(routes._PC_DB_DIR, _PC_DBS[category])
     _pc_ensure_db(path)
@@ -507,6 +508,8 @@ def _pc_write_exec(category, ops):
         return True
     except Exception:
         log.warning('[pending-confirmation] write failed on %s:\n%s', category, traceback.format_exc())
+        if raise_errors:
+            raise
         return False
 
 
@@ -538,6 +541,35 @@ def _pc_delete_trade_number(tn):
     return achou
 
 
+# Colunas que o DEAL diz, e que um novo mapeamento (amend, reimport da
+# recompra) pode corrigir. Todas as outras são da MESA ou derivadas dela.
+_PC_DEAL_COLUMNS = ('LOB', 'SPN', 'Client', 'Product Type', 'Trade Date',
+                    'Maturity Date')
+
+
+def _pc_find_row(tn):
+    """A linha gravada do Trade Number `tn` (a primeira achada em backlog →
+    pending → ok), ou `None`. ESTRITA: banco que não abre levanta — lida como
+    "não há", o `_pc_save_from_deal` reescreveria a linha da mesa com uma em
+    branco."""
+    from apps.pages import routes
+    tn = str(tn or '').strip()
+    if not tn:
+        return None
+    cols = ', '.join('"{}"'.format(c) for c in _PC_COLUMNS)
+    for cat in ('backlog', 'pending', 'ok'):
+        path = os.path.join(routes._PC_DB_DIR, _PC_DBS[cat])
+        if not _store.isfile(path):
+            continue
+        _pc_ensure_db(path)
+        with routes.duckdb_read(path) as con:
+            r = con.execute('SELECT {} FROM {} WHERE "Trade Number" = ? LIMIT 1'.format(
+                cols, _PC_TABLE), [tn]).fetchone()
+        if r is not None:
+            return dict(zip(_PC_COLUMNS, ('' if v is None else v for v in r)))
+    return None
+
+
 def _pc_insert_into(category, row):
     # INSERT com colunas explícitas: funciona também num DB ainda não migrado
     # (colunas legadas extras ficam NULL) — o VALUES posicional quebraria.
@@ -560,7 +592,19 @@ def _pc_upsert_rows(rows):
     Number some dos três bancos e a linha entra no banco a que pertence AGORA.
     TN repetido no lote vale a ÚLTIMA linha (é o que a sequência de upserts
     fazia — a última sobrescrevia). Devolve a lista de categorias-alvo, na
-    ordem das linhas de entrada."""
+    ordem das linhas de entrada.
+
+    **Ordem: primeiro o DESTINO, depois a limpeza dos outros.** Eram três
+    transações na ordem backlog → pending → ok, cada uma apagando o Trade
+    Number e só a do alvo inserindo, com o `False` do `_pc_write_exec`
+    ignorado: uma linha indo para `ok` era apagada de backlog e pending, a
+    gravação do `ok` falhava (ocupado) e ela sumia dos três bancos com a tela
+    dizendo `success`. Agora o destino recebe a linha (delete + insert numa
+    transação); só com ele gravado as cópias dos outros bancos saem — no pior
+    caso sobra uma DUPLICATA, que a próxima gravação resolve, nunca um vazio.
+    E a falha SOBE (a primeira, depois de tentar as outras categorias): o
+    endpoint responde 503/500 em vez de `success` (o `manual_conf.upsert_row`
+    passou pela mesma correção)."""
     alvos = []
     ultima_por_tn = {}
     sem_tn = []                  # linha sem Trade Number entra assim mesmo
@@ -578,13 +622,33 @@ def _pc_upsert_rows(rows):
     cols = ', '.join('"{}"'.format(c) for c in _PC_COLUMNS)
     ph = ', '.join('?' for _ in _PC_COLUMNS)
     ins_sql = 'INSERT INTO {} ({}) VALUES ({})'.format(_PC_TABLE, cols, ph)
-    for cat in ('backlog', 'pending', 'ok'):
-        ops = [(del_sql, [tn]) for tn in ultima_por_tn]
+    cats = ('backlog', 'pending', 'ok')
+    erro = None
+    gravado = set()              # categorias-DESTINO que gravaram
+    for cat in cats:
+        tns = [tn for tn, (target, _r) in ultima_por_tn.items() if target == cat]
+        ops = [(del_sql, [tn]) for tn in tns]
         ops += [(ins_sql, [row.get(c, '') for c in _PC_COLUMNS])
                 for target, row in
                 (list(ultima_por_tn.values()) + sem_tn) if target == cat]
-        if ops:
-            _pc_write_exec(cat, ops)
+        if not ops:
+            continue
+        try:
+            _pc_write_exec(cat, ops, raise_errors=True)
+            gravado.add(cat)
+        except Exception as exc:                            # noqa: BLE001
+            erro = erro or exc
+    for cat in cats:
+        tns = [tn for tn, (target, _r) in ultima_por_tn.items()
+               if target != cat and target in gravado]
+        if not tns:
+            continue
+        try:
+            _pc_write_exec(cat, [(del_sql, [tn]) for tn in tns], raise_errors=True)
+        except Exception as exc:                            # noqa: BLE001
+            erro = erro or exc
+    if erro is not None:
+        raise erro
     return alvos
 
 
@@ -760,7 +824,25 @@ def _pc_save_from_deal(deal, product_type, pending_status=None, trade_number=Non
         row['Pending Status'] = pending_status or 'Pending OTC'
         row['Owner'] = _pc_banker_for_spn(deal.get('SPN', ''))
         _pc_refdata_enrich(row)      # Economic Group / Signature Type do RefData
-        _pc_upsert_row(row)          # routes to pending (or backlog if >12 months)
+        # A linha que JÁ EXISTE não volta a ser uma linha nova: todo PATCH
+        # `Success` do New Deals, todo `b3_mapped` e todo reimport da recompra
+        # passam por aqui, e a linha em branco apagava EA, Send/Return Date,
+        # Break Reason, Comments, FepWeb ID e Pendência e devolvia o Pending
+        # Status a Pending OTC — com a esteira intocada, as duas telas passavam
+        # a discordar. Do deal só vem o que é DELE (`_PC_DEAL_COLUMNS`, quando
+        # preenchido); o resto é da mesa. Leitura estrita: banco que não abre
+        # interrompe aqui (vai para o log abaixo) em vez de gravar em branco.
+        atual = _pc_find_row(row['Trade Number'])
+        if atual is not None:
+            novo = dict(atual)
+            for c in _PC_DEAL_COLUMNS:
+                if str(row.get(c, '') or '').strip():
+                    novo[c] = row[c]
+            for c in _PC_COLUMNS:            # vazio na mesa → o que o deal/cadastro sabe
+                if not str(novo.get(c, '') or '').strip() and str(row.get(c, '') or '').strip():
+                    novo[c] = row[c]
+            row = novo
+        _pc_upsert_rows([row])       # routes to pending (or backlog if >12 months)
         # A MESMA operação entra na esteira de validação da confirmação — só os
         # produtos que geram documento (ver _MC_CONFIRMATION_SOURCES).
         routes._mc_save_from_deal(deal, source or product_type, trade_number=row['Trade Number'])

@@ -2726,5 +2726,8 @@
   "ndm-col-open": "Em aberto",
   "ndm-sum-open": "em aberto",
   "ndm-sum-open-one": "em aberto",
-  "ndm-zone-conf": "Confirmações"
+  "ndm-zone-conf": "Confirmações",
+  "map-load-failed-title": "Mapping não carregado",
+  "map-load-failed-busy": "O banco está ocupado. Tente de novo em alguns segundos.",
+  "map-load-failed": "Não foi possível ler este mapping. Nada foi alterado."
 }
