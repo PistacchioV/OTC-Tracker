@@ -142,6 +142,97 @@ def _dashboard_mock(obj):
     return o
 
 
+# ── New Deals Monitor (/api/new-deals/monitor) ──────────────────────────────
+# A tela é uma TABELA por zona, e a resposta real vem com TODOS os cards
+# zerados na dev (não há arquivo-dia): a captura saía com as três zonas dizendo
+# "nothing imported today". Aqui as contagens são escritas à mão, card a card,
+# porque a tela é justamente a COMPARAÇÃO entre produtos — contagem sorteada
+# dava um dia sem forma nenhuma.
+#
+# Parte dos cards fica ZERADA de propósito: a tela recolhe os sem movimento
+# atrás de uma linha que diz quantos são, e é esse o retrato de um dia típico.
+# Os status são os que cada zona fala (§454): New/Pending/Approved/Sent/Success
+# na B3 e no Intrag; Pending OTC/MO/FO e Ok na esteira das Confirmations.
+MONITOR_COUNTS = {
+    # ── B3 Registration ──
+    'ndf-vanilla':        {'Pending': 2, 'Approved': 1, 'Sent': 3, 'Success': 24},
+    'ndf-fwdstart':       {'Pending': 1, 'Success': 6},
+    'ndf-commodities':    {'New': 2, 'Sent': 1, 'Success': 9},
+    'ndf-otherpublisher': {'Success': 4},
+    # `done: ['Sent']` — a recompra FECHA em Sent, e é o que prova na captura
+    # que "em aberto" sai do card, não de uma lista fixa de status.
+    'unwind-ndf-fx':      {'Pending': 1, 'Sent': 2},
+    'opt-fxo':            {'New': 1, 'Approved': 2, 'Success': 11},
+    'opt-commodities':    {'Success': 5},
+    'swap-equities':      {'Pending': 3, 'Sent': 1, 'Success': 8},
+    'swap-cem':           {'Success': 6},
+    # ── Intrag ──
+    'intrag-ndf':         {'Pending': 2, 'Success': 18},
+    'intrag-option':      {'Success': 9},
+    'intrag-swap':        {'Pending': 1, 'Success': 7},
+    'intrag-dce-ndf':     {'Success': 5},
+    # A Intrag Unwind é o bloco PRÓPRIO da zona (a tela dela é de todos os
+    # produtos): sem movimento ela ficaria recolhida, e a captura do guia não
+    # mostraria a família nova.
+    'intrag-unwind':      {'New': 1, 'Sent': 3},
+    # ── Confirmations (o total do card é o número de GRUPOS segregados) ──
+    'conf-ndf-commodities': {'Pending OTC': 1, 'Pending MO': 1, 'Ok': 2},
+    'conf-ndf-mgt':         {'Pending OTC': 1, 'Ok': 2},
+    'conf-opt-fxo':         {'Pending FO': 1, 'Ok': 2},
+}
+# Acrônimos curtos: o rótulo do grupo é "<acrônimo> · <mercadoria>" e ele
+# aparece como etiqueta embaixo do nome do produto — nome de contraparte
+# inteiro ali estica a primeira coluna e esmaga a barra de composição.
+ACR = ['AURORA', 'CEDRO', 'ORION', 'VELMONT', 'PONTAL', 'SERRA']
+
+
+def _split(total, n):
+    """Distribui `total` em n parcelas decrescentes (a primeira concentra)."""
+    if n <= 0:
+        return []
+    if total < n:
+        return [total] + [0] * (n - 1)
+    pesos = [3, 2, 1, 1, 1][:n]
+    soma = sum(pesos)
+    partes = [max(1, total * p // soma) for p in pesos]
+    partes[0] += total - sum(partes)
+    return partes
+
+
+def _monitor_mock(obj):
+    o = dict(obj)
+    for campo in ('cards', 'conf_cards'):
+        novos = []
+        for c in (o.get(campo) or []):
+            c = dict(c)
+            st = MONITOR_COUNTS.get(c.get('key'))
+            if st:
+                c['statuses'] = dict(st)
+                c['total'] = sum(st.values())
+                # A quebra por entidade soma o total do card: elas são as
+                # partes dele, e três números que não fecham com a linha ao
+                # lado é exatamente o que a mesa confere na tela.
+                if c.get('les'):
+                    partes = _split(c['total'], len(c['les']))
+                    c['les'] = [{'le': e['le'], 'count': n}
+                                for e, n in zip(c['les'], partes)]
+                # Na esteira o TOTAL é a contagem de grupos segregados: um
+                # grupo por etiqueta, com os deals dentro dele.
+                if c.get('groups') is not None:
+                    # O ativo do grupo segue o PRODUTO do card: mercadoria na
+                    # de commodities, par de moedas nas de câmbio.
+                    ativos = COMMOD if 'commodities' in (c.get('key') or '') else PAIRS
+                    c['groups'] = [
+                        {'label': '%s · %s' % (ACR[i % len(ACR)], ativos[i % len(ativos)]),
+                         'count': 1 + (i % 3)}
+                        for i in range(c['total'])]
+            novos.append(c)
+        if campo in o:
+            o[campo] = novos
+    o['success'] = True
+    return o
+
+
 def transform(obj, nrows=12):
     """Given a parsed API JSON dict, inject fictional data. Returns (changed, obj)."""
     if not isinstance(obj, dict):
@@ -155,6 +246,9 @@ def transform(obj, nrows=12):
             obj['widgets'] = fill_widgets(obj.get('widgets'), nrows)
         obj['success'] = True
         return True, obj
+    # new-deals monitor (cards é LISTA aqui; o do ndf-summary é dict)
+    if isinstance(obj.get('cards'), list) and 'conf_cards' in obj:
+        return True, _monitor_mock(obj)
     # dashboard-stats
     if 'total_deals' in obj and 'top5_clients' in obj:
         return True, _dashboard_mock(obj)

@@ -67,11 +67,19 @@ DATA_EPS = [
     '/api/other-products-swap-kapital-hybrids/data',
     '/api/other-products-swap-settlement-advice/data',
     '/api/other-products-swap-vcp/data',
+    # O Monitor é uma TABELA por zona e na dev vem com os 26 cards zerados: sem
+    # mock a captura sai com as três zonas dizendo "nothing imported today".
+    '/api/new-deals/monitor',
 ]
 
 # Tema das capturas (o guia é DARK desde o StreamFlow). O config.js lê a chave
 # do localStorage no load e escreve o data-bs-theme — não há parâmetro de URL.
 THEME = os.environ.get('SOP_THEME', 'dark')
+
+# Refazer UMA tela (uma rota redesenhada) não pode custar as outras 60: a
+# rodada inteira reescreve o diretório todo, e uma captura ruim no meio dela
+# apaga uma boa. SOP_ONLY é a lista (vírgula) de rotas a percorrer.
+ONLY = [r.strip() for r in (os.environ.get('SOP_ONLY') or '').split(',') if r.strip()]
 
 
 def find_chrome():
@@ -126,7 +134,7 @@ def prefetch_mocks():
 
 def main():
     from playwright.sync_api import sync_playwright
-    routes = sidebar_routes()
+    routes = ONLY or sidebar_routes()
     payloads = prefetch_mocks()
     chrome = find_chrome()
 
