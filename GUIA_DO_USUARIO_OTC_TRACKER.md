@@ -375,7 +375,7 @@ O **sino** da barra superior mostra em vermelho quantos avisos você tem. O sist
 
 **Para que serve:** é o painel do dia. Ele responde, num relance, quanto já foi registrado na B3, quanto já virou confirmação e quanto falta — por produto.
 
-A tela tem três seções, cada uma com um cartão por produto e um anel de progresso:
+A tela tem três seções, e cada uma é **uma tabela: uma linha por produto**.
 
 | Seção | O que ela conta |
 |---|---|
@@ -383,14 +383,24 @@ A tela tem três seções, cada uma com um cartão por produto e um anel de prog
 | **Confirmations** | Quantas já têm o documento de confirmação gerado e validado pelo OTC |
 | **Intrag** | Quantas já foram enviadas à Intrag |
 
+**Como ler uma seção.** No alto, à direita, o resumo dela em dois números: **Open** (o que ainda precisa de ação) e **Imported** (o total que entrou). Embaixo do título, quantos produtos da seção se moveram hoje. A barra colorida que atravessa a seção é a composição do dia: cada faixa é um status, nas mesmas cores das colunas da tabela.
+
+Na tabela, as colunas do meio são os **status** (New, Pending, Approved, Sent, Success na B3; Pending OTC, Pending MO, Pending FO e Ok nas confirmações), e as duas últimas resumem a linha: **Open** e **Total**. A barrinha ao lado do nome do produto é a composição daquela linha — dá para ver a forma do dia de cada produto sem ler número nenhum.
+
 **Passo a passo:**
 
 1. Confira a **data** no alto da tela — por padrão é hoje. Troque para olhar um dia anterior.
-2. Percorra os cartões. O número grande é a contagem; o anel colorido é a proporção do que está pronto.
-3. **Clique no cartão do produto** para abrir a tela dele já filtrada por aquele dia.
-4. No cartão de **Confirmations**, o botão que aparece depende do estado: **Generate** enquanto não há PDF na pasta da confirmação, e **Validate** depois que há. Ver o capítulo 9.3.
+2. Leia o **Open** de cada seção: é a resposta da tela. Zerado, a seção mostra **all done**.
+3. Percorra as linhas com número na coluna **Open** — são os produtos com trabalho pendente.
+4. **Clique na linha do produto** para abrir a tela dele já filtrada por aquele dia.
 
-> **O cartão de Confirmations acompanha UM ciclo só, e ele termina no OTC.** Validada a etapa do OTC, a confirmação conta como 100% aqui. O que vem depois (Middle e Front Office) é acompanhado no **Confirmations Monitor** (capítulo 9.3).
+> **Produto sem movimento não some: ele fica recolhido.** No fim de cada seção há uma linha dizendo quantos produtos não tiveram nada importado hoje; clique nela para abrir a lista. É assim que "não houve operação" não se confunde com "esse produto não existe".
+
+> **As três seções não se somam.** A mesma operação aparece no registro da B3 e no espelho da Intrag — somá-las daria um número que nenhuma das duas telas confirma. Compare cada seção com ela mesma.
+
+> **Aqui não se gera nem se valida documento.** A seção de Confirmations mostra em que etapa está cada produto; **Generate** e **Validate** vivem no **Confirmations Monitor** (capítulo 9.3), que é onde o ciclo inteiro do documento mora.
+
+> **A seção de Confirmations acompanha UM ciclo só, e ele termina no OTC.** Validada a etapa do OTC, a confirmação conta como concluída aqui. O que vem depois (Middle e Front Office) é acompanhado no **Confirmations Monitor** (capítulo 9.3).
 
 ### 5.2. A tela de produto
 
@@ -531,7 +541,7 @@ A recompra desfaz, no todo ou em parte, um termo de moeda que já está registra
 
 **A tela faz três coisas hoje:** importa o aviso, confere a conta e monta o arquivo da B3. O restante do ciclo (Termo de Resilição, arquivo da Intrag, esteira de confirmação e a entrada no Summary de NDF) **ainda não está pronto** e continua sendo feito por fora.
 
-A recompra aparece no **Monitor** (capítulo 5.1) como *Unwind NDF FX*, na coluna **B3 Registration**, junto dos demais produtos de NDF — é de lá que se vê, sem abrir a tela, se sobrou alguma recompra do dia para enviar. Ela some da pendência quando fica **Sent**.
+A recompra aparece no **Monitor** (capítulo 5.1) como *Unwind NDF FX*, na seção **B3 Registration**, junto dos demais produtos de NDF — é de lá que se vê, sem abrir a tela, se sobrou alguma recompra do dia para enviar. Ela some da coluna **Open** quando fica **Sent**: é onde a recompra fecha, porque o B3 ID de volta ainda não existe para ela.
 
 **Passo a passo:**
 

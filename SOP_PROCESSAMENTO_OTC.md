@@ -355,8 +355,8 @@ A coluna **Check** é o veredito da conferência e tem três estados: **OK**,
 **NOK** (o valor do e-mail não bate com o recalculado) e **–** (não deu para
 conferir). **Só se envia com OK.**
 
-A recompra é acompanhada pelo **New Deals Monitor** (card *Unwind NDF FX*, na
-coluna B3 Registration, grupo NDF) e entra no aviso diário de pendências
+A recompra é acompanhada pelo **New Deals Monitor** (linha *Unwind NDF FX*, na
+seção B3 Registration, grupo NDF) e entra no aviso diário de pendências
 enquanto houver linha não enviada; o estado que a encerra é **Sent**.
 
 O ciclo da recompra de NDF de moeda está completo no sistema: além do arquivo da
