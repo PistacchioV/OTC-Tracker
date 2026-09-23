@@ -547,7 +547,10 @@ def _mc_confirmation_docs(row, trades=None):
         # sem Trade ID, e sumir com ele por causa do filtro deixaria o item do
         # Monitor sem o e-mail que está lá.
         ids = [str(k).strip().upper() for k in (trades or []) if str(k or '').strip()]
-        ativo = str(row.get('Moeda', '') or '').strip().upper()
+        ativo = _mc_mod.upper_norm(row.get('Moeda', ''))
+        # O Ativo da linha é MERCADORIA (e não a moeda que a planilha legada
+        # grava nessa coluna) quando não é uma moeda do cadastro Currency Base.
+        ativo_e_mercadoria = bool(ativo) and len(ativo) >= 3 and not routes._moeda_num_code(ativo)
 
         def _afunila(docs):
             if ids:
@@ -555,12 +558,31 @@ def _mc_confirmation_docs(row, trades=None):
                 if proprios:
                     return proprios
             if ativo and len(ativo) >= 3:
-                proprios = [d for d in docs if ativo in d['name'].upper()]
+                proprios = [d for d in docs if ativo in _mc_mod.upper_norm(d['name'])]
                 if proprios:
                     return proprios
             return docs
 
-        return _afunila(out) + _afunila(mails)
+        def _de_outro_ativo(d):
+            """True quando o NOME do PDF diz que ele é de OUTRA mercadoria.
+
+            O app grava `<acrônimo> - <mercadoria> - CONFIRMAÇÃO…`
+            (`features/confirmation/entrypoint.py`), então o segundo trecho é o
+            ativo do documento. Sem este corte, o card de AÇÚCAR de uma
+            contraparte que já tinha a confirmação de SOJA no mesmo dia caía no
+            "devolve a pasta inteira" do `_afunila`: mostrava o PDF de soja e
+            trocava o Generate por Validate — a de açúcar não se gerava mais.
+            PDF sem esse padrão (upload à mão) não diz o ativo e continua
+            aparecendo."""
+            partes = d['name'].split(' - ')
+            if len(partes) < 3 or not _mc_mod.upper_norm(partes[2]).startswith('CONFIRMACAO'):
+                return False
+            return _mc_mod.upper_norm(partes[1]) != ativo
+
+        pdfs = _afunila(out)
+        if ativo_e_mercadoria:
+            pdfs = [d for d in pdfs if not _de_outro_ativo(d)]
+        return pdfs + _afunila(mails)
     except Exception:
         log.warning('[manual-conf] não consegui listar a pasta da confirmação:\n%s',
                     traceback.format_exc())
