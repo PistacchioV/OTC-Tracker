@@ -23175,3 +23175,260 @@ próprio do cashflow; Options EDG de New Deals (stub). Se a mesa marcar campos
 como `Fixed` nos layouts de antecipação, rodar
 `scripts/import_file_interpreter_template.py --key swap-antecipacao` (e
 `antecipacao-opcao`).
+
+## §527 — Swap Calculator: a taxa contratada vazia caía em 0%, e o plano B levou três rodadas (2026-09-22)
+
+**O defeito.** A taxa contratada de cada ponta sai da DPOSICAO-SWAP (a mesma
+que o Swap Characteristics mostra), e célula VAZIA ali vira 0% no formulário —
+é como o motor lê branco. Num CDI − 11,90% isso apagava o spread negativo da
+conta sem aviso nenhum: a tela afirmava um swap sem spread, e a conta fechava
+consigo mesma.
+
+**O plano B.** O DFLUXO (Live Position › cashflow) traz a mesma informação por
+FLUXO — `Sinal/Taxa de Juros Parte` (ponta ativa) e `... Contraparte`
+(passiva). Ele entra SÓ quando a posição não respondeu, lendo o fluxo que está
+sendo calculado, e a origem fica marcada em `fonte.taxa = 'dfluxo'`.
+
+**As três rodadas, que é o que vale registrar.** A primeira (af89bb5a) pôs o
+DFLUXO como plano B. A segunda (00bded26) INVERTEU a precedência — o DFLUXO
+passou a vencer a posição — porque a planilha da mesa parecia desmentir o
+−11,95% do CDI no 25C04803529, trazendo −11,90%; com o número do fluxo a conta
+reproduzia a planilha (R$ 6.160.863,94 de juros na ponta CDI, resultado
+R$ 1.543.769,26 contra os R$ 1.008.081,47 da tela). A terceira (b1a1d51f)
+desfez isso: **era a planilha que estava sem o spread, e a mesa confirmou** — a
+posição estava certa e a tela também. Vale a regra original: o DFLUXO só entra
+com a célula da posição VAZIA, e o seletor de fluxo só troca a taxa da ponta
+que veio do DFLUXO.
+
+**A correção que SOBREVIVEU à terceira rodada** é do sinal: o plano B
+multiplicava a célula pelo código de sinal, e `-3,13` com `Sinal Juros` = 1
+virava +3,13 — o spread do Term SOFR entrava invertido. O sinal pode vir
+embutido na célula OU no código (ou nos dois): negativo é "célula negativa OU
+código negativo", aplicado ao MÓDULO (`swap_flows.taxa_do_fluxo`).
+
+**A lição.** Uma planilha da mesa não é o gabarito: ela é outra implementação
+da mesma conta, e pode estar sem um dado que a posição tem. Antes de inverter
+uma precedência para casar com ela, pergunte de onde ela tirou o número — duas
+rodadas de código foram gastas aqui para voltar ao ponto de partida.
+
+## §528 — O filtro só aceitava um valor, e a mesa cola uma coluna do Excel (2026-09-22)
+
+**O que a mesa pedia.** Buscar várias operações de uma vez, colando a coluna de
+Trade IDs do Excel. Três coisas independentes impediam, e cada uma falhava
+calada:
+
+1. o `_deal_matches` do servidor (o `/cache/search` do New Deals) comparava o
+   texto inteiro como substring;
+2. no navegador, a busca padrão do DataTables faz **E** entre as palavras —
+   `123 456` nunca casava com linha nenhuma;
+3. o `<input>` **descarta as quebras de linha ao colar**, grudando a coluna
+   inteira do Excel num ID só.
+
+**A regra.** `,`, `;` e quebra de linha separam valores, e a linha passa se
+QUALQUER um casar: `_filter_tokens` no servidor e `sf-multi.js` no navegador
+(regex OR escapado, sem smart search; o colar troca as quebras por `; `).
+Milhar (`1,250,000`) continua UM valor — senão um notional viraria três
+buscas —, lista de números separa só por `;`, e o chip `Status ≠ Success` segue
+valor único. O dropdown do filtro inteligente passou a oferecer as colunas de
+TEXTO para a lista e também para um valor que COMEÇA com dígito: antes, um Deal
+numérico ou um B3 ID só ofereciam colunas de número e data, que é onde eles não
+estão. Unwinds não têm filtro inteligente — lá a lista vale na linha de filtro
+por coluna. `check_sf_multi.py` cobre o servidor, o JS no `jsc` e as 17 páginas.
+
+## §529 — No cross SEM BRL a liquidação é o SEGUNDO Rolled Positions (2026-09-22)
+
+O `_ndfc_api_rolled` pegava sempre o primeiro item numérico de `Rolled
+Positions`. No par com BRL isso está certo: o primeiro é o caixa em reais e o
+segundo é o notional. **No cross sem BRL (GBP × USD, EUR × USD) a API inverte a
+ordem** — o primeiro é o notional da moeda e o caixa vem em segundo. No
+D5VL-2IEJOX, `[-43000000.0, -5167299.25]`: o Cockpit mostrava -43.000.000,00
+como liquidação e o NDF Summary somava o notional no caixa do dia.
+
+Agora, com as DUAS pernas fora de BRL, vale o segundo item; sem ele a célula
+fica VAZIA com aviso no log, porque ali o primeiro é notional e usá-lo seria o
+mesmo erro com outra cara. Par com BRL segue igual. **Dia já importado só muda
+no próximo Run do Cockpit daquela data** — o número errado não se conserta
+sozinho no arquivo-dia que já está gravado. `check_ndfc_api.py` §3 prende o
+payload real, a lista sem o segundo item e o par com BRL.
+
+## §530 — O tipoEvento do XML do Termo de Resilição é RE (2026-09-22)
+
+O FepWeb identifica o distrato pelo código **RE**, de resilição. O `R` gerado
+desde 18/09/2026 não era o código que a mesa usa para o evento, e com ele o
+FepWeb não reconhece o lançamento como distrato. Só o Termo muda: as
+confirmações de operação nova seguem com `N`.
+
+## §531 — O Advanced Export do Pending Confirmation respondia outra pergunta (2026-09-22)
+
+**O desenho herdado.** O intervalo do Advanced Export nasceu para as telas de
+arquivo-dia: ele lê uma foto por dia útil e empilha, e cada linha sai com a
+Reference Date do arquivo de onde veio. **No Pending Confirmation a operação
+não vive num dia** — ela vive nos três bancos (`pending`, `ok`, `backlog`) e
+ANDA entre eles conforme o status resolve e o prazo vira. Pelas fotos das
+11:30, a mesma operação saía repetida em todas as fotos em que ainda estava
+pendente, e NENHUMA vez se já tivesse sido resolvida antes da primeira foto.
+
+**O que a mesa pede** é outra coisa: as operações cuja Trade Date (ou Maturity
+Date) cai no intervalo. A seção ganhou um combobox de COLUNA (Trade Date é o
+padrão, por ser por onde se recorta o que entrou no período) e a leitura virou
+UMA busca nos três bancos, em `/api/pending-confirmation/range` — o modo
+`range` do `export-advanced.js`, que EXCLUI o `daily`.
+
+**As decisões que não dão erro nenhum quando caem:**
+
+- a coluna é **LISTA BRANCA**: o nome chega do navegador e vai escolher uma
+  coluna do `_PC_COLUMNS`; aceitar o que vier faria a busca comparar texto com
+  texto numa coluna que não é data, sem erro e com o arquivo saindo errado;
+- **deduplicação por Trade Number**: a linha fica nos dois bancos até a
+  manutenção das 11:30 reencaminhá-la, e sairia duas vezes no arquivo;
+- linha SEM a data pedida fica de fora e é **CONTADA** (`undated`, dito no
+  rodapé): sumir calada é o que faz ninguém confiar no número;
+- leitura **`strict=True`**: a tolerante devolve `[]` com banco ocupado ou
+  ilegível (§4), e num export isso é uma planilha curta — indistinguível de um
+  intervalo sem movimento, e assinada por quem a mandou;
+- **sem Reference Date** na frente da linha: aqui não há arquivo de um dia a
+  carimbar, e uma coluna com a data de hoje em todas as linhas seria uma data
+  inventada.
+
+`check_pc_export_range.py`.
+
+## §532 — O campo de data se DIGITA: a máscara mora no HELPER (2026-09-22)
+
+O campo já era editável (`allowInput`), mas quem digitava tinha de pôr as duas
+barras à mão. **Um dígito a mais ou uma barra esquecida produz um texto que o
+parse frouxo do flatpickr aceita mesmo assim**: `2208/2026` vira uma data
+QUALQUER, sem erro nenhum, e o intervalo exportado é outro. Agora só entra
+dígito e as barras se escrevem sozinhas.
+
+Duas decisões:
+
+- **A máscara mora no helper** (`otcDateField`), não na página. É o único campo
+  de data do app: Advanced Export, Intrag, DCE, New Deals e Tools passam todos
+  por ele. Copiada por tela, ela chegaria a umas e faltaria noutras — é a
+  história do Import laranja da sétima página (§490).
+- **Completada a data, ela vai ao picker na hora** (`setDate`). O código em
+  volta lê o ISO do input ORIGINAL, e ele só nasceria no blur: digitar o
+  intervalo e clicar direto no Run exportaria o intervalo anterior.
+
+A máscara vai no `altInput`, que é o campo que se vê; o original segue com o
+ISO e nada em volta muda. Só a data INTEIRA vai ao picker — escrever no meio da
+digitação faria o campo pular para um dia que ninguém pediu. Conferido no
+navegador: `22082026` → `22/08/2026` com o ISO já em `2026-08-22`; letra e
+barra a mais ignoradas; `31/02` rola para 03/03 À VISTA, não calado.
+`check_export_padrao.py` §5.
+
+## §533 — Dois scripts de operação do Pending Confirmation, e o que a carga ensinou (2026-09-22)
+
+**A pergunta que os gerou**, da mesa: *"a busca não traz nada antes de
+26/08/2025"*. **Não há piso de data no código** — o `/range` faz SELECT inteiro
+dos três bancos, a regra dos 12 meses só decide em qual banco a linha mora e
+nada expurga o backlog. Então a resposta está no DADO, e faltava como olhar.
+
+**`diag_pending_confirmation_db.py`** despeja o conteúdo dos três bancos e, na
+tela, o resumo que costuma responder: linhas, a Trade Date mais velha e a mais
+nova, o histograma por ano e **quantas linhas têm data ILEGÍVEL**, com amostra
+do texto cru. Essa última coluna separa duas causas que se parecem e se
+consertam ao contrário: não há nada mais velho, ou há e a data está num formato
+que o app não lê (serial do Excel, `26/8/25`) — e aí a linha some de todo filtro
+por data sem erro nenhum. Banco em uso ou ilegível **PARA com o motivo** em vez
+de imprimir zero linha, que é exatamente a confusão que o script existe para
+desfazer. Só lê, e roda com o app de pé (`duckdb_read`).
+
+**`import_pending_confirmation_missing.py`** acrescenta aos bancos o que a
+planilha tem e eles não têm. Trade Number já existente é PULADO — este script
+não corrige linha e não apaga nada; quem reconstrói é o
+`import_pending_confirmation.py`, e aquele apaga o que não estiver na planilha,
+backlog inclusive, que é só história e não se repovoa. SPN, Client e Owner saem
+do Reference Data; o resto vem da planilha. O nome casa por igualdade e, sem
+ela, pelo mais parecido — **só acima do limiar E com vantagem sobre o segundo
+colocado**: um SPN quase certo não é um SPN, ele leva a operação para outra
+contraparte com o Owner e o grupo junto, e nada na tela acusa.
+
+**As quatro correções que a carga real exigiu, todas do mesmo dia:**
+
+1. **O banco de destino é a coluna `Status`, não o Pending Status** (cfb5ef81).
+   O script usava o `_pc_target_category` do app, que responde pelo PENDING
+   STATUS — e jogava no `pending` uma planilha inteira de operações já
+   resolvidas. A regra da mesa: `Ok` dentro de 12 meses → `ok`, `Ok` mais velha
+   → `backlog`, **qualquer coisa que não seja `Ok` → `pending`**. Linha com
+   `Status = Ok` e um Pending Status que o app não lê como resolvido é CONTADA e
+   avisada: a tela deriva o Status do Pending Status, e a manutenção das 11:30
+   moveria essas linhas para o `pending`.
+2. **A carga diz POR QUE cada linha ficou de fora** (7e420675). O resumo só
+   dizia quantas entraram; de 80 mil linhas, "974 ok" sem explicação é
+   indistinguível de um arquivo quebrado. O `RESULTADO` agora FECHA a conta com
+   o total lido (inseridas + já nos bancos + sem Trade Number + repetidas) e
+   mostra exemplos de cada motivo — a contagem diz quantas ficaram de fora, só a
+   linha diz por quê. A leitura da planilha passou a dizer as ABAS e qual leu
+   (`--aba` escolhe; a ativa é a que estava aberta quando salvaram) e a achar o
+   CABEÇALHO na primeira linha que traga Trade Number ou Client, não na linha 1.
+3. **A carga parecia travada, e o "antes" foi lido como resultado** (591d9810).
+   Ela levava 178 s, e 156 deles no primeiro bloco de 10 mil linhas: o
+   `get_close_matches` do relatório rodava com `cutoff=0.0`, que **desliga a
+   poda do difflib** e varre as ~7 mil contrapartes por nome novo. Com o piso
+   (`PISO_RELATORIO = 0.60`), 33 s — e o relatório melhorou junto, porque um
+   candidato de 57% não é candidato, é o nome menos distante do cadastro inteiro
+   (`PETROBRAS DISTRIBUIDORA` → `CARGILL ALIMENTOS`). O laço passou a imprimir
+   uma linha de vida a cada 10 mil: **parado, um script é indistinguível de
+   travado**, e foi assim que a primeira carga foi interrompida no meio e a
+   varredura do ANTES (que agora se anuncia como tal) foi lida como o resultado.
+4. A gravação virou **INSERT de lote com UMA abertura por banco** pelo
+   `duckdb_write`: o `_pc_upsert_rows` do app faria 3 deletes por linha — 240
+   mil operações no share para uma planilha de 80 mil.
+
+Sem `--gravar` ele não escreve nada, e a leitura dos três bancos é `strict`
+(lida como vazia, a falha faria o script reinserir como novo tudo que já estava
+lá, duplicando a fila da mesa). Carga medida: 80.784 linhas, `ok` 64.000 /
+`backlog` 16.000 / `pending` 0. `check_pc_import_missing.py`.
+
+## §534 — O New Deals Monitor: de 34 cartões a uma tabela, e da tabela ao peso (2026-09-22)
+
+Duas rodadas no mesmo dia, uma de estrutura e outra de forma — e a segunda só
+existiu porque a primeira acertou a pergunta e errou o peso.
+
+**Primeira: a tela vira uma TABELA por zona** (60bb33f7). Eram 34 cartões, um
+por produto, quase todos zerados: a frase *"No operations imported for this
+date."* repetida 28 vezes e 2.900px de rolagem para dizer que o dia estava
+parado. A pergunta da tela é uma só — o que ainda precisa de ação, e onde —, e
+ela se responde COMPARANDO produtos, que é leitura de tabela. Uma linha por
+produto, contagens por status em colunas alinhadas: **1.563px e 9 linhas**, o
+dia inteiro numa tela. As colunas de status são a UNIÃO do que aparece NA ZONA
+(a B3 fala New/Pending/Approved/Sent/Success e a esteira fala Pending
+OTC/MO/FO/Ok — lista fixa mostraria coluna vazia de um lado e esconderia status
+do outro), e a coluna-resumo se chama **Open**, nunca "Pending": já existe um
+STATUS com esse nome, e duas colunas homônimas na mesma tabela não se
+distinguem. O que é "em aberto" é a **MESMA regra do aviso das 19h**
+(`Success`/`Ok` mais o que o card declara em `done`, sem caixa): duas
+definições fariam a tela e o e-mail cobrarem números diferentes da mesma mesa
+no mesmo dia. Produto sem movimento fica RECOLHIDO atrás de uma linha que diz
+quantos são — sumir calado faria "sem movimento" e "produto que não existe"
+virarem a mesma coisa. E **as três zonas não se somam num total**: a mesma
+operação aparece no registro da B3 e no espelho da Intrag.
+
+**Segunda: a tabela respondia certo e parecia vazia** (13ac3b28). O resumo de
+cada zona — que é a RESPOSTA dela — era uma frase cinza de .78rem jogada à
+direita do título, e num dia parado a tela inteira eram três lajotas brancas
+com uma linha de texto cada. O resumo virou NÚMERO grande (aberto em âmbar,
+importado em neutro), a zona ganhou o fio do gradiente da casa no topo, as
+contagens viraram PASTILHAS (um dígito colorido solto se perde no branco da
+linha) e o dia parado virou uma pílula verde que DIZ. O vão entre o nome do
+produto e as colunas de número — meio metro de branco numa tela larga, porque
+o nome fica com toda a sobra — virou a **composição da linha**: a mesma barra
+da zona, produto a produto. As duas barras saem da MESMA função (`segmentos`) e
+a cor de cada status mora numa variável (`--st-fg`/`--st-bg`) que serve à
+pastilha e ao segmento. A coluna da composição é a única sem largura fixa (é
+ela que recebe a sobra), a primeira tem piso de 220px (sem ele o nome quebra em
+duas linhas e as etiquetas de entidade empilham) e abaixo de 900px a barra da
+linha some.
+
+**E uma regra de domínio, da mesa: a Intrag Unwind é bloco PRÓPRIO, fora do de
+NDF.** A tela dela é de todos os produtos, e dentro do bloco de NDF ela
+afirmava que a recompra espelhada é de termo de moeda — a de opção e a de swap
+caem na mesma página. As `intrag-unwind-dce-*` continuam cada uma na família do
+SEU produto: essas sim são uma tela por produto.
+
+Os cinco produtos da esteira ganharam ícone (sem eles a zona de Confirmations
+inteira caía no genérico e repetia a mesma caixinha cinza). Medido no Chromium
+com dados sintéticos injetados na API — a dev não tem dia com movimento —, em
+claro, escuro, BR, efeitos reduzidos e 420px, onde quem rola de lado é a
+tabela, nunca a página. `check_ndm_cards.py`.
