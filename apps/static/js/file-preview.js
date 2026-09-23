@@ -22,7 +22,13 @@
            records,                // linhas do arquivo; sem elas, UMA montada dos campos
            extraHtml               // HTML depois da tabela (linhas tipo 2, etc.)
        }],
-       buttons: { download: true|false, edit: true|false, send: true|false },
+       buttons: { download: true|false|'raw', edit: true|false, send: true|false },
+                                   //   download: 'raw' = o Export da casa sem endpoint:
+                                   //   baixa o ARQUIVO CRU de cada aba (o que está na
+                                   //   tela, header + registros) com o `file_name` e o
+                                   //   `encoding` da aba ('utf-8' padrão, 'cp1252').
+                                   //   true = a página trata o `isConfirmed` sozinha.
+       onEdit,                     // opcional: o que o Edit faz (senão, `isDenied`)
        rawFrom: { url, body },     // opcional: o endpoint de DOWNLOAD da página
                                    //   (`download: true`, não grava). O arquivo cru
                                    //   da aba passa a ser o que o SERVIDOR gera —
@@ -161,6 +167,41 @@
             .catch(function () {});
     }
 
+    /* cp1252 à mão (o TextEncoder só fala utf-8): o Conecta conta BYTES, e o
+       travessão da denominação VCP é 1 byte aqui e 3 em utf-8 (§480). */
+    var CP1252 = { 0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85, 0x2020: 0x86,
+                   0x2021: 0x87, 0x02C6: 0x88, 0x2030: 0x89, 0x0160: 0x8A, 0x2039: 0x8B, 0x0152: 0x8C,
+                   0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92, 0x201C: 0x93, 0x201D: 0x94, 0x2022: 0x95,
+                   0x2013: 0x96, 0x2014: 0x97, 0x02DC: 0x98, 0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B,
+                   0x0153: 0x9C, 0x017E: 0x9E, 0x0178: 0x9F };
+    function encode(txt, encoding) {
+        if (String(encoding || '').toLowerCase().replace(/[-_]/g, '') !== 'cp1252')
+            return new TextEncoder().encode(txt);
+        var out = new Uint8Array(txt.length);
+        for (var i = 0; i < txt.length; i++) {
+            var c = txt.charCodeAt(i);
+            out[i] = (c < 0x80 || (c >= 0xA0 && c <= 0xFF)) ? c : (CP1252[c] || 0x3F);
+        }
+        return out;
+    }
+    function saveAs(content, name, encoding) {
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([encode(content, encoding)], { type: 'text/plain' }));
+        a.download = name || 'file.txt';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    }
+    /* O arquivo cru de cada aba é lido do POPUP, não recalculado: é o que a
+       pessoa conferiu — inclusive o que o `rawFrom` trocou pelo do servidor. */
+    function downloadRaw(popup, files) {
+        files.forEach(function (f, i) {
+            var el = popup && popup.querySelector('#otcPv' + i + ' .otc-preview-line');
+            var txt = el ? el.textContent : '';
+            if (txt) saveAs(txt, f.file_name, f.encoding);
+        });
+    }
+
     window.otcFilePreview = function (opts) {
         opts = opts || {};
         ensureCss();
@@ -192,7 +233,13 @@
                 if (typeof opts.didOpen === 'function') opts.didOpen(popup);
             }
         };
-        return Swal.fire(cfg);
+        // No preConfirm o popup ainda existe; depois do `then` ele já saiu do DOM.
+        if (b.download === 'raw' && !b.send)
+            cfg.preConfirm = function () { downloadRaw(Swal.getPopup(), files); return true; };
+        return Swal.fire(cfg).then(function (result) {
+            if (result.isDenied && typeof opts.onEdit === 'function') opts.onEdit();
+            return result;
+        });
     };
     window.otcFilePreview.lineOf = lineOf;
     window.otcFilePreview.enrich = enrich;

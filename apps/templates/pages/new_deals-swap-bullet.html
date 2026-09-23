@@ -744,9 +744,12 @@ $(document).ready(function() {
                 title: t('nd-swb-preview-title', 'B3 file preview'),
                 subtitle: [e.Deal || e._id, e.Client || '', e.LE || '', e.LOB || '', e.B3ID ? 'B3 ID ' + e.B3ID : ''].filter(Boolean).join(' \u00b7 '),
                 files: (o.data.files || []).map(function(f){
-                    return { label: (f.kind === 'swap' ? 'SWAP 0301' : 'Pr\u00eamio 0897') + ' \u00b7 ' + f.le_pair, file_name: f.file_name,
+                    return { label: (f.kind === 'swap' ? 'SWAP 0301' : 'Pr\u00eamio 0897') + ' \u00b7 ' + f.le_pair, file_name: f.file_name, encoding: 'cp1252',
                              fields: f.fields, header: f.header, records: f.records };
-                }), t: t
+                }), t: t,
+                // O rodapé da casa (Export · Edit · Close), o mesmo do Vanilla.
+                buttons: { download: 'raw', edit: true },
+                onEdit: function(){ if (DEALS[dealId]) openModal(DEALS[dealId]); }
             });
         }).catch(function(err){ Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' }); });
     }
