@@ -23432,3 +23432,46 @@ inteira caía no genérico e repetia a mesma caixinha cinza). Medido no Chromium
 com dados sintéticos injetados na API — a dev não tem dia com movimento —, em
 claro, escuro, BR, efeitos reduzidos e 420px, onde quem rola de lado é a
 tabela, nunca a página. `check_ndm_cards.py`.
+
+## §535 — O Page do Add Template abria vazio, sem dizer por quê (2026-09-23)
+
+A mesa tentou criar a variante do **Antecipação Termo Multiclasses (TER)** e o
+select **Page** do modal abria em branco — parecia defeito de carregamento. Não
+era: o select lista só as páginas em que o template BASE já foi amarrado pelo
+**Link Pages** (`base.linked_pages`), e esse template nunca foi amarrado a
+nenhuma (o banco dele nem tem a tabela `linked_pages`). O aviso existia, mas só
+aparecia no Save.
+
+Sem página amarrada, o select agora traz a própria instrução como opção
+desabilitada (`fi-var-need-page`, já traduzida nas três línguas). O caminho da
+mesa é Link Pages → a página que gera o arquivo (a recompra de NDF é
+`/unwinds/ndf/fx`) → Add Template. O Guia (13.6) diz a ordem. d5624dac.
+
+## §536 — O rodapé Export · Edit · Close vira padrão em todo preview (2026-09-23)
+
+O preview de duplo clique das páginas de NDF e Opção do New Deals tinha
+**Export, Edit e Close**; o das recompras (NDF FX e as onze do catálogo), do
+Swap Bullet, do catálogo de New Deals (Swap Cashflow / Opt EDG) e da Intrag DCE
+Swap abria só com o X do canto. O `buttons` do `otcFilePreview` é opcional, e
+cada página nova copiava o molde do Swap Bullet, que não o passava — nada
+acusava.
+
+Essas cinco não têm endpoint de download sem efeito colateral, então o helper
+ganhou **`download: 'raw'`**: o Export baixa o arquivo cru de cada aba, LIDO DO
+POPUP (é o que a pessoa conferiu, inclusive o que o `rawFrom` trocou pelo do
+servidor), com o `file_name` e o `encoding` da aba. O `encoding` importa:
+**cp1252** no Swap Bullet e no Cashflow, porque o Conecta conta bytes e o
+travessão da denominação VCP é 1 byte lá e 3 em utf-8 (§480) — o encoder é
+escrito à mão, porque o `TextEncoder` só fala utf-8. O download roda no
+`preConfirm`: no `then` do Swal o popup já saiu do DOM e não há mais o que ler.
+O **Edit** é um `onEdit` que dispara o Edit da LINHA — nas recompras ele some em
+`Sent`, como o da grade. As páginas que já baixavam pelo servidor (Vanilla, FWD
+Start, Other Publisher, NDF/Opt Commodities, FXO) seguem como estavam.
+
+Medido no Chromium: Swap Bullet com os três botões e o Export baixando o
+`SWAP_EDG_BANCO.txt` (1.971 bytes); o helper com duas abas baixando `0x96` para
+o travessão em cp1252 e `é` em utf-8 na outra, o `onEdit` chamado e o popup
+fechando nos dois caminhos. As recompras não deu para ver ponta a ponta: a única
+da dev não tem posição e o preview para em *Cannot build the B3 file* antes de
+abrir. `check_file_preview_buttons.py` reprova preview sem `buttons:` em
+qualquer template (provado tirando os botões de uma página). 4ce7b79f.

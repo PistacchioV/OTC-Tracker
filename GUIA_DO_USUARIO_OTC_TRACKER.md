@@ -468,7 +468,7 @@ O fluxo é o mesmo nas seis; o que muda são as colunas e os botões próprios d
 ### 5.4. Conferir e corrigir uma operação
 
 1. Localize a linha — pela busca por fichas (4.4) ou pelos filtros de coluna (4.3).
-2. **Dê um duplo clique na linha** para ver todos os campos daquela operação numa janela, com os nomes que a B3 usa no arquivo de registro. É a forma mais rápida de conferir sem rolar a tabela para o lado.
+2. **Dê um duplo clique na linha** para ver todos os campos daquela operação numa janela, com os nomes que a B3 usa no arquivo de registro. É a forma mais rápida de conferir sem rolar a tabela para o lado. O rodapé da janela tem três botões, os mesmos em toda tela que gera arquivo: **Export** (baixa o arquivo como ele vai para a B3 ou a Intrag, sem gravar nada e sem mudar o status), **Edit** (abre a edição daquela linha) e **Close**.
 3. Para corrigir, clique no botão **Edit** (o lápis) da linha, altere o que precisa e clique em **Save** (4.9).
 4. Salvando uma edição, o status vai para `Pending` — a alteração precisa da aprovação de outra pessoa.
 
@@ -552,7 +552,7 @@ A recompra aparece no **Monitor** (capítulo 5.1) como *Unwind NDF FX*, na seç�
    - **OK** (verde) — o resultado do e-mail bate com o recalculado;
    - **NOK** (vermelho) — não bate. **Não envie**: passe o mouse no badge para ver o que divergiu;
    - **–** (cinza) — não deu para conferir (faltou um valor no e-mail, ou a operação não foi encontrada no Live Position). Também não envie.
-5. **Duplo clique na linha** abre o arquivo da B3 campo a campo, com o texto cru embaixo. É aqui que se confere antes de mandar.
+5. **Duplo clique na linha** abre o arquivo da B3 campo a campo, com o texto cru embaixo. É aqui que se confere antes de mandar. O rodapé tem **Export** (baixa o arquivo para conferir, sem enviar), **Edit** (edita a linha, e some quando ela já está **Sent**) e **Close** — o mesmo nas demais telas de recompra.
 6. Selecione a linha e clique em **Send** para gravar o arquivo no Batch Conecta. A linha vira **Sent** e deixa de poder ser apagada.
 
 **O que a tela preenche sozinha, e de onde:** o **B3 ID**, a **contraparte**, a **moeda** e as **contas** não vêm do e-mail — vêm da linha do Live Position da operação, achada pelos 14 últimos caracteres do Athena ID. Se a coluna **B3 ID** vier vazia, é porque a operação não foi encontrada lá: confira o *Código Identificador* no Live Position de NDF antes de qualquer outra coisa.
@@ -1577,7 +1577,7 @@ Cada leiaute é um **template**, e a tabela mostra uma linha por campo: **SEQ ·
 2. **Versions**, no cartão do template, escolhe a **variante** — a mesma família de arquivo pode ter versões por par de entidades ou por produto.
 3. Clique em **Edit Sources** para dizer de onde vem o valor de cada campo.
 4. Clique em **Edit Template** para alterar a estrutura, **Add Template** para criar uma variante e **Create New Template** para um leiaute novo.
-5. **Link Pages** amarra o template às páginas que o usam.
+5. **Link Pages** amarra o template às páginas que o usam. **Faça isso antes do Add Template**: a variante é sempre de uma página, e o campo **Page** do Add Template só lista as páginas já amarradas ao template — sem nenhuma, ele diz *"Link the base template to a page first"*.
 6. Dê um **duplo clique** numa linha para ver a prévia do valor.
 
 **A coluna *Source*** diz quem manda o valor:
