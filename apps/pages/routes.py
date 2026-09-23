@@ -7944,6 +7944,36 @@ def _ndfc_rec_from_api(rec, refmap_acr, refmap_spn, stl=None):
     return out, None
 
 
+def _ndfc_deal_key(v):
+    """Chave de DEAL para comparar a recompra com a API: a API grava o `Deal
+    Name` com `_` trocado por `-` (`_ndfc_rec_from_api`), e o Athena ID da
+    recompra pode chegar com qualquer um dos dois."""
+    return str(v or '').strip().upper().replace('_', '-')
+
+
+def _ndfc_unwinds_fora_da_api(ref, api_rows):
+    """As RECOMPRAS do dia `ref` que a API ainda NÃO traz.
+
+    Quem as põe no dia do Cockpit é a vertical das recompras
+    (`unwinds.commands.cockpit_da_recompra`), no import do aviso do Athena,
+    marcadas com `_nc_unwind`: o `getTradesBySettle` não as conhece. Se um dia
+    a API passar a trazer a recompra, a da API é a boa — e a pergunta é pelo
+    DEAL (o `ID_SOURCE_DEAL` da recompra é o Athena ID), porque a linha da API
+    não tem `_nc_id` nenhum para comparar: comparar pelo `_nc_id`, como se
+    fazia, nunca casava, e a recompra entraria DUAS vezes no caixa do dia.
+
+    Falha ao reler o dia LEVANTA: devolver `[]` seria afirmar que não há
+    recompra, e o caixa dela sumiria calado de quem soma o dia."""
+    _jp, atuais = _ndfc_load(ref)
+    na_api = {_ndfc_deal_key(r.get('ID_SOURCE_DEAL')) for r in (api_rows or [])}
+    na_api.discard('')
+    vistos = {str(r.get('_nc_id') or '') for r in (api_rows or [])}
+    return [r for r in (atuais or [])
+            if r.get('_nc_unwind')
+            and str(r.get('_nc_id') or '') not in vistos
+            and _ndfc_deal_key(r.get('ID_SOURCE_DEAL')) not in na_api]
+
+
 def _ndfc_keep_unwinds(ref, out):
     """Reanexa a `out` as linhas de RECOMPRA que já estavam no dia do Cockpit.
 
@@ -7952,17 +7982,14 @@ def _ndfc_keep_unwinds(ref, out):
     Cockpit monta o dia inteiro a partir dele. Sem isto, todo Run do Cockpit
     apagava a recompra do dia — o tipo de perda que não aparece na tela.
 
-    Linha cuja chave já veio da API não é reanexada: se um dia a recompra
-    passar a vir de lá, a da API é a boa."""
+    Recompra cujo deal já veio da API não é reanexada: se um dia ela passar a
+    vir de lá, a da API é a boa (`_ndfc_unwinds_fora_da_api`)."""
     try:
-        _jp, atuais = _ndfc_load(ref)
+        guardadas = _ndfc_unwinds_fora_da_api(ref, out)
     except Exception:                                       # noqa: BLE001
         log.warning('[ndfc] não deu para reler o dia para preservar as recompras:\n%s',
                     traceback.format_exc())
         return
-    vistos = {str(r.get('_nc_id') or '') for r in out}
-    guardadas = [r for r in (atuais or [])
-                 if r.get('_nc_unwind') and str(r.get('_nc_id') or '') not in vistos]
     if guardadas:
         out.extend(guardadas)
         log.info('[ndfc] %d recompra(s) preservada(s) no dia %s',
@@ -8063,13 +8090,13 @@ def _ndfc_reapply_ir(ref):
                     ref.strftime('%Y-%m-%d'), traceback.format_exc())
 
 
-def _ndfc_import(ref=None):
-    """Import do Cockpit: puxa do getTradesBySettle as operações de NDF que
-    liquidam em `ref` (a data do picker; default hoje) e REESCREVE o JSON do dia
-    — como o import do SETTLEMENT.xlsx sempre fez. Falha de rede/SSO volta como
-    erro para a tela, nunca como JSON vazio: um dia sem arquivo se leria como
-    "não há liquidação hoje"."""
-    ref = ref or datetime.now()
+def _ndfc_fetch_api(ref):
+    """As linhas do Cockpit que o `getTradesBySettle` traz para a liquidação
+    `ref` — SÓ a API, sem recompra, sem imposto e sem gravar nada.
+
+    Devolve `{'success': True, 'rows', 'skipped', 'url'}` ou `{'success':
+    False, 'error', 'url'}`. Falha de rede/SSO volta como erro, nunca como
+    lista vazia: um dia sem linha se leria como "não há liquidação hoje"."""
     from apps.pages import athena_api
     if not athena_api.is_available():
         return {'success': False, 'error': "The 'requests' package is not installed; "
@@ -8130,6 +8157,54 @@ def _ndfc_import(ref=None):
         log.warning('[ndfc] %d evento(s) sem `Spot` no getTradesBySettle de %s — o Fixing do '
                     'aviso sai vazio: %s', len(sem_spot), ref.strftime('%Y-%m-%d'),
                     ', '.join(sem_spot[:10]))
+    return {'success': True, 'rows': out, 'skipped': skipped, 'url': url}
+
+
+def _ndfc_liquidacao_do_dia(ref):
+    """A liquidação de NDF do dia `ref` como o Cockpit a monta — a API, mais as
+    RECOMPRAS que ela ainda não traz, com o IR calculado — SEM gravar o dia.
+
+    É a fonte do lado JPM de NDF da Recon Pay/Rec, no lugar do `settlement.csv`
+    exportado para a pasta: o arquivo era uma foto do Cockpit de quem o
+    exportou, e a recompra só entrava nele se alguém a tivesse lançado à mão.
+    Não reescreve o Cockpit de propósito: rodar a recon não pode apagar a
+    edição de maker/checker que a mesa fez na tela.
+
+    Falha da API ou do dia do Cockpit LEVANTA com o motivo (`RuntimeError`):
+    uma recon sem o lado NDF acusaria toda perna de cliente de NDF como
+    pendente, e o problema real seria outro."""
+    api = _ndfc_fetch_api(ref)
+    if not api.get('success'):
+        raise RuntimeError('NDF settlements (Athena getTradesBySettle): {}'.format(
+            api.get('error') or 'no answer'))
+    rows = [dict(r) for r in api['rows']]
+    try:
+        unwinds = _ndfc_unwinds_fora_da_api(ref, rows)
+    except Exception as exc:                                # noqa: BLE001
+        log.warning('[ndfc] recompras do dia %s ilegíveis:\n%s',
+                    ref.strftime('%Y-%m-%d'), traceback.format_exc())
+        raise RuntimeError('NDF unwinds of {} (NDF Cockpit day): {}: {}'.format(
+            ref.strftime('%d/%m/%Y'), type(exc).__name__, exc))
+    rows += [dict(r) for r in unwinds]
+    # O imposto é CALCULADO pela mesma função do import do Cockpit e do NDF
+    # Summary (§423): o dia INTEIRO montado, porque o piso é do balde do mês.
+    _ndfc_apply_ir(ref, rows)
+    log.info('[ndfc] liquidação de %s: %d da API + %d recompra(s) fora dela (skipped %s)',
+             ref.strftime('%Y-%m-%d'), len(api['rows']), len(unwinds), api.get('skipped'))
+    return rows
+
+
+def _ndfc_import(ref=None):
+    """Import do Cockpit: puxa do getTradesBySettle as operações de NDF que
+    liquidam em `ref` (a data do picker; default hoje) e REESCREVE o JSON do dia
+    — como o import do SETTLEMENT.xlsx sempre fez. Falha de rede/SSO volta como
+    erro para a tela, nunca como JSON vazio: um dia sem arquivo se leria como
+    "não há liquidação hoje"."""
+    ref = ref or datetime.now()
+    api = _ndfc_fetch_api(ref)
+    if not api.get('success'):
+        return api
+    out, url = api['rows'], api['url']
     # As RECOMPRAS sobrevivem ao reimport (§488): elas não vêm da API — a
     # vertical das recompras as projeta aqui no import do aviso do Athena —, e
     # este laço monta o dia INTEIRO do zero. Sem preservá-las, o próximo Run do
@@ -8144,9 +8219,9 @@ def _ndfc_import(ref=None):
     jp = _ndfc_json_path(ref)
     _ndfc_save(jp, out)
     _ds_write_updated(jp, datetime.now().strftime('%H:%M:%S'))
-    log.info('[ndfc] %d row(s) from %s (skipped %s)', len(out), url, skipped)
+    log.info('[ndfc] %d row(s) from %s (skipped %s)', len(out), url, api['skipped'])
     return {'success': True, 'file': 'Athena getTradesBySettle', 'rows': len(out),
-            'date': ref.strftime('%Y-%m-%d'), 'skipped': skipped, 'url': url}
+            'date': ref.strftime('%Y-%m-%d'), 'skipped': api['skipped'], 'url': url}
 
 
 def _ndfc_num(v):

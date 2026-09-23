@@ -3,8 +3,12 @@ Pay/Rec Reconciliation engine — faithful port of the Alteryx "PayRec" workflow
 verified against the ground-truth daily output.
 
 JPM / Cockpit side (3 sources, Union'd):
-  settlement.csv      → NDF   (value = Tax Income + Amount, per-Client sum; ALL settlement
-                        types are kept — the net type comes from CounterpartyDetails, not the file)
+  NDF Cockpit         → NDF   (value = VL_TAX_INCOME + [PROD] Cockpit.SETTLEMENT, per-Client
+                        sum). Desde 23/09/2026 vem da API `getTradesBySettle` + as recompras
+                        de NDF que a API ainda não traz, com o IR calculado
+                        (`routes._ndfc_liquidacao_do_dia`) — não mais do `settlement.csv`
+                        da pasta, que é ignorado se ainda estiver lá. ALL settlement types
+                        are kept — the net type comes from CounterpartyDetails.
   cashflows_*.xlsx    → COMM TER / SWAP  (per-client NET sum; Owner Legal Entity='0228')
   FXO Detail*.xlsx    → FXO   (value from ATH SET AMT + Direction)
 
@@ -680,6 +684,26 @@ def _jpm_settlement(rows, cols, net_map=None):
     for (client, le), values in groups.items():
         out += _emit_records('NDF', client, values, _net_type_for(net_map, client), le=le)
     return out
+
+
+def _jpm_cockpit(records, net_map=None):
+    """Registros do NDF Cockpit (API + recompras, `routes._ndfc_liquidacao_do_dia`)
+    → NDF, pela MESMA redução do `settlement.csv` que eles substituem: o arquivo
+    era a exportação do Cockpit, com `Amount` = `[PROD] Cockpit.SETTLEMENT` e
+    `Tax Income` = `VL_TAX_INCOME` (positivo: o IR retido quando o banco paga).
+
+    Só as entidades JPM, como a tela do Cockpit e o IR (`_ndfc_collect`): linha
+    sob outra LEGAL (o Lawton) não é liquidação desta mesa."""
+    rows = []
+    for rec in records or []:
+        legal = re.sub(r'[^A-Z0-9]', '', str(rec.get('LEGAL', '') or '').upper())
+        if legal and not (legal.startswith('BANCOJP') or legal.startswith('JPMORGANCHASE')):
+            continue
+        rows.append({'Client': rec.get('NM_COUNTERPARTY', ''),
+                     'Amount': rec.get('[PROD] Cockpit.SETTLEMENT', ''),
+                     'Tax Income': rec.get('VL_TAX_INCOME', ''),
+                     'Legal Entity': rec.get('LEGAL', '')})
+    return _jpm_settlement(rows, ['Client', 'Amount', 'Tax Income', 'Legal Entity'], net_map)
 
 
 def _jpm_cashflows(rows, cols, net_map=None, ref_date=None):
@@ -1538,9 +1562,12 @@ def _net_client(client, net_map):
     return out
 
 
-def run_payrec(recon_date, files=None, mode='auto'):
+def run_payrec(recon_date, files=None, mode='auto', ndf_rows=None):
+    """`ndf_rows` são os registros do NDF Cockpit do dia (API + recompras), que
+    o chamador busca (`routes._ndfc_liquidacao_do_dia`): o motor não importa o
+    `routes` para isso, e o teste passa a lista pronta."""
     srcs = _gather_sources(files, mode)
-    if not srcs:
+    if not srcs and not ndf_rows:
         raise FileNotFoundError('No Pay/Rec input files provided or found for this date.')
 
     # Net type per counterparty (name → SPN → CounterpartyDetails.NET), resolved
@@ -1548,11 +1575,16 @@ def run_payrec(recon_date, files=None, mode='auto'):
     net_map = _load_net_type_map()
 
     jpm, client = [], []
+    jpm += _jpm_cockpit(ndf_rows, net_map)
     for bucket, rows, cols in srcs:
         if not rows:
             continue
         if bucket == 'settlement':
-            jpm += _jpm_settlement(rows, cols, net_map)
+            # O NDF vem do Cockpit (API + recompras). Um `settlement.csv` que
+            # ficou na pasta entraria de NOVO e dobraria o lado NDF.
+            _LOG.warning('[payrec] settlement file ignored — NDF now comes from the '
+                         'Athena API + unwinds')
+            continue
         elif bucket == 'jpm_cash':
             jpm += _jpm_cashflows(rows, cols, net_map, ref_date=_parse_dmy(recon_date))
         elif bucket == 'jpm_fxo':

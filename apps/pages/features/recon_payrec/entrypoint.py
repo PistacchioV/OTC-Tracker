@@ -51,6 +51,10 @@ def reconciliation_payrec_run():
                 result.get('meta', '') + (' (' + recon_date + ')' if recon_date else '')
             )
         return jsonify(result)
+    except commands.NdfSourceError as e:
+        R.log.warning('[recon_payrec_run] liquidação de NDF indisponível: %s', e)
+        return jsonify({'success': False, 'code': 'ndf_source_failed',
+                        'params': {'reason': str(e)}, 'error': str(e)}), 502
     except FileNotFoundError as e:
         R.log.warning('[recon_payrec_run] arquivo não encontrado: %s', e)
         return jsonify({'not_found': True, 'detail': str(e)})
