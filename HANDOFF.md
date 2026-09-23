@@ -23475,3 +23475,33 @@ fechando nos dois caminhos. As recompras não deu para ver ponta a ponta: a úni
 da dev não tem posição e o preview para em *Cannot build the B3 file* antes de
 abrir. `check_file_preview_buttons.py` reprova preview sem `buttons:` em
 qualquer template (provado tirando os botões de uma página). 4ce7b79f.
+
+## §537 — As asiáticas do Live Position Option, e a data que o Excel lia como texto (2026-09-23)
+
+A mesa extraiu do Live Position Option uma planilha com 388 opções asiáticas
+de CO1-2 com a Média Asiática errada em todas: ou as datas do mês fora de
+ordem (a data 1 não era o primeiro dia útil), ou a janela atravessando dois
+meses. E as datas vieram como General.
+
+**O conserto da planilha é um script, não uma tela**
+(`scripts/fix_asian_dates_xlsx.py`): uma aba nova, `Ajustado`, com A:BH
+copiadas iguais e o bloco `Média Asiática (data) 1…N` (achado pelo rótulo, da
+BI em diante) reescrito. No mesmo mês, só reordena as mesmas datas. Em dois
+meses, vale o mês com MAIS datas, e a linha passa a ter TODO dia útil dele, do
+primeiro ao último. A quantidade pode mudar, e o log diz quando muda. Empate
+não se decide: a linha fica como está e vai para o log. Os feriados são os
+do Holidays do app (IPE por padrão), lidos pelo armazém. **Calendário sem
+feriado no ano da janela PARA**: sem ele, dia útil vira dia de semana, e a
+janela sairia com dia de bolsa fechada dentro, sem erro nenhum. Na dev o
+`ipe.json` está vazio; o calendário tem de ser conferido na instância antes de
+rodar. `check_fix_asian_dates.py`.
+
+**A causa do General era do export, e valia para o app inteiro.** O
+`excelHtml5` do Buttons só reconhece data `aaaa-mm-dd`, e toda tela escreve
+`dd/mm/aaaa` (§7): a data virava `inlineStr`. O `asDates` do
+`export-advanced.js`, no mesmo `customize` do §477, reescreve a célula de
+texto que é data VÁLIDA como serial com numFmt `dd/mm/yyyy` próprio. O 14 que
+o Buttons usa para ISO é a "data curta" do sistema de quem abre, e no Windows
+do JP ela é `mm/dd`. `check_export_excel_ids.py` §6 executa o export e lê a
+célula pelo openpyxl como data.
+

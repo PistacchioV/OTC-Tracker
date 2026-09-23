@@ -22,7 +22,11 @@ plugins locais do repo, download capturado e o `sheet1.xml` lido do zip):
 4. o `customize` proprio da pagina (a Recon FXO tem um) continua rodando,
    DEPOIS do patch;
 5. o botao do Advanced Export (extend por nome, `excelHtml5`) passa pelo
-   mesmo caminho.
+   mesmo caminho;
+6. a DATA `dd/mm/aaaa` (o formato de toda tela) sai como DATA: serial do
+   Excel com numFmt `dd/mm/yyyy` explicito, lida como data pelo openpyxl — o
+   Buttons so reconhecia `aaaa-mm-dd`, e o resto chegava como General (a
+   planilha de asiaticas do Live Position Option). Data invalida fica texto.
 
 E, por AST de template, que toda pagina que carrega o `buttons.html5` carrega
 o `export-advanced.js` DEPOIS dele — o Buttons copia o `action` na construcao
@@ -107,10 +111,10 @@ except ImportError:
     sys.exit(1)
 
 LINHAS = [
-    ['26E04610365', '1,234.56', 'texto', '42'],       # o contrato com E
-    ['26G53382860', '-9.10', 'x', '7'],                # contrato com outra letra
-    ['1234567890123456', '0.00', 'y', '123456789012345'],   # 16 digitos vs 15
-    ['0848007678', '5', 'z', '1e5'],                   # zero a esquerda (o Buttons ja trata)
+    ['26E04610365', '1,234.56', 'texto', '42', '05/01/2026'],       # o contrato com E
+    ['26G53382860', '-9.10', 'x', '7', '31/02/2026'],                # contrato com outra letra
+    ['1234567890123456', '0.00', 'y', '123456789012345', '29/02/2028'],   # 16 digitos vs 15
+    ['0848007678', '5', 'z', '1e5', '5/1/2026'],       # zero a esquerda (o Buttons ja trata)
 ]
 
 
@@ -119,7 +123,7 @@ def _src(rel):
 
 
 HTML = """<!doctype html><html><head><meta charset="utf-8"></head><body>
-<table id="t"><thead><tr><th>ID</th><th>Valor</th><th>Txt</th><th>N</th></tr></thead><tbody></tbody></table>
+<table id="t"><thead><tr><th>ID</th><th>Valor</th><th>Txt</th><th>N</th><th>Data</th></tr></thead><tbody></tbody></table>
 <script src="%(jq)s"></script>
 <script src="%(dt)s"></script>
 <script src="%(btn)s"></script>
@@ -189,6 +193,17 @@ with sync_playwright() as p:
     check('42 continua NUMERO', (cel.get('D3') or ('?', ''))[1], '42')
     check('1e5 (numero legitimo em notacao cientifica) vira texto — e ID neste app',
           cel.get('D6'), ('inlineStr', '1e5'))
+    from datetime import datetime
+    check('05/01/2026 sai como DATA (serial do Excel)', cel.get('E3'), ('', '46027'))
+    check('29/02/2028 (bissexto) sai como DATA', cel.get('E5'), ('', '46812'))
+    check('31/02/2026 (invalida) fica TEXTO', cel.get('E4'), ('inlineStr', '31/02/2026'))
+    check('5/1/2026 (sem zero) fica TEXTO', cel.get('E6'), ('inlineStr', '5/1/2026'))
+    from openpyxl import load_workbook
+    ws = load_workbook(caminho).active
+    check('openpyxl le a celula como data', ws['E3'].value, datetime(2026, 1, 5))
+    check('…no formato dd/mm/yyyy explicito (nao o 14, que e mm/dd no Windows do JP)',
+          ws['E3'].number_format, 'dd/mm/yyyy')
+    check('cabecalho Data segue texto', ws['E2'].value, 'Data')
     check('customize da pagina rodou UMA vez', pg.evaluate('window.__custRan'), 1)
     check('…e DEPOIS do patch (ja viu o 26E como texto)',
           '26E04610365' in pg.evaluate('window.__custSawText || []'), True)
@@ -199,6 +214,7 @@ with sync_playwright() as p:
     dl2.value.save_as(caminho2)
     cel2 = _celulas(caminho2)
     check('extend excelHtml5 (o do Advanced Export) tambem', cel2.get('A3'), ('inlineStr', '26E04610365'))
+    check('…e a data tambem', cel2.get('E3'), ('', '46027'))
     check('segundo clique nao empilha customize', pg.evaluate('window.__custRan'), 1)
     b.close()
 

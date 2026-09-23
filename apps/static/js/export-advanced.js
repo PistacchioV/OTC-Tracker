@@ -99,6 +99,68 @@
         window.__otcExcelIdsPatched = true;  // sonda do check_export_excel_ids.py
         var SCI  = /^-?\d+[eE][-+]?\d+$/;    // 26E04610365 — contrato, não 26×10^…
         var LONG = /^-?\d{16,}$/;            // 16+ dígitos: o Excel zera do 16º em diante
+        /* A DATA sai como DATA. Toda tela do app escreve `dd/mm/aaaa` (§7), e o
+         * Buttons só reconhece `aaaa-mm-dd`: o resto vira TEXTO (`inlineStr`),
+         * que o Excel mostra como General — não ordena, não filtra por mês e
+         * não entra em conta nenhuma (foi a planilha de 388 asiáticas do Live
+         * Position Option chegando assim). Aqui a célula de texto que é uma data
+         * válida vira o serial do Excel com o formato `dd/mm/yyyy` EXPLÍCITO — o
+         * numFmt 14 do Buttons é o "data curta" do Windows de quem abre, e no
+         * Windows do JP isso é `mm/dd`. Data inválida (31/02) fica texto. */
+        var DMY = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+        function serialDmy(txt) {
+            var m = DMY.exec(txt);
+            if (!m) return null;
+            var d = +m[1], mo = +m[2], y = +m[3];
+            var ms = Date.UTC(y, mo - 1, d);
+            var chk = new Date(ms);
+            if (y < 1900 || chk.getUTCFullYear() !== y || chk.getUTCMonth() !== mo - 1 || chk.getUTCDate() !== d) return null;
+            return Math.round(ms / 864e5) + 25569;   // 25569 = 01/01/1970 no Excel
+        }
+        function dateStyle(xlsx) {
+            var st = xlsx.xl && xlsx.xl['styles.xml'];
+            if (!st) return null;
+            if (st._otcDmy != null) return st._otcDmy;
+            var fmts = st.getElementsByTagName('numFmts')[0];
+            var xfs = st.getElementsByTagName('cellXfs')[0];
+            if (!fmts || !xfs) return null;
+            var id = 164;
+            jQuery('numFmt', fmts).each(function () { id = Math.max(id, +this.getAttribute('numFmtId') + 1); });
+            var nf = st.createElement('numFmt');
+            nf.setAttribute('numFmtId', id);
+            nf.setAttribute('formatCode', 'dd/mm/yyyy');
+            fmts.appendChild(nf);
+            fmts.setAttribute('count', jQuery('numFmt', fmts).length);
+            var idx = jQuery(xfs).children('xf').length;
+            var xf = st.createElement('xf');
+            [['numFmtId', id], ['fontId', 0], ['fillId', 0], ['borderId', 0], ['applyFont', 1],
+             ['applyFill', 1], ['applyBorder', 1], ['xfId', 0], ['applyNumberFormat', 1]]
+                .forEach(function (a) { xf.setAttribute(a[0], a[1]); });
+            xfs.appendChild(xf);
+            xfs.setAttribute('count', idx + 1);
+            st._otcDmy = idx;
+            return idx;
+        }
+        function asDates(xlsx) {
+            var sheet = xlsx && xlsx.xl && xlsx.xl.worksheets && xlsx.xl.worksheets['sheet1.xml'];
+            if (!sheet) return;
+            var s = null;
+            jQuery('row c[t="inlineStr"]', sheet).each(function () {
+                var c = this;
+                var tt = c.getElementsByTagName('t')[0];
+                var serial = serialDmy(tt ? String(tt.textContent).trim() : '');
+                if (serial === null) return;
+                if (s === null) s = dateStyle(xlsx);
+                if (s === null) return;
+                var is = c.getElementsByTagName('is')[0];
+                var v = c.ownerDocument.createElement('v');
+                v.appendChild(c.ownerDocument.createTextNode(String(serial)));
+                c.removeChild(is);
+                c.appendChild(v);
+                c.removeAttribute('t');
+                c.setAttribute('s', s);
+            });
+        }
         function asText(xlsx) {
             var sheet = xlsx && xlsx.xl && xlsx.xl.worksheets && xlsx.xl.worksheets['sheet1.xml'];
             if (!sheet) return;
@@ -126,6 +188,7 @@
             if (!user || !user._otcIds) {
                 var wrapped = function (xlsx, cfg, api) {
                     asText(xlsx);
+                    asDates(xlsx);
                     if (user) return user.call(this, xlsx, cfg, api);
                 };
                 wrapped._otcIds = true;

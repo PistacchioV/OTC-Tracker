@@ -770,6 +770,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `buttons.html5` carrega o `export-advanced.js` DEPOIS dele e com
   `asset_v`** — o Buttons copia o `action` na construção do botão.
   `check_export_excel_ids.py` executa o export no Chromium e cobra os dois.
+- **Excel exportado: DATA sai como DATA** (§537). O Buttons só reconhece
+  `aaaa-mm-dd`, e toda tela escreve `dd/mm/aaaa`: a data chegava como texto
+  (General), sem ordenar nem filtrar por mês. O mesmo `customize` do
+  `export-advanced.js` (`asDates`) grava o serial do Excel com numFmt
+  `dd/mm/yyyy` EXPLÍCITO — o numFmt 14 do Buttons é a data curta do Windows de
+  quem abre, `mm/dd` no JP. Data inválida fica texto. Mesmo guarda.
 - **Preview de arquivo é o `otcFilePreview` (`static/js/file-preview.js`)**
   (§480): uma aba por arquivo/visão, tabela Bloco · Campo · Formato · Valor
   com o badge da origem do cadastro e o arquivo cru embaixo. A página passa
@@ -2183,6 +2189,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 | `export_duckdb_to_json.py` | o ROLLBACK: reconstrói do banco os JSONs com diferença (`--dry-run`, `--force`, `--only`); `check_export_rollback.py` prova que cada forma volta exata |
 | `scripts/standalone/` (40, GERADOS por `build_duckdb_standalone.py`) | os mesmos conversores para máquina sem o código (`pip install duckdb` só) — nunca editar à mão |
 | `build_sop_docx.py` | SOP e Guia em Word a partir do `.md` |
+| `fix_asian_dates_xlsx.py <xlsx> [--dry-run] [--feriados] [--calendario IPE]` | conserta as datas da Média Asiática de um Excel do Live Position Option numa aba NOVA (§537): mesmo mês → reordena; dois meses → o mês com MAIS datas inteiro, dia útil a dia útil no calendário do Holidays (IPE); empate fica e vai para o log. Calendário sem feriado no ano PARA — sem feriado, dia útil vira dia de semana |
 | `diag_ndfsum_account.py [AAAA-MM-DD]` | DIAGNÓSTICO da coluna Account do Settlement Summary: nome da linha → SPN no Reference Data → registro do Counterparty Details → defaults → conta, dizendo onde a cadeia quebra (§436) |
 | `diag_pending_confirmation_db.py [--db backlog\|pending\|ok\|todos] [--db-dir] [--out] [--csv] [--so-resumo]` | DESPEJA o conteúdo dos três bancos do Pending Confirmation (uma aba por banco) e, na tela, o RESUMO que costuma responder a pergunta: linhas, a Trade Date mais velha e a mais nova, o histograma por ano e **quantas linhas têm data ILEGÍVEL**, com amostra do texto cru. "A busca não traz nada antes de tal dia" tem duas causas que se parecem e se consertam ao contrário — não há nada mais velho, ou há e a data está num formato que o app não lê (serial do Excel, `26/8/25`), e aí a linha some de todo filtro por data sem erro nenhum. Só LÊ, roda com o app de pé (abre pelo `duckdb_read`), e banco em uso ou ilegível **para com o motivo** em vez de imprimir zero linha. O `.xlsx` sai com toda célula como TEXTO (o contrato `26E04610365` vira `#NULL!` numa célula numérica, §477) |
 | `diag_boot_imports.py` | DIAGNÓSTICO da SUBIDA (§522/§524): `python -X importtime` num subprocesso, com o farol do app passando direto para a tela e um pulso a cada 5 s (segundos · módulos · último módulo) — saída que demora tem de dizer que está viva, senão doze minutos de subida são indistinguíveis de um travamento. Rodá-lo de um clone LOCAL é o CONTROLE do experimento, não erro de uso: mesmos dados no share, só o código em disco local — caiu de minutos para segundos, o custo é ler o código pelo SMB; não caiu, é o que o import EXECUTA. Vale rodar os dois |
