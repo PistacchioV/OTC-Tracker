@@ -23579,3 +23579,26 @@ Pending. O texto do "Cannot Send" de um deal New dizia para confirmar "para
 mover a Pending" e foi corrigido nas três línguas. `check_amend_counterparty.py`
 varre os seis templates; `check_swap_bullet.py` e `check_swap_cashflow.py`
 cobram o Amend → Approved.
+
+## §541 — A Pay/Rec lê o dia do Cockpit quando ele já foi importado (2026-09-23)
+
+Com o §538, todo Run da recon chamava o `getTradesBySettle`, que varre o livro
+inteiro da data e leva até `REPORT_TIMEOUT` (180 s), e depois ainda curava o
+ledger de IR do mês. O botão ficava minutos em "Running…" e a mesa leu isso
+como travado (na dev não se vê: a API não resolve e o erro volta em 0,2 s).
+
+Agora o `_ndfc_liquidacao_do_dia` lê o **dia do Cockpit** quando ele JÁ FOI
+IMPORTADO e só vai à API quando não foi. O import grava o dia inteiro (API +
+recompras preservadas + IR). O que diz "importado" é o **carimbo**
+`ndf-cockpit_AAAAMMDD.meta.json` (`_ds_write_updated`, gravado pelo import da
+API e pelo do SETTLEMENT.xlsx), e **não a existência do arquivo-dia**: a
+vertical das recompras CRIA o dia do Cockpit ao projetar uma recompra, e um
+dia só com a recompra não é a liquidação da data. O IR sai como o Cockpit
+gravou (o Summary segue sendo a autoridade, §423). Dia com carimbo que não se
+deixa ler cai para a API, avisando no log. A linha `[ndfc] liquidação de <dia>
+lida do Cockpit importado (<hora do import>)` diz qual caminho foi tomado.
+
+Consequência: a recon concilia o dia **como estava no último import**. Uma
+liquidação que entrou na API depois disso só aparece depois de um novo Run no
+NDF Cockpit. As recompras não têm esse problema: a vertical as projeta no dia
+no momento em que são importadas. `check_payrec_ndf_source.py` §4b.

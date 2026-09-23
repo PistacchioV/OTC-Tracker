@@ -8170,9 +8170,35 @@ def _ndfc_liquidacao_do_dia(ref):
     Não reescreve o Cockpit de propósito: rodar a recon não pode apagar a
     edição de maker/checker que a mesa fez na tela.
 
+    **Dia já importado no Cockpit é lido de lá, sem API** (mesa, 23/09/2026):
+    o import grava o dia inteiro — API + recompras preservadas + IR — e o
+    carimbo `.meta.json` ao lado (`_ds_write_updated`, pela API ou pelo
+    SETTLEMENT.xlsx). O `getTradesBySettle` varre o livro inteiro da data e
+    leva até `REPORT_TIMEOUT`: com ele em todo Run, o botão da recon ficava
+    minutos em "Running…". O carimbo, e não a existência do arquivo, é o que
+    diz "importado": a vertical das recompras CRIA o dia do Cockpit ao projetar
+    uma recompra, e esse dia só com a recompra não é a liquidação da data. O
+    IR sai como o Cockpit o gravou (o Summary segue sendo a autoridade, §423).
+    Dia importado que não se deixa ler cai para a API, avisando.
+
     Falha da API ou do dia do Cockpit LEVANTA com o motivo (`RuntimeError`):
     uma recon sem o lado NDF acusaria toda perna de cliente de NDF como
     pendente, e o problema real seria outro."""
+    jp = _ndfc_json_path(ref)
+    if _store.isfile(_ds_meta_path(jp)):
+        try:
+            _jp, dia = _ndfc_load(ref)
+        except Exception:                                   # noqa: BLE001
+            dia = None
+        if dia is None:
+            # O `_ndfc_load` devolve None para arquivo ausente ou ilegível.
+            log.warning('[ndfc] dia %s tem o carimbo de importado mas não se deixa ler — '
+                        'a recon vai à API', ref.strftime('%Y-%m-%d'))
+        else:
+            log.info('[ndfc] liquidação de %s lida do Cockpit importado (%s): %d linha(s), '
+                     '%d recompra(s)', ref.strftime('%Y-%m-%d'), _ds_read_updated(jp),
+                     len(dia), sum(1 for r in dia if r.get('_nc_unwind')))
+            return [dict(r) for r in dia]
     api = _ndfc_fetch_api(ref)
     if not api.get('success'):
         raise RuntimeError('NDF settlements (Athena getTradesBySettle): {}'.format(
