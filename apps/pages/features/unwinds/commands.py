@@ -916,8 +916,7 @@ def esteira_data_da_operacao(linha, ref):
         nova = ref.strftime('%d/%m/%Y')
         if str(row.get('Data Operação', '') or '').strip() == nova:
             return False
-        row['Data Operação'] = nova
-        mc.upsert_row(row)
+        mc.save_changes(row, dict(row, **{'Data Operação': nova}))
         R.log.info('[UNWIND NDF FX] esteira: %s passou a apontar para o dia %s', chave, nova)
         return True
     except Exception:                                       # noqa: BLE001

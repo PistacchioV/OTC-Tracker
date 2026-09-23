@@ -309,7 +309,7 @@
     /* i18n do texto montado em JS. O I18nManager traduz os [data-lang] UMA vez,
        no load: o que o JS insere depois nunca passa por ele. */
     var _TRANS = {
-        en: { legal: 'Legal', otc: 'OTC', mo: 'CEM MO',
+        en: { reimported: 'The list was re-imported from SharePoint after this page loaded — the page was reloaded; try again.', gone: 'This document is no longer in the list — the page was reloaded.', legal: 'Legal', otc: 'OTC', mo: 'CEM MO',
               empty: 'Nothing pending with this desk',
               nodb: 'The CGD database has not been imported yet.',
               nodbhint: 'Run scripts/import_cgd_sharepoint.py with the SharePoint export.',
@@ -325,7 +325,7 @@
               noFiles: 'No Taxonomy or signed CGD found in the Electronic Inventory for this client.',
               upFailed: 'Could not save the file to the Electronic Inventory.',
               failed: 'Could not update the document.' },
-        br: { legal: 'Legal', otc: 'OTC', mo: 'CEM MO',
+        br: { reimported: 'A lista foi reimportada do SharePoint depois de a página abrir — a página foi recarregada; tente de novo.', gone: 'Este documento não está mais na lista — a página foi recarregada.', legal: 'Legal', otc: 'OTC', mo: 'CEM MO',
               empty: 'Nada pendente nesta mesa',
               nodb: 'O banco de CGDs ainda não foi importado.',
               nodbhint: 'Rode scripts/import_cgd_sharepoint.py com a exportação do SharePoint.',
@@ -341,7 +341,7 @@
               noFiles: 'Nenhum Taxonomy ou CGD abonado encontrado no Electronic Inventory deste cliente.',
               upFailed: 'Não consegui gravar o arquivo no Electronic Inventory.',
               failed: 'Não consegui atualizar o documento.' },
-        es: { legal: 'Legal', otc: 'OTC', mo: 'CEM MO',
+        es: { reimported: 'La lista fue reimportada de SharePoint después de abrir la página — la página se recargó; intente de nuevo.', gone: 'Este documento ya no está en la lista — la página se recargó.', legal: 'Legal', otc: 'OTC', mo: 'CEM MO',
               empty: 'Nada pendiente en esta mesa',
               nodb: 'La base de CGD aún no fue importada.',
               nodbhint: 'Ejecute scripts/import_cgd_sharepoint.py con la exportación de SharePoint.',
@@ -477,6 +477,10 @@
             .then(function (r) { return r.json(); })
             .then(function (j) {
                 if (!j || !j.success) { return; }
+                // A geração da importação: volta em todo carimbo, e o servidor
+                // recusa se a lista foi reimportada depois deste load (o `_id`
+                // já seria de outro documento).
+                GEN = j.gen;
                 // Os chips de contagem MORAM no Track Docs (pedido 2026-09-01):
                 // aqui ficam só as três filas das mesas.
                 // Banco ausente é um estado, não um erro: a tela diz o que
@@ -517,7 +521,10 @@
           });
     }
 
+    var GEN;
+
     function carimba(payload) {
+        if (GEN !== undefined) { payload.gen = GEN; }
         return fetch('/api/onboarding/docs/stamp', {
             method: 'POST', credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
@@ -525,6 +532,10 @@
         }).then(function (r) { return r.json(); })
           .then(function (j) {
               if (j && j.success) { return j; }
+              if (j && (j.error === 'onboarding_reimported' || j.error === 'row_not_found')) {
+                  load();                  // a lista mudou: recarrega antes de dizer
+                  throw new Error(t(j.error === 'row_not_found' ? 'gone' : 'reimported'));
+              }
               throw new Error((j && j.error) || 'stamp');
           });
     }

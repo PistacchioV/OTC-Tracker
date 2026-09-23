@@ -382,7 +382,7 @@
     /* Texto montado em JS não passa pelo I18nManager (ele traduz os [data-lang]
        uma vez, no load), então vive aqui. */
     var _TRANS = {
-        en: { stage: 'Pending with', actions: 'Actions', edit: 'Edit', del: 'Delete',
+        en: { reimported: 'The list was re-imported from SharePoint after this page loaded — the page was reloaded; try again.', gone: 'This document is no longer in the list — the page was reloaded.', stage: 'Pending with', actions: 'Actions', edit: 'Edit', del: 'Delete',
               finalized: 'Finalized', editTitle: 'Edit Document', addTitle: 'New Document',
               massCol: 'Select Column to Apply', massTitle: 'Apply to {n} row(s)?', massEmpty: '(empty)',
               yesApply: 'Yes, apply', massDone: '{n} row(s) updated', massDelTitle: 'Delete {n} row(s)?',
@@ -392,7 +392,7 @@
               failed: 'Could not save', empty: 'No documents in the database yet.',
               nodb: 'The CGD database was not found', nodbHint: 'run scripts/import_cgd_sharepoint.py',
               src: 'Source', rows: 'row(s)', derived: 'derived from the stamps' },
-        br: { stage: 'Pendente em', actions: 'Ações', edit: 'Editar', del: 'Excluir',
+        br: { reimported: 'A lista foi reimportada do SharePoint depois de a página abrir — a página foi recarregada; tente de novo.', gone: 'Este documento não está mais na lista — a página foi recarregada.', stage: 'Pendente em', actions: 'Ações', edit: 'Editar', del: 'Excluir',
               finalized: 'Finalizado', editTitle: 'Editar Documento', addTitle: 'Novo Documento',
               massCol: 'Select Column to Apply', massTitle: 'Aplicar em {n} linha(s)?', massEmpty: '(vazio)',
               yesApply: 'Sim, aplicar', massDone: '{n} linha(s) atualizada(s)', massDelTitle: 'Excluir {n} linha(s)?',
@@ -402,7 +402,7 @@
               failed: 'Não consegui salvar', empty: 'Nenhum documento no banco ainda.',
               nodb: 'O banco de CGDs não foi encontrado', nodbHint: 'rode scripts/import_cgd_sharepoint.py',
               src: 'Fonte', rows: 'linha(s)', derived: 'derivado dos carimbos' },
-        es: { stage: 'Pendiente en', actions: 'Acciones', edit: 'Editar', del: 'Eliminar',
+        es: { reimported: 'La lista fue reimportada de SharePoint después de abrir la página — la página se recargó; intente de nuevo.', gone: 'Este documento ya no está en la lista — la página se recargó.', stage: 'Pendiente en', actions: 'Acciones', edit: 'Editar', del: 'Eliminar',
               finalized: 'Finalizado', editTitle: 'Editar Documento', addTitle: 'Nuevo Documento',
               massCol: 'Select Column to Apply', massTitle: '¿Aplicar en {n} fila(s)?', massEmpty: '(vacío)',
               yesApply: 'Sí, aplicar', massDone: '{n} fila(s) actualizada(s)', massDelTitle: '¿Eliminar {n} fila(s)?',
@@ -491,6 +491,23 @@
     var GUAROPTS = [];        // Yes/No do Garantidor
     var table = null;
     var dados = [];
+    // A geração da importação que esta grade carregou: volta em toda escrita
+    // por `_id` (ver `comGen`), e o servidor recusa (409) se a lista foi
+    // reimportada depois — o mesmo número seria de OUTRO documento.
+    var GEN;
+    function comGen(corpo) { if (GEN !== undefined) { corpo.gen = GEN; } return corpo; }
+    // Recusa por reimportação/linha sumida: recarrega e DIZ, em vez de o
+    // `.then(carrega)` sumir com o pedido calado.
+    function recusaLista(j) {
+        if (!j || (j.error !== 'onboarding_reimported' && j.error !== 'row_not_found')) { return false; }
+        carrega();
+        if (window.Swal) {
+            Swal.fire({ icon: 'warning', title: t('failed'),
+                        html: esc(t(j.error === 'row_not_found' ? 'gone' : 'reimported')),
+                        confirmButtonColor: '#0066cc' });
+        }
+        return true;
+    }
 
     // Status → cor do badge. As classes são as do app (`text-bg-*` do tema, com
     // `bg-gradient`), e não um mapa de cores próprio desta página: status é badge
@@ -758,6 +775,7 @@
                 STATUSOPTS = j.status_options || [];
                 STATUSCOL = j.status_column || '';
                 GUAROPTS = j.guarantor_options || [];
+                GEN = j.gen;
                 dados = j.rows || [];
                 $('#ob-src').html(
                     j.db_ready
@@ -890,8 +908,9 @@
         fetch('/api/onboarding/docs/save', {
             method: 'POST', credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(corpo)
+            body: JSON.stringify(comGen(corpo))
         }).then(function (r) { return r.json(); }).then(function (j) {
+            if (recusaLista(j)) { modal().hide(); editandoId = null; return; }
             if (!j || !j.success) { throw new Error((j && j.error) || 'erro'); }
             modal().hide();
             editandoId = null;
@@ -924,8 +943,9 @@
             fetch('/api/onboarding/docs/delete', {
                 method: 'POST', credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: id })
-            }).then(function () { carrega(); });
+                body: JSON.stringify(comGen({ id: id }))
+            }).then(function (r) { return r.json(); })
+              .then(function (j) { if (!recusaLista(j)) { carrega(); } });
         };
         if (!window.Swal) { if (window.confirm(t('confirmDel'))) { go(); } return; }
         Swal.fire({ icon: 'warning', title: t('confirmDel'), html: esc(t('confirmDelTxt')),
@@ -1049,9 +1069,10 @@
             fetch('/api/onboarding/docs/save', {
                 method: 'POST', credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ids: ids, values: vals })
+                body: JSON.stringify(comGen({ ids: ids, values: vals }))
             }).then(function (r2) { return r2.json(); })
               .then(function (j) {
+                  if (recusaLista(j)) { return; }
                   if (!j || !j.success) {
                       Swal.fire({ icon: 'error', title: t('failed'),
                                   text: (j && j.error) || '' });
@@ -1077,8 +1098,9 @@
             fetch('/api/onboarding/docs/delete', {
                 method: 'POST', credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ids: ids })
-            }).then(function () { carrega(); });
+                body: JSON.stringify(comGen({ ids: ids }))
+            }).then(function (r) { return r.json(); })
+              .then(function (j) { if (!recusaLista(j)) { carrega(); } });
         });
     });
 

@@ -3453,6 +3453,10 @@ def _ds_handle(name, raw, delete_path, ref, processed, skipped):
     _ds_write(jp, recs, name, spec, total, processed, delete_path)
     if spec.get('latam'):                              # guarda também o arquivo de origem
         _latam_write_meta(jp, ref.strftime('%H:%M:%S'), name)
+        # O Daily Settlement grava o Latam SEM passar pelo `_latam_save`, que é
+        # quem esquecia a lista de datas: a data nova ficava invisível para o
+        # elo de equity e para a tela do Latam por até 5 min.
+        _latam_dates_forget()
     elif spec.get('otm') or spec.get('ndfc') or spec.get('cog') or spec.get('swaphyb'):   # timestamp = import time (no in-file time)
         _ds_write_updated(jp, ref.strftime('%H:%M:%S'))
     if spec.get('opb3'):                               # operacoes file ALSO feeds the Operations B3 page
@@ -3986,9 +3990,15 @@ def _lp_account_names():
     Comparação por DÍGITOS dos dois lados (§197): o RefData guarda
     '29407.00-0' e a posição da B3 '29407000'. O gatilho de reconstrução é o
     mesmo do `_lp_taxid_names` — a troca de objeto do `_refdata_by_taxid()`,
-    que já é cacheado por mtime e memoizado por request."""
+    que já é cacheado por mtime e memoizado por request — MAIS o objeto do
+    cadastro `b3-accounts`: é ele que decide quem é guarda-chuva, e sem ele na
+    chave marcar/desmarcar uma conta no /mapping não valia até o RefData mudar
+    (o cliente saía resolvido como o titular do omnibus, §513). O
+    `_mapping_rows` devolve lista NOVA quando o cadastro muda."""
     base = _refdata_by_taxid()
-    if _LP_ACCOUNT_NAME_CACHE['src'] is not base:
+    contas = _mapping_rows('b3-accounts')
+    src = _LP_ACCOUNT_NAME_CACHE['src']
+    if not (isinstance(src, tuple) and src[0] is base and src[1] is contas):
         m, ambiguas = {}, set()
         for rec in _refdata_records():
             acc = ''.join(ch for ch in str(rec.get('B3 ACCOUNT', '') or '') if ch.isdigit())
@@ -4003,7 +4013,7 @@ def _lp_account_names():
             elif atual != nome:
                 del m[acc]
                 ambiguas.add(acc)
-        _LP_ACCOUNT_NAME_CACHE['src'] = base
+        _LP_ACCOUNT_NAME_CACHE['src'] = (base, contas)
         _LP_ACCOUNT_NAME_CACHE['map'] = m
     return _LP_ACCOUNT_NAME_CACHE['map']
 
@@ -4058,9 +4068,17 @@ def _lp_amort_label(raw):
 # então não existe a versão de uma e a versão da outra; a única diferença é que
 # agora a leitura cacheia por mtime, como todos os outros cadastros.
 def _swapindex_lookup():
-    """{code(upper) → Nome Curva} do cadastro `swap-index`."""
+    """{code(upper) → Nome Curva} do cadastro `swap-index` — só o APROVADO.
+
+    `PENDING` é linha nova ou editada que ninguém aprovou (maker-checker do
+    Index B3), e `INACTIVE` foi desativada: nenhuma das duas vale — o nome ia
+    para o Settlement Advice do cliente e para a classificação do Swap
+    Calculator antes da aprovação. `PENDING DELETE`/`PENDING INACTIVE` seguem
+    valendo até aprovadas; STATUS em branco (linha legada) vale."""
     m = {}
     for rec in _mapping_rows('swap-index'):
+        if str(rec.get('STATUS', '') or '').strip().upper() in ('PENDING', 'INACTIVE'):
+            continue
         code = str(rec.get('Codigo Referencia Externa', '') or '').strip().upper()
         name = str(rec.get('Nome Curva', '') or '').strip()
         if code:
@@ -5379,8 +5397,14 @@ def _subjacente_map():
     if _SUBJ_CACHE['mtime'] != mt:
         try:
             data = _db_dataset_rows(path) or []
-        except Exception:
+        except FileNotFoundError:
             data = []
+        except Exception as exc:
+            # Falha não é "cadastro vazio": guardada sob o carimbo, valia até
+            # alguém editar o Subjacente (§4, ocupado nunca é vazio).
+            log.warning('[subjacente] leitura falhou (%s: %s) — o mapa em memória '
+                        'fica como está', type(exc).__name__, exc)
+            return _SUBJ_CACHE['map']
         m = {}
         for rec in data:
             code = str(rec.get('Codigo do Ativo Subjacente', '') or '').strip().upper()
@@ -5438,6 +5462,16 @@ def _refdata_records():
     para se curar). Os três índices derivados abaixo continuam cacheados pelo
     MTIME DO JSON — que é exatamente a chave do contrato de frescor, então as
     duas fontes respondem a mesma pergunta."""
+    rows = _refdata_records_try()
+    return rows if rows is not None else []
+
+
+def _refdata_records_try():
+    """`_refdata_records`, mas `None` quando a leitura FALHOU (banco ocupado,
+    ilegível) — para os índices abaixo não guardarem a falha como "cadastro
+    vazio" sob um carimbo válido. Guardada, ela valia até alguém editar o
+    RefData: nomes de contraparte vazios no Live Position, no OTM e no
+    autocompletar, com o cadastro intacto no banco."""
     try:
         from apps.pages import duck_read
         rows = duck_read.refdata_rows()
@@ -5448,8 +5482,12 @@ def _refdata_records():
     path = os.path.join(_B3_DATA_DIR, 'RefData.json')
     try:
         data = _store.read(path) or []
-    except Exception:                                       # noqa: BLE001
-        data = []
+    except FileNotFoundError:
+        return []
+    except Exception as exc:                                # noqa: BLE001
+        log.warning('[refdata] leitura falhou (%s: %s) — o índice em memória '
+                    'fica como está', type(exc).__name__, exc)
+        return None
     return data if isinstance(data, list) else []
 
 
@@ -5469,7 +5507,9 @@ def _refdata_triples():
     except OSError:
         return []
     if _REFDATA_TRIPLE_CACHE['mtime'] != mt:
-        data = _refdata_records()
+        data = _refdata_records_try()
+        if data is None:                    # falhou: não guarda a falha
+            return _REFDATA_TRIPLE_CACHE['rows']
         vistos, out = set(), []
         for rec in data:
             nome = str(rec.get('COUNTERPARTY', '') or '').strip()
@@ -5499,7 +5539,9 @@ def _refdata_by_spn():
     except OSError:
         return {}
     if _REFDATA_SPN_CACHE['mtime'] != mt:
-        data = _refdata_records()
+        data = _refdata_records_try()
+        if data is None:                    # falhou: não guarda a falha
+            return _REFDATA_SPN_CACHE.get('map') or {}
         m = {}
         for rec in data:
             spn = _spn_key(rec.get('SPN', ''))
@@ -5557,7 +5599,9 @@ def _refdata_by_taxid():
     except OSError:
         return {}
     if _REFDATA_TAXID_CACHE['mtime'] != mt:
-        data = _refdata_records()
+        data = _refdata_records_try()
+        if data is None:                    # falhou: não guarda a falha
+            return _REFDATA_TAXID_CACHE.get('map') or {}
         m = {}
         for rec in data:
             digits = ''.join(ch for ch in str(rec.get('TAX ID', '') or '') if ch.isdigit())
@@ -7265,12 +7309,15 @@ def _latam_find(data, rid):
 # cobre o import feito pela instância vizinha.
 _LATAM_DATES_TTL = 300.0
 _latam_dates_lock = threading.Lock()
-_latam_dates_memo = {'at': 0.0, 'dates': None}
+_latam_dates_memo = {'at': 0.0, 'dates': None, 'gen': 0}
 
 
 def _latam_dates_forget():
+    # O `gen` é o que impede a varredura que COMEÇOU antes do esquecimento de
+    # guardar a lista velha com um carimbo novo (ela roda fora da trava).
     with _latam_dates_lock:
         _latam_dates_memo['dates'] = None
+        _latam_dates_memo['gen'] += 1
 
 
 @_once_per_request
@@ -7285,6 +7332,7 @@ def _latam_all_dates():
         memo = _latam_dates_memo
         if memo['dates'] is not None and time.monotonic() - memo['at'] < _LATAM_DATES_TTL:
             return list(memo['dates'])
+        gen = memo['gen']
     pref = _LATAM_JSON_BASE + '_'
     out = set()
     for _caminho, nome, _mtime, _size in _day_files(root, '.json'):
@@ -7296,8 +7344,9 @@ def _latam_all_dates():
             continue
     dates = sorted(out, reverse=True)
     with _latam_dates_lock:
-        _latam_dates_memo['at'] = time.monotonic()
-        _latam_dates_memo['dates'] = list(dates)
+        if _latam_dates_memo['gen'] == gen:     # ninguém esqueceu no meio
+            _latam_dates_memo['at'] = time.monotonic()
+            _latam_dates_memo['dates'] = list(dates)
     return dates
 
 
@@ -9124,6 +9173,7 @@ _ndf_publisher_is_bacen = _pf_nd._ndf_publisher_is_bacen
 _ndf_publisher_codes = _pf_nd._ndf_publisher_codes
 _ndf_publisher_fonte_info = _pf_nd._ndf_publisher_fonte_info
 _generic_ndf_ter_line = _pf_nd._generic_ndf_ter_line
+_asian_verification_dates = _pf_nd._asian_verification_dates
 _nd_lawton_mirror = _pf_nd._nd_lawton_mirror
 _nd_lawton_sig = _pf_nd._nd_lawton_sig
 _nd_mgt_mirror = _pf_nd._nd_mgt_mirror
@@ -12521,6 +12571,10 @@ _MAPPING_DEFS = {
         # próprio arquivo (inclusive STATUS/MAKER/CHECKER, declaradas para que um
         # POST do /mapping, que reescreve o arquivo inteiro, não as apague).
         'file': data_write('SwapIndex.json'),
+        # O arquivo tem maker-checker (tela Index B3): gravação pelo /mapping
+        # passa pelo mesmo circuito — ver `api_mappings` (`maker_checker` é a
+        # coluna-chave da linha).
+        'maker_checker': 'Codigo Referencia Externa',
         'columns': [
             {'key': 'Codigo Referencia Externa', 'label': 'B3 Code'},
             {'key': 'Nome Curva', 'label': 'Curve Name'},
@@ -13508,6 +13562,9 @@ _anbima_add_biz = _pf_anbima._anbima_add_biz
 # ── Subjacente.json lookup (keyed by Codigo do Ativo Subjacente, first match) ──
 
 def _load_subjacente_lookup():
+    """{código → linha} do Subjacente.json; `None` quando a leitura FALHOU
+    (ocupado, ilegível) — distinto do `{}` de um cadastro sem linha, para o
+    `_subjacente_by_code` não guardar a falha sob o carimbo."""
     try:
         fp = data_path('Subjacente.json')
         rows = _db_dataset_rows(fp)
@@ -13517,9 +13574,11 @@ def _load_subjacente_lookup():
             if code and code not in result:
                 result[code] = row
         return result
+    except FileNotFoundError:
+        return {}
     except Exception as exc:
         log.warning('[SUBJACENTE] Failed to load: %s', exc)
-        return {}
+        return None
 
 
 # Cache por mtime, não dict de módulo: o Subjacente.json é editado pela tela
@@ -13536,7 +13595,10 @@ def _subjacente_by_code():
     except OSError:
         return _subjacente_cache['data']
     if _subjacente_cache['mtime'] != mtime:
-        _subjacente_cache['data'] = _load_subjacente_lookup()
+        data = _load_subjacente_lookup()
+        if data is None:                    # falhou: fica o que já estava
+            return _subjacente_cache['data']
+        _subjacente_cache['data'] = data
         _subjacente_cache['mtime'] = mtime
     return _subjacente_cache['data']
 
@@ -14171,30 +14233,15 @@ def _vanilla_verification_lines(deal, page_url, le_pair):
     """Linhas tipo 2 (Dados Variáveis) do DOWNLOAD do Vanilla — só ele as
     emite: o registro oficial do Vanilla é de outra ferramenta, e o arquivo
     dos demais produtos genéricos nunca as carregou (o asiático vai só na
-    contagem do campo 59). Uma linha por dia útil da janela de fixing, no
-    calendário do deal (FX Holiday Schedule; sem cadastro, Seg–Sex, como o
-    preview). Com a Cotação para o Vencimento EFETIVA preenchida (> 0 — Fixed
-    da variante ou fórmula cadastrada), cada data sai deslocada N dias úteis
-    PARA FRENTE, no mesmo calendário."""
-    def _s(v):
-        return re.sub(r'<[^>]+>', '', str(v or '')).strip()
-    a = _parse_date_any(_s(deal.get('FirstFixingDate')))
-    b = _parse_date_any(_s(deal.get('LastFixingDate')))
-    if not a or not b or a >= b:
+    contagem do campo 59). Uma linha por data de `_asian_verification_dates`
+    — a MESMA lista que o campo 59 conta: calendário do deal e, sem ele, o
+    ANBIMA (sem cadastro saía Seg–Sex, e o 07/09 virou data de verificação);
+    calendário ilegível levanta. Com a Cotação para o Vencimento EFETIVA
+    preenchida (> 0 — Fixed da variante ou fórmula cadastrada), cada data sai
+    deslocada N dias úteis PARA FRENTE, no mesmo calendário."""
+    datas, hols = _asian_verification_dates(deal)
+    if not datas:
         return []
-    hols = set()
-    sched = re.sub(r'[^A-Za-z0-9_]', '',
-                   _s(deal.get('FXHolidaySchedule')).replace('-', '_').lower())
-    if sched:
-        try:
-            from apps.pages import duck_read       # DB-first (fase 3): o schedule é um calendário do registro.
-            _cal = os.path.join(_B3_DATA_DIR, sched + '.json')
-            _itens = duck_read.calendar_rows(_cal)
-            if _itens is None:
-                _itens = _store.read(_cal)
-            hols = {(x.get('date') if isinstance(x, dict) else x) for x in _itens}
-        except Exception:
-            hols = set()
     cotv = _fi_effective_seq_value(_TER_FI_KEY, 'registro-dados-fixos', '15', {},
                                    page_url, le_pair, deal).strip()
     shift = int(cotv) if cotv.isdigit() and int(cotv) > 0 else 0
@@ -14210,15 +14257,13 @@ def _vanilla_verification_lines(deal, page_url, le_pair):
                 left -= 1
         return cur
 
-    lines, cur = [], a
-    while cur <= b:
-        if _is_biz(cur):
-            d8 = _shifted(cur).strftime('%Y%m%d')
-            lines.append(_fi_build_line(
-                _TER_FI_KEY, 'registro-dados-variaveis',
-                {'4': d8.ljust(8), '6': ''.ljust(18)},
-                page_url=page_url, le_pair=le_pair, deal=deal))
-        cur += timedelta(days=1)
+    lines = []
+    for cur in datas:
+        d8 = _shifted(cur).strftime('%Y%m%d')
+        lines.append(_fi_build_line(
+            _TER_FI_KEY, 'registro-dados-variaveis',
+            {'4': d8.ljust(8), '6': ''.ljust(18)},
+            page_url=page_url, le_pair=le_pair, deal=deal))
     return lines
 
 

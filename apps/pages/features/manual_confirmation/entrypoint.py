@@ -329,6 +329,10 @@ def api_mc_upsert():
         if existente is not None and nova:
             return jsonify({'success': False, 'code': 'mc_row_exists', 'key': key,
                             'message': '{} already exists — edit the existing row.'.format(key)}), 409
+        # A cópia do que foi LIDO: a gravação aplica só o que a edição mudou
+        # sobre a linha relida sob a trava (`save_changes`) — senão a linha
+        # inteira desta leitura desfaria a validação que outra mesa deu depois.
+        original = dict(existente) if existente is not None else None
         row = existente or _mc.blank_row()
         # Estado ANTES da edição: é ele que diz se esta gravação é uma validação
         # nova (a coluna estava vazia e passou a ter data) ou só um ajuste de
@@ -411,12 +415,17 @@ def api_mc_upsert():
                 # Desfez a validação: o carimbo não sobrevive a ela. Deixá-lo
                 # afirmaria que alguém assinou uma etapa que está pendente.
                 row[col_stamp] = ''
-        pendentes.append(row)
+        pendentes.append((original, row))
 
     saved = []
-    for row in pendentes:
-        _mc.upsert_row(row)
-        saved.append(row)
+    for original, row in pendentes:
+        if original is None:
+            _mc.upsert_row(row)              # Add Row: linha nova de verdade
+            saved.append(row)
+            continue
+        gravada = _mc.save_changes(original, row)
+        if gravada is not None:
+            saved.append(gravada)
     _R()._mc_pc_sync(saved)
     return jsonify({'success': True, 'rows': saved})
 
@@ -438,10 +447,10 @@ def api_mc_legal_release():
         row = _mc.find_row(k)
         if row is None or _mc.upper_norm(row.get('Pending')) != _mc.upper_norm(_mc.PENDING_LEGAL):
             continue                     # só solta o que está de fato no hold
-        row['Pending'] = ''              # a derivação decide a etapa real
-        _mc.refresh_derived(row)
-        _mc.upsert_row(row)
-        saved.append(row)
+        depois = dict(row, Pending='')   # a derivação decide a etapa real
+        gravada = _mc.save_changes(row, depois)
+        if gravada is not None:
+            saved.append(gravada)
     if not saved:
         return jsonify({'success': False,
                         'message': 'No confirmation in Pending Legal for these trades.'}), 404
@@ -498,11 +507,12 @@ def api_mc_fepweb_sent():
                                    .format(len(sem_cb))}), 409
     saved = []
     for row in alvo:
-        if not str(row.get(_mc.SENT_COLUMN, '') or '').strip():
-            row[_mc.SENT_COLUMN] = hoje
-        _mc.refresh_derived(row)
-        _mc.upsert_row(row)
-        saved.append(row)
+        depois = dict(row)
+        if not str(depois.get(_mc.SENT_COLUMN, '') or '').strip():
+            depois[_mc.SENT_COLUMN] = hoje
+        gravada = _mc.save_changes(row, depois)
+        if gravada is not None:
+            saved.append(gravada)
     _R()._mc_pc_sync(saved)
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Manual Confirmation', 'Confirmation',
@@ -536,14 +546,27 @@ def api_mc_delete():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'message': 'Not authenticated'}), 401
     from apps.pages import manual_conf as _mc
+    # Apagar da esteira é ato da mesa de OTC Ops (a mesma trava da etapa OTC),
+    # e linha com carimbo de mesa — documento gerado, validação, callback,
+    # envio — é REGISTRO de maker/checker: não se apaga pela tela (a mesma
+    # regra do Delete da recompra, `row_untouched`). Só o master passa por
+    # cima. Antes, qualquer sessão logada apagava qualquer linha.
+    if not _R()._mc_can_validate(_mc.STAGE_OTC):
+        return jsonify({'success': False, 'stage_forbidden': True,
+                        'message': _R()._mc_stage_denied(_mc.STAGE_OTC)}), 403
     payload = request.get_json(silent=True) or {}
     keys = payload.get('keys') or ([payload.get('key')] if payload.get('key') else [])
-    n = 0
+    keys = [str(k).strip() for k in keys if str(k or '').strip()]
+    mestre = _R()._session_is_master()
+    tocadas = [k for k in keys if not mestre and not _mc.row_untouched(k)]
+    if tocadas:
+        return jsonify({'success': False, 'code': 'mc_row_touched', 'keys': tocadas,
+                        'message': ('{} already has desk stamps (document, validation, '
+                                    'callback or sent) and cannot be deleted.'
+                                    .format(', '.join(tocadas)))}), 409
     for k in keys:
-        if str(k or '').strip():
-            _mc.delete_row(k)
-            n += 1
-    return jsonify({'success': True, 'deleted': n})
+        _mc.delete_row(k)
+    return jsonify({'success': True, 'deleted': len(keys)})
 
 @blueprint.route('/api/manual-confirmation/validate', methods=['POST'])
 def api_mc_validate():
@@ -571,6 +594,11 @@ def api_mc_validate():
     try:
         rows = [r for r in (_mc.mark_validated(k, stage, session.get('user_sid', ''), comment)
                             for k in keys) if r is not None]
+    except _mc.StageNotPending as exc:
+        return jsonify({'success': False, 'stage_not_pending': True, 'stage': stage,
+                        'key': str(exc),
+                        'message': ('{}: the OTC validation must come before the {} '
+                                    'validation.'.format(str(exc), stage))}), 409
     except _mc.SlaCommentRequired:
         # 409 e não 400: o pedido está bem formado, o ESTADO é que exige mais um
         # campo. A tela usa `sla_comment_required` para abrir o campo em vez de

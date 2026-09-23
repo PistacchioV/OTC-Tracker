@@ -400,8 +400,14 @@ def sla_days():
         mtime = None
     if _SLA_CACHE['val'] is not None and _SLA_CACHE['mtime'] == mtime:
         return _SLA_CACHE['val']
+    linhas = _mapping_rows_try('manual-conf-sla')
+    if linhas is None:
+        # Leitura falhou: nada entra no cache (guardado sob o carimbo, o prazo
+        # de fábrica valia até alguém editar o cadastro). Serve o último prazo
+        # conhecido, ou o histórico.
+        return _SLA_CACHE['val'] or dict(SLA_BIZDAYS)
     out = dict(SLA_BIZDAYS)
-    for r in _mapping_rows('manual-conf-sla'):
+    for r in linhas:
         st = upper_norm(r.get('STAGE'))
         if st not in out:
             continue
@@ -558,16 +564,43 @@ def _mapping_rows(key):
     SWAP CORPORATE, sem linha nenhuma, caía no DEFAULT_RULE (OTC + MO) — a regra
     errada, porque nele o FO também valida.
     """
-    try:                                        # DB-first (fase 3)
-        from apps.pages import duck_read
-        rows = duck_read.dataset_rows(_mapping_path(key))
-    except Exception:
-        rows = []
-    rows = [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+    rows = _mapping_rows_try(key)
+    if rows is None:
+        # Falhou (banco ocupado/ilegível): a última leitura BOA deste cadastro,
+        # e só sem nenhuma o seed via upgrade — lido como vazio, o
+        # `validation_upgrade([])` aplicava as regras de FÁBRICA e mandava
+        # confirmações para as mesas erradas enquanto a trava durasse.
+        return _MAP_LAST_GOOD.get(key) or _mapping_upgrade(key, [])
+    return rows
+
+
+_MAP_LAST_GOOD = {}
+
+
+def _mapping_upgrade(key, rows):
     if key == 'manual-conf-validation':
         return validation_upgrade(rows)
     if key == 'manual-conf-sla':
         return sla_upgrade(rows)
+    return rows
+
+
+def _mapping_rows_try(key):
+    """`_mapping_rows` que devolve `None` quando a leitura FALHOU (distinto de
+    cadastro ausente, que é `[]` + upgrade) — para quem cacheia não guardar a
+    falha sob o carimbo (`sla_days`)."""
+    try:                                        # DB-first (fase 3)
+        from apps.pages import duck_read
+        rows = duck_read.dataset_rows(_mapping_path(key))
+    except FileNotFoundError:
+        rows = []
+    except Exception as exc:                                # noqa: BLE001
+        _LOG.warning('[manual-conf] cadastro %s ilegível (%s: %s)', key,
+                     type(exc).__name__, exc)
+        return None
+    rows = [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+    rows = _mapping_upgrade(key, rows)
+    _MAP_LAST_GOOD[key] = rows
     return rows
 
 
@@ -1009,8 +1042,9 @@ def load_all(strict=False):
     return load_rows('pending', strict) + load_rows('ok', strict)
 
 
-def _write_exec(category, ops):
-    """Roda (sql, params) numa transação de escrita só.
+def _write_exec(category, ops, raise_errors=False):
+    """Roda (sql, params) numa transação de escrita só. `raise_errors`: a falha
+    SOBE (depois do WARNING) em vez de virar `False`.
 
     O laço de retentativa que estava escrito aqui passou a ser do `duckdb_write`
     — as leituras read-only da tela são rápidas mas frequentes, e o DuckDB recusa
@@ -1020,6 +1054,8 @@ def _write_exec(category, ops):
     E é UMA transação para o lote inteiro: metade das operações não fica gravada
     quando a outra metade falha."""
     if duckdb is None:
+        if raise_errors:
+            raise RuntimeError('duckdb indisponível: a esteira não grava')
         return False
     path = db_path(category)
     ensure_db(path)
@@ -1031,6 +1067,8 @@ def _write_exec(category, ops):
     except Exception:
         _LOG.warning('[manual-conf] escrita falhou em %s:\n%s', category,
                      traceback.format_exc())
+        if raise_errors:
+            raise
         return False
 
 
@@ -1058,7 +1096,9 @@ def upsert_row(row):
     No banco de destino o DELETE e o INSERT são UMA transação, e o banco de
     origem só perde a linha DEPOIS de o destino gravar: apagar primeiro e
     inserir numa segunda abertura perdia a operação inteira quando o INSERT
-    falhava (§546)."""
+    falhava (§546). E a falha do destino SOBE: ignorada, a tela respondia
+    `success` com a linha que nunca chegou ao banco — a validação aparecia
+    feita, o sino anunciava, e nada estava gravado."""
     refresh_derived(row)
     key = str(row.get(KEY_COLUMN, '') or '').strip()
     target = target_category(row)
@@ -1069,11 +1109,105 @@ def upsert_row(row):
         ops.append(('DELETE FROM {} WHERE trim("{}") = ?'.format(TABLE, KEY_COLUMN), [key]))
     ops.append(('INSERT INTO {} ({}) VALUES ({})'.format(TABLE, cols, ph),
                 [str(row.get(c, '') or '') for c in DB_COLUMNS]))
-    if _write_exec(target, ops):
-        for cat in ('pending', 'ok'):
-            if cat != target:
-                _delete_key(cat, key)
+    _write_exec(target, ops, raise_errors=True)
+    for cat in ('pending', 'ok'):
+        if cat != target:
+            _delete_key(cat, key)
     return target
+
+
+_SEL_ROW = 'SELECT {} FROM {} WHERE trim("{}") = ? LIMIT 1'
+
+
+def mutate_row(key, fn):
+    """Ler → alterar → gravar UMA linha da esteira com a leitura DENTRO da
+    transação de escrita (trava EXCLUSIVA do arquivo). Devolve a linha gravada,
+    ou `None` quando a chave não está na esteira.
+
+    `fn(row)` altera a linha no lugar; levantar dentro dela desfaz tudo (é como
+    o `mark_validated` recusa o atraso sem justificativa).
+
+    Existe porque cada pessoa roda a PRÓPRIA instância sobre o mesmo `db/`: MO e
+    FO validam em paralelo, e o desenho `find_row` → alterar → `upsert_row`
+    (linha inteira) fazia a segunda gravação apagar a assinatura da primeira —
+    o MO lia, o FO lia, o MO gravava, o FO gravava a cópia dele com o `VALIDADO
+    p/ MO` vazio. Uma trava em memória não alcança o outro processo; a trava do
+    arquivo, sim, e ela já é paga pela gravação.
+
+    A linha que muda de banco (a esteira fechou → ok; reabriu → pending) é
+    gravada no DESTINO antes de sair da origem — no pior caso sobra uma
+    duplicata, nunca uma operação perdida (§546)."""
+    k = str(key or '').strip()
+    if not k:
+        return None
+    if duckdb is None:
+        raise RuntimeError('duckdb indisponível: a esteira não grava')
+    cols = ', '.join('"{}"'.format(c) for c in DB_COLUMNS)
+    ph = ', '.join('?' for _ in DB_COLUMNS)
+    del_sql = 'DELETE FROM {} WHERE trim("{}") = ?'.format(TABLE, KEY_COLUMN)
+    ins_sql = 'INSERT INTO {} ({}) VALUES ({})'.format(TABLE, cols, ph)
+    # O cadastro de validação é lido ANTES de pedir a trava: dentro dela seria
+    # uma ida ao share com a esteira presa para todas as instâncias.
+    rules = validation_rules()
+    for cat in ('pending', 'ok'):
+        path = db_path(cat)
+        ensure_db(path)
+        if not _store.isfile(path):
+            continue
+        with duckdb_write(path) as con:
+            r = con.execute(_SEL_ROW.format(cols, TABLE, KEY_COLUMN), [k]).fetchone()
+            if r is None:
+                continue
+            row = {c: ('' if v is None else str(v)) for c, v in zip(DB_COLUMNS, r)}
+            fn(row)
+            refresh_derived(row, rules)
+            vals = [str(row.get(c, '') or '') for c in DB_COLUMNS]
+            target = target_category(row)
+            if target != cat:
+                _write_exec(target, [(del_sql, [k]), (ins_sql, vals)], raise_errors=True)
+            con.execute(del_sql, [k])
+            if target == cat:
+                con.execute(ins_sql, vals)
+            return row
+    return None
+
+
+# Recalculadas a cada gravação — nunca "mudança" de quem editou.
+_DERIVED_ON_SAVE = ('Pending', 'Aging Confirmação')
+
+
+def changes_between(antes, depois):
+    """As colunas que a edição MUDOU (`depois` × `antes`), para `save_changes`.
+
+    `Pending` é derivada, com UMA exceção gravada à mão: o hold `Pending Legal`
+    (§254). Pôr o hold é mudança; tirá-lo (o Legal Release, ou o `Pending OTC`
+    da grade numa linha em hold) grava vazio e deixa a derivação decidir."""
+    ch = {}
+    for c in DB_COLUMNS:
+        if c in _DERIVED_ON_SAVE:
+            continue
+        novo = str((depois or {}).get(c, '') or '')
+        if novo != str((antes or {}).get(c, '') or ''):
+            ch[c] = novo
+    legal_antes = upper_norm((antes or {}).get('Pending')) == upper_norm(PENDING_LEGAL)
+    legal_depois = upper_norm((depois or {}).get('Pending')) == upper_norm(PENDING_LEGAL)
+    if legal_depois and not legal_antes:
+        ch['Pending'] = PENDING_LEGAL
+    elif legal_antes and not legal_depois:
+        ch['Pending'] = ''
+    return ch
+
+
+def save_changes(antes, depois):
+    """Grava só o que mudou de `antes` para `depois`, sobre a linha RELIDA sob a
+    trava (`mutate_row`) — a edição de quem abriu a tela antes não desfaz a
+    validação que outra mesa deu nesse meio. Devolve a linha gravada, ou
+    `None` quando ela saiu da esteira."""
+    key = str((antes or {}).get(KEY_COLUMN, '') or (depois or {}).get(KEY_COLUMN, '') or '').strip()
+    ch = changes_between(antes, depois)
+    if not ch:
+        return find_row(key)
+    return mutate_row(key, lambda row: row.update(ch))
 
 
 def delete_row(key):
@@ -1185,9 +1319,11 @@ def _set_cells(column, pairs):
         novo = alvo.get(chave)
         if not novo or str(row.get(column, '') or '').strip() == novo:
             continue
-        row[column] = novo
-        upsert_row(row)
-        n += 1
+        # Só a CÉLULA, sobre a linha relida sob a trava: a leitura acima é do
+        # começo do request, e gravar a linha inteira dela desfazia a validação
+        # que outra mesa deu nesse meio (o Monitor sincroniza a cada abertura).
+        if mutate_row(chave, lambda r, v=novo: r.__setitem__(column, v)) is not None:
+            n += 1
     return n
 
 
@@ -1205,17 +1341,14 @@ def mark_generated(key, when=None, link=None, subject=None):
     O **link**, ao contrário, é sempre reescrito: ele aponta para o documento
     ATUAL, e um endereço da versão anterior levaria quem valida ao papel errado.
     """
-    row = find_row(key)
-    if row is None:
-        return None
-    if link:
-        row['Confirmation Link'] = str(link)
-    if subject and not _filled(row, 'E-mail Subject'):
-        row['E-mail Subject'] = str(subject)
-    if not _filled(row, 'Data envio validação OTC'):
-        row['Data envio validação OTC'] = fmt_date(when or datetime.now().date())
-    upsert_row(row)
-    return row
+    def _carimba(row):
+        if link:
+            row['Confirmation Link'] = str(link)
+        if subject and not _filled(row, 'E-mail Subject'):
+            row['E-mail Subject'] = str(subject)
+        if not _filled(row, 'Data envio validação OTC'):
+            row['Data envio validação OTC'] = fmt_date(when or datetime.now().date())
+    return mutate_row(key, _carimba)
 
 
 class SlaCommentRequired(Exception):
@@ -1225,6 +1358,10 @@ class SlaCommentRequired(Exception):
     linha" de "achei e recusei", para a tela pedir o comentário em vez de dizer
     que a confirmação não existe.
     """
+
+
+class StageNotPending(Exception):
+    """MO/FO assinando antes do OTC. A mensagem é o Trade ID."""
 
 
 def mark_validated(key, stage, sid, comment=''):
@@ -1239,32 +1376,41 @@ def mark_validated(key, stage, sid, comment=''):
     tela é onde se pede, mas o endpoint é onde se garante — e o motivo do atraso
     é justamente o que alguém vai procurar depois.
     """
-    row = find_row(key)
-    if row is None:
+    if stage not in (STAGE_OTC, STAGE_MO, STAGE_FO):
         return None
     comment = str(comment or '').strip()
-    if sla_breached(row, stage) and not comment:
-        raise SlaCommentRequired(stage)
-    if comment:
-        col = STAGE_COMMENT_COLUMN.get(str(stage or '').upper())
-        if col:
-            row[col] = comment
-    hoje = fmt_date(datetime.now().date())
-    if stage == STAGE_OTC:
-        row['Conferido OTC'] = hoje
-        row['Time Stamp OTC'] = stamp_now(sid)
-        if not _filled(row, 'Data envio validação MO/FO'):
-            row['Data envio validação MO/FO'] = hoje
-    elif stage == STAGE_MO:
-        row['VALIDADO p/ MO'] = hoje
-        row['Time Stamp MO'] = stamp_now(sid)
-    elif stage == STAGE_FO:
-        row['VALIDADO p/ FO'] = hoje
-        row['Time Stamp FO'] = stamp_now(sid)
-    else:
-        return None
-    upsert_row(row)
-    return row
+
+    def _valida(row):
+        # O prazo é medido na linha RELIDA sob a trava (`mutate_row`): é ela
+        # que vai ser gravada, e levantar aqui desfaz a transação inteira.
+        #
+        # A ETAPA também: MO e FO conferem o documento que o OTC validou, e
+        # assinar antes dele era possível por POST direto. E validar de novo
+        # uma etapa já validada não troca o carimbo de quem assinou primeiro.
+        rule, _found = rule_for(row.get('Produto'), row.get('LOB'))
+        if stage != STAGE_OTC and rule[STAGE_OTC] and not _filled(row, 'Conferido OTC'):
+            raise StageNotPending(str(row.get(KEY_COLUMN, '') or key).strip())
+        if _filled(row, STAGE_COLUMNS[stage][0]):
+            return
+        if sla_breached(row, stage) and not comment:
+            raise SlaCommentRequired(stage)
+        if comment:
+            col = STAGE_COMMENT_COLUMN.get(str(stage or '').upper())
+            if col:
+                row[col] = comment
+        hoje = fmt_date(datetime.now().date())
+        if stage == STAGE_OTC:
+            row['Conferido OTC'] = hoje
+            row['Time Stamp OTC'] = stamp_now(sid)
+            if not _filled(row, 'Data envio validação MO/FO'):
+                row['Data envio validação MO/FO'] = hoje
+        elif stage == STAGE_MO:
+            row['VALIDADO p/ MO'] = hoje
+            row['Time Stamp MO'] = stamp_now(sid)
+        else:
+            row['VALIDADO p/ FO'] = hoje
+            row['Time Stamp FO'] = stamp_now(sid)
+    return mutate_row(key, _valida)
 
 
 def reject(key, stage, sid, comment):
@@ -1275,15 +1421,12 @@ def reject(key, stage, sid, comment):
     aval que ninguém deu à versão nova. O carimbo do reject fica na coluna do
     estágio que rejeitou, para a tela poder dizer quem devolveu e quando.
     """
-    row = find_row(key)
-    if row is None:
-        return None
-    for col in ('Conferido OTC', 'Time Stamp OTC', 'VALIDADO p/ MO', 'Time Stamp MO',
-                'VALIDADO p/ FO', 'Time Stamp FO', 'Data envio validação MO/FO'):
-        row[col] = ''
-    row['Time Stamp %s' % stage] = 'REJEITADO %s' % stamp_now(sid)
-    upsert_row(row)
-    return row
+    def _rejeita(row):
+        for col in ('Conferido OTC', 'Time Stamp OTC', 'VALIDADO p/ MO', 'Time Stamp MO',
+                    'VALIDADO p/ FO', 'Time Stamp FO', 'Data envio validação MO/FO'):
+            row[col] = ''
+        row['Time Stamp %s' % stage] = 'REJEITADO %s' % stamp_now(sid)
+    return mutate_row(key, _rejeita)
 
 
 # =============================================================================

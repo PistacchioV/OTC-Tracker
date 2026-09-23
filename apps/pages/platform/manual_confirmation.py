@@ -317,7 +317,13 @@ def _mc_ei_link(client_key, client_dir, file_path):
 
 
 def _mc_stamp_generated(picked, product, link=''):
-    """Confirmação salva → Data envio validação OTC nas linhas que ela cobre."""
+    """Confirmação salva → Data envio validação OTC nas linhas que ela cobre.
+
+    E a listagem das pastas em memória (`_MC_DOCS_CACHE`) é esquecida: o PDF
+    acabou de chegar numa delas, e com o TTL de 60 s o Monitor dizia "no PDF"
+    e não oferecia o Validate para o documento que a pessoa acabou de gerar."""
+    with _MC_DOCS_LOCK:
+        _MC_DOCS_CACHE.clear()
     try:
         from apps.pages import manual_conf as _mc
         for k in _mc_conf_trade_keys(picked, product):

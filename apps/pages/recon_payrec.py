@@ -37,6 +37,7 @@ import re
 import json
 import glob
 import logging
+import traceback
 import unicodedata
 from datetime import datetime
 
@@ -1623,8 +1624,13 @@ def _fmt_date(recon_date):
         return recon_date or ''
 
 
-def _persist(recon_date, payload):
-    """Working cache: latest run for the date + _last (overwritten each run)."""
+def _persist(recon_date, payload, strict=False):
+    """Working cache: latest run for the date + _last (overwritten each run).
+
+    A falha era engolida (`except: pass`): o Justify respondia sucesso, a linha
+    aparecia Justified, voltava a Pending no reload e o End process mandava a
+    situação velha por e-mail. `strict` (Justify): a falha SOBE. Sem ele (o Run,
+    cujo resultado a tela já tem), vai para o log — calada ela não se acha."""
     try:
         os.makedirs(_CACHE_DIR, exist_ok=True)
         key = (recon_date or 'last').replace('/', '-')
@@ -1634,7 +1640,10 @@ def _persist(recon_date, payload):
         routes._atomic_write_json(os.path.join(_CACHE_DIR, key + '.json'), payload)
         routes._atomic_write_json(os.path.join(_CACHE_DIR, '_last.json'), payload)
     except Exception:
-        pass
+        if strict:
+            raise
+        _LOG.warning('[payrec] o resultado de %s não foi gravado:\n%s',
+                    recon_date or 'last', traceback.format_exc())
 
 
 def _history_path(recon_date):
@@ -1647,38 +1656,45 @@ def _history_path(recon_date):
                         'payrec_status_{}.json'.format(dt.strftime('%Y%m%d')))
 
 
-def _load_flat(recon_date=''):
+def _load_flat(recon_date='', strict=False):
     """Read the working cache. With a date → only that date's file (no _last
-    fallback, so a day without a run shows empty); without a date → _last."""
+    fallback, so a day without a run shows empty); without a date → _last.
+
+    `strict` (quem vai GRAVAR a partir disto — Justify, End process): banco
+    ocupado/ilegível SOBE em vez de virar "não há recon" — lido como ausente, o
+    End process dizia "run the reconciliation first" para um dia rodado."""
+    if recon_date:
+        cand = os.path.join(_CACHE_DIR, recon_date.replace('/', '-') + '.json')
+    else:
+        cand = os.path.join(_CACHE_DIR, '_last.json')
     try:
-        if recon_date:
-            cand = os.path.join(_CACHE_DIR, recon_date.replace('/', '-') + '.json')
-        else:
-            cand = os.path.join(_CACHE_DIR, '_last.json')
         if _store.exists(cand):
             return _store.read(cand)
+    except FileNotFoundError:
+        return None
     except Exception:
-        pass
+        if strict:
+            raise
+        _LOG.warning('[payrec] leitura de %s falhou:\n%s', cand, traceback.format_exc())
     return None
 
 
 def finalize_history(recon_date):
     """On End process: persist the day's result to the dated history path so it
     can be pulled back when the reference date is set to a past day. Returns path."""
-    data = _load_flat(recon_date)
+    data = _load_flat(recon_date, strict=True)
     if not data or not (data.get('summary') or data.get('settled')
                         or data.get('pending_payment') or data.get('pending_receivement')):
         return None
     p = _history_path(recon_date)
     if not p:
         return None
-    try:
-        os.makedirs(os.path.dirname(p), exist_ok=True)
-        from apps.pages import routes
-        routes._atomic_write_json(p, data)      # funil: grava no banco (§434)
-        return p
-    except Exception:
-        return None
+    # A falha da gravação SOBE: virando `None`, a tela dizia "run the
+    # reconciliation first" para um dia que foi rodado — e a mesa rodava de novo.
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    from apps.pages import routes
+    routes._atomic_write_json(p, data)          # funil: grava no banco (§434)
+    return p
 
 
 _CARRY_STATUSES = ('pending payment', 'pending receivement')
@@ -1692,8 +1708,18 @@ def justify_row(recon_date, table, index, comment, status=None):
         so the value carries forward to the next days' reconciliations until it
         settles (OK) or is justified (the comment is just an annotation).
       • 'Pending' (the default) → the row becomes 'Justified' (comment kept).
-    Returns the updated payload, or None when the date/row can't be resolved."""
-    data = _load_flat(recon_date)
+    Returns the updated payload, or None when the date/row can't be resolved.
+
+    Ler → alterar → gravar sob o `_cache_lock` e com a leitura ESTRITA: dois
+    Justify ao mesmo tempo gravavam cada um a sua cópia do dia e um desfazia o
+    outro; e a gravação que falha SOBE (o endpoint responde 500 com o motivo)."""
+    from apps.pages import routes
+    with routes._cache_lock:
+        return _justify_locked(recon_date, table, index, comment, status)
+
+
+def _justify_locked(recon_date, table, index, comment, status):
+    data = _load_flat(recon_date, strict=True)
     if not data:
         return None
     key = {'pay': 'pending_payment', 'rec': 'pending_receivement'}.get(table)
@@ -1712,7 +1738,7 @@ def justify_row(recon_date, table, index, comment, status=None):
     else:
         rows[index]['status'] = 'Justified'         # comment-only on a Pending row
     rows[index]['comment'] = str(comment or '').strip()
-    _persist(recon_date, data)
+    _persist(recon_date, data, strict=True)
     return data
 
 

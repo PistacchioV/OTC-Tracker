@@ -2300,6 +2300,61 @@ def _ndf_publisher_fonte_info(publisher):
     fi = str(_ndf_publisher_row(publisher).get('FONTE INFO', '') or '').strip() or '1'
     return fi.rjust(4)
 
+def _asian_verification_dates(deal):
+    """(datas de verificação, feriados) da janela de fixing de um NDF asiático
+    — a fonte ÚNICA do campo 59 (Quantidade de Datas de Verificação) e das
+    linhas tipo 2 do Vanilla. `([], set())` quando não há janela (primeira e
+    última preenchidas e diferentes, a mesma regra do `asian_fix`).
+
+    As duas contas moravam em lugares diferentes, com calendários diferentes:
+    o campo 59 contava pelo ANBIMA e as linhas pelo `FXHolidaySchedule` do deal,
+    que o import da API do Vanilla NUNCA preenche — sem ele as linhas saíam de
+    Seg–Sex, e o 07/09/2026 (Independência) foi como data de verificação de um
+    NDF de PTAX, com o campo 59 contando uma data a menos que as linhas. Agora:
+
+    - o calendário é o do deal e, sem ele, o **ANBIMA** (PTAX não sai em
+      feriado nacional; o FXO já fazia `or 'anbima'`);
+    - calendário que não se lê LEVANTA (`ValueError` com o nome) em vez de
+      virar Seg–Sex calado — o envio para, com o motivo;
+    - a contagem é das datas INCLUSIVE a primeira, só se ela for dia útil (o
+      `_anbima_biz_diff(...) + 1` contava a primeira mesmo num feriado)."""
+    from apps.pages import routes
+
+    def _s(v):
+        return re.sub(r'<[^>]+>', '', str(v or '')).strip()
+
+    a = routes._parse_date_any(_s(deal.get('FirstFixingDate')))
+    b = routes._parse_date_any(_s(deal.get('LastFixingDate')))
+    if not a or not b or a >= b:
+        return [], set()
+    sched = re.sub(r'[^A-Za-z0-9_]', '',
+                   _s(deal.get('FXHolidaySchedule')).replace('-', '_')).lower() or 'anbima'
+    if sched == 'anbima':
+        hols = set(routes._anbima_holidays() or ())
+    else:
+        from apps.pages import duck_read   # DB-first: o schedule é um calendário do registro
+        cal = os.path.join(routes._B3_DATA_DIR, sched + '.json')
+        try:
+            itens = duck_read.calendar_rows(cal)
+            if itens is None:
+                itens = _store.read(cal)
+        except FileNotFoundError:
+            itens = None
+        hols = {(x.get('date') if isinstance(x, dict) else x) for x in (itens or [])}
+    if not hols:
+        # Calendário sem um feriado sequer é calendário que não foi lido: as
+        # datas sairiam Seg–Sex, que é exatamente o defeito do 07/09.
+        raise ValueError(
+            "FX holiday calendar '{}' could not be read (deal {}) — the Asian "
+            "verification dates were not generated.".format(sched, _s(deal.get('Deal'))))
+    datas, cur = [], a
+    while cur <= b:
+        if cur.weekday() < 5 and cur.strftime('%Y-%m-%d') not in hols:
+            datas.append(cur)
+        cur += timedelta(days=1)
+    return datas, hols
+
+
 def _generic_ndf_ter_line(deal, is_fwd, page_url=None, participant_override=None,
                           party_taxid=None):
     """Linha tipo 1 (Dados Fixos) do TER de um deal FWD Start / Other
@@ -2521,10 +2576,10 @@ def _generic_ndf_ter_line(deal, is_fwd, page_url=None, participant_override=None
         '55': _pos('S' if _s(deal.get('IsBRRFixed', '')).upper() == 'YES' else '', 1),  # Taxa a Termo em Reais
         '57': _pos(deal_id[-14:], 14, 'right'),      # Código Identificador (right 14 of Deal)
         '58': _pos(tipo_media, 1),                   # Tipo Média Asiático
-        '59': _pos(str(routes._anbima_biz_diff(
-            routes._parse_date_any(_s(deal.get('FirstFixingDate', ''))),
-            routes._parse_date_any(_s(deal.get('LastFixingDate', ''))))
-            + 1).zfill(3) if asian_fix else '000', 3),   # Qtde Datas Verificação
+        # Qtde Datas Verificação: a contagem das MESMAS datas que viram as
+        # linhas tipo 2 (`_asian_verification_dates`) — nunca uma conta à parte.
+        '59': _pos(str(len(_asian_verification_dates(deal)[0])).zfill(3)
+                   if asian_fix else '000', 3),
     }
     # O default é a página do produto; o download do Vanilla passa a DELE,
     # para os overrides e variantes do cadastro daquela página valerem.

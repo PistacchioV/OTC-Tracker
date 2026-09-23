@@ -4465,7 +4465,10 @@ $(document).ready(function() {
         // de verificação, não o rótulo TradeType.
         var hasFixWindow = !!(deal.FirstFixingDate && deal.LastFixingDate
                               && String(deal.FirstFixingDate).trim() !== String(deal.LastFixingDate).trim());
-        var fxSched   = _sh(deal.FXHolidaySchedule || '');
+        // Sem calendário no deal, o ANBIMA — a MESMA regra do servidor
+        // (`_asian_verification_dates`): Seg–Sex puro pôs o 07/09 como data de
+        // verificação de um NDF de PTAX, e o preview mostrava o mesmo erro.
+        var fxSched   = _sh(deal.FXHolidaySchedule || '') || 'ANBIMA';
         var isBrl     = _sh(deal.StrikeCurrency || '').toUpperCase() === 'BRL';
 
         var today = (function() {
@@ -4692,7 +4695,7 @@ $(document).ready(function() {
             }
         }
         if (hasFixWindow && fxSched) {
-            fetch('{{ config.ASSETS_ROOT }}/data/' + encodeURIComponent(fxSched.replace(/-/g, '_')) + '.json')
+            fetch('{{ config.ASSETS_ROOT }}/data/' + encodeURIComponent(fxSched.replace(/-/g, '_').toLowerCase()) + '.json')
                 .then(function(r) {
                     return r.ok
                         ? r.json().then(function(d) { return { status: true, data: d }; })

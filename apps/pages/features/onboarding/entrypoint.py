@@ -61,6 +61,29 @@ def api_onboarding_docs():
     return jsonify({'success': True, **queries.docs()})
 
 
+def _recusa_gen(exc):
+    """As duas recusas de uma escrita por `_id`: a lista foi reimportada depois
+    de a tela carregar (409 — o número já é de outro documento), ou o `_id` não
+    existe mais (404). Antes as duas respondiam sucesso."""
+    from apps.pages import cgd_docs
+    if isinstance(exc, cgd_docs.Reimportado):
+        return jsonify({'success': False, 'error': 'onboarding_reimported',
+                        'message': 'The list was re-imported from SharePoint after this '
+                                   'page loaded — reload before saving.'}), 409
+    return jsonify({'success': False, 'error': 'row_not_found', 'id': str(exc),
+                    'message': 'This document is no longer in the list — reload the page.'}), 404
+
+
+def _gen(payload):
+    g = payload.get('gen')
+    return None if g is None else str(g)
+
+
+def _recusas():
+    from apps.pages import cgd_docs
+    return (cgd_docs.Reimportado, commands.LinhaSumiu)
+
+
 @blueprint.route('/api/onboarding/docs/save', methods=['POST'])
 def api_onboarding_docs_save():
     if not session.get('authenticated'):
@@ -73,12 +96,17 @@ def api_onboarding_docs_save():
     if isinstance(ids, list) and ids:
         try:
             return jsonify({'success': True,
-                            'count': commands.save_many(ids, valores)})
+                            'count': commands.save_many(ids, valores, gen=_gen(payload))})
+        except _recusas() as exc:
+            return _recusa_gen(exc)
         except Exception as exc:                              # pragma: no cover
             return _falhou(exc, 'falha na gravação em massa')
     rid = str(payload.get('id') or '').strip()
     try:
-        rid = commands.save_one(rid, valores) if rid else commands.create(valores)
+        rid = (commands.save_one(rid, valores, gen=_gen(payload)) if rid
+               else commands.create(valores))
+    except _recusas() as exc:
+        return _recusa_gen(exc)
     except Exception as exc:                                  # pragma: no cover
         return _falhou(exc, 'falha ao gravar a linha')
     return jsonify({'success': True, 'id': rid})
@@ -102,7 +130,7 @@ def api_onboarding_docs_stamp():
     try:
         if acao == 'taxonomy':
             return jsonify({'success': True,
-                            'stamp': commands.stamp_taxonomy(rid, sid)})
+                            'stamp': commands.stamp_taxonomy(rid, sid, gen=_gen(payload))})
         if acao == 'otc':
             issue = str(payload.get('issue_date') or '').strip()
             assinatura = str(payload.get('signature_date') or '').strip()
@@ -112,10 +140,13 @@ def api_onboarding_docs_stamp():
                                 'error': 'missing_fields'}), 400
             return jsonify({'success': True,
                             'values': commands.stamp_otc(rid, sid, issue,
-                                                         assinatura, b3)})
+                                                         assinatura, b3,
+                                                         gen=_gen(payload))})
         if acao == 'mo':
             return jsonify({'success': True,
-                            'values': commands.stamp_mo(rid, sid)})
+                            'values': commands.stamp_mo(rid, sid, gen=_gen(payload))})
+    except _recusas() as exc:
+        return _recusa_gen(exc)
     except Exception as exc:                                  # pragma: no cover
         return _falhou(exc, 'falha ao carimbar a etapa (%s)' % acao)
     return jsonify({'success': False, 'error': 'unknown_action'}), 400
@@ -129,14 +160,19 @@ def api_onboarding_docs_delete():
     ids = payload.get('ids')
     if isinstance(ids, list) and ids:
         try:
-            return jsonify({'success': True, 'count': commands.delete_many(ids)})
+            return jsonify({'success': True,
+                            'count': commands.delete_many(ids, gen=_gen(payload))})
+        except _recusas() as exc:
+            return _recusa_gen(exc)
         except Exception as exc:                              # pragma: no cover
             return _falhou(exc, 'falha ao apagar o lote')
     rid = str(payload.get('id') or '').strip()
     if not rid:
         return jsonify({'success': False, 'error': 'missing_id'}), 400
     try:
-        commands.delete_one(rid)
+        commands.delete_one(rid, gen=_gen(payload))
+    except _recusas() as exc:
+        return _recusa_gen(exc)
     except Exception as exc:                                  # pragma: no cover
         return _falhou(exc, 'falha ao apagar a linha')
     return jsonify({'success': True})

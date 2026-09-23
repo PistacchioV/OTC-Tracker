@@ -143,4 +143,6 @@ document.addEventListener('keydown', function (e) { if (e.key === 'Escape') clos
   update();
 })();
 </script>
+<!-- Alinha o CNPJ sob o nome das Partes, SÓ na tela (o .doc/PDF são renderizados sem isto). -->
+<script src="{{ url_for('static', filename='js/conf-partes-align.js') }}?v=1"></script>
 {% endif %}

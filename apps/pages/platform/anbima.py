@@ -76,23 +76,35 @@ def _anbima_stamp():
 
 
 def _load_anbima():
+    """Carrega o calendário, e SÓ o marca como carregado quando a leitura deu
+    certo e o carimbo é conhecido.
+
+    O `_anbima_stamp` responde `None` quando não consegue olhar o arquivo — e
+    banco OCUPADO é `IOError` —, e `None` com `_anbima_loaded` é justamente o
+    calendário FIXADO à mão, que nunca recarrega: uma primeira carga com a
+    instância vizinha gravando deixava o processo sem feriado nenhum (ou com os
+    velhos) até o restart, errando SLA, D-1 e aging. Agora a falha não marca
+    nada, e a chamada seguinte tenta de novo; e carimbo ilegível ou leitura
+    falha com um calendário JÁ carregado mantêm o que está em memória, em vez
+    de trocá-lo por um conjunto vazio."""
     global _ANBIMA_HOLIDAYS, _anbima_loaded, _anbima_mtime
-    if _anbima_loaded:
-        if _anbima_mtime is None:
-            return                              # fixado à mão: não recarrega
-        if _anbima_stamp() == _anbima_mtime:
-            return
+    if _anbima_loaded and _anbima_mtime is None:
+        return                                  # fixado à mão: não recarrega
     stamp = _anbima_stamp()
+    if _anbima_loaded and (stamp is None or stamp == _anbima_mtime):
+        return                                  # igual, ou não deu para olhar
     try:
         path = data_path('anbima.json')
         from apps.pages import duck_read
         data = duck_read.dataset_rows(path)
-        _ANBIMA_HOLIDAYS = {d['date'] for d in data}
+        hols = {d['date'] for d in data}
     except Exception as exc:
         log.warning('[ANBIMA] Failed to load anbima.json: %s', exc)
-        _ANBIMA_HOLIDAYS = set()
-    _anbima_loaded = True
-    _anbima_mtime = stamp
+        return
+    _ANBIMA_HOLIDAYS = hols
+    if stamp is not None:
+        _anbima_loaded = True
+        _anbima_mtime = stamp
 
 
 def _prev_anbima_bizday(ref):
@@ -158,23 +170,35 @@ _anbima_hols_mtime = None       # `None` com cache preenchido = fixado à mão
 
 
 def _anbima_holidays():
+    """Os feriados, em cache pelo carimbo do arquivo. Mesma regra do
+    `_load_anbima`: só entra no cache o que foi LIDO com carimbo conhecido —
+    `None` no carimbo é o "fixado à mão" e congelaria o conjunto até o
+    restart —, e carimbo ilegível ou leitura falha com um cache já cheio
+    mantêm o cache."""
     global _anbima_hols_cache, _anbima_hols_mtime
-    if _anbima_hols_cache is not None and _anbima_hols_mtime is not None \
-            and _anbima_stamp() != _anbima_hols_mtime:
-        _anbima_hols_cache = None               # o arquivo mudou: recarrega
-    if _anbima_hols_cache is None:
-        _anbima_hols_mtime = _anbima_stamp()
-        # Andaime declarado: o `_B3_DATA_DIR` ainda é do `routes` (é o mesmo
-        # `data_dir()` do app), e os testes o trocam LÁ (`R._B3_DATA_DIR = tmp`).
-        from apps.pages import routes
-        try:
-            from apps.pages import duck_read
-            _anbima_hols_cache = {(x.get('date') if isinstance(x, dict) else x)
-                                  for x in duck_read.dataset_rows(
-                                      os.path.join(routes._B3_DATA_DIR, 'anbima.json'))}
-        except (IOError, json.JSONDecodeError):
-            _anbima_hols_cache = set()
-    return _anbima_hols_cache
+    if _anbima_hols_cache is not None:
+        if _anbima_hols_mtime is None:
+            return _anbima_hols_cache           # fixado à mão
+        stamp = _anbima_stamp()
+        if stamp is None or stamp == _anbima_hols_mtime:
+            return _anbima_hols_cache
+    else:
+        stamp = _anbima_stamp()
+    # Andaime declarado: o `_B3_DATA_DIR` ainda é do `routes` (é o mesmo
+    # `data_dir()` do app), e os testes o trocam LÁ (`R._B3_DATA_DIR = tmp`).
+    from apps.pages import routes
+    try:
+        from apps.pages import duck_read
+        hols = {(x.get('date') if isinstance(x, dict) else x)
+                for x in duck_read.dataset_rows(
+                    os.path.join(routes._B3_DATA_DIR, 'anbima.json'))}
+    except (IOError, json.JSONDecodeError) as exc:
+        log.warning('[ANBIMA] feriados não carregados: %s', exc)
+        return _anbima_hols_cache if _anbima_hols_cache is not None else set()
+    if stamp is None:
+        return hols                             # sem carimbo: não entra no cache
+    _anbima_hols_cache, _anbima_hols_mtime = hols, stamp
+    return hols
 
 
 def _anbima_biz_diff(start_dt, end_dt):

@@ -11,6 +11,7 @@ import io
 import json
 import os
 import re
+import traceback
 from datetime import datetime
 
 from flask import jsonify, request, session
@@ -86,6 +87,53 @@ def _grava_mapeamento(finder, deal_text, client_name, updates):
             _R().log.exception('[MAPPING-B3] falha ao GRAVAR deal=%r client=%r em %s',
                                deal_text, client_name, file_path)
             return False, None, '%s: %s' % (type(exc).__name__, exc)
+
+
+# ── 4-olhos no SERVIDOR ───────────────────────────────────────────────────────
+# O PATCH aplicava `deals[idx].update(updates)` com o que o navegador mandou:
+# qualquer Status, e Maker/Checker do CORPO do pedido. A regra de que quem
+# editou não aprova vivia só no JS — um POST direto, ou uma aba desatualizada,
+# passava por cima. Swap Bullet/Cashflow, Unwinds e Intrag já conferem aqui.
+_ND_FINAL_STATUSES = ('Sent', 'Success')
+_ND_BACK_STATUSES = ('New', 'Pending', 'Approved')
+
+
+def _nd_guard_updates(deal, updates, sid):
+    """(updates saneados, código de recusa ou '').
+
+    - `Maker`/`Checker` não-vazios são da SESSÃO (vazio segue vazio: limpar é
+      permitido);
+    - Pending → Approved pelo próprio Maker é `same_user` — a mesma trava do
+      botão Confirm (New/Amend → Approved segue livre, §540);
+    - Sent/Success não voltam a New/Pending/Approved (`status_regression`): é
+      a aba aberta antes do envio gravando o status que ela ainda mostra. O
+      `Amend` passa — é o caminho do dado econômico."""
+    sid = str(sid or '').strip()
+    upd = dict(updates or {})
+    for k in ('Maker', 'Checker'):
+        if str(upd.get(k, '') or '').strip():
+            upd[k] = sid
+    novo = str(upd.get('Status', '') or '').strip()
+    atual = str((deal or {}).get('Status', '') or '').strip()
+    if novo and novo != atual:
+        if atual in _ND_FINAL_STATUSES and novo in _ND_BACK_STATUSES:
+            return None, 'status_regression'
+        if novo == 'Approved' and atual == 'Pending':
+            maker = str((deal or {}).get('Maker', '') or '').strip().upper()
+            if maker and maker == sid.upper():
+                return None, 'same_user'
+    return upd, ''
+
+
+_ND_GUARD_HTTP = {
+    'same_user': (403, 'A different user must approve a deal you imported or last edited.'),
+    'status_regression': (409, 'This deal was already sent — reload the page.'),
+}
+
+
+def _nd_guard_response(code):
+    status, msg = _ND_GUARD_HTTP[code]
+    return jsonify({'success': False, 'error': code, 'message': msg}), status
 
 
 @blueprint.route('/api/new-deals/opt-commodities/cache', methods=['POST'])
@@ -193,6 +241,9 @@ def api_update_deal_cache(deal_id):
         if idx is None:
             return jsonify({"success": False, "message": "Deal not found"}), 404
         updates.pop('_client', None)
+        updates, _recusa = _nd_guard_updates(deals[idx], updates, session.get('user_sid', ''))
+        if _recusa:
+            return _nd_guard_response(_recusa)
         deals[idx].update(updates)
         for _k in ('Maker', 'Checker'):
             if _k in deals[idx]:
@@ -322,6 +373,7 @@ def api_opt_bulk_patch_deal_cache():
             file_patches.setdefault(fp, []).append((deal_id, client, updates))
 
     updated = 0
+    refused = []                 # recusados pelo 4-olhos (`_nd_guard_updates`)
     for fp, file_ops in file_patches.items():
         with _R()._cache_lock:
             try:
@@ -335,7 +387,11 @@ def api_opt_bulk_patch_deal_cache():
                             and (not want_client or (d.get('Client') or '').strip() == want_client)]
                 if matching:
                     for idx in matching:
-                        deals[idx].update(updates)
+                        upd, _recusa = _nd_guard_updates(deals[idx], updates, session.get('user_sid', ''))
+                        if _recusa:
+                            refused.append({'deal_id': deal_id, 'client': client, 'error': _recusa})
+                            continue
+                        deals[idx].update(upd)
                         updated += 1
                 else:
                     _R().log.warning("[OPT BULK-PATCH] idx not found: deal=%r client=%r in %s",
@@ -348,7 +404,7 @@ def api_opt_bulk_patch_deal_cache():
             'Bulk Update', 'Opt Comm',
             str(updated) + ' deal' + ('s' if updated != 1 else '') + ' updated'
         )
-    return jsonify({"success": True, "updated": updated})
+    return jsonify({"success": True, "updated": updated, "refused": refused})
 
 @blueprint.route('/api/new-deals/opt-fxo/cache', methods=['POST'])
 def api_save_fxo_cache():
@@ -439,6 +495,9 @@ def api_update_fxo_cache(deal_id):
         if idx is None:
             return jsonify({"success": False, "message": "Deal not found"}), 404
         updates.pop('_client', None)
+        updates, _recusa = _nd_guard_updates(deals[idx], updates, session.get('user_sid', ''))
+        if _recusa:
+            return _nd_guard_response(_recusa)
         deals[idx].update(updates)
         # Rewrite in table-column order (Maker/Checker last) — not alphabetical.
         deals[idx] = _R()._fxo_order_deal(deals[idx])
@@ -558,6 +617,7 @@ def api_fxo_bulk_patch_deal_cache():
             file_patches.setdefault(fp, []).append((deal_id, client, updates))
 
     updated = 0
+    refused = []                 # recusados pelo 4-olhos (`_nd_guard_updates`)
     for fp, file_ops in file_patches.items():
         with _R()._cache_lock:
             try:
@@ -570,7 +630,11 @@ def api_fxo_bulk_patch_deal_cache():
                             if (d.get('Deal') or '').strip() == deal_id.strip()
                             and (not want_client or (d.get('Client') or '').strip() == want_client)]
                 for idx in matching:
-                    deals[idx].update(updates)
+                    upd, _recusa = _nd_guard_updates(deals[idx], updates, session.get('user_sid', ''))
+                    if _recusa:
+                        refused.append({'deal_id': deal_id, 'client': client, 'error': _recusa})
+                        continue
+                    deals[idx].update(upd)
                     deals[idx] = _R()._fxo_order_deal(deals[idx])
                     updated += 1
             _R()._atomic_write_json(fp, deals)
@@ -581,7 +645,7 @@ def api_fxo_bulk_patch_deal_cache():
             'Bulk Update', 'Opt FXO',
             str(updated) + ' deal' + ('s' if updated != 1 else '') + ' updated'
         )
-    return jsonify({"success": True, "updated": updated})
+    return jsonify({"success": True, "updated": updated, "refused": refused})
 
 @blueprint.route('/api/new-deals/opt-fxo/import-api', methods=['POST'])
 def api_fxo_import_api():
@@ -1145,6 +1209,9 @@ def api_ndf_update_deal_cache(deal_id):
             _R().log.warning("[NDF PATCH] 404 — deal found in file scan but not after reload. deal_id=%r client=%r file=%s", deal_id, client, file_path)
             return jsonify({"success": False, "message": "Deal not found"}), 404
         prev_status = deals[idx].get('Status', '?')
+        updates, _recusa = _nd_guard_updates(deals[idx], updates, session.get('user_sid', ''))
+        if _recusa:
+            return _nd_guard_response(_recusa)
         deals[idx].update(updates)
         _R().log.info("[NDF PATCH] Updated deal[%d] %r: Status %r→%r updates=%s",
                  idx, deal_id, prev_status, deals[idx].get('Status', '?'), updates)
@@ -1305,6 +1372,7 @@ def api_ndf_bulk_patch_deal_cache():
             _R().log.warning("[NDF BULK-PATCH] NOT FOUND: deal=%r client=%r", deal_id, client)
 
     updated = 0
+    refused = []                 # recusados pelo 4-olhos (`_nd_guard_updates`)
     for fp, file_ops in file_patches.items():
         with _R()._cache_lock:
             try:
@@ -1315,7 +1383,11 @@ def api_ndf_bulk_patch_deal_cache():
                 idx = next((i for i, d in enumerate(deals)
                             if d.get('Deal') == deal_id and (not client or d.get('Client', '') == client)), None)
                 if idx is not None:
-                    deals[idx].update(updates)
+                    upd, _recusa = _nd_guard_updates(deals[idx], updates, session.get('user_sid', ''))
+                    if _recusa:
+                        refused.append({'deal_id': deal_id, 'client': client, 'error': _recusa})
+                        continue
+                    deals[idx].update(upd)
                     updated += 1
                     _R().log.debug("[NDF BULK-PATCH] Updated deal=%r client=%r", deal_id, client)
             _R()._atomic_write_json(fp, deals)
@@ -1327,7 +1399,7 @@ def api_ndf_bulk_patch_deal_cache():
             'Bulk Update', 'NDF Comm',
             str(updated) + ' deal' + ('s' if updated != 1 else '') + ' updated'
         )
-    return jsonify({"success": True, "updated": updated})
+    return jsonify({"success": True, "updated": updated, "refused": refused})
 
 @blueprint.route('/api/new-deals/ndf-commodities/send-conecta', methods=['POST'])
 def api_ndf_send_conecta():
@@ -2118,14 +2190,27 @@ def api_generic_nd_search_cache(product):
         try:
             # Contraparte cadastrada depois do import → persiste o
             # enriquecimento, senão a linha volta vazia a cada visita.
+            #
+            # Grava sobre o dia RELIDO sob a trava, nunca sobre `deals`: essa
+            # lista veio do memo, e gravá-la inteira desfazia o Confirm/Edit que
+            # outro usuário fez entre a leitura e aqui — calado, porque a busca
+            # não é uma edição. O enriquecimento só preenche SPN VAZIO, então
+            # reaplicá-lo à cópia fresca dá o mesmo resultado.
             if _R()._generic_nd_reenrich(deals, refmap_cache):
                 with _R()._cache_lock:
-                    _R()._atomic_write_json(fpath, deals)
+                    fresco = _R()._day_records_for_write(fpath, lambda _d: False)
+                    if fresco and _R()._generic_nd_reenrich(fresco, refmap_cache):
+                        _R()._atomic_write_json(fpath, fresco)
+                    if fresco is not None:
+                        deals = fresco
                 # O mtime novo já invalidaria a entrada, mas contar com isso é
                 # contar com a resolução do relógio do share.
                 _R()._daycache_forget(fpath)
         except Exception:                                   # noqa: BLE001
-            continue
+            # A falha de GRAVAR não tira o dia da busca (era `continue`): a
+            # mesa via menos operações do que o dia tem, sem aviso nenhum.
+            _R().log.warning('[ND SEARCH] enriquecimento de %s não gravado:\n%s',
+                             fpath, traceback.format_exc())
         for deal in deals:
             if _R()._deal_matches(deal, filters):
                 matched.append(deal)
@@ -2157,6 +2242,9 @@ def api_generic_nd_update_cache(product, deal_id):
                     if d.get('Deal') == deal_id and (client is None or d.get('Client', '') == client)), None)
         if idx is None:
             return jsonify({"success": False, "message": "Deal not found"}), 404
+        updates, _recusa = _nd_guard_updates(deals[idx], updates, session.get('user_sid', ''))
+        if _recusa:
+            return _nd_guard_response(_recusa)
         deals[idx].update(updates)
         _R()._atomic_write_json(file_path, deals)
         updated_deal = deals[idx].copy()
@@ -2283,6 +2371,7 @@ def api_generic_nd_bulk_patch_cache(product):
             file_patches.setdefault(fp, []).append((deal_id, client, updates))
 
     updated = 0
+    refused = []                 # recusados pelo 4-olhos (`_nd_guard_updates`)
     for fp, file_ops in file_patches.items():
         with _R()._cache_lock:
             try:
@@ -2294,7 +2383,11 @@ def api_generic_nd_bulk_patch_cache(product):
                 idx = next((i for i, d in enumerate(deals)
                             if d.get('Deal') == deal_id and (not client or d.get('Client', '') == client)), None)
                 if idx is not None:
-                    deals[idx].update(updates)
+                    upd, _recusa = _nd_guard_updates(deals[idx], updates, session.get('user_sid', ''))
+                    if _recusa:
+                        refused.append({'deal_id': deal_id, 'client': client, 'error': _recusa})
+                        continue
+                    deals[idx].update(upd)
                     updated += 1
                     if str(updates.get('Status', '')) == 'Success':
                         success_deals.append(deals[idx].copy())
@@ -2306,7 +2399,7 @@ def api_generic_nd_bulk_patch_cache(product):
         _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                              'Bulk Update', cfg['label'],
                              str(updated) + ' deal' + ('s' if updated != 1 else '') + ' updated')
-    return jsonify({"success": True, "updated": updated})
+    return jsonify({"success": True, "updated": updated, "refused": refused})
 
 @blueprint.route('/api/new-deals/<product>/send-conecta', methods=['POST'])
 def api_generic_nd_send_conecta(product):

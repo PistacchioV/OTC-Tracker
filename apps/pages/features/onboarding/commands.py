@@ -14,9 +14,23 @@ from datetime import datetime
 from apps.pages import cgd_docs
 
 
-def save_one(row_id, values):
+class LinhaSumiu(Exception):
+    """O `_id` não casou com linha nenhuma — a gravação não aconteceu."""
+
+
+def _gravou(n, row_id):
+    if not n:
+        raise LinhaSumiu(str(row_id))
+    return n
+
+
+# `gen` é a geração da importação que a TELA carregou (ver
+# `cgd_docs.META_TABLE`): mudou, e a escrita é recusada com `Reimportado`.
+# `None` (tela antiga, sem o campo) não confere.
+
+def save_one(row_id, values, gen=None):
     """Grava numa linha que já existe. Devolve o id dela."""
-    cgd_docs.update_row(row_id, values)
+    _gravou(cgd_docs.update_row(row_id, values, gen=gen), row_id)
     return row_id
 
 
@@ -25,15 +39,13 @@ def create(values):
     return cgd_docs.add_row(values)
 
 
-def save_many(ids, values):
-    """O mesmo valor em várias linhas. Devolve quantas foram."""
-    for uid in ids:
-        cgd_docs.update_row(str(uid).strip(), values)
-    return len(ids)
+def save_many(ids, values, gen=None):
+    """O mesmo valor em várias linhas. Devolve quantas foram GRAVADAS."""
+    return sum(cgd_docs.update_row(str(uid).strip(), values, gen=gen) for uid in ids)
 
 
-def delete_one(row_id):
-    cgd_docs.delete_row(row_id)
+def delete_one(row_id, gen=None):
+    _gravou(cgd_docs.delete_row(row_id, gen=gen), row_id)
 
 
 # ── Os carimbos da esteira ───────────────────────────────────────────────────
@@ -42,7 +54,7 @@ def _hoje():
     return datetime.now().strftime('%d/%m/%Y')
 
 
-def stamp_taxonomy(row_id, sid):
+def stamp_taxonomy(row_id, sid, gen=None):
     """Legal anexou o Taxonomy: a coluna guarda QUANDO e QUEM (data · SID).
 
     O SID vai na mesma célula de propósito — a coluna não está em DATE_COLUMNS,
@@ -51,28 +63,32 @@ def stamp_taxonomy(row_id, sid):
     """
     stamp = '{} {} · {}'.format(_hoje(), datetime.now().strftime('%H:%M'),
                                 str(sid or '').strip().upper())
-    cgd_docs.update_row(row_id, {cgd_docs.LEGAL_STAMP: stamp})
+    _gravou(cgd_docs.update_row(row_id, {cgd_docs.LEGAL_STAMP: stamp}, gen=gen), row_id)
     return stamp
 
 
-def stamp_otc(row_id, sid, issue_date, signature_date, b3_id):
+def stamp_otc(row_id, sid, issue_date, signature_date, b3_id, gen=None):
     """OTC anexou o CGD abonado: Emissão, Data de Assinatura e o B3 ID — na
     coluna da LE em que a solicitação foi aberta (`b3_id_column`). O
     `OTC - STAMP` fecha a mesa com a data de hoje."""
     linha = [r for r in cgd_docs.load_all()
              if str(r.get(cgd_docs.ID_COLUMN)) == str(row_id)]
-    le = linha[0].get(cgd_docs.LEGAL_ENTITY_COLUMN, '') if linha else ''
+    if not linha:
+        # Sem a linha não há LE — e com LE vazia o B3 ID caía na coluna do JPM
+        # de um documento que talvez nem fosse daqui.
+        raise LinhaSumiu(str(row_id))
+    le = linha[0].get(cgd_docs.LEGAL_ENTITY_COLUMN, '')
     valores = {
         'Emissão': str(issue_date or '').strip(),
         'Signature Date': str(signature_date or '').strip(),
         cgd_docs.b3_id_column(le): str(b3_id or '').strip(),
         cgd_docs.OTC_STAMP: _hoje(),
     }
-    cgd_docs.update_row(row_id, valores)
+    _gravou(cgd_docs.update_row(row_id, valores, gen=gen), row_id)
     return valores
 
 
-def stamp_mo(row_id, sid):
+def stamp_mo(row_id, sid, gen=None):
     """CEM MO conferiu abonado + taxonomy: fecha a esteira. O documento sai das
     filas pelo `Status = Active`, e o `Conclusion - Stamp` é o que PARA o aging
     — sem ele o CGD concluído continuaria envelhecendo."""
@@ -83,11 +99,11 @@ def stamp_mo(row_id, sid):
     valores = {cgd_docs.MO_STAMP: _hoje(),
                'Conclusion - Stamp': _hoje(),
                cgd_docs.STATUS_COLUMN: cgd_docs.STATUS_OPTIONS[0]}
-    cgd_docs.update_row(row_id, valores)
+    _gravou(cgd_docs.update_row(row_id, valores, gen=gen), row_id)
     return valores
 
 
-def delete_many(ids):
+def delete_many(ids, gen=None):
     """Apaga o lote e devolve quantos documentos SAÍRAM.
 
     Os ids passam por um `set`: o `_id` é a CHAVE da linha (o `DELETE` casa por
@@ -95,6 +111,4 @@ def delete_many(ids):
     lista faria a contagem devolvida mentir sobre quantos documentos saíram.
     """
     unicos = sorted({str(x).strip() for x in ids if str(x).strip()})
-    for uid in unicos:
-        cgd_docs.delete_row(uid)
-    return len(unicos)
+    return sum(cgd_docs.delete_row(uid, gen=gen) for uid in unicos)

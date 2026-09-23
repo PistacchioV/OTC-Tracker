@@ -53,6 +53,12 @@ _MAPPINGS_DIR = data_write('mappings')
 DB_NAME = 'cgd_sharepoint.db'
 DB_PATH = os.path.normpath(os.path.join(Config.DATABASE_DIR, DB_NAME))
 TABLE = 'cgd_docs'
+# A GERAÇÃO da importação: o `_id` é renumerado a cada `replace_all` (ver o
+# cabeçalho), então a tela que carregou ANTES de uma reimportação endereça, pelo
+# mesmo número, OUTRO documento — carimbava o Taxonomy/OTC/MO e APAGAVA o CGD
+# errado, com resposta de sucesso. A leitura devolve a geração e toda escrita
+# por `_id` a confere (`Reimportado`, 409 na rota).
+META_TABLE = 'cgd_meta'
 
 # As colunas da lista do SharePoint, na ordem em que a tela as mostra. São o
 # contrato com a planilha: quem exporta de lá reconhece esta ordem, e o script
@@ -225,6 +231,7 @@ def ensure_db(path=None):
     with duckdb_write(path) as con:
         cols = ', '.join('"{}" VARCHAR'.format(c) for c in DB_COLUMNS)
         con.execute('CREATE TABLE IF NOT EXISTS {} ({})'.format(TABLE, cols))
+        con.execute('CREATE TABLE IF NOT EXISTS {} (k VARCHAR, v VARCHAR)'.format(META_TABLE))
         existentes = {r[1] for r in con.execute(
             "PRAGMA table_info('{}')".format(TABLE)).fetchall()}
         for c in DB_COLUMNS:
@@ -268,7 +275,35 @@ def replace_all(rows, path=None):
         if dados:
             con.executemany('INSERT INTO {} ({}) VALUES ({})'.format(TABLE, cols, ph),
                             dados)
+        con.execute("DELETE FROM {} WHERE k = 'gen'".format(META_TABLE))
+        con.execute("INSERT INTO {} VALUES ('gen', ?)".format(META_TABLE),
+                    [datetime.now().strftime('%Y%m%d%H%M%S%f')])
     return len(dados)
+
+
+class Reimportado(Exception):
+    """A lista foi reimportada depois de a tela carregar: o `_id` que ela
+    manda já é de outro documento."""
+
+
+def _gen_of(con):
+    r = con.execute("SELECT v FROM {} WHERE k = 'gen' LIMIT 1".format(META_TABLE)).fetchone()
+    return str(r[0]) if r and r[0] is not None else ''
+
+
+def generation(path=None):
+    """A geração da importação em vigor (`''` antes da primeira)."""
+    path = path or DB_PATH
+    if duckdb is None or not _store.isfile(path):
+        return ''
+    path = ensure_db(path)
+    with duckdb_read(path) as con:
+        return _gen_of(con)
+
+
+def _confere_gen(con, gen):
+    if gen is not None and str(gen) != _gen_of(con):
+        raise Reimportado()
 
 
 def load_all(path=None):
@@ -303,7 +338,7 @@ def load_all(path=None):
     return out
 
 
-def update_row(row_id, values, path=None):
+def update_row(row_id, values, path=None, gen=None):
     """Grava as colunas de UMA linha. Só as colunas conhecidas entram — o resto
     do payload é descartado, que é a "Defense Option 3" do cheat sheet: o nome
     da coluna não pode ser bindado, então ele é validado contra a lista fixa."""
@@ -317,19 +352,23 @@ def update_row(row_id, values, path=None):
     sets = ', '.join('"{}" = ?'.format(c) for c, _v in campos)
     args = ['' if v is None else str(v) for _c, v in campos] + [str(row_id)]
     with duckdb_write(path) as con:
-        con.execute('UPDATE {} SET {} WHERE "{}" = ?'.format(TABLE, sets, ID_COLUMN),
-                    args)
-    return 1
+        _confere_gen(con, gen)
+        # A contagem é a do BANCO: devolver 1 sempre afirmava ter gravado numa
+        # linha que já não existia.
+        r = con.execute('UPDATE {} SET {} WHERE "{}" = ?'.format(TABLE, sets, ID_COLUMN),
+                        args).fetchone()
+    return int(r[0]) if r else 0
 
 
-def delete_row(row_id, path=None):
+def delete_row(row_id, path=None, gen=None):
     path = ensure_db(path)
     if duckdb is None:
         return 0
     with duckdb_write(path) as con:
-        con.execute('DELETE FROM {} WHERE "{}" = ?'.format(TABLE, ID_COLUMN),
-                    [str(row_id)])
-    return 1
+        _confere_gen(con, gen)
+        r = con.execute('DELETE FROM {} WHERE "{}" = ?'.format(TABLE, ID_COLUMN),
+                        [str(row_id)]).fetchone()
+    return int(r[0]) if r else 0
 
 
 def add_row(values, path=None):
@@ -715,8 +754,14 @@ def _stage_map():
     try:                                        # DB-first (fase 3)
         from apps.pages import duck_read
         linhas = duck_read.dataset_rows(path) or []
-    except Exception:
+    except FileNotFoundError:
         linhas = []
+    except Exception as exc:
+        # Falha não é "cadastro vazio": guardada sob o carimbo, as etapas
+        # voltavam à derivação até alguém editar o `cgd-stage`.
+        _LOG.warning('[cgd-docs] cgd-stage ilegível (%s: %s) — sem cache desta vez',
+                             type(exc).__name__, exc)
+        return _STAGE_MAP['rows'] or {}
     mapa = {}
     for r in linhas if isinstance(linhas, list) else []:
         st = _norm(r.get('STATUS'))
