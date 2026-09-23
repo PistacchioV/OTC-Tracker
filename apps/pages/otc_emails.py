@@ -2066,7 +2066,10 @@ def build_drafts_download(drafts, sender_email=None, zip_name=None):
 # dia com Modalidade de Liquidação Bilateral*/Bruta*. Mesmo shell/assinatura
 # dos avisos de NDF de Moeda.
 # ──────────────────────────────────────────────────────────────────────────
-_MSG_TABLE_HEADERS = ['Participante (Nome Simpl.)', 'Conta', 'Tipo Operação', 'C/V', 'Título',
+# O Athena ID vem à ESQUERDA do Título (o B3 ID), pedido da mesa (23/09/2026):
+# é por ele que a operação se acha no Athena, e o B3 ID sozinho obrigava a
+# procurar o contrato na posição antes.
+_MSG_TABLE_HEADERS = ['Participante (Nome Simpl.)', 'Conta', 'Tipo Operação', 'C/V', 'Athena ID', 'Título',
                       'Tipo Título', 'Valor', 'Sistema', 'Modalidade Liquidação', 'Status',
                       'Contraparte (Nome Simpl.)', 'Conta Contraparte']
 
@@ -2105,7 +2108,7 @@ def opb3_msg_is_swap_venc(tipo_titulo, tipo_operacao):
 def build_opb3_mensageria_email(group):
     """One Mensageria draft. `group`:
       tipo, tipo_titulo, tipo_operacao, cpty (nome p/ subject/frases),
-      ref_date (dd/mm/yyyy), rows ([[12 células]] na ordem _MSG_TABLE_HEADERS),
+      ref_date (dd/mm/yyyy), rows ([[13 células]] na ordem _MSG_TABLE_HEADERS),
       total (float, soma B3 — positivo = Banco recebe),
       internal (float|None — batimento interno; None = sem fonte p/ comparar),
       to, cc.

@@ -23625,3 +23625,30 @@ queda de antes. PDF fora do padrão (upload à mão) não diz o ativo e continua
 aparecendo. Os **e-mails de recap não mudaram**: continuam caindo para a lista
 inteira quando nada casa, porque o recap é nomeado pela contraparte, sem
 Trade ID. `check_mc_docs_ativo.py`.
+
+## §543 — O Athena ID na tabela da mensageria bilateral do Operations B3 (2026-09-23)
+
+A tabela do e-mail de liquidação bilateral (Mensageria) trazia o **Título**
+(o B3 ID) e nenhum identificador do Athena: para achar a operação lá, a mesa
+procurava o contrato na posição antes. A tabela ganhou a coluna **Athena ID**,
+logo à esquerda do Título.
+
+Quem responde é o `_opb3_athena_id_map` (`platform/operations_b3.py`), e das
+MESMAS linhas que o batimento do próprio e-mail e as telas de liquidação já
+leem, para o número do e-mail ser o que a tela mostra:
+- **NDF de moeda:** o Cockpit, `CD_CETIP_RETURN` → `ID_SOURCE_DEAL`, o Deal
+  Name do Athena. A recompra projetada no dia só entra quando o contrato não
+  tem a linha da operação original.
+- **Swap, termo de commodities e opção:** o `internal_id` do Trade Level. No
+  swap é o `Kapital ID` do Athena. No termo de commodities e na opção é o
+  `Código Identificador` do Live Position, que pode vir TRUNCADO nos 14 da
+  direita (§488).
+
+Contrato que nenhuma fonte conhece fica com a célula **vazia**, nunca um
+chute. Uma fonte que falha não derruba as outras.
+
+Como o batimento e o Athena ID perguntam às mesmas linhas, e o Cockpit e o
+Trade Level custam segundos no share, as leituras passaram pelo `_opb3_once`:
+memo por REQUEST, sem TTL entre requests, e fora de request não memoiza. Ele
+resolve a função pelo nome no `routes` a cada chamada, para o teste que a troca
+lá continuar valendo. `check_opb3_mensageria.py` (a coluna, o mapa e a memo).

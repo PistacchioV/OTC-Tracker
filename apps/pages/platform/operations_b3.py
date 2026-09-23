@@ -687,6 +687,27 @@ def _opb3_legal_side(legal):
     return ''
 
 
+def _opb3_once(nome, arg):
+    """`routes.<nome>(arg)` uma vez por REQUEST.
+
+    A mensageria faz duas perguntas às MESMAS linhas — o batimento (SETTLEMENT)
+    e o Athena ID da tabela — e o Cockpit e o Trade Level custam segundos no
+    share. Sem TTL entre requests, de propósito: a edição feita na tela vale no
+    clique seguinte. Fora de um request não memoiza. A função é resolvida pelo
+    NOME no `routes` a cada chamada, para o teste que a troca lá continuar
+    valendo (§3)."""
+    from apps.pages import routes
+    from flask import g, has_request_context
+    fn = getattr(routes, nome)
+    if not has_request_context():
+        return fn(arg)
+    memo = g.setdefault('_opb3_once', {})
+    chave = (nome, arg)
+    if chave not in memo:
+        memo[chave] = fn(arg)
+    return memo[chave]
+
+
 def _opb3_internal_ter_map(ref):
     """B3 ID (upper) → {conta de casa: Σ SETTLEMENT interno} — lado JP do
     batimento para Tipo Título = TER (NDF de moeda).
@@ -708,7 +729,7 @@ def _opb3_internal_ter_map(ref):
         # somada aqui, ela mudaria o lado JP de um contrato que a B3 informa
         # sozinho, e o "Favor considerar" sairia com o valor errado.
         i_unw = len(routes._NDFC_COLUMNS) + 4
-        for row in routes._ndfc_collect(ref)['rows']:
+        for row in _opb3_once('_ndfc_collect', ref)['rows']:
             if len(row) > i_unw and row[i_unw]:
                 continue
             b3 = str(row[ci['CD_CETIP_RETURN']] or '').strip().upper()
@@ -798,7 +819,7 @@ def _opb3_internal_swap_map(ref):
     divergência que é só a outra metade do mesmo pagamento."""
     from apps.pages import routes
     try:
-        return _opb3_internal_trade_map(routes._ops_swap_trade_rows(ref.date()))
+        return _opb3_internal_trade_map(_opb3_once('_ops_swap_trade_rows', ref.date()))
     except Exception:
         log.error('[opb3-msg] mapa interno de swap falhou:\n%s', traceback.format_exc())
         return {}
@@ -812,11 +833,55 @@ def _opb3_internal_ndfc_map(ref):
     sem o "Favor considerar", que é indistinguível de "bateu"."""
     from apps.pages import routes
     try:
-        return _opb3_internal_trade_map(routes._ops_ndfc_trade_rows(ref.date()))
+        return _opb3_internal_trade_map(_opb3_once('_ops_ndfc_trade_rows', ref.date()))
     except Exception:
         log.error('[opb3-msg] mapa interno de termo de commodities falhou:\n%s',
                   traceback.format_exc())
         return {}
+
+def _opb3_athena_id_map(ref):
+    """B3 ID (upper) → Athena ID, para a coluna da tabela da mensageria.
+
+    Sai das MESMAS linhas que o batimento do e-mail e as telas de liquidação já
+    leem, para o número do e-mail ser o que a tela mostra:
+      * NDF de MOEDA — o Cockpit: `CD_CETIP_RETURN` (com os resgates de
+        contrato aplicados) → `ID_SOURCE_DEAL`, o Deal Name do Athena. A
+        RECOMPRA projetada no dia (§488) só entra se o contrato não tiver a
+        linha da operação original: ela carrega o mesmo contrato, e o Athena ID
+        dela é o da recompra;
+      * SWAP, TERMO DE COMMODITIES e OPÇÃO — o `internal_id` do Trade Level
+        (`Kapital ID` do Athena no swap; o `Código Identificador` do Live
+        Position no termo de commodities e na opção, que a posição pode trazer
+        TRUNCADO nos 14 da direita).
+    Contrato que nenhuma fonte conhece fica sem Athena ID — célula vazia, nunca
+    um chute. Uma fonte que falha não derruba as outras."""
+    from apps.pages import routes
+    out, recompras = {}, {}
+    try:
+        ci = {c: i for i, c in enumerate(routes._NDFC_COLUMNS)}
+        i_unw = len(routes._NDFC_COLUMNS) + 4
+        for row in _opb3_once('_ndfc_collect', ref)['rows']:
+            b3 = str(row[ci['CD_CETIP_RETURN']] or '').strip().upper()
+            deal = str(row[ci['ID_SOURCE_DEAL']] or '').strip()
+            if not b3 or not deal or b3 == routes._NDFC_MISSING_B3.upper():
+                continue
+            alvo = recompras if (len(row) > i_unw and row[i_unw]) else out
+            alvo.setdefault(b3, deal)
+    except Exception:
+        log.error('[opb3-msg] Athena ID do Cockpit falhou:\n%s', traceback.format_exc())
+    for b3, deal in recompras.items():
+        out.setdefault(b3, deal)
+    for nome in ('_ops_swap_trade_rows', '_ops_ndfc_trade_rows', '_ops_opt_trade_rows'):
+        try:
+            for r in _opb3_once(nome, ref.date()) or []:
+                b3 = str(r.get('id_b3', '') or '').strip().upper()
+                iid = str(r.get('internal_id', '') or '').strip()
+                if b3 and iid:
+                    out.setdefault(b3, iid)
+        except Exception:
+            log.error('[opb3-msg] Athena ID de %s falhou:\n%s', nome, traceback.format_exc())
+    return out
+
 
 def _opb3_events_upgrade(rows):
     """Completa o arquivo já em disco com as linhas de Consider de TER e OPC.
