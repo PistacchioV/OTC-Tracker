@@ -23602,3 +23602,26 @@ Consequência: a recon concilia o dia **como estava no último import**. Uma
 liquidação que entrou na API depois disso só aparece depois de um novo Run no
 NDF Cockpit. As recompras não têm esse problema: a vertical as projeta no dia
 no momento em que são importadas. `check_payrec_ndf_source.py` §4b.
+
+## §542 — O card do Monitor mostrava o PDF de OUTRA mercadoria (2026-09-23)
+
+No Confirmations Monitor, o card de **AÇÚCAR** da Mondelez (NDF COMM,
+22/09/2026) listava o PDF `MONDNNBR - SOJA - CONFIRMAÇÃO…`. Como o card tinha
+PDF, a tela trocava o Generate por Validate, e a confirmação de açúcar não se
+gerava mais.
+
+O filtro do card (`_mc_confirmation_docs` → `_afunila`) procura o Trade ID e
+depois o Ativo no nome do arquivo. Quando nada casava, devolvia a **pasta
+inteira do dia**. Essa queda existe para a linha LEGADA, que traz a MOEDA na
+coluna Ativo (`USD`) e por isso não casa com nada. Mas ela também alcançava o
+card de uma mercadoria cujo PDF ainda não existe, e aí o PDF da mercadoria
+vizinha aparecia no lugar.
+
+Agora o PDF cujo NOME diz outra mercadoria sai do card. O app grava
+`<acrônimo> - <mercadoria> - CONFIRMAÇÃO…`, e o segundo trecho é o ativo do
+documento, comparado sem acento com o Ativo da linha. O corte só vale quando o
+Ativo é mercadoria (não é moeda do Currency Base): a linha legada segue com a
+queda de antes. PDF fora do padrão (upload à mão) não diz o ativo e continua
+aparecendo. Os **e-mails de recap não mudaram**: continuam caindo para a lista
+inteira quando nada casa, porque o recap é nomeado pela contraparte, sem
+Trade ID. `check_mc_docs_ativo.py`.
