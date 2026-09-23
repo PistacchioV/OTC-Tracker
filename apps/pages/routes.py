@@ -11732,6 +11732,15 @@ def _commodities_b3_upgrade(rows):
                 r['B3 CODE FAR'] = 'CO1-2'
             continue
 
+        # O marcador "MY" É o padrão, qualquer que seja o TYPE escolhido na tela
+        # (§544): o KW"MY" cadastrado como FIXED saía para a B3 com as aspas.
+        # Os geradores já decidem pelo marcador; aqui a linha só passa a DIZER
+        # o que é, para o TYPE da tabela não contradizer o código.
+        if typ == 'FIXED':
+            from apps.pages.otc_boxparse import has_b3_marker
+            if has_b3_marker(code):
+                r['TYPE'] = 'PREFIX'
+            continue
         if 'PREFIX' not in typ or '"' in code or not code:
             continue
         # Formato antigo: o mês/ano vinha sempre no fim, e o espaço era literal.
@@ -13271,14 +13280,17 @@ def _b3_code_matches(pattern, code):
     A coluna B3 CODE guarda um LITERAL nas linhas FIXED ('NACX0005') e um PADRÃO
     nas PREFIX ('HO"MY"', 'C_"MY"', 'KO"MY"BNMK', §164). O padrão casa por
     prefixo + sufixo, com pelo menos um caractere de mês/ano no meio — senão
-    'HO' casaria com 'HO' pelado, que não é código de contrato nenhum."""
-    from apps.pages.otc_boxparse import split_b3_pattern
+    'HO' casaria com 'HO' pelado, que não é código de contrato nenhum.
+
+    Quem diz que é padrão é o MARCADOR, não o TYPE (§544), e o `_` é espaço
+    também no literal: 'C_1' casa com 'C 1'."""
+    from apps.pages.otc_boxparse import split_b3_pattern, has_b3_marker
     pat = str(pattern or '').strip()
     cod = str(code or '').strip().upper()
     if not pat or not cod:
         return False
-    if '"' not in pat and '_' not in pat:
-        return pat.upper() == cod
+    if not has_b3_marker(pat):
+        return pat.replace('_', ' ').upper() == cod
     head, tail = split_b3_pattern(pat)
     head, tail = head.upper(), tail.upper()
     return (cod.startswith(head) and cod.endswith(tail)

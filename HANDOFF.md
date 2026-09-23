@@ -23652,3 +23652,54 @@ Trade Level custam segundos no share, as leituras passaram pelo `_opb3_once`:
 memo por REQUEST, sem TTL entre requests, e fora de request não memoiza. Ele
 resolve a função pelo nome no `routes` a cada chamada, para o teste que a troca
 lá continuar valendo. `check_opb3_mensageria.py` (a coluna, o mapa e a memo).
+
+## §544 — No Commodities × B3, o `"MY"` e o `_` valem em qualquer TYPE (2026-09-23)
+
+A mesa cadastrou o `KW_KCBOT` com B3 Code `KW"MY"` e TYPE **FIXED**. A tabela
+mostrava as aspas cruas, sem o realce âmbar das outras linhas, e o gerador
+mandava o texto `KW"MY"` como código para a B3. Uma linha FIXED era devolvida
+como estava, sem olhar o marcador. O realce da tela também só existia para
+PREFIX/SPECIAL.
+
+Agora **quem diz que o código é padrão é o marcador, não o TYPE**. E o **`_` é
+espaço em TODO código emitido** (pedido da mesa): ele só existe no cadastro
+para o espaço ficar visível. Código B3 não tem sublinhado, e nenhuma linha
+FIXED do seed nem da dev usava `_` como literal.
+- `otc_boxparse.resolve_b3_code(code, contract)`: com o marcador, monta pelo
+  `build_b3_code`; sem ele, troca `_` por espaço. Ele responde pelo FIXED e
+  pelos dois códigos do SPECIAL (o far `CO_1-2` sai `CO 1-2`). O PREFIX segue
+  no `build_b3_code`, porque o PREFIX sem marcador é o formato legado que ganha
+  o mês/ano no fim.
+- O espelho `resolveB3Code` está nas duas cópias JS (`otc-fileupload.js` e
+  `deals-processing-table.js`). O `check_b3_pattern.py` executa as duas no jsc
+  contra o Python, e o harness do `check_boxparse.py` também a recorta.
+- `_b3_code_matches` e o `matches` do `b3-quote-config.js` também decidem pelo
+  marcador: sem ele é LITERAL com `_` virando espaço, e `C_1` casa `C 1`.
+  Antes, um `_` sem aspas caía no ramo de padrão e nunca casava.
+- O `_commodities_b3_upgrade` (na leitura) faz a linha FIXED com `"MY"` DIZER
+  PREFIX, para o TYPE da tabela não contradizer o código. O código não é tocado.
+- O `mapping.html` realça o `"MY"` em qualquer TYPE (o `onlyWhen` saiu da
+  entrada `commodities-b3`).
+
+## §545 — O aviso do sino do Index B3 diz QUAL registro (2026-09-23)
+
+O `/api/b3/*` (`features/index_b3/entrypoint.py`) serve o Reference Data e as
+quatro tabelas do Index B3: Subjacente, VCP, Domínio e Swap Index. No
+Reference Data o aviso já dizia o SPN e o nome. No Index B3 ele dizia só o
+nome INTERNO da tabela (`subj`, `subj — edit → PENDING`). O New Item ainda
+procurava `TICKER`/`CODE`/`NAME`, campos que nenhuma das quatro tem, e saía
+`subj: ` vazio. A mesa não sabia qual ativo tinha sido cadastrado, alterado ou
+apagado sem abrir a tela.
+
+Agora o `_detalhe` identifica o registro pelo `_B3_TABLE_ID`: rótulo da
+tabela, o código-chave e o que diz o que ele é.
+- `Underlying Asset KWZ6 · TRIGO · COMMODITIES`
+- `VCP <ID> · <Descrição>`
+- `Domain <Identificador> · <TipoIF> · <Descrição>` (o Domínio é chaveado pelo
+  quádruplo, §492, e o identificador sozinho repete)
+- `Swap Index <Código> · <Nome Curva>`
+
+As três rotas usam o `_detalhe`, com os sufixos de sempre (`(Pending
+approval)`, `— ação → status`). Código em branco vira `—`, nunca some. O
+Reference Data não mudou, porque o deep-link `?spn=` do sino lê o texto dele.
+`check_index_b3_notif.py`.

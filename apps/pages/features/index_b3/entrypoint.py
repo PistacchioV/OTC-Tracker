@@ -27,12 +27,33 @@ def _pagina(table):
     return 'Reference Data' if table == 'refdata' else 'Index B3'
 
 
+# O que identifica um registro de cada tabela do Index B3 no aviso do sino:
+# (rótulo da tabela, campo-chave, campos que o complementam). O aviso dizia só
+# o nome INTERNO da tabela (`subj`, `subj: ` vazio no New Item — ele procurava
+# TICKER/CODE/NAME, que nenhuma das quatro tem) e a mesa não sabia que ativo
+# tinha sido cadastrado, alterado ou apagado sem abrir a tela.
+_B3_TABLE_ID = {
+    'subj':      ('Underlying Asset', 'Codigo do Ativo Subjacente', ('Commodity', 'Classe')),
+    'vcp':       ('VCP', 'ID da Qualificação', ('Descrição da Qualificação',)),
+    'dominio':   ('Domain', 'Identificador Qualificacao',
+                  ('Codigo TipoIF', 'Descricao Qualificacao')),
+    'swapindex': ('Swap Index', 'Codigo Referencia Externa', ('Nome Curva',)),
+}
+
+
 def _detalhe(table, rec):
-    """O texto do aviso: no Reference Data ele identifica o CLIENTE (SPN +
-    razão social), porque `refdata` sozinho não diz a quem a linha se refere."""
+    """O texto do aviso: identifica o REGISTRO, não só a tabela. No Reference
+    Data é o CLIENTE (SPN + razão social); nas tabelas do Index B3 é o rótulo
+    da tabela + o código + o que diz o que ele é (`Underlying Asset KWZ6 ·
+    TRIGO`)."""
     rec = rec or {}
     if table != 'refdata':
-        return table
+        rotulo, chave, extras = _B3_TABLE_ID.get(table, (table, None, ()))
+        codigo = str(rec.get(chave, '') or '').strip() if chave else ''
+        partes = [str(rec.get(k, '') or '').strip() for k in extras]
+        partes = [x for x in partes if x]
+        texto = rotulo + ' ' + (codigo or '—')
+        return (texto + ' · ' + ' · '.join(partes)) if partes else texto
     spn = str(rec.get('SPN', '') or '').strip()
     nome = str(rec.get('COUNTERPARTY', '') or '').strip()
     detalhe = ('SPN ' + spn) if spn else 'SPN —'
@@ -131,7 +152,7 @@ def api_b3_update():
         detail += ' — ' + action + ' → ' + new_status
     else:
         page = 'Index B3'
-        detail = table + ' — ' + action + ' → ' + new_status
+        detail = _detalhe(table, rec) + ' — ' + action + ' → ' + new_status
     _R()._create_notification(user, session.get('user_name', ''), 'Item Updated', page, detail)
     return jsonify({'ok': True, 'new_status': new_status})
 
@@ -193,6 +214,6 @@ def api_b3_add():
         detail += ' (Pending approval)'
     else:
         page = 'Index B3'
-        detail = table + ': ' + str(fields.get('TICKER', fields.get('CODE', fields.get('NAME', ''))))
+        detail = _detalhe(table, fields) + ' (Pending approval)'
     _R()._create_notification(user, session.get('user_name', ''), 'New Item', page, detail)
     return jsonify({'ok': True, 'idx': len(records) - 1})

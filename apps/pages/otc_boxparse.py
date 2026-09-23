@@ -289,6 +289,20 @@ def build_b3_code(pattern, contract):
     return head + p[0] + p[1] + tail
 
 
+def resolve_b3_code(code, contract):
+    """O código que SAI de uma linha do cadastro, seja qual for o TYPE dela.
+
+    Quem decide se é padrão é o marcador ``"MY"``, não a coluna TYPE: uma linha
+    cadastrada como FIXED com ``KW"MY"`` emitia o texto cru, com as aspas, para
+    a B3. E o ``_`` é espaço em TODO código do cadastro, fixo ou padrão — ele só
+    existe para o espaço ser visível na tela (``C_1`` → ``'C 1'``); código B3
+    não tem sublinhado."""
+    s = '' if code is None else str(code)
+    if has_b3_marker(s):
+        return build_b3_code(s, contract)
+    return s.replace('_', ' ')
+
+
 def strip_b3_marker(code):
     """Rede de segurança: tira do código emitido um ``"MY"`` que tenha sobrado.
 
@@ -381,7 +395,7 @@ def calculate_b3_id(market, contract, is_vanilla, fixed_codes, dynamic_prefix,
     mkt = str(market).upper().strip()
     fx = _b3_map_entry(fixed_codes, mkt, is_vanilla)
     if fx:
-        return fx
+        return resolve_b3_code(fx, contract)
     # SPECIAL: DOIS códigos cadastrados, e qual dos dois sai é lógica, não
     # de-para — por isso a linha continua SPECIAL.
     #
@@ -397,8 +411,8 @@ def calculate_b3_id(market, contract, is_vanilla, fixed_codes, dynamic_prefix,
     if sp:
         near, far = sp.get('near') or '', sp.get('far') or ''
         if is_vanilla or months_ahead(settle_date, contract) == 1:
-            return build_b3_code(near, contract) or far
-        return far
+            return resolve_b3_code(near, contract) or resolve_b3_code(far, contract)
+        return resolve_b3_code(far, contract)
     pattern = _b3_map_entry(dynamic_prefix, mkt, is_vanilla)
     if not pattern:
         u = mkt.find('_')

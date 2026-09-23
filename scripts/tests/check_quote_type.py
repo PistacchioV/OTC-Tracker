@@ -54,7 +54,11 @@ for pat, code, exp in (
         ('KO"MY"BNMK', 'KOZ7BNMK', True),        # padrao com sufixo
         ('KO"MY"BNMK', 'KOZ7', False),
         ('', 'HOZ6', False),
-        ('HO"MY"', '', False)):
+        ('HO"MY"', '', False),
+        # §544: o _ e espaco tambem no literal, e o marcador vale sem aspas no TYPE
+        ('C_1',      'C 1', True),
+        ('C_1',      'C_1', False),
+        ('KW"MY"',   'KWZ6', True)):
     check('%-12r x %-10r' % (pat, code), R._b3_code_matches(pat, code), exp)
 
 print('\n== 2. o que sai para cada subjacente ==')
@@ -152,7 +156,8 @@ for name in NDF_PAGES + ['new_deals-opt-commodities']:
 
 print('\n== 5. paridade Python x navegador ==')
 JSC = '/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc'
-CASES = [('NACX0005', 'NACX0005'), ('NACX0005', 'NAEB0011'), ('HO"MY"', 'HOZ6'),
+CASES = [('C_1', 'C 1'), ('C_1', 'C_1'), ('KW"MY"', 'KWZ6'),
+         ('NACX0005', 'NACX0005'), ('NACX0005', 'NAEB0011'), ('HO"MY"', 'HOZ6'),
          ('HO"MY"', 'HO'), ('C_"MY"', 'C Z7'), ('C_"MY"', 'CZ7'),
          ('KO"MY"BNMK', 'KOZ7BNMK'), ('KO"MY"BNMK', 'KOZ7'), ('', 'HOZ6')]
 if not os.path.exists(JSC):

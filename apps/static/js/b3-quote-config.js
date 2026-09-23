@@ -28,16 +28,15 @@ window.B3Quote = (function () {
 
     function txt(v) { return String(v == null ? '' : v).trim(); }
 
-    /* Mesma regra de `_b3_code_matches`: literal nas linhas FIXED, prefixo +
-       sufixo nas PREFIX ('HO"MY"', 'C_"MY"', 'KO"MY"BNMK'), exigindo ao menos um
+    /* Mesma regra de `_b3_code_matches`: literal sem o marcador "MY" (o _ é
+       espaço), prefixo + sufixo com ele ('HO"MY"', 'C_"MY"', 'KO"MY"BNMK'), exigindo ao menos um
        caractere de mês/ano no meio. */
     function matches(pattern, code) {
         var pat = txt(pattern), cod = txt(code).toUpperCase();
         if (!pat || !cod) return false;
-        if (pat.indexOf('"') === -1 && pat.indexOf('_') === -1) {
-            return pat.toUpperCase() === cod;
-        }
         var m = /"\s*MY\s*"/i.exec(pat);
+        // Sem o marcador é LITERAL, qualquer que seja o TYPE, e o _ é espaço.
+        if (!m) return pat.replace(/_/g, ' ').toUpperCase() === cod;
         var head = (m ? pat.slice(0, m.index) : pat).replace(/_/g, ' ').toUpperCase();
         var tail = (m ? pat.slice(m.index + m[0].length) : '').replace(/_/g, ' ').toUpperCase();
         return cod.indexOf(head) === 0 &&
