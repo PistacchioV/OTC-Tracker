@@ -76,6 +76,24 @@ fictício; as demais chamadas seguem normalmente (retornando vazio/real).
 - Se precisar de mais/menos linhas fictícias ou de outra contraparte/valor,
   ajuste os pools no topo do `mockgen.py`.
 - Variáveis de ambiente opcionais: `SOP_BASE_URL`, `SOP_LOGIN_PATH`, `SOP_CHROME`,
-  `SOP_OUT_DIR` — este último grava os PNGs num diretório à parte, para conferir a
-  rodada antes de sobrescrever as telas do guia (uma captura ruim não pode apagar
-  a boa).
+  `SOP_THEME` (o guia é **dark**), `SOP_ONLY`, `SOP_OUT_DIR` — este último grava os
+  PNGs num diretório à parte, para conferir a rodada antes de sobrescrever as
+  telas do guia (uma captura ruim não pode apagar a boa).
+- **Refazer UMA tela** (uma rota redesenhada) não custa as outras 60: `SOP_ONLY`
+  é a lista de rotas, por vírgula. Ex.:
+
+  ```bash
+  SOP_BASE_URL=http://127.0.0.1:5005 SOP_ONLY=/new-deals-monitor \
+    SOP_OUT_DIR=/tmp/shot python scripts/sop-capture/capture_screens.py
+  ```
+- Os PNGs do repositório são **1920 px, 256 cores + dither** (captura dark em RGB
+  comprime mal — §f42f744). A rodada crua sai em 3200 px; reduza antes de
+  substituir a tela do guia:
+
+  ```python
+  from PIL import Image
+  im = Image.open(src).convert('RGB')
+  im = im.resize((1920, round(im.height * 1920 / im.width)), Image.LANCZOS)
+  im.quantize(256, method=Image.FASTOCTREE, dither=Image.FLOYDSTEINBERG) \
+    .save(dst, 'PNG', optimize=True)
+  ```

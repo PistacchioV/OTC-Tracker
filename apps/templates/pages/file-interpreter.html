@@ -1428,9 +1428,14 @@
         if (!base) return;
         document.getElementById('fiVarBase').value = base.name || base.key;
         var pages = base.linked_pages || [];
-        document.getElementById('fiVarPage').innerHTML = pages.map(function (p) {
-            return '<option value="' + esc(p.url) + '">' + esc(p.label || p.url) + '</option>';
-        }).join('');
+        // Sem página linkada o select abria VAZIO, sem dizer por quê: a lista
+        // é a do Link Pages do base, e é lá que se resolve.
+        document.getElementById('fiVarPage').innerHTML = pages.length
+            ? pages.map(function (p) {
+                return '<option value="' + esc(p.url) + '">' + esc(p.label || p.url) + '</option>';
+            }).join('')
+            : '<option value="" disabled selected>' +
+              esc(t('fi-var-need-page', 'Link the base template to a page first (Link Pages)')) + '</option>';
         // A opção VAZIA é o que permite a variante por PRODUTO (Intrag): sem
         // par de pernas, quem a distingue é o rótulo do campo abaixo.
         document.getElementById('fiVarPair').innerHTML =
