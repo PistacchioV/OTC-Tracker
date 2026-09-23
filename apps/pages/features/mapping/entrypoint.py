@@ -52,7 +52,7 @@ def api_mappings(key):
         return jsonify({'success': False, 'error': 'Unknown mapping.'}), 404
     if request.method == 'GET':
         return jsonify({'success': True, 'label': d['label'], 'columns': d['columns'],
-                        'rows': _R()._mapping_rows(key)})
+                        'rows': _R()._mapping_rows(key, strict=True)})
     p = request.get_json(silent=True) or {}
     rows = p.get('rows')
     if not isinstance(rows, list):

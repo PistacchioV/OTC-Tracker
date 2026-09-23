@@ -425,12 +425,23 @@
         fetch('/api/mappings/' + encodeURIComponent(key), { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(function (d) {
-                if (!d || !d.success) return;
+                if (!d || !d.success) throw new Error((d && (d.error || d.message)) || '');
                 STATE[key] = { columns: d.columns || [], rows: d.rows || [], loaded: true };
                 buildRail();
                 if (key === CUR) render();
             })
-            .catch(function () {});
+            .catch(function (e) {
+                // Leitura que falhou NÃO vira grade vazia: o Save substitui o
+                // cadastro inteiro, e uma grade vazia (ou a de fábrica) salva
+                // por cima apagaria o que a mesa cadastrou. O servidor responde
+                // 503 com o banco ocupado; aqui só se DIZ, e a grade fica como
+                // estava (ou ausente) até a leitura seguinte dar certo.
+                if (key !== CUR || !window.Swal) return;
+                var busy = e && /database_(busy|unreadable)/.test(e.message || '');
+                Swal.fire({ icon: 'warning', title: t('map-load-failed-title', 'Mapping not loaded'),
+                            text: busy ? t('map-load-failed-busy', 'The database is busy. Try again in a few seconds.')
+                                       : t('map-load-failed', 'Could not read this mapping. Nothing was changed.') });
+            });
     }
 
     function save(okMsgKey) {

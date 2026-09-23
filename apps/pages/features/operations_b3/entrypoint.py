@@ -59,19 +59,20 @@ def api_opb3_row_add():
     cells = p.get('cells') or []
     sid = session.get('user_sid', '')
     ref = _R()._opb3_ref_from(p)
-    jp, data = _R()._opb3_load(ref)
-    if data is None:
-        data = []
-    rec = {c: (str(cells[i]).strip() if i < len(cells) and cells[i] is not None else '')
-           for i, c in enumerate(_R()._OPB3_COLUMNS)}
-    rec['_ob_status'], rec['_ob_maker'], rec['_ob_checker'], rec['_ob_id'] = 'New', sid, '', _R()._otm_new_id()
-    rec['_ob_src'] = 'manual'                           # keep manual rows across re-imports (merge preserves them)
-    data.append(rec)
-    try:
-        _R()._otm_save(jp, data)
-    except Exception:
-        _R().log.error('[opb3] add save failed:\n%s', traceback.format_exc())
-        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    with _R()._cache_lock:
+        jp, data = _R()._opb3_load_for_write(ref)
+        if data is None:
+            data = []
+        rec = {c: (str(cells[i]).strip() if i < len(cells) and cells[i] is not None else '')
+               for i, c in enumerate(_R()._OPB3_COLUMNS)}
+        rec['_ob_status'], rec['_ob_maker'], rec['_ob_checker'], rec['_ob_id'] = 'New', sid, '', _R()._otm_new_id()
+        rec['_ob_src'] = 'manual'                           # keep manual rows across re-imports (merge preserves them)
+        data.append(rec)
+        try:
+            _R()._otm_save(jp, data)
+        except Exception:
+            _R().log.error('[opb3] add save failed:\n%s', traceback.format_exc())
+            return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _R()._create_notification(sid, session.get('user_name', ''), 'Operations B3 Row Added', 'Operations B3',
                          '{} ({})'.format(rec.get('Num Ctrl Operação', ''), ref.strftime('%Y-%m-%d')))
     return jsonify({'success': True, 'id': rec['_ob_id']})
@@ -84,19 +85,20 @@ def api_opb3_row_edit():
     p = request.get_json(silent=True) or {}
     rid, cells = str(p.get('id', '')), (p.get('cells') or [])
     sid = session.get('user_sid', '')
-    jp, data = _R()._opb3_load(_R()._opb3_ref_from(p))
-    rec = _R()._opb3_find(data or [], rid)
-    if rec is None:
-        return jsonify({'success': False, 'error': 'Row not found.'}), 404
-    for i, c in enumerate(_R()._OPB3_COLUMNS):
-        if i < len(cells):
-            rec[c] = str(cells[i]).strip()
-    rec['_ob_status'], rec['_ob_maker'], rec['_ob_checker'] = 'Pending', sid, ''
-    try:
-        _R()._otm_save(jp, data)
-    except Exception:
-        _R().log.error('[opb3] edit save failed:\n%s', traceback.format_exc())
-        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    with _R()._cache_lock:
+        jp, data = _R()._opb3_load_for_write(_R()._opb3_ref_from(p))
+        rec = _R()._opb3_find(data or [], rid)
+        if rec is None:
+            return jsonify({'success': False, 'error': 'Row not found.'}), 404
+        for i, c in enumerate(_R()._OPB3_COLUMNS):
+            if i < len(cells):
+                rec[c] = str(cells[i]).strip()
+        rec['_ob_status'], rec['_ob_maker'], rec['_ob_checker'] = 'Pending', sid, ''
+        try:
+            _R()._otm_save(jp, data)
+        except Exception:
+            _R().log.error('[opb3] edit save failed:\n%s', traceback.format_exc())
+            return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _R()._create_notification(sid, session.get('user_name', ''), 'Operations B3 Row Updated', 'Operations B3',
                          '{} ({})'.format(rec.get('Num Ctrl Operação', ''), _R()._opb3_ref_from(p).strftime('%Y-%m-%d')))
     return jsonify({'success': True})
@@ -108,18 +110,19 @@ def api_opb3_row_delete():
     p = request.get_json(silent=True) or {}
     rid = str(p.get('id', ''))
     sid = session.get('user_sid', '')
-    jp, data = _R()._opb3_load(_R()._opb3_ref_from(p))
-    if data is None:
-        return jsonify({'success': False, 'error': 'No data for this date.'}), 404
-    rec = _R()._opb3_find(data, rid)
-    if rec is None:
-        return jsonify({'success': False, 'error': 'Row not found.'}), 404
-    data.remove(rec)
-    try:
-        _R()._otm_save(jp, data)
-    except Exception:
-        _R().log.error('[opb3] delete save failed:\n%s', traceback.format_exc())
-        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    with _R()._cache_lock:
+        jp, data = _R()._opb3_load_for_write(_R()._opb3_ref_from(p))
+        if data is None:
+            return jsonify({'success': False, 'error': 'No data for this date.'}), 404
+        rec = _R()._opb3_find(data, rid)
+        if rec is None:
+            return jsonify({'success': False, 'error': 'Row not found.'}), 404
+        data.remove(rec)
+        try:
+            _R()._otm_save(jp, data)
+        except Exception:
+            _R().log.error('[opb3] delete save failed:\n%s', traceback.format_exc())
+            return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _R()._create_notification(sid, session.get('user_name', ''), 'Operations B3 Row Deleted', 'Operations B3',
                          '{} ({})'.format(rec.get('Num Ctrl Operação', ''), _R()._opb3_ref_from(p).strftime('%Y-%m-%d')))
     return jsonify({'success': True})
@@ -133,20 +136,21 @@ def api_opb3_row_confirm():
     p = request.get_json(silent=True) or {}
     rid = str(p.get('id', ''))
     sid = session.get('user_sid', '')
-    jp, data = _R()._opb3_load(_R()._opb3_ref_from(p))
-    rec = _R()._opb3_find(data or [], rid)
-    if rec is None:
-        return jsonify({'success': False, 'error': 'Row not found.'}), 404
-    maker = str(rec.get('_ob_maker', '') or '')
-    if maker and maker == sid:
-        return jsonify({'success': False, 'error': 'same_user',
-                        'message': 'A different user must confirm a row you changed.'}), 403
-    rec['_ob_status'], rec['_ob_checker'] = 'OK', sid
-    try:
-        _R()._otm_save(jp, data)
-    except Exception:
-        _R().log.error('[opb3] confirm save failed:\n%s', traceback.format_exc())
-        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    with _R()._cache_lock:
+        jp, data = _R()._opb3_load_for_write(_R()._opb3_ref_from(p))
+        rec = _R()._opb3_find(data or [], rid)
+        if rec is None:
+            return jsonify({'success': False, 'error': 'Row not found.'}), 404
+        maker = str(rec.get('_ob_maker', '') or '')
+        if maker and maker == sid:
+            return jsonify({'success': False, 'error': 'same_user',
+                            'message': 'A different user must confirm a row you changed.'}), 403
+        rec['_ob_status'], rec['_ob_checker'] = 'OK', sid
+        try:
+            _R()._otm_save(jp, data)
+        except Exception:
+            _R().log.error('[opb3] confirm save failed:\n%s', traceback.format_exc())
+            return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _R()._create_notification(sid, session.get('user_name', ''), 'Operations B3 Row Confirmed', 'Operations B3',
                          '{} ({})'.format(rec.get('Num Ctrl Operação', ''), _R()._opb3_ref_from(p).strftime('%Y-%m-%d')))
     return jsonify({'success': True})
@@ -384,6 +388,12 @@ def api_opb3_mensageria():
     for rec in used:
         rec['_ob_status'] = _R()._OPB3_STATUS_GENERATED
         rec['Status'] = _R()._OPB3_B3_STATUS_DONE
+    # Grava só o que ESTA ação mudou, sobre o dia RELIDO sob o lock: `data` veio
+    # do cache e passou pela montagem dos e-mails (segundos no share) — gravá-lo
+    # inteiro desfaria a edição ou o confirm que outro usuário fez nesse meio.
+    mudou = {str(rec.get('_ob_id')): {'_ob_status': _R()._OPB3_STATUS_GENERATED,
+                                      'Status': _R()._OPB3_B3_STATUS_DONE}
+             for rec in used}
     # A visão marcada como Disregard não gera e-mail, mas a liquidação dela saiu
     # pela outra ponta — fica Generated para a tabela não sugerir que ficou algo
     # pendente. Só a linha que o cadastro `opb3-events` aprova: a operação
@@ -392,8 +402,14 @@ def api_opb3_mensageria():
     for rec in data:
         if _bilateral(rec) and _view_off(rec) and _R()._opb3_settle_ok(rec, ev_rules):
             rec['_ob_status'] = _R()._OPB3_STATUS_GENERATED
+            mudou.setdefault(str(rec.get('_ob_id')), {'_ob_status': _R()._OPB3_STATUS_GENERATED})
     try:
-        _R()._otm_save(jp, data)
+        with _R()._cache_lock:
+            jp, atual = _R()._opb3_load_for_write(ref)
+            for rec in atual or []:
+                rec.update(mudou.get(str(rec.get('_ob_id')), {}))
+            if atual:
+                _R()._otm_save(jp, atual)
     except Exception:
         _R().log.error('[opb3-msg] status save failed:\n%s', traceback.format_exc())
     return _R()._email_drafts_response(drafts, zip_name='mensageria_{}'.format(ref.strftime('%Y%m%d')))

@@ -233,7 +233,7 @@ _old_dbdir = R._PC_DB_DIR
 R._PC_DB_DIR = _dbdir
 _opens = []
 _orig_exec = _PC._pc_write_exec
-_PC._pc_write_exec = lambda cat, ops: (_opens.append(cat), _orig_exec(cat, ops))[1]
+_PC._pc_write_exec = lambda cat, ops, **kw: (_opens.append(cat), _orig_exec(cat, ops, **kw))[1]
 try:
     hoje = datetime.now().strftime('%d/%m/%Y')
     linhas = [{'Trade Number': 'TN%d' % i, 'Client': 'C%d' % i,

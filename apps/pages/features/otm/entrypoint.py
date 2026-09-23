@@ -60,19 +60,20 @@ def api_otm_row_add():
     cells = p.get('cells') or []
     sid = session.get('user_sid', '')
     ref = _R()._otm_ref_from(p)
-    jp, data = _R()._otm_load(ref)
-    if data is None:
-        data = []                                     # first manual row on a day with no import
-    rec = {c: (str(cells[i]).strip() if i < len(cells) and cells[i] is not None else '')
-           for i, c in enumerate(_R()._OTM_COLUMNS)}
-    rec['Cpty Name'] = rec.get('Cpty Name', '').upper()
-    rec['_ot_status'], rec['_ot_maker'], rec['_ot_checker'], rec['_ot_id'] = 'OK', sid, '', _R()._otm_new_id()
-    data.append(rec)
-    try:
-        _R()._otm_save(jp, data)
-    except Exception:
-        _R().log.error('[otm] add save failed:\n%s', traceback.format_exc())
-        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    with _R()._cache_lock:
+        jp, data = _R()._otm_load_for_write(ref)
+        if data is None:
+            data = []                                     # first manual row on a day with no import
+        rec = {c: (str(cells[i]).strip() if i < len(cells) and cells[i] is not None else '')
+               for i, c in enumerate(_R()._OTM_COLUMNS)}
+        rec['Cpty Name'] = rec.get('Cpty Name', '').upper()
+        rec['_ot_status'], rec['_ot_maker'], rec['_ot_checker'], rec['_ot_id'] = 'OK', sid, '', _R()._otm_new_id()
+        data.append(rec)
+        try:
+            _R()._otm_save(jp, data)
+        except Exception:
+            _R().log.error('[otm] add save failed:\n%s', traceback.format_exc())
+            return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _R()._create_notification(sid, session.get('user_name', ''), 'OTM Row Added', 'OTM Settlements',
                          '{} ({})'.format(rec.get('Trade Id', ''), ref.strftime('%Y-%m-%d')))
     return jsonify({'success': True, 'id': rec['_ot_id']})
@@ -85,20 +86,21 @@ def api_otm_row_edit():
     p = request.get_json(silent=True) or {}
     rid, cells = str(p.get('id', '')), (p.get('cells') or [])
     sid = session.get('user_sid', '')
-    jp, data = _R()._otm_load(_R()._otm_ref_from(p))
-    rec = _R()._otm_find(data or [], rid)
-    if rec is None:
-        return jsonify({'success': False, 'error': 'Row not found.'}), 404
-    for i, c in enumerate(_R()._OTM_COLUMNS):
-        if i < len(cells):
-            rec[c] = str(cells[i]).strip()
-    rec['Cpty Name'] = rec.get('Cpty Name', '').upper()
-    rec['_ot_status'], rec['_ot_maker'], rec['_ot_checker'] = 'Pending', sid, ''
-    try:
-        _R()._otm_save(jp, data)
-    except Exception:
-        _R().log.error('[otm] edit save failed:\n%s', traceback.format_exc())
-        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    with _R()._cache_lock:
+        jp, data = _R()._otm_load_for_write(_R()._otm_ref_from(p))
+        rec = _R()._otm_find(data or [], rid)
+        if rec is None:
+            return jsonify({'success': False, 'error': 'Row not found.'}), 404
+        for i, c in enumerate(_R()._OTM_COLUMNS):
+            if i < len(cells):
+                rec[c] = str(cells[i]).strip()
+        rec['Cpty Name'] = rec.get('Cpty Name', '').upper()
+        rec['_ot_status'], rec['_ot_maker'], rec['_ot_checker'] = 'Pending', sid, ''
+        try:
+            _R()._otm_save(jp, data)
+        except Exception:
+            _R().log.error('[otm] edit save failed:\n%s', traceback.format_exc())
+            return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _R()._create_notification(sid, session.get('user_name', ''), 'OTM Row Updated', 'OTM Settlements',
                          '{} ({})'.format(rec.get('Trade Id', ''), _R()._otm_ref_from(p).strftime('%Y-%m-%d')))
     return jsonify({'success': True})
@@ -110,18 +112,19 @@ def api_otm_row_delete():
     p = request.get_json(silent=True) or {}
     rid = str(p.get('id', ''))
     sid = session.get('user_sid', '')
-    jp, data = _R()._otm_load(_R()._otm_ref_from(p))
-    if data is None:
-        return jsonify({'success': False, 'error': 'No data for this date.'}), 404
-    rec = _R()._otm_find(data, rid)
-    if rec is None:
-        return jsonify({'success': False, 'error': 'Row not found.'}), 404
-    data.remove(rec)
-    try:
-        _R()._otm_save(jp, data)
-    except Exception:
-        _R().log.error('[otm] delete save failed:\n%s', traceback.format_exc())
-        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    with _R()._cache_lock:
+        jp, data = _R()._otm_load_for_write(_R()._otm_ref_from(p))
+        if data is None:
+            return jsonify({'success': False, 'error': 'No data for this date.'}), 404
+        rec = _R()._otm_find(data, rid)
+        if rec is None:
+            return jsonify({'success': False, 'error': 'Row not found.'}), 404
+        data.remove(rec)
+        try:
+            _R()._otm_save(jp, data)
+        except Exception:
+            _R().log.error('[otm] delete save failed:\n%s', traceback.format_exc())
+            return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _R()._create_notification(sid, session.get('user_name', ''), 'OTM Row Deleted', 'OTM Settlements',
                          '{} ({})'.format(rec.get('Trade Id', ''), _R()._otm_ref_from(p).strftime('%Y-%m-%d')))
     return jsonify({'success': True})
@@ -135,20 +138,21 @@ def api_otm_row_confirm():
     p = request.get_json(silent=True) or {}
     rid = str(p.get('id', ''))
     sid = session.get('user_sid', '')
-    jp, data = _R()._otm_load(_R()._otm_ref_from(p))
-    rec = _R()._otm_find(data or [], rid)
-    if rec is None:
-        return jsonify({'success': False, 'error': 'Row not found.'}), 404
-    maker = str(rec.get('_ot_maker', '') or '')
-    if maker and maker == sid:
-        return jsonify({'success': False, 'error': 'same_user',
-                        'message': 'A different user must confirm a row you changed.'}), 403
-    rec['_ot_status'], rec['_ot_checker'] = 'OK', sid
-    try:
-        _R()._otm_save(jp, data)
-    except Exception:
-        _R().log.error('[otm] confirm save failed:\n%s', traceback.format_exc())
-        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    with _R()._cache_lock:
+        jp, data = _R()._otm_load_for_write(_R()._otm_ref_from(p))
+        rec = _R()._otm_find(data or [], rid)
+        if rec is None:
+            return jsonify({'success': False, 'error': 'Row not found.'}), 404
+        maker = str(rec.get('_ot_maker', '') or '')
+        if maker and maker == sid:
+            return jsonify({'success': False, 'error': 'same_user',
+                            'message': 'A different user must confirm a row you changed.'}), 403
+        rec['_ot_status'], rec['_ot_checker'] = 'OK', sid
+        try:
+            _R()._otm_save(jp, data)
+        except Exception:
+            _R().log.error('[otm] confirm save failed:\n%s', traceback.format_exc())
+            return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _R()._create_notification(sid, session.get('user_name', ''), 'OTM Row Confirmed', 'OTM Settlements',
                          '{} ({})'.format(rec.get('Trade Id', ''), _R()._otm_ref_from(p).strftime('%Y-%m-%d')))
     return jsonify({'success': True})

@@ -3624,6 +3624,7 @@ _OPB3_META_KEYS = _pf_opb3._OPB3_META_KEYS
 _opb3_ensure_meta = _pf_opb3._opb3_ensure_meta
 _opb3_load_cached = _pf_opb3._opb3_load_cached
 _opb3_load = _pf_opb3._opb3_load
+_opb3_load_for_write = _pf_opb3._opb3_load_for_write
 _opb3_find = _pf_opb3._opb3_find
 _opb3_ref_from = _pf_opb3._opb3_ref_from
 _opb3_json_path = _pf_opb3._opb3_json_path
@@ -4501,6 +4502,31 @@ def _otm_load(ref):
     """
     jp, data = _otm_load_cached(ref)
     return jp, (None if data is None else [dict(r) for r in data])
+
+
+def _day_records_for_write(jp, ensure_meta):
+    """Registros do arquivo-dia `jp` para um ler → alterar → gravar, ou `None`
+    quando o dia NÃO EXISTE. Leitura fresca (sem o `_req_cached`) e estrita:
+    ocupado/ilegível SOBE — lido como "não há", o chamador gravaria só a
+    linha nova por cima do dia inteiro (§4). Ver `_opb3_load_for_write`."""
+    if not _store.isfile(jp):
+        return None
+    try:
+        data = _store.read(jp)
+    except FileNotFoundError:
+        return None
+    if not isinstance(data, list):
+        raise ValueError('{}: esperava uma lista de registros, veio {}'.format(
+            os.path.basename(jp), type(data).__name__))
+    data = [dict(r) for r in data if isinstance(r, dict)]
+    ensure_meta(data)
+    return data
+
+
+def _otm_load_for_write(ref):
+    """O `_otm_load` de quem GRAVA — ver `_day_records_for_write`."""
+    jp = _otm_json_path(ref)
+    return jp, _day_records_for_write(jp, _otm_ensure_meta)
 
 
 def _otm_save(jp, data):
@@ -13205,7 +13231,7 @@ def _mapping_path(key):
     return d.get('file') or os.path.join(_MAPPINGS_DIR, key + '.json')
 
 
-def _mapping_rows(key):
+def _mapping_rows(key, strict=False):
     """Linhas do mapping `key` (lista de dicts). Cria o arquivo com o SEED na
     primeira leitura; cacheia por mtime, então edição pela tela vale na
     requisição seguinte.
@@ -13270,8 +13296,27 @@ def _mapping_rows(key):
         if _req_store is not None:
             _req_store[os.path.normpath(path)] = rows
         return rows
+    except (_store.BancoOcupado, _store.SemCanal):
+        # Ocupado/ilegível NÃO é "não cadastrado": servido como o SEED, a tela
+        # `/mapping` abria o cadastro de fábrica com 200 e o Save seguinte (que
+        # substitui a lista inteira) gravava o seed por cima do cadastro real;
+        # e os consumidores aplicavam as regras de fábrica calados. Sobe — na
+        # rota vira 503 pelo tratador global.
+        raise
     except Exception:
+        # Outra falha (um `upgrade` com defeito, conteúdo ilegível): quem grava
+        # (`strict`, o GET da tela) não pode receber o seed; os consumidores
+        # seguem com ele, mas o motivo vai para o log — antes era silêncio.
+        if strict:
+            raise
+        if key not in _mapping_seed_warned:
+            _mapping_seed_warned.add(key)
+            log.error('[mappings] %s ilegível, usando o SEED:\n%s', key,
+                      traceback.format_exc())
         return list(d.get('seed') or [])
+
+
+_mapping_seed_warned = set()
 
 
 def _b3_code_matches(pattern, code):

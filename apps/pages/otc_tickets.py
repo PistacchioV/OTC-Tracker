@@ -63,13 +63,18 @@ def _atomic_write(path, data):
 
 
 def _read():
-    """Estado bruto do arquivo. Um arquivo ausente, vazio ou corrompido vira um
-    estado vazio em vez de estourar — a página de tickets não pode derrubar o
-    app por causa de um JSON quebrado."""
+    """Estado bruto do arquivo. AUSENTE ou CORROMPIDO (JSON quebrado no arquivo
+    legado) vira um estado vazio — a página não cai por isso; banco OCUPADO ou
+    ilegível SOBE (o tratador global responde 503).
+
+    Lido como vazio, o ocupado apagava o store: `create` somava um ticket a
+    `{'seq': 0, 'tickets': []}` e gravava por cima de todos, reusando o id
+    `-0001` — e `update`/`add_comment`/`delete` fazem o mesmo ler → gravar
+    (§436, o mesmo desenho do `_cpd_load`)."""
+    from apps.pages import data_store
     try:
-        from apps.pages import data_store
         data = data_store.read(_FILE)
-    except (IOError, OSError, ValueError):
+    except (FileNotFoundError, ValueError):
         return {'seq': 0, 'tickets': []}
     if not isinstance(data, dict):
         return {'seq': 0, 'tickets': []}

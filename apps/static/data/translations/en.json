@@ -2726,5 +2726,8 @@
   "ndm-col-open": "Open",
   "ndm-sum-open": "open",
   "ndm-sum-open-one": "open",
-  "ndm-zone-conf": "Confirmations"
+  "ndm-zone-conf": "Confirmations",
+  "map-load-failed-title": "Mapping not loaded",
+  "map-load-failed-busy": "The database is busy. Try again in a few seconds.",
+  "map-load-failed": "Could not read this mapping. Nothing was changed."
 }
