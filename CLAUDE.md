@@ -596,7 +596,8 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 - **`publisher-ndf`** — linha sem Match Tokens casa só com o texto completo;
   `NOTES = BACEN` é o que roteia para Vanilla (§166).
 - **`commodities-b3`/`cetip-files`** — padrão, não literal: `"MY"` = letra do
-  mês + ano, `_` = espaço, `YYMMDD` = Reference Date. `TRADE TYPE`
+  mês + ano, `_` = espaço (no B3 Code, em QUALQUER TYPE: quem diz que é
+  padrão é o marcador, e o `_` vira espaço até no FIXED — §544), `YYMMDD` = Reference Date. `TRADE TYPE`
   (VANILLA/ASIAN/BOTH) por linha (BRT_IPE e WTI têm duas); `QUOTE TYPE
   NDF/OPT` e `INFO SOURCE` guardam o código do layout Conecta, default
   `A`/`5`/`358` (`_b3_quote_cfg`); cópia no navegador em
@@ -2215,7 +2216,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (160 scripts)
+### `scripts/tests/` (162 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
