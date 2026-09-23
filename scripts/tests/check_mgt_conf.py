@@ -147,12 +147,23 @@ try:
     titulo = re.sub(r'<[^>]+>', '', titulo).replace('\n', ' ')
     check('o titulo nao leva "No" nem numero', titulo.strip(), 'CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS')
     check('   e o painel nao tem mais o campo do No do cabecalho', 'inp_num_conf' in hv, False)
-    check('o editor rotula a coluna como Athena ID', "label: 'Nº (Athena ID)'" in hv, True)
+    _conf_v = json.loads(re.search(r'id="conf-data">(.*?)</script>', hv, re.S).group(1))
+    check('o editor rotula a coluna como Athena ID', _conf_v.get('num_label'), 'Athena ID')
     hf = cl.get('/confirmation/ndf-mgt/fwd-start?date=2026-08-05&acronym=SUZANO&mercadoria=USD').data.decode('utf-8')
     cf = cells(hf)
     check('FWD Start: as tres colunas do forward start', (cf.get('pontosTermo'), cf.get('dtVerifFwd'), cf.get('taxaFwd')),
           ('0,0337', '30/07/2026', 'Não Aplicável'))
-    check('FWD Start MGT: No do Anexo I = Athena ID', cf.get('num'), 'F1')
+    # FWD Start e B3 ID em qualquer LE (mesa, 23/09/2026) — como no do BANCO.
+    check('FWD Start MGT: No do Anexo I = B3 ID', cf.get('num'), FWD_MGT.get('B3_ID'))
+    _conf_f = json.loads(re.search(r'id="conf-data">(.*?)</script>', hf, re.S).group(1))
+    check('   e o editor rotula a coluna como B3 ID', _conf_f.get('num_label'), 'B3 ID')
+    _n, _x, _w = R._conf_ndf_xml(
+        [(dict(FWD_MGT, _conf_src='fwd-start'), None)], 'USD', REF, prefixo='NDF_FwdStart',
+        legs_fn=R._conf_fx_legs, ccy='USD', warn_no_spot=False,
+        num_field=R._conf_mgt_num_field([(dict(FWD_MGT, _conf_src='fwd-start'), None)]))
+    check('   e o numeroContrato do XML tambem', _n, FWD_MGT.get('B3_ID'))
+    check('   o Vanilla MGT segue no Athena ID',
+          R._conf_mgt_num_field([(dict(VAN_MGT, _conf_src='vanilla'), None)]), 'Deal')
     r404 = cl.get('/confirmation/ndf-mgt/strike-me?date=2026-08-05&acronym=SUZANO&mercadoria=USD')
     check('familia desconhecida e 404', r404.status_code, 404)
 

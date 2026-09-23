@@ -26,7 +26,8 @@
           commentPh: 'Enter justification…', commentReq: 'Please enter a justification comment.',
           justifyFail: 'Could not save the justification.',
           runFolder: 'Run with the files from the Pay/Rec folder',
-          runFiles: 'Run with the attached file(s)' },
+          runFiles: 'Run with the attached file(s)',
+          e_ndf_source_failed: 'Could not read the NDF settlements (Athena API + unwinds):' },
     br: { running: 'Processando…', sending: 'Enviando…', run: 'Rodar reconciliação', end: 'Encerrar processo',
           noFiles: 'Sem arquivos', noFilesMsg: 'Anexe os arquivos no dropzone ou verifique se a pasta Pay/Rec tem os arquivos de insumo desta data.',
           failTitle: 'Reconciliação falhou', netErr: 'Erro de rede.', done: 'Reconciliação concluída',
@@ -39,7 +40,8 @@
           commentPh: 'Digite a justificativa…', commentReq: 'Informe um comentário de justificativa.',
           justifyFail: 'Não foi possível salvar a justificativa.',
           runFolder: 'Rodar com os arquivos da pasta Pay/Rec',
-          runFiles: 'Rodar com o(s) arquivo(s) anexado(s)' },
+          runFiles: 'Rodar com o(s) arquivo(s) anexado(s)',
+          e_ndf_source_failed: 'Não foi possível ler as liquidações de NDF (API Athena + recompras):' },
     es: { running: 'Procesando…', sending: 'Enviando…', run: 'Ejecutar reconciliación', end: 'Finalizar proceso',
           noFiles: 'Sin archivos', noFilesMsg: 'Adjunte los archivos en el dropzone o verifique que la carpeta Pay/Rec tenga los archivos de esta fecha.',
           failTitle: 'La reconciliación falló', netErr: 'Error de red.', done: 'Reconciliación completada',
@@ -52,7 +54,8 @@
           commentPh: 'Ingrese la justificación…', commentReq: 'Ingrese un comentario de justificación.',
           justifyFail: 'No se pudo guardar la justificación.',
           runFolder: 'Ejecutar con los archivos de la carpeta Pay/Rec',
-          runFiles: 'Ejecutar con el/los archivo(s) adjunto(s)' },
+          runFiles: 'Ejecutar con el/los archivo(s) adjunto(s)',
+          e_ndf_source_failed: 'No se pudieron leer las liquidaciones de NDF (API Athena + recompras):' },
   };
   function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k]; }
   function esc(s) {
@@ -236,7 +239,11 @@
         } else if (b.not_found) {
           if (typeof Swal !== 'undefined') Swal.fire({ icon: 'warning', title: t('noFiles'), html: b.detail || t('noFilesMsg'), confirmButtonColor: '#0066cc' });
         } else {
-          if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: t('failTitle'), html: b.error || t('netErr'), confirmButtonColor: '#0066cc' });
+          // Erro com código sai pelo `_TRANS`; o `error` do servidor fica de fallback (§486).
+          var msg = (b.code && t('e_' + b.code))
+            ? t('e_' + b.code) + (b.params && b.params.reason ? '<br><small>' + esc(b.params.reason) + '</small>' : '')
+            : (b.error ? esc(b.error) : t('netErr'));
+          if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: t('failTitle'), html: msg, confirmButtonColor: '#0066cc' });
         }
       })
       .catch(function () { if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: t('failTitle'), html: t('netErr'), confirmButtonColor: '#0066cc' }); })

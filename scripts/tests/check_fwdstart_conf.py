@@ -305,7 +305,7 @@ check('a fórmula da mercadoria sobrevive sem legs_fn',
 check('e a confirmacao do FWD Start passa a de moeda',
       'legs_fn=_conf_fx_legs' in src or 'legs_fn=_R()._conf_fx_legs' in src, True)
 # A moeda do XML é a Moeda Base do grupo, não a Quantity Currency (que pode ser BRL).
-check('e manda a Moeda Base explicita', 'ccy=merc)' in src, True)
+check('e manda a Moeda Base explicita', bool(re.search(r'ccy=merc\s*[,)]', src)), True)
 
 # ── 8. O tipoOperacao do XML ────────────────────────────────────────────────
 # O FWD Start e um NDF: o que ele tem de proprio e a data de inicio la na frente,
@@ -332,6 +332,33 @@ check('   e as outras tres seguem o produto delas',
       ('NDF', 'OPTION', 'OPTION'))
 check('   e o tipo vai sempre em CAIXA ALTA',
       [t for t in _tipos.values() if t != t.upper()], [])
+
+# ── 9. O numeroContrato do FWD Start do BANCO é o B3 ID ─────────────────────
+# (mesa, 23/09/2026) O XML saía com o Athena ID enquanto o Nº do Anexo I do
+# mesmo documento já era o B3 ID.
+_fs_calls = [n for n in ast.walk(_arv) if isinstance(n, ast.Call)
+             and (getattr(n.func, 'id', '') or getattr(n.func, 'attr', '')) == '_conf_ndf_xml'
+             and any(k.arg == 'prefixo' and getattr(k.value, 'value', None) == 'NDF_FwdStart'
+                     for k in n.keywords)]
+check('o XML do FWD Start do banco pede o B3_ID',
+      [{k.arg: getattr(k.value, 'value', None) for k in c.keywords}.get('num_field')
+       for c in _fs_calls], ['B3_ID'])
+from apps.pages.platform import confirmations as _PC               # noqa: E402
+_deal = {'Deal': 'ATH-123', 'B3_ID': '26F00012345', 'TradeDate': '2026-09-23',
+         'SettlementDate': '2026-12-23', 'Notional': '1000000', 'Strike': '5.0',
+         'QuantityCurrency': 'USD', 'TaxID': '12345678000199', 'Client': 'X'}
+_num, _xml, _w = _PC._conf_ndf_xml([(_deal, None)], 'USD', datetime(2026, 9, 23),
+                                   prefixo='NDF_FwdStart', legs_fn=_PC._conf_fx_legs,
+                                   ccy='USD', warn_no_spot=False, num_field='B3_ID')
+check('   numeroContrato = B3 ID', _num, '26F00012345')
+check('   e no XML tambem', '<numeroContrato>26F00012345</numeroContrato>' in _xml, True)
+_num, _xml, _w = _PC._conf_ndf_xml([(dict(_deal, B3_ID=''), None)], 'USD', datetime(2026, 9, 23),
+                                   prefixo='NDF_FwdStart', legs_fn=_PC._conf_fx_legs,
+                                   ccy='USD', warn_no_spot=False, num_field='B3_ID')
+check('   sem B3 ID cai no Athena ID', _num, 'ATH-123')
+check('   avisando', any('B3_ID' in w for w in _w), True)
+_num, _x, _w = _PC._conf_ndf_xml([(_deal, None)], 'USD', datetime(2026, 9, 23))
+check('   as outras confirmacoes seguem com o Deal', _num, 'ATH-123')
 
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)

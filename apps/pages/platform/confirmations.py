@@ -677,8 +677,13 @@ def _conf_fx_legs(deal, subj):
 
 def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
                   ccy_field='StrikeCurrency', warn_no_spot=True, legs_fn=None, ccy=None,
-                  evento='N'):
+                  evento='N', num_field='Deal'):
     """(numero_contrato, xml_string, warnings) do grupo de deals da confirmação.
+
+    `num_field` é o campo do deal que nomeia o contrato de UMA operação: o
+    `Deal` (Athena ID) por padrão, o `B3_ID` no FWD Start do BANCO (mesa,
+    23/09/2026) — o mesmo número da coluna Nº do Anexo I desse documento
+    (`_conf_fwdstart_rows`). Sem B3 ID cai no Athena ID, AVISANDO.
 
     valor            = Σ notional × strike ajustado × Spot FXRate
     valorEstrangeiro = Σ notional × strike ajustado
@@ -702,8 +707,12 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
     if len(picked) > 1:
         numero = '{}_{}_{}'.format(prefixo, trade_dt.strftime('%Y%m%d'), merc_tag)
     else:
-        numero = str(first.get('Deal') or '').strip() or \
-            '{}_{}_{}'.format(prefixo, trade_dt.strftime('%Y%m%d'), merc_tag)
+        numero = str(first.get(num_field) or '').strip()
+        if not numero and num_field != 'Deal':
+            numero = str(first.get('Deal') or '').strip()
+            warnings.append('Operação {}: sem {} — o numeroContrato do XML saiu com o Athena '
+                            'ID.'.format(first.get('Deal'), num_field))
+        numero = numero or '{}_{}_{}'.format(prefixo, trade_dt.strftime('%Y%m%d'), merc_tag)
         if 'MONDELEZ' in str(first.get('Client') or '').upper():
             numero = numero + '_' + merc_tag
 
@@ -1340,15 +1349,22 @@ def _conf_pick_mgt(ref, acr, merc, family):
                                _conf_mgt_family, merc_fn=_conf_fwdstart_moeda)
 
 
+def _conf_mgt_num_field(picked):
+    """O campo que numera a operação no documento MGT e no XML dele: `B3_ID`
+    no FWD Start (como no do BANCO), `Deal` (Athena ID) no Vanilla."""
+    fwd = any(str(d.get('_conf_src') or '') == 'fwd-start' for d, _s in (picked or []))
+    return 'B3_ID' if fwd else 'Deal'
+
+
 def _conf_mgt_rows(picked, warnings):
     """As linhas do Anexo I do documento MGT: as do FWD Start como são, e no
     Vanilla a Taxa Forward é a taxa contratada (o `Rate`, cláusula 4.2.l.1) e
     não há Data de Verificação da Taxa Forward nem Pontos de Termo — saem
     "Não Aplicável", declarados, não em branco."""
-    # O Nº do Anexo I é o **Athena ID** (o `Deal`), não o B3 ID (§484): é o
-    # número que identifica a operação para a MGT e o cliente neste documento
-    # — o B3 ID fica no cabeçalho, quando o grupo tem uma operação só.
-    rows = _conf_fwdstart_rows(picked, warnings, num_field='Deal')
+    # O Nº do Anexo I: no **FWD Start** é o B3 ID, qualquer que seja a LE
+    # (mesa, 23/09/2026 — o documento do BANCO já era assim); no Vanilla segue
+    # o **Athena ID** (o `Deal`, §484). A família é uma só por grupo.
+    rows = _conf_fwdstart_rows(picked, warnings, num_field=_conf_mgt_num_field(picked))
     for (deal, _s), r in zip(picked, rows):
         if str(deal.get('_conf_src') or '') == 'vanilla':
             r['dtVerifFwd'] = 'Não Aplicável'
