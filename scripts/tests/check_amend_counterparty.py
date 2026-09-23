@@ -227,5 +227,20 @@ finally:
             os.rmdir(os.path.join(root, d))
     os.rmdir(tmp)
 
+# ── O Confirm da linha: New e Amend vão DIRETO para Approved ────────────────
+# (mesa, 23/09/2026) Pending é só de quem EDITOU pelo modal. O Amend parava em
+# Pending, e a mesa conferia duas vezes a mesma linha sem ter mexido nela. A
+# regra mora no JS de cada uma das seis páginas — nada no servidor a segura.
+print('\n== o Confirm de New/Amend aprova direto nas seis paginas ==')
+for pg in ('ndf-commodities', 'ndf-fwdstart', 'ndf-otherpublisher', 'ndf-vanilla',
+           'opt-commodities', 'opt-fxo'):
+    html = io.open(os.path.join(ROOT, 'apps', 'templates', 'pages', 'new_deals-%s.html' % pg),
+                   encoding='utf-8').read()
+    check('%s: New e Amend -> Approved' % pg,
+          ("if (currentStatus === 'New' || currentStatus === 'Amend') {\n"
+           "            var directToApproved = true;") in html, True)
+    check('%s: o Save do Edit continua pondo em Pending' % pg,
+          "changedFields['Status'] = 'Pending';" in html, True)
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

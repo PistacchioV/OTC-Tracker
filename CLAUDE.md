@@ -872,6 +872,10 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   (`_ND_AMEND_COSMETIC_BY_PRODUCT`, por produto — produto vazio = econômico).
   A varredura do box não tem a proteção de propósito (paridade com
   `otc-fileupload.js`).
+- **O Confirm da linha leva New E Amend direto para `Approved`** (§540, mesa
+  23/09/2026); **`Pending` é só do Save do modal de Edit**. Nas seis páginas de
+  NDF/Opção a regra é o `directToApproved` do JS (com as travas de contraparte
+  e ativo); no Swap Bullet/Cashflow é o `commands.set_status`.
 - **Só `isCancelled` é cancelado** na Athena; `isDead` importa normalmente.
 - **O veredito do `mapping-b3` sai da GRAVAÇÃO, nunca da intenção** (§521): os
   quatro endpoints decidiam o Status pelo arquivo de retorno da B3 e o

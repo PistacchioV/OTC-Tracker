@@ -23559,3 +23559,23 @@ Pending Confirmation (`_conf_pc_set_fepweb`) é o do XML, e portanto também
 passou a ser o B3 ID no FWD Start. O título do documento MGT segue sem "Nº", e
 as chaves da esteira não mudam. `check_mgt_conf.py`, `check_fwdstart_conf.py` §9.
 e06a50ff.
+
+## §540 — O Confirm da linha aprova New e Amend direto; Pending é só do Edit (2026-09-23)
+
+Nas páginas de New Deals, o Confirm da coluna Actions levava o **New** direto a
+`Approved`, mas o **Amend** parava em `Pending`: a ideia era que alguém
+olhasse o dado econômico que a API mudou. Na prática a mesa conferia a
+mesma linha duas vezes sem ter mexido nela. Regra da mesa: **New e Amend →
+Approved** no Confirm (quem confirma vira o Maker, e o Send segue exigindo
+outro usuário), e **Pending só quando houve alteração pelo modal de Edit**,
+que continua pondo a linha em `Pending` com o maker de quem editou.
+
+Nas seis páginas de NDF e Opção (Vanilla, FWD Start, Other Publisher, NDF
+Commodities, Opt Commodities, Opt FXO) a regra mora no JS: `directToApproved`
+passou a valer para os dois status, com as MESMAS travas de cadastro
+(contraparte e ativo) do Pending → Approved. No Swap Bullet e no Swap Cashflow
+ela mora no servidor (`commands.set_status`), que empurrava o Amend para
+Pending. O texto do "Cannot Send" de um deal New dizia para confirmar "para
+mover a Pending" e foi corrigido nas três línguas. `check_amend_counterparty.py`
+varre os seis templates; `check_swap_bullet.py` e `check_swap_cashflow.py`
+cobram o Amend → Approved.

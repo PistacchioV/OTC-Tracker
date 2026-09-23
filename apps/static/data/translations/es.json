@@ -810,7 +810,7 @@
   "swal-not-allowed-send": "No puede enviar un deal que importó o editó por última vez. Un usuario diferente debe enviarlo.",
   "swal-send-deal-title": "¿Enviar este deal?",
   "swal-send-deal-text": "El deal será enviado para su procesamiento.",
-  "swal-send-new-msg": "Este deal aún no ha sido revisado. Haga clic en Confirmar para moverlo a Pendiente y luego aprobarlo.",
+  "swal-send-new-msg": "Este deal aún no ha sido revisado. Haga clic en Confirmar para aprobarlo.",
   "swal-send-pending-msg": "Este deal está pendiente de aprobación. Haga clic en Confirmar para aprobarlo primero.",
   "swal-send-already-sent-msg": "Este deal ya ha sido enviado.",
   "swal-send-must-approved": "El estado debe ser Aprobado antes de enviar.",

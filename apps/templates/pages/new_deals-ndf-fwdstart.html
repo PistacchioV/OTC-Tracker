@@ -3855,19 +3855,18 @@ $(document).ready(function() {
         var badge = statusNode ? $(statusNode).find('.badge') : $();
         var currentStatus = badge.length ? badge.text().trim() : '';
 
-        // New → Approved direto; Amend → Pending.
-        // Confirmar um deal NOVO aqui na coluna Actions já o aprova: o passo
-        // Pending existe para quem EDITOU submeter a alteração à revisão, e
-        // neste caminho não houve edição nenhuma. Amend continua indo para
-        // Pending — ali a API mudou dado econômico e alguém tem de olhar.
+        // New e Amend → Approved direto (mesa, 23/09/2026). O passo Pending
+        // existe para quem EDITOU submeter a alteração à revisão, e este
+        // caminho não edita nada — quem joga a linha em Pending é o Save do
+        // modal de Edit. O Amend vinha para cá também parando em Pending, e a
+        // mesa conferia duas vezes a mesma linha sem ter mexido nela.
         // O Send segue exigindo outro usuário: o aprovador vira o Maker.
         if (currentStatus === 'New' || currentStatus === 'Amend') {
-            var directToApproved = (currentStatus === 'New');
+            var directToApproved = true;
             // Indo direto para Approved valem as MESMAS travas do Pending →
             // Approved: de Approved o deal segue para Send/B3, e deixar passar
             // contraparte ou ativo sem cadastro é o que essas travas existem
-            // para impedir. Amend, que continua parando em Pending, não precisa
-            // delas agora — vai passar por aqui de novo na aprovação.
+            // para impedir.
             if (directToApproved) {
                 if (_cp() && _cp().rowMissing(tr[0])) { _cp().promptRegister(); return; }
                 var colAssetNew = table.cell(tr[0], 14).node();
@@ -3983,7 +3982,7 @@ $(document).ready(function() {
 
         if (currentStatus !== 'Approved' && currentStatus !== 'Error') {
             var msg = currentStatus === 'New'
-                ? t('swal-send-new-msg', 'This deal has not been reviewed yet. Click Confirm to move it to Pending, then approve it.')
+                ? t('swal-send-new-msg', 'This deal has not been reviewed yet. Click Confirm to approve it.')
                 : currentStatus === 'Pending'
                     ? t('swal-send-pending-msg', 'This deal is pending approval. Click Confirm to approve it first.')
                     : currentStatus === 'Sent'

@@ -463,8 +463,8 @@ def add(fields, trade_date, sid=''):
 
 
 def set_status(deal_id, trade_date, status, sid=''):
-    """Confirm: New → Approved direto (quem confirma vira Maker); Amend →
-    Pending (alguém tem de olhar o dado que o DT reimportado mudou); Pending →
+    """Confirm: New e Amend → Approved direto (quem confirma vira Maker; mesa,
+    23/09/2026 — quem põe a linha em Pending é o Save do Edit); Pending →
     Approved exige outro usuário. → (deal, código do erro)."""
     with _R()._cache_lock:
         fp, lst, idx = queries.find(deal_id, trade_date)
@@ -472,15 +472,13 @@ def set_status(deal_id, trade_date, status, sid=''):
             return None, 'swc_not_found'
         d = lst[idx]
         cur = d.get('Status') or 'New'
-        if status == 'Approved' and cur == 'Amend':
-            status = 'Pending'
         if status == 'Approved':
-            if cur not in ('New', 'Pending'):
+            if cur not in ('New', 'Amend', 'Pending'):
                 return None, 'swc_not_approvable'
             if cur == 'Pending' and d.get('Maker') and d['Maker'] == sid:
                 return None, 'swc_maker_checker'
             d['Checker'] = sid if cur == 'Pending' else ''
-            if cur == 'New':
+            if cur in ('New', 'Amend'):
                 d['Maker'] = sid
         if status == 'Pending':
             d['Maker'] = sid

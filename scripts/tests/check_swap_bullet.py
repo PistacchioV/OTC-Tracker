@@ -357,7 +357,10 @@ def main():
     check('batch com _replace: Approved vira Amend, Meu Número preservado',
           n == 1 and l4[i4]['Status'] == 'Amend' and l4[i4]['MyNumber'] == nums['MyNumber'])
     d5, msg = commands.set_status(cli['_id'], '2026-09-16', 'Approved', sid='C333333')
-    check('Confirm em Amend vai para Pending (maker = quem confirmou)', d5 is not None and d5['Status'] == 'Pending' and d5['Maker'] == 'C333333')
+    # Amend → Approved direto, como o New (mesa, 23/09/2026): Pending é só do Edit.
+    check('Confirm em Amend vai para Approved (maker = quem confirmou)',
+          d5 is not None and d5['Status'] == 'Approved' and d5['Maker'] == 'C333333' and d5['Checker'] == '')
+    commands.set_status(cli['_id'], '2026-09-16', 'Pending', sid='C333333')
     d6, msg6 = commands.set_status(cli['_id'], '2026-09-16', 'Approved', sid='C333333')
     check('Pending: maker não aprova o próprio', d6 is None and 'Maker' in msg6)
     d7, _m = commands.set_status(cli['_id'], '2026-09-16', 'Approved', sid='D444444')

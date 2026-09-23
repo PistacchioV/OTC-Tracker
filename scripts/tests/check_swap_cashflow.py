@@ -340,8 +340,12 @@ def _main(R, app, catalog, bullet, bullet_q, commands, domain, entrypoint, queri
     check('batch com _replace: Approved vira Amend, Meu Número preservado', l2[i2]['Status'] == 'Amend'
           and all(l2[i2][k] == nums[k] for k in commands._MY_NUMBERS))
     d, cod = commands.set_status(cli['_id'], '2026-09-16', 'Approved', sid='C333333')
+    # Amend → Approved direto, como o New (mesa, 23/09/2026): Pending é só do Edit.
+    check('Amend → Approved (maker = quem confirmou)',
+          d['Status'] == 'Approved' and d['Maker'] == 'C333333' and d['Checker'] == '')
+    commands.set_status(cli['_id'], '2026-09-16', 'Pending', sid='C333333')
     d2, cod2 = commands.set_status(cli['_id'], '2026-09-16', 'Approved', sid='C333333')
-    check('Amend → Pending; o maker não aprova o próprio', d['Status'] == 'Pending' and d2 is None and cod2 == 'swc_maker_checker')
+    check('Pending: o maker não aprova o próprio', d2 is None and cod2 == 'swc_maker_checker')
     novo = [dict(f) for f in cli['CashFlows']] + [{'StartDate': '2027-06-07', 'PaymentDate': '2027-06-07'}]
     d3, mapped = commands.edit(cli['_id'], '2026-09-16', {'CashFlows': novo[:3] + [{'PaymentDate': '', 'StartDate': ''}]},
                                sid='D444444')
