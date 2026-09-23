@@ -27,6 +27,14 @@ Uso
     python scripts/backfill_manual_confirmations.py --dry-run   # só relata
     python scripts/backfill_manual_confirmations.py             # grava
     python scripts/backfill_manual_confirmations.py --source "NDF COMM"
+    python scripts/backfill_manual_confirmations.py --repair --dry-run
+
+`--repair` reconstrói as CASCAS (§546): linhas da esteira com o Trade ID e
+nada que diga que operação é (sem Produto, Cliente, Trade Date nem Notional),
+que o Save do Track gravava por cima da operação quando a leitura do banco
+falhava. A linha é refeita pelo MESMO `_mc_save_from_deal`, a partir do deal
+do New Deals, e o que a casca carregava (Callback Date, FepWeb ID, validações)
+é devolvido por cima. Casca sem deal no cache é listada no fim, para a mesa.
 
 É idempotente: `_mc_save_from_deal` nunca sobrescreve uma linha existente, então
 rodar duas vezes não duplica nada nem apaga um 'Conferido OTC' já carimbado.
@@ -164,6 +172,8 @@ def main():
                     help='conta o que entraria, sem gravar')
     ap.add_argument('--source', action='append', metavar='SOURCE',
                     help='limita a um source (ex.: "NDF COMM"); pode repetir')
+    ap.add_argument('--repair', action='store_true',
+                    help='reconstrói as linhas-casca (só Trade ID) a partir do deal (§546)')
     args = ap.parse_args()
 
     # O import de routes sobe os schedulers do app — barulho no log, inofensivo
@@ -173,7 +183,7 @@ def main():
 
     wanted = set(args.source) if args.source else None
     totals = {'varridos': 0, 'success': 0, 'internos': 0, 'fora_regra': 0,
-              'sem_chave': 0, 'ja_existiam': 0, 'criados': 0}
+              'sem_chave': 0, 'ja_existiam': 0, 'criados': 0, 'reparados': 0}
 
     for family, cfg in sorted(FAMILIES.items()):
         source = cfg['source']
@@ -185,7 +195,7 @@ def main():
             print('· {:22s} fora de _MC_CONFIRMATION_SOURCES — pulando'.format(source))
             continue
 
-        criados = existiam = internos = sem_chave = success = varridos = 0
+        criados = existiam = internos = sem_chave = success = varridos = reparados = 0
         fora_regra = 0
         # O MESMO Deal aparece em mais de um arquivo-dia (amend, remapeação, e no
         # mock simplesmente repetido). Sem este conjunto o --dry-run conta cada
@@ -243,7 +253,14 @@ def main():
                 sem_chave += 1
                 continue
 
-            if key in vistos or MC.find_row(key) is not None:
+            existente = None if key in vistos else MC.find_row(key)
+            if existente is not None and args.repair and MC.is_hollow(existente):
+                vistos.add(key)
+                if not args.dry_run and not _reparar(R, MC, deal, deal_source, key, existente):
+                    continue
+                reparados += 1
+                continue
+            if key in vistos or existente is not None:
                 existiam += 1
                 continue
             vistos.add(key)
@@ -259,7 +276,8 @@ def main():
               'fora-da-regra={:4d} sem-chave={:2d} já-existiam={:3d} {}={:3d}'.format(
                   family, source, varridos, success, internos, fora_regra,
                   sem_chave, existiam,
-                  'entrariam' if args.dry_run else 'criados', criados))
+                  'entrariam' if args.dry_run else 'criados', criados)
+              + (' reparados={:3d}'.format(reparados) if args.repair else ''))
 
         totals['varridos'] += varridos
         totals['success'] += success
@@ -268,6 +286,7 @@ def main():
         totals['sem_chave'] += sem_chave
         totals['ja_existiam'] += existiam
         totals['criados'] += criados
+        totals['reparados'] += reparados
 
     verbo = 'entrariam na esteira' if args.dry_run else 'entraram na esteira'
     print()
@@ -277,7 +296,40 @@ def main():
               totals['fora_regra'], totals['ja_existiam']))
     print('{} {}{}'.format(totals['criados'], verbo,
                            ' (--dry-run: nada foi gravado)' if args.dry_run else ''))
+    if args.repair:
+        print('{} casca(s) {}'.format(totals['reparados'],
+                                      'seriam reconstruídas' if args.dry_run else 'reconstruídas'))
+        # O que sobra é casca sem deal no cache de New Deals (a planilha antiga,
+        # um produto fora das famílias): o script não inventa a operação — lista.
+        restantes = [r for r in MC.load_all(strict=True) if MC.is_hollow(r)]
+        if not args.dry_run and restantes:
+            print('\n{} casca(s) sem deal para reconstruir — preencher na grade do Track:'
+                  .format(len(restantes)))
+            for r in restantes:
+                print('  - {}'.format(r.get(MC.KEY_COLUMN, '')))
     return 0
+
+
+def _reparar(R, MC, deal, source, key, casca):
+    """Refaz a linha pelo `_mc_save_from_deal` e devolve o que a casca tinha.
+
+    O espelho só grava linha AUSENTE, então a casca sai antes; se ele não gravar
+    (log `[manual-conf]`), a casca VOLTA — ela carrega o Callback Date e o
+    FepWeb ID que a mesa lançou, e perder isso seria pior que deixá-la."""
+    MC.delete_row(key)
+    R._mc_save_from_deal(deal, source, trade_number=key)
+    nova = MC.find_row(key)
+    if nova is None:
+        MC.upsert_row(casca)
+        print('  ! {} não reconstruiu (ver log [manual-conf]); a casca ficou'.format(key))
+        return False
+    for c in MC.DB_COLUMNS:
+        v = str(casca.get(c, '') or '').strip()
+        if v and c not in MC.DERIVED_COLUMNS and not str(nova.get(c, '') or '').strip():
+            nova[c] = casca[c]
+    MC.upsert_row(nova)
+    print('  + {} reconstruída'.format(key))
+    return True
 
 
 if __name__ == '__main__':

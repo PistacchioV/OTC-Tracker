@@ -958,7 +958,15 @@ def ensure_db(path):
         _LOG.warning('[manual-conf] não consegui preparar %s:\n%s', path, traceback.format_exc())
 
 
-def load_rows(category):
+def load_rows(category, strict=False):
+    """As linhas de um banco da esteira.
+
+    `strict=True` é de quem vai GRAVAR a partir do que leu: a leitura que falha
+    (banco ocupado pela instância vizinha, ilegível) LEVANTA em vez de responder
+    lista vazia. Lida como "vazio", ela fazia o `find_row` dizer que a operação
+    não existe, e a gravação seguinte trocava a linha inteira por uma em branco
+    com só a célula editada (§546). A tela, que só mostra, segue tolerante.
+    """
     path = db_path(category)
     ensure_db(path)
     if duckdb is None or not _store.isfile(path):
@@ -971,6 +979,8 @@ def load_rows(category):
             raw = con.execute('SELECT {} FROM {}'.format(cols, TABLE)).fetchall()
     except Exception:
         _LOG.warning('[manual-conf] consulta falhou em %s:\n%s', path, traceback.format_exc())
+        if strict:
+            raise
         return []
     rules = validation_rules()
     out = []
@@ -989,14 +999,14 @@ def load_rows(category):
     return out
 
 
-def load_all():
-    """As linhas dos dois bancos, com a etapa recalculada.
+def load_all(strict=False):
+    """As linhas dos dois bancos, com a etapa recalculada (`strict`: ver `load_rows`).
 
     Uma linha pode estar fisicamente no banco errado — ela só migra quando é
     gravada —, então a categoria de exibição vem do `Pending` recalculado, não do
     arquivo em que a linha estava.
     """
-    return load_rows('pending') + load_rows('ok')
+    return load_rows('pending', strict) + load_rows('ok', strict)
 
 
 def _write_exec(category, ops):
@@ -1043,13 +1053,26 @@ def _insert_into(category, row):
 def upsert_row(row):
     """Grava uma linha: recalcula as derivadas, apaga a chave dos DOIS bancos e
     insere no que ela agora pertence. É isso que move a linha pending→ok quando a
-    esteira fecha (e de volta, quando um reject a reabre)."""
+    esteira fecha (e de volta, quando um reject a reabre).
+
+    No banco de destino o DELETE e o INSERT são UMA transação, e o banco de
+    origem só perde a linha DEPOIS de o destino gravar: apagar primeiro e
+    inserir numa segunda abertura perdia a operação inteira quando o INSERT
+    falhava (§546)."""
     refresh_derived(row)
     key = str(row.get(KEY_COLUMN, '') or '').strip()
     target = target_category(row)
-    for cat in ('pending', 'ok'):
-        _delete_key(cat, key)
-    _insert_into(target, row)
+    cols = ', '.join('"{}"'.format(c) for c in DB_COLUMNS)
+    ph = ', '.join('?' for _ in DB_COLUMNS)
+    ops = []
+    if key:
+        ops.append(('DELETE FROM {} WHERE trim("{}") = ?'.format(TABLE, KEY_COLUMN), [key]))
+    ops.append(('INSERT INTO {} ({}) VALUES ({})'.format(TABLE, cols, ph),
+                [str(row.get(c, '') or '') for c in DB_COLUMNS]))
+    if _write_exec(target, ops):
+        for cat in ('pending', 'ok'):
+            if cat != target:
+                _delete_key(cat, key)
     return target
 
 
@@ -1079,14 +1102,30 @@ def row_untouched(key):
 
 
 def find_row(key):
-    """A linha de um Trade ID, olhando os dois bancos."""
+    """A linha de um Trade ID, olhando os dois bancos.
+
+    `None` quer dizer que a operação NÃO ESTÁ na esteira — nunca "não deu para
+    ler": quem pergunta costuma gravar em seguida (a grade do Track, o espelho
+    do New Deals, as validações), e a leitura que falha LEVANTA (§546)."""
     k = str(key or '').strip()
     if not k:
         return None
-    for r in load_all():
+    for r in load_all(strict=True):
         if str(r.get(KEY_COLUMN, '') or '').strip() == k:
             return r
     return None
+
+
+# O que só a ORIGEM da operação preenche (o espelho do New Deals, a planilha):
+# linha sem nenhum deles é a casca que o §546 deixava — Trade ID, callback,
+# FepWeb ID e nada que diga que operação é.
+IDENTITY_COLUMNS = ('Produto', 'Cliente', 'Data Operação', 'Notional')
+
+
+def is_hollow(row):
+    """A linha é uma CASCA — tem chave e nenhum dado da operação?"""
+    return bool(str((row or {}).get(KEY_COLUMN, '') or '').strip()) and \
+        not any(_filled(row, c) for c in IDENTITY_COLUMNS)
 
 
 def blank_row(**kw):

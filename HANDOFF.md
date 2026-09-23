@@ -23703,3 +23703,47 @@ As três rotas usam o `_detalhe`, com os sufixos de sempre (`(Pending
 approval)`, `— ação → status`). Código em branco vira `—`, nunca some. O
 Reference Data não mudou, porque o deep-link `?spn=` do sino lê o texto dele.
 `check_index_b3_notif.py`.
+
+## §546 — A esteira não troca a operação por uma CASCA (2026-09-23)
+
+A mesa via linhas no Track Confirmations só com Trade ID, Callback Date e
+FepWeb ID: sem produto, cliente, datas ou notional. No Monitor cada uma virava
+um card de Pending OTC vazio ("no PDF in the confirmation folder", Generate).
+
+O caminho era o Save da grade. A edição em massa do Track (a Callback Date em
+lote é o caso típico) manda só `{Trade ID, coluna: valor}`. O endpoint
+`/api/manual-confirmation/upsert` fazia `find_row(key) or blank_row()`. O
+`find_row` lia pelo `load_rows`, que respondia `[]` a QUALQUER falha de
+leitura, incluindo o banco ocupado pela instância vizinha (§4). Lida como
+"não existe", a operação virava uma linha em branco com a célula editada, e o
+`upsert_row` APAGAVA a chave dos dois bancos antes de inserir a casca. Depois
+o `set_fepweb_ids` preenchia o FepWeb ID pela linha irmã do Pending
+Confirmation, e sobrava exatamente o que a tela mostrava. O Pending
+Confirmation manteve a linha inteira, porque o espelho `_mc_pc_sync` só mexe
+no Pending Status.
+
+O que mudou:
+- `load_rows`/`load_all` ganharam `strict`. O `find_row` lê com
+  `strict=True`, porque quem pergunta costuma gravar em seguida: a leitura que
+  falha LEVANTA (503 pelo tratador global), e `None` passou a querer dizer
+  ausência de verdade. A tela, que só mostra, segue tolerante. Isso vale
+  também para o `_mc_save_from_deal`: ali o "não existe" falso sobrescrevia a
+  linha INTEIRA, validações incluídas, com o deal fresco. Agora ele loga e
+  não grava.
+- **A edição nunca cria linha.** Chave ausente é 404 `mc_row_missing`. Só o
+  Add Row cria, e diz isso mandando `_new`; `_new` com chave existente é 409
+  `mc_row_exists`. As mensagens saem por código, no `_TRANS` do Track.
+- O `upsert_row` faz DELETE + INSERT numa transação só no banco de DESTINO, e
+  só tira a chave do outro banco depois que o destino gravou. Antes o INSERT
+  que falhava perdia a operação.
+- As cascas já gravadas se reparam com
+  `backfill_manual_confirmations.py --repair [--dry-run]`. A linha é refeita
+  pelo MESMO `_mc_save_from_deal`, a partir do deal do New Deals, e o que a
+  casca tinha (Callback Date, FepWeb ID, validações) volta por cima. Casca sem
+  deal no cache é listada no fim, para a mesa preencher na grade. Casca é
+  `manual_conf.is_hollow`: tem chave e não tem Produto, Cliente, Trade Date
+  nem Notional.
+- O que a casca apagou de validação ANTES da correção não volta. Esse dado só
+  existia na linha que foi apagada.
+
+`check_mc_hollow_row.py`.

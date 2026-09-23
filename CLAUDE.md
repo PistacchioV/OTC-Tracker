@@ -1826,6 +1826,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `/manual-confirmation/generate?keys=…` casa pelos Trade IDs; 404 explicado).
   Os `/validate` do New Deals só carimbam `_mc_stamp_generated`, não a etapa
   do OTC, e não avisam no sino.
+- **A grade do Track EDITA, não cria** (§546): chave ausente é 404 e só o Add
+  Row cria linha, mandando `_new`. O `find_row` lê em modo `strict`, e uma
+  leitura que falha LEVANTA. Lida como "não existe", a edição em massa trocava
+  a operação por uma CASCA (Trade ID + Callback Date) e o `upsert_row` apagava
+  a verdadeira. Casca já gravada se refaz com
+  `backfill_manual_confirmations.py --repair`.
 - **Preencher a coluna de validação pela grade do Track é validar** (mesmas
   regras do `mark_validated`; a transição é vazio → data; lote tudo-ou-nada).
 - **"Não há PDF na pasta" tem TRÊS estados** (§502, a regra do §486): há PDF ·
@@ -2216,7 +2222,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (162 scripts)
+### `scripts/tests/` (163 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
