@@ -204,6 +204,26 @@ check('FIXED continua literal', B.calculate_b3_id('NG_NYMEX', 'Dec26', False, fi
 check('market desconhecido usa o trecho antes do _',
       B.calculate_b3_id('ZZ_FOO', 'Dec26', False, fixed, dyn), 'ZZZ6')
 
+print('\n== 4b. o marcador manda, nao o TYPE; _ e espaco em todo codigo (§544) ==')
+check('FIXED com "MY" vira padrao (o KW_KCBOT da mesa)',
+      B.calculate_b3_id('KW_KCBOT', 'Dec26', True, {'KW_KCBOT': 'KW"MY"'}, {}), 'KWZ6')
+check('FIXED com _ sai com espaco',
+      B.calculate_b3_id('ZZ_FOO', 'Dec26', True, {'ZZ_FOO': 'C_1'}, {}), 'C 1')
+check('FIXED sem marcador segue literal (nao ganha mes/ano)',
+      B.calculate_b3_id('ZZ_FOO', 'Dec26', True, {'ZZ_FOO': 'PUSP54GP'}, {}), 'PUSP54GP')
+check('far do SPECIAL com _ sai com espaco',
+      B.calculate_b3_id('ZZ_FOO', 'Mar27', False, {}, {},
+                        {'ZZ_FOO': {'near': 'CO"MY"', 'far': 'CO_1-2'}}, '05/01/2027'), 'CO 1-2')
+check('resolve_b3_code: padrao',  B.resolve_b3_code('X_"MY"_Y', 'Jan30'), 'X F0 Y')
+check('resolve_b3_code: literal', B.resolve_b3_code('A_B', 'Jan30'), 'A B')
+check('resolve_b3_code: vazio',   B.resolve_b3_code(None, 'Jan30'), '')
+up = R._commodities_b3_upgrade([{'TYPE': 'FIXED', 'MARKET': 'KW_KCBOT', 'TRADE TYPE': 'BOTH',
+                                 'B3 CODE': 'KW"MY"'},
+                                {'TYPE': 'FIXED', 'MARKET': 'NG_NYMEX', 'TRADE TYPE': 'BOTH',
+                                 'B3 CODE': 'NG1'}])
+check('upgrade: FIXED com "MY" passa a dizer PREFIX', [r['TYPE'] for r in up], ['PREFIX', 'FIXED'])
+check('   sem mexer no codigo', up[0]['B3 CODE'], 'KW"MY"')
+
 print('\n== 5. paridade com o JS (jsc) ==')
 if not os.path.exists(JSC):
     print('  --  jsc ausente (nao e macOS) — parte pulada')
@@ -212,12 +232,14 @@ else:
              ('PI"MY"', 'Nov28'), ('XXX"MY"XXXX', 'Dec27'), ('XB', 'Dec26'),
              ('KO"MY"BNMK', 'lixo'), ('S_"MY"', 'May27'), ('X_"MY"_Y', 'Jan30'),
              ('PI" my "', 'Feb29')]
+    RCASES = [('KW"MY"', 'Dec26'), ('C_1', 'Dec26'), ('PUSP54GP', 'Dec26'),
+              ('CO_1-2', 'Mar27'), ('X_"MY"_Y', 'Jan30'), ('', 'Dec26')]
     for jsfile in ('apps/static/js/pages/otc-fileupload.js',
                    'apps/static/js/pages/deals-processing-table.js'):
         src = io.open(jsfile, encoding='utf-8').read()
         # recorta as 3 funcoes de que o teste precisa
         need = []
-        for fn in ('splitB3Pattern', 'buildB3Code', 'contractParts'):
+        for fn in ('splitB3Pattern', 'buildB3Code', 'resolveB3Code', 'contractParts'):
             m = re.search(r'\n    function ' + fn + r'\(.*?\n    \}\n', src, re.S)
             assert m, '%s: nao achei %s' % (jsfile, fn)
             need.append(m.group(0))
@@ -230,6 +252,9 @@ else:
                    'var CASES = ' + json.dumps(CASES) + ';\n' +
                    'for (var i = 0; i < CASES.length; i++) {'
                    '  OUT.push(buildB3Code(CASES[i][0], CASES[i][1])); }\n'
+                   'var RCASES = ' + json.dumps(RCASES) + ';\n'
+                   'for (var j = 0; j < RCASES.length; j++) {'
+                   '  OUT.push(resolveB3Code(RCASES[j][0], RCASES[j][1])); }\n'
                    'print(JSON.stringify(OUT));\n')
         fd, path = tempfile.mkstemp(suffix='.js')
         os.write(fd, harness.encode('utf-8'))
@@ -243,8 +268,9 @@ else:
             js_out = json.loads(out)
         finally:
             os.unlink(path)
-        py_out = [B.build_b3_code(p, c) for p, c in CASES]
-        for (pat, con), j, p_ in zip(CASES, js_out, py_out):
+        py_out = ([B.build_b3_code(p, c) for p, c in CASES] +
+                  [B.resolve_b3_code(p, c) for p, c in RCASES])
+        for (pat, con), j, p_ in zip(CASES + RCASES, js_out, py_out):
             check('%s: %s + %s' % (os.path.basename(jsfile)[:12], pat, con), j, p_)
 
 # ── BRT_IPE: a regra vive em TRES lugares (o Python e as duas copias JS) ──────
@@ -275,7 +301,7 @@ if os.path.exists(JSC):
                    'apps/static/js/pages/deals-processing-table.js'):
         src = io.open(jsfile, encoding='utf-8').read()
         need = []
-        for fn in ('splitB3Pattern', 'buildB3Code', 'contractParts',
+        for fn in ('splitB3Pattern', 'buildB3Code', 'resolveB3Code', 'contractParts',
                    'contractMonthYear', 'dateMonthYear', 'monthsAhead',
                    'b3MapEntry', 'calculateB3Id'):
             m = re.search(r'\n    function ' + fn + r'\(.*?\n    \}\n', src, re.S)

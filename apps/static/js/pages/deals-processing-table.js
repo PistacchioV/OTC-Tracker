@@ -302,7 +302,7 @@ var OTCFileUpload = (function () {
 
         // Fixed code — return immediately
         var fx = b3MapEntry(MARKET_FIXED_CODES, mkt, isVanilla);
-        if (fx) return fx;
+        if (fx) return resolveB3Code(fx, contract);
 
         // SPECIAL: os dois códigos vêm do cadastro; qual dos dois sai é lógica.
         // No BRT_IPE a linha SPECIAL é hoje SÓ da asiática (a vanilla tem linha
@@ -312,9 +312,9 @@ var OTCFileUpload = (function () {
         var sp = b3MapEntry(MARKET_SPECIAL_CODES, mkt, isVanilla);
         if (sp) {
             if (isVanilla || monthsAhead(settleDate, contract) === 1) {
-                return buildB3Code(sp.near, contract) || sp.far;
+                return resolveB3Code(sp.near, contract) || resolveB3Code(sp.far, contract);
             }
-            return sp.far;
+            return resolveB3Code(sp.far, contract);
         }
 
         // Padrão do cadastro: parte fixa + mês/ano + parte fixa
@@ -369,6 +369,16 @@ var OTCFileUpload = (function () {
         var p = contractParts(contract);
         if (!p) return parts.head;
         return parts.head + p.monthCode + p.yearLast + parts.tail;
+    }
+
+    // O código que SAI de uma linha do cadastro, seja qual for o TYPE: quem diz
+    // se é padrão é o marcador "MY" (uma linha FIXED com KW"MY" emitia as aspas
+    // cruas), e o _ é espaço em TODO código — fixo ou padrão.
+    // ⚠️ Espelho de resolve_b3_code em apps/pages/otc_boxparse.py.
+    function resolveB3Code(code, contract) {
+        var s = code == null ? '' : String(code);
+        if (B3_MY_RE.test(s)) return buildB3Code(s, contract);
+        return s.replace(/_/g, ' ');
     }
 
     // -------------------------------------------------------------------------
