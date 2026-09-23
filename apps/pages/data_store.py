@@ -865,6 +865,12 @@ def _after_write_fs(path):
 def _after_write(db, path, rel):
     _forget_db(db)
     memo_forget(path)
+    # A gravação acabou de conseguir a trava EXCLUSIVA: o banco não está mais
+    # ocupado para este processo. Sem isto, uma leitura que perdeu a disputa
+    # antes deixava a marca de 60 s de pé, e a leitura logo depois da própria
+    # gravação respondia 503 — o manifest e a cópia do caminho acabaram de ser
+    # esquecidos acima, então não havia última cópia boa para servir.
+    _ocupado_limpa(db)
     if rel == core.REGISTRY_FILE:
         _cal_forget()
     try:

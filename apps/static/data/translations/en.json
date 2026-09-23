@@ -2729,5 +2729,6 @@
   "ndm-zone-conf": "Confirmations",
   "map-load-failed-title": "Mapping not loaded",
   "map-load-failed-busy": "The database is busy. Try again in a few seconds.",
-  "map-load-failed": "Could not read this mapping. Nothing was changed."
+  "map-load-failed": "Could not read this mapping. Nothing was changed.",
+  "map-save-forbidden": "You do not have access to the Mapping page — nothing was saved."
 }

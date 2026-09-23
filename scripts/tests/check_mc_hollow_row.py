@@ -125,10 +125,14 @@ print('\n== 4. upsert_row não perde a linha quando o INSERT falha ==')
 _orig_cols = M.DB_COLUMNS
 _alterada = dict(M.find_row('DSYJ-SNT1M'), Cliente='OUTRO')
 M.DB_COLUMNS = list(_orig_cols) + ['coluna_que_nao_existe']
+_levantou = False
 try:
     M.upsert_row(_alterada)
+except Exception:                                 # noqa: BLE001
+    _levantou = True                              # a falha SOBE (23/09/2026)
 finally:
     M.DB_COLUMNS = _orig_cols
+check('a falha do INSERT sobe (a tela não diz sucesso)', _levantou, True)
 check('a linha continua lá, como estava', (M.find_row('DSYJ-SNT1M') or {}).get('Cliente'), 'MONDELEZ')
 
 print('\n== 5. o espelho do New Deals não sobrescreve quando não consegue ler ==')

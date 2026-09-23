@@ -53,6 +53,13 @@ def api_mappings(key):
     if request.method == 'GET':
         return jsonify({'success': True, 'label': d['label'], 'columns': d['columns'],
                         'rows': _R()._mapping_rows(key, strict=True)})
+    # A GRAVAÇÃO é da tela /mapping: o `enforce_page_access` não olha `/api/*`,
+    # e sem esta conferência qualquer sessão logada — inclusive a de quem não
+    # tem o /mapping na allowlist — substituía qualquer um dos cadastros por
+    # POST direto. A leitura (GET) segue livre: é o que as outras telas usam.
+    if not _R()._user_can_access_page('/mapping'):
+        return jsonify({'success': False, 'error': 'forbidden',
+                        'message': 'You do not have access to the Mapping page.'}), 403
     p = request.get_json(silent=True) or {}
     rows = p.get('rows')
     if not isinstance(rows, list):
@@ -68,6 +75,9 @@ def api_mappings(key):
     # (mtime que o front devolve) — não implementado.
     with _R()._cache_lock:
         try:
+            if d.get('maker_checker'):
+                clean = _maker_checker_rows(key, d['maker_checker'], keys, clean,
+                                            session.get('user_sid', ''))
             _R()._atomic_write_json(_R()._mapping_path(key), clean)
             _R()._mapping_cache.pop(key, None)
         except Exception as e:
@@ -77,3 +87,37 @@ def api_mappings(key):
                          'Mapping Updated', 'Mapping',
                          '{} ({} row(s))'.format(d['label'], len(clean)))
     return jsonify({'success': True, 'rows': clean})
+
+
+_MC_META = ('STATUS', 'MAKER', 'CHECKER')
+
+
+def _maker_checker_rows(key, chave, colunas, novas, sid):
+    """O POST do /mapping num cadastro com maker-checker próprio (`swap-index`,
+    o SwapIndex.json da tela Index B3) passa pelo MESMO circuito dela: linha
+    nova ou alterada vira PENDING com a sessão como Maker; linha igual mantém
+    o STATUS/MAKER/CHECKER GRAVADOS (não os que a tela mandou — era por aqui
+    que um ACTIVE nascia sem checker); linha removida vira PENDING DELETE, que
+    a aprovação no Index B3 apaga. Chamado sob o `_cache_lock`, com a leitura
+    `strict` (ocupado sobe: nunca comparar contra o seed)."""
+    atuais = {str(r.get(chave, '') or '').strip().upper(): r
+              for r in _R()._mapping_rows(key, strict=True)}
+    dados = [c for c in colunas if c not in _MC_META]
+    vistos, out = set(), []
+    for r in novas:
+        code = str(r.get(chave, '') or '').strip().upper()
+        vistos.add(code)
+        velho = atuais.get(code)
+        if velho is not None and all(str(velho.get(c, '') or '') == r.get(c, '') for c in dados):
+            for c in _MC_META:
+                r[c] = str(velho.get(c, '') or '')
+        else:
+            r['STATUS'], r['MAKER'], r['CHECKER'] = 'PENDING', sid, ''
+        out.append(r)
+    for code, velho in atuais.items():
+        if code and code not in vistos:
+            linha = {c: str(velho.get(c, '') or '') for c in colunas}
+            if linha.get('STATUS') != 'PENDING DELETE':
+                linha['STATUS'], linha['MAKER'], linha['CHECKER'] = 'PENDING DELETE', sid, ''
+            out.append(linha)
+    return out

@@ -22,16 +22,23 @@ def overview():
     diferença entre o total e a soma era justamente o que tinha sumido das
     filas.
     """
+    gen = cgd_docs.generation()          # ANTES das linhas: ver `docs`
     rows, existe, path = _rows()
     data = cgd_docs.overview(rows)
-    data.update({'db': path, 'db_ready': existe, 'counts': cgd_docs.counts(rows)})
+    data.update({'db': path, 'db_ready': existe, 'counts': cgd_docs.counts(rows),
+                 'gen': gen})
     return data
 
 
 def docs():
     """A grade do Tracking Docs: as linhas com a etapa, mais os domínios."""
+    # A geração é lida ANTES das linhas: uma reimportação entre as duas
+    # leituras faz a tela carregar a geração VELHA com linhas novas — e a
+    # primeira escrita é recusada à toa, o que é seguro. Na ordem inversa, a
+    # geração nova validaria `_id`s da lista velha.
+    gen = cgd_docs.generation()
     rows, existe, path = _rows()
-    data = {'db': path, 'db_ready': existe,
+    data = {'db': path, 'db_ready': existe, 'gen': gen,
             'rows': [mappers.with_stage(r) for r in rows]}
     data.update(mappers.field_domains())
     return data

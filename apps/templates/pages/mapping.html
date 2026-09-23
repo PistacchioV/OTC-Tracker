@@ -460,7 +460,10 @@
         }).catch(function (e) {
             // recarrega do servidor para o estado local não mentir
             STATE[CUR].loaded = false; load(CUR, true);
-            if (window.Swal) Swal.fire({ icon: 'error', title: 'Mapping', text: e.message });
+            var msg = e.message === 'forbidden'
+                ? t('map-save-forbidden', 'You do not have access to the Mapping page — nothing was saved.')
+                : e.message;
+            if (window.Swal) Swal.fire({ icon: 'error', title: 'Mapping', text: msg });
         });
     }
 

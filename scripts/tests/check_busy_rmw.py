@@ -16,6 +16,26 @@ por cima — o mesmo desenho do `_cpd_load` (§436). O que este script prende:
   4. Pending Confirmation: `_pc_save_from_deal` numa operação que JÁ EXISTE
      preserva o que a mesa preencheu; `_pc_upsert_rows` com a gravação do
      DESTINO falhando não apaga a linha dos outros bancos, e levanta.
+  5. esteira: MO e FO validando a partir da MESMA leitura não se apagam
+     (`save_changes`/`mutate_row` releem sob a trava); `upsert_row` levanta
+     quando a gravação falha; o `mark_validated` fora do prazo sem motivo
+     desfaz a transação inteira;
+  6. Pay/Rec: o Justify levanta quando a gravação falha (antes: sucesso na
+     tela, Pending no reload) e o End process não diz "rode a recon" quando o
+     banco está ocupado;
+  7. caches: a primeira carga do ANBIMA com o carimbo ilegível não CONGELA o
+     calendário; o RefData ilegível não vira índice vazio sob o carimbo; a
+     gravação limpa a marca de OCUPADO do próprio banco.
+  8. autorização e maker-checker no SERVIDOR: POST de mapping sem a página é
+     403; o `swap-index` gravado pelo /mapping entra PENDING (e o que está
+     PENDING/INACTIVE não vale); o PATCH do New Deals não deixa o Maker aprovar
+     o próprio Pending nem uma aba velha desfazer um Sent, e o Maker é o da
+     sessão; MO/FO não assinam antes do OTC; o Delete da esteira recusa linha
+     com carimbo; o Onboarding recusa escrita depois de uma reimportação (o
+     `_id` já seria de outro CGD) e diz quando o `_id` não existe; a lista de
+     datas do Latam não guarda a varredura de antes de um esquecimento; o
+     índice de contas do Live Position acompanha o `b3-accounts`; e gerar uma
+     confirmação esquece a listagem das pastas do Monitor.
 
 Roda com bancos em tempfile; não toca em dado real.
 """
@@ -216,6 +236,223 @@ try:
 finally:
     R._PC_DB_DIR = velho_dir
     shutil.rmtree(tmp, ignore_errors=True)
+
+# ── 5. esteira ─────────────────────────────────────────────────────────────
+print('\n== 5. esteira: validações em paralelo e falha que sobe ==')
+from apps.pages import manual_conf as M                       # noqa: E402
+M._DB_DIR = tempfile.mkdtemp(prefix='otc-busy-mc-')
+M._ENSURED.clear()
+BASE = {'Trade ID': 'EST-1', 'Produto': 'SWAP', 'LOB': 'EDG', 'Cliente': 'C',
+        'Data Operação': datetime.now().strftime('%d/%m/%Y'), 'Notional': '1',
+        'Conferido OTC': datetime.now().strftime('%d/%m/%Y')}
+M.upsert_row(M.blank_row(**BASE))
+lida = M.find_row('EST-1')                   # as DUAS mesas abriram a mesma linha
+mo = dict(lida, **{'VALIDADO p/ MO': '23/09/2026', 'Time Stamp MO': 'MO 1'})
+fo = dict(lida, **{'VALIDADO p/ FO': '23/09/2026', 'Time Stamp FO': 'FO 1'})
+M.save_changes(lida, mo)
+M.save_changes(lida, fo)                     # a cópia do FO tem o MO vazio
+final = M.find_row('EST-1') or {}
+check('a validação do MO sobrevive à gravação do FO', final.get('VALIDADO p/ MO'), '23/09/2026')
+check('   e a do FO está lá', final.get('VALIDADO p/ FO'), '23/09/2026')
+
+def _escrita_falha(*_a, **_k):
+    raise S.BancoOcupado('esteira ocupada')
+
+with Troca((M, 'duckdb_write', _escrita_falha)):
+    check('upsert_row com a gravação falhando LEVANTA',
+          levanta(M.upsert_row, dict(final, Cliente='OUTRO')))
+check('   e a linha continua como estava', (M.find_row('EST-1') or {}).get('Cliente'), 'C')
+
+M.upsert_row(M.blank_row(**dict(BASE, **{'Trade ID': 'EST-3'})))   # OTC feito, MO pendente
+with Troca((M, 'sla_breached', lambda row, stage: True)):
+    try:
+        M.mark_validated('EST-3', M.STAGE_MO, 'X', comment='')
+        check('mark_validated fora do prazo sem motivo recusa', False)
+    except M.SlaCommentRequired:
+        check('mark_validated fora do prazo sem motivo recusa', True)
+check('   e nada foi gravado (a transação desfez)',
+      (M.find_row('EST-3') or {}).get('VALIDADO p/ MO'), '')
+check('validar de novo uma etapa já validada não troca o carimbo',
+      (M.mark_validated('EST-1', M.STAGE_MO, 'OUTRA') or {}).get('Time Stamp MO'), 'MO 1')
+
+# ── 6. Pay/Rec ──────────────────────────────────────────────────────────────
+print('\n== 6. Pay/Rec ==')
+from apps.pages import recon_payrec as PR                     # noqa: E402
+dia = {'summary': [1], 'pending_payment': [{'status': 'Pending', 'comment': ''}],
+       'pending_receivement': []}
+with Troca((PR, '_load_flat', lambda d, strict=False: {k: (list(v) if isinstance(v, list) else v)
+                                                        for k, v in dia.items()}),
+           (R, '_atomic_write_json', ocupado)):
+    check('Justify com a gravação falhando LEVANTA (não responde sucesso)',
+          levanta(PR.justify_row, '2026-09-23', 'pay', 0, 'motivo'))
+with Troca((S, 'exists', lambda p: True), (S, 'read', ocupado)):
+    check('End process com o banco ocupado LEVANTA (não é "rode a recon")',
+          levanta(PR.finalize_history, '2026-09-23'))
+
+# ── 7. caches ───────────────────────────────────────────────────────────────
+print('\n== 7. caches ==')
+from apps.pages.platform import anbima as AN                  # noqa: E402
+salvo = (AN._ANBIMA_HOLIDAYS, AN._anbima_loaded, AN._anbima_mtime,
+         AN._anbima_hols_cache, AN._anbima_hols_mtime)
+try:
+    AN._ANBIMA_HOLIDAYS, AN._anbima_loaded, AN._anbima_mtime = set(), False, None
+    AN._anbima_hols_cache, AN._anbima_hols_mtime = None, None
+    carimbos = [None, 10.0]                  # 1ª carga: carimbo ilegível (ocupado)
+    with Troca((AN, '_anbima_stamp', lambda: carimbos[0]),
+               (duck_read, 'dataset_rows', lambda p: [{'date': '2026-09-07'}])):
+        AN._load_anbima()
+        check('1ª carga sem carimbo NÃO marca "fixado à mão"', AN._anbima_loaded, False)
+        AN._anbima_holidays()
+        check('   nem o cache dos feriados', AN._anbima_hols_cache, None)
+        carimbos[0] = 10.0
+        AN._load_anbima()
+        check('a carga seguinte carrega de verdade',
+              (AN._anbima_loaded, AN._anbima_mtime, '2026-09-07' in AN._ANBIMA_HOLIDAYS),
+              (True, 10.0, True))
+        check('   e o cache dos feriados também', '2026-09-07' in AN._anbima_holidays())
+    carimbos[0] = 11.0                       # o arquivo mudou, e a leitura falha
+    with Troca((AN, '_anbima_stamp', lambda: carimbos[0]),
+               (duck_read, 'dataset_rows', ocupado)):
+        AN._load_anbima()
+        check('leitura falha com calendário carregado MANTÉM os feriados',
+              '2026-09-07' in AN._ANBIMA_HOLIDAYS)
+        check('   (o conjunto do _anbima_holidays também)', '2026-09-07' in AN._anbima_holidays())
+finally:
+    (AN._ANBIMA_HOLIDAYS, AN._anbima_loaded, AN._anbima_mtime,
+     AN._anbima_hols_cache, AN._anbima_hols_mtime) = salvo
+
+velho = dict(R._REFDATA_TAXID_CACHE)
+try:
+    R._REFDATA_TAXID_CACHE.update(mtime=1.0, map={'123': 'CLIENTE'})
+    with app.test_request_context('/'):
+        with Troca((S, 'getmtime', lambda p: 2.0), (duck_read, 'refdata_rows', ocupado),
+                   (S, 'read', ocupado)):
+            check('RefData ilegível não vira índice vazio', R._refdata_by_taxid(), {'123': 'CLIENTE'})
+    check('   e o carimbo novo NÃO foi guardado com a falha', R._REFDATA_TAXID_CACHE['mtime'], 1.0)
+finally:
+    R._REFDATA_TAXID_CACHE.clear(); R._REFDATA_TAXID_CACHE.update(velho)
+
+DBX = '/x/banco.db'
+S._ocupado_marca(DBX)
+S._after_write(DBX, '/x/banco.json', 'banco.json')
+check('a gravação limpa a marca de OCUPADO do próprio banco', S._ocupado_marcado(DBX), False)
+
+# ── 8. autorização, maker-checker e caches menores ─────────────────────────
+print('\n== 8. autorização e maker-checker no servidor ==')
+with Troca((R, '_user_can_access_page', lambda url: False)):
+    r = cl.post('/api/mappings/b3-accounts', json={'rows': []})
+    check('POST de mapping sem a página /mapping é 403', r.status_code, 403)
+
+from apps.pages.features.mapping import entrypoint as MAPE     # noqa: E402
+atuais = [{'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C01', 'Nome Curva': 'A',
+           'Nome Categoria': 'X', 'MAKER': 'M1', 'CHECKER': 'C1'},
+          {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C02', 'Nome Curva': 'B',
+           'Nome Categoria': 'X', 'MAKER': 'M1', 'CHECKER': 'C1'}]
+cols = [c['key'] for c in R._MAPPING_DEFS['swap-index']['columns']]
+novas = [{'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C01', 'Nome Curva': 'A',
+          'Nome Categoria': 'X', 'MAKER': '', 'CHECKER': ''},            # igual
+         {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C03', 'Nome Curva': 'NOVA',
+          'Nome Categoria': 'X', 'MAKER': '', 'CHECKER': 'EU'}]          # nova, "ACTIVE"
+with Troca((R, '_mapping_rows', lambda key, *a, **k: [dict(x) for x in atuais])):
+    out = {x['Codigo Referencia Externa']: x for x in
+           MAPE._maker_checker_rows('swap-index', 'Codigo Referencia Externa', cols,
+                                    [dict(x) for x in novas], 'T000000')}
+check('swap-index: linha igual mantém o STATUS/CHECKER gravados',
+      (out['C01']['STATUS'], out['C01']['CHECKER']), ('ACTIVE', 'C1'))
+check('   linha nova entra PENDING com a sessão como Maker (não o ACTIVE da tela)',
+      (out['C03']['STATUS'], out['C03']['MAKER'], out['C03']['CHECKER']),
+      ('PENDING', 'T000000', ''))
+check('   linha removida vira PENDING DELETE, não some', out['C02']['STATUS'], 'PENDING DELETE')
+with Troca((R, '_mapping_rows', lambda key, *a, **k: list(out.values()))):
+    idx = R._swapindex_lookup()
+check('PENDING não vale na leitura; PENDING DELETE vale até aprovado',
+      ('C03' in idx, 'C02' in idx, 'C01' in idx), (False, True, True))
+
+from apps.pages.features.new_deals import entrypoint as NDE    # noqa: E402
+g = NDE._nd_guard_updates
+check('New Deals: Pending → Approved pelo próprio Maker é recusado',
+      g({'Status': 'Pending', 'Maker': 'A000001'}, {'Status': 'Approved'}, 'a000001')[1], 'same_user')
+check('   por outro usuário passa', g({'Status': 'Pending', 'Maker': 'A000001'},
+                                      {'Status': 'Approved'}, 'B000002')[1], '')
+check('   New → Approved segue livre (§540)', g({'Status': 'New', 'Maker': 'A000001'},
+                                                {'Status': 'Approved'}, 'A000001')[1], '')
+check('   aba velha não desfaz um Sent', g({'Status': 'Sent'}, {'Status': 'Approved'}, 'X')[1],
+      'status_regression')
+check('   Amend continua passando', g({'Status': 'Success'}, {'Status': 'Amend'}, 'X')[1], '')
+check('   o Maker é o da SESSÃO, não o do corpo',
+      g({'Status': 'New'}, {'Maker': 'OUTRO'}, 'B000002')[0]['Maker'], 'B000002')
+
+M.upsert_row(M.blank_row(**{'Trade ID': 'EST-2', 'Produto': 'SWAP', 'LOB': 'EDG',
+                             'Cliente': 'C', 'Data Operação': datetime.now().strftime('%d/%m/%Y'),
+                             'Notional': '1'}))
+try:
+    M.mark_validated('EST-2', M.STAGE_MO, 'X')
+    check('MO não assina antes do OTC', False)
+except M.StageNotPending:
+    check('MO não assina antes do OTC', True)
+r = cl.post('/api/manual-confirmation/delete', json={'keys': ['EST-1']})
+check('Delete da esteira recusa linha com carimbo (409)', r.status_code, 409)
+check('   e ela continua lá', M.find_row('EST-1') is not None)
+r = cl.post('/api/manual-confirmation/delete', json={'keys': ['EST-2']})
+check('   linha intocada apaga', (r.status_code, M.find_row('EST-2')), (200, None))
+
+print('\n== 8b. Onboarding: a geração da importação ==')
+from apps.pages import cgd_docs as CG                          # noqa: E402
+CGP = os.path.join(tempfile.mkdtemp(prefix='otc-busy-cgd-'), 'cgd.db')
+CG.replace_all([{'Razão Social': 'EMPRESA A'}, {'Razão Social': 'EMPRESA B'}], path=CGP)
+gen1 = CG.generation(CGP)
+check('a importação grava uma geração', bool(gen1))
+check('escrita com a geração em vigor grava', CG.update_row('1', {'Status': 'Active'}, path=CGP, gen=gen1), 1)
+import time as _t; _t.sleep(0.01)
+CG.replace_all([{'Razão Social': 'EMPRESA B'}], path=CGP)       # reimportou: o _id 1 é OUTRO
+try:
+    CG.update_row('1', {'Status': 'Cancelled'}, path=CGP, gen=gen1)
+    check('escrita com a geração VELHA é recusada', False)
+except CG.Reimportado:
+    check('escrita com a geração VELHA é recusada', True)
+try:
+    CG.delete_row('1', path=CGP, gen=gen1)
+    check('   o delete também', False)
+except CG.Reimportado:
+    check('   o delete também', True)
+check('   e o documento que herdou o _id 1 está intacto',
+      [(r['Razão Social'], r['Status']) for r in CG.load_all(CGP)], [('EMPRESA B', '')])
+check('_id que não existe devolve 0 (não "1" fixo)',
+      CG.update_row('99', {'Status': 'Active'}, path=CGP, gen=CG.generation(CGP)), 0)
+
+print('\n== 8c. caches menores ==')
+chamou = []
+def _dias_com_esquecimento(root, suf):
+    R._latam_dates_forget()               # um import no MEIO da varredura
+    chamou.append(1)
+    return []
+R._latam_dates_forget()
+with Troca((S, 'isdir', lambda p: True), (R, '_day_files', _dias_com_esquecimento)):
+    R._latam_all_dates()
+check('Latam: varredura de antes do esquecimento não é guardada',
+      (bool(chamou), R._latam_dates_memo['dates']), (True, None))
+
+base = {'x': 'y'}
+rows = [{'B3 ACCOUNT': '11111.00-1', 'COUNTERPARTY': 'CLIENTE'}]
+omni = {'v': set()}
+contas = {'v': []}
+with Troca((R, '_refdata_by_taxid', lambda: base), (R, '_refdata_records', lambda: rows),
+           (R, '_mapping_rows', lambda key, *a, **k: contas['v']),
+           (R, '_b3_is_omnibus', lambda acc: acc in omni['v'])):
+    R._LP_ACCOUNT_NAME_CACHE.update(src=None, map=None)
+    antes = dict(R._lp_account_names())
+    omni['v'] = {'11111001'}; contas['v'] = [{'mudou': True}]   # conta virou guarda-chuva
+    depois = dict(R._lp_account_names())
+check('Live Position: marcar guarda-chuva no b3-accounts vale sem mexer no RefData',
+      ('11111001' in antes, '11111001' in depois), (True, False))
+R._LP_ACCOUNT_NAME_CACHE.update(src=None, map=None)
+
+from apps.pages.platform import manual_confirmation as PMC      # noqa: E402
+PMC._MC_DOCS_CACHE['/pasta'] = (1e18, ['velho.pdf'])
+with Troca((PMC, '_mc_conf_trade_keys', lambda picked, product: [])):
+    PMC._mc_stamp_generated([], 'ndf-comm')
+check('gerar a confirmação esquece a listagem das pastas do Monitor',
+      '/pasta' in PMC._MC_DOCS_CACHE, False)
 
 print()
 if fails:

@@ -2729,5 +2729,6 @@
   "ndm-zone-conf": "Confirmações",
   "map-load-failed-title": "Mapping não carregado",
   "map-load-failed-busy": "O banco está ocupado. Tente de novo em alguns segundos.",
-  "map-load-failed": "Não foi possível ler este mapping. Nada foi alterado."
+  "map-load-failed": "Não foi possível ler este mapping. Nada foi alterado.",
+  "map-save-forbidden": "Você não tem acesso à página de Mapping — nada foi salvo."
 }

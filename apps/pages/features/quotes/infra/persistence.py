@@ -31,10 +31,14 @@ def active_by_class():
         try:                                    # DB-first (fase 3)
             from apps.pages import duck_read
             data = duck_read.dataset_rows(fp) or []
+        except FileNotFoundError:
+            data = []
         except Exception:                                   # noqa: BLE001
+            # Falha não é "nenhum ativo": guardada sob o carimbo, as opções da
+            # tela ficavam vazias até alguém editar o Subjacente.
             routes.log.warning('[quotes] Subjacente.json ilegível:\n%s',
                                traceback.format_exc())
-            data = []
+            return _cache['data']
         por_classe = {}
         for rec in (data if isinstance(data, list) else []):
             if str(rec.get('STATUS', '') or '').strip().upper() != 'ACTIVE':

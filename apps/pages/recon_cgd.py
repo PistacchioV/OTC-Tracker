@@ -325,8 +325,14 @@ def _mapping_rows(key):
     try:                                        # DB-first (fase 3)
         from apps.pages import duck_read
         linhas = duck_read.dataset_rows(path) or []
-    except Exception:
+    except FileNotFoundError:
         linhas = []
+    except Exception as exc:
+        # Falha não é "cadastro vazio": guardada sob o carimbo, o `b3-accounts`
+        # vazio deixava a recon sem contas próprias até alguém editar o cadastro.
+        _LOG.warning('[recon-cgd] cadastro %s ilegível (%s: %s) — sem cache desta vez',
+                         key, type(exc).__name__, exc)
+        return ent[1] if ent else []
     linhas = linhas if isinstance(linhas, list) else []
     _MAP_CACHE[key] = (mt, linhas)
     return linhas
