@@ -399,25 +399,25 @@ def add(fields, trade_date, sid=''):
 
 
 def set_status(deal_id, trade_date, status, sid='', require_other_than_maker=False):
-    """Muda a esteira (Confirm: New → Approved direto; Pending → Approved com
-    maker ≠ checker). → (deal, erro)."""
+    """Muda a esteira (Confirm: New e Amend → Approved direto; Pending →
+    Approved com maker ≠ checker). → (deal, erro)."""
     with _R()._cache_lock:
         fp, lst, idx = queries.find(deal_id, trade_date)
         if idx is None:
             return None, 'Entry not found'
         d = lst[idx]
         cur = d.get('Status') or 'New'
-        if status == 'Approved' and cur == 'Amend':
-            # Amend parou aqui porque o DT reimportado mudou dado: alguém tem de
-            # olhar — vai para Pending, como no FXO.
-            status = 'Pending'
+        # New e Amend → Approved direto (mesa, 23/09/2026): o Confirm não
+        # edita nada, e quem põe a linha em Pending é o Save do Edit
+        # (`update_entry`). O Amend parava em Pending e a mesa conferia duas
+        # vezes a mesma linha sem ter mexido nela.
         if status == 'Approved':
-            if cur not in ('New', 'Pending'):
-                return None, 'Only New or Pending entries can be approved.'
+            if cur not in ('New', 'Amend', 'Pending'):
+                return None, 'Only New, Amend or Pending entries can be approved.'
             if cur == 'Pending' and d.get('Maker') and d['Maker'] == sid:
                 return None, 'Maker cannot approve their own change — a different user must check it.'
             d['Checker'] = sid if cur == 'Pending' else ''
-            if cur == 'New':
+            if cur in ('New', 'Amend'):
                 d['Maker'] = sid
         if status == 'Pending':
             d['Maker'] = sid
