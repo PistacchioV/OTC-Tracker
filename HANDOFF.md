@@ -23432,3 +23432,76 @@ inteira caía no genérico e repetia a mesma caixinha cinza). Medido no Chromium
 com dados sintéticos injetados na API — a dev não tem dia com movimento —, em
 claro, escuro, BR, efeitos reduzidos e 420px, onde quem rola de lado é a
 tabela, nunca a página. `check_ndm_cards.py`.
+
+## §535 — O Page do Add Template abria vazio, sem dizer por quê (2026-09-23)
+
+A mesa tentou criar a variante do **Antecipação Termo Multiclasses (TER)** e o
+select **Page** do modal abria em branco — parecia defeito de carregamento. Não
+era: o select lista só as páginas em que o template BASE já foi amarrado pelo
+**Link Pages** (`base.linked_pages`), e esse template nunca foi amarrado a
+nenhuma (o banco dele nem tem a tabela `linked_pages`). O aviso existia, mas só
+aparecia no Save.
+
+Sem página amarrada, o select agora traz a própria instrução como opção
+desabilitada (`fi-var-need-page`, já traduzida nas três línguas). O caminho da
+mesa é Link Pages → a página que gera o arquivo (a recompra de NDF é
+`/unwinds/ndf/fx`) → Add Template. O Guia (13.6) diz a ordem. d5624dac.
+
+## §536 — O rodapé Export · Edit · Close vira padrão em todo preview (2026-09-23)
+
+O preview de duplo clique das páginas de NDF e Opção do New Deals tinha
+**Export, Edit e Close**; o das recompras (NDF FX e as onze do catálogo), do
+Swap Bullet, do catálogo de New Deals (Swap Cashflow / Opt EDG) e da Intrag DCE
+Swap abria só com o X do canto. O `buttons` do `otcFilePreview` é opcional, e
+cada página nova copiava o molde do Swap Bullet, que não o passava — nada
+acusava.
+
+Essas cinco não têm endpoint de download sem efeito colateral, então o helper
+ganhou **`download: 'raw'`**: o Export baixa o arquivo cru de cada aba, LIDO DO
+POPUP (é o que a pessoa conferiu, inclusive o que o `rawFrom` trocou pelo do
+servidor), com o `file_name` e o `encoding` da aba. O `encoding` importa:
+**cp1252** no Swap Bullet e no Cashflow, porque o Conecta conta bytes e o
+travessão da denominação VCP é 1 byte lá e 3 em utf-8 (§480) — o encoder é
+escrito à mão, porque o `TextEncoder` só fala utf-8. O download roda no
+`preConfirm`: no `then` do Swal o popup já saiu do DOM e não há mais o que ler.
+O **Edit** é um `onEdit` que dispara o Edit da LINHA — nas recompras ele some em
+`Sent`, como o da grade. As páginas que já baixavam pelo servidor (Vanilla, FWD
+Start, Other Publisher, NDF/Opt Commodities, FXO) seguem como estavam.
+
+Medido no Chromium: Swap Bullet com os três botões e o Export baixando o
+`SWAP_EDG_BANCO.txt` (1.971 bytes); o helper com duas abas baixando `0x96` para
+o travessão em cp1252 e `é` em utf-8 na outra, o `onEdit` chamado e o popup
+fechando nos dois caminhos. As recompras não deu para ver ponta a ponta: a única
+da dev não tem posição e o preview para em *Cannot build the B3 file* antes de
+abrir. `check_file_preview_buttons.py` reprova preview sem `buttons:` em
+qualquer template (provado tirando os botões de uma página). 4ce7b79f.
+
+## §537 — As asiáticas do Live Position Option, e a data que o Excel lia como texto (2026-09-23)
+
+A mesa extraiu do Live Position Option uma planilha com 388 opções asiáticas
+de CO1-2 com a Média Asiática errada em todas: ou as datas do mês fora de
+ordem (a data 1 não era o primeiro dia útil), ou a janela atravessando dois
+meses. E as datas vieram como General.
+
+**O conserto da planilha é um script, não uma tela**
+(`scripts/fix_asian_dates_xlsx.py`): uma aba nova, `Ajustado`, com A:BH
+copiadas iguais e o bloco `Média Asiática (data) 1…N` (achado pelo rótulo, da
+BI em diante) reescrito. No mesmo mês, só reordena as mesmas datas. Em dois
+meses, vale o mês com MAIS datas, e a linha passa a ter TODO dia útil dele, do
+primeiro ao último. A quantidade pode mudar, e o log diz quando muda. Empate
+não se decide: a linha fica como está e vai para o log. Os feriados são os
+do Holidays do app (IPE por padrão), lidos pelo armazém. **Calendário sem
+feriado no ano da janela PARA**: sem ele, dia útil vira dia de semana, e a
+janela sairia com dia de bolsa fechada dentro, sem erro nenhum. Na dev o
+`ipe.json` está vazio; o calendário tem de ser conferido na instância antes de
+rodar. `check_fix_asian_dates.py`.
+
+**A causa do General era do export, e valia para o app inteiro.** O
+`excelHtml5` do Buttons só reconhece data `aaaa-mm-dd`, e toda tela escreve
+`dd/mm/aaaa` (§7): a data virava `inlineStr`. O `asDates` do
+`export-advanced.js`, no mesmo `customize` do §477, reescreve a célula de
+texto que é data VÁLIDA como serial com numFmt `dd/mm/yyyy` próprio. O 14 que
+o Buttons usa para ISO é a "data curta" do sistema de quem abre, e no Windows
+do JP ela é `mm/dd`. `check_export_excel_ids.py` §6 executa o export e lê a
+célula pelo openpyxl como data.
+
