@@ -23747,3 +23747,149 @@ O que mudou:
   existia na linha que foi apagada.
 
 `check_mc_hollow_row.py`.
+
+## §547 — A leitura do sino não fura mais a fila da gravação (2026-09-23)
+
+Na instância, o `_create_notification` morria com *"Can't open a connection to
+same database file with a different configuration than existing
+connections"*, e a notificação se perdia (`lock_hold_seconds` ≈ 15,8 no log).
+
+O §319 tinha posto o `_UnlockedReadGate` entre o poll sem lock do sino e a
+escrita. O defeito estava no teto do LEITOR: com um escritor declarado, o poll
+esperava 1 s e depois ENTRAVA assim mesmo. Com várias abas abertas, um poll
+chegava enquanto o anterior ainda abria o banco pelo share. Cada leitor novo
+furava a fila, a contagem nunca zerava, o escritor esgotava os 10 s da
+drenagem, conectava e batia no `read_only` aberto.
+
+O que mudou: o leitor sem lock usa `try_enter_read`. Vencido o teto com
+escritor declarado, ele desiste com `DatabaseLockTimeout` SEM se registrar nem
+abrir nada, e o poll serve a última resposta boa (`_notif_last_good`). O
+escritor só espera quem já estava em voo. As leituras do armazém, que têm
+trava de arquivo, não mudam.
+
+`check_unlocked_gate.py` §5b: quatro leitores em laço, escalonados, e uma
+gravação. O código antigo reproduz a ConnectionException.
+
+## §548 — Varredura dos pontos de gravação: ocupado não é "vazio" (2026-09-23)
+
+Pedido da mesa: varrer todo ponto que grava depois de ler. O padrão
+encontrado é o do `_cpd_load` (§436), espalhado por vários lugares: a leitura
+que falha (`BancoOcupado`, a instância vizinha com a trava) é lida como "não
+há dado", e a gravação que vem depois escreve só o registro novo por cima do
+que existia. A regra que ficou é a mesma para todos os casos. **Quem vai
+gravar lê em modo estrito e sem cache. Se a disputa é dentro do processo, o
+ciclo inteiro roda sob o `_cache_lock`. Se é entre instâncias, relê DENTRO da
+transação de escrita**, porque a trava de arquivo é a única que alcança o
+outro processo.
+
+**Primeira metade (`f2cc34a4`):**
+- **Tickets:** o `_read` devolvia um store vazio quando o banco estava
+  ocupado, e o `create` gravava UM ticket por cima do store inteiro, reusando
+  o id `-0001`. Agora só arquivo ausente ou JSON corrompido é vazio; ocupado
+  sobe como 503.
+- **Operations B3 / OTM:** as rotas de linha usavam o loader do leitor, que
+  engole a falha e responde do cache de 5 s. O add fazia `data = []` e gravava
+  uma linha por cima do dia importado. Agora usam `_opb3_load_for_write` /
+  `_otm_load_for_write` (`_day_records_for_write`), com o ciclo inteiro sob o
+  `_cache_lock`, e o import (`_opb3_side_write`) também. A mensageria relê o
+  dia sob a trava e grava só os status que mudou (por `_ob_id`).
+- **Mappings:** o `_mapping_rows` devolvia o SEED quando o banco estava
+  ocupado, com 200 na tela `/mapping`, e o Save (que substitui a lista
+  inteira) gravava o seed por cima do cadastro. Agora ocupado sobe, e o GET da
+  tela é `strict=True`: nenhuma falha vira seed ali, e a tela diz que não
+  conseguiu ler (en/br/es) em vez de mostrar grade vazia. Os consumidores
+  seguem com o seed numa falha que não é de banco, com ERROR no log uma vez
+  por chave.
+- **Pending Confirmation:** o `_pc_save_from_deal` montava a linha em branco e
+  apagava EA, datas, comentários, FepWeb ID e Pendência de toda operação
+  remapeada. Agora mescla com a linha existente (`_pc_find_row`, leitura
+  estrita): do deal vem só o que é do deal. O `_pc_upsert_rows` grava o
+  DESTINO primeiro, só então limpa as outras categorias, e a falha sobe. O
+  pior caso deixou de ser perda e passou a ser duplicata.
+
+**Segunda metade (`902ea4b3`):**
+- **Esteira (`manual_conf`):** MO e FO validam em paralelo, cada um na sua
+  instância. O `find_row` → alterar → `upsert_row` da linha inteira fazia a
+  segunda gravação apagar a assinatura da primeira. Agora o `mutate_row(key,
+  fn)` relê a linha DENTRO do `duckdb_write` e o `save_changes(antes, depois)`
+  aplica só o que a edição mudou. Todo caminho de escrita da esteira passa por
+  eles: validar, rejeitar, o carimbo de geração, E-mail Subject, FepWeb ID, a
+  grade do Track, Legal Release, FepWeb Sent e a data da recompra. O
+  `upsert_row` levanta na falha. MO e FO não assinam antes do OTC
+  (`StageNotPending`, 409), e revalidar não troca o carimbo de quem assinou.
+  O Delete é da mesa de OTC Ops e recusa linha com carimbo (`mc_row_touched`),
+  salvo o master.
+- **Pay/Rec:** o `_persist` engolia a falha, e o Justify respondia sucesso e
+  voltava a Pending no reload. Agora o Justify roda sob o `_cache_lock`, as
+  leituras são `strict` e a falha sobe.
+- **Caches que guardavam a falha:** o `_anbima_stamp` é `None` quando o banco
+  está ocupado, e `None` com `_anbima_loaded` é o sinal de calendário "fixado
+  à mão". Na primeira carga com a vizinha gravando, os feriados ficavam
+  congelados até o restart. RefData (triplas, SPN, Tax ID), Subjacente,
+  Quotes, os cadastros do CGD e o SLA/regras da esteira também guardavam a
+  leitura falha sob um carimbo válido. Agora uma falha mantém o último valor
+  bom e não carimba. O `_after_write` limpa a marca de OCUPADO: a leitura logo
+  depois da própria gravação respondia 503. A lista de datas do Latam tem
+  contador de geração, porque uma varredura em curso regravava a lista velha.
+  O `_lp_account_names` acompanha o `b3-accounts`.
+- **Autorização no servidor, não só no JS:**
+  - o POST de `/api/mappings` exige a página `/mapping`;
+  - o `swap-index` gravado pelo `/mapping` entra no maker-checker do Index B3
+    (PENDING / PENDING DELETE, Maker = sessão), e PENDING/INACTIVE não valem
+    na leitura;
+  - o PATCH do New Deals (`_nd_guard_updates`, 4 pontos simples e 4 em lote)
+    tira Maker/Checker da sessão, recusa Pending → Approved pelo próprio Maker
+    (`same_user`) e recusa o retorno de um Sent/Success por aba velha
+    (`status_regression`).
+- **Onboarding:** o `_id` é renumerado a cada importação do SharePoint, e uma
+  tela aberta antes carimbava ou APAGAVA outro CGD. A importação grava uma
+  geração (`cgd_meta`), e a escrita por `_id` com geração velha é 409
+  `onboarding_reimported`; `_id` que não existe é 404.
+
+`check_busy_rmw.py` (§1–§8) prende os casos. Continuam abertos: o carimbo do
+Onboarding não confere o papel de quem carimba (falta saber qual papel é o
+Legal), e o Confirm por JS das páginas de NDF/Opção não mostra a recusa do
+servidor.
+
+## §549 — NDF Vanilla asiático com o 07/09 como data de verificação (2026-09-23)
+
+Um NDF Vanilla asiático foi à B3 com o 07/09/2026 (Independência) entre as
+datas de verificação. O deal da API chega SEM `FXHolidaySchedule`: o import
+não grava o campo e o modal não o edita. Por isso o
+`_vanilla_verification_lines` caía em Seg–Sex puro. Já o campo 59 (Quantidade
+de Datas de Verificação) contava pelo ANBIMA. O arquivo declarava 7 datas e
+levava 8 linhas tipo 2, uma delas num feriado sem PTAX. As duas contas moravam
+em lugares diferentes, com calendários diferentes.
+
+A fonte agora é uma só, o `_asian_verification_dates(deal)` em
+`platform/new_deals.py`:
+- o campo 59 é a contagem das MESMAS datas que viram as linhas tipo 2;
+- sem calendário no deal vale o ANBIMA, como o FXO já fazia;
+- um calendário que não se lê LEVANTA com o nome, em vez de virar Seg–Sex
+  calado;
+- a janela que começa num feriado não conta o feriado (o `+1` antigo contava).
+
+O preview das três páginas genéricas segue a mesma regra (ANBIMA, nome do
+arquivo em minúsculas como o servidor). A operação que já foi à B3 precisa de
+correção lá. `check_ndf_asian_calendar.py`.
+
+## §550 — CNPJ desalinhado do nome das Partes na tela da confirmação (2026-09-23)
+
+Na tela de MGT × Cliente, o CNPJ da Parte A saía 172 px à DIREITA do nome e o
+da Parte B 21 px à ESQUERDA. O bloco "Definição das Partes" é export do Word.
+O nome vai por TAB (`mso-tab-count`), que o navegador desenha como uma fila de
+`&nbsp;`. O CNPJ vai por margem de parágrafo MAIS um recuo de `&nbsp;` dentro
+de `<!--[if !supportLists]-->`. O Word esconde esse recuo, o conversor de PDF
+(que não lê margem) usa só ele, e o navegador aplica os dois. O `.doc` e o PDF
+saíam certos; o defeito aparecia só onde a mesa gera e valida. O mesmo bloco
+tinha o mesmo defeito no FWD Start do banco, nas duas Opções de Câmbio e no
+Swap EDG.
+
+`static/js/conf-partes-align.js` roda só na TELA, dentro do bloco
+`not doc_only`. Ele esconde o recuo e põe o CNPJ na coordenada em que o nome
+começa. As linhas são achadas pelo TEXTO do parágrafo inteiro: os documentos
+não compartilham ids, e o Word parte "Parte A" entre elementos. A correção é
+JS e não CSS porque uma regra de `<style>` valeria também no Word e desalinharia
+o outro lado. O HTML do `doc_only`, de onde saem o `.doc` e o PDF, ficou
+idêntico byte a byte nos cinco documentos. Documento novo com esse bloco
+inclui o script. `check_conf_partes_align.py`.

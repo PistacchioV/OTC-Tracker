@@ -417,7 +417,10 @@ da subida e NÃO liga o farol; os caminhos do espelho são dinâmicos.
   errado — `check_unlocked_reads.py` barra por nome. O `_UnlockedReadGate`
   coordena o poll `read_only` com o `duckdb_write` do `_create_notification`
   (mesmo arquivo, configurações diferentes → "different configuration"); no
-  teto degrada, nunca enfileira. Poll que ainda esbarra serve `_notif_last_good`
+  teto degrada, nunca enfileira. O leitor que chega com escritor
+  declarado DESISTE no teto (`try_enter_read`, sem se registrar), senão
+  várias abas se revezam, a contagem nunca zera e a escrita bate no
+  `read_only` aberto (§547). Poll que ainda esbarra serve `_notif_last_good`
   (por SID × papel, teto 10 min — preserva o alarme de conexão vazada).
 - **Assinaturas de "arquivo em uso" moram no `database_access`**
   (`FILE_IN_USE_SIGNATURES`/`is_file_in_use`, `True` também para
@@ -468,6 +471,16 @@ da subida e NÃO liga o farol; os caminhos do espelho são dinâmicos.
 - **Caches JSON são read-modify-write sob `with _cache_lock:` no ciclo
   INTEIRO** (ler → alterar → `_atomic_write_json`). `_cache_lock` não é
   reentrante: nunca chame helper que trava de dentro do bloco.
+- **Quem vai GRAVAR lê estrito, fresco e sob a trava** (§548): o loader do
+  leitor (tolerante, com cache) lê ocupado como vazio, e a gravação seguinte
+  escreve só o registro novo por cima do resto. Dentro do processo, o ciclo
+  inteiro sob o `_cache_lock` com `*_load_for_write`/`_day_records_for_write`.
+  ENTRE instâncias (a esteira: MO e FO validam em paralelo) o `_cache_lock`
+  não alcança: relê DENTRO do `duckdb_write` (`manual_conf.mutate_row`) e
+  grava só o que mudou (`save_changes`). Cache nunca guarda a leitura que
+  falhou: mantém o último valor bom e não carimba. Upsert entre categorias grava
+  o DESTINO primeiro e só então limpa as outras (pior caso: duplicata, não
+  perda).
 - **Conexões dos bancos por produto fecham no `finally`**; vazada, segura o lock
   de escrita pela vida do processo.
 - **Um `stat` por LINHA é invisível na dev e custa minutos no share.** O cache
@@ -566,7 +579,11 @@ Entrada em `_MAPPING_DEFS` (`key → {label, columns, seed[, file, upgrade]}`) +
 item no `TYPES` de `mapping.html`. Arquivo em `static/data/mappings/<key>.json`
 (versionado; `BaseMoeda.json` também está lá). `_mapping_rows(key)` semeia na
 primeira leitura e cacheia por mtime — **edição vale no request seguinte, sem
-restart**. API `/api/mappings/<key>` GET/POST; o POST substitui o arquivo
+restart**. **Banco ocupado SOBE, nunca vira seed** (§548): o Save
+substitui a lista inteira, e o seed lido como cadastro seria gravado por cima.
+O GET da tela é `strict=True`; o POST exige a página `/mapping`, e o
+`swap-index` gravado por aqui entra no maker-checker do Index B3.
+API `/api/mappings/<key>` GET/POST; o POST substitui o arquivo
 inteiro; valores **não são trimados** (`'C '` é código B3). O front mantém os
 literais antigos como fallback. `upgrade` converte formato antigo na leitura;
 **seed só roda quando o arquivo não existe** — correção de seed não alcança
@@ -877,6 +894,14 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   23/09/2026); **`Pending` é só do Save do modal de Edit**. Nas seis páginas de
   NDF/Opção a regra é o `directToApproved` do JS (com as travas de contraparte
   e ativo); no Swap Bullet/Cashflow é o `commands.set_status`.
+- **O servidor confere o 4-olhos do PATCH** (`_nd_guard_updates`, §548):
+  Maker/Checker saem da SESSÃO, o próprio Maker não leva Pending → Approved
+  (`same_user`), e Sent/Success não voltam por aba velha
+  (`status_regression`). O JS é conveniência.
+- **As datas de verificação do asiático têm UMA fonte**
+  (`_asian_verification_dates`, §549): as linhas tipo 2 e o campo 59 contam
+  as MESMAS datas; sem `FXHolidaySchedule` (a API não manda) vale o ANBIMA, e
+  calendário ilegível LEVANTA. Eram dois calendários, e o 07/09 foi à B3.
 - **Só `isCancelled` é cancelado** na Athena; `isDead` importa normalmente.
 - **O veredito do `mapping-b3` sai da GRAVAÇÃO, nunca da intenção** (§521): os
   quatro endpoints decidiam o Status pelo arquivo de retorno da B3 e o
@@ -1832,6 +1857,10 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   a operação por uma CASCA (Trade ID + Callback Date) e o `upsert_row` apagava
   a verdadeira. Casca já gravada se refaz com
   `backfill_manual_confirmations.py --repair`.
+- **Gravação na esteira é `mutate_row`/`save_changes`, nunca `find_row` +
+  `upsert_row` da linha inteira** (§548): cada mesa roda a própria instância, e
+  a segunda assinatura apagava a primeira. MO/FO não assinam antes do OTC
+  (409 `StageNotPending`); Delete é do OTC e recusa linha carimbada.
 - **Preencher a coluna de validação pela grade do Track é validar** (mesmas
   regras do `mark_validated`; a transição é vazio → data; lote tudo-ou-nada).
 - **"Não há PDF na pasta" tem TRÊS estados** (§502, a regra do §486): há PDF ·
@@ -2000,6 +2029,9 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   empresa e é por este texto que a pasta da contraparte é procurada no
   Electronic Inventory (pasta gêmea não nasce daí: o `_ei_match_key` já compara
   em maiúsculas e sem pontuação).
+- **O `_id` muda a cada importação do SharePoint** (§548): a escrita por
+  `_id` leva a GERAÇÃO (`cgd_meta`) que a tela leu, e geração velha é 409
+  `onboarding_reimported` — sem isso, uma tela aberta antes carimbava outro CGD.
 - **O Apêndice aceita VÁRIOS arquivos** (§520): todos na MESMA pasta do EI com o
   mesmo prefixo, separados pelo marcador de cópia do inventário
   (`_ei_version_prefix`). Soltar ACUMULA e o seletor SUBSTITUI; mesmo nome e
@@ -2115,6 +2147,10 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `build_sop_docx.py`.
 - `confirmation_pdfs.py`: documento novo nasce do HTML renderizado
   (`word_html_pdf`, `_CONF_OPT_PDF_FROM_HTML`), não de réplica em reportlab.
+- **Bloco "Definição das Partes" de export do Word desalinha NA TELA** (§550):
+  o navegador aplica o tab e o recuo `supportLists` juntos. Documento com esse
+  bloco inclui `conf-partes-align.js` só no bloco `not doc_only` (JS, não CSS:
+  `<style>` valeria no Word).
 
 ---
 
