@@ -7,6 +7,7 @@ from flask import jsonify, redirect, render_template, request, session, url_for
 
 from apps.pages import blueprint
 from apps.pages.features.cognos import commands, domain, queries
+from apps.pages.platform import authz as _authz
 
 
 def _R():
@@ -130,7 +131,7 @@ def api_cog_row_confirm():
     if rec is None:
         return jsonify({'success': False, 'error': 'Row not found.'}), 404
     maker = str(rec.get('_cg_maker', '') or '')
-    if maker and maker == sid:
+    if _authz.is_own_change(maker, sid):
         return jsonify({'success': False, 'error': 'same_user',
                         'message': 'A different user must confirm a row you changed.'}), 403
     rec['_cg_status'], rec['_cg_checker'] = 'OK', sid

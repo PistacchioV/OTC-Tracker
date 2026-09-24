@@ -19,6 +19,7 @@ from flask import jsonify, request, session
 from apps.pages import blueprint
 from apps.pages import data_store as _store  # noqa: E402
 from apps.pages.features.new_deals import catalog
+from apps.pages.platform import authz as _authz
 
 
 def _R():
@@ -120,7 +121,7 @@ def _nd_guard_updates(deal, updates, sid):
             return None, 'status_regression'
         if novo == 'Approved' and atual == 'Pending':
             maker = str((deal or {}).get('Maker', '') or '').strip().upper()
-            if maker and maker == sid.upper():
+            if _authz.is_own_change(maker, sid):
                 return None, 'same_user'
     return upd, ''
 

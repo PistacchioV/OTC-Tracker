@@ -586,6 +586,7 @@ $(document).ready(function () {
     'use strict';
 
     var CURRENT_USER = '{{ session.get("user_sid", "") }}';
+    var OTC_FOUR_EYES = {{ 'true' if config.get('FOUR_EYES', True) else 'false' }};  // maker/checker (dev: false, §553)
 
     /* ── Dropdown option lists ─────────────────────────────────────────── */
     var OPT = {
@@ -873,7 +874,7 @@ $(document).ready(function () {
         var tableKey = btn.dataset.table;
         var idx      = parseInt(btn.dataset.idx);
         var maker    = btn.dataset.maker || '';
-        if (maker && maker === CURRENT_USER) {
+        if (OTC_FOUR_EYES && maker && maker === CURRENT_USER) {
             Swal.fire({
                 title: 'Cannot approve your own changes',
                 text: 'Another user must approve records you modified.',

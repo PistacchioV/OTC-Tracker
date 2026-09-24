@@ -12,6 +12,7 @@ from apps.pages.platform import swap_deal_ticket as _dtk
 from apps.pages.platform import swap_new_deals as _sw
 from apps.pages.features.swap_cashflow import domain, queries
 from apps.pages.features.swap_cashflow.infra import persistence
+from apps.pages.platform import authz as _authz
 
 
 def _R():
@@ -475,7 +476,7 @@ def set_status(deal_id, trade_date, status, sid=''):
         if status == 'Approved':
             if cur not in ('New', 'Amend', 'Pending'):
                 return None, 'swc_not_approvable'
-            if cur == 'Pending' and d.get('Maker') and d['Maker'] == sid:
+            if cur == 'Pending' and _authz.is_own_change(d.get('Maker'), sid):
                 return None, 'swc_maker_checker'
             d['Checker'] = sid if cur == 'Pending' else ''
             if cur in ('New', 'Amend'):

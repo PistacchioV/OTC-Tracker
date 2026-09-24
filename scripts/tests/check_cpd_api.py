@@ -12,6 +12,8 @@ from datetime import datetime, timedelta, timezone
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 sys.path.insert(0, ROOT)
+from apps.config import Config as _Cfg                      # noqa: E402
+_Cfg.FOUR_EYES = True   # prova a trava da PROD; na dev o maker/checker e desligado (§553)
 os.chdir(ROOT)
 os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', ROOT)
 os.environ['OTC_DISABLE_SCHEDULERS'] = '1'

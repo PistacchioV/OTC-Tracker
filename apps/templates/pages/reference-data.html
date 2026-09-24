@@ -619,6 +619,7 @@ $(document).ready(function () {
     'use strict';
 
     var CURRENT_USER = '{{ session.get("user_sid", "") }}';
+    var OTC_FOUR_EYES = {{ 'true' if config.get('FOUR_EYES', True) else 'false' }};  // maker/checker (dev: false, §553)
 
     /* ── Translation cache ───────────────────────────────────────────── */
     var _TRANS_CACHE = {};
@@ -1214,7 +1215,7 @@ $(document).ready(function () {
         var rows = model.CGD.map(function(it){
             if (editId && it.id === editId) return _cgdFormRow(it);
             var pend = String(it.status).toLowerCase() !== 'active';
-            var own  = it.maker && it.maker === CURRENT_USER;
+            var own  = OTC_FOUR_EYES && it.maker && it.maker === CURRENT_USER;
             var ops = '';
             if (pend) ops += _apprBtn('cp-cgd-approve', it.id, own);
             ops += '<button type="button" title="' + _attr(t('rd-cp-edit','Edit')) + '" class="btn btn-xs cp-editbtn cp-cgd-edit" data-id="' + it.id + '"><i class="ti ti-pencil"></i></button>';
@@ -1246,7 +1247,7 @@ $(document).ready(function () {
             body = _netFormRow(net);
         } else {
             var pend = String(net.status).toLowerCase() !== 'active';
-            var own  = net.maker && net.maker === CURRENT_USER;
+            var own  = OTC_FOUR_EYES && net.maker && net.maker === CURRENT_USER;
             var ops = '';
             if (pend) ops += _apprBtn('cp-net-approve', 'net', own);
             ops += '<button type="button" title="' + _attr(t('rd-cp-edit','Edit')) + '" class="btn btn-xs cp-editbtn cp-net-edit"><i class="ti ti-pencil"></i></button>';
@@ -1282,7 +1283,7 @@ $(document).ready(function () {
         var rows = model.CONTACTS.map(function(it){
             if (editId && it.id === editId) return _contactFormCard(it);
             var pend = String(it.appr).toLowerCase() !== 'active';
-            var own  = it.maker && it.maker === CURRENT_USER;
+            var own  = OTC_FOUR_EYES && it.maker && it.maker === CURRENT_USER;
             var ops = '';
             if (pend) ops += _apprBtn('cp-contact-approve', it.id, own);
             ops += '<button type="button" title="' + _attr(t('rd-cp-edit','Edit')) + '" class="btn btn-xs cp-editbtn cp-contact-edit" data-id="' + it.id + '"><i class="ti ti-pencil"></i></button>';
@@ -1476,7 +1477,7 @@ $(document).ready(function () {
                 '" data-defset="RECEIVE" data-id="' + a.id + '"' + (active ? '' : ' disabled') + '>' + (recDef ? '<i class="ti ti-star-filled"></i> ' : '') + 'RECEIVE</button>';
             var ops = '';
             if (!active) {
-                var own = a.maker && a.maker === CURRENT_USER;
+                var own = OTC_FOUR_EYES && a.maker && a.maker === CURRENT_USER;
                 ops += '<button type="button" title="' + _attr(t('rd-swal-approve-btn','Approve')) + '" class="btn btn-xs btn-success cp-acc-approve" data-id="' + a.id + '" data-own="' + (own ? '1' : '0') + '"><i class="ti ti-check"></i></button>';
             }
             ops += '<button type="button" title="' + _attr(t('rd-cp-edit','Edit')) + '" class="btn btn-xs cp-editbtn cp-acc-edit" data-id="' + a.id + '"><i class="ti ti-pencil"></i></button>';
@@ -1496,7 +1497,7 @@ $(document).ready(function () {
             if (!slot.pending) return '';
             var acc = bk.ACCOUNTS.filter(function(a){ return a.id === slot.pending; })[0];
             if (!acc) return '';
-            var own = slot.maker && slot.maker === CURRENT_USER;
+            var own = OTC_FOUR_EYES && slot.maker && slot.maker === CURRENT_USER;
             return '<div class="cp-def-banner"><span>' + t('rd-cp-pending-default','Pending default') + ' ' + kind + ': ' + _esc(acc.bank || acc.account || acc.id) + '</span>' +
                 '<button type="button" class="btn btn-xs btn-success cp-def-approve" data-kind="' + kind + '" data-own="' + (own ? '1' : '0') + '"><i class="ti ti-check"></i> ' + t('rd-swal-approve-btn','Approve') + '</button></div>';
         }
@@ -1998,7 +1999,7 @@ $(document).ready(function () {
     function handleApprove(btn) {
         var idx   = parseInt(btn.dataset.idx);
         var maker = btn.dataset.maker || '';
-        if (maker && maker === CURRENT_USER) {
+        if (OTC_FOUR_EYES && maker && maker === CURRENT_USER) {
             Swal.fire({
                 title: t('rd-swal-own-changes','Cannot approve your own changes'),
                 text:  t('rd-swal-own-changes-text','Another user must approve records you modified.'),
@@ -2097,8 +2098,8 @@ $(document).ready(function () {
             return;
         }
 
-        var blocked   = candidates.filter(function(r){ return r.maker && r.maker === CURRENT_USER; });
-        var toApprove = candidates.filter(function(r){ return !r.maker || r.maker !== CURRENT_USER; });
+        var blocked   = candidates.filter(function(r){ return OTC_FOUR_EYES && r.maker && r.maker === CURRENT_USER; });
+        var toApprove = candidates.filter(function(r){ return !OTC_FOUR_EYES || !r.maker || r.maker !== CURRENT_USER; });
         // Do MAIOR índice para o menor. Aprovar um Pending Delete remove o
         // registro do array, e isso desloca todo mundo DEPOIS dele — removendo
         // de trás para a frente, os índices que ainda faltam continuam válidos.

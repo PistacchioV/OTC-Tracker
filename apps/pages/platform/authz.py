@@ -349,6 +349,18 @@ def _set_page_access(sid, urls):
 _MASTER_SIDS = {'E930179'}
 
 
+def is_own_change(maker, sid):
+    """O maker/checker: `True` quando quem age (`sid`) é quem fez a linha
+    (`maker`) e por isso NÃO pode aprovar/enviar. Maker vazio nunca é "o
+    próprio". Com `Config.FOUR_EYES` desligado (a dev, §553) é sempre `False`
+    — lido a cada chamada, para o teste poder ligar e desligar."""
+    from apps.config import Config
+    if not getattr(Config, 'FOUR_EYES', True):
+        return False
+    maker = str(maker or '').strip().upper()
+    return bool(maker) and maker == str(sid or '').strip().upper()
+
+
 def _session_is_master():
     return (session.get('user_sid') or '').strip().upper() in _MASTER_SIDS
 

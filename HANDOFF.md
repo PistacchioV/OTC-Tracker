@@ -23951,3 +23951,35 @@ mesmo fluxo de IP. `check_session_ip.py`; o `check_session_role.py` passou a
 montar a sessão com `session_ip`, senão o carimbo do primeiro request
 reemitia o cookie que ele confere não ser reemitido.
 
+## §553 — Maker/checker desligado na DEV, obrigatório na PROD (2026-09-24)
+
+Na dev quem testa é uma pessoa só, e toda aprovação ou envio da própria linha
+voltava 403 `same_user` (ou o Confirm nem aparecia): não havia como passar de
+`Pending` para `Approved` nem de `Approved` para `Sent` sem um segundo SID.
+
+O interruptor mora no bloco de ambiente do `config.py`, que é a única
+diferença entre as duas branches: `_FOUR_EYES = False` na `StreamFlow`,
+`True` na `StreamFlow-prod` (o bloco que o `/commitjp` escreve ganhou a
+linha). Vira `Config.FOUR_EYES`, que entrou no `_REQUIRED_CONFIG_NAMES`.
+
+Havia 26 travas no servidor, cada uma com a sua comparação à mão
+(`maker and maker == sid`, `x.get('maker') and x['maker'] == sid`,
+`rec.get('MAKER') == user`, `r[-3] == sid`) em 16 módulos: New Deals
+(`_nd_guard_updates`), Swap Bullet/Cashflow, Intrag (sete), Counterparty
+Details/Reference Data (cinco), Index B3, MTM, Accrual, OTM, Cognos, Latam,
+Operations B3, NDF Cockpit, Other Products e as duas recompras. Agora todas
+perguntam a UMA função, `platform.authz.is_own_change(maker, sid)`, que
+devolve `False` com o flag desligado. No navegador, as oito páginas que
+comparam o maker com `CURRENT_USER`/`CURRENT_USER_SID` (as seis de New Deals,
+Reference Data, Index B3 Results) definem `OTC_FOUR_EYES` pelo `config` do
+Flask e condicionam cada comparação a ele — senão o servidor aceitaria e a
+tela continuaria escondendo o botão.
+
+O que NÃO mudou: o fluxo de status (`Pending` segue não enviável nas
+recompras e no Intrag — é estado, não 4-olhos) e as etapas da esteira de
+confirmação, que são por MESA (`_MC_STAGE_ROLE`), não por maker.
+
+`check_four_eyes.py` prende o helper, o default da dev e a ausência de
+comparação à mão nos dois lados. Os dez testes que provam a trava da PROD
+ligam `Config.FOUR_EYES = True` no topo, e seguem cobrando o 403.
+

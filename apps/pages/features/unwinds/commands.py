@@ -11,6 +11,7 @@ from datetime import datetime
 from apps.pages import data_store as _store
 from apps.pages.features.unwinds import domain, queries
 from apps.pages.features.unwinds.infra import email_file, notification_html, persistence
+from apps.pages.platform import authz as _authz
 
 
 def _R():
@@ -512,7 +513,7 @@ def aprovar(athena_id, ref_date='', sid=''):
             return None
         if (lst[idx].get('Status') or '') != domain.STATUS_PENDENTE:
             raise ValueError('Only Pending unwinds can be approved')
-        if lst[idx].get('Maker') and lst[idx]['Maker'] == (sid or ''):
+        if _authz.is_own_change(lst[idx].get('Maker'), (sid or '')):
             raise PermissionError('Maker cannot approve their own change — '
                                   'a different user must check it')
         lst[idx]['Status'] = domain.STATUS_APROVADO

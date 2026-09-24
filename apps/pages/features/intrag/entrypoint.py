@@ -11,6 +11,7 @@ from apps.pages import blueprint
 from apps.pages.features.intrag import commands, domain, queries
 from apps.pages.features.intrag.infra import persistence, xlsx_grid
 from apps.pages import data_store as _store  # noqa: E402
+from apps.pages.platform import authz as _authz
 
 
 def _R():
@@ -249,7 +250,7 @@ def api_intrag_option_approve():
             return jsonify({'success': False, 'message': 'Entry not found'}), 404
         if (entries[idx].get('status') or '') != 'Pending':
             return jsonify({'success': False, 'message': 'Only Pending entries can be approved.'}), 400
-        if entries[idx].get('maker') and entries[idx]['maker'] == user_sid:
+        if _authz.is_own_change(entries[idx].get('maker'), user_sid):
             return jsonify({'success': False,
                             'message': 'Maker cannot approve their own change — a different user must check it.'}), 403
         entries[idx]['status']  = 'Approved'
@@ -414,7 +415,7 @@ def api_intrag_ndf_approve():
             return jsonify({'success': False, 'message': 'Entry not found'}), 404
         if (entries[idx].get('status') or '') != 'Pending':
             return jsonify({'success': False, 'message': 'Only Pending entries can be approved.'}), 400
-        if entries[idx].get('maker') and entries[idx]['maker'] == user_sid:
+        if _authz.is_own_change(entries[idx].get('maker'), user_sid):
             return jsonify({'success': False,
                             'message': 'Maker cannot approve their own change — a different user must check it.'}), 403
         entries[idx]['status']  = 'Approved'
@@ -616,7 +617,7 @@ def api_intrag_swap_approve():
             return jsonify({'success': False, 'message': 'Entry not found'}), 404
         if (entries[idx].get('status') or '') != 'Pending':
             return jsonify({'success': False, 'message': 'Only Pending entries can be approved.'}), 400
-        if entries[idx].get('maker') and entries[idx]['maker'] == user_sid:
+        if _authz.is_own_change(entries[idx].get('maker'), user_sid):
             return jsonify({'success': False,
                             'message': 'Maker cannot approve their own change — a different user must check it.'}), 403
         entries[idx]['status']  = 'Approved'
@@ -862,7 +863,7 @@ def api_intrag_dce_option_approve():
             return jsonify({'success': False, 'message': 'Entry not found'}), 404
         if (entries[idx].get('status') or '') != 'Pending':
             return jsonify({'success': False, 'message': 'Only Pending entries can be approved.'}), 400
-        if entries[idx].get('maker') and entries[idx]['maker'] == user_sid:
+        if _authz.is_own_change(entries[idx].get('maker'), user_sid):
             return jsonify({'success': False,
                             'message': 'Maker cannot approve their own change — a different user must check it.'}), 403
         entries[idx]['status']  = 'Approved'
@@ -1116,7 +1117,7 @@ def api_intrag_dce_ndf_approve():
             return jsonify({'success': False, 'message': 'Entry not found'}), 404
         if (entries[idx].get('status') or '') != 'Pending':
             return jsonify({'success': False, 'message': 'Only Pending entries can be approved.'}), 400
-        if entries[idx].get('maker') and entries[idx]['maker'] == user_sid:
+        if _authz.is_own_change(entries[idx].get('maker'), user_sid):
             return jsonify({'success': False,
                             'message': 'Maker cannot approve their own change — a different user must check it.'}), 403
         entries[idx]['status']  = 'Approved'
@@ -1379,7 +1380,7 @@ def api_intrag_dce_swap_approve():
             return jsonify({'success': False, 'message': 'Entry not found'}), 404
         if (entries[idx].get('status') or '') != 'Pending':
             return jsonify({'success': False, 'message': 'Only Pending entries can be approved.'}), 400
-        if entries[idx].get('maker') and entries[idx]['maker'] == user_sid:
+        if _authz.is_own_change(entries[idx].get('maker'), user_sid):
             return jsonify({'success': False,
                             'message': 'Maker cannot approve their own change — a different user must check it.'}), 403
         entries[idx]['status']  = 'Approved'
@@ -1679,7 +1680,7 @@ def api_intrag_unwind_approve():
         if (entries[idx].get('status') or '') != 'Pending':
             return jsonify({'success': False,
                             'message': 'Only Pending entries can be approved.'}), 400
-        if entries[idx].get('maker') and entries[idx]['maker'] == user_sid:
+        if _authz.is_own_change(entries[idx].get('maker'), user_sid):
             return jsonify({'success': False,
                             'message': 'Maker cannot approve their own change — a different '
                                        'user must check it.'}), 403

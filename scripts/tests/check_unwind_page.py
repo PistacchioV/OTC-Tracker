@@ -29,6 +29,8 @@ import tempfile
 from datetime import date, datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+from apps.config import Config as _Cfg                      # noqa: E402
+_Cfg.FOUR_EYES = True   # prova a trava da PROD; na dev o maker/checker e desligado (§553)
 os.environ.setdefault('OTC_DISABLE_SCHEDULERS', '1')
 if os.name != 'nt' and not os.environ.get('OTC_SHARED_DRIVE_ROOT'):
     os.environ['OTC_SHARED_DRIVE_ROOT'] = tempfile.mkdtemp(prefix='otc-share-')
