@@ -98,7 +98,7 @@ class Config(object):
     # própria linha. Na PROD é obrigatório; na DEV fica desligado, porque quem
     # testa é uma pessoa só e toda aprovação voltava 403 `same_user` (§553).
     # Quem responde é `platform.authz.is_own_change` (servidor) e o
-    # `window.OTC_FOUR_EYES` do `base.html` (navegador).
+    # `OTC_FOUR_EYES` que cada página com trava define (navegador).
     FOUR_EYES = _FOUR_EYES
 
     # A pasta dos DADOS em JSON — os arquivos-dia do cache, os cadastros do
