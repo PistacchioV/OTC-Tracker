@@ -5,6 +5,7 @@ Só a casca: o arquivo é o MESMO que o cadastro swap-index do /mapping edita.
 """
 
 from flask import jsonify, request, session
+from apps.pages.platform import authz as _authz
 
 
 
@@ -84,7 +85,7 @@ def api_b3_update():
     rec = records[int(idx)]
 
     if action == 'approve':
-        if rec.get('MAKER') == user:
+        if _authz.is_own_change(rec.get('MAKER'), user):
             return jsonify({'ok': False, 'error': 'same_user'}), 403
         if rec.get('STATUS') == _PENDING_DELETE:
             # Aprovar um PENDING DELETE **é** a exclusão: o registro sai do

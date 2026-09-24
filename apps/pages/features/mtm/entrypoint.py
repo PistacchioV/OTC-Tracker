@@ -10,6 +10,7 @@ from apps.pages import blueprint
 from apps.pages.features.mtm import commands, domain, queries
 from apps.pages.features.mtm.infra import mail, mappers, persistence
 from apps.pages import data_store as _store  # noqa: E402
+from apps.pages.platform import authz as _authz
 
 
 def _R():
@@ -169,7 +170,7 @@ def api_mtm_row_send():
         r = domain._mtm_find_row(data, p.get('lob', ''), p.get('id', ''))
         if not r:
             return jsonify({'success': False, 'error': 'Row not found.'}), 404
-        if str(r[-3] or '') == sid:                          # maker == current user → blocked
+        if _authz.is_own_change(r[-3], sid):                          # maker == current user → blocked
             return jsonify({'success': False, 'error': 'same_user'}), 403
         r[-4], r[-2] = 'Sent', sid                           # status, checker
         try:

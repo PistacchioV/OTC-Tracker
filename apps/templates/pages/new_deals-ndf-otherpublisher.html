@@ -1159,6 +1159,7 @@ function formatExportData(data, row, column, node) {
 
 // Current authenticated user SID (set by Flask session)
 var CURRENT_USER_SID = '{{ session.get("user_sid", "") }}';
+var OTC_FOUR_EYES = {{ 'true' if config.get('FOUR_EYES', True) else 'false' }};  // maker/checker (dev: false, §553)
 
 // ── Real-time notifications ──────────────────────────────────────────────────
 // Refresh the topbar bell immediately after any mutating action on this page
@@ -2833,7 +2834,7 @@ $(document).ready(function() {
             var rowMaker  = d[28] || '';
 
             console.log('[NDF-DEALS SEND] rowId:', rowId, '| status:', rowStatus, '| maker:', rowMaker, '| CURRENT_USER_SID:', CURRENT_USER_SID);
-            if ((rowStatus === 'Approved' || rowStatus === 'Error') && rowMaker !== CURRENT_USER_SID) {
+            if ((rowStatus === 'Approved' || rowStatus === 'Error') && (!OTC_FOUR_EYES || rowMaker !== CURRENT_USER_SID)) {
                 sendableRows.push({ rowIdx: this.index(), data: d });
             } else {
                 blockedCount++;
@@ -3853,7 +3854,7 @@ $(document).ready(function() {
                 return;
             }
             var approverMaker = table.cell(tr[0], MAKER_COL_INDEX).data() || '';
-            if (approverMaker && approverMaker === CURRENT_USER_SID) {
+            if (OTC_FOUR_EYES && approverMaker && approverMaker === CURRENT_USER_SID) {
                 Swal.fire({
                     title: t('swal-not-allowed-title', 'Not Allowed'),
                     text: t('swal-not-allowed-approve', 'You cannot approve a deal that you imported or last edited. A different user must approve it.'),
@@ -3930,7 +3931,7 @@ $(document).ready(function() {
             return;
         }
 
-        if (makerSid && makerSid === CURRENT_USER_SID) {
+        if (OTC_FOUR_EYES && makerSid && makerSid === CURRENT_USER_SID) {
             Swal.fire({
                 title: t('swal-not-allowed-title', 'Not Allowed'),
                 text: t('swal-not-allowed-send', 'You cannot send a deal you imported or last edited. A different user must send this deal.'),

@@ -7,6 +7,7 @@ from flask import jsonify, request, session
 from apps.pages import blueprint
 from apps.pages.features.counterparty_details import commands, domain
 from apps.pages.features.counterparty_details.infra import persistence
+from apps.pages.platform import authz as _authz
 
 
 def _R():
@@ -131,7 +132,7 @@ def api_cp_banking_account_approve():
     acc = next((a for a in banking['ACCOUNTS'] if a['id'] == acc_id), None)
     if acc is None:
         return jsonify({'ok': False, 'error': 'not_found'}), 404
-    if acc.get('maker') and acc['maker'] == sid:
+    if _authz.is_own_change(acc.get('maker'), sid):
         return jsonify({'ok': False, 'error': 'same_user'}), 403
     acc['status'] = 'Active'
     acc['checker'] = sid
@@ -198,7 +199,7 @@ def api_cp_banking_default_approve():
     slot = banking['DEFAULT_' + kind]
     if not slot.get('pending'):
         return jsonify({'ok': False, 'error': 'no_pending'}), 400
-    if slot.get('maker') and slot['maker'] == sid:
+    if _authz.is_own_change(slot.get('maker'), sid):
         return jsonify({'ok': False, 'error': 'same_user'}), 403
     slot['current'] = slot['pending']
     slot['pending'] = None
@@ -263,7 +264,7 @@ def api_cp_cgd_approve():
     item = next((x for x in rec['CGD'] if x['id'] == iid), None)
     if item is None:
         return jsonify({'ok': False, 'error': 'not_found'}), 404
-    if item.get('maker') and item['maker'] == sid:
+    if _authz.is_own_change(item.get('maker'), sid):
         return jsonify({'ok': False, 'error': 'same_user'}), 403
     item['status'] = 'Active'
     item['checker'] = sid
@@ -312,7 +313,7 @@ def api_cp_net_approve():
     sid = session.get('user_sid', '') or ''
     data, rec = persistence._cpd_get_record(spn)
     net = rec['NET']
-    if net.get('maker') and net['maker'] == sid:
+    if _authz.is_own_change(net.get('maker'), sid):
         return jsonify({'ok': False, 'error': 'same_user'}), 403
     net['status'] = 'Active'
     net['checker'] = sid
@@ -374,7 +375,7 @@ def api_cp_contact_approve():
     item = next((x for x in rec['CONTACTS'] if x['id'] == iid), None)
     if item is None:
         return jsonify({'ok': False, 'error': 'not_found'}), 404
-    if item.get('maker') and item['maker'] == sid:
+    if _authz.is_own_change(item.get('maker'), sid):
         return jsonify({'ok': False, 'error': 'same_user'}), 403
     item['appr'] = 'Active'
     item['checker'] = sid

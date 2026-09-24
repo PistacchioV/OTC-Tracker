@@ -10,6 +10,7 @@ from apps.pages import blueprint
 from apps.pages.features.accrual import commands, domain, queries
 from apps.pages.features.accrual.infra import mappers, persistence
 from apps.pages import data_store as _store  # noqa: E402
+from apps.pages.platform import authz as _authz
 
 
 def _R():
@@ -309,7 +310,7 @@ def api_accrual_row_send():
     if target is None:
         return jsonify({'success': False, 'error': 'Row not found.'}), 404
     maker = str(target[-3] or '')
-    if maker and maker == sid:
+    if _authz.is_own_change(maker, sid):
         return jsonify({'success': False, 'error': 'same_user',
                         'message': 'A different user must send a row you changed.'}), 403
     target[-4], target[-2] = 'Sent', sid            # status, checker

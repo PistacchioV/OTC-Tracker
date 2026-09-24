@@ -61,6 +61,7 @@ class Config(object):
     _SHARED_DRIVE_DEFAULT = 'I:\\'
     _SQLITE_DIR_DEFAULT = basedir
     _CONECTA_SUFFIX = ' - UAT'   # Batch Conecta: a dev grava em New - UAT / lê Return - UAT
+    _FOUR_EYES = False           # maker/checker DESLIGADO na dev (uma pessoa só testa)
     # ── /ENV ─────────────────────────────────────────────────────────────────
 
     # A PASTA dos bancos, e é dela que sai todo caminho de banco do app — o
@@ -92,6 +93,13 @@ class Config(object):
                                  os.path.join(_CONECTA_ROOT, 'New' + _CONECTA_SUFFIX))
     CONECTA_RETURN_PATH = os.getenv('RETURN_PATH',
                                     os.path.join(_CONECTA_ROOT, 'Return' + _CONECTA_SUFFIX))
+
+    # O maker/checker (4-olhos): quem editou/importou não aprova nem envia a
+    # própria linha. Na PROD é obrigatório; na DEV fica desligado, porque quem
+    # testa é uma pessoa só e toda aprovação voltava 403 `same_user` (§553).
+    # Quem responde é `platform.authz.is_own_change` (servidor) e o
+    # `window.OTC_FOUR_EYES` do `base.html` (navegador).
+    FOUR_EYES = _FOUR_EYES
 
     # A pasta dos DADOS em JSON — os arquivos-dia do cache, os cadastros do
     # /mapping, os tickets, o RefData, o calendário. É o terceiro caminho que

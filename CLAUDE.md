@@ -44,8 +44,9 @@ OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_<nome>.py
   é a dev MAIS um commit no `apps/config.py` — o bloco entre `── ENV:DEV ──`
   e `── /ENV ──` (dados, bancos e share em
   `\\Nawest.ad.jpmorganchase.com\lac\BRA\intra` em vez de dentro do checkout e
-  `I:\`, e o Batch Conecta em `New`/`Return` em vez de `New - UAT`/`Return -
-  UAT` — `_CONECTA_SUFFIX`, §551). Código nasce na dev e chega lá por merge
+  `I:\`, o Batch Conecta em `New`/`Return` em vez de `New - UAT`/`Return -
+  UAT` — `_CONECTA_SUFFIX`, §551 —, e o maker/checker LIGADO, que na dev é
+  desligado — `_FOUR_EYES`, §553). Código nasce na dev e chega lá por merge
   (`/commit` publica na dev, `/commitjp` faz o merge). Corrigir direto na
   prod cria divergência invisível até o merge seguinte conflitar. Nunca
   presuma `main`.
@@ -557,6 +558,14 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   `session_ip` é carimbada, não derrubada — teste que monta sessão à mão e
   confere se o cookie foi reemitido tem de pôr o `session_ip`. O Lock Screen
   MANUAL do menu continua.
+- **Maker/checker (4-olhos) só vale na PROD** (§553): `Config.FOUR_EYES`,
+  do bloco de ambiente (`_FOUR_EYES = False` na dev, onde uma pessoa só
+  testa). Trava NOVA de "o próprio maker não aprova/envia" pergunta ao
+  `platform.authz.is_own_change(maker, sid)` no servidor e é condicionada ao
+  `OTC_FOUR_EYES` no navegador (a página o define ao lado do
+  `CURRENT_USER`/`CURRENT_USER_SID`) — comparar maker e SID à mão continua
+  dando 403 na dev, calado, e o `check_four_eyes.py` recusa. Teste que PROVA a
+  trava liga o flag (`Config.FOUR_EYES = True`) antes de subir o app.
 
 - **Papéis** (`Role` no banco): `ADMIN`, `BO`, `MO`, `FO`, `INSTITUTIONAL`,
   `HUB`. **Master** é por SID (`_MASTER_SIDS = {'E930179'}` em

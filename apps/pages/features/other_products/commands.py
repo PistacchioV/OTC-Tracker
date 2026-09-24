@@ -9,6 +9,7 @@ from apps.pages.features.other_products import domain, queries
 from apps.pages.features.other_products.infra import persistence
 from apps.pages.platform import email_validation as _ev
 from apps.pages.platform import pu_fator as _pf
+from apps.pages.platform import authz as _authz
 
 
 def _R():
@@ -63,7 +64,7 @@ def vcp_send(ref, contratos, sid='', nome=''):
         if not f:
             problemas.append('{}: not on the page'.format(key))
             continue
-        if f.get('maker') and f['maker'] == sid:
+        if _authz.is_own_change(f.get('maker'), sid):
             problemas.append('{}: a different user must send a row you edited'.format(key))
             continue
         ruins = domain.problemas_para_envio(f)

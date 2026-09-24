@@ -10,6 +10,7 @@ from apps.pages import data_store as _store
 from apps.pages.platform import swap_new_deals as _sw
 from apps.pages.features.swap_bullet import domain, queries
 from apps.pages.features.swap_bullet.infra import dt_reader, persistence
+from apps.pages.platform import authz as _authz
 
 
 def _R():
@@ -414,7 +415,7 @@ def set_status(deal_id, trade_date, status, sid='', require_other_than_maker=Fal
         if status == 'Approved':
             if cur not in ('New', 'Amend', 'Pending'):
                 return None, 'Only New, Amend or Pending entries can be approved.'
-            if cur == 'Pending' and d.get('Maker') and d['Maker'] == sid:
+            if cur == 'Pending' and _authz.is_own_change(d.get('Maker'), sid):
                 return None, 'Maker cannot approve their own change — a different user must check it.'
             d['Checker'] = sid if cur == 'Pending' else ''
             if cur in ('New', 'Amend'):

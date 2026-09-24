@@ -65,6 +65,7 @@ _REQUIRED_CONFIG_NAMES = (
     'DATA_DIR',                # a pasta dos JSON (cache, cadastros, tickets)
     'CONECTA_NEW_PATH',        # Batch Conecta › New (dev: New - UAT)
     'CONECTA_RETURN_PATH',     # Batch Conecta › Return (dev: Return - UAT)
+    'FOUR_EYES',               # maker/checker ligado (prod) ou não (dev)
 )
 
 

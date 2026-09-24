@@ -13,6 +13,7 @@ import uuid
 from apps.pages.features.unwinds import catalog
 from apps.pages.features.unwinds.infra import email_file, product_store
 from apps.pages.features.unwinds.product import domain, queries
+from apps.pages.platform import authz as _authz
 
 
 def _R():
@@ -233,7 +234,7 @@ def aprovar(page, row_id, date_str, sid=''):
         linha = lst[idx]
         if linha.get('Status') != domain.STATUS_PENDENTE:
             raise domain.Recusa('unwind_only_pending', 'Only Pending unwinds can be approved')
-        if linha.get('Maker') and linha['Maker'] == (sid or ''):
+        if _authz.is_own_change(linha.get('Maker'), (sid or '')):
             raise domain.Recusa('unwind_maker_is_checker',
                                 'Maker cannot approve their own change', 403)
         linha['Status'] = domain.STATUS_APROVADO
