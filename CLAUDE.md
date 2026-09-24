@@ -41,12 +41,14 @@ OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_<nome>.py
 ## 2. As regras que não se negociam
 
 - **Branch de trabalho: `StreamFlow`. Prod do JPM: `StreamFlow-prod`.** A prod
-  é a dev MAIS um commit no `apps/config.py` — o bloco de seis linhas entre
-  `── ENV:DEV ──` e `── /ENV ──` (dados, bancos e share em
+  é a dev MAIS um commit no `apps/config.py` — o bloco entre `── ENV:DEV ──`
+  e `── /ENV ──` (dados, bancos e share em
   `\\Nawest.ad.jpmorganchase.com\lac\BRA\intra` em vez de dentro do checkout e
-  `I:\`). Código nasce na dev e chega lá por merge (`/commit` publica na dev,
-  `/commitjp` faz o merge). Corrigir direto na prod cria divergência invisível
-  até o merge seguinte conflitar. Nunca presuma `main`.
+  `I:\`, e o Batch Conecta em `New`/`Return` em vez de `New - UAT`/`Return -
+  UAT` — `_CONECTA_SUFFIX`, §551). Código nasce na dev e chega lá por merge
+  (`/commit` publica na dev, `/commitjp` faz o merge). Corrigir direto na
+  prod cria divergência invisível até o merge seguinte conflitar. Nunca
+  presuma `main`.
 - **O bloco DEV BYPASS (`/dev-login`) do `routes.py` nunca vai para o
   repositório.** É removido antes de cada commit e restaurado depois.
 - **Nunca fixe um de-para novo no código.** Tudo que é mapeável se cadastra
@@ -230,6 +232,11 @@ exista no módulo (`__module__` mente sob `functools.wraps`; quem diz é o
 - **`Config.SHARED_DRIVE_ROOT`** (`OTC_SHARED_DRIVE_ROOT`, padrão `I:\`) — os
   destinos do share: confirmações, Electronic Inventory, CETIP, B3 Files, os
   pontos de entrada das recons, o `link.txt` da versão.
+  **O Batch Conecta é `Config.CONECTA_NEW_PATH`/`CONECTA_RETURN_PATH`**
+  (§551): a DEV grava os arquivos gerados em `Batch Conecta\New - UAT` e o
+  Mapping B3 ID lê de `Return - UAT`; a PROD usa `New`/`Return`. O sufixo é o
+  `_CONECTA_SUFFIX` do bloco de ambiente — gerador novo grava pelo
+  `routes.CONECTA_NEW_PATH`, nunca montando a pasta.
 - **`/static/data/...` do navegador também sai do `DATA_DIR`**: a rota
   `static_data_file` resolve pelo `data_path()` e vence o `/static/<path>`
   embutido; serve RefData/CPD/calendários do BANCO quando fresco. Raiz e caminho

@@ -23893,3 +23893,26 @@ JS e não CSS porque uma regra de `<style>` valeria também no Word e desalinhar
 o outro lado. O HTML do `doc_only`, de onde saem o `.doc` e o PDF, ficou
 idêntico byte a byte nos cinco documentos. Documento novo com esse bloco
 inclui o script. `check_conf_partes_align.py`.
+
+## §551 — Batch Conecta da dev em `New - UAT` / `Return - UAT` (2026-09-24)
+
+A dev e a instância do JPM usavam as MESMAS pastas do Batch Conecta. Um Send
+de teste na dev caía na `New` que o Conecta de produção consome, e o Mapping
+B3 ID da dev lia o retorno de produção. O caminho era montado à mão no
+`routes.py` (`RETURN_PATH`/`CONECTA_NEW_PATH`), sem nada que mudasse entre os
+dois ambientes.
+
+Agora o `Config` monta `CONECTA_NEW_PATH` e `CONECTA_RETURN_PATH` a partir do
+`SHARED_DRIVE_ROOT`, e o sufixo mora no bloco de ambiente:
+`_CONECTA_SUFFIX = ' - UAT'` na `StreamFlow`, `''` na `StreamFlow-prod`. Os
+dois continuam aceitando as variáveis `CONECTA_NEW_PATH`/`RETURN_PATH`, que
+vencem. O `routes.py` só lê do `Config`, e todos os geradores (New Deals, Swap
+Bullet/Cashflow, Unwinds, MTM, Accrual, Other Publisher, `pu_fator`) já
+passavam por essas duas constantes. Os dois nomes entraram no
+`_REQUIRED_CONFIG_NAMES`: um `config.py` desatualizado na instância recusa
+subir dizendo o que falta.
+
+O bloco de PROD que o `/commitjp` escreve (skill local, não versionada) ganhou
+a linha `_CONECTA_SUFFIX = ''`. Sem ela a prod quebraria na subida com
+`NameError` no corpo da classe.
+
