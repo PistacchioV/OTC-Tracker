@@ -591,10 +591,8 @@ SHARED_MAILBOX = _pf_mail.SHARED_MAILBOX
 # Os `.bat` não conseguem ler daqui (são do cmd), então a porta deles é conferida
 # pelo `check_bat_files.py` contra esta constante.
 APP_PORT = int(os.getenv('OTC_TRACKER_PORT', '8051'))
-RETURN_PATH = os.getenv('RETURN_PATH', os.path.join(
-    Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Batch Conecta', 'Return'))
-CONECTA_NEW_PATH = os.getenv('CONECTA_NEW_PATH', os.path.join(
-    Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Batch Conecta', 'New'))
+RETURN_PATH = Config.CONECTA_RETURN_PATH        # dev: Return - UAT (config.py)
+CONECTA_NEW_PATH = Config.CONECTA_NEW_PATH      # dev: New - UAT (config.py)
 # Electronic Inventory: one folder per counterparty with Confirmations /
 # Transactional / SSI subfolders. Created here on Reference Data checker approval
 # and in bulk by scripts/create_counterparty_folders.py (kept in sync).

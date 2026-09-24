@@ -60,6 +60,7 @@ class Config(object):
     _DATABASE_DIR_DEFAULT = os.path.join(basedir, 'static', 'data', 'db')
     _SHARED_DRIVE_DEFAULT = 'I:\\'
     _SQLITE_DIR_DEFAULT = basedir
+    _CONECTA_SUFFIX = ' - UAT'   # Batch Conecta: a dev grava em New - UAT / lê Return - UAT
     # ── /ENV ─────────────────────────────────────────────────────────────────
 
     # A PASTA dos bancos, e é dela que sai todo caminho de banco do app — o
@@ -80,6 +81,17 @@ class Config(object):
     # route settings can still override their specific directory.
     SHARED_DRIVE_ROOT = _absolute_path_from_environment('OTC_SHARED_DRIVE_ROOT',
                                                         _SHARED_DRIVE_DEFAULT)
+
+    # O Batch Conecta: `New` é onde os arquivos gerados para a B3 são gravados e
+    # `Return` é de onde o Mapping B3 ID lê o retorno. A dev usa as pastas
+    # `New - UAT`/`Return - UAT` (sufixo no bloco de ambiente) para que um Send
+    # de teste nunca caia na pasta que o Conecta de produção consome.
+    _CONECTA_ROOT = os.path.join(SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos',
+                                 'OTC Tracker', 'Batch Conecta')
+    CONECTA_NEW_PATH = os.getenv('CONECTA_NEW_PATH',
+                                 os.path.join(_CONECTA_ROOT, 'New' + _CONECTA_SUFFIX))
+    CONECTA_RETURN_PATH = os.getenv('RETURN_PATH',
+                                    os.path.join(_CONECTA_ROOT, 'Return' + _CONECTA_SUFFIX))
 
     # A pasta dos DADOS em JSON — os arquivos-dia do cache, os cadastros do
     # /mapping, os tickets, o RefData, o calendário. É o terceiro caminho que
