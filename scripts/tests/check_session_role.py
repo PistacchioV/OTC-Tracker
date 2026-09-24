@@ -2,7 +2,7 @@
 """O papel do CADASTRO alcanca quem ja esta logado.
 
 O `user_role` e gravado na sessao pelo `_set_session`, no login, e nada o relia
-depois: com *Keep me signed in* a sessao dura 30 DIAS. Quem fosse promovido a
+depois: a sessao nao expira por tempo (so pelo IP). Quem fosse promovido a
 `BO` continuava sem o botao da mesa e quem fosse despromovido continuava com ele
 -- e nos dois sentidos nao ha erro nenhum para ver, so uma tela se comportando
 pelo papel de semanas atras. Foi assim que uma pessoa trocada de `ADMIN` para
@@ -33,7 +33,6 @@ Nao encosta em dado real: o DuckDB e criado em tempfile.
 import os
 import sys
 import tempfile
-from datetime import datetime, timedelta
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 sys.path.insert(0, ROOT)
@@ -110,7 +109,9 @@ def cliente(sid, papel):
         s['user_name'] = sid
         s['user_email'] = sid + '@x'
         s['user_role'] = papel
-        s['session_expires_at'] = (datetime.now() + timedelta(days=1)).isoformat()
+        # sessao ja carimbada com o IP do test client (`enforce_session_ip`):
+        # sem isso o carimbo do primeiro request gravaria na sessao
+        s['session_ip'] = '127.0.0.1'
     return cl
 
 

@@ -201,11 +201,14 @@ class ProductionConfig(Config):
     SESSION_COOKIE_SECURE = True
     REMEMBER_COOKIE_SECURE = True
     REMEMBER_COOKIE_DURATION = 3600
-    PERMANENT_SESSION_LIFETIME = timedelta(days=30)
+    # A sessão não expira por tempo (mesa, 24/09/2026): o cookie é renovado a
+    # cada request e só cai se o IP mudar (`routes.enforce_session_ip`). O ano é
+    # só o teto de um navegador que ficou um ano sem abrir o app.
+    PERMANENT_SESSION_LIFETIME = timedelta(days=365)
 
 class DebugConfig(Config):
     DEBUG = True
-    PERMANENT_SESSION_LIFETIME = timedelta(days=30)
+    PERMANENT_SESSION_LIFETIME = timedelta(days=365)
 
 # Load all possible configurations
 config_dict = {

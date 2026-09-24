@@ -23916,3 +23916,38 @@ O bloco de PROD que o `/commitjp` escreve (skill local, não versionada) ganhou
 a linha `_CONECTA_SUFFIX = ''`. Sem ela a prod quebraria na subida com
 `NameError` no corpo da classe.
 
+## §552 — Sessão sem prazo e sem auto-lock: só o IP decide (2026-09-24)
+
+Pedido da mesa: tirar o lock automático depois de horas sem mexer no app e o
+*Keep me signed in*. A única verificação que fica é o IP: igual ao cadastro,
+entra direto; diferente, código por e-mail.
+
+Antes havia três camadas de tempo: o auto-lock do `topbar.html` (3 h sem
+mouse/teclado, contado no `localStorage`, mandava para `/lock`), o teto
+absoluto do `_set_session` (5 h sem o checkbox, 30 dias com, gravado em
+`session_expires_at` e cobrado pelo `enforce_session_expiry`) e o
+`PERMANENT_SESSION_LIFETIME` de 30 dias. O IP só era olhado no LOGIN — com a
+sessão aberta, trocar de rede não pedia nada.
+
+Agora:
+
+- `_set_session(user)` não tem mais `remember_me`: a sessão é sempre
+  permanente e grava `session_ip`;
+- `enforce_session_expiry` virou `enforce_session_ip`: IP do request diferente
+  do `session_ip` encerra a sessão, e o login seguinte cai no 2FA pelo
+  `_handle_existing_user` (o IP novo só é gravado no cadastro depois do código,
+  como antes). Sessão anterior à regra, sem `session_ip`, é CARIMBADA com o IP
+  atual em vez de derrubada: o cookie é assinado, e derrubá-la só faria a mesa
+  digitar o SID de novo;
+- o script de auto-lock saiu do `topbar.html`; o checkbox saiu do
+  `auth-2-sign-in.html` (e o morto do `auth-2-sign-up.html`), e a chave
+  `auth-keep-signed` das três traduções;
+- `PERMANENT_SESSION_LIFETIME` foi a 365 dias. Com o cookie renovado a cada
+  request, é só o teto de um navegador que ficou um ano sem abrir o app — e aí
+  o login pelo SID no mesmo IP continua direto.
+
+O Lock Screen MANUAL (item do menu, `/lock`) continua, com o desbloqueio pelo
+mesmo fluxo de IP. `check_session_ip.py`; o `check_session_role.py` passou a
+montar a sessão com `session_ip`, senão o carimbo do primeiro request
+reemitia o cookie que ele confere não ser reemitido.
+

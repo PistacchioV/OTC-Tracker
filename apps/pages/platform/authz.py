@@ -284,7 +284,7 @@ def refresh_session_role():
     """Faz o papel do CADASTRO alcançar quem já está logado.
 
     O `user_role` é gravado na sessão pelo `_set_session`, no login, e nada o
-    relia depois: com *Keep me signed in* a sessão dura 30 dias, então quem
+    relia depois: a sessão não expira por tempo (só pelo IP), então quem
     fosse promovido a `BO` continuava sem o botão da mesa e quem fosse
     despromovido continuava com ele. Nos dois sentidos não há erro nenhum para
     ver — a tela simplesmente se comporta pelo papel de semanas atrás.
