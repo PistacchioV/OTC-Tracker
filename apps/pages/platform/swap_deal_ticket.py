@@ -1173,3 +1173,86 @@ def confirmation_deal(deal):
         '_conf_withdrawal': has_withdrawal_option(deal),
     })
     return out
+
+
+# ── O arquivo de RETORNO da B3 (Mapping B3 ID) ───────────────────────────────
+# Cada linha do retorno é `seq;B3 ID;controle;STATUS;<o registro que foi>`: a
+# B3 devolve o 0301 que mandamos, inteiro, depois do quarto `;`. É dele que se
+# lê a identificação — pelas posições do layout (Dados Iniciais do 0301):
+#   11-20 Meu Número · 21-28 Parte · 53-60 Contraparte · 85-92 Data início ·
+#   93-100 Data vencimento · 103-118 Valor base 9(14)v9(02).
+# O Meu Número é NOSSO (`MyNumber` na visão do cliente e do banco,
+# `MyNumberMirror` na do Atacama) e casa exato; contas, valor e datas são o
+# plano B, e só com candidato ÚNICO.
+
+RETURN_OK = 'EXECUCAO OK'
+
+
+def parse_return_line(line):
+    """Uma linha do retorno → {b3_id, ok, status, my_number, parte,
+    contraparte, start, maturity, notional_cents}, ou None quando a linha não
+    é o eco de um SWAP 0301 (header, outro sistema, outro código)."""
+    parts = str(line or '').rstrip('\r\n').split(';', 4)
+    if len(parts) < 5:
+        return None
+    rec = parts[4].lstrip()
+    if not rec.startswith('SWAP') or rec[5:6] != '1' or rec[6:10] != '0301' or len(rec) < 118:
+        return None
+    status = parts[3].strip()
+    return {
+        'b3_id': parts[1].strip(),
+        'ok': status.upper() == RETURN_OK,
+        'status': status,
+        'my_number': rec[10:20].strip(),
+        'parte': _digits(rec[20:28]),
+        'contraparte': _digits(rec[52:60]),
+        'start': rec[84:92].strip(),
+        'maturity': rec[92:100].strip(),
+        'notional_cents': int(_digits(rec[102:118]) or 0),
+    }
+
+
+def return_my_numbers(deal):
+    """Os Meu Número que os arquivos do deal levaram: cliente → o da visão
+    do cliente; B2B → o do Banco E o espelho do Atacama (o mesmo contrato,
+    lançado pelas duas pontas)."""
+    keys = ('MyNumber', 'MyNumberMirror') if is_b2b(deal) else ('MyNumber',)
+    return {str(deal.get(k) or '').strip() for k in keys} - {''}
+
+
+def _return_signature(deal):
+    """(conta do cliente, início, vencimento, valor em centavos) do deal — o
+    plano B do casamento. None quando falta algum."""
+    acc = _digits(deal.get('ClientAccount'))
+    start = (iso(parse_date(deal.get('StartDate'))) or '').replace('-', '')
+    mat = (iso(parse_date(deal.get('MaturityDate'))) or '').replace('-', '')
+    val = parse_number(deal.get('Notional'))
+    if not (acc and start and mat and val is not None):
+        return None
+    return acc, start, mat, int(round(float(val) * 100))
+
+
+def match_return(deal, lines, deals=()):
+    """A linha do retorno de `deal` entre `lines` (já parseadas). Pelo Meu
+    Número; sem ele, pelas características — a conta do cliente numa das duas
+    pontas, as duas datas e o valor base —, e só se a linha for a ÚNICA que
+    casa e nenhum OUTRO deal de `deals` casar com ela (ambíguo não chuta).
+    Entre várias linhas do mesmo Meu Número, a `EXECUCAO OK` vence."""
+    nums = return_my_numbers(deal)
+    hits = [ln for ln in lines if ln['my_number'] in nums]
+    if hits:
+        return next((h for h in hits if h['ok']), hits[0])
+    sig = _return_signature(deal)
+    if not sig:
+        return None
+    acc, start, mat, val = sig
+
+    def casa(ln, s):
+        return (s[0] in (ln['parte'], ln['contraparte']) and ln['start'] == s[1]
+                and ln['maturity'] == s[2] and ln['notional_cents'] == s[3])
+
+    cands = [ln for ln in lines if casa(ln, sig)]
+    if len(cands) != 1:
+        return None
+    outros = [d for d in deals if d is not deal and _return_signature(d) == sig]
+    return None if outros else cands[0]

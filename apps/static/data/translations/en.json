@@ -832,6 +832,7 @@
   "swal-mapping-no-new": "No operations with status \"New\", \"Sent\" or \"Error\" to map.",
   "swal-err-title": "Error",
   "swal-mapping-read-error": "Failed to read return files.",
+  "swb-map-folder-missing": "B3 return folder not found:",
   "swal-mapping-no-match": "No matching deals found in return files.",
   "swal-mapping-success-n": "deal(s) mapped successfully.",
   "swal-mapping-error-n": "deal(s) returned error from B3.",

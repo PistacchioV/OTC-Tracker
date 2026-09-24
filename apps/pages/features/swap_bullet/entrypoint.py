@@ -244,6 +244,32 @@ def api_swap_bullet_preview():
                     'codes': queries.codes_for(deal)})
 
 
+@blueprint.route('/api/new-deals/swap-bullet/mapping-b3', methods=['POST'])
+def api_swap_bullet_mapping_b3():
+    """Mapping B3 ID: lê o retorno da B3 (`RETURN_PATH`) e grava B3 ID +
+    `Success` nos deals do arquivo-dia da Trade Date (`ref_date`, dd/mm/aaaa
+    ou ISO). O casamento é pelo Meu Número do 0301 (§554)."""
+    err = _auth()
+    if err:
+        return err
+    payload = request.get_json(silent=True) or {}
+    ref_date = str(payload.get('ref_date') or '').strip()
+    if not ref_date:
+        return jsonify({'ok': False, 'error': 'Missing ref_date'}), 400
+    try:
+        results = commands.map_b3(ref_date, sid=session.get('user_sid', ''))
+    except FileNotFoundError as exc:
+        return jsonify({'ok': False, 'code': 'return_folder_missing',
+                        'params': {'path': _R().RETURN_PATH}, 'error': str(exc)}), 400
+    except ValueError as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 400
+    n = sum(1 for r in results if r.get('saved') and r.get('status') == 'Success')
+    if n:
+        _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                                  'B3 Mapped', PAGE, '{} deal{} mapped'.format(n, '' if n == 1 else 's'))
+    return jsonify({'ok': True, 'results': results})
+
+
 @blueprint.route('/api/new-deals/swap-bullet/send-conecta', methods=['POST'])
 def api_swap_bullet_send():
     """Gera os arquivos dos deals selecionados no `CONECTA_NEW_PATH` (ou

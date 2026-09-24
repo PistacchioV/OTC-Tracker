@@ -832,6 +832,7 @@
   "swal-mapping-no-new": "Nenhuma operação com status \"New\", \"Sent\" ou \"Error\" para mapear.",
   "swal-err-title": "Erro",
   "swal-mapping-read-error": "Falha ao ler arquivos de retorno.",
+  "swb-map-folder-missing": "Pasta de retorno da B3 não encontrada:",
   "swal-mapping-no-match": "Nenhum deal correspondente encontrado nos arquivos de retorno.",
   "swal-mapping-success-n": "deal(s) mapeado(s) com sucesso.",
   "swal-mapping-error-n": "deal(s) retornaram erro da B3.",

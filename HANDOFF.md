@@ -23983,3 +23983,44 @@ confirmação, que são por MESA (`_MC_STAGE_ROLE`), não por maker.
 comparação à mão nos dois lados. Os dez testes que provam a trava da PROD
 ligam `Config.FOUR_EYES = True` no topo, e seguem cobrando o 403.
 
+## §554 — Swap Bullet: Mapping B3 ID pelo retorno e a linha mapeada que voltava a Approved (2026-09-24)
+
+A mesa viu na instância as duas linhas de 17/09 com B3 ID e Status
+`Approved`. A regra do §481 punha `Success` quando o B3 ID ENTRAVA, mas o
+`edit` só sabia disso na edição que TROCAVA o B3 ID: qualquer Save seguinte
+(corrigir outro campo) caía no ramo comum, `Pending` com maker, e o Confirm
+levava a `Approved`. O reimport do DT com "substituir" fazia o mesmo por outro
+caminho (`persist_deals` rebaixava a `Amend` quem não estava `New`,
+preservando o B3 ID). Agora B3 ID presente é `Success` nos dois caminhos, e o
+Confirm segue recusando linha `Success`.
+
+A página não tinha Mapping: o B3 ID só entrava digitado. O botão novo (o
+padrão das páginas de NDF: `ti-refresh` verde depois do Import) chama
+`/api/new-deals/swap-bullet/mapping-b3` com a Trade Date, e o servidor varre
+o `RETURN_PATH`. A B3 devolve cada registro como `seq;B3 ID;controle;STATUS;`
+seguido do 0301 que mandamos, inteiro — então a identificação sai das
+posições do layout: Meu Número (11-20), Parte (21-28), Contraparte (53-60),
+datas (85-100) e Valor base (103-118). O Meu Número é nosso e aleatório
+(`MyNumber` para cliente/banco, `MyNumberMirror` para o espelho do Atacama),
+e casa exato: é ele que separa o swap contra o cliente do swap contra o
+Atacama no mesmo arquivo. O plano B — conta do cliente numa das pontas +
+datas + valor — só vale com candidato único, dos dois lados.
+
+Regras de estado: `EXECUCAO OK` → B3 ID + `Success` + `b3_mapped` (Intrag /
+Pending Confirmation, idempotentes); outro status no eco → `Error` com o
+texto da B3 em `MappingError`; `Sent` sem retorno → `Error` (como as páginas
+de NDF); linha com B3 ID e status atrasado → curada para `Success` (é como se
+conserta a linha presa da instância: basta rodar o Mapping). O arquivo de
+retorno só é apagado quando todas as linhas de swap dele foram consumidas por
+deals daqui — o Swap Cashflow também registra 0301, e apagar o arquivo
+inteiro (como fazem as páginas de NDF com o TER) sumiria com o retorno dele.
+Pasta ausente responde por CÓDIGO (`return_folder_missing`, traduzido na tela).
+
+Achado de passagem: o `.env` desta máquina fixava `RETURN_PATH` e
+`CONECTA_NEW_PATH` nos caminhos antigos, e variável de ambiente vence o
+`config.py` — o `New - UAT`/`Return - UAT` do §551 não valia aqui. As duas
+linhas foram comentadas. Vale conferir o `.env` de quem roda a dev.
+
+`check_swap_bullet.py` §6b2 (15 asserções), com o retorno montado a partir
+dos arquivos do próprio Send.
+
