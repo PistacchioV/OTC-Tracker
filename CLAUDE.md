@@ -1138,6 +1138,18 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   o Strike é o % sobre ele; `Spot` deixa Preço Inicial e Strike em BRANCO e
   obrigatórios. XML só com o valor em BRL. Platform lê os deals do dia por
   `routes._swap_bullet_engine()` (platform não importa feature).
+  **Linha com B3 ID é `Success`, e fica** (§554): editar outro campo ou
+  reimportar o DT substituindo não a devolve a Pending/Amend — era assim que
+  ela chegava a `Approved` COM o B3 ID. **O Mapping B3 ID lê o retorno da
+  B3** (`RETURN_PATH`, botão verde da toolbar, `/mapping-b3`): o retorno
+  ecoa o 0301 depois do 4º `;`, e o casamento é pelo **Meu Número** (pos.
+  11-20; `MyNumber` na visão cliente/banco, `MyNumberMirror` na do Atacama),
+  com conta do cliente + datas + valor base como plano B só com candidato
+  único (`platform/swap_deal_ticket.parse_return_line`/`match_return`). Eco
+  com outro status → `Error` com o texto da B3 (`MappingError`); `Sent` sem
+  retorno → `Error`; B3 ID com status atrasado → curado para `Success`. O
+  arquivo de retorno só é apagado quando TODAS as linhas de swap dele
+  casaram: o Swap Cashflow também registra 0301.
 - **Swap Cashflow e Options EDG são UMA tela e um CATÁLOGO**
   (`features/new_deals/catalog.py` + `pages/new_deals-product.html`, o molde do
   Swap Bullet; 21/09/2026). **Não existe página "Swap CEM"**: o swap da CEM é

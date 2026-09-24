@@ -103,7 +103,10 @@ def persist_deals(deals, sid=''):
     for ref_dt, lst in por_dia.items():
         novas = [d for d, _r in lst]
         n += persistence.upsert(ref_dt, novas)
-        amend = [d['_id'] for d, r in lst if r and (d.get('Status') or 'New') != 'New']
+        # Linha com B3 ID fica `Success` (§554): o registro já existe na B3, e
+        # rebaixá-la a `Amend` a levaria a `Approved` com o B3 ID na tela.
+        amend = [d['_id'] for d, r in lst if r and (d.get('Status') or 'New') != 'New'
+                 and not str(d.get('B3ID') or '').strip()]
         if amend:
             with _R()._cache_lock:
                 fp = persistence.day_path(ref_dt)
@@ -357,6 +360,12 @@ def edit(deal_id, trade_date, changes, sid=''):
             d['Status'] = 'Success'
             d['MappedBy'] = sid
             d['MappedAt'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        elif b3_novo:
+            # A linha JÁ mapeada continua `Success` (§554): o contrato existe
+            # na B3, e editar outro campo não reabre a esteira. Era por aqui que
+            # o Swap Bullet ficava com B3 ID e `Approved` — o Save voltava a
+            # linha para `Pending` e o Confirm seguinte a levava a `Approved`.
+            d['Status'] = 'Success'
         else:
             d['Status'] = 'Pending'
             d['Maker'] = sid
@@ -456,6 +465,114 @@ def delete(items):
             _R()._atomic_write_json(fp, lst)
             _R()._daycache_forget(fp)
     return apagados, nao
+
+
+# ── Mapping B3 ID: o arquivo de retorno (§554) ───────────────────────────────
+
+# Quem o Mapping pode levar a `Error` quando o retorno não a traz: só quem foi
+# ENVIADO e esperava resposta. New/Approved não foram à B3.
+MAPPING_ERRORABLE = ('Sent', 'Error')
+
+
+def _return_files():
+    """[(caminho, [linhas parseadas])] do `RETURN_PATH`: só os arquivos com
+    ao menos um eco de SWAP 0301. Pasta ausente levanta (a tela diz qual)."""
+    root = _R().RETURN_PATH
+    if not _store.isdir(root):
+        raise FileNotFoundError('Return folder not found: {}'.format(root))
+    out = []
+    for fname in sorted(_store.listdir(root)):
+        fpath = os.path.join(root, fname)
+        if not _store.isfile(fpath):
+            continue
+        try:
+            with open(fpath, 'r', encoding='cp1252', errors='replace') as fh:
+                linhas = [domain.parse_return_line(ln) for ln in fh]
+        except OSError as exc:
+            _R().log.warning('[SWAP BULLET] return file unreadable %s: %s', fpath, exc)
+            continue
+        linhas = [ln for ln in linhas if ln]
+        if linhas:
+            out.append((fpath, linhas))
+    return out
+
+
+def map_b3(trade_date, sid=''):
+    """Varre o retorno da B3 e grava o B3 ID nos deals do arquivo-dia de
+    `trade_date`: `EXECUCAO OK` → B3 ID + `Success`; eco com outro status →
+    `Error` com o texto da B3 (`MappingError`); enviado e ausente do retorno →
+    `Error`. A linha que já tem B3 ID e não está `Success` é CURADA para
+    `Success` (§554). Depois da gravação, quem ganhou `Success` dispara o
+    `b3_mapped` (Intrag / Pending Confirmation — idempotentes).
+
+    O arquivo de retorno só é apagado quando TODAS as linhas de swap dele
+    casaram com um deal daqui: o Swap Cashflow também registra 0301, e apagar
+    o arquivo inteiro sumiria com o retorno dele.
+    → [{id, b3_id, status, saved, reason}] só com quem MUDOU."""
+    ref = domain.parse_date(trade_date)
+    if not ref:
+        raise ValueError('invalid trade date: {!r}'.format(trade_date))
+    arquivos = _return_files()
+    todas = [ln for _fp, lns in arquivos for ln in lns]
+    results, disparar, usadas = [], [], set()
+    with _R()._cache_lock:
+        fp = persistence.day_path(datetime(ref.year, ref.month, ref.day))
+        lst = _store.read(fp) if _store.exists(fp) else []
+        lst = [persistence.migrate(e) for e in lst if isinstance(e, dict)]
+        for d in lst:
+            if str(d.get('Status') or '').strip() == 'Canceled':
+                continue
+            antes = (str(d.get('B3ID') or '').strip(), d.get('Status') or 'New')
+            hit = domain.match_return(d, todas, lst)
+            if hit is not None:
+                # No B2B o MESMO contrato volta duas vezes (lançado pelo Banco e
+                # pelo Atacama): as duas linhas são deste deal.
+                nums = domain.return_my_numbers(d)
+                usadas.update(id(ln) for ln in todas if ln is hit or ln['my_number'] in nums)
+            if hit is not None and hit['ok'] and hit['b3_id']:
+                d['B3ID'] = hit['b3_id']
+                d['Status'] = 'Success'
+                d.pop('MappingError', None)
+            elif hit is not None and not hit['ok'] and antes[1] != 'Success':
+                d['Status'] = 'Error'
+                d['MappingError'] = hit['status']
+            elif antes[0] and antes[1] != 'Success':
+                d['Status'] = 'Success'          # já mapeada, esteira atrasada
+            elif hit is None and antes[1] in MAPPING_ERRORABLE and not antes[0]:
+                d['Status'] = 'Error'
+                d['MappingError'] = 'not found in the B3 return files'
+            depois = (str(d.get('B3ID') or '').strip(), d.get('Status') or 'New')
+            if depois == antes:
+                continue
+            if depois[1] == 'Success':
+                d['MappedBy'] = sid
+                d['MappedAt'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                disparar.append(d)
+            results.append({'id': persistence.key_of(d), 'b3_id': depois[0], 'status': depois[1],
+                            'reason': d.get('MappingError', ''), 'entry': d})
+        saved, motivo = True, ''
+        if results:
+            try:
+                _R()._atomic_write_json(fp, lst)
+                _R()._daycache_forget(fp)
+            except Exception as exc:              # noqa: BLE001 — a tela diz o motivo
+                saved, motivo = False, '{}: {}'.format(type(exc).__name__, exc)
+                _R().log.error('[MAPPING-B3] swap bullet day file NOT saved %s: %s', fp, motivo)
+    for r in results:
+        r['saved'] = saved
+        if not saved:
+            r['reason'] = motivo
+            r['b3_id'] = ''
+    if saved:
+        for d in disparar:
+            b3_mapped(d)
+        for fpath, lns in arquivos:
+            if all(id(ln) in usadas for ln in lns):
+                try:
+                    _store.remove(fpath)
+                except OSError as exc:
+                    _R().log.warning('[SWAP BULLET] return file not removed %s: %s', fpath, exc)
+    return results
 
 
 # ── Depois do B3 ID (§481) ───────────────────────────────────────────────────

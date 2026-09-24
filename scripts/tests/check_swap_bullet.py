@@ -418,6 +418,97 @@ def main():
         check('Sent não reenvia', False)
     except ValueError as exc:
         check('Sent não reenvia', 'status Sent' in str(exc))
+    print('== 6b2. Mapping B3 ID pelo arquivo de RETORNO (§554) ==')
+    # O retorno ecoa o 0301 que foi: monta-se a partir dos arquivos que o Send
+    # acabou de gravar. Cliente e B2B no mesmo arquivo; o B2B volta DUAS vezes
+    # (Banco e Atacama lançam o mesmo contrato).
+    ret_dir = os.path.join(tmp, 'return'); os.makedirs(ret_dir, exist_ok=True)
+    R.RETURN_PATH = ret_dir
+    def _rec(nome):
+        return io.open(os.path.join(R.CONECTA_NEW_PATH, nome), encoding='cp1252').read().split('\n')[1]
+    ret_linhas = ['HEADER DO RETORNO',
+                  '00000000000001;26I05774449;2026091738383230;EXECUCAO OK;' + _rec('SWAP_EDG_CLIENTE.txt'),
+                  '00000000000002;26I05760675;2026091738383231;EXECUCAO OK;' + _rec('SWAP_EDG_BANCO.txt'),
+                  '00000000000003;26I05760675;2026091738383232;EXECUCAO OK;' + _rec('SWAP_EDG_ATACAMA.txt')]
+    io.open(os.path.join(ret_dir, 'RET_SWAP.txt'), 'w', encoding='cp1252').write('\n'.join(ret_linhas))
+    io.open(os.path.join(ret_dir, 'RET_TER.txt'), 'w', encoding='cp1252').write('x;y;z;EXECUCAO OK;TER outro sistema')
+    p0 = domain.parse_return_line(ret_linhas[2])
+    check('o eco do 0301 dá Meu Número, contas, datas e valor base pelas posições do layout',
+          p0 and p0['my_number'] == lstb[ib]['MyNumber'] and p0['parte'] == '73760009' and p0['contraparte'] == '85398005'
+          and p0['start'] == '20260915' and p0['maturity'] == '20270607' and p0['notional_cents'] == 34600000)
+    check('header, linha de outro sistema e 0897 não são eco de 0301',
+          domain.parse_return_line(ret_linhas[0]) is None and domain.parse_return_line('a;b;c;EXECUCAO OK;TER x') is None
+          and domain.parse_return_line('a;b;c;EXECUCAO OK;SWAP 10897' + '0' * 200) is None)
+    _disparos = []
+    _bm = commands.b3_mapped
+    commands.b3_mapped = lambda d: _disparos.append(d.get('B3ID'))
+    try:
+        res_map = commands.map_b3('2026-09-16', sid='G777777')
+    finally:
+        commands.b3_mapped = _bm
+    _f, lstm, _ = queries.find(cli['_id'], '2026-09-16')
+    por_id = {e['_id']: e for e in lstm}
+    check('contra cliente: o B3 ID do eco com o Meu Número da visão do cliente, Success',
+          por_id[cli['_id']]['B3ID'] == '26I05774449' and por_id[cli['_id']]['Status'] == 'Success'
+          and por_id[cli['_id']]['MappedBy'] == 'G777777')
+    check('B2B: o B3 ID do contrato com o Atacama, Success',
+          por_id[b2b['_id']]['B3ID'] == '26I05760675' and por_id[b2b['_id']]['Status'] == 'Success')
+    check('o resultado traz os dois, gravados, e o disparo pós-mapeamento roda para os dois',
+          sorted(r['b3_id'] for r in res_map) == ['26I05760675', '26I05774449'] and all(r['saved'] for r in res_map)
+          and sorted(_disparos) == ['26I05760675', '26I05774449'])
+    check('o retorno todo consumido é apagado; o arquivo de outro sistema fica',
+          not os.path.exists(os.path.join(ret_dir, 'RET_SWAP.txt')) and os.path.exists(os.path.join(ret_dir, 'RET_TER.txt')))
+    commands.b3_mapped = lambda d: None
+    try:
+        d_ed = commands.edit(cli['_id'], '2026-09-16', {'Observations': 'ajuste depois do registro'}, sid='H888888')
+    finally:
+        commands.b3_mapped = _bm
+    check('EDITAR a linha já mapeada não a tira de Success (era o Approved com B3 ID)',
+          d_ed['Status'] == 'Success' and d_ed['B3ID'] == '26I05774449')
+    _dconf, _merr = commands.set_status(cli['_id'], '2026-09-16', 'Approved', sid='H888888')
+    check('e o Confirm não leva a linha mapeada a Approved', _dconf is None)
+    # Linha presa antes da correção (B3 ID + Approved) → o Mapping cura.
+    _f, lsts, isx = queries.find(cli['_id'], '2026-09-16')
+    lsts[isx]['Status'] = 'Approved'; R._atomic_write_json(_f, lsts); R._daycache_forget(_f)
+    commands.b3_mapped = lambda d: _disparos.append('cura:' + d.get('B3ID'))
+    try:
+        res_cura = commands.map_b3('2026-09-16', sid='G777777')
+    finally:
+        commands.b3_mapped = _bm
+    check('B3 ID com Approved (a linha presa) volta a Success no Mapping, e o disparo roda de novo',
+          [r['status'] for r in res_cura] == ['Success'] and queries.find(cli['_id'], '2026-09-16')[1][isx]['Status'] == 'Success'
+          and 'cura:26I05774449' in _disparos)
+    # Eco com outro status → Error com o texto da B3; enviado sem retorno → Error.
+    cli_err = dict(cli, B3ID='', Status='Sent')
+    io.open(os.path.join(ret_dir, 'RET_ERR.txt'), 'w', encoding='cp1252').write(
+        '00000000000009;;2026091738383299;CAMPO 126 CONTEUDO INVALIDO;' + _rec('SWAP_EDG_CLIENTE.txt'))
+    _f, lste, iex = queries.find(cli['_id'], '2026-09-16')
+    lste[iex].update(B3ID='', Status='Sent'); R._atomic_write_json(_f, lste); R._daycache_forget(_f)
+    res_err = commands.map_b3('2026-09-16', sid='G777777')
+    e_err = queries.find(cli['_id'], '2026-09-16')[1][iex]
+    check('eco com status da B3 ≠ EXECUCAO OK → Error com o texto da B3, sem B3 ID',
+          e_err['Status'] == 'Error' and e_err['MappingError'] == 'CAMPO 126 CONTEUDO INVALIDO' and not e_err['B3ID'])
+    check('   e o retorno processado (mesmo com erro) sai da pasta', not os.path.exists(os.path.join(ret_dir, 'RET_ERR.txt')))
+    lste = queries.find(cli['_id'], '2026-09-16')[1]; lste[iex].update(Status='Sent'); lste[iex].pop('MappingError', None)
+    R._atomic_write_json(_f, lste); R._daycache_forget(_f)
+    commands.map_b3('2026-09-16', sid='G777777')
+    e_nf = queries.find(cli['_id'], '2026-09-16')[1][iex]
+    check('enviado e ausente do retorno → Error dizendo que não achou',
+          e_nf['Status'] == 'Error' and 'not found' in e_nf['MappingError'])
+    # Sem Meu Número: pelas características, só com candidato único.
+    alheio = dict(queries.find(cli['_id'], '2026-09-16')[1][iex], MyNumber='0000000000')
+    p_cli = domain.parse_return_line('1;26I05774449;x;EXECUCAO OK;' + _rec('SWAP_EDG_CLIENTE.txt'))
+    check('sem o Meu Número, conta do cliente + datas + valor casam (candidato único)',
+          domain.match_return(alheio, [p_cli], [alheio]) is p_cli)
+    check('   e dois deals com a mesma assinatura não chutam',
+          domain.match_return(alheio, [p_cli], [alheio, dict(alheio)]) is None)
+    # Reimport com "substituir" de uma linha mapeada não a rebaixa a Amend.
+    _f, lstr, irx = queries.find(cli['_id'], '2026-09-16')
+    lstr[irx].update(B3ID='26I05774449', Status='Success'); R._atomic_write_json(_f, lstr); R._daycache_forget(_f)
+    commands.persist_deals([dict(cli, _replace=True)], sid='B222222')
+    e_re = queries.find(cli['_id'], '2026-09-16')[1][irx]
+    check('reimport SUBSTITUINDO a linha mapeada mantém Success e o B3 ID', e_re['Status'] == 'Success' and e_re['B3ID'] == '26I05774449')
+
     apagados, nao = commands.delete([{'deal_id': cli['_id'], 'trade_date': '2026-09-16'}])
     check('delete apaga do arquivo', apagados == 1 and not nao and queries.find(cli['_id'], '2026-09-16')[2] is None)
 

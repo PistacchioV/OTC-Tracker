@@ -312,7 +312,8 @@ var STATUS_META = {
     'Pending':  { cls: 'text-bg-warning' },
     'Approved': { cls: 'text-bg-secondary' },
     'Sent':     { cls: 'badge-sent' },
-    'Success':  { cls: 'text-bg-success' }
+    'Success':  { cls: 'text-bg-success' },
+    'Error':    { cls: 'text-bg-danger' }
 };
 function statusBadge(status) {
     var txt = (status == null ? '' : String(status)).replace(/<[^>]*>/g, '').trim() || 'New';
@@ -391,6 +392,7 @@ $(document).ready(function() {
             "B" +
             "<'refDateWrap ms-2 d-flex align-items-center'>" +
             "<'importBtn ms-2 me-2'>" +
+            "<'refreshBtn me-2'>" +
             "<'clearFiltersBtn me-2'>" +
             "<'conditionalActions ms-2 d-flex align-items-center gap-2'>" +
             ">" +
@@ -499,6 +501,26 @@ $(document).ready(function() {
                 importBtn.addEventListener('click', runImport);
             }
 
+            // ── Mapping B3 ID (o retorno da B3, §554) ──────────────────────
+            // O padrão das páginas de NDF: só ícone, verde, depois do Import. A
+            // lista sai do ARQUIVO do dia da Trade Date no servidor (não da
+            // tabela, que mostra só a última busca); o casamento é pelo Meu
+            // Número que o 0301 levou.
+            var refreshBtnContainer = document.querySelector('.refreshBtn');
+            if (refreshBtnContainer && !document.getElementById('mappingB3Btn')) {
+                var mappingBtn = document.createElement('button');
+                mappingBtn.id = 'mappingB3Btn';
+                mappingBtn.className = 'btn btn-sm btn-success bg-gradient btn-toolbar-all btn-toolbar-refresh';
+                mappingBtn.setAttribute('type', 'button');
+                mappingBtn.setAttribute('data-bs-toggle', 'tooltip');
+                mappingBtn.setAttribute('data-bs-placement', 'bottom');
+                mappingBtn.setAttribute('data-bs-title', t('swal-mapping-b3-title', 'Mapping B3 ID'));
+                mappingBtn.setAttribute('data-bs-custom-class', 'tooltip-success');
+                mappingBtn.innerHTML = '<i class="ti ti-refresh"></i>';
+                refreshBtnContainer.appendChild(mappingBtn);
+                mappingBtn.addEventListener('click', runMappingB3);
+            }
+
             // ── Clear Filters ──────────────────────────────────────────────
             var clearFiltersContainer = document.querySelector('.clearFiltersBtn');
             if (clearFiltersContainer && !document.getElementById('clearFiltersBtn')) {
@@ -572,6 +594,58 @@ $(document).ready(function() {
         ENTRIES = ENTRIES.filter(function(e){ return !(e && set[e._id || e.Deal]); });
         ids.forEach(function(x){ selected.delete(x); });
         renderAll();
+    }
+
+    // ── Mapping B3 ID ─────────────────────────────────────────────────────────
+    var _mappingRunning = false;
+    function runMappingB3() {
+        var btn = document.getElementById('mappingB3Btn');
+        if (_mappingRunning) return;
+        _mappingRunning = true;
+        if (btn) { btn.style.pointerEvents = 'none'; btn.innerHTML = '<i class="ti ti-loader-2 ti-spin"></i>'; }
+        function done() {
+            _mappingRunning = false;
+            if (btn) { btn.style.pointerEvents = ''; btn.innerHTML = '<i class="ti ti-refresh"></i>'; }
+        }
+        fetch('/api/new-deals/swap-bullet/mapping-b3', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin', body: JSON.stringify({ ref_date: apiRefDate() }) })
+        .then(function(r){ return r.json(); })
+        .then(function(res){
+            done();
+            if (!res.ok) {
+                var txt = res.code === 'return_folder_missing'
+                    ? t('swb-map-folder-missing', 'B3 return folder not found:') + ' ' + ((res.params && res.params.path) || '')
+                    : (res.error || t('swal-mapping-read-error', 'Failed to read return files.'));
+                Swal.fire({ title: t('swal-err-title', 'Error'), text: txt, icon: 'error',
+                            confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+                return;
+            }
+            var ok = 0, err = 0, failed = 0;
+            (res.results || []).forEach(function(r){
+                if (r.saved === false) { failed++; return; }
+                if (r.status === 'Success') ok++; else if (r.status === 'Error') err++;
+                if (r.entry) {
+                    var i = ENTRIES.findIndex(function(x){ return x && (x._id || x.Deal) === r.id; });
+                    if (i >= 0) ENTRIES[i] = r.entry;
+                }
+            });
+            renderAll();
+            var msg = '';
+            if (ok)     msg += ok + ' ' + t('swal-mapping-success-n', 'deal(s) mapped successfully.') + ' ';
+            if (err)    msg += err + ' ' + t('swal-mapping-error-n', 'deal(s) returned error from B3.') + ' ';
+            if (failed) msg += failed + ' ' + t('swal-mapping-failed-n', 'deal(s) could NOT be saved \u2014 see the log and try again.');
+            if (!msg) msg = t('swal-mapping-no-match', 'No matching deals found in return files.');
+            Swal.fire({ title: t('swal-mapping-b3-title', 'Mapping B3 ID'), text: msg.trim(),
+                        icon: failed ? 'error' : (ok ? 'success' : (err ? 'warning' : 'info')),
+                        confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#198754',
+                        timer: 3500, timerProgressBar: true, showConfirmButton: true });
+            if (window.fetchNotifications) window.fetchNotifications();
+        })
+        .catch(function(e){
+            done();
+            Swal.fire({ title: t('swal-err-title', 'Error'), text: t('swal-request-failed', 'Request failed:') + ' ' + e.message,
+                        icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+        });
     }
 
     // ── Trade Date do import: o campo mostra dd/mm/yyyy, o POST vai em ISO ──
