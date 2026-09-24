@@ -90,6 +90,11 @@ def amortization_rows():
     return _R()._mapping_rows('swap-amortizacao') or []
 
 
+def swap_index_rows():
+    """O cadastro Swap Index (`swap-index`: código B3 × curva × categoria)."""
+    return _R()._mapping_rows('swap-index') or []
+
+
 def codes_for(deal):
     """Os códigos B3 do deal: os do Bullet (`platform/swap_new_deals.codes_for`)
     mais o do Tipo de Amortização (`amortization`, 9(02) do 0034)."""

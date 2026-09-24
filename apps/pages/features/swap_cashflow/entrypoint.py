@@ -80,8 +80,9 @@ def api_swap_cashflow_import():
         motivo = '%s: %s' % (type(exc).__name__, exc)
         return _err('swc_import_failed', 'Import failed: ' + motivo, 500, params={'reason': motivo})
     if not result.get('deals'):
-        return _err('swc_no_deal_ticket', 'No Deal Ticket found — the file needs a sheet/page with '
-                    'Valor Base and Vencimento.', 400, ignored=result.get('ignored', []))
+        return _err('swc_no_deal_ticket', 'Nothing to import — the file needs a Deal Ticket (sheet/page '
+                    'with Valor Base and Vencimento) or, in the e-mail body, an Onshore Swap section '
+                    'of the Trade Recap.', 400, ignored=result.get('ignored', []))
     if not dry_run and result.get('imported'):
         _notify('Deals Imported', '%d deal(s) from %s' % (result['imported'], f.filename))
     result['file'] = f.filename

@@ -488,6 +488,137 @@ def _main(R, app, catalog, bullet, bullet_q, commands, domain, entrypoint, queri
     outra = cl.post('/api/new-deals/opt-edg/cache/search', json={'filters': []}).get_json()
     check('o opt-edg segue no stub (vazio com o contrato)', outra.get('success') and outra.get('backend') is False)
 
+    print('== 9. o Internal Trade Recap no CORPO do e-mail (§555): só a Onshore Swap ==')
+    import email.message
+    def _p(txt):
+        return "<p class=MsoNormal>%s</p>" % txt
+    def _lbl(rot, val):
+        return _p("%s<span style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp; </span>%s" % (rot, val))
+    corpo = ''.join([
+        "<html><head><style>p.MsoNormal{margin:0}</style></head><body><div class=WordSection1>",
+        _p('Hi team,'), _p('We have just executed the below transaction. Booking details below.'),
+        "<ul><li>XCCY onshore booked</li><li>XCCY offshore booked</li><li>TRS - could you please proceed with booking?</li></ul>",
+        "<table class=MsoNormalTable><tr><td>Gross</td><td>1,195,000.00</td></tr><tr><td>Net AFR</td><td>801,968.00</td></tr></table>",
+        _p('<u>Please note that there is a JPM LE to each swap below</u>:'),
+        _p("<b><u><span lang=EN-US>Vibra Energia SA SPN : </span></u></b><u>1962701</u>"), _p('&nbsp;'),
+        _p('<b><u>I) Onshore Cross-Currency Swap</u></b>'),
+        _lbl('Party A', 'Banco J.P.Morgan'), _lbl('Party B', 'Vibra Energia S.A.'), _lbl('Agreement', 'CGD'),
+        _lbl('Effective', '11 Sep 2026 (T+5)'), _lbl('Maturity', '11 Sep 2029 (3yrs from Effective)'),
+        _lbl('Notional', 'USD 30,000,000'), _lbl('Initial FX', '[5.1150]'), _lbl('Notional', 'BRL [153,450,000]'),
+        _lbl('Vibra Recs', 'USD [5.69]% semiannual act/360 (equiv to S+152)'),
+        _lbl('Vibra Pays', 'CDI + [0.15]% semiannual bd/252'), _lbl('Amortization', 'At maturity'), _p('&nbsp;'),
+        _p('<b><u>Inicio</u></b>&nbsp;&nbsp;&nbsp;&nbsp; <b><u>Datas de Fluxo</u></b>'),
+        _p('&nbsp;&nbsp;11-Sep-26&nbsp;&nbsp;&nbsp; 11-Mar-27'), _p('&nbsp;&nbsp;11-Mar-27&nbsp;&nbsp;&nbsp; 13-Sep-27'),
+        _p('&nbsp;&nbsp;13-Sep-27&nbsp;&nbsp;&nbsp; 13-Mar-28'), _p('&nbsp;&nbsp;13-Mar-28&nbsp;&nbsp;&nbsp; 11-Sep-28'),
+        _p('&nbsp;&nbsp;11-Sep-28&nbsp;&nbsp;&nbsp; 12-Mar-29'), _p('&nbsp;&nbsp;12-Mar-29&nbsp;&nbsp;&nbsp; 11-Sep-29'), _p('&nbsp;'),
+        _p('<b><u>II) Brazil Jan-30 LTN TRS</u></b> - <a href="mailto:x">@LATAM NY MO TEAM</a> – could you please proceed with the booking?'),
+        _lbl('Party A', 'J.P.Morgan Chase Bank N.A.'), _lbl('Party B', 'Vibra Energia S.A.'), _lbl('Agreement', 'ISDA'),
+        _lbl('Effective Date', '11 Sep 2026 (T+5)'), _lbl('Maturity', '01 Jul 2029'), _lbl('Notional', 'USD 30,000,000'),
+        _lbl('Bonds', 'Brazil Jul-29 LTN'), _lbl('Qty Bonds', '[220,057]'), _lbl('Bond PU', '[695.274406177]'),
+        _lbl('ISIN', 'BRSTNCLTN8K6'), _lbl('Vibra Recs', 'Total Return of Brazil LTN Bonds'),
+        _lbl('Vibra Pays', 'USD [5.79]% bullet act/360'), _lbl('Amortization', 'At maturity'), _p('&nbsp;'),
+        _p('<b><u>III) Brazil Offshore Cross-Currency Swap</u></b>'),
+        _lbl('Party A', 'J.P.Morgan Chase Bank N.A.'), _lbl('Party B', 'Vibra Energia S.A.'), _lbl('Agreement', 'ISDA'),
+        _lbl('Effective Date', '11 Sep 2026'), _lbl('Maturity', '01 Jul 2029'), _lbl('Notional', 'USD 30,000,000'),
+        _lbl('Initial FX', '[5.1150]'), _lbl('Notional', 'BRL 153,450,000'),
+        _lbl('Vibra Recs', 'USD [5.79]% bullet act/360'), _lbl('Vibra Pays', 'BRL [14.00]% bd/252'),
+        _lbl('Amortization', 'At maturity'),
+        "</div></body></html>"])
+    em = email.message.EmailMessage()
+    em['Subject'] = 'Internal Trade Recap - $30M 3yrs USD EPP + Convertibility + Swap - 03 Sep 2026'
+    em['From'] = 'desk@jpmorgan.com'; em['To'] = 'ops@jpmorgan.com'
+    em.set_content('plain'); em.add_alternative(corpo, subtype='html')
+    eml = em.as_bytes()
+    itens = sw.read_upload('recap.eml', eml)
+    check('o corpo vira TRÊS seções (a tabela do AFR e a lista do "Hi team" não são seção)',
+          [k for k, _t, _p2 in itens] == ['recap'] * 3
+          and [t for _k, t, _p2 in itens] == ['I) Onshore Cross-Currency Swap',
+                                              'II) Brazil Jan-30 LTN TRS - @LATAM NY MO TEAM – could you please proceed with the booking?',
+                                              'III) Brazil Offshore Cross-Currency Swap'],
+          [t for _k, t, _p2 in itens])
+    sec_trs = itens[1][2]
+    check('as linhas do TRS ficam NA seção dele (não se somam ao swap de cima)',
+          itens[0][2]['notionals'] == [('USD', 30000000.0), ('BRL', 153450000.0)] and len(itens[0][2]['legs']) == 2
+          and sec_trs['fields'].get('Agreement') == 'ISDA' and sec_trs['fields'].get('Effective') == '11 Sep 2026 (T+5)')
+    res9 = commands.import_upload('recap.eml', eml, datetime(2026, 9, 3), sid='A111111', dry_run=True)
+    check('só a Onshore Swap é importada; o TRS e a offshore voltam como ignoradas',
+          len(res9['deals']) == 1 and len(res9['ignored']) == 2 and 'TRS' in res9['ignored'][0]
+          and 'Offshore' in res9['ignored'][1])
+    d9 = res9['deals'][0]
+    check('contraparte pela SPN do cabeçalho, datas do Effective/Maturity, valor base em BRL',
+          d9['SPN'] == '1962701' and d9['StartDate'] == '2026-09-11' and d9['MaturityDate'] == '2029-09-11'
+          and d9['Notional'] == '153450000.00' and d9['Currency'] == 'BRL' and d9['Type'] == 'Fluxo de Caixa', d9)
+    check('Notional (Foreign Ccy) = USD 30 mi e FX Start = 5.115', d9['NotionalFC'] == '30000000.00' and d9['FXStart'] == '5.115')
+    check('Curva A = a perna que o BANCO recebe (a que a Vibra paga): CDI + 0,15%, JUROS, bd/252',
+          d9['CurveA'] == 'CDI' and d9['CurveACategory'] == 'JUROS' and d9['CurveASign'] == '+'
+          and float(d9['CurveARate']) == 0.15 and float(d9['CurveAPct']) == 100 and d9['CurveADCC'] == 'BD/252', d9)
+    check('Curva B = a perna em dólar, 5,69% act/360; sem a curva no cadastro, a categoria fica EM BRANCO',
+          d9['CurveB'] == 'USD' and d9['CurveBCategory'] == '' and float(d9['CurveBRate']) == 5.69
+          and d9['CurveBDCC'] == 'ACT/360' and not d9['VcpText'], d9)
+    fl9 = d9['CashFlows']
+    check('o cronograma: seis fluxos, datas do e-mail, 100% de amortização só no último (At maturity)',
+          len(fl9) == 6 and fl9[0]['StartDate'] == '2026-09-11' and fl9[0]['PaymentDate'] == '2027-03-11'
+          and fl9[-1]['PaymentDate'] == '2029-09-11' and fl9[-1]['AmortizationPct'] == '100'
+          and all(f['AmortizationPct'] == '0' for f in fl9[:-1]) and d9['Flows'] == '6', fl9)
+    check('Adesão CGD (o Agreement) e LOB em BRANCO (o recap não diz; não se chuta)',
+          d9['Adhesion'] == 'CGD' and d9['LOB'] == '')
+    lac9 = domain.missing_for_send(d9, sw.codes_for(d9), sw.own_accounts(), '')
+    cods9 = {x['code'] for x in lac9}
+    check('lacunas estruturadas: LOB e a categoria da Curva B (a do dólar)',
+          'swc_no_lob' in cods9 and any(x['code'] == 'swc_no_category' and x['params']['side'] == 'B' for x in lac9)
+          and not any(x['code'] == 'swc_no_category' and x['params']['side'] == 'A' for x in lac9), sorted(cods9))
+    # Com a curva USD cadastrada (a mesa: USD é TAXAS DE CAMBIO, código 220 no
+    # Swap Index), a categoria sai dos cadastros e a perna de moeda vai ao 0301.
+    _mr = R._mapping_rows
+    def _mr_usd(key, *a, **k):
+        rows = list(_mr(key, *a, **k) or [])
+        if key == 'swap-bullet-curve':
+            rows.append({'DT CURVE': 'USD', 'MATCH': 'Exact', 'B3 CODE': '220', 'NOTES': 'DOLAR DOS EUA'})
+        if key == 'swap-index' and not any(str(r.get('Codigo Referencia Externa')) == '220' for r in rows):
+            rows.append({'Codigo Referencia Externa': '220', 'Nome Curva': 'DOLAR DOS EUA',
+                         'Nome Categoria': 'TAXAS DE CAMBIO', 'STATUS': 'ACTIVE'})
+        if key == 'swap-index' and not any(str(r.get('Codigo Referencia Externa')) == 'C03' for r in rows):
+            rows.append({'Codigo Referencia Externa': 'C03', 'Nome Curva': 'DI', 'Nome Categoria': 'JUROS',
+                         'STATUS': 'ACTIVE'})
+        return rows
+    R._mapping_rows = _mr_usd
+    try:
+        d9b = commands.import_upload('recap.eml', eml, datetime(2026, 9, 3), sid='A111111', dry_run=True)['deals'][0]
+        check('com USD → 220 cadastrado: Curva B = TAXAS DE CAMBIO (pelo Swap Index), Curva A = JUROS',
+              d9b['CurveBCategory'] == 'TAXAS DE CAMBIO' and d9b['CurveACategory'] == 'JUROS', (d9b['CurveACategory'], d9b['CurveBCategory']))
+        check('   e o Clean Coupon da perna de moeda nasce do Initial FX (5.115)', d9b['CurveBCleanCoupon'] == '5.115')
+        lb = domain.missing_for_send(d9b, commands.queries.codes_for(d9b), sw.own_accounts(), '')
+        cb = {x['code'] for x in lb}
+        check('   a Data de Cotação da perna de moeda é LACUNA (o recap não a diz; nada de D-1 presumido)',
+              'swc_fx_quote' in cb and 'swc_no_category' not in cb and 'swc_fx_coupon' not in cb, sorted(cb))
+        d9b['CurveBQuote'] = 'D-1'
+        lb2 = {x['code'] for x in domain.missing_for_send(d9b, commands.queries.codes_for(d9b), sw.own_accounts(), '')}
+        check('   preenchida (D-1), a lacuna some', 'swc_fx_quote' not in lb2, sorted(lb2))
+        acc = {'JPM': '73760009'}
+        d9b['ClientAccount'] = '12345678'
+        vals = domain.contract_record_values(d9b, 'client', acc, commands.queries.codes_for(d9b), '1234567890')
+        check('0301: a Contraparte (Curva B, moeda) leva código 220, taxa 5,69 e sinal +, sem bloco VCP',
+              vals['34'] == '220' and vals['37'] == '0056900' and vals['36'] == '00' and vals['44'].strip() == ''
+              and vals['46'].strip() == '', (vals['34'], vals['36'], vals['37']))
+        check('0301: Cupom Limpo da Contraparte = 5,1150000 (9(08)v9(07)) e Data de Cotação = 01 (D-1)',
+              vals['49'] == '000000051150000' and vals['50'] == '01', (vals['49'], vals['50']))
+        check('0301: a Parte (Curva A, CDI) fica sem cupom limpo', vals['47'].strip() == '' and vals['48'].strip() == '')
+        check('   e Curva A = C03 (DI + 0,15%)', vals['27'] == 'C03' and vals['30'] == '0001500', (vals['27'], vals['30']))
+    finally:
+        R._mapping_rows = _mr
+    check('fx_quote_code: D-1/1/01 → 01; D0 → 00; D-7 e texto → vazio',
+          [domain.fx_quote_code({'CurveBQuote': v}, 'B') for v in ('D-1', '1', '01', 'D0', 'D-7', 'PTAX')]
+          == ['01', '01', '01', '00', '', ''])
+    r = cl.post(api + '/import-file?dry_run=1', data={'file': (io.BytesIO(eml), 'Internal Trade Recap.msg'),
+                                                      'trade_date': '03/09/2026'}, content_type='multipart/form-data')
+    j9 = r.get_json()
+    check('a API: o e-mail renomeado entra pelo CONTEÚDO e responde o deal da Onshore Swap',
+          r.status_code == 200 and len(j9['deals']) == 1 and j9['deals'][0]['SPN'] == '1962701', r.status_code)
+    so_trs = eml.replace(b'I) Onshore Cross-Currency Swap', b'I) Onshore Cross-Currency Option')
+    r = cl.post(api + '/import-file?dry_run=1', data={'file': (io.BytesIO(so_trs), 'r.eml')}, content_type='multipart/form-data')
+    check('recap sem Onshore Swap: 400 com código e as seções ignoradas',
+          r.status_code == 400 and r.get_json()['code'] == 'swc_no_deal_ticket' and len(r.get_json()['ignored']) == 3)
+
 
 if __name__ == '__main__':
     sys.exit(main())

@@ -52,11 +52,23 @@ def _rand10():
 
 def parse_upload(filename, data, trade_iso):
     """O arquivo do dropzone → (deals, ignorados). Lido pelo CONTEÚDO
-    (`platform/swap_new_deals.read_upload`): xlsx, pdf, ou o e-mail (.msg/
-    .eml) que carrega um dos dois. Cada aba/página que é Deal Ticket vira um
+    (`platform/swap_new_deals.read_upload`): xlsx, pdf, o e-mail (.msg/.eml)
+    que carrega um dos dois, ou o Internal Trade Recap no CORPO do e-mail —
+    deste, só as seções Onshore Swap (§555). Cada aba/página que é Deal Ticket vira um
     deal com o cronograma da tabela Cash Flow dela."""
     deals, ignorados = [], []
     for kind, title, payload in _sw.read_upload(filename, data):
+        if kind == 'recap':
+            # O e-mail traz várias operações; só a Onshore Swap vai à B3
+            # (mesa, 24/09/2026). As outras voltam como ignoradas, pelo título.
+            if not _dtk.is_onshore_swap(payload):
+                ignorados.append(title)
+                continue
+            deal = domain.deal_from_recap(payload, trade_iso)
+            deal['_sheet'] = title
+            enrich(deal)
+            deals.append(deal)
+            continue
         if kind == 'grid':
             grade, flows = domain.split_cashflow_grid(payload)
             if not _dtk.is_dt_grid(grade):
@@ -157,6 +169,18 @@ def enrich(deal):
     horizontal), mais o tipo de amortização na grafia do cadastro e a
     contagem de fluxos."""
     _sw.enrich(deal)
+    # Categoria em branco (o Trade Recap, §555) sai dos CADASTROS: curva →
+    # código B3 (swap-bullet-curve) → categoria (Swap Index). Só o que está em
+    # branco — o que o DT ou a mesa escreveu fica.
+    codes = _sw.codes_for(deal)
+    index_rows = queries.swap_index_rows()
+    for side in ('A', 'B'):
+        k = 'Curve%sCategory' % side
+        if not str(deal.get(k) or '').strip():
+            deal[k] = _dtk.category_by_code(index_rows, codes.get('curve' + side))
+        if _dtk.is_fx_category(deal.get(k)) and not str(deal.get('Curve%sCleanCoupon' % side) or '').strip() \
+                and str(deal.get('FXStart') or '').strip():
+            deal['Curve%sCleanCoupon' % side] = deal['FXStart']
     deal['AmortizationType'] = domain.amortization_label(queries.amortization_rows(),
                                                          deal.get('AmortizationType', ''))
     deal[domain.SCHEDULE_FIELD] = domain.normalize_schedule(deal.get(domain.SCHEDULE_FIELD))
