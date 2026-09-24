@@ -1654,6 +1654,7 @@
   "map-saved": "Guardado",
   "map-deleted": "Eliminado",
   "map-copied": "Copiado",
+  "map-export-failed": "Error al exportar",
   "map-tab-publisher": "Publisher × B3 (NDF)",
   "map-tab-le-accronym": "Legal Entity × Accronym",
   "map-tab-le-spn": "Legal Entity × SPN",

@@ -171,8 +171,11 @@
                                 <i class="ti ti-download me-1"></i><span data-lang="map-export">Export</span>
                             </button>
                             <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="#" id="mapExportCsv"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li>
                                 <li><a class="dropdown-item" href="#" id="mapExportCopy"><i class="ti ti-copy me-1"></i> Copy</a></li>
+                                <li><a class="dropdown-item" href="#" id="mapExportCsv"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li>
+                                <li><a class="dropdown-item" href="#" id="mapExportExcel"><i class="ti ti-file-spreadsheet me-1"></i> Excel</a></li>
+                                <li><a class="dropdown-item" href="#" id="mapExportPrint"><i class="ti ti-printer me-1"></i> Print</a></li>
+                                <li><a class="dropdown-item" href="#" id="mapExportPdf"><i class="ti ti-file-type-pdf me-1"></i> PDF</a></li>
                             </ul>
                         </div>
                         <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" type="button" id="mapClearFilters">
@@ -624,6 +627,96 @@
                 if (window.Swal) Swal.fire({ icon: 'success', title: t('map-copied', 'Copied'), timer: 1100, showConfirmButton: false });
             })
             .catch(function () {});
+    });
+
+    // Excel/PDF carregam a biblioteca só no clique: são ~1,5 MB que a tela
+    // não usa para mais nada. Locais (a instância roda sem internet).
+    var LIBS = {};
+    function loadLib(src) {
+        if (!LIBS[src]) LIBS[src] = new Promise(function (ok, ko) {
+            var el = document.createElement('script');
+            el.src = '{{ config.ASSETS_ROOT }}/plugins/' + src;
+            el.onload = ok; el.onerror = function () { delete LIBS[src]; ko(new Error(src)); };
+            document.head.appendChild(el);
+        });
+        return LIBS[src];
+    }
+    function exportTitle() { return 'Mapping - ' + t(typeOf(CUR).lang, typeOf(CUR).label); }
+    function exportFail() {
+        if (window.Swal) Swal.fire({ icon: 'error', title: t('map-export-failed', 'Export failed') });
+    }
+    function download(blob, name) {
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        document.body.appendChild(a); a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+    }
+    document.getElementById('mapExportExcel').addEventListener('click', function (e) {
+        e.preventDefault();
+        loadLib('xlsx/xlsx.full.min.js').then(function () {
+            // Toda célula como TEXTO: código B3 que parece número (`26E04610365`,
+            // §477) viraria `#NULL!` no Excel, e `'C '` perderia o espaço.
+            var m = exportMatrix().map(function (r) {
+                return r.map(function (v) { return String(v == null ? '' : v); });
+            });
+            var ws = XLSX.utils.aoa_to_sheet(m);
+            Object.keys(ws).forEach(function (k) {
+                if (k.charAt(0) !== '!') { ws[k].t = 's'; ws[k].z = '@'; }
+            });
+            ws['!cols'] = m[0].map(function (_, ci) {
+                var w = m.reduce(function (mx, r) { return Math.max(mx, (r[ci] || '').length); }, 8);
+                return { wch: Math.min(w + 2, 60) };
+            });
+            var wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Mapping');
+            XLSX.writeFile(wb, 'mapping_' + CUR + '.xlsx');
+        }).catch(exportFail);
+    });
+    document.getElementById('mapExportPrint').addEventListener('click', function (e) {
+        e.preventDefault();
+        var m = exportMatrix();
+        var html = '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(exportTitle()) + '</title>' +
+            '<style>body{font:11px Arial,sans-serif;margin:16px}h1{font-size:15px}' +
+            'table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:3px 6px;' +
+            'text-align:center;vertical-align:middle}th{background:#eee}</style></head><body>' +
+            '<h1>' + esc(exportTitle()) + '</h1><table><thead><tr>' +
+            m[0].map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+            m.slice(1).map(function (r) {
+                return '<tr>' + r.map(function (v) { return '<td>' + esc(v == null ? '' : v) + '</td>'; }).join('') + '</tr>';
+            }).join('') + '</tbody></table></body></html>';
+        var w = window.open('', '_blank');
+        if (!w) { exportFail(); return; }
+        w.document.open(); w.document.write(html); w.document.close();
+        w.focus();
+        setTimeout(function () { w.print(); }, 300);
+    });
+    document.getElementById('mapExportPdf').addEventListener('click', function (e) {
+        e.preventDefault();
+        loadLib('datatables/pdfmake.min.js')
+            .then(function () { return loadLib('datatables/vfs_fonts.js'); })
+            .then(function () {
+                var m = exportMatrix();
+                var body = m.map(function (r, ri) {
+                    return r.map(function (v) {
+                        return { text: String(v == null ? '' : v), style: ri ? 'td' : 'th' };
+                    });
+                });
+                pdfMake.createPdf({
+                    pageOrientation: m[0].length > 5 ? 'landscape' : 'portrait',
+                    pageSize: 'A4',
+                    pageMargins: [20, 30, 20, 30],
+                    content: [
+                        { text: exportTitle(), style: 'title' },
+                        { table: { headerRows: 1, body: body }, layout: 'lightHorizontalLines' }
+                    ],
+                    styles: {
+                        title: { fontSize: 12, bold: true, margin: [0, 0, 0, 8] },
+                        th: { fontSize: 7, bold: true, alignment: 'center', fillColor: '#eeeeee' },
+                        td: { fontSize: 7, alignment: 'center' }
+                    }
+                }).download('mapping_' + CUR + '.pdf');
+            }).catch(exportFail);
     });
 
     // ── Add / Edit (modal glass) ─────────────────────────────────────────────
