@@ -63,6 +63,8 @@ _REQUIRED_CONFIG_NAMES = (
     'DATABASE_ACCESS_PATHS',   # a lista que o validate_database_paths confere
     'SHARED_DRIVE_ROOT',       # a raiz do share
     'DATA_DIR',                # a pasta dos JSON (cache, cadastros, tickets)
+    'CONECTA_NEW_PATH',        # Batch Conecta › New (dev: New - UAT)
+    'CONECTA_RETURN_PATH',     # Batch Conecta › Return (dev: Return - UAT)
 )
 
 
