@@ -799,7 +799,13 @@ def vcp_text(deal, width=320):
     Excel da mesa o monta — inclusive o travessão (–) entre os itens e o
     'Cupom limpo = Strike'. Segmentos sem valor caem fora; acentos saem
     (a fórmula tirava ã/ç/ó — aqui saem todos); o resultado é cortado em
-    `width` e completado com espaços pelo motor do File Interpreter."""
+    `width` e completado com espaços pelo motor do File Interpreter.
+
+    Swap SEM perna VCP (o cross-currency do Trade Recap, §555) não tem
+    denominação: devolve '' em vez de uma frase feita só de rótulos."""
+    if 'VCP' not in (norm(deal.get('CurveACategory')), norm(deal.get('CurveBCategory'))) \
+            and not str(deal.get('VcpCurve') or '').strip():
+        return ''
     parts = [
         '%s : %s Código %s' % (deal.get('VcpCurve', ''), _proper(deal.get('VcpCategory', '')),
                                deal.get('VcpCode', '')),
@@ -1256,3 +1262,220 @@ def match_return(deal, lines, deals=()):
         return None
     outros = [d for d in deals if d is not deal and _return_signature(d) == sig]
     return None if outros else cands[0]
+
+
+# ── O TRADE RECAP no corpo do e-mail (Swap Cashflow, §555) ───────────────────
+# O swap da CEM não chega em planilha: chega no CORPO do "Internal Trade
+# Recap", em parágrafos do Outlook (`<p class=MsoNormal>`), não em tabela —
+# a única <table> do corpo é a do AFR. Forma (e-mail da mesa de 03/09/2026):
+#
+#   Vibra Energia SA SPN : 1962701          ← cliente + SPN (vale até o próximo)
+#   I) Onshore Cross-Currency Swap          ← uma SEÇÃO por swap
+#   Party A   Banco J.P.Morgan
+#   Party B   Vibra Energia S.A.
+#   Agreement CGD
+#   Effective 11 Sep 2026 (T+5)
+#   Maturity  11 Sep 2029 (3yrs from Effective)
+#   Notional  USD 30,000,000
+#   Initial FX [5.1150]
+#   Notional  BRL [153,450,000]
+#   Vibra Recs USD [5.69]% semiannual act/360 (equiv to S+152)
+#   Vibra Pays CDI + [0.15]% semiannual bd/252
+#   Amortization At maturity
+#   Inicio     Datas de Fluxo               ← o cronograma, também em parágrafos
+#   11-Sep-26  11-Mar-27
+#
+# Só a seção ONSHORE vai à B3 (a offshore e o TRS são booking de fora).
+
+from html.parser import HTMLParser as _HTMLParser
+import html as _html_mod
+
+_BLOCK_TAGS = {'p', 'br', 'div', 'tr', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table'}
+
+
+class _Lines(_HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.out, self.cur, self.skip = [], [], 0
+
+    def _flush(self):
+        txt = re.sub(r'[ \t ]+', ' ', ''.join(self.cur)).strip()
+        if txt:
+            self.out.append(txt)
+        self.cur = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ('style', 'script', 'head', 'title'):
+            self.skip += 1
+        elif tag in _BLOCK_TAGS:
+            self._flush()
+        elif tag == 'td':
+            self.cur.append(' \t ')
+
+    def handle_endtag(self, tag):
+        if tag in ('style', 'script', 'head', 'title'):
+            self.skip = max(0, self.skip - 1)
+        elif tag in _BLOCK_TAGS:
+            self._flush()
+
+    def handle_data(self, data):
+        if not self.skip:
+            self.cur.append(data.replace('\r', ' ').replace('\n', ' '))
+
+
+def html_to_lines(html_text):
+    """O corpo HTML → as linhas de texto como o leitor as vê (um parágrafo
+    por linha, espaços do Outlook colapsados). Texto puro passa por linha."""
+    s = str(html_text or '')
+    if '<' not in s:
+        return [re.sub(r'[ \t ]+', ' ', ln).strip() for ln in s.splitlines() if ln.strip()]
+    p = _Lines()
+    p.feed(s)
+    p.close()
+    p._flush()
+    return p.out
+
+
+_RECAP_SECTION = re.compile(r'^\s*([IVX]+|\d{1,2})\s*[).]\s*([A-Za-z].*)$')
+_RECAP_SPN = re.compile(r'^(.*?)\bSPN\b\s*[:#-]?\s*(\d{3,})', re.I)
+_RECAP_LEG = re.compile(r'^(.+?)\s+(Recs|Receives|Rec|Pays|Pay)\b\s*[:\-]?\s*(.+)$', re.I)
+_RECAP_FIELDS = (('PARTY A', 'PartyA'), ('PARTY B', 'PartyB'), ('AGREEMENT', 'Agreement'),
+                 ('EFFECTIVE DATE', 'Effective'), ('EFFECTIVE', 'Effective'), ('START DATE', 'Effective'),
+                 ('MATURITY DATE', 'Maturity'), ('MATURITY', 'Maturity'),
+                 ('INITIAL FX', 'InitialFX'), ('FX START', 'InitialFX'), ('AMORTIZATION', 'Amortization'),
+                 ('AMORTISATION', 'Amortization'), ('NOTIONAL', 'Notional'))
+_RECAP_DATE = re.compile(r'\b(\d{1,2}[-/ ](?:[A-Za-z]{3,9})[-/ ]\d{2,4}|\d{1,2}/\d{1,2}/\d{2,4})\b')
+
+
+def is_onshore_swap(section):
+    """Só o swap ONSHORE vai à B3: o e-mail traz várias operações (o XCCY
+    offshore, o TRS, o EPP), e a mesa importa só 'Onshore … Swap' (mesa,
+    24/09/2026). O título decide."""
+    t = norm((section or {}).get('title'))
+    return 'ONSHORE' in t and 'SWAP' in t
+
+
+def recap_date(text):
+    """'11 Sep 2026 (T+5)' / '11-Sep-26' / '11/09/2026' → date ou None."""
+    m = _RECAP_DATE.search(str(text or ''))
+    return parse_date(re.sub(r'\s+', '-', m.group(1))) if m else None
+
+
+def is_trade_recap(lines):
+    """O corpo é um trade recap de swap? (uma linha de SPN, uma seção
+    numerada com 'Swap' e as linhas Party A / Effective / Maturity)."""
+    up = [norm(ln) for ln in lines]
+    return (any(_RECAP_SPN.match(ln) for ln in lines)
+            and any(_RECAP_SECTION.match(ln) and 'SWAP' in norm(ln) for ln in lines)
+            and any(u.startswith('PARTYA') for u in up) and any(u.startswith('MATURITY') for u in up))
+
+
+def parse_trade_recap(lines):
+    """As SEÇÕES de swap do recap: [{title, client, spn, fields{...},
+    notionals[(ccy, valor)], legs[{who, dir, text}], flows[(início, pagamento)]}].
+    Sem nenhum casamento de nome com cadastro — isso é do `commands`."""
+    secoes, cliente, spn, cur, cron = [], '', '', None, False
+    for ln in lines:
+        m = _RECAP_SPN.match(ln)
+        if m and not _RECAP_SECTION.match(ln):
+            cliente, spn = m.group(1).strip(' :-'), m.group(2)
+            cur, cron = None, False
+            continue
+        m = _RECAP_SECTION.match(ln)
+        if m and spn:
+            # Qualquer título numerado DEPOIS de um cliente abre seção —
+            # inclusive o que não é swap (o TRS, o EPP): senão as linhas dele se
+            # somariam à seção de cima. Quem escolhe o que importar é o chamador
+            # (`is_onshore_swap`). Antes do SPN é o texto do e-mail, não seção.
+            cur = {'title': ln.strip(), 'client': cliente, 'spn': spn, 'fields': {},
+                   'notionals': [], 'legs': [], 'flows': []}
+            secoes.append(cur)
+            cron = False
+            continue
+        if cur is None:
+            continue
+        u = norm(ln)
+        if u.startswith('INICIO') or 'DATASDEFLUXO' in u or u.startswith('STARTDATEPAYMENTDATE'):
+            cron = True
+            continue
+        if cron:
+            datas = [parse_date(re.sub(r'\s+', '-', d)) for d in _RECAP_DATE.findall(ln)]
+            datas = [d for d in datas if d]
+            if len(datas) >= 2:
+                cur['flows'].append((datas[0], datas[1]))
+                continue
+            if datas or not ln.strip():
+                continue
+            cron = False                       # a tabela acabou
+        up = strip_accents(ln).upper()
+        hit = False
+        for rot, campo in _RECAP_FIELDS:
+            if up.startswith(rot) and (len(up) == len(rot) or not up[len(rot)].isalnum()):
+                val = ln[len(rot):].strip(' :\t-')
+                if campo == 'Notional':
+                    mm = re.match(r'\s*\[?\s*([A-Z]{3})\b\s*\[?\s*([\d.,]+)', val.upper())
+                    if mm:
+                        cur['notionals'].append((mm.group(1), parse_number(mm.group(2))))
+                else:
+                    cur['fields'].setdefault(campo, val)
+                hit = True
+                break
+        if hit:
+            continue
+        m = _RECAP_LEG.match(ln)
+        if m:
+            d = norm(m.group(2))
+            cur['legs'].append({'who': m.group(1).strip(), 'dir': 'REC' if d.startswith('REC') else 'PAY',
+                                'text': m.group(3).strip()})
+    return secoes
+
+
+_LEG_DCC = re.compile(r'\b(act/360|act/365|30/360|bd/252|du/252|dc/360)\b', re.I)
+
+
+def recap_leg(text):
+    """'CDI + [0.15]% semiannual bd/252' → {curve, pct, sign, rate, dcc};
+    'USD [5.69]% …' → curve USD, taxa 5.69; '110% CDI' → pct 110. Colchetes
+    (o recap marca o que é indicativo) são ignorados."""
+    t = re.sub(r'[\[\]]', '', str(text or '')).strip()
+    dcc = (_LEG_DCC.search(t).group(1).upper() if _LEG_DCC.search(t) else '')
+    m = re.match(r'([\d.,]+)\s*%\s*(?:of\s+)?(?:the\s+)?([A-Z]{2,6})\b', t, re.I)
+    if m:
+        return {'curve': m.group(2).upper(), 'pct': m.group(1), 'sign': '+', 'rate': '0', 'dcc': dcc}
+    m = re.match(r'([A-Z]{2,6})\s*([+-])\s*([\d.,]+)\s*%', t, re.I)
+    if m:
+        return {'curve': m.group(1).upper(), 'pct': '100', 'sign': m.group(2), 'rate': m.group(3), 'dcc': dcc}
+    m = re.match(r'([A-Z]{2,6})\s+([\d.,]+)\s*%', t, re.I)
+    if m:
+        return {'curve': m.group(1).upper(), 'pct': '100', 'sign': '+', 'rate': m.group(2), 'dcc': dcc}
+    m = re.match(r'([\d.,]+)\s*%', t)
+    if m:
+        return {'curve': 'PRE', 'pct': '100', 'sign': '+', 'rate': m.group(1), 'dcc': dcc}
+    return {'curve': '', 'pct': '', 'sign': '+', 'rate': '', 'dcc': dcc}
+
+
+def category_by_code(index_rows, code):
+    """A categoria B3 de um código de curva pelo cadastro Swap Index
+    (`swap-index`: `Codigo Referencia Externa` → `Nome Categoria`): C03 → JUROS,
+    220 → TAXAS DE CAMBIO. Só linha ACTIVE; sem resposta → ''. É por aqui que
+    a perna do Trade Recap ganha categoria (§555) — nunca por uma lista no
+    código."""
+    alvo = str(code or '').strip().upper()
+    if not alvo:
+        return ''
+    for r in index_rows or []:
+        if str(r.get('Codigo Referencia Externa', '') or '').strip().upper() != alvo:
+            continue
+        if norm(r.get('STATUS', 'ACTIVE')) not in ('', 'ACTIVE'):
+            continue
+        return str(r.get('Nome Categoria', '') or '').strip().upper()
+    return ''
+
+
+FX_CATEGORY = 'TAXAS DE CAMBIO'
+
+
+def is_fx_category(category):
+    """Perna de MOEDA (dólar + cupom): no 0301 ela leva a cotação inicial no
+    Cupom Limpo (47/49) e a defasagem na Data de Cotação (48/50)."""
+    return norm(category) == norm(FX_CATEGORY)

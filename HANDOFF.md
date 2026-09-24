@@ -24024,3 +24024,72 @@ linhas foram comentadas. Vale conferir o `.env` de quem roda a dev.
 `check_swap_bullet.py` §6b2 (15 asserções), com o retorno montado a partir
 dos arquivos do próprio Send.
 
+## §555 — Swap Cashflow: o Internal Trade Recap no corpo do e-mail (2026-09-24)
+
+A mesa soltou no dropzone do Swap Cashflow o `.msg` "Internal Trade Recap -
+$30M 3yrs USD EPP + Convertibility + Swap", e o import respondeu "No Deal
+Ticket found". A mesa lembrou que o swap da CEM NÃO chega em planilha: chega no
+corpo do e-mail. Essa decisão não estava registrada em lugar nenhum — o §526
+dizia o contrário (o Cashflow lendo o Deal Ticket do Bullet, com a tabela Cash
+Flow SUPOSTA) —, e é por isso que ela fica aqui agora.
+
+O corpo não é tabela: cada linha é um `<p class=MsoNormal>` (Party A, Effective,
+"Vibra Recs USD [5.69]% semiannual act/360"…), e até o cronograma "Início /
+Datas de Fluxo" vem em parágrafos. A única `<table>` do corpo é a do AFR
+(Gross / IBT Cost / Net AFR) — era ela que o import lia como grade e recusava.
+E o e-mail traz VÁRIAS operações: "I) Onshore Cross-Currency Swap", "II) Brazil
+Jan-30 LTN TRS", "III) Brazil Offshore Cross-Currency Swap".
+
+O leitor mora na horizontal (`platform/swap_deal_ticket.py`, puro):
+`html_to_lines` (um parágrafo por linha) → `is_trade_recap` → `parse_trade_recap`
+(seções numeradas sob a linha `<Cliente> SPN : n`; Party A/B, Agreement,
+Effective, Maturity, os Notional, Initial FX, as pernas "<quem> Recs/Pays" e o
+cronograma) → `recap_leg` (curva, %, sinal, taxa, DCC; colchetes ignorados). O
+`read_upload` entrega cada seção como `kind='recap'`, e o `commands` do
+Cashflow importa só as que `is_onshore_swap` aceita (título com Onshore E Swap —
+mesa, 24/09/2026); as outras voltam em `ignored`, pelo título.
+
+Duas armadilhas que o exemplo real mostrou: (1) o título do TRS não tem "Swap",
+e a primeira versão só abria seção para título com "Swap" — as linhas do TRS
+iam se somar ao swap onshore; agora QUALQUER título numerado depois de um SPN
+abre seção. (2) "Effective Date" e "Maturity Date" são as grafias das seções II
+e III.
+
+Do recap ao deal (`swap_cashflow/domain.recap_parts` / `deal_from_recap`), na
+MESMA forma do Deal Ticket: Parte A = a perna que o BANCO recebe (a que o
+cliente paga — "Vibra Pays CDI + 0.15%"); valor base = o notional em BRL (a B3
+registra em reais), o da moeda em Notional (Foreign Ccy), `Initial FX` em FX
+Start, os DCC por curva, `Agreement` na Adesão, `At maturity` = 0% nos fluxos
+intermediários e 100% no último.
+
+**A categoria das pernas sai dos cadastros** (mesa, 24/09/2026: "USD é Taxas
+de Câmbio", código 220 — DOLAR DOS EUA — no Swap Index). A primeira versão
+tinha uma lista no código (CDI/DI/PRE → JUROS); saiu. Agora é curva do recap →
+código B3 pelo `swap-bullet-curve` → `Nome Categoria` do `swap-index` pelo
+código (`swap_deal_ticket.category_by_code`, no `enrich` do Cashflow, só onde
+está em branco). A linha `USD → 220` se cadastra no /mapping › Swap Bullet
+Curve; o Swap Index tem também `USD` (DOLAR COMERCIAL EXPONENCIAL) e `U30`
+(30/360) — é o cadastro que escolhe, não um casamento pelo texto.
+
+**A perna TAXAS DE CAMBIO no 0301** (4.2.7 v00003): percentual, código,
+sinal e taxa (5,69) nos campos da curva, como qualquer perna que não é VCP; e
+os campos 47/49 ("Cupom Limpo — Cotação Cupom Limpo Curva Moeda ou VCP") com a
+COTAÇÃO INICIAL da moeda — a coluna `Curve X Clean Coupon`, que nasce do FX
+Start (o `Initial FX` do recap) —, mais os 48/50 (Data de Cotação, 00 = D0 …
+05 = D-5) pela coluna `Curve X Quote`. O gerador só preenchia esses quatro
+campos para VCP.
+
+O que segue EM ABERTO, como lacuna (o Send recusa, a tela diz):
+- **a Data de Cotação da perna de moeda** (`swc_fx_quote`): o recap não a
+  diz, e a PTAX de D-1 é só o costume — a mesa preenche `Curve B Quote`;
+- **a LOB**: o recap não a diz (§517: não se chuta);
+- **a curva USD no cadastro** (`swc_no_category` enquanto não houver).
+
+De passagem: o `vcp_text` escrevia a denominação VCP (uma frase feita só de
+rótulos) em swap SEM perna VCP; agora devolve ''.
+
+O `.msg` real não está na dev: o teste usa um `.eml` com as três operações do
+e-mail em parágrafos do Outlook (`check_swap_cashflow.py` §9). O `.msg` do
+Outlook passa pelo `extract_msg.htmlBody` — conferir na instância com o
+arquivo real.
+

@@ -201,8 +201,9 @@ def read_upload(filename, data, _depth=0):
     (grade de uma aba ou de uma tabela HTML) ou 'text' (página de PDF).
 
     Lido pelo CONTEÚDO, nunca pela extensão. O e-mail (.msg/.eml) entra pelos
-    ANEXOS que são Deal Ticket (xlsx/pdf); sem anexo que sirva, pelas tabelas
-    do corpo. Levanta ValueError para o que não é nenhum dos formatos."""
+    ANEXOS que são Deal Ticket (xlsx/pdf); sem anexo que sirva, pelo Trade
+    Recap do corpo (`kind` 'recap', uma seção por operação) ou, não sendo
+    recap, pelas tabelas do corpo. Levanta ValueError para o que não é nenhum dos formatos."""
     k = kind_of(data)
     nome = str(filename or '')
     if k == 'xlsx':
@@ -220,6 +221,12 @@ def read_upload(filename, data, _depth=0):
             if kind_of(ad) in ('xlsx', 'pdf'):
                 out.extend((kk, an + ' › ' + t, p) for kk, t, p in read_upload(an, ad, _depth + 1))
         if not out and corpo:
+            # O Internal Trade Recap (§555): as operações vêm em PARÁGRAFOS no
+            # corpo, uma seção numerada por operação — cada seção sai como
+            # 'recap' e quem importa escolhe (o Cashflow leva só Onshore Swap).
+            linhas = _dtk.html_to_lines(corpo)
+            if _dtk.is_trade_recap(linhas):
+                return [('recap', s['title'], s) for s in _dtk.parse_trade_recap(linhas)]
             out = [('grid', 'e-mail table %d' % (i + 1), g) for i, g in enumerate(grids_from_html(corpo))]
         return out
     raise ValueError('unsupported file — drop the Deal Ticket as .xlsx or .pdf, '

@@ -384,6 +384,87 @@ def deal_from_raw(raw, flows, trade_date_iso, extras=None):
     return deal
 
 
+# ── Do Trade Recap (corpo do e-mail) ao deal (§555) ─────────────────────────
+
+def recap_parts(section):
+    """Uma seção do recap (`swap_deal_ticket.parse_trade_recap`) → (raw,
+    flows, extras) na MESMA forma do Deal Ticket, para o deal nascer pelo
+    `deal_from_raw` de sempre.
+
+    Quem é Parte A: a NOSSA perna é a que o banco RECEBE — a que o cliente
+    PAGA ('Vibra Pays CDI + 0.15%'). Valor base = o notional em BRL (a B3
+    registra em reais); o da moeda vai em Notional (Foreign Ccy) e a paridade
+    em FX Start. Amortização 'At maturity' põe 100% no último fluxo."""
+    f = section.get('fields') or {}
+    pa, pb = f.get('PartyA', ''), f.get('PartyB', '')
+    nosso, cliente = (pa, pb) if dtk._is_ours(pa) or not dtk._is_ours(pb) else (pb, pa)
+    legs = section.get('legs') or []
+
+    def banco_recebe(leg):
+        return (leg['dir'] == 'PAY') != dtk._is_ours(leg['who'])
+
+    rec = next((lg for lg in legs if banco_recebe(lg)), None)
+    pag = next((lg for lg in legs if lg is not rec), None)
+    a, b = dtk.recap_leg(rec['text'] if rec else ''), dtk.recap_leg(pag['text'] if pag else '')
+    brl = next((v for ccy, v in section.get('notionals') or [] if ccy == 'BRL'), None)
+    fc = next(((ccy, v) for ccy, v in section.get('notionals') or [] if ccy != 'BRL'), None)
+    notional = brl if brl is not None else (fc[1] if fc else None)
+    ini, fim = dtk.recap_date(f.get('Effective')), dtk.recap_date(f.get('Maturity'))
+    raw = {
+        '_title': section.get('title', ''),
+        'Client': cliente or section.get('client', ''),
+        'SPN': section.get('spn', ''),
+        'StartDate': dtk.iso(ini) if ini else '',
+        'MaturityDate': dtk.iso(fim) if fim else '',
+        'Notional': '' if notional is None else ('BRL %.2f' % notional if brl is not None
+                                                 else '%s %.2f' % (fc[0], notional)),
+        # O banco "segura" a perna que recebe: é o que o `deal_from_raw` lê
+        # para pôr essa perna na Curva A.
+        'VanillaHolder': nosso or 'Banco J.P.Morgan',
+        'VcpHolder': cliente,
+        'PremiumSchedule': 'Não',
+    }
+    for pref, leg in (('vanilla_', a), ('vcp_', b)):
+        raw[pref + 'Curve'] = leg['curve']
+        raw[pref + 'Category'] = '-'     # quem diz é o cadastro, no `enrich`
+        raw[pref + 'Pct'] = leg['pct']
+        raw[pref + 'Sign'] = leg['sign']
+        raw[pref + 'Rate'] = leg['rate']
+    amort = f.get('Amortization', '')
+    no_venc = 'MATURITY' in dtk.norm(amort) or 'VENCIMENTO' in dtk.norm(amort)
+    pares = section.get('flows') or []
+    flows = [{'StartDate': dtk.iso(i), 'PaymentDate': dtk.iso(p),
+              'AmortizationPct': ('100' if k == len(pares) - 1 else '0') if no_venc else ''}
+             for k, (i, p) in enumerate(pares)]
+    extras = {'vanilla_DCC': a['dcc'], 'vcp_DCC': b['dcc'], 'AmortizationType': amort,
+              'Adhesion': f.get('Agreement', '')}
+    if fc:
+        extras['NotionalFC'] = '%.2f' % fc[1]
+    fx = dtk.parse_number(f.get('InitialFX'))
+    if fx is not None:
+        extras['FXStart'] = str(fx)
+    return raw, flows, extras
+
+
+def deal_from_recap(section, trade_date_iso):
+    """A seção Onshore Swap do recap → o deal do cashflow. As categorias das
+    pernas nascem em BRANCO: o `enrich` as tira dos cadastros (curva → código
+    B3 → categoria no Swap Index); sem cadastro, lacuna `swc_no_category`."""
+    raw, flows, extras = recap_parts(section)
+    adesao = extras.pop('Adhesion', '')
+    deal = deal_from_raw(raw, flows, trade_date_iso, extras)
+    for side, pref in (('A', 'vanilla_'), ('B', 'vcp_')):
+        cat = raw[pref + 'Category']
+        deal['Curve' + side + 'Category'] = '' if cat == '-' else cat
+    if 'VCP' not in (deal['CurveACategory'], deal['CurveBCategory']):
+        deal['VcpCurve'] = ''
+        deal['VcpText'] = ''
+    if adesao:
+        deal['Adhesion'] = adesao.strip().upper()
+    deal['Source'] = 'Trade Recap'
+    return deal
+
+
 def make_deal_id(deal):
     return dtk.make_deal_id(deal, prefix=ID_PREFIX)
 
@@ -418,6 +499,24 @@ def _blank(n):
 def contract_header_values(participant, today_ymd):
     return {'1': 'SWAP ', '2': '0', '3': '0301', '4': str(participant or '').ljust(20)[:20],
             '5': today_ymd, '6': '00003'}
+
+
+def fx_clean_coupon(deal, side):
+    """A cotação inicial da perna de moeda: o Clean Coupon da curva, ou o FX
+    Start do deal (o `Initial FX` do recap). → número ou None."""
+    v = dtk.parse_number(deal.get('Curve%sCleanCoupon' % side))
+    return v if v is not None else dtk.parse_number(deal.get('FXStart'))
+
+
+def fx_quote_code(deal, side):
+    """A Data de Cotação da perna de moeda, no código do layout (00 = D0 …
+    05 = D-5), lida da coluna `Curve X Quote` ('D-1', '1', '01'). Fora de 0-5 →
+    ''. O recap NÃO a diz: em branco é lacuna, nunca um D-1 presumido."""
+    s = str(deal.get('Curve%sQuote' % side) or '').strip().upper().replace(' ', '')
+    m = re.fullmatch(r'D?-?0?(\d)', s)
+    if not m or int(m.group(1)) > 5:
+        return ''
+    return '%02d' % int(m.group(1))
 
 
 def contract_record_values(deal, view, accounts, codes, my_number):
@@ -467,7 +566,17 @@ def contract_record_values(deal, view, accounts, codes, my_number):
     text = str(deal.get('VcpText') or '').strip() or dtk.vcp_text(deal)
     for base, cl_base, side in ((41, 47, parte), (44, 49, contra)):
         c = dtk._curve(deal, side['curve'])
-        if c['category'] == 'VCP':
+        if dtk.is_fx_category(c['category']):
+            # Perna de MOEDA (§555): o Cupom Limpo é a COTAÇÃO inicial da moeda
+            # ("Cotação Cupom Limpo Curva Moeda ou VCP", 47/49) e a Data de
+            # Cotação é a defasagem D-n (48/50); os blocos VCP ficam em branco.
+            lado = side['curve']
+            vals[str(base)] = _blank(22)
+            vals[str(base + 1)] = _blank(5)
+            vals[str(base + 2)] = _blank(320)
+            vals[str(cl_base)] = dtk.b3_num(fx_clean_coupon(deal, lado), 8, 7) or _blank(15)
+            vals[str(cl_base + 1)] = fx_quote_code(deal, lado) or _blank(2)
+        elif c['category'] == 'VCP':
             vals[str(base)] = dtk.b3_num(1, 14, 8)
             vals[str(base + 1)] = d(deal.get('VcpCode')).zfill(5)[-5:] if d(deal.get('VcpCode')) else _blank(5)
             vals[str(base + 2)] = text[:320].ljust(320) if side is parte else _blank(320)
@@ -578,6 +687,19 @@ def missing_for_send(deal, codes, accounts, amort_code):
                           value=str(deal.get('AmortizationType'))))
     if dtk.norm(deal.get('LOB')) not in ('CEM', 'EDG'):
         out.append(lacuna('swc_no_lob', 'LOB (CEM or EDG)'))
+    for side in ('A', 'B'):
+        if dtk.is_fx_category(deal.get('Curve' + side + 'Category')):
+            if fx_clean_coupon(deal, side) is None:
+                out.append(lacuna('swc_fx_coupon', 'Curve %s (currency): initial FX quote — FX Start or '
+                                  'Clean Coupon' % side, side=side))
+            if not fx_quote_code(deal, side):
+                out.append(lacuna('swc_fx_quote', 'Curve %s (currency): Quote date D-n (D0 to D-5)'
+                                  % side, side=side))
+        if not str(deal.get('Curve' + side + 'Category') or '').strip():
+            out.append(lacuna('swc_no_category', 'Curve %s category (%s) — register the curve in /mapping '
+                              '› Swap Bullet Curve (its B3 code gives the category in Swap Index)'
+                              % (side, deal.get('Curve' + side) or '?'), side=side,
+                              curve=str(deal.get('Curve' + side) or '')))
     for side in ('A', 'B'):
         if dtk.norm(deal.get('Curve' + side + 'Category')) == 'JUROSINTERNACIONAIS':
             out.append(lacuna('swc_intl_curve', 'Curve %s is JUROS INTERNACIONAIS — the SOFR / TERM SOFR '

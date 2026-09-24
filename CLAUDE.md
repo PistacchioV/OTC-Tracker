@@ -1186,6 +1186,26 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   Cashflow (`routes._swap_cashflow_engine`) — sem isso o Generate do Monitor não
   achava a operação —, e o backfill tem as famílias da pasta `Swap/Cashflow`.
   `check_swap_cashflow.py`.
+- **O swap da CEM chega no CORPO do "Internal Trade Recap", não em planilha**
+  (mesa, 24/09/2026, §555). O corpo é PARÁGRAFO do Outlook (`<p
+  class=MsoNormal>`), não tabela — a única `<table>` é a do AFR, e era ela que
+  o import lia e recusava. O leitor (`swap_deal_ticket.html_to_lines` →
+  `parse_trade_recap`) separa o e-mail em SEÇÕES numeradas (`I)`, `II)`…) sob
+  a linha `<Cliente> SPN : n`; **toda** seção numerada abre uma nova, senão as
+  linhas do TRS se somariam ao swap de cima. **Só `Onshore … Swap` é
+  importada** (`is_onshore_swap`): o e-mail traz o XCCY offshore, o TRS e o
+  EPP, que voltam como ignorados. Parte A = a perna que o BANCO recebe (a que
+  o cliente PAGA); valor base = o notional em BRL, o da moeda em Notional
+  (Foreign Ccy), `Initial FX` em FX Start; `At maturity` = 100% no último
+  fluxo. **A categoria das pernas sai dos CADASTROS**, nunca de lista no
+  código: curva do recap → código B3 (`swap-bullet-curve`) → `Nome Categoria`
+  no Swap Index (`swap-index`, pelo código). USD é **TAXAS DE CAMBIO**, código
+  220 (mesa, 24/09/2026) — a linha `USD → 220` se cadastra no /mapping.
+  **Perna TAXAS DE CAMBIO no 0301**: taxa e sinal nos campos de juros, e a
+  cotação inicial no **Cupom Limpo** (47/49, "Curva Moeda ou VCP"), que nasce
+  do FX Start; a **Data de Cotação D-n** (48/50) é a coluna `Curve X Quote` e,
+  como o recap não a diz, é lacuna (`swc_fx_quote`) — nunca D-1 presumido. A
+  LOB também fica em branco (o recap não diz).
 - **Swap Calculator: a `Denominação` da curva VCP é CONTRATO, e o IR sai do
   CADASTRO** (§479). A posição traz nas colunas 70/75 o texto livre da curva
   (`(3M SOFR + 0.75%)*1.1765 A/360`), e o `*1.1765` só existe ali. Quem o lê é
