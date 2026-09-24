@@ -547,7 +547,16 @@ da subida e NÃO liga o farol; os caminhos do espelho são dinâmicos.
 traz nome/e-mail/cargo; SID no banco **e** IP igual ao gravado → sessão
 direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
 `/verify-2fa`. Sessão: `authenticated`, `user_sid`, `user_name`, `user_email`,
-`user_role`.
+`user_role`, `session_ip`.
+
+- **A sessão só cai se o IP mudar** (mesa, 24/09/2026, §552): não há prazo,
+  auto-lock por inatividade nem *Keep me signed in*. Ela é permanente (cookie
+  renovado a cada request, `PERMANENT_SESSION_LIFETIME` de 365 dias) e o
+  `enforce_session_ip` a encerra quando o IP do request difere do
+  `session_ip`; o login seguinte cai no código por e-mail. Sessão sem
+  `session_ip` é carimbada, não derrubada — teste que monta sessão à mão e
+  confere se o cookie foi reemitido tem de pôr o `session_ip`. O Lock Screen
+  MANUAL do menu continua.
 
 - **Papéis** (`Role` no banco): `ADMIN`, `BO`, `MO`, `FO`, `INSTITUTIONAL`,
   `HUB`. **Master** é por SID (`_MASTER_SIDS = {'E930179'}` em

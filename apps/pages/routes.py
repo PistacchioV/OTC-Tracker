@@ -335,27 +335,27 @@ def _handle_api_exception(exc):
 
 
 # ==============================================================================
-# SESSION EXPIRY — server-side check (independente do browser restaurar cookies)
+# SESSÃO PRESA AO IP — a única verificação contínua (mesa, 24/09/2026)
 # ==============================================================================
+# A sessão não expira por tempo nem trava por inatividade: quem fica no mesmo
+# IP segue logado. O IP é o mesmo critério do login (IP igual ao cadastro →
+# entra direto; diferente → código por e-mail). Mudou o IP no meio da sessão,
+# ela é encerrada, e o login seguinte cai no 2FA pelo `_handle_existing_user`.
+# Sessão anterior a esta regra (sem `session_ip`) é carimbada com o IP atual:
+# o cookie é assinado, e derrubá-la só obrigaria a mesa a digitar o SID de novo.
 
 @blueprint.before_request
-def enforce_session_expiry():
+def enforce_session_ip():
     if not session.get('authenticated'):
         return
-    expires_at = session.get('session_expires_at')
-    if not expires_at:
-        session.clear()
+    client_ip = get_client_ip()
+    session_ip = session.get('session_ip')
+    if not session_ip:
+        session['session_ip'] = client_ip
         return
-    try:
-        expiry = datetime.fromisoformat(expires_at)
-        now = datetime.now(tz=timezone.utc)
-        # Garante comparação timezone-aware
-        if expiry.tzinfo is None:
-            expiry = expiry.replace(tzinfo=timezone.utc)
-        if now > expiry:
-            session.clear()
-            log.info("[enforce_session_expiry] Session expired — cleared")
-    except (ValueError, TypeError):
+    if session_ip != client_ip:
+        log.info("[enforce_session_ip] IP changed for SID=%s (%s -> %s) — session cleared",
+                 session.get('user_sid'), session_ip, client_ip)
         session.clear()
 
 
@@ -1501,9 +1501,8 @@ def register():
 @blueprint.route('/login', methods=['POST'])
 def login():
     sid = request.form.get('sid', '').strip().upper()
-    remember_me = request.form.get('remember_me') == 'on'
     client_ip = get_client_ip()
-    log.info("[login] Attempt SID=%s IP=%s remember=%s", sid, client_ip, remember_me)
+    log.info("[login] Attempt SID=%s IP=%s", sid, client_ip)
 
     if not _validate_sid(sid):
         log.warning("[login] Invalid SID format: %r", sid)
@@ -1516,19 +1515,18 @@ def login():
         log.info("[login] SID=%s found in DB (Status=%s) — delegating to _handle_existing_user",
                  sid, existing_user.get("Status"))
         return _handle_existing_user(existing_user, sid, client_ip,
-                                     redirect_page='pages_blueprint.sign_in_page',
-                                     remember_me=remember_me)
+                                     redirect_page='pages_blueprint.sign_in_page')
     else:
         log.info("[login] SID=%s not in DB — delegating to _handle_new_user", sid)
         return _handle_new_user(sid, client_ip,
                                 redirect_page='pages_blueprint.sign_in_page')
 
 
-def _handle_existing_user(user, sid, client_ip, redirect_page, remember_me=False):
+def _handle_existing_user(user, sid, client_ip, redirect_page):
     status = user.get("Status", "Pending")
     stored_ip = user.get("IP_Address")
-    log.info("[_handle_existing_user] SID=%s Status=%s StoredIP=%s ClientIP=%s remember=%s",
-             sid, status, stored_ip, client_ip, remember_me)
+    log.info("[_handle_existing_user] SID=%s Status=%s StoredIP=%s ClientIP=%s",
+             sid, status, stored_ip, client_ip)
 
     if status == 'Inactive':
         log.warning("[_handle_existing_user] SID=%s is Inactive — blocking login", sid)
@@ -1543,7 +1541,7 @@ def _handle_existing_user(user, sid, client_ip, redirect_page, remember_me=False
     # Active
     if stored_ip == client_ip:
         log.info("[_handle_existing_user] SID=%s IP match — granting session directly", sid)
-        _set_session(user, remember_me=remember_me)
+        _set_session(user)
         return redirect(url_for('pages_blueprint.dashboard'))
     else:
         log.info("[_handle_existing_user] SID=%s IP mismatch (stored=%s vs current=%s) — triggering 2FA",
@@ -1552,7 +1550,6 @@ def _handle_existing_user(user, sid, client_ip, redirect_page, remember_me=False
         # would let anyone holding the SID overwrite the trusted IP and then log
         # in directly (IP-match shortcut) without ever passing 2FA. Stash it in
         # the session and only commit it after verify_2fa succeeds.
-        session['pending_remember_me'] = remember_me
         session['pending_ip'] = client_ip
         return _initiate_2fa(sid, user["Email"], user["Name"])
 
@@ -1578,21 +1575,20 @@ def _handle_new_user(sid, client_ip, redirect_page):
                            first_name=first_name)
 
 
-def _set_session(user, remember_me=False):
-    session.permanent = remember_me
+def _set_session(user):
+    # Sem prazo e sem "Keep me signed in": a sessão é permanente (cookie
+    # renovado a cada request pelo PERMANENT_SESSION_LIFETIME) e só cai se o IP
+    # mudar (`enforce_session_ip`).
+    session.permanent = True
     session['authenticated'] = True
     session['user_sid'] = user["SID"]
     session['user_name'] = user["Name"]
     session['user_email'] = user["Email"]
     # Master is pinned by SID and outranks every stored role.
     session['user_role'] = 'MASTER' if (user["SID"] or '').strip().upper() in _MASTER_SIDS else user["Role"]
-    session['remember_me'] = remember_me
+    session['session_ip'] = get_client_ip()
     # A freshly established session is never locked.
     session.pop('locked', None)
-    # Without "Keep me signed in": hard cap of 5 hours (absolute, even with
-    # activity). With it: 30 days + IP re-verification on a new IP.
-    lifetime = timedelta(days=30) if remember_me else timedelta(hours=5)
-    session['session_expires_at'] = (datetime.now(tz=timezone.utc) + lifetime).isoformat()
 
 
 @blueprint.route('/verify-2fa', methods=['POST'])
@@ -1627,7 +1623,6 @@ def verify_2fa():
 
     if is_valid:
         user = get_user_by_sid(sid)
-        remember_me = session.pop('pending_remember_me', False)
         # Now that the code is verified, trust this IP for future direct logins.
         pending_ip = session.pop('pending_ip', None)
         if pending_ip:
@@ -1635,8 +1630,8 @@ def verify_2fa():
         session.pop('pending_sid', None)
         session.pop('masked_email', None)
         session.pop('masked_phone', None)
-        _set_session(user, remember_me=remember_me)
-        log.info("[verify_2fa] 2FA SUCCESS for SID=%s remember=%s — session set", sid, remember_me)
+        _set_session(user)
+        log.info("[verify_2fa] 2FA SUCCESS for SID=%s — session set", sid)
 
         if request.is_json:
             return jsonify({"success": True, "redirect": url_for('pages_blueprint.dashboard')})
@@ -1698,7 +1693,8 @@ def resend_code():
 @blueprint.route('/lock')
 def lock():
     """Lock the current session and send the user to the lock screen.
-    Used by the topbar 'Lock Screen' item and the 3h idle auto-lock."""
+    Used by the topbar 'Lock Screen' item (manual only — there is no idle
+    auto-lock)."""
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
     session['locked'] = True
@@ -1745,10 +1741,8 @@ def unlock():
 
     # Reuse the login IP-verification flow. On IP match _set_session clears the
     # 'locked' flag; on mismatch it routes to 2FA, after which verify_2fa does.
-    remember_me = session.get('remember_me', False)
     return _handle_existing_user(user, sid, get_client_ip(),
-                                 redirect_page='pages_blueprint.lock_screen_page',
-                                 remember_me=remember_me)
+                                 redirect_page='pages_blueprint.lock_screen_page')
 
 
 # ==============================================================================

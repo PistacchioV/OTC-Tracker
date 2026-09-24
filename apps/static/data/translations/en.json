@@ -1043,7 +1043,6 @@
   "intrag-dces-flow-col-12": "Notional(Absolute)",
   "intrag-dces-flow-col-13": "Notional(%)",
   "auth-signin-sub": "Let's get you signed in. Enter your SID to continue.",
-  "auth-keep-signed": "Keep me signed in",
   "auth-signin-btn": "Sign In",
   "auth-new-here": "New here?",
   "auth-create-account": "Create an account",
