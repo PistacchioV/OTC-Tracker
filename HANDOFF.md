@@ -24093,3 +24093,21 @@ e-mail em parágrafos do Outlook (`check_swap_cashflow.py` §9). O `.msg` do
 Outlook passa pelo `extract_msg.htmlBody` — conferir na instância com o
 arquivo real.
 
+
+## §556 — /mapping: o Export ganhou Excel, Print e PDF (2026-09-24)
+
+O menu do Export do `/mapping` só tinha CSV e Copy: a tela não é DataTable
+(paginação própria, sem Buttons para chamar), e os outros três do padrão da
+casa (§7: Copy · CSV · Excel · Print · PDF) nunca foram escritos. Agora estão
+lá, na ordem da casa, sobre as MESMAS linhas filtradas do CSV
+(`exportMatrix`). Advanced Export fica de fora de propósito (a pedido da
+mesa): cadastro não tem dia.
+
+- **Excel** pelo SheetJS local (`plugins/xlsx`), com toda célula como TEXTO
+  (`t: 's'`, formato `@`): código B3 que parece número vira `#NULL!` no Excel
+  (§477), e `'C '` perderia o espaço (valores do cadastro não são trimados, §6).
+- **PDF** pelo pdfmake local (`plugins/datatables/pdfmake` + `vfs_fonts`),
+  paisagem acima de cinco colunas.
+- **Print** abre a tabela numa janela própria e chama o `print()`.
+- As duas bibliotecas (~1,5 MB) carregam só no CLIQUE (`loadLib`); falha de
+  carga é o aviso `map-export-failed` nas três línguas.
