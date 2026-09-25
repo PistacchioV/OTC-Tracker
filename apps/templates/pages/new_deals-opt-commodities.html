@@ -1841,64 +1841,18 @@ $(document).ready(function() {
                 importBtn.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
                 importBtnContainer.appendChild(importBtn);
 
-                // Process all files queued in the dropzone, then clear it.
-                // After a successful import, flag any operations whose premium
-                // payment (Spot Date, col 26) falls on today.
+                // Process all files queued in the dropzone, then clear it. O
+                // prêmio D0 não é mais um Swal daqui: a faixa do `premium-d0.js`
+                // conta a grade a cada draw, por qualquer caminho de entrada.
                 importBtn.addEventListener('click', function() {
-                    // Snapshot Deal|Client already in the table so the Premium D0 alert
-                    // only considers deals imported now (not earlier imports same day).
-                    var _preKeys = {};
-                    table.rows().every(function(){ var d = this.data(); if (_sh(d[3])) _preKeys[_sh(d[3]) + '|' + _sh(d[10])] = 1; });
-                    OTCFileUpload.processDropzone(table, '{{ config.ASSETS_ROOT }}', CURRENT_USER_SID, '/api/new-deals/opt-commodities/cache', 'opt', ['Cancel', 'Swap'])
-                        .then(function(res) {
-                            if (!res || res.totalDeals <= 0) return;
-                            var _todayMid = new Date(); _todayMid.setHours(0, 0, 0, 0);
-                            var dueToday = 0;
-                            table.rows().every(function(){
-                                var d = this.data();
-                                if (_preKeys[_sh(d[3]) + '|' + _sh(d[10])]) return;   // already imported earlier
-                                var sd = _parseSpotDate(_sh(d[26]));
-                                if (sd && sd.getTime() === _todayMid.getTime()) dueToday++;
-                            });
-                            if (dueToday > 0) _showPremiumDueTodayAlert(dueToday);
-                        });
+                    OTCFileUpload.processDropzone(table, '{{ config.ASSETS_ROOT }}', CURRENT_USER_SID, '/api/new-deals/opt-commodities/cache', 'opt', ['Cancel', 'Swap']);
                 });
             }
 
-            // ==============================================================
-            // PREMIUM DUE TODAY (Spot Date) — post-import check
-            // ==============================================================
-            // Parse a date string in dd/mm/yyyy (display format) or yyyy-mm-dd.
-            function _parseSpotDate(s) {
-                if (!s) return null;
-                s = String(s).trim();
-                var dmy = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
-                if (dmy) return new Date(+dmy[3], +dmy[2] - 1, +dmy[1]);
-                var iso = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
-                if (iso) return new Date(+iso[1], +iso[2] - 1, +iso[3]);
-                return null;
-            }
-            // Count rows whose Spot Date (col 26 = premium payment date) is today.
-            function _countPremiumDueToday() {
-                var today = new Date(); today.setHours(0, 0, 0, 0);
-                var n = 0;
-                table.rows({ search: 'none', page: 'all' }).every(function () {
-                    var sd = _parseSpotDate(_sh(this.data()[26]));
-                    if (sd && sd.getTime() === today.getTime()) n++;
-                });
-                return n;
-            }
-            function _showPremiumDueTodayAlert(count) {
-                var msg = t('swal-premium-today-text', '{n} operation(s) have a premium payment (Spot Date) due today.')
-                            .replace('{n}', count);
-                Swal.fire({
-                    title: t('swal-premium-today-title', 'Premium Payment Due Today'),
-                    text:  msg,
-                    icon:  'warning',
-                    confirmButtonText: t('swal-ok', 'OK'),
-                    confirmButtonColor: '#0066cc'
-                });
-            }
+            // PREMIUM DUE TODAY (Spot Date): a faixa fixa acima da grade
+            // (`static/js/premium-d0.js`) — o Swal só existia no Import da
+            // página, e o deal do box scan passava calado.
+            if (window.otcPremiumD0) window.otcPremiumD0(table, { spot: 26, deal: 3, client: 10 });
 
             // ==============================================================
             // MAPPING B3 ID BUTTON
@@ -5027,6 +4981,7 @@ $(document).ready(function() {
      DataTables Buttons que a página já montou, então nada aqui em cima muda.
      Vai no FIM do bloco de propósito: precisa da DataTable já inicializada. -->
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/premium-d0.js?v={{ asset_v('js/premium-d0.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/file-preview.js?v={{ asset_v('js/file-preview.js') }}"></script>
 <script>
     jQuery(function () {

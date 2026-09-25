@@ -3222,3 +3222,24 @@ input#apiRefDate {
 [data-bs-theme="dark"] input#apiRefDate {
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23adb5bd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
 }
+
+/* 51. Prêmio D0 — faixa fixa acima da grade das páginas de opção
+   (`static/js/premium-d0.js`). Âmbar TRANSLÚCIDO, como o `cp-def-banner`: a
+   mesma leitura nos dois temas sem token próprio. O `[hidden]` é explícito
+   porque o `display:flex` da faixa venceria o do atributo. */
+.otc-premium-d0 {
+  display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+  margin: 0 0 .6rem; padding: .5rem .75rem; border-radius: 10px;
+  font-size: .8rem; line-height: 1.4;
+  background: rgba(255, 193, 7, .14); border: 1px solid rgba(255, 193, 7, .45);
+  color: var(--vr-text, inherit);
+}
+.otc-premium-d0[hidden] { display: none !important; }
+.otc-premium-d0 > .ti { font-size: 1.1rem; color: #b8860b; }
+.otc-premium-d0__msg { flex: 1 1 auto; min-width: 0; }
+.otc-premium-d0__list { opacity: .75; }
+.otc-premium-d0__btn {
+  background: rgba(255, 193, 7, .9) !important; color: #3d2e00 !important;
+  border: none !important; border-radius: 8px !important; font-weight: 600;
+}
+[data-bs-theme="dark"] .otc-premium-d0 > .ti { color: #ffd54f; }
