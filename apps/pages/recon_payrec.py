@@ -717,9 +717,11 @@ def _jpm_cockpit(records, net_map=None):
 # (73760.20-5). A REVERSÃO é o net delas × −1 — se no net a 73760.20-5 paga a
 # MGT, na reversão a MGT paga o Banco —, e é o valor e a direção do e-mail do VP.
 #
-# O B2B (73760.00-9 × 04880.00-6) NÃO entra: hoje ele soma também o que é contra
-# cliente pela rota antiga (04880.10-9), e não dá para separar. A rota antiga
-# (04880.00-6 × 04880.10-9) é só AVISADA, até o cenário ficar só na 73760.20-5.
+# O B2B (73760.00-9 × 04880.00-6) é uma liquidação DEVIDA e tem a sua própria
+# linha no Pay/Rec, mas NÃO entra na reversão nem no e-mail: hoje ele soma também
+# o que é contra cliente pela rota antiga (04880.10-9), e não dá para separar. A
+# rota antiga (04880.00-6 × 04880.10-9) é só AVISADA, até o cenário ficar só na
+# 73760.20-5.
 #
 # As contas chegam do `b3-accounts` pelo chamador (LE × tipo), nunca daqui.
 _BRANCH_SISTEMA = 'Branch Settlement'
@@ -769,7 +771,8 @@ def _pair_legs(ops_rows, lado, outro):
 def branch_settlement(ops_rows, accounts, ndf_rows=None):
     """A liquidação do dia com a Branch, pelo Operations B3.
 
-    `accounts`: {'mgt_own', 'bank_client', 'mgt_client'} (do `b3-accounts`).
+    `accounts`: {'bank_own', 'mgt_own', 'bank_client', 'mgt_client'} (do
+    `b3-accounts`).
     `ndf_rows` (o Cockpit do dia) só ENRIQUECE cada operação pelo B3 ID —
     contraparte, bruto, IR e total —, que o Operations B3 não traz.
 
@@ -779,6 +782,8 @@ def branch_settlement(ops_rows, accounts, ndf_rows=None):
     cli = _pair_legs(ops_rows, acc.get('bank_client'), acc.get('mgt_own')) if not faltam else []
     legado = (_pair_legs(ops_rows, acc.get('mgt_own'), acc.get('mgt_client'))
               if acc.get('mgt_own') and acc.get('mgt_client') else [])
+    b2b = (_pair_legs(ops_rows, acc.get('bank_own'), acc.get('mgt_own'))
+           if acc.get('bank_own') and acc.get('mgt_own') else [])
 
     cockpit = {}
     for rec in ndf_rows or []:
@@ -800,14 +805,21 @@ def branch_settlement(ops_rows, accounts, ndf_rows=None):
         })
     cli_net = round(sum(r['value'] for r in cli), 2)
     reversal = round(-cli_net, 2)
+    b2b_net = round(sum(r['value'] for r in b2b), 2)
+
+    def _dir(v):
+        return ('Receive' if v > 0 else 'Pay') if abs(v) >= 0.005 else ''
+
     return {
         # O botão do e-mail só existe com a ROTA NOVA (73760.20-5): a rota antiga
         # sozinha não tem reversão para aprovar.
         'has_settlement': bool(cli),
         'accounts_missing': faltam,
         'trades': trades, 'client_b3_net': cli_net,
-        'reversal_net': reversal,
-        'pay_receive': ('Receive' if reversal > 0 else 'Pay') if abs(reversal) >= 0.005 else '',
+        'reversal_net': reversal, 'pay_receive': _dir(reversal),
+        # A liquidação DEVIDA Banco × MGT (visão da 73760.00-9): só a linha do
+        # Pay/Rec — fora da reversão e do e-mail.
+        'b2b': b2b, 'b2b_net': b2b_net, 'b2b_pay_receive': _dir(b2b_net),
         'client_gross': round(sum(t['gross'] or 0 for t in trades), 2),
         'client_ir': round(sum(t['ir'] or 0 for t in trades), 2),
         'client_net': round(sum(t['total'] or 0 for t in trades), 2),
@@ -817,11 +829,16 @@ def branch_settlement(ops_rows, accounts, ndf_rows=None):
 
 
 def _branch_breaks(branch):
-    """A linha (lado JPM) da reversão da Branch Settlement; net zero não nasce."""
-    if not (branch or {}).get('pay_receive'):
-        return []
-    return [{'product': 'NDF', 'cpty': _BRANCH_NAME, 'value': branch['reversal_net'],
-             'pay_receive': branch['pay_receive'], 'le': 'JPM', 'branch': 'reversal'}]
+    """As linhas (lado JPM) da Branch Settlement: a liquidação devida dos B2B e
+    a reversão. Linha de net zero não nasce."""
+    out = []
+    branch = branch or {}
+    for kind, v, pr in (('b2b', branch.get('b2b_net'), branch.get('b2b_pay_receive')),
+                        ('reversal', branch.get('reversal_net'), branch.get('pay_receive'))):
+        if pr:
+            out.append({'product': 'NDF', 'cpty': _BRANCH_NAME, 'value': v,
+                        'pay_receive': pr, 'le': 'JPM', 'branch': kind})
+    return out
 
 
 def _jpm_cashflows(rows, cols, net_map=None, ref_date=None):
@@ -1726,10 +1743,10 @@ def run_payrec(recon_date, files=None, mode='auto', ndf_rows=None, ops_rows=None
         elif bucket == 'spb_mgt':
             client += _cli_spb(rows, cols, mgt=True)
 
-    # Branch Settlement: dia com liquidação com a MGT ganha a linha da REVERSÃO.
-    # Vai por ÚLTIMO no lado JPM, para nunca tomar o par de uma perna de cliente
-    # (só casa com o interbancário, ver `_match_allowed`), e fica pendente até
-    # a reversão liquidar.
+    # Branch Settlement: a liquidação devida dos B2B e a REVERSÃO, uma linha
+    # cada. Vão por ÚLTIMO no lado JPM, para nunca tomar o par de uma perna de
+    # cliente (só casam com o interbancário, ver `_match_allowed`), e ficam
+    # pendentes até liquidar.
     branch = branch_settlement(ops_rows, branch_accounts, ndf_rows)
     jpm += _branch_breaks(branch)
     if branch['accounts_missing']:

@@ -2051,8 +2051,10 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   o INTERBANCÁRIO no mesmo sentido (`_match_allowed`) — com a perna de um
   cliente de mesmo valor a quebra fecharia sem reversão nenhuma. As contas são
   do `b3-accounts` por LE × TIPO (`commands.branch_accounts`), nunca número no
-  código. **O B2B (73760.00-9 × 04880.00-6) NÃO entra**: hoje ele soma também o
-  que é contra cliente pelas duas rotas, e não se separa. A rota ANTIGA
+  código. **O B2B (73760.00-9 × 04880.00-6) é liquidação DEVIDA**: tem a sua
+  linha (`branch: 'b2b'`) no Pay/Rec, mas fica FORA da reversão e do e-mail —
+  hoje ele soma também o que é contra cliente pelas duas rotas, e não se
+  separa. A rota ANTIGA
   (04880.00-6 × 04880.10-9) fica fora da conta, avisada no log e no `.eml`, até
   o cenário ficar só na 205. O botão **Branch Settl.** só existe com a rota nova
   e na data de HOJE; baixa um `.eml` (X-Unsent, sem `From`) para o VP com as

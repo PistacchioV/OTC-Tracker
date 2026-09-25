@@ -48,13 +48,13 @@ def run(recon_date, files=None, mode='auto'):
 
 
 # (LE, tipo) no `b3-accounts` → papel da conta na Branch Settlement.
-_BRANCH_ACCOUNT_ROLES = {('MGT', 'OWN'): 'mgt_own', ('JPM', 'CLIENT 2'): 'bank_client',
-                         ('MGT', 'CLIENT 1'): 'mgt_client'}
+_BRANCH_ACCOUNT_ROLES = {('JPM', 'OWN'): 'bank_own', ('MGT', 'OWN'): 'mgt_own',
+                         ('JPM', 'CLIENT 2'): 'bank_client', ('MGT', 'CLIENT 1'): 'mgt_client'}
 
 
 def branch_accounts():
-    """As contas do controle pelo cadastro `b3-accounts`: MGT própria
-    (04880.00-6), a guarda-chuva do Banco para o cliente da MGT (73760.20-5,
+    """As contas do controle pelo cadastro `b3-accounts`: Banco própria
+    (73760.00-9, a do B2B), MGT própria (04880.00-6), a guarda-chuva do Banco para o cliente da MGT (73760.20-5,
     CLIENT 2) e a guarda-chuva da MGT (04880.10-9, CLIENT 1) — a rota antiga,
     só avisada."""
     out = {}

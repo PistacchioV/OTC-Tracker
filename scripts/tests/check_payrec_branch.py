@@ -5,8 +5,9 @@
 Mesa, 25/09/2026. A fonte é o OPERATIONS B3 do dia: só as liquidações entre a
 MGT própria (04880.00-6) e a guarda-chuva do Banco para o cliente da MGT
 (73760.20-5). A REVERSÃO é o net delas × −1 — se a 73760.20-5 paga a MGT, na
-reversão a MGT paga o Banco. O B2B (73760.00-9 × 04880.00-6) NÃO entra; a rota
-antiga (04880.00-6 × 04880.10-9) é só avisada.
+reversão a MGT paga o Banco. O B2B (73760.00-9 × 04880.00-6) é liquidação
+DEVIDA: tem a sua linha no Pay/Rec, mas fica fora da reversão e do e-mail. A
+rota antiga (04880.00-6 × 04880.10-9) é só avisada.
 
 Prova: as visões espelhadas sem dobrar, a linha da reversão e o casamento só
 com o interbancário, o rascunho .eml (contas, lista, sem B2B, sem disclaimer,
@@ -82,7 +83,9 @@ b = RP.branch_settlement(OPS, ACC, DIA)
 check('ha liquidacao com a Branch', b['has_settlement'], True)
 check('so as operacoes 73760.20-5 x 04880.00-6, sem dobrar a visao espelhada',
       [(t['b3_id'], t['value']) for t in b['trades']], [('26E001', 50000.0), ('26E002', -20000.0)])
-check('o B2B nao entra', 'b2b' in b or 'b2b_net' in b, False)
+check('B2B sem dobrar a visao espelhada', [(r['titulo'], r['value']) for r in b['b2b']],
+      [('26B001', -50000.0), ('26B002', 20000.0)])
+check('net do B2B (visao da 73760.00-9)', (b['b2b_net'], b['b2b_pay_receive']), (-30000.0, 'Pay'))
 check('reversao = net x -1', (b['client_b3_net'], b['reversal_net']), (30000.0, -30000.0))
 check('205 recebe no net -> na reversao o Banco paga', b['pay_receive'], 'Pay')
 inv = RP.branch_settlement([ob('26E001', '73760.20-5', '04880.00-6', '-100,00')], ACC)
@@ -93,8 +96,9 @@ check('Cockpit enriquece pelo B3 ID', [(t['counterparty'], t['ir']) for t in b['
 check('rota antiga avisada, fora da conta', (len(b['legacy']), b['legacy_net']), (1, -700.0))
 check('sem as contas no cadastro o controle nao roda',
       RP.branch_settlement(OPS, {'bank_own': '73760.00-9'})['has_settlement'], False)
-check('so B2B (73760.00-9) nao e liquidacao da Branch aqui',
-      RP.branch_settlement([ob('X', '73760.00-9', '04880.00-6', '10')], ACC)['has_settlement'], False)
+so_b2b = RP.branch_settlement([ob('X', '73760.00-9', '04880.00-6', '10')], ACC)
+check('so B2B: tem a linha devida, mas sem botao (sem rota nova)',
+      (so_b2b['b2b_net'], so_b2b['has_settlement']), (10.0, False))
 check('LEGAL da MGT pela grafia do Cockpit', RP._entity_side('JPMORGAN CHASE BANK N.A. SAO PAULO'), 'MGT')
 check('Banco sem o ponto do P', RP._entity_side(BANCO), 'JPM')
 check('cliente nao e entidade', RP._entity_side('BANCO SAFRA S/A'), None)
@@ -129,9 +133,13 @@ try:
     out = run(OPS)
     linhas = [(r['branch'], r['jpm_value'], r['pay_receive'])
               for r in out['pending_payment'] + out['pending_receivement'] if r.get('branch')]
-    check('uma linha so, a da reversao', linhas, [('reversal', -30000.0, 'Pay')])
+    check('a linha devida dos B2B e a da reversao', linhas,
+          [('b2b', -30000.0, 'Pay'), ('reversal', -30000.0, 'Pay')])
     check('JPM cpty e a Branch, LE JPM',
-          [(r['jpm_cpty'], r['le']) for r in out['pending_payment'] if r.get('branch')], [(MGT, 'JPM')])
+          {(r['jpm_cpty'], r['le']) for r in out['pending_payment'] if r.get('branch')}, {(MGT, 'JPM')})
+    check('dia so com B2B ainda mostra a linha devida',
+          [(r['branch'], r['jpm_value']) for r in run([ob('X', '73760.00-9', '04880.00-6', '10,00')])
+           ['pending_receivement'] if r.get('branch')], [('b2b', 10.0)])
     check('o resultado grava o bloco da Branch', out['branch']['reversal_net'], -30000.0)
     check('dia sem MGT nao cria linha',
           [r for r in run([])['pending_payment'] if r.get('branch')], [])
@@ -141,12 +149,12 @@ try:
               'product': 'NDF', 'pay_receive': 'Pay', 'le': 'JPM', 'bank': True, 'tol': 20.0,
               'drop_if_unmatched': True}
     fechou = run(OPS, [interb])
-    check('interbancario no mesmo sentido casa a reversao',
+    check('um interbancario no mesmo sentido casa UMA das linhas',
           [r['status'] for r in fechou['settled'] if r.get('branch')], ['Settled'])
     cliente = {'value': -30000.0, 'client': 'CLIENTE Z', 'sistema': 'SPB - conta externa',
                'snumconta': '', 'product': 'NDF', 'pay_receive': 'Pay', 'le': 'JPM'}
     nao = run(OPS, [cliente])
-    check('perna de cliente de mesmo valor NAO fecha a reversao',
+    check('perna de cliente de mesmo valor NAO fecha nenhuma',
           [r for r in nao['settled'] if r.get('branch')], [])
 finally:
     (RP._gather_sources, RP._persist, RP._load_net_type_map, RP._apply_carry_forward,

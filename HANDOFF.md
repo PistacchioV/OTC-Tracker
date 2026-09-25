@@ -24185,7 +24185,11 @@ liquidar, e a reversão só é executada com aprovação de um VP por e-mail.
    não é defeito.
 3. **A que ficou:** só as liquidações 04880.00-6 × 73760.20-5 do Operations
    B3. A REVERSÃO é o net delas × −1 — se no net a 73760.20-5 pagou a MGT, na
-   reversão a MGT paga o Banco. UMA linha no Pay/Rec (`branch: 'reversal'`).
+   reversão a MGT paga o Banco (`branch: 'reversal'`).
+
+E o B2B voltou ao Pay/Rec, mas só como a sua linha (`branch: 'b2b'`): é uma
+liquidação DEVIDA (mesa) e tem de aparecer. Fora da reversão e do e-mail pelo
+mesmo motivo do item 2; um dia só com B2B tem a linha e não tem botão.
 
 O Operations B3 traz o mesmo contrato pelas duas visões, com as contas e o
 sinal trocados: vale a da conta do Banco, e a espelhada só entra (sinal
