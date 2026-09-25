@@ -667,7 +667,11 @@ def _conf_fx_legs(deal, subj):
     a perna fica de fora, com aviso — é o caso do forward start ainda não
     fixado."""
     qty = _conf_to_float(str(deal.get('Notional') or '').replace('-', ''))
-    strike = _conf_to_float(deal.get('Strike'))
+    # A taxa: o FWD Start a grava em `Strike` (e zera o `Rate`); o Vanilla só em
+    # `Rate` — é o que o Anexo I do documento MGT já lê. Lendo só o `Strike`,
+    # toda operação Vanilla de MGT caía em "sem notional/strike" e o XML saía
+    # com valor e valor estrangeiro ZERADOS (#OTC-0042).
+    strike = _conf_to_float(deal.get('Strike')) or _conf_to_float(deal.get('Rate'))
     if qty is None or not strike:
         return None
     if _conf_ccy_is_brl(str(deal.get('QuantityCurrency') or '')):
@@ -732,6 +736,13 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
     valor_estr = 0.0
     venc = None
     for deal, subj in picked:
+        # O vencimento vem ANTES de qualquer `continue`: ele não depende do
+        # notional nem do strike, e uma operação sem valor ainda vence numa data.
+        # Lido depois, a perna recusada levava junto a `dataVencimento`, e o XML
+        # saía com ela vazia (#OTC-0042).
+        sd = routes._parse_date_any(deal.get('SettlementDate'))
+        if sd and (venc is None or sd > venc):
+            venc = sd
         # `legs_fn` troca a aritmética da perna (o termo de moeda não é
         # quantidade × preço, ver _conf_fx_legs); sem ele vale a da mercadoria.
         if legs_fn:
@@ -758,9 +769,6 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
                     warnings.append('Operação {}: sem Spot FXRate — valor em BRL ficou igual ao '
                                     'estrangeiro.'.format(deal.get('Deal')))
             valor += leg * spot
-        sd = routes._parse_date_any(deal.get('SettlementDate'))
-        if sd and (venc is None or sd > venc):
-            venc = sd
 
     cnpj_cli = re.sub(r'\D', '', str(first.get('TaxID') or ''))
     if len(cnpj_cli) != 14:
