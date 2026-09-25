@@ -77,7 +77,7 @@ for i, (pos, key) in enumerate(marcas):
 print('\n== 1. registro x template ==')
 reg = [c['id'] for c in R._CONTROL_PANEL_CARDS]
 no_tpl = re.findall(r'data-cp-card="([^"]+)"', CORPO)
-check('o registro tem 14 cards', len(reg), 14)
+check('o registro tem 15 cards', len(reg), 15)
 check('nenhum card repetido no template', sorted(no_tpl), sorted(set(no_tpl)))
 check('todo card do registro esta no template', sorted(set(reg) - set(no_tpl)), [])
 check('todo card do template esta no registro', sorted(set(no_tpl) - set(reg)), [])

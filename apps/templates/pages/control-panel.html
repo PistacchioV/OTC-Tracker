@@ -696,6 +696,40 @@
                 </div>
             </div>
         </div>
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="branchsettlement">
+                    <div class="cp-card__icon"><i class="ti ti-building-bank"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-branch-title">Branch Settlement Reverse Approval</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-branch-desc">
+                        Recipients of the VP approval request for the manual reversal of a settlement
+                        with the Branch (JPMorgan Chase Bank, N.A. &ndash; S&atilde;o Paulo Branch). The
+                        e-mail is generated as an .eml draft by the Branch Settl. button of the Pay/Rec
+                        Reconciliation, which only shows on a day with a Branch settlement.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-branch-to">TO — VP</label>
+                        <input type="text" id="cp-branch-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-branch-cc">CC</label>
+                        <input type="text" id="cp-branch-cc" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-mail"></i><span data-lang="cp-branch-meta">Pay/Rec &rsaquo; Branch Settl. &rarr; .eml draft</span>
+                        </span>
+                        <a class="cp-run-btn" href="/reconciliation-payrec" style="text-decoration:none;">
+                            <i class="ti ti-arrow-right"></i>
+                            <span data-lang="cp-branch-open">Open Pay/Rec</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- ── Section: Pending Confirmation Routines ──────────────────── -->
@@ -2032,6 +2066,32 @@ document.addEventListener('click', function (e) {
         });
     });
     load();
+})();
+
+// ── Branch Settlement Reverse Approval: só TO/CC ─────────────────────────────
+// O e-mail sai do botão Branch Settl. do Pay/Rec; aqui ficam os destinatários,
+// gravados ao sair do campo (o card não tem botão de salvar).
+(function () {
+    var toEl = document.getElementById('cp-branch-to');
+    var ccEl = document.getElementById('cp-branch-cc');
+    if (!toEl || !ccEl) return;
+    var REC = '/api/control-panel/branch-settlement/recipients';
+    fetch(REC, { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!d || !d.success) return;
+            toEl.value = d.to || '';
+            ccEl.value = d.cc || '';
+        })
+        .catch(function () {});
+    function save() {
+        return fetch(REC, { method: 'POST', credentials: 'same-origin',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ to: toEl.value, cc: ccEl.value }) })
+            .catch(function () {});
+    }
+    toEl.addEventListener('change', save);
+    ccEl.addEventListener('change', save);
 })();
 
 // ── MT300: TO/CC persistidos, Run e status do disparo ───────────────────────

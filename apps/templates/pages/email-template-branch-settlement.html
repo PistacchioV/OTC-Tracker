@@ -1,0 +1,96 @@
+{#- Branch Settlement Reverse Approval — pedido de aprovação do VP (G&O, passos 10-11).
+    Rascunho .eml gerado pelo botão "Branch Settl." do Pay/Rec Reconciliation.
+    Largura 1080 e toda célula `nowrap`: B3 ID, contraparte e valor numa linha só. -#}
+{%- set W = 1080 -%}
+{%- set th = 'background:#1c2b6b;color:#fff;padding:7px 10px;font-weight:600;white-space:nowrap;' -%}
+{%- set td = 'padding:6px 10px;border-bottom:1px solid #eee;white-space:nowrap;' -%}
+{%- macro money(v) -%}{%- if v is none -%}&mdash;{%- elif v < 0 -%}<span style="color:#c0392b;">{{ '{:,.2f}'.format(v) }}</span>{%- else -%}{{ '{:,.2f}'.format(v) }}{%- endif -%}{%- endmacro -%}
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>OTC Tracker – Branch Settlement Reverse Approval</title>
+    <!--[if mso]>
+    <style type="text/css">body, table, td { font-family: Arial, sans-serif !important; }</style>
+    <![endif]-->
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f9;color:#333333;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color:#f4f6f9;padding:40px 0;">
+        <tr><td align="center">
+            <!--[if mso]>
+            <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="{{ W }}"><tr><td width="{{ W }}" style="width:{{ W }}px;">
+            <![endif]-->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="{{ W }}"
+                   style="width:{{ W }}px;background-color:#ffffff;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.08);overflow:hidden;">
+                {% set header_title = 'Branch Settlement — Reverse Approval' %}
+                {% set header_subtitle = 'Settlement Date &nbsp;·&nbsp; <strong style="color:#ffffff;">' ~ recon_date_fmt ~ '</strong>' %}
+                {% set header_logo_height = 64 %}
+                {% set header_width = W %}
+                {% include 'partials/email-gradient-header.html' %}
+                <tr><td style="padding:30px 30px 26px;">
+
+                    <p style="font-size:13px;line-height:1.6;margin:0 0 18px;">
+                        Today's settlement includes trades with the Branch (JPMorgan Chase Bank, N.A. &ndash; S&atilde;o Paulo Branch).
+                        Please review and <strong>approve by replying to this e-mail</strong> the manual reversal below.
+                        No manual reversal is executed without this approval; until it settles, the break stays open in the Pay/Rec reconciliation.
+                    </p>
+
+                    <!-- Reversal -->
+                    <p style="color:#1a1a2e;font-size:15px;font-weight:700;margin:0 0 10px;">Reversal</p>
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse:collapse;font-size:12.5px;margin-bottom:24px;">
+                        <tr><td style="{{ td }}width:24%;font-weight:600;">Net value</td><td style="{{ td }}">BRL {{ money(branch.reversal_net) }}</td></tr>
+                        <tr><td style="{{ td }}font-weight:600;">Direction</td><td style="{{ td }}">{{ direction_text }}</td></tr>
+                        <tr><td style="{{ td }}font-weight:600;">Source account</td><td style="{{ td }}">{{ source.name }} &nbsp;&middot;&nbsp; {% if source.account %}{{ source.account }}{% else %}<span style="color:#b71c1c;">Not registered in Reference Data &rsaquo; Counterparty Details</span>{% endif %}</td></tr>
+                        <tr><td style="{{ td }}font-weight:600;">Destination account</td><td style="{{ td }}">{{ dest.name }} &nbsp;&middot;&nbsp; {% if dest.account %}{{ dest.account }}{% else %}<span style="color:#b71c1c;">Not registered in Reference Data &rsaquo; Counterparty Details</span>{% endif %}</td></tr>
+                    </table>
+
+                    <!-- Operations -->
+                    <p style="color:#1a1a2e;font-size:15px;font-weight:700;margin:0 0 10px;">Operations <span style="color:#555;background:#eeeeee;border-radius:20px;padding:1px 9px;font-size:11px;">{{ branch.trades|length }}</span></p>
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse:collapse;font-size:11.5px;margin-bottom:8px;">
+                        <thead><tr>
+                            <th style="{{ th }}text-align:left;">B3 ID</th>
+                            <th style="{{ th }}text-align:left;">Counterparty</th>
+                            <th style="{{ th }}text-align:right;">Gross value</th>
+                            <th style="{{ th }}text-align:right;">IR</th>
+                            <th style="{{ th }}text-align:right;">Total</th>
+                            <th style="{{ th }}text-align:right;">B3 settlement</th>
+                        </tr></thead>
+                        <tbody>
+                            {% for r in branch.trades %}
+                            <tr>
+                                <td style="{{ td }}">{{ r.b3_id }}</td>
+                                <td style="{{ td }}">{{ r.counterparty or '—' }}</td>
+                                <td style="{{ td }}text-align:right;">{{ money(r.gross) }}</td>
+                                <td style="{{ td }}text-align:right;">{{ money(r.ir) }}</td>
+                                <td style="{{ td }}text-align:right;">{{ money(r.total) }}</td>
+                                <td style="{{ td }}text-align:right;">{{ money(r.value) }}</td>
+                            </tr>
+                            {% endfor %}
+                            <tr style="background:#eef2ff;font-weight:700;">
+                                <td style="{{ td }}" colspan="2">Total</td>
+                                <td style="{{ td }}text-align:right;">{{ money(branch.client_gross) }}</td>
+                                <td style="{{ td }}text-align:right;">{{ money(branch.client_ir) }}</td>
+                                <td style="{{ td }}text-align:right;">{{ money(branch.client_net) }}</td>
+                                <td style="{{ td }}text-align:right;">{{ money(branch.client_b3_net) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <p style="font-size:13px;line-height:1.6;color:#333333;margin:24px 0 0;">
+                        Regards,<br/><strong>Brazil OTC Operations</strong>
+                    </p>
+                </td></tr>
+                <tr>
+                    <td style="background-color:#f8f9fa;padding:16px 30px;text-align:center;border-top:1px solid #e9ecef;">
+                        <p style="color:#999999;font-size:11px;margin:0;">&copy; {{ current_year }} OTC Tracker by JPMorganChase &amp; Co.</p>
+                    </td>
+                </tr>
+            </table>
+            <!--[if mso]>
+            </td></tr></table>
+            <![endif]-->
+        </td></tr>
+    </table>
+</body>
+</html>

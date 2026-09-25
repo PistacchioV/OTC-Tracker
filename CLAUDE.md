@@ -589,10 +589,11 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   sem o card (`_CP_ENDPOINT_CARD`). **O `id` é o token gravado**: renomear
   revoga em silêncio. A seção do card é o DOM (`data-cp-hdr` + `.row.cp-cards`),
   nunca um mapa no JS. Seis seções: Intraday, Settlement Reporting, Pending
-  Confirmation, Economic Affirmation, Reference Data, Application (o card *New
+  Confirmation, Economic Affirmation, Reference Data, Application; quinze cards
+  (o `check_control_panel_sections.py` conta — card novo mexe nele). O card *New
   Version Released* lê a versão do `link.txt` ao lado do
   `start-otc-tracker.bat`; sem versão o envio é recusado; destinatário é quem
-  está `Active`).
+  está `Active`.
 - **`refresh_session_role`** (`before_request` próprio): o papel do cadastro
   alcança quem já está logado em até 30 s, pela mesma leitura da allowlist.
   `None` não mexe (banco mudo não rebaixa a mesa); `''` mexe (é revogação);
@@ -1887,6 +1888,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   "infinito"): grava dia a dia, só o dia pedido fica de fora com `ir_partial`;
   laço `ndfsum-ir-warm` cura até a véspera; `/data` devolve `collect_failed`
   como JSON. Other Products segue o mesmo desenho.
+- **Os cards B3 × Internal do NDF Summary contam só as contas PRÓPRIAS**
+  (§561, mesa, 25/09/2026): no lado B3, a QUANTIDADE só soma o resgate cuja
+  `Conta` é a `OWN` de JPM ou MGT no `b3-accounts` (73760.00-9, 04880.00-6 —
+  `_ndfsum_count_accounts`); o VALOR soma todas as linhas. O mesmo contrato chega
+  por mais de uma visão (intragrupo espelhado, guarda-chuva) e cada uma contava
+  como operação. O `matched` do card compara essa contagem.
+  `check_ndfsum_card_count.py`.
 - **A tabela do PDF do Advice tem largura MEDIDA** (`stringWidth`, escada de
   fonte, `Paragraph`), nunca `515/N`.
 - **No Cockpit, `VL_FORWARD_RATE` é a forward do trade date e
@@ -2035,6 +2043,26 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   que ninguém conserta, e foi assim que este defeito durou. Duas suposições
   estão escritas no código para o dia em que forem falsas: direção `Pay` fixa e
   produto `NDF` (nenhum dos dois entra no casamento).
+- **Pay/Rec: a Branch Settlement sai do OPERATIONS B3, pelas CONTAS** (§560,
+  G&O "Branch Settlement Control"). Só as liquidações 04880.00-6 (MGT própria)
+  × 73760.20-5 (guarda-chuva do Banco para o cliente da MGT): a **reversão** é
+  o net delas × −1 (a 205 pagou a MGT → na reversão a MGT paga o Banco) e vira
+  UMA linha `branch: 'reversal'` no Pending Payment/Receivement. Ela só casa com
+  o INTERBANCÁRIO no mesmo sentido (`_match_allowed`) — com a perna de um
+  cliente de mesmo valor a quebra fecharia sem reversão nenhuma. As contas são
+  do `b3-accounts` por LE × TIPO (`commands.branch_accounts`), nunca número no
+  código. **O B2B (73760.00-9 × 04880.00-6) é liquidação DEVIDA**: tem a sua
+  linha (`branch: 'b2b'`) no Pay/Rec, mas fica FORA da reversão e do e-mail —
+  hoje ele soma também o que é contra cliente pelas duas rotas, e não se
+  separa. A rota ANTIGA
+  (04880.00-6 × 04880.10-9) fica fora da conta, avisada no log e no `.eml`, até
+  o cenário ficar só na 205. O botão **Branch Settl.** só existe com a rota nova
+  e na data de HOJE; baixa um `.eml` (X-Unsent, sem `From`) para o VP com as
+  contas de origem/destino do Counterparty Details (default APROVADO; faltando,
+  aviso por código) e a lista das operações — contraparte, bruto e IR vêm do
+  Cockpit pelo B3 ID. Destinatários no card `branchsettlement` do Control Panel.
+  A perna intragrupo do Cockpit (`BANCO J.P MORGAN S.A`, sem o ponto) não entra
+  mais no lado JPM como cliente (`_entity_side`). `check_payrec_branch.py`.
 - **CGD**: lê o D-1 do arquivo que o Save CETIP Files GRAVA (`CETIP_DEST_ROOT`),
   a lista do FEP vem do ANEXO do e-mail mais recente do box
   (`baixar_fep_do_box`; `path` vence; sem Outlook cai para `CGD_INPUT_ROOT`
@@ -2330,7 +2358,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (169 scripts)
+### `scripts/tests/` (172 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

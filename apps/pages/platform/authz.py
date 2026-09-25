@@ -67,6 +67,7 @@ _CONTROL_PANEL_CARDS = [
     # Settlement Reporting
     {'id': 'daily',       'label': 'Save Daily Settlement Files'},
     {'id': 'forecast',    'label': 'Settlement Forecast'},
+    {'id': 'branchsettlement', 'label': 'Branch Settlement Reverse Approval'},
     # Pending Confirmation Routines
     {'id': 'dailymetric', 'label': 'Daily Metric — Outstanding Confirmation Brazil OTC'},
     {'id': 'pendingspreadsheet', 'label': 'Pending Confirmations Spreadsheet Metrics'},
@@ -91,6 +92,7 @@ _CP_ENDPOINT_CARD = {
     '/api/control-panel/settlement-forecast/email': 'forecast',
     '/api/control-panel/settlement-forecast/recipients': 'forecast',
     '/api/control-panel/import-contacts': 'contacts',
+    '/api/control-panel/branch-settlement/recipients': 'branchsettlement',
     '/api/control-panel/daily-metric/recipients': 'dailymetric',
     '/api/control-panel/daily-metric/run': 'dailymetric',
     '/api/control-panel/weekly-escalation/recipients': 'weeklyescalation',

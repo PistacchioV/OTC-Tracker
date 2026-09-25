@@ -24165,3 +24165,72 @@ cadastro e não no JS. Ele só escreve com o destino vazio ou ainda igual à
 proposta anterior — a exceção digitada à mão (`ARS MAE`) sobrevive a trocar a
 moeda. O `autofill` que já existia é outra coisa: copia o que as LINHAS
 cadastradas usam, e numa moeda nova não haveria o que copiar.
+
+## §560 — Pay/Rec: Branch Settlement Control — a reversão da liquidação com a MGT e a aprovação do VP (2026-09-25)
+
+O G&O "Branch Settlement Control" pede, no T+0: verificar se há liquidação com
+a Branch (JPMorgan Chase Bank, N.A. – São Paulo Branch, a MGT); havendo, a
+recon ganha uma quebra ADICIONAL que fica aberta até a reversão manual
+liquidar, e a reversão só é executada com aprovação de um VP por e-mail.
+
+**A fonte chegou à terceira forma no mesmo dia, e a ordem explica a regra:**
+
+1. Do NDF Cockpit (pernas LEGAL Banco × contraparte MGT). Descartado: a perna
+   B2B não é garantida ali (a API filtra o interbook).
+2. Do Operations B3 com DUAS linhas — o net dos B2B (73760.00-9 × 04880.00-6) e
+   a reversão —, pareando cada perna de cliente com um B2B de mesmo valor e
+   sinal invertido. Descartado pela mesa: o net do B2B soma também o que é
+   contra cliente pelas DUAS rotas (a nova, 73760.20-5, e a antiga,
+   04880.10-9), e hoje não há como separar — o pareamento acusaria sobra que
+   não é defeito.
+3. **A que ficou:** só as liquidações 04880.00-6 × 73760.20-5 do Operations
+   B3. A REVERSÃO é o net delas × −1 — se no net a 73760.20-5 pagou a MGT, na
+   reversão a MGT paga o Banco (`branch: 'reversal'`).
+
+E o B2B voltou ao Pay/Rec, mas só como a sua linha (`branch: 'b2b'`): é uma
+liquidação DEVIDA (mesa) e tem de aparecer. Fora da reversão e do e-mail pelo
+mesmo motivo do item 2; um dia só com B2B tem a linha e não tem botão.
+
+O Operations B3 traz o mesmo contrato pelas duas visões, com as contas e o
+sinal trocados: vale a da conta do Banco, e a espelhada só entra (sinal
+virado) no contrato que não tem a dela (`_pair_legs`) — senão dobraria. As
+contas saem do `b3-accounts` por LE × TIPO (`commands.branch_accounts`: MGT
+`OWN`, JPM `CLIENT 2`, MGT `CLIENT 1`), nunca escritas no código.
+
+- **A linha só casa com o INTERBANCÁRIO no mesmo sentido** (`_match_allowed`):
+  por valor ela fecharia com a perna de um cliente qualquer, e a quebra sumiria
+  sem reversão nenhuma. Vai por ÚLTIMO no lado JPM, para não tomar o par de
+  ninguém. Fica `Pending` até liquidar; o carry-forward é o de sempre.
+- **Rota antiga (04880.00-6 × 04880.10-9)**: fora da conta e fora do e-mail;
+  aparece no log (WARNING) e no aviso `branch_legacy_route` ao baixar o `.eml`,
+  até o cenário ficar só na 73760.20-5. Dia SÓ com ela não tem botão nem linha.
+- **Botão "Branch Settl."** (toolbar do Pay/Rec): só com a rota nova e na data
+  de HOJE — o controle é do T+0. Baixa um `.eml` (X-Unsent, SEM `From`: quem
+  pede a aprovação é a pessoa, e o Outlook usa a conta dela) com o valor e a
+  direção da reversão, a conta de ORIGEM (default de pagamento APROVADO de
+  quem paga) e de DESTINO (default de recebimento de quem recebe) do
+  Counterparty Details, e a lista das operações — B3 ID, contraparte, bruto, IR,
+  total (do Cockpit pelo B3 ID, que o Operations B3 não traz) e o valor na B3,
+  com o total. Conta sem default aprovado vai ESCRITA como faltando no e-mail e
+  vira aviso `branch_no_account`; nunca se inventa. Tabela de 1080px com toda
+  célula `nowrap`. Sem TO salvo, recusa (`branch_no_recipient`).
+- **Card "Branch Settlement Reverse Approval"** no Control Panel (Settlement
+  Reporting, id `branchsettlement`): só TO e CC, gravados ao sair do campo;
+  arquivo `branch_settlement_recipients.json` ao lado dos outros cards.
+- De carona: a perna intragrupo do Cockpit com a grafia `BANCO J.P MORGAN S.A`
+  (sem o ponto) escapava da `_JPM_ENTITIES` e entrava no lado JPM como se fosse
+  cliente; `_entity_side` a tira.
+
+Em aberto: o sinal do `Valor` foi lido na visão da conta do Banco (205); se o
+Operations B3 da instância assinar pelo outro lado, a direção da reversão
+inverte — conferir no primeiro dia real. `check_payrec_branch.py`.
+
+## §561 — NDF Summary: os cards B3 × Internal contam só as contas próprias (2026-09-25)
+
+No lado B3 dos cards (resgates do Operations B3), o mesmo contrato chega por
+mais de uma visão — o intragrupo espelhado, a conta guarda-chuva — e a
+QUANTIDADE somava cada uma como uma operação. Pedido da mesa: contar só a linha
+cuja `Conta` é 73760.00-9 ou 04880.00-6, e só na contagem. As duas são as
+`OWN` de JPM e MGT no `b3-accounts` (`_ndfsum_count_accounts`), não números no
+código. O VALOR segue somando todas as linhas; o `matched` do card compara a
+contagem nova com a do Cockpit. `check_ndfsum_card_count.py`.

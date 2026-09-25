@@ -2732,5 +2732,12 @@
   "map-load-failed-title": "Mapping not loaded",
   "map-load-failed-busy": "The database is busy. Try again in a few seconds.",
   "map-load-failed": "Could not read this mapping. Nothing was changed.",
-  "map-save-forbidden": "You do not have access to the Mapping page — nothing was saved."
+  "map-save-forbidden": "You do not have access to the Mapping page — nothing was saved.",
+  "cp-r-branch-title": "Branch Settlement Reverse Approval",
+  "cp-r-branch-desc": "Recipients of the VP approval request for the manual reversal of a settlement with the Branch (JPMorgan Chase Bank, N.A. – São Paulo Branch). The e-mail is generated as an .eml draft by the Branch Settl. button of the Pay/Rec Reconciliation, which only shows on a day with a Branch settlement.",
+  "cp-branch-to": "TO — VP",
+  "cp-branch-cc": "CC",
+  "cp-branch-meta": "Pay/Rec › Branch Settl. → .eml draft",
+  "cp-branch-open": "Open Pay/Rec",
+  "pr-branch": "Branch Settl."
 }
