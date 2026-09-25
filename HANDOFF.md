@@ -24301,26 +24301,30 @@ draw a partir da GRADE — qualquer caminho de entrada — com os deals e um bot
 que filtra o dia; e o box scan toca o sino ("Premium payment due TODAY") quando
 importa operação com prêmio hoje. `check_boxsched.py`.
 
-## §566 — Pay/Rec: a reversão da Branch só liquida com o pagamento E o recebimento (2026-09-25)
+## §566 — Pay/Rec: B2B é o net Banco × MGT inteiro; a reversão casa com o extrato da MGT (2026-09-25)
 
 Na primeira rodada real a reversão (Banco paga a Branch, −1.564.325,50) ficou
 `Pending` no Pending Payment e o MESMO dinheiro apareceu solto no Pending
 Receivement: a MGT recebendo +1.564.325,50 de `/OTC DERIVATIVES PRODUCTS` (a
-conta de derivativos do Banco, `sNomeCliDebitado` do RLDOCREC). A linha só
-sabia casar com o interbancário do Banco — e, casando só com ele, fecharia com
-o dinheiro saindo sem ninguém conferir que chegou.
+conta de derivativos do Banco, `sNomeCliDebitado` do RLDOCREC). E o B2B
+(+3.593.922,84) também ficou pendente, com o LTR0005 de 5.158.248,34 do
+Histórico de Mensagens JPM sem par.
 
-Regra (`_reversal_legs`/`_reversal_detail`): a reversão é um dinheiro dito
-pelos dois lados, e só é `Settled` com AS DUAS pontas — a do Banco (LE JPM, no
-sentido da linha, interbancário ±R$20) e a da MGT (LE MGT, sentido OPOSTO: o
-recebimento/pagamento contra a conta `/OTC DERIVATIVES PRODUCTS` ou o
-interbancário da MGT), cada uma pelo valor ABSOLUTO da reversão. Uma só fica
-`Pending` com `reversal_legs` dizendo qual apareceu (etiquetas ✓/✗ na tela). A
-ponta da MGT é consumida (não sobra no Pending Receivement) e sai do resumo — é
-o espelho da do Banco e inflaria o outro sentido. A conta do Banco nunca é par
-de perna de cliente (`_match_allowed`). O B2B segue com a regra antiga.
+A mesa explicou os dois números (e a conta fecha: 3.593.922,84 + 1.564.325,50 =
+5.158.248,34):
 
-Em aberto: a ponta do BANCO continua sendo só o interbancário (LTR) do JPM.
-Se o primeiro dia real mostrar que o débito sai por outra via (o SDConta
-interno contra `/OTC DERIVATIVES PRODUCTS`, hoje descartado no
-`_cli_finalize`), é ali que se abre a segunda porta. `check_payrec_branch.py`.
+- **O B2B é o net de TODA liquidação Banco × MGT**: 73760.00-9 × 04880.00-6
+  **mais** 73760.20-5 × 04880.00-6, na visão do Banco. É esse total que a B3
+  liquida e que o LTR do Histórico de Mensagens JPM traz — ele casa com a linha
+  do B2B pela regra de sempre (interbancário no mesmo sentido, ±R$20).
+- **A reversão é só a 20-5 × 00-6 × −1**, e o extrato que a mostra é o da MGT,
+  no sentido oposto: a TED contra `/OTC DERIVATIVES PRODUCTS` no RLDOCREC (ou o
+  interbancário da MGT). `_reversal_leg` a acha pelo valor absoluto e ela entra
+  no casamento dita na visão do Banco (sinal virado), indo ao Settled como
+  qualquer outra; no resumo conta nesse sentido, não no do extrato.
+
+Uma primeira versão desta seção exigia DUAS pontas na reversão (o LTR do Banco
+e o recebimento da MGT), com etiquetas ✓/✗: estava errada — o LTR é do B2B.
+Saiu inteira. A conta do Banco (`/OTC DERIVATIVES PRODUCTS`) nunca é par de
+perna de cliente (`_match_allowed`). O `bank-name` não entra em nenhuma das
+duas: as linhas da Branch ignoram o cadastro. `check_payrec_branch.py`.

@@ -2064,18 +2064,16 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   G&O "Branch Settlement Control"). Só as liquidações 04880.00-6 (MGT própria)
   × 73760.20-5 (guarda-chuva do Banco para o cliente da MGT): a **reversão** é
   o net delas × −1 (a 205 pagou a MGT → na reversão a MGT paga o Banco) e vira
-  UMA linha `branch: 'reversal'` no Pending Payment/Receivement. **Ela só
-  liquida com as DUAS pontas** (§566, `_reversal_legs`): a do Banco (o
-  interbancário do JPM no sentido da linha) E a da MGT no sentido oposto (o
-  RLDOCREC da MGT contra a conta `/OTC DERIVATIVES PRODUCTS` do Banco, ou o
-  interbancário da MGT). Uma só deixa `Pending`, e a tela diz qual falta
-  (`reversal_legs`); a ponta da MGT sai do resumo (é o mesmo dinheiro). Perna de
-  cliente nunca fecha a reversão, e a conta do Banco nunca é par de cliente. As contas são
+  UMA linha `branch: 'reversal'` no Pending Payment/Receivement. **Ela casa
+  com o extrato da MGT** (§566, `_reversal_leg`): a TED contra a conta
+  `/OTC DERIVATIVES PRODUCTS` do Banco no RLDOCREC (ou o interbancário da MGT),
+  no sentido OPOSTO, dita na visão do Banco — nunca com o LTR do JPM, que é do
+  B2B, nem com perna de cliente; a conta do Banco nunca é par de cliente. As contas são
   do `b3-accounts` por LE × TIPO (`commands.branch_accounts`), nunca número no
-  código. **O B2B (73760.00-9 × 04880.00-6) é liquidação DEVIDA**: tem a sua
-  linha (`branch: 'b2b'`) no Pay/Rec, mas fica FORA da reversão e do e-mail —
-  hoje ele soma também o que é contra cliente pelas duas rotas, e não se
-  separa. A rota ANTIGA
+  código. **O B2B é o net de TODA liquidação Banco × MGT**
+  (73760.00-9 × 04880.00-6 **mais** 73760.20-5 × 04880.00-6, visão do Banco;
+  mesa, 25/09/2026) e casa com o LTR do Histórico de Mensagens JPM: tem a sua
+  linha (`branch: 'b2b'`) no Pay/Rec e fica fora do e-mail. A rota ANTIGA
   (04880.00-6 × 04880.10-9) fica fora da conta, avisada no log e no `.eml`, até
   o cenário ficar só na 205. O botão **Branch Settl.** só existe com a rota nova
   e na data de HOJE; baixa um `.eml` (X-Unsent, sem `From`) para o VP com as

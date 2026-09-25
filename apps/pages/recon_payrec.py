@@ -814,7 +814,10 @@ def branch_settlement(ops_rows, accounts, ndf_rows=None):
         })
     cli_net = round(sum(t['value'] for t in trades), 2)          # visão da Branch
     reversal = cli_net                   # = −(net pela 205): visão do BANCO, a da recon
-    b2b_net = round(sum(r['value'] for r in b2b), 2)
+    # O B2B é o net de TODA liquidação Banco × MGT (mesa, 25/09/2026): a própria
+    # (73760.00-9) E a guarda-chuva do cliente (73760.20-5), na visão do Banco —
+    # é esse total que a B3 liquida e o LTR do Histórico de Mensagens JPM traz.
+    b2b_net = round(sum(r['value'] for r in b2b) + sum(c['value'] for c in cli), 2)
 
     def _dir(v):
         return ('Receive' if v > 0 else 'Pay') if abs(v) >= 0.005 else ''
@@ -828,8 +831,8 @@ def branch_settlement(ops_rows, accounts, ndf_rows=None):
         'reversal_net': reversal, 'pay_receive': _dir(reversal),
         # A reversão dita pela BRANCH: o inverso do total da tabela do e-mail.
         'reversal_branch': round(-cli_net, 2),
-        # A liquidação DEVIDA Banco × MGT (visão da 73760.00-9): só a linha do
-        # Pay/Rec — fora da reversão e do e-mail.
+        # A liquidação DEVIDA Banco × MGT (00-9 × 00-6 + 20-5 × 00-6, visão do
+        # Banco): só a linha do Pay/Rec — fora do e-mail.
         'b2b': b2b, 'b2b_net': b2b_net, 'b2b_pay_receive': _dir(b2b_net),
         'client_gross': round(sum(t['gross'] or 0 for t in trades), 2),
         'client_ir': round(sum(t['ir'] or 0 for t in trades), 2),
@@ -1297,74 +1300,31 @@ def _is_house_leg(c):
     return str(c.get('client') or '').strip().upper() == _HOUSE_DERIV_ACCOUNT
 
 
-def _reversal_legs(j, client, matched):
-    """As DUAS pontas da reversão da Branch Settlement.
+def _reversal_leg(j, client, matched):
+    """A ponta que liquida a reversão da Branch Settlement.
 
-    A reversão é UM dinheiro dito pelos dois lados: o Banco paga (a linha `j`,
-    na visão do Banco) e a Branch recebe — ou o inverso. Ela só está liquidada
-    quando as duas pontas aparecem nos extratos:
-
-    - `bank`: a ponta do BANCO, no sentido da linha — o interbancário (LTR) do
-      Banco, como antes (±R$20).
-    - `branch`: a ponta da MGT, no sentido OPOSTO — o recebimento/pagamento da
-      MGT contra a conta de derivativos do Banco (`/OTC DERIVATIVES PRODUCTS`
-      no RLDOCREC) ou o interbancário da MGT.
-
-    Uma ponta sozinha não fecha: o pagamento sem o recebimento é dinheiro que
-    saiu e não chegou; o recebimento sem o pagamento, um crédito que não é da
-    reversão. Cada uma casa pelo valor ABSOLUTO da reversão."""
+    A reversão (20-5 × 00-6 × −1, visão do Banco) é dinheiro DENTRO de casa, e
+    o extrato que a mostra é o da MGT, no sentido OPOSTO ao da linha: a TED
+    contra a conta de derivativos do Banco (`/OTC DERIVATIVES PRODUCTS`, no
+    RLDOCREC) ou o interbancário da MGT. O LTR do Histórico de Mensagens JPM é
+    do B2B (o net de toda liquidação Banco × MGT), não daqui. Casa pelo valor
+    ABSOLUTO; o mais próximo vence."""
     alvo = abs(j['value'])
     oposto = 'Receive' if j['pay_receive'] == 'Pay' else 'Pay'
-
-    def perto(c):
+    best, best_d = None, None
+    for c in client:
+        if id(c) in matched or c.get('pay_receive') != oposto or (c.get('le') or 'JPM') != 'MGT':
+            continue
+        if not (c.get('bank') or _is_house_leg(c)):
+            continue
         d = abs(abs(c['value']) - alvo)
-        return (d <= c['tol']) if c.get('tol') else (d < _TOL_SETTLED)
-
-    def achar(le, direcao, aceita):
-        best, best_d = None, None
-        for c in client:
-            if id(c) in matched or c.get('pay_receive') != direcao:
-                continue
-            if (c.get('le') or 'JPM') != le or not aceita(c) or not perto(c):
-                continue
-            d = abs(abs(c['value']) - alvo)
-            if best_d is None or d < best_d:
-                best, best_d = c, d
-        return best
-
-    # O Banco é a ponta da linha; a MGT, a do outro lado.
-    bank = achar('JPM', j['pay_receive'], lambda c: bool(c.get('bank')))
-    if bank is not None:
-        matched.add(id(bank))
-    branch = achar('MGT', oposto, lambda c: bool(c.get('bank')) or _is_house_leg(c))
-    if branch is not None:
-        matched.add(id(branch))
-    return bank, branch
-
-
-def _reversal_detail(j, bank, branch):
-    """A linha da reversão com as duas pontas. O valor do lado cliente é dito
-    na visão do BANCO (a da linha): a ponta da MGT entra com o sinal virado."""
-    if bank is not None:
-        cv = bank['value']
-    elif branch is not None:
-        cv = -branch['value']
-    else:
-        cv = ''
-    legs = [x for x in (bank, branch) if x is not None]
-    both = bank is not None and branch is not None
-    diff = (cv - j['value']) if cv != '' else -j['value']
-    return {
-        'le': j.get('le', 'JPM'), 'product': j['product'], 'jpm_cpty': j['cpty'],
-        'client': ' / '.join(x['client'] for x in legs if x.get('client')),
-        'pay_receive': j['pay_receive'], 'jpm_value': j['value'], 'client_value': cv,
-        'sistema': ' + '.join(x['sistema'] for x in legs) or _BRANCH_SISTEMA,
-        'snumconta': ' / '.join(x['snumconta'] for x in legs if x.get('snumconta')),
-        'status': 'Settled' if both else 'Pending',
-        'difference': diff, 'branch': 'reversal',
-        # Qual ponta apareceu — a tela diz qual falta.
-        'reversal_legs': {'bank': bank is not None, 'branch': branch is not None},
-    }
+        if not ((d <= c['tol']) if c.get('tol') else (d < _TOL_SETTLED)):
+            continue
+        if best_d is None or d < best_d:
+            best, best_d = c, d
+    if best is not None:
+        matched.add(id(best))
+    return best
 
 
 # ── Reconciliation ────────────────────────────────────────────────────────────
@@ -1374,16 +1334,22 @@ def _reconcile(jpm, client):
         buckets.setdefault(_int_key(c['value']), []).append(c)
     details = []
     matched = set()
-    mirrored = set()            # a ponta da MGT na reversão: fora do resumo
+    mirrored = set()            # a ponta da MGT na reversão, como veio do extrato
+    mirrored_as = {}            # … e dita na visão do Banco, que é a que conta
     for j in jpm:
         if j.get('branch') == 'reversal':
-            bank, branch = _reversal_legs(j, client, matched)
-            if branch is not None:
-                mirrored.add(id(branch))
-            details.append(_reversal_detail(j, bank, branch))
-            continue
-        pool = buckets.get(_int_key(j['value']), [])
-        mate = None
+            leg = _reversal_leg(j, client, matched)
+            if leg is not None:
+                mirrored.add(id(leg))
+                # A ponta da MGT dita na visão do Banco (a da linha): sinal virado.
+                leg = dict(leg, value=-leg['value'], pay_receive=j['pay_receive'],
+                           tol=leg.get('tol') or _TOL_SETTLED)
+                mirrored_as[id(leg)] = leg
+            j_mate = leg
+        else:
+            j_mate = None
+        pool = [] if j.get('branch') == 'reversal' else buckets.get(_int_key(j['value']), [])
+        mate = j_mate
         for c in pool:
             # `_match_allowed` vale nos TRÊS estágios, e neste também: valores
             # que caem na mesma unidade inteira casam aqui sem passar por
@@ -1394,7 +1360,7 @@ def _reconcile(jpm, client):
         # COMM OPT premiums are settled net of ~0.005% IR, so the exact whole-unit
         # key can miss. Fall back to the nearest unmatched client value within
         # 0.005% of the JPM (gross) value.
-        if mate is None and j.get('product') == 'COMM OPT':
+        if mate is None and j.get('product') == 'COMM OPT' and j.get('branch') != 'reversal':
             tol = abs(j['value']) * _TOL_COMM_OPT_PCT + _TOL_COMM_OPT_ABS
             best, best_d = None, None
             for c in client:
@@ -1411,7 +1377,7 @@ def _reconcile(jpm, client):
         # whole-unit boundary and miss the exact-key bucket. Fall back to the nearest
         # unmatched client value within R$1 — or within the client record's own
         # tolerance when it carries one (interbank SPB actuals: ±R$20).
-        if mate is None:
+        if mate is None and j.get('branch') != 'reversal':
             best, best_d = None, None
             for c in client:
                 if id(c) in matched or not _match_allowed(j, c):
@@ -1482,6 +1448,7 @@ def _reconcile(jpm, client):
     # outro lado e no sentido oposto: contada, inflaria o outro sentido.
     client_kept = [c for c in client if id(c) not in mirrored
                    and (id(c) in matched or not c.get('drop_if_unmatched'))]
+    client_kept += list(mirrored_as.values())
     return details, _summary(jpm, client_kept, details)
 
 
