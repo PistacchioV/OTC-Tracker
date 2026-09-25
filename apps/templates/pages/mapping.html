@@ -249,7 +249,7 @@
         { key: 'bank-name',      icon: 'ti-building-bank',   lang: 'map-tab-bank-name',     label: 'Bank Name' },
         // ti-currency-exchange NÃO existe no Tabler empacotado (vendors.min.css) — era
         // por isso que esta era a única aba sem ícone. ti-transfer existe.
-        { key: 'fxo-conv-rate',  icon: 'ti-transfer',         lang: 'map-tab-fxo-conv-rate', label: 'FXO Conversion Rate' },
+        { key: 'fxo-conv-rate',  icon: 'ti-transfer',         lang: 'map-tab-fxo-conv-rate', label: 'Currency Conversion Rate' },
         { key: 'ndf-pdf-cpty',   icon: 'ti-file-type-pdf',   lang: 'map-tab-ndf-pdf-cpty',  label: 'PDF (Settlement Advice)' },
         { key: 'swap-curves',    icon: 'ti-chart-line',      lang: 'map-tab-swap-curves',   label: 'Swap Curves (Athena × B3)' },
         { key: 'cetip-files',    icon: 'ti-file-download',   lang: 'map-tab-cetip-files',   label: 'CETIP Files (Save Routine)' },
@@ -765,6 +765,7 @@
         }).join('');
         wireAutofill(st);
         wireRefdata(st);
+        wireDerive(st);
         // Colunas de domínio aberto (type datalist): as mesmas sugestões, no
         // dropdown padrão em vez do popup nativo.
         st.columns.forEach(function (c, i) {
@@ -905,6 +906,33 @@
                 // `input` cobre quem colou o valor inteiro de uma vez.
                 el.addEventListener('change', completa);
                 el.addEventListener('input', completa);
+            });
+        });
+    }
+
+    /* Coluna com `derive: {from, format}` (declarado no `_MAPPING_DEFS`): o
+       valor digitado na coluna `from` propõe o desta — `format` com `{}` no
+       lugar do valor, em maiúsculas (Moeda Base `usd` → `USD PTAX`, §559). Só
+       escreve quando o destino está vazio ou ainda é a proposta anterior:
+       quem digitou a exceção (`ARS MAE`) não perde o que digitou. */
+    function wireDerive(st) {
+        st.columns.forEach(function (c, di) {
+            if (!c.derive || !c.derive.from) return;
+            var si = -1;
+            st.columns.forEach(function (x, i) { if (x.key === c.derive.from) si = i; });
+            var src = document.querySelector('#mapModalFields .map-fld[data-i="' + si + '"]');
+            var dst = document.querySelector('#mapModalFields .map-fld[data-i="' + di + '"]');
+            if (si < 0 || !src || !dst) return;
+            function proposta(v) {
+                v = String(v || '').trim().toUpperCase();
+                return v ? String(c.derive.format || '{}').replace('{}', v) : '';
+            }
+            var prev = proposta(src.value);
+            src.addEventListener('input', function () {
+                var cur = String(dst.value || '').trim();
+                var nova = proposta(src.value);
+                if (!cur || cur === prev) dst.value = nova;
+                prev = nova;
             });
         });
     }

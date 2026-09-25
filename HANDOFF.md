@@ -24148,3 +24148,20 @@ telas) passam agora por `entrypoint._notif_ref(entries, idx, deal_id)`: o
 `b3_id` da linha e, sem ele, a chave (linha ainda sem B3 ID, e nas DCE a chave
 já é o Trade ID do extrato). A chave de busca não mudou — só o texto do sino.
 `check_intrag_notif_ref.py`.
+
+## §559 — /mapping: "FXO Conversion Rate" vira Currency Conversion Rate, e a taxa se propõe sozinha (2026-09-25)
+
+O cadastro da Taxa de Conversão por Moeda Base (o Anexo II das confirmações)
+serve FXO **e** NDF, e o rótulo dizia só FXO. Na tela ele é agora **Currency
+Conversion Rate** (en/br/es, a chave `map-tab-fxo-conv-rate` nunca tinha
+tradução); a CHAVE do cadastro segue `fxo-conv-rate`, porque é o nome do
+arquivo/tabela já gravado — renomeá-la faria a instância perder o cadastro e
+cair no seed. Os avisos do `confirmations.py` citam o nome novo.
+
+Digitar a Moeda Base preenche a Conversion Rate com `<MOEDA> PTAX`, a regra
+da casa. É um atributo NOVO e genérico de coluna do `_MAPPING_DEFS`:
+`derive: {from, format}` (`wireDerive` no `mapping.html`), declarado no
+cadastro e não no JS. Ele só escreve com o destino vazio ou ainda igual à
+proposta anterior — a exceção digitada à mão (`ARS MAE`) sobrevive a trocar a
+moeda. O `autofill` que já existia é outra coisa: copia o que as LINHAS
+cadastradas usam, e numa moeda nova não haveria o que copiar.

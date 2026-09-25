@@ -1090,7 +1090,8 @@ def _conf_fxo_strike(v):
 
 
 def _conf_fxo_conv_rate(moeda):
-    """(Taxa de Conversão, Tipo) da Moeda Base pelo mapping FXO Conversion Rate.
+    """(Taxa de Conversão, Tipo) da Moeda Base pelo mapping Currency Conversion Rate
+    (`fxo-conv-rate`, que serve FXO e NDF).
 
     O Anexo II do documento define uma taxa por moeda ("USD PTAX" é a de venda
     do dólar, "ARS MAE" a do peso etc.), então isto é de-para de cadastro, não
@@ -1159,7 +1160,7 @@ def _conf_fxo_generation_page(family):
             row['dtExerc'] = _conf_fmt_date(deal.get('FixingEndDate'))
         rows.append(row)
     if sem_taxa:
-        warnings.append('Moeda {} sem Taxa de Conversão cadastrada (mapping FXO Conversion Rate) '
+        warnings.append('Moeda {} sem Taxa de Conversão cadastrada (mapping Currency Conversion Rate) '
                         '— preencha as colunas no painel.'.format(', '.join(sorted(sem_taxa))))
 
     cgd_txt = _conf_cgd_lookup(first)
@@ -1432,7 +1433,7 @@ def _conf_fwdstart_rows(picked, warnings, num_field='B3_ID'):
             'dtVenc':        _conf_fmt_date(deal.get('SettlementDate')),
         })
     if sem_taxa:
-        warnings.append('Moeda {} sem Taxa de Conversão cadastrada (mapping FXO Conversion Rate) '
+        warnings.append('Moeda {} sem Taxa de Conversão cadastrada (mapping Currency Conversion Rate) '
                         '— preencha as colunas no painel.'.format(', '.join(sorted(sem_taxa))))
     if sem_b3 and num_field == 'B3_ID':
         warnings.append('{} operação(ões) sem B3 ID — a coluna Nº do Anexo I sai vazia. '

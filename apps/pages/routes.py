@@ -12168,11 +12168,17 @@ _MAPPING_DEFS = {
     # o que faz disto cadastro e não constante. Nasce só com o USD, que é a
     # linha do documento-modelo; moeda sem linha cai como aviso no painel, em
     # vez de sair em branco na confirmação sem ninguém ver.
+    # Taxa de conversão por Moeda Base — do Anexo II das confirmações de FXO e
+    # das de NDF. O rótulo é GLOBAL; a chave segue `fxo-conv-rate` porque é o
+    # nome do arquivo/tabela já cadastrado (renomeá-la perderia o cadastro).
+    # `derive`: digitar a Moeda Base propõe a taxa `<MOEDA> PTAX` (a regra da
+    # casa); o campo continua editável para a exceção (`ARS MAE`) — §559.
     'fxo-conv-rate': {
-        'label': 'FXO Conversion Rate',
+        'label': 'Currency Conversion Rate',
         'columns': [
             {'key': 'MOEDA BASE', 'label': 'Base Currency'},
-            {'key': 'TAXA DE CONVERSAO', 'label': 'Conversion Rate'},
+            {'key': 'TAXA DE CONVERSAO', 'label': 'Conversion Rate',
+             'derive': {'from': 'MOEDA BASE', 'format': '{} PTAX'}},
             {'key': 'TIPO', 'label': 'Rate Type', 'type': 'select',
              'options': ['', 'Venda', 'Compra']},
         ],
