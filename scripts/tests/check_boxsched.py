@@ -173,6 +173,27 @@ check('rota /api/new-deals/box-scan/run registrada',
 check('rota /api/new-deals/box-scan continua',
       '/api/new-deals/box-scan' in rules, True)
 
+print('\n== premio D0: o box scan toca o sino (o Swal so existia no Import da pagina) ==')
+from datetime import datetime as _dt                     # noqa: E402
+NOTIFS = []
+_orig_notif, _orig_now = R._create_notification, R._br_now
+R._create_notification = lambda *a, **k: NOTIFS.append(a)
+try:
+    R._br_now = lambda: _dt(2026, 5, 25, 10, 0)        # = a SpotDate do row()
+    BOX['opt'] = [email('E9', [row(deal='D-9')])]
+    BC.pull('opt')
+    premio = [a for a in NOTIFS if 'Premium payment due TODAY' in str(a[-1])]
+    check('um aviso de premio hoje', len(premio), 1)
+    check('   com o deal', 'D-9' in str(premio[0][-1]) if premio else False, True)
+    NOTIFS[:] = []
+    R._br_now = lambda: _dt(2026, 5, 26, 10, 0)
+    BOX['opt'] = [email('E10', [row(deal='D-10')])]
+    BC.pull('opt')
+    check('SpotDate que nao e hoje nao avisa',
+          [a for a in NOTIFS if 'Premium payment due TODAY' in str(a[-1])], [])
+finally:
+    R._create_notification, R._br_now = _orig_notif, _orig_now
+
 shutil.rmtree(TMP, ignore_errors=True)
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS: %r' % fails))
 sys.exit(1 if fails else 0)

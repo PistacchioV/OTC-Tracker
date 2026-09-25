@@ -24244,3 +24244,59 @@ cuja `Conta` é 73760.00-9 ou 04880.00-6, e só na contagem. As duas são as
 `OWN` de JPM e MGT no `b3-accounts` (`_ndfsum_count_accounts`), não números no
 código. O VALOR segue somando todas as linhas; o `matched` do card compara a
 contagem nova com a do Cockpit. `check_ndfsum_card_count.py`.
+
+## §562 — Operations B3: o Advanced Export perdia dias por tempo (2026-09-25)
+
+"Could not read 6 days · signal is aborted without reason": é o teto de 60 s
+por dia do Advanced Export abortando o fetch. Cada dia do Operations B3
+derivava a coluna Type lendo as TRÊS posições de D-1 inteiras (DPOSICAO-TER,
+DPOSICAO, DPOSICAO-SWAP), frias no share. O mapa contrato → tipo de cada
+arquivo de posição agora fica em memória pelo carimbo (`_TIPO_MEMO`); o export
+aceita teto por página (`daily.timeout`, o Operations B3 declara 180 s) e dá
+UMA segunda passada nos dias que falharam — o servidor segue lendo o dia
+abortado e deixa os caches quentes. `check_opb3_tipo_memo.py`.
+
+## §563 — #OTC-0042: o XML das confirmações da MGT saía com valores e vencimento zerados (2026-09-25)
+
+O `_conf_fx_legs` lia a taxa só do `Strike`, que o import grava no FWD Start;
+o Vanilla a guarda em `Rate` (é o que o Anexo I do documento MGT já lia). Toda
+operação Vanilla caía em "sem notional/strike", e o `continue` levava junto a
+leitura da `SettlementDate` — `valor`, `valorEstrangeiro` e `dataVencimento`
+vazios. Agora a taxa é `Strike` ou `Rate`, e o vencimento é lido ANTES de a
+perna ser recusada. `check_mgt_conf.py` (o teste reproduz o ticket com o
+código antigo).
+
+## §564 — Monitor × Track: uma confirmação, um card, e o card abre o SEU PDF (2026-09-25)
+
+Dois relatos, uma raiz: o card do Monitor agrupava por CAMPOS da esteira (LOB,
+Cliente, Produto, Data, Moeda) que podiam divergir da segregação que montou o
+documento.
+
+- **Commodities, 6 operações e 5 validadas**: o documento escolhia o ativo por
+  `Commodities → Subjacente → Underlying Asset`; a esteira gravava a Moeda por
+  `Commodities → Underlying Asset`. O deal que chegou sem `Commodities` ia para
+  o PDF do grupo e para OUTRO card; o Validate carimba as chaves do card, e a
+  confirmação ficou em dois estágios. Agora é UMA função
+  (`_conf_merc_default`) para os dois lados.
+- **#OTC-0043** (USD e EUR do mesmo cliente): linha antiga (antes do §457) com
+  Moeda `BRL` juntava as duas num card; gerada a de EUR, o filtro de PDF casava
+  os dois e, na ordem alfabética, o de EUR vinha primeiro — o card mostrava e
+  validava o papel de EUR para as duas.
+
+O que mudou: confirmação JÁ GERADA agrupa pelo `Confirmation Link` (o
+documento que a geração carimba em toda operação que ele cobre —
+`manual_conf.group_key`); sem link, os campos de sempre. E quando vários PDFs
+casam, vale o do link, no card (`_mc_confirmation_docs(…, link)`) e na janela
+de validação. As linhas que já estão divididas em dois estágios na instância
+seguem assim: o card da que ficou para trás aparece sozinho e se valida à
+parte. `check_mc_confirmation_split.py`.
+
+## §565 — Opt FXO / Opt Commodities: o aviso de prêmio D0 não depende mais do Import da página (2026-09-25)
+
+Era um Swal no fim do Import da própria página (planilha/API), contando os
+deals recém-importados com Spot Date = hoje; o deal que entrava pelo box scan
+(servidor) passava calado. Agora: uma faixa fixa acima da grade
+(`static/js/premium-d0.js`, estilo no `streamflow.css` §51), recontada a cada
+draw a partir da GRADE — qualquer caminho de entrada — com os deals e um botão
+que filtra o dia; e o box scan toca o sino ("Premium payment due TODAY") quando
+importa operação com prêmio hoje. `check_boxsched.py`.

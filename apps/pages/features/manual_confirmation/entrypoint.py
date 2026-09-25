@@ -122,7 +122,7 @@ def api_mc_docs():
            'Moeda': request.args.get('ativo', ''),
            'Data Operação': request.args.get('data', '')}
     trades = [t.strip() for t in (request.args.get('trades') or '').split(',') if t.strip()]
-    docs = _R()._mc_confirmation_docs(row, trades)
+    docs = _R()._mc_confirmation_docs(row, trades, request.args.get('link', ''))
     _R()._mc_flush_email_subjects(_R()._mc_sync_email_subjects(docs, trades))
     return jsonify({'docs': docs})
 
@@ -169,7 +169,7 @@ def api_mc_docs_batch():
             docs = _R()._mc_confirmation_docs({
                 'Cliente': it.get('cliente', ''), 'Produto': it.get('produto', ''),
                 'LOB': it.get('lob', ''), 'Moeda': it.get('ativo', ''),
-                'Data Operação': it.get('data', '')}, trades)
+                'Data Operação': it.get('data', '')}, trades, it.get('link', ''))
         except Exception:                                   # noqa: BLE001
             # `null` é "não deu para olhar ESTE item", e a tela o distingue de
             # uma lista vazia. Duas coisas dependem disto: um item que levanta
@@ -257,7 +257,11 @@ def manual_confirmation_validate():
     # confirmações que apareceram num card, e uma confirmação aberta direto pelo
     # link ficava com a célula vazia com o recap na pasta.
     _keys = [str(r.get(_mc.KEY_COLUMN, '') or '') for r in rows]
-    docs = _R()._mc_confirmation_docs(row, _keys)
+    # O PDF que a geração carimbou nas linhas vence quando a pasta tem vários
+    # que casam (#OTC-0043): validar é assinar AQUELE papel.
+    _link = next((str(r.get('Confirmation Link', '') or '').strip() for r in rows
+                  if str(r.get('Confirmation Link', '') or '').strip()), '')
+    docs = _R()._mc_confirmation_docs(row, _keys, _link)
     _R()._mc_flush_email_subjects(_R()._mc_sync_email_subjects(docs, _keys))
     return render_template(
         'confirmations/manual-validate.html',

@@ -164,6 +164,22 @@ try:
     check('   e o numeroContrato do XML tambem', _n, FWD_MGT.get('B3_ID'))
     check('   o Vanilla MGT segue no Athena ID',
           R._conf_mgt_num_field([(dict(VAN_MGT, _conf_src='vanilla'), None)]), 'Deal')
+    # #OTC-0042: o XML da MGT saía com valor, valor estrangeiro e vencimento
+    # ZERADOS. O Vanilla guarda a taxa só em `Rate` (o `Strike` é do FWD
+    # Start), e o `continue` da perna recusada levava a data junto.
+    _n, xv, _w = R._conf_ndf_xml(
+        [(dict(VAN_MGT, _conf_src='vanilla'), None)], 'USD', REF, prefixo='NDF_Vanilla',
+        ccy_field='QuantityCurrency', legs_fn=R._conf_fx_legs, ccy='USD', warn_no_spot=False,
+        num_field='Deal')
+    tag = lambda x, t: (re.search(r'<%s>(.*?)</%s>' % (t, t), x) or [None, None])[1]
+    check('#OTC-0042 Vanilla MGT: valor estrangeiro = notional', tag(xv, 'valorEstrangeiro'), '1000000.00')
+    check('#OTC-0042 Vanilla MGT: valor em BRL = notional x Rate', tag(xv, 'valor'), '5432100.00')
+    check('#OTC-0042 Vanilla MGT: vencimento preenchido', tag(xv, 'dataVencimento'), '20261105')
+    _n, xf, _w = R._conf_ndf_xml(
+        [(dict(FWD_MGT, _conf_src='fwd-start'), None)], 'USD', REF, prefixo='NDF_FwdStart',
+        ccy_field='QuantityCurrency', legs_fn=R._conf_fx_legs, ccy='USD', warn_no_spot=False,
+        num_field='B3_ID')
+    check('#OTC-0042 FWD Start sem taxa: o vencimento sai mesmo assim', tag(xf, 'dataVencimento'), '20260828')
     r404 = cl.get('/confirmation/ndf-mgt/strike-me?date=2026-08-05&acronym=SUZANO&mercadoria=USD')
     check('familia desconhecida e 404', r404.status_code, 404)
 

@@ -40,7 +40,7 @@ from apps.pages import manual_conf as _mc_mod
 # das confirmacoes vem depois no routes.py) — sao os MESMOS objetos.
 from apps.pages.platform.confirmations import (
     _conf_ndfcomm_groups, _conf_optcomm_groups, _conf_optfxo_groups,
-    _conf_fwdstart_groups, _conf_mgt_groups, _conf_fwdstart_moeda,
+    _conf_fwdstart_groups, _conf_mgt_groups, _conf_fwdstart_moeda, _conf_merc_default,
     _conf_swap_groups, _conf_unwind_groups,
     _CONF_FAMILY_TEMPLATES, _CONF_UNWIND_FAMILY_TEMPLATES,
     _CONF_OPT_FAMILY_TEMPLATES, _CONF_FXO_FAMILY_TEMPLATES,
@@ -113,7 +113,10 @@ def _mc_moeda_do_ativo(deal, source, first):
     """
     src = _mc_mod.upper_norm(source)
     if src in ('NDF COMM', 'OPTION COMM'):
-        return first('Commodities', 'UnderlyingAsset')
+        # A MESMA regra da segregação do documento (Commodities → Subjacente →
+        # Underlying Asset). A cadeia própria daqui pulava o Subjacente, e o
+        # deal sem `Commodities` virava um card à parte do seu PDF.
+        return _conf_merc_default(deal) or first('Commodities', 'UnderlyingAsset')
     if src in ('SWAP', 'SWAP CORPORATE'):
         # O ativo do swap é a curva VCP (o papel/índice do Fator Equities) —
         # o MESMO eixo da segregação das confirmações (`_conf_swap_moeda`).
@@ -464,7 +467,20 @@ def _mc_email_subject(full):
     return assunto
 
 
-def _mc_confirmation_docs(row, trades=None):
+def _mc_link_pdf_name(link):
+    """O nome (sem extensão, em maiúsculas) do PDF para onde o `Confirmation
+    Link` da linha aponta, ou ''. O link é o `/api/electronic-inventory/file?
+    client=…&rel=…` que a geração carimba (`_mc_ei_link`)."""
+    from urllib.parse import urlparse, parse_qs
+    try:
+        rel = (parse_qs(urlparse(str(link or '')).query).get('rel') or [''])[0]
+    except Exception:                                       # noqa: BLE001
+        return ''
+    nome = rel.replace('\\', '/').rsplit('/', 1)[-1]
+    return os.path.splitext(nome)[0].strip().upper() if nome.lower().endswith('.pdf') else ''
+
+
+def _mc_confirmation_docs(row, trades=None, link=''):
     """Os PDFs da confirmação daquela linha, no Electronic Inventory.
 
     A pasta é DERIVADA da linha (cliente × produto × data da operação) e não de
@@ -588,6 +604,15 @@ def _mc_confirmation_docs(row, trades=None):
         pdfs = _afunila(out)
         if ativo_e_mercadoria:
             pdfs = [d for d in pdfs if not _de_outro_ativo(d)]
+        # O documento que a GERAÇÃO carimbou nas linhas vence o funil: com dois
+        # PDFs casando (o USD e o EUR do mesmo cliente, #OTC-0043), o card
+        # mostrava o primeiro da ordem alfabética — o EUR — e o Validate dava
+        # baixa no papel errado.
+        alvo = _mc_link_pdf_name(link)
+        if alvo:
+            meu = [d for d in out if d['name'].strip().upper() == alvo]
+            if meu:
+                pdfs = meu
         return pdfs + _afunila(mails)
     except Exception:
         log.warning('[manual-conf] não consegui listar a pasta da confirmação:\n%s',

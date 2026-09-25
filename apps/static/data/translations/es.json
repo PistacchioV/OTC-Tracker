@@ -2739,5 +2739,7 @@
   "cp-branch-cc": "CC",
   "cp-branch-meta": "Pay/Rec › Branch Settl. → borrador .eml",
   "cp-branch-open": "Abrir Pay/Rec",
-  "pr-branch": "Branch Settl."
+  "pr-branch": "Branch Settl.",
+  "nd-premium-d0-show": "Mostrar",
+  "nd-premium-d0-all": "Mostrar todas"
 }

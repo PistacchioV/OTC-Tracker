@@ -557,6 +557,8 @@
                    'data-docs-lob="' + esc(it.LOB || '') + '" ' +
                    'data-docs-ativo="' + esc(it.Moeda || '') + '" ' +
                    'data-docs-data="' + esc(it['Data Operação'] || '') + '" ' +
+                   // O PDF que a geração carimbou: com vários na pasta, é ele.
+                   'data-docs-link="' + esc(it['Confirmation Link'] || '') + '" ' +
                    // Os Trade IDs do grupo: o nome do PDF traz o número da
                    // operação, e é ele que escolhe o documento exato quando a
                    // pasta do dia tem vários.
@@ -675,7 +677,7 @@
         var itens = els.map(function (el) {
             return { cliente: el.attr('data-docs-cliente'), produto: el.attr('data-docs-produto'),
                      lob: el.attr('data-docs-lob'), ativo: el.attr('data-docs-ativo'),
-                     data: el.attr('data-docs-data'),
+                     data: el.attr('data-docs-data'), link: el.attr('data-docs-link') || '',
                      trades: (el.attr('data-docs-trades') || '').split(',').filter(Boolean) };
         });
         // `checou` distingue "o servidor olhou a pasta e não há contrato" (aí o

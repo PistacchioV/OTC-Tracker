@@ -51,6 +51,8 @@ def pull(product):
     maps = queries.commodity_maps()
 
     total = new_n = amend_n = archived = 0
+    premio_hoje = []
+    hoje = R._br_now().date()
     for em in emails:
         try:
             deals = otc_boxparse.deals_from_html(
@@ -67,6 +69,12 @@ def pull(product):
                         product, em.get('subject'))
             continue
         n, a = persistence.persist_deals(product, deals)
+        # Prêmio D0: o Swal da página só existe no Import dela, e o deal que
+        # entra por aqui passava calado. O sino avisa a mesa inteira.
+        for d in deals:
+            sd = R._parse_date_any(d.get('SpotDate', ''))
+            if sd and sd == hoje:
+                premio_hoje.append(str(d.get('Deal') or '').strip())
         total += len(deals)
         new_n += n
         amend_n += a
@@ -85,6 +93,10 @@ def pull(product):
             bits.append('{} amended'.format(amend_n))
         R._create_notification(domain.MAKER_SID, 'Box Scan', 'New Deals', cfg['label'],
                              'Outlook box: {} deal(s)'.format(', '.join(bits)))
+    if premio_hoje:
+        R._create_notification(domain.MAKER_SID, 'Box Scan', 'New Deals', cfg['label'],
+                             'Premium payment due TODAY: {} deal(s) — {}'.format(
+                                 len(premio_hoje), ', '.join(x for x in premio_hoje if x)[:180]))
     R.log.info('[boxscan] %s: %d e-mail(s) · %d deal(s) · novos=%d amendados=%d · '
              'arquivados=%d · cancelamentos apagados do box=%d',
              product, len(emails), total, new_n, amend_n, archived, len(cancelled))

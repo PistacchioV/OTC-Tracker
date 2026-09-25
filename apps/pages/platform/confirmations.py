@@ -235,6 +235,20 @@ def _conf_state_save(ref, state, product='ndf-comm'):
         routes._atomic_write_json(fp, state)
 
 
+def _conf_merc_default(deal, subj=None):
+    """O ATIVO de uma operação de mercadoria (o eixo do meio da segregação):
+    `Commodities`, senão a mercadoria do Subjacente (Index B3) pelo Underlying
+    Asset, senão o próprio Underlying Asset. UMA função para a segregação, a
+    geração (`_conf_pick_eligible`) e a coluna Moeda da esteira
+    (`_mc_moeda_do_ativo`) — com cadeias diferentes, o deal que chegou sem
+    `Commodities` ia para o PDF do grupo e para OUTRO card no Monitor, e o
+    Validate do card carimbava as outras operações sem ele."""
+    ua = str((deal or {}).get('UnderlyingAsset') or '').strip()
+    if subj is None:
+        subj = _conf_subjacente_map().get(ua)
+    return str((deal or {}).get('Commodities') or (subj or {}).get('mercadoria') or ua or '').strip().upper()
+
+
 def _conf_segregate(deals, family_fn, merc_fn=None):
     """Segregação das confirmações da data: um grupo por contraparte ×
     mercadoria × família de template (pontas internas fora, Canceled fora).
@@ -257,7 +271,7 @@ def _conf_segregate(deals, family_fn, merc_fn=None):
         ua = str(deal.get('UnderlyingAsset') or '').strip()
         subj = subj_map.get(ua)
         merc = (str(merc_fn(deal) or '').strip().upper() if merc_fn else
-                str(deal.get('Commodities') or (subj or {}).get('mercadoria') or ua or '').strip().upper())
+                _conf_merc_default(deal, subj))
         fam = family_fn(deal, subj)
         acr = str(deal.get('Acronym') or '').strip() or client or '(sem contraparte)'
         key = (acr, merc, fam)
@@ -486,7 +500,7 @@ def _conf_pick_eligible(deals, acr, merc, family, family_fn, merc_fn=None):
         ua = str(deal.get('UnderlyingAsset') or '').strip()
         subj = subj_map.get(ua)
         d_merc = (str(merc_fn(deal) or '').strip().upper() if merc_fn else
-                  str(deal.get('Commodities') or (subj or {}).get('mercadoria') or ua or '').strip().upper())
+                  _conf_merc_default(deal, subj))
         d_acr = str(deal.get('Acronym') or '').strip() or client or '(sem contraparte)'
         if d_acr != acr or d_merc != merc:
             continue
@@ -667,7 +681,11 @@ def _conf_fx_legs(deal, subj):
     a perna fica de fora, com aviso — é o caso do forward start ainda não
     fixado."""
     qty = _conf_to_float(str(deal.get('Notional') or '').replace('-', ''))
-    strike = _conf_to_float(deal.get('Strike'))
+    # A taxa: o FWD Start a grava em `Strike` (e zera o `Rate`); o Vanilla só em
+    # `Rate` — é o que o Anexo I do documento MGT já lê. Lendo só o `Strike`,
+    # toda operação Vanilla de MGT caía em "sem notional/strike" e o XML saía
+    # com valor e valor estrangeiro ZERADOS (#OTC-0042).
+    strike = _conf_to_float(deal.get('Strike')) or _conf_to_float(deal.get('Rate'))
     if qty is None or not strike:
         return None
     if _conf_ccy_is_brl(str(deal.get('QuantityCurrency') or '')):
@@ -732,6 +750,13 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
     valor_estr = 0.0
     venc = None
     for deal, subj in picked:
+        # O vencimento vem ANTES de qualquer `continue`: ele não depende do
+        # notional nem do strike, e uma operação sem valor ainda vence numa data.
+        # Lido depois, a perna recusada levava junto a `dataVencimento`, e o XML
+        # saía com ela vazia (#OTC-0042).
+        sd = routes._parse_date_any(deal.get('SettlementDate'))
+        if sd and (venc is None or sd > venc):
+            venc = sd
         # `legs_fn` troca a aritmética da perna (o termo de moeda não é
         # quantidade × preço, ver _conf_fx_legs); sem ele vale a da mercadoria.
         if legs_fn:
@@ -758,9 +783,6 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
                     warnings.append('Operação {}: sem Spot FXRate — valor em BRL ficou igual ao '
                                     'estrangeiro.'.format(deal.get('Deal')))
             valor += leg * spot
-        sd = routes._parse_date_any(deal.get('SettlementDate'))
-        if sd and (venc is None or sd > venc):
-            venc = sd
 
     cnpj_cli = re.sub(r'\D', '', str(first.get('TaxID') or ''))
     if len(cnpj_cli) != 14:
