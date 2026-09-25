@@ -24300,3 +24300,27 @@ deals recém-importados com Spot Date = hoje; o deal que entrava pelo box scan
 draw a partir da GRADE — qualquer caminho de entrada — com os deals e um botão
 que filtra o dia; e o box scan toca o sino ("Premium payment due TODAY") quando
 importa operação com prêmio hoje. `check_boxsched.py`.
+
+## §566 — Pay/Rec: a reversão da Branch só liquida com o pagamento E o recebimento (2026-09-25)
+
+Na primeira rodada real a reversão (Banco paga a Branch, −1.564.325,50) ficou
+`Pending` no Pending Payment e o MESMO dinheiro apareceu solto no Pending
+Receivement: a MGT recebendo +1.564.325,50 de `/OTC DERIVATIVES PRODUCTS` (a
+conta de derivativos do Banco, `sNomeCliDebitado` do RLDOCREC). A linha só
+sabia casar com o interbancário do Banco — e, casando só com ele, fecharia com
+o dinheiro saindo sem ninguém conferir que chegou.
+
+Regra (`_reversal_legs`/`_reversal_detail`): a reversão é um dinheiro dito
+pelos dois lados, e só é `Settled` com AS DUAS pontas — a do Banco (LE JPM, no
+sentido da linha, interbancário ±R$20) e a da MGT (LE MGT, sentido OPOSTO: o
+recebimento/pagamento contra a conta `/OTC DERIVATIVES PRODUCTS` ou o
+interbancário da MGT), cada uma pelo valor ABSOLUTO da reversão. Uma só fica
+`Pending` com `reversal_legs` dizendo qual apareceu (etiquetas ✓/✗ na tela). A
+ponta da MGT é consumida (não sobra no Pending Receivement) e sai do resumo — é
+o espelho da do Banco e inflaria o outro sentido. A conta do Banco nunca é par
+de perna de cliente (`_match_allowed`). O B2B segue com a regra antiga.
+
+Em aberto: a ponta do BANCO continua sendo só o interbancário (LTR) do JPM.
+Se o primeiro dia real mostrar que o débito sai por outra via (o SDConta
+interno contra `/OTC DERIVATIVES PRODUCTS`, hoje descartado no
+`_cli_finalize`), é ali que se abre a segunda porta. `check_payrec_branch.py`.
