@@ -110,6 +110,13 @@
            {% include 'partials/head-css.html' %}
    
        {% endblock css %}
+
+       {# Sessão que cai no meio da página (IP mudou, §557): 401 de /api/* vira
+          aviso traduzido + volta ao login. No <head>: os fetches da página
+          rodam antes do footer. #}
+       {% if session.get('authenticated') %}
+       <script src="{{ config.ASSETS_ROOT }}/js/session-guard.js?v=20260924a"></script>
+       {% endif %}
    
    </head>
    
