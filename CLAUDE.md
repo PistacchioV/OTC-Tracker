@@ -785,7 +785,11 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   **Advanced Export** (`otcExportAdvanced('#t', { daily: '<endpoint que a
   própria página consulta>' })`, `exact=1` + confere `source_date`, dia sem
   arquivo é pulado, teto 60 s/dia — §304). **Export próprio não existe**: um
-  CSV escrito à mão diverge do resto do app no primeiro acento (§461). Célula
+  CSV escrito à mão diverge do resto do app no primeiro acento (§461). A
+  exceção é o `/mapping`, que não é DataTable (paginação própria): o menu dele
+  é o da casa sem o Advanced (cadastro não tem dia), Excel pelo SheetJS com
+  toda célula como TEXTO e PDF pelo pdfmake, as duas bibliotecas carregadas só
+  no clique (§556). Célula
   editável sai pelo VALUE do campo, num `format.body` (o texto de um `<input>`
   é vazio, e a coluna sairia em branco) — modelo em `formatExportData`.
   **O nome do arquivo é o do DOCUMENTO** — tela, card quando há mais de um, e a
@@ -2184,6 +2188,11 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 
 ### Notificações, e-mail e schedulers
 
+- **O id da linha no sino é a REFERÊNCIA da tela, não a chave interna**
+  (§558): nas telas de Intrag o `deal_id` das rotas é o Athena ID (o `_deal`
+  das páginas que nascem do New Deals) e a mesa fala em B3 ID — o texto passa
+  por `intrag/entrypoint._notif_ref` (B3 ID da linha, sem ele a chave).
+  `check_intrag_notif_ref.py`.
 - **Notificação nova exige o rótulo `page` nos TRÊS mapas** (`_NOTIF_PAGE_URL`,
   `PAGE_URL` do `topbar.html` e do `sw-push.js`); sem ele o clique não vai a
   lugar nenhum. `check_notif_page_url.py` varre por AST.
@@ -2321,7 +2330,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (163 scripts)
+### `scripts/tests/` (169 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
