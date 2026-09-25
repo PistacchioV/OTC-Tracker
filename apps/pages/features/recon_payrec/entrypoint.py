@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""As quatro rotas do Pay/Rec."""
+"""As rotas do Pay/Rec e do card Branch Settlement Reverse Approval."""
+import base64
+import traceback
 from datetime import datetime
 
 from flask import jsonify, redirect, render_template, request, session, url_for
@@ -113,3 +115,41 @@ def reconciliation_payrec_end():
     except Exception as e:
         R.log.error('[recon_payrec_end] %s', e)
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@blueprint.route('/reconciliation-payrec/branch-email', methods=['POST'])
+def reconciliation_payrec_branch_email():
+    """Rascunho .eml (X-Unsent) do pedido de aprovação da reversão da Branch
+    Settlement para o VP, com os destinatários do card do Control Panel. Volta
+    em base64 no JSON e a página salva o arquivo (o desenho do Daily Metric)."""
+    R = _routes()
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    recon_date = ((request.get_json(silent=True) or {}).get('recon_date') or '').strip()
+    try:
+        fname, raw, avisos = commands.branch_draft(recon_date)
+    except commands.BranchDraftError as e:
+        return jsonify({'success': False, 'code': e.code, 'params': {}, 'error': str(e)}), 400
+    R._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                           'Branch Settlement Approval Draft', 'Reconciliation',
+                           'VP approval draft generated' +
+                           (' (' + recon_date + ')' if recon_date else ''))
+    return jsonify({'success': True, 'filename': fname,
+                    'b64': base64.b64encode(raw).decode('ascii'), 'warnings': avisos})
+
+
+@blueprint.route('/api/control-panel/branch-settlement/recipients', methods=['GET', 'POST'])
+def api_cp_branch_settlement_recipients():
+    """GET → TO/Cc do card; POST → grava as listas."""
+    R = _routes()
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if request.method == 'POST':
+        try:
+            commands.save_recipients(request.get_json(silent=True) or {})
+        except Exception as e:                              # noqa: BLE001
+            R.log.error('[branch-settlement] save recipients failed:\n%s', traceback.format_exc())
+            return jsonify({'success': False,
+                            'error': '{}: {}'.format(type(e).__name__, e)}), 500
+        return jsonify({'success': True})
+    return jsonify({'success': True, **queries.recipients()})

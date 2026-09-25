@@ -2732,5 +2732,12 @@
   "map-load-failed-title": "Mapping não carregado",
   "map-load-failed-busy": "O banco está ocupado. Tente de novo em alguns segundos.",
   "map-load-failed": "Não foi possível ler este mapping. Nada foi alterado.",
-  "map-save-forbidden": "Você não tem acesso à página de Mapping — nada foi salvo."
+  "map-save-forbidden": "Você não tem acesso à página de Mapping — nada foi salvo.",
+  "cp-r-branch-title": "Branch Settlement Reverse Approval",
+  "cp-r-branch-desc": "Destinatários do pedido de aprovação do VP para a reversão manual de uma liquidação com a Branch (JPMorgan Chase Bank, N.A. – São Paulo Branch). O e-mail é gerado como rascunho .eml pelo botão Branch Settl. do Pay/Rec Reconciliation, que só aparece em dia com liquidação com a Branch.",
+  "cp-branch-to": "PARA — VP",
+  "cp-branch-cc": "CC",
+  "cp-branch-meta": "Pay/Rec › Branch Settl. → rascunho .eml",
+  "cp-branch-open": "Abrir Pay/Rec",
+  "pr-branch": "Branch Settl."
 }

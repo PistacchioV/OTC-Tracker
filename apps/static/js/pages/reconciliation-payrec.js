@@ -27,7 +27,14 @@
           justifyFail: 'Could not save the justification.',
           runFolder: 'Run with the files from the Pay/Rec folder',
           runFiles: 'Run with the attached file(s)',
-          e_ndf_source_failed: 'Could not read the NDF settlements (Athena API + unwinds):' },
+          e_ndf_source_failed: 'Could not read the NDF settlements (Athena API + unwinds):',
+          branchTag: 'Branch Settl.', branchTitle: 'Branch Settlement — VP approval',
+          branchDone: 'The approval e-mail draft was downloaded. Open it in Outlook, review and send it to the VP.',
+          branchWarn: 'Check before sending:',
+          e_branch_none: 'There is no settlement with the Branch on this date. Run the reconciliation first.',
+          e_branch_no_recipient: 'No TO recipient saved. Fill it in Control Panel › Branch Settlement Reverse Approval.',
+          e_branch_no_b2b: 'The NDF Cockpit has no Bank × Branch B2B net for this date — there is no reversal to approve.',
+          w_branch_no_account: 'No approved {slot} account for {entity} in Reference Data › Counterparty Details.' },
     br: { running: 'Processando…', sending: 'Enviando…', run: 'Rodar reconciliação', end: 'Encerrar processo',
           noFiles: 'Sem arquivos', noFilesMsg: 'Anexe os arquivos no dropzone ou verifique se a pasta Pay/Rec tem os arquivos de insumo desta data.',
           failTitle: 'Reconciliação falhou', netErr: 'Erro de rede.', done: 'Reconciliação concluída',
@@ -41,7 +48,14 @@
           justifyFail: 'Não foi possível salvar a justificativa.',
           runFolder: 'Rodar com os arquivos da pasta Pay/Rec',
           runFiles: 'Rodar com o(s) arquivo(s) anexado(s)',
-          e_ndf_source_failed: 'Não foi possível ler as liquidações de NDF (API Athena + recompras):' },
+          e_ndf_source_failed: 'Não foi possível ler as liquidações de NDF (API Athena + recompras):',
+          branchTag: 'Branch Settl.', branchTitle: 'Branch Settlement — aprovação do VP',
+          branchDone: 'O rascunho do e-mail de aprovação foi baixado. Abra no Outlook, revise e envie ao VP.',
+          branchWarn: 'Confira antes de enviar:',
+          e_branch_none: 'Não há liquidação com a Branch nesta data. Rode a reconciliação primeiro.',
+          e_branch_no_recipient: 'Nenhum destinatário PARA salvo. Preencha em Control Panel › Branch Settlement Reverse Approval.',
+          e_branch_no_b2b: 'O NDF Cockpit não tem net B2B Banco × Branch nesta data — não há reversão para aprovar.',
+          w_branch_no_account: 'Sem conta {slot} aprovada para {entity} em Reference Data › Counterparty Details.' },
     es: { running: 'Procesando…', sending: 'Enviando…', run: 'Ejecutar reconciliación', end: 'Finalizar proceso',
           noFiles: 'Sin archivos', noFilesMsg: 'Adjunte los archivos en el dropzone o verifique que la carpeta Pay/Rec tenga los archivos de esta fecha.',
           failTitle: 'La reconciliación falló', netErr: 'Error de red.', done: 'Reconciliación completada',
@@ -55,7 +69,14 @@
           justifyFail: 'No se pudo guardar la justificación.',
           runFolder: 'Ejecutar con los archivos de la carpeta Pay/Rec',
           runFiles: 'Ejecutar con el/los archivo(s) adjunto(s)',
-          e_ndf_source_failed: 'No se pudieron leer las liquidaciones de NDF (API Athena + recompras):' },
+          e_ndf_source_failed: 'No se pudieron leer las liquidaciones de NDF (API Athena + recompras):',
+          branchTag: 'Branch Settl.', branchTitle: 'Branch Settlement — aprobación del VP',
+          branchDone: 'Se descargó el borrador del correo de aprobación. Ábralo en Outlook, revíselo y envíelo al VP.',
+          branchWarn: 'Verifique antes de enviar:',
+          e_branch_none: 'No hay liquidación con la Branch en esta fecha. Ejecute la reconciliación primero.',
+          e_branch_no_recipient: 'No hay destinatario PARA guardado. Complételo en Control Panel › Branch Settlement Reverse Approval.',
+          e_branch_no_b2b: 'El NDF Cockpit no tiene net B2B Banco × Branch en esta fecha — no hay reversión para aprobar.',
+          w_branch_no_account: 'Sin cuenta {slot} aprobada para {entity} en Reference Data › Counterparty Details.' },
   };
   function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k]; }
   function esc(s) {
@@ -136,7 +157,7 @@
       var base =
         '<td>' + esc(r.le || '') + '</td>' +
         '<td>' + esc(r.product) + '</td>' +
-        '<td>' + esc(r.jpm_cpty) + '</td>' +
+        '<td>' + esc(r.jpm_cpty) + (r.branch ? '<span class="pr-branch-tag">' + esc(t('branchTag')) + '</span>' : '') + '</td>' +
         '<td>' + esc(r.client) + '</td>' +
         '<td>' + esc(r.pay_receive) + '</td>' +
         numCell(r.jpm_value) + numCell(r.client_value);
@@ -173,6 +194,7 @@
     // The final situation can only be e-mailed once there is a processed result.
     var endBtn = document.getElementById('prEndBtn');
     if (endBtn) endBtn.disabled = false;
+    syncBranchBtn(d);
     if (window.lucide && lucide.createIcons) lucide.createIcons();
     applyTranslationsIfAny();
   }
@@ -247,6 +269,59 @@
         }
       })
       .catch(function () { if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: t('failTitle'), html: t('netErr'), confirmButtonColor: '#0066cc' }); })
+      .finally(function () { busy(btn, false); });
+  }
+
+  // ── Branch Settlement: rascunho do pedido de aprovação ao VP ────────────────
+  // O botão só existe com liquidação contra a MGT na data de HOJE (o G&O é um
+  // controle do T+0); um dia passado mostra a linha, mas não pede aprovação.
+  function syncBranchBtn(d) {
+    var btn = document.getElementById('prBranchBtn');
+    if (!btn) return;
+    var today = page.getAttribute('data-ref-date') || '';
+    btn.hidden = !(d && d.branch && d.branch.has_settlement && today && refDate() === today);
+  }
+
+  function fmtParams(s, params) {
+    return String(s || '').replace(/\{(\w+)\}/g, function (m, k) {
+      return (params && params[k] != null) ? params[k] : m;
+    });
+  }
+
+  function branchEmail(btn) {
+    busy(btn, true, 'running');
+    fetch('/reconciliation-payrec/branch-email', {
+      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recon_date: refDate() })
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+      .then(function (res) {
+        var b = res.body || {};
+        if (!(res.ok && b.success && b.b64)) {
+          var msg = (b.code && t('e_' + b.code)) ? t('e_' + b.code) : (b.error ? esc(b.error) : t('netErr'));
+          if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: t('branchTitle'), html: msg, confirmButtonColor: '#0066cc' });
+          return;
+        }
+        var bin = atob(b.b64), bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        var url = URL.createObjectURL(new Blob([bytes], { type: 'message/rfc822' }));
+        var a = document.createElement('a');
+        a.href = url; a.download = b.filename || 'Branch_Settlement_Reverse_Approval.eml';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+        // Aviso vem por código (§486); o `text` do servidor é só o fallback.
+        var avisos = (b.warnings || []).map(function (w) {
+          var tr = t('w_' + w.code);
+          return '<li>' + esc(tr ? fmtParams(tr, w.params) : (w.text || w.code)) + '</li>';
+        });
+        if (typeof Swal !== 'undefined') Swal.fire({
+          icon: avisos.length ? 'warning' : 'success', title: t('branchTitle'),
+          html: esc(t('branchDone')) + (avisos.length ? '<br><br><b>' + esc(t('branchWarn')) +
+                '</b><ul class="text-start mb-0">' + avisos.join('') + '</ul>' : ''),
+          confirmButtonColor: '#0066cc'
+        });
+      })
+      .catch(function () { if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: t('branchTitle'), html: t('netErr'), confirmButtonColor: '#0066cc' }); })
       .finally(function () { busy(btn, false); });
   }
 
@@ -464,6 +539,7 @@
     setText('prMeta', '');
     var endBtn = document.getElementById('prEndBtn');
     if (endBtn) endBtn.disabled = true;
+    syncBranchBtn(null);
   }
 
   // Pull the saved status for the current reference date (finalised history, or
@@ -488,6 +564,8 @@
     var endBtn = document.getElementById('prEndBtn');
     if (runBtn) runBtn.addEventListener('click', function () { run(runBtn); });
     if (endBtn) endBtn.addEventListener('click', function () { endProcess(endBtn); });
+    var branchBtn = document.getElementById('prBranchBtn');
+    if (branchBtn) branchBtn.addEventListener('click', function () { branchEmail(branchBtn); });
     syncRunHint();
     try { loadLast(); } catch (e) {}
   });

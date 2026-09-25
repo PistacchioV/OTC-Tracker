@@ -49,3 +49,50 @@ def end_process(recon_date):
     if not saved:
         return False, False
     return True, bool(send_payrec_email(recon_date))
+
+
+def save_recipients(d):
+    from apps.pages.features.recon_payrec.infra import persistence
+    persistence.save_recipients(d)
+
+
+class BranchDraftError(RuntimeError):
+    """Não há o que pedir ao VP; `code` diz por quê (a tela traduz)."""
+
+    def __init__(self, code, text):
+        super().__init__(text)
+        self.code = code
+
+
+def branch_draft(recon_date):
+    """(filename, bytes do .eml, avisos) do pedido de aprovação da reversão da
+    Branch Settlement para o VP.
+
+    Sai do resultado GRAVADO do dia — o e-mail diz o que a tela mostra —, e as
+    contas do Counterparty Details são lidas agora (cadastro corrigido vale no
+    clique seguinte, sem rodar a recon de novo)."""
+    from apps.pages.features.recon_payrec import queries
+    from apps.pages.features.recon_payrec.infra import branch_mail
+    from apps.pages.recon_payrec import _load_flat, _fmt_date
+    R = _routes()
+    data = _load_flat(recon_date, strict=True) or {}
+    branch = data.get('branch') or {}
+    if not branch.get('has_settlement'):
+        raise BranchDraftError('branch_none', 'No settlement with the Branch on this date — '
+                                              'run the reconciliation first.')
+    rec = queries.recipients()
+    to_list, cc_list = R._parse_emails(rec['to']), R._parse_emails(rec['cc'])
+    if not to_list:
+        raise BranchDraftError('branch_no_recipient',
+                               'No TO recipient saved in Control Panel › Branch Settlement '
+                               'Reverse Approval.')
+    if not branch.get('pay_receive'):
+        # Sem B2B (ou com ele netando zero) não há reversão para aprovar — e a
+        # direção não se chuta pelo lado dos clientes.
+        raise BranchDraftError('branch_no_b2b', 'No Bank × Branch B2B net in the NDF Cockpit '
+                                                'for this date — there is no reversal to approve.')
+    source, dest, avisos = queries.branch_accounts(branch['pay_receive'])
+    ref_fmt = _fmt_date(recon_date)
+    raw = branch_mail.build(ref_fmt, branch, source, dest, to_list, cc_list)
+    fname = 'Branch_Settlement_Reverse_Approval_{}.eml'.format(ref_fmt.replace('/', ''))
+    return fname, raw, avisos
