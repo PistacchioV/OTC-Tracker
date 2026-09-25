@@ -1260,8 +1260,12 @@
         if (!d) return null;
         if (typeof d === 'string') d = { url: d };
         if (!d.url) return null;
+        // `timeout` (ms): o teto por dia da PÁGINA. O padrão serve a quem lê só o
+        // próprio arquivo-dia; quem também lê posição (o Operations B3 deriva a
+        // coluna Type das três DPOSICAO de D-1) declara mais.
         return { url: d.url, param: d.param || 'date',
-                 rows: d.rows || 'rows', columns: d.columns || 'columns' };
+                 rows: d.rows || 'rows', columns: d.columns || 'columns',
+                 timeout: +d.timeout || DAY_TIMEOUT_MS };
     }
 
     /* ══════ O intervalo por COLUNA de data ═════════════════════════════════
@@ -1516,8 +1520,8 @@
     function fetchDays(daily, dias, onStep) {
         var columns = [], rows = [], failed = [], empty = [], why = {};
         var chain = Promise.resolve();
-        dias.forEach(function (d, i) {
-            chain = chain.then(function () {
+        function umDia(d, i) {
+            return function () {
                 if (onStep) onStep(i + 1, d);
                 var sep = daily.url.indexOf('?') === -1 ? '?' : '&';
                 // `exact=1`: o dia pedido ou nada. Sem ele, as telas de posição
@@ -1529,7 +1533,7 @@
                 // pedido é abortado e o dia entra como falha. Era isso que
                 // travava a exportação inteira no último dia do intervalo.
                 var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-                var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, DAY_TIMEOUT_MS);
+                var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, daily.timeout || DAY_TIMEOUT_MS);
                 var opts = { credentials: 'same-origin' };
                 if (ctrl) opts.signal = ctrl.signal;
                 return fetch(url, opts)
@@ -1595,9 +1599,35 @@
                         });
                     })
                     .catch(function (e) {
-                        why[(e && e.message) ? String(e.message).slice(0, 60) : 'erro de rede'] = 1;
+                        // Abortado pelo teto não é "erro de rede": diz o tempo.
+                        var msg = (e && e.name === 'AbortError')
+                            ? 'timeout ' + Math.round((daily.timeout || DAY_TIMEOUT_MS) / 1000) + 's'
+                            : ((e && e.message) ? String(e.message).slice(0, 60) : 'erro de rede');
+                        why[msg] = (why[msg] || 0) + 1;
                         failed.push(d);
                     });
+            };
+        }
+        dias.forEach(function (d, i) { chain = chain.then(umDia(d, i)); });
+        // UMA segunda passada pelos dias que falharam. O servidor não para
+        // quando o navegador desiste: o dia abortado por tempo continua sendo
+        // lido lá e deixa os caches quentes, e na segunda vez ele responde em
+        // segundos. Sem isso a mesa refazia o intervalo inteiro à mão.
+        chain = chain.then(function () {
+            if (!failed.length) return;
+            var again = failed.splice(0, failed.length);
+            why = {};
+            var c2 = Promise.resolve();
+            again.forEach(function (d, i) {
+                c2 = c2.then(function () {
+                    if (onStep) onStep(dias.length, d);
+                    return umDia(d, i)();
+                });
+            });
+            return c2.then(function () {
+                // A repetição anexa no fim: a planilha volta à ordem das datas
+                // (sort estável, a ordem das linhas dentro do dia fica).
+                rows.sort(function (x, y) { return x[0] < y[0] ? -1 : (x[0] > y[0] ? 1 : 0); });
             });
         });
         return chain.then(function () {

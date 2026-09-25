@@ -22,6 +22,7 @@ import traceback
 from datetime import datetime
 import os
 import re
+import threading
 
 from apps.pages.data_paths import data_path
 from apps.pages.request_cache import req_cached as _req_cached
@@ -460,6 +461,13 @@ def _opb3_breakdown(data, col):
     return {'total': sum(counts.values()), 'items': items}
 
 
+# (caminho, mtime, tamanho) de uma posição → {contrato: tipo}. Dicionários
+# pequenos; o teto cobre ~meio ano de dias × três categorias.
+_TIPO_MEMO = {}
+_TIPO_MEMO_MAX = 400
+_TIPO_MEMO_LOCK = threading.Lock()
+
+
 def _opb3_tipo_maps(ref):
     """{'TER'|'OPC'|'SWAP': {contrato_upper: tipo}} a partir dos snapshots de
     posição (DPOSICAO*) mais recentes até D-1 ANBIMA de `ref` (walk-back de até
@@ -487,6 +495,19 @@ def _opb3_tipo_maps(ref):
             probe = routes._prev_anbima_bizday(probe)
         if not path:
             continue
+        # O mapa de UM arquivo de posição não muda enquanto o arquivo não muda:
+        # memo de processo pelo carimbo. Sem ele, cada dia do Advanced Export
+        # relia três posições inteiras (a DPOSICAO-TER sozinha leva dezenas de
+        # segundos no share, fria) só para esta coluna, e o dia estourava o teto
+        # de 60 s do export — "signal is aborted without reason".
+        try:
+            st = _store.stat(path)
+            chave = (path, st.st_mtime, st.st_size)
+        except Exception:                                   # noqa: BLE001
+            chave = None
+        if chave is not None and chave in _TIPO_MEMO:
+            out[key].update(_TIPO_MEMO[chave])
+            continue
         try:
             from apps.pages import duck_read
             data = duck_read.day_records(path) or []
@@ -494,6 +515,7 @@ def _opb3_tipo_maps(ref):
             continue
         if not data:
             continue
+        mapa = {}
         keys = list(data[0].keys())
         # A posição de opções não tem coluna "Contrato" — o contrato dela é o
         # "Código IF". Procurar por 'Contrato' ali caía no fallback por substring
@@ -514,7 +536,13 @@ def _opb3_tipo_maps(ref):
             else:                                       # TER e OPC: classe como está
                 tipo = str(rec.get(k_classe, '') or '').strip().upper() if k_classe else ''
             if tipo:
-                out[key].setdefault(contrato, tipo)
+                mapa.setdefault(contrato, tipo)
+        if chave is not None:
+            with _TIPO_MEMO_LOCK:
+                if len(_TIPO_MEMO) >= _TIPO_MEMO_MAX:
+                    _TIPO_MEMO.pop(next(iter(_TIPO_MEMO)))     # o mais antigo sai
+                _TIPO_MEMO[chave] = mapa
+        out[key].update(mapa)
     return out
 
 

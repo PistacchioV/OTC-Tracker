@@ -194,7 +194,7 @@
     if (window.otcCellCopy) otcCellCopy('#opb3-table', { skip: [0, 1] });
     // Item Advanced do menu Export — opt-in como o otcCellCopy: onde o
     // export-advanced.js não estiver carregado, é um no-op.
-    if (window.otcExportAdvanced) window.otcExportAdvanced('#opb3-table', { daily: '/api/operations-b3/data' });
+    if (window.otcExportAdvanced) window.otcExportAdvanced('#opb3-table', { daily: { url: '/api/operations-b3/data', timeout: 180000 } });
 
     var expWrap = document.querySelector('.obExportWrapper');
     if (expWrap) { expWrap.innerHTML = ''; dt.buttons().container().appendTo(expWrap); }
