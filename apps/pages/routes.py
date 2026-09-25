@@ -354,7 +354,10 @@ def enforce_session_ip():
         session['session_ip'] = client_ip
         return
     if session_ip != client_ip:
-        log.info("[enforce_session_ip] IP changed for SID=%s (%s -> %s) — session cleared",
+        # WARNING: é a única causa de sessão encerrada (§552), e log de módulo
+        # só aparece na instância a partir de WARNING — em INFO o "Not
+        # authenticated" da tela não tinha rastro nenhum (§557).
+        log.warning("[enforce_session_ip] IP changed for SID=%s (%s -> %s) — session cleared",
                  session.get('user_sid'), session_ip, client_ip)
         session.clear()
 

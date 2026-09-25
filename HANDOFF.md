@@ -24111,3 +24111,40 @@ mesa): cadastro não tem dia.
 - **Print** abre a tabela numa janela própria e chama o `print()`.
 - As duas bibliotecas (~1,5 MB) carregam só no CLIQUE (`loadLib`); falha de
   carga é o aviso `map-export-failed` nas três línguas.
+
+## §557 — "Not authenticated" no meio da página: a sessão caiu pelo IP (2026-09-24)
+
+A mesa viu um Swal "Error / Not authenticated" no NDF Commodities com a grade
+carregada. É o 401 que TODO `/api/*` devolve quando o request chega sem
+sessão, e desde o §552 a única coisa que encerra a sessão é o IP mudar (VPN
+que reconecta, troca de rede): `enforce_session_ip` limpa a sessão e a página
+aberta só descobre no clique seguinte. Cada tela mostrava o texto cru do
+servidor, sem dizer o que houve nem que era preciso entrar de novo, e a troca
+de IP logava em INFO, que na instância não aparece (só WARNING) — não havia
+rastro.
+
+- `static/js/session-guard.js`, no `<head>` do `base.html` só quando há
+  sessão (os fetches da página rodam antes do footer): embrulha o `fetch`;
+  401 de `/api/*` do próprio app vira o Swal traduzido (en/br/es, mapa local)
+  "Sessão encerrada" e a volta ao `/auth-2-sign-in`. A promessa da página
+  fica PENDENTE de propósito, senão o Swal de erro dela cobriria o aviso.
+  Conferido que todo 401 de `/api/*` no código é `not session.get('authenticated')`.
+- `[enforce_session_ip] IP changed …` agora em WARNING, com os dois IPs.
+
+Se a mesa relatar sessão caindo com frequência sem trocar de rede, o log
+dirá os dois IPs — é aí que se decide se a regra do §552 precisa de folga
+(ex.: mesma sub-rede).
+
+## §558 — Intrag: o sino dizia o Athena ID, e a referência da tela é o B3 ID (2026-09-24)
+
+"Augusto Braga Status Updated in Intrag NDF — DBH-1P7CZ9 → Approved": o
+`DBH-…` é o Athena ID. As rotas de edit/approve das telas de Intrag recebem
+`deal_id`, que é a CHAVE da linha no arquivo-dia — nas páginas que nascem do
+New Deals (NDF, Option, Swap) é o `_deal`, o Athena ID —, e a notificação
+escrevia essa chave. A mesa identifica a operação na Intrag pelo B3 ID.
+
+As 14 notificações de linha (`Deal Updated` e `Status Updated` das sete
+telas) passam agora por `entrypoint._notif_ref(entries, idx, deal_id)`: o
+`b3_id` da linha e, sem ele, a chave (linha ainda sem B3 ID, e nas DCE a chave
+já é o Trade ID do extrato). A chave de busca não mudou — só o texto do sino.
+`check_intrag_notif_ref.py`.

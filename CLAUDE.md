@@ -557,7 +557,13 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   `session_ip`; o login seguinte cai no código por e-mail. Sessão sem
   `session_ip` é carimbada, não derrubada — teste que monta sessão à mão e
   confere se o cookie foi reemitido tem de pôr o `session_ip`. O Lock Screen
-  MANUAL do menu continua.
+  MANUAL do menu continua. **A página que ficou aberta descobre isso no
+  clique seguinte** (§557): o `static/js/session-guard.js` (no `<head>` do
+  `base.html`, só com sessão) embrulha o `fetch` — 401 de um `/api/*` vira o
+  aviso traduzido "Sessão encerrada" e a volta ao login, e a promessa da
+  página fica pendente para o erro cru dela ("Not authenticated") não cobrir o
+  aviso. Todo 401 de `/api/*` é "sem sessão"; não use 401 para outra coisa. A
+  troca de IP loga em WARNING (`[enforce_session_ip]`).
 - **Maker/checker (4-olhos) só vale na PROD** (§553): `Config.FOUR_EYES`,
   do bloco de ambiente (`_FOUR_EYES = False` na dev, onde uma pessoa só
   testa). Trava NOVA de "o próprio maker não aprova/envia" pergunta ao
