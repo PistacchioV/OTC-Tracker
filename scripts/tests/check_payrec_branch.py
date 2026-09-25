@@ -81,16 +81,19 @@ OPS = [
 print('\n== 1. branch_settlement ==')
 b = RP.branch_settlement(OPS, ACC, DIA)
 check('ha liquidacao com a Branch', b['has_settlement'], True)
-check('so as operacoes 73760.20-5 x 04880.00-6, sem dobrar a visao espelhada',
-      [(t['b3_id'], t['value']) for t in b['trades']], [('26E001', 50000.0), ('26E002', -20000.0)])
+check('so as operacoes 73760.20-5 x 04880.00-6, sem dobrar, na visao da Branch',
+      [(t['b3_id'], t['value']) for t in b['trades']], [('26E001', -50000.0), ('26E002', 20000.0)])
+check('bruto do Cockpit e B3 settlement no MESMO sinal (os dois pela Branch)',
+      [(t['gross'], t['value']) for t in b['trades'] if t['b3_id'] == '26E001'], [(-50000.0, -50000.0)])
 check('B2B sem dobrar a visao espelhada', [(r['titulo'], r['value']) for r in b['b2b']],
       [('26B001', -50000.0), ('26B002', 20000.0)])
 check('net do B2B (visao da 73760.00-9)', (b['b2b_net'], b['b2b_pay_receive']), (-30000.0, 'Pay'))
-check('reversao = net x -1', (b['client_b3_net'], b['reversal_net']), (30000.0, -30000.0))
+check('total da tabela, reversao pela Branch (inverso) e linha da recon (Banco)',
+      (b['client_b3_net'], b['reversal_branch'], b['reversal_net']), (-30000.0, 30000.0, -30000.0))
 check('205 recebe no net -> na reversao o Banco paga', b['pay_receive'], 'Pay')
 inv = RP.branch_settlement([ob('26E001', '73760.20-5', '04880.00-6', '-100,00')], ACC)
 check('205 paga a MGT no net -> na reversao a MGT paga o Banco',
-      (inv['reversal_net'], inv['pay_receive']), (100.0, 'Receive'))
+      (inv['reversal_net'], inv['pay_receive'], inv['reversal_branch']), (100.0, 'Receive', -100.0))
 check('Cockpit enriquece pelo B3 ID', [(t['counterparty'], t['ir']) for t in b['trades']],
       [('CLIENTE X', 2.5), ('CLIENTE Y', 0.0)])
 check('rota antiga avisada, fora da conta', (len(b['legacy']), b['legacy_net']), (1, -700.0))
@@ -210,6 +213,11 @@ try:
     check('lista as operacoes', all(x in html for x in ('26E001', '26E002', 'CLIENTE X', 'CLIENTE Y')), True)
     check('nada de B2B nem da nota explicativa no e-mail',
           ('B2B' in html, '26B001' in html, 'Values in' in html, '× −1' in html), (False, False, False, False))
+    check('direcao dita pela Branch: recebe do Banco',
+          (MGT + ' receives from ' + BANCO) in html, True)
+    check('cabecalhos dizem a visao',
+          ('Gross value (Branch × Client)' in html, 'B3 settlement (Branch × 73760.20-5)' in html,
+           'Net value (Branch view)' in html), (True, True, True))
     check('valor da reversao no assunto',
           'BRL 30,000.00' in str(email.header.make_header(email.header.decode_header(msg['Subject']))), True)
     check('sem "Dear VP"', 'Dear VP' in html, False)

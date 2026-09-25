@@ -39,7 +39,7 @@
                     <!-- Reversal -->
                     <p style="color:#1a1a2e;font-size:15px;font-weight:700;margin:0 0 10px;">Reversal</p>
                     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse:collapse;font-size:12.5px;margin-bottom:24px;">
-                        <tr><td style="{{ td }}width:24%;font-weight:600;">Net value</td><td style="{{ td }}">BRL {{ money(branch.reversal_net) }}</td></tr>
+                        <tr><td style="{{ td }}width:24%;font-weight:600;">Net value (Branch view)</td><td style="{{ td }}">BRL {{ money(branch.reversal_branch) }}</td></tr>
                         <tr><td style="{{ td }}font-weight:600;">Direction</td><td style="{{ td }}">{{ direction_text }}</td></tr>
                         <tr><td style="{{ td }}font-weight:600;">Source account</td><td style="{{ td }}">{{ source.name }} &nbsp;&middot;&nbsp; {% if source.account %}{{ source.account }}{% else %}<span style="color:#b71c1c;">Not registered in Reference Data &rsaquo; Counterparty Details</span>{% endif %}</td></tr>
                         <tr><td style="{{ td }}font-weight:600;">Destination account</td><td style="{{ td }}">{{ dest.name }} &nbsp;&middot;&nbsp; {% if dest.account %}{{ dest.account }}{% else %}<span style="color:#b71c1c;">Not registered in Reference Data &rsaquo; Counterparty Details</span>{% endif %}</td></tr>
@@ -51,10 +51,10 @@
                         <thead><tr>
                             <th style="{{ th }}text-align:left;">B3 ID</th>
                             <th style="{{ th }}text-align:left;">Counterparty</th>
-                            <th style="{{ th }}text-align:right;">Gross value</th>
+                            <th style="{{ th }}text-align:right;">Gross value (Branch × Client)</th>
                             <th style="{{ th }}text-align:right;">IR</th>
                             <th style="{{ th }}text-align:right;">Total</th>
-                            <th style="{{ th }}text-align:right;">B3 settlement</th>
+                            <th style="{{ th }}text-align:right;">B3 settlement (Branch × 73760.20-5)</th>
                         </tr></thead>
                         <tbody>
                             {% for r in branch.trades %}

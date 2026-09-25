@@ -18,14 +18,19 @@ def build(recon_date_fmt, branch, source, dest, to_list, cc_list):
     na conta de quem baixou — a aprovação é pedida pela pessoa, não pela caixa
     do sistema."""
     R = _routes()
-    direction_text = '{} pays {}'.format(source['name'], dest['name'])
+    # A direção dita pela BRANCH, na mesma visão da tabela e do valor:
+    # "Branch recebe do Banco" em vez de "Banco paga a Branch".
+    if (branch.get('reversal_branch') or 0) > 0:
+        direction_text = '{} receives from {}'.format(dest['name'], source['name'])
+    else:
+        direction_text = '{} pays {}'.format(source['name'], dest['name'])
     html = render_template('pages/email-template-branch-settlement.html',
                            recon_date_fmt=recon_date_fmt, branch=branch,
                            source=source, dest=dest, direction_text=direction_text,
                            current_year=datetime.now().year)
     msg = MIMEMultipart('related')
     msg['Subject'] = 'Branch Settlement Reverse Approval — {} — BRL {:,.2f}'.format(
-        recon_date_fmt, abs(branch.get('reversal_net') or 0))
+        recon_date_fmt, abs(branch.get('reversal_branch') or 0))
     if to_list:
         msg['To'] = ', '.join(to_list)
     if cc_list:

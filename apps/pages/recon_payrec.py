@@ -776,7 +776,13 @@ def branch_settlement(ops_rows, accounts, ndf_rows=None):
     `ndf_rows` (o Cockpit do dia) só ENRIQUECE cada operação pelo B3 ID —
     contraparte, bruto, IR e total —, que o Operations B3 não traz.
 
-    Valores na visão da 73760.20-5 (positivo = o Banco recebe)."""
+    VISÕES (mesa, 25/09/2026): a lista das operações é toda da BRANCH — o
+    bruto/IR/total do Cockpit são Branch × cliente e o `value` é Branch ×
+    73760.20-5 (o Operations B3 lido pela 205, com o sinal virado) —, e a
+    reversão do e-mail é o INVERSO do total dela, também dita pela Branch
+    (`reversal_branch`: positivo = a Branch recebe do Banco). A linha do Pay/Rec
+    (`reversal_net`/`pay_receive`) segue na visão do BANCO, como toda a recon:
+    é o mesmo dinheiro, dito pelo outro lado."""
     acc = {k: _digits(v) for k, v in (accounts or {}).items()}
     faltam = [k for k in ('mgt_own', 'bank_client') if not acc.get(k)]
     cli = _pair_legs(ops_rows, acc.get('bank_client'), acc.get('mgt_own')) if not faltam else []
@@ -797,14 +803,14 @@ def branch_settlement(ops_rows, accounts, ndf_rows=None):
         gross = round(_num(rec.get('[PROD] Cockpit.SETTLEMENT', '')), 2) if rec else None
         ir = round(_num(rec.get('VL_TAX_INCOME', '')), 2) if rec else None
         trades.append({
-            'b3_id': c['titulo'], 'value': c['value'],
+            'b3_id': c['titulo'], 'value': round(-c['value'], 2),   # Branch × 205
             'deal': str(rec.get('ID_SOURCE_DEAL', '') or '').strip(),
             'counterparty': str(rec.get('NM_COUNTERPARTY', '') or '').strip().upper(),
             'gross': gross, 'ir': ir,
             'total': round(gross + ir, 2) if rec else None,
         })
-    cli_net = round(sum(r['value'] for r in cli), 2)
-    reversal = round(-cli_net, 2)
+    cli_net = round(sum(t['value'] for t in trades), 2)          # visão da Branch
+    reversal = cli_net                   # = −(net pela 205): visão do BANCO, a da recon
     b2b_net = round(sum(r['value'] for r in b2b), 2)
 
     def _dir(v):
@@ -817,6 +823,8 @@ def branch_settlement(ops_rows, accounts, ndf_rows=None):
         'accounts_missing': faltam,
         'trades': trades, 'client_b3_net': cli_net,
         'reversal_net': reversal, 'pay_receive': _dir(reversal),
+        # A reversão dita pela BRANCH: o inverso do total da tabela do e-mail.
+        'reversal_branch': round(-cli_net, 2),
         # A liquidação DEVIDA Banco × MGT (visão da 73760.00-9): só a linha do
         # Pay/Rec — fora da reversão e do e-mail.
         'b2b': b2b, 'b2b_net': b2b_net, 'b2b_pay_receive': _dir(b2b_net),
