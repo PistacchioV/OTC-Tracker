@@ -1629,6 +1629,7 @@
   "map-list-title": "Mappings Disponibles",
   "map-list-hint": "Los cambios aplican al instante — el import de la API, los archivos Conecta y los previews leen de aquí.",
   "map-tab-currency-base": "Base de Monedas",
+  "map-tab-fxo-conv-rate": "Tasa de Conversión de Moneda",
   "map-tab-interbook": "Interbook API (NDF)",
   "map-tab-currency-codes": "Códigos de Moneda (Athena)",
   "map-tab-commodities": "Commodities × B3",

@@ -619,7 +619,7 @@ inteiro; valores **não são trimados** (`'C '` é código B3). O front mantém 
 literais antigos como fallback. `upgrade` converte formato antigo na leitura;
 **seed só roda quando o arquivo não existe** — correção de seed não alcança
 quem já tem o cadastro, e por isso precisa de `upgrade`. `autofill` preenche
-outra coluna; tipo **`refdata`** liga nome/SPN/Tax ID ao Reference Data (um
+outra coluna (pelo que as linhas já cadastradas usam); **`derive: {from, format}`** PROPÕE o valor a partir de outra coluna (`{}` = o valor digitado, em maiúsculas), sem sobrescrever o que foi digitado à mão (§559); tipo **`refdata`** liga nome/SPN/Tax ID ao Reference Data (um
 escolhido, os outros dois se preenchem). **`file`** aponta para um JSON já
 existente (o `swap-index` edita o mesmo `SwapIndex.json` do Index Results —
 declare as colunas extras, senão o POST as derruba).
@@ -710,7 +710,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   **`ndfc-advice-split`** (um aviso por mercadoria, depois do split por net),
   **`bankers-email`** (Cc da coleta de assinatura; vazio avisa no log),
   **`opb3-msg-asset`** (token do Type → rótulo no assunto; contém, mais longo
-  vence, sem linha não põe rótulo), **`fxo-conv-rate`** (moeda não cadastrada
+  vence, sem linha não põe rótulo), **`fxo-conv-rate`** (na tela **Currency Conversion Rate** — serve FXO e NDF, a chave ficou pelo cadastro gravado; Moeda Base digitada propõe `<MOEDA> PTAX`; moeda não cadastrada
   avisa em vez de imprimir em branco), **`swap-index`** (C00 → VCP; Termo e
   Opção não têm de-para), **`cgd-*`** (colunas na ordem das abas do
   `Auxiliar.xlsx`; `import_cgd_auxiliar.py` carrega).
