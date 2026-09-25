@@ -159,6 +159,41 @@ try:
     nao = run(OPS, [cliente])
     check('perna de cliente de mesmo valor NAO fecha nenhuma',
           [r for r in nao['settled'] if r.get('branch')], [])
+
+    # A reversão só fecha com as DUAS pontas: o Banco paga (interbancário) e a
+    # MGT recebe da conta de derivativos do Banco (RLDOCREC).
+    so_rev = [ob('26E001', '73760.20-5', '04880.00-6', '30000,00')]   # sem B2B
+    receb = {'value': 30000.0, 'client': '/OTC DERIVATIVES PRODUCTS', 'sistema': 'SDConta - conta externa',
+             'snumconta': '', 'product': 'NDF', 'pay_receive': 'Receive', 'le': 'MGT'}
+
+    def rev(out):
+        return [r for r in out['pending_payment'] + out['settled'] if r.get('branch') == 'reversal']
+
+    ambos = run(so_rev, [dict(interb), dict(receb)], ndf=[])
+    r0 = rev(ambos)
+    check('pagamento do Banco + recebimento da MGT: reversao Settled',
+          [(r['status'], r['reversal_legs']) for r in r0],
+          [('Settled', {'bank': True, 'branch': True})])
+    check('o recebimento da MGT nao sobra no Pending Receivement',
+          [r['client'] for r in ambos['pending_receivement']], [])
+    check('resumo nao conta a ponta espelhada da MGT (Receive zerado)',
+          [(x['client_qty'], x['check_value']) for x in ambos['summary'] if x['pay_receive'] == 'Receive'],
+          [(0, 'OK')])
+    so_rec = run(so_rev, [dict(receb)], ndf=[])
+    check('so o recebimento da MGT: Pending dizendo que falta a ponta do Banco',
+          [(r['status'], r['reversal_legs'], r['client_value']) for r in rev(so_rec)],
+          [('Pending', {'bank': False, 'branch': True}, -30000.0)])
+    so_pag = run(so_rev, [dict(interb)], ndf=[])
+    check('so o pagamento do Banco: Pending dizendo que falta a ponta da MGT',
+          [(r['status'], r['reversal_legs']) for r in rev(so_pag)],
+          [('Pending', {'bank': True, 'branch': False})])
+    outro = dict(receb, value=12345.0)
+    check('recebimento de outro valor nao e a reversao (e sobra)',
+          ([r['reversal_legs'] for r in rev(run(so_rev, [dict(interb), outro], ndf=[]))],
+           [r['client'] for r in run(so_rev, [dict(interb), dict(outro)], ndf=[])['pending_receivement']]),
+          ([{'bank': True, 'branch': False}], ['/OTC DERIVATIVES PRODUCTS']))
+    check('a conta do Banco nunca e par de perna de cliente',
+          RP._match_allowed({'cpty': 'CLIENTE X', 'pay_receive': 'Receive'}, receb), False)
 finally:
     (RP._gather_sources, RP._persist, RP._load_net_type_map, RP._apply_carry_forward,
      RP._net_type_for, RP._settlement_exception_for, RP._is_bank_cpty) = _stubs

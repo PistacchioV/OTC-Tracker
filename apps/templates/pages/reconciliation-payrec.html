@@ -49,6 +49,10 @@
 #payrec-page .pr-branch-tag { display: inline-block; margin-left: .35rem; padding: 1px 7px; border-radius: 20px;
     font-size: .65rem; font-weight: 700; background: #ede7f6; color: #4a3ba0; white-space: nowrap; }
 [data-bs-theme="dark"] #payrec-page .pr-branch-tag { background: rgba(169,155,234,.18); color: #c9bff2; }
+#payrec-page .pr-rev-leg.is-ok { background: rgba(10,179,156,.14); color: #0a8f7d; }
+#payrec-page .pr-rev-leg.is-miss { background: rgba(240,101,72,.14); color: #c9492c; }
+[data-bs-theme="dark"] #payrec-page .pr-rev-leg.is-ok { background: rgba(10,179,156,.2); color: #5fd6c3; }
+[data-bs-theme="dark"] #payrec-page .pr-rev-leg.is-miss { background: rgba(240,101,72,.2); color: #f59a86; }
 
 /* Reference date */
 #payrec-page .pr-datewrap { position: relative; width: 160px; }
@@ -292,7 +296,7 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/reconciliation-payrec.js?v=20260925d"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/reconciliation-payrec.js?v=20260925e"></script>
 <script>
 // Seleção de célula + Ctrl+C — padrão New Deals. Delegação no nó da tabela,
 // então sobrevive aos rebuilds do tbody a cada reconciliação.

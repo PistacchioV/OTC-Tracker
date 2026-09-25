@@ -726,6 +726,9 @@ def _jpm_cockpit(records, net_map=None):
 # As contas chegam do `b3-accounts` pelo chamador (LE × tipo), nunca daqui.
 _BRANCH_SISTEMA = 'Branch Settlement'
 _BRANCH_NAME = 'JPMORGAN CHASE BANK, N.A. - SAO PAULO BRANCH'
+# A conta de derivativos do BANCO como ela aparece do outro lado de uma TED: é o
+# `sNomeCliDebitado` do RLDOCREC quando a MGT recebe do Banco (a reversão).
+_HOUSE_DERIV_ACCOUNT = '/OTC DERIVATIVES PRODUCTS'
 
 
 def _entity_side(name):
@@ -983,7 +986,7 @@ def _jpm_fxo(rows, cols, net_map=None):
 def _cli_finalize(val, desc, titular, conta, sistema, product='NDF'):
     """Merged SDConta post-processing (Filter[35], Formula[27], Filter[29])."""
     titular = str(titular or '').strip().replace('LMA-COMM-BR ', '').strip()
-    if titular == '/OTC DERIVATIVES PRODUCTS':
+    if titular == _HOUSE_DERIV_ACCOUNT:
         return None
     if not sistema:
         sistema = 'SDConta - conta interna'
@@ -1280,9 +1283,88 @@ def _match_allowed(j, c):
     # qualquer fecharia a quebra sem que a reversão tivesse acontecido.
     if j.get('branch'):
         return bool(c.get('bank')) and j.get('pay_receive') == c.get('pay_receive')
+    # A TED da conta de derivativos do Banco é dinheiro DENTRO de casa (é a
+    # reversão chegando na MGT): só a linha da reversão a consome.
+    if _is_house_leg(c):
+        return False
     if not c.get('bank'):
         return True
     return _is_bank_cpty(j.get('cpty')) and j.get('pay_receive') == c.get('pay_receive')
+
+
+def _is_house_leg(c):
+    """A perna do lado cliente é a conta de derivativos do Banco?"""
+    return str(c.get('client') or '').strip().upper() == _HOUSE_DERIV_ACCOUNT
+
+
+def _reversal_legs(j, client, matched):
+    """As DUAS pontas da reversão da Branch Settlement.
+
+    A reversão é UM dinheiro dito pelos dois lados: o Banco paga (a linha `j`,
+    na visão do Banco) e a Branch recebe — ou o inverso. Ela só está liquidada
+    quando as duas pontas aparecem nos extratos:
+
+    - `bank`: a ponta do BANCO, no sentido da linha — o interbancário (LTR) do
+      Banco, como antes (±R$20).
+    - `branch`: a ponta da MGT, no sentido OPOSTO — o recebimento/pagamento da
+      MGT contra a conta de derivativos do Banco (`/OTC DERIVATIVES PRODUCTS`
+      no RLDOCREC) ou o interbancário da MGT.
+
+    Uma ponta sozinha não fecha: o pagamento sem o recebimento é dinheiro que
+    saiu e não chegou; o recebimento sem o pagamento, um crédito que não é da
+    reversão. Cada uma casa pelo valor ABSOLUTO da reversão."""
+    alvo = abs(j['value'])
+    oposto = 'Receive' if j['pay_receive'] == 'Pay' else 'Pay'
+
+    def perto(c):
+        d = abs(abs(c['value']) - alvo)
+        return (d <= c['tol']) if c.get('tol') else (d < _TOL_SETTLED)
+
+    def achar(le, direcao, aceita):
+        best, best_d = None, None
+        for c in client:
+            if id(c) in matched or c.get('pay_receive') != direcao:
+                continue
+            if (c.get('le') or 'JPM') != le or not aceita(c) or not perto(c):
+                continue
+            d = abs(abs(c['value']) - alvo)
+            if best_d is None or d < best_d:
+                best, best_d = c, d
+        return best
+
+    # O Banco é a ponta da linha; a MGT, a do outro lado.
+    bank = achar('JPM', j['pay_receive'], lambda c: bool(c.get('bank')))
+    if bank is not None:
+        matched.add(id(bank))
+    branch = achar('MGT', oposto, lambda c: bool(c.get('bank')) or _is_house_leg(c))
+    if branch is not None:
+        matched.add(id(branch))
+    return bank, branch
+
+
+def _reversal_detail(j, bank, branch):
+    """A linha da reversão com as duas pontas. O valor do lado cliente é dito
+    na visão do BANCO (a da linha): a ponta da MGT entra com o sinal virado."""
+    if bank is not None:
+        cv = bank['value']
+    elif branch is not None:
+        cv = -branch['value']
+    else:
+        cv = ''
+    legs = [x for x in (bank, branch) if x is not None]
+    both = bank is not None and branch is not None
+    diff = (cv - j['value']) if cv != '' else -j['value']
+    return {
+        'le': j.get('le', 'JPM'), 'product': j['product'], 'jpm_cpty': j['cpty'],
+        'client': ' / '.join(x['client'] for x in legs if x.get('client')),
+        'pay_receive': j['pay_receive'], 'jpm_value': j['value'], 'client_value': cv,
+        'sistema': ' + '.join(x['sistema'] for x in legs) or _BRANCH_SISTEMA,
+        'snumconta': ' / '.join(x['snumconta'] for x in legs if x.get('snumconta')),
+        'status': 'Settled' if both else 'Pending',
+        'difference': diff, 'branch': 'reversal',
+        # Qual ponta apareceu — a tela diz qual falta.
+        'reversal_legs': {'bank': bank is not None, 'branch': branch is not None},
+    }
 
 
 # ── Reconciliation ────────────────────────────────────────────────────────────
@@ -1292,7 +1374,14 @@ def _reconcile(jpm, client):
         buckets.setdefault(_int_key(c['value']), []).append(c)
     details = []
     matched = set()
+    mirrored = set()            # a ponta da MGT na reversão: fora do resumo
     for j in jpm:
+        if j.get('branch') == 'reversal':
+            bank, branch = _reversal_legs(j, client, matched)
+            if branch is not None:
+                mirrored.add(id(branch))
+            details.append(_reversal_detail(j, bank, branch))
+            continue
         pool = buckets.get(_int_key(j['value']), [])
         mate = None
         for c in pool:
@@ -1389,7 +1478,10 @@ def _reconcile(jpm, client):
             d['product'] = 'EQUITIES'
     # Unmatched MGT receipts (drop_if_unmatched) are SPB noise → exclude them
     # from the summary too, so the counts stay consistent with the tables.
-    client_kept = [c for c in client if id(c) in matched or not c.get('drop_if_unmatched')]
+    # A ponta da MGT na reversão é o MESMO dinheiro da ponta do Banco, dito pelo
+    # outro lado e no sentido oposto: contada, inflaria o outro sentido.
+    client_kept = [c for c in client if id(c) not in mirrored
+                   and (id(c) in matched or not c.get('drop_if_unmatched'))]
     return details, _summary(jpm, client_kept, details)
 
 

@@ -2064,9 +2064,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   G&O "Branch Settlement Control"). Só as liquidações 04880.00-6 (MGT própria)
   × 73760.20-5 (guarda-chuva do Banco para o cliente da MGT): a **reversão** é
   o net delas × −1 (a 205 pagou a MGT → na reversão a MGT paga o Banco) e vira
-  UMA linha `branch: 'reversal'` no Pending Payment/Receivement. Ela só casa com
-  o INTERBANCÁRIO no mesmo sentido (`_match_allowed`) — com a perna de um
-  cliente de mesmo valor a quebra fecharia sem reversão nenhuma. As contas são
+  UMA linha `branch: 'reversal'` no Pending Payment/Receivement. **Ela só
+  liquida com as DUAS pontas** (§566, `_reversal_legs`): a do Banco (o
+  interbancário do JPM no sentido da linha) E a da MGT no sentido oposto (o
+  RLDOCREC da MGT contra a conta `/OTC DERIVATIVES PRODUCTS` do Banco, ou o
+  interbancário da MGT). Uma só deixa `Pending`, e a tela diz qual falta
+  (`reversal_legs`); a ponta da MGT sai do resumo (é o mesmo dinheiro). Perna de
+  cliente nunca fecha a reversão, e a conta do Banco nunca é par de cliente. As contas são
   do `b3-accounts` por LE × TIPO (`commands.branch_accounts`), nunca número no
   código. **O B2B (73760.00-9 × 04880.00-6) é liquidação DEVIDA**: tem a sua
   linha (`branch: 'b2b'`) no Pay/Rec, mas fica FORA da reversão e do e-mail —
