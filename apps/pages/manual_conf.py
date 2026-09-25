@@ -1642,7 +1642,7 @@ MONITOR_STAGES = (
 # Os campos que o item da lista do card mostra. É o mínimo para reconhecer a
 # confirmação sem abrir: quando, de quem, o quê.
 MONITOR_FIELDS = ('Data Operação', 'Cliente', 'Produto', 'LOB', 'Moeda',
-                  'Trade ID', 'Aging Confirmação')
+                  'Trade ID', 'Aging Confirmação', 'Confirmation Link')
 
 
 # O que define UMA confirmação. O documento é emitido por contraparte × produto ×
@@ -1657,6 +1657,23 @@ GROUP_FIELDS = ('LOB', 'Cliente', 'Produto', 'Data Operação', 'Moeda')
 
 
 def group_key(row):
+    """A chave do card. Confirmação JÁ GERADA agrupa pelo DOCUMENTO: o
+    `Confirmation Link` que a geração carimba em TODA operação que o PDF cobre
+    (`mark_generated`). É ele, e não os campos, que diz quais operações são a
+    mesma confirmação — os campos podem divergir da segregação que montou o
+    documento:
+
+      * commodity com `Commodities` em branco no deal: o documento a juntava
+        pelo Subjacente e a esteira gravava o código B3 na Moeda. 6 operações
+        num PDF viravam cards de 5 + 1, e o Validate carimbava só as 5;
+      * linha antiga (antes do §457) com Moeda `BRL`: o USD e o EUR do mesmo
+        cliente num card só, que mostrava — e validava — o PDF de um deles
+        para os dois (#OTC-0043).
+
+    Sem link (ainda não gerada), valem os campos."""
+    link = str(row.get('Confirmation Link', '') or '').strip()
+    if link:
+        return ('link', link)
     return tuple(norm(row.get(f)) for f in GROUP_FIELDS)
 
 
