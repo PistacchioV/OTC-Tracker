@@ -712,18 +712,15 @@ def _jpm_cockpit(records, net_map=None):
 
 # ── Branch Settlement (liquidação com a MGT — a Branch de São Paulo) ─────────
 # Controle do G&O "Branch Settlement Control" (passos 7, 9, 10 e 15). A fonte é
-# o OPERATIONS B3 do dia, pelas CONTAS (mesa, 25/09/2026):
+# o OPERATIONS B3 do dia, pelas CONTAS (mesa, 25/09/2026): as liquidações entre
+# a MGT própria (04880.00-6) e a guarda-chuva do Banco para o cliente da MGT
+# (73760.20-5). A REVERSÃO é o net delas × −1 — se no net a 73760.20-5 paga a
+# MGT, na reversão a MGT paga o Banco —, e é o valor e a direção do e-mail do VP.
 #
-#   B2B      = Banco própria (73760.00-9) × MGT própria (04880.00-6);
-#   CLIENTE  = guarda-chuva do Banco para a MGT (73760.20-5) × MGT própria —
-#              é o cliente da MGT, e cada perna dele tem um B2B de MESMO valor e
-#              sinal INVERTIDO;
-#   LEGADO   = MGT própria × guarda-chuva da MGT (04880.10-9): a rota antiga,
-#              que ainda liquida. Não entra em conta nenhuma — é AVISADA até o
-#              cenário ficar só na 73760.20-5.
+# O B2B (73760.00-9 × 04880.00-6) NÃO entra: hoje ele soma também o que é contra
+# cliente pela rota antiga (04880.10-9), e não dá para separar. A rota antiga
+# (04880.00-6 × 04880.10-9) é só AVISADA, até o cenário ficar só na 73760.20-5.
 #
-# A recon ganha DUAS linhas: a de todos os B2B e a da REVERSÃO, que é o net das
-# pernas de cliente × −1 — o valor e a direção do pagamento que o VP aprova.
 # As contas chegam do `b3-accounts` pelo chamador (LE × tipo), nunca daqui.
 _BRANCH_SISTEMA = 'Branch Settlement'
 _BRANCH_NAME = 'JPMORGAN CHASE BANK, N.A. - SAO PAULO BRANCH'
@@ -772,15 +769,13 @@ def _pair_legs(ops_rows, lado, outro):
 def branch_settlement(ops_rows, accounts, ndf_rows=None):
     """A liquidação do dia com a Branch, pelo Operations B3.
 
-    `accounts`: dígitos das contas {'bank_own', 'mgt_own', 'bank_client',
-    'mgt_client'} (do `b3-accounts`). `ndf_rows` (o Cockpit do dia) só ENRIQUECE
-    a perna de cliente pelo B3 ID — contraparte, bruto, IR e total —, que o
-    Operations B3 não traz.
+    `accounts`: {'mgt_own', 'bank_client', 'mgt_client'} (do `b3-accounts`).
+    `ndf_rows` (o Cockpit do dia) só ENRIQUECE cada operação pelo B3 ID —
+    contraparte, bruto, IR e total —, que o Operations B3 não traz.
 
-    Todo valor está na visão do BANCO (positivo = o Banco recebe)."""
+    Valores na visão da 73760.20-5 (positivo = o Banco recebe)."""
     acc = {k: _digits(v) for k, v in (accounts or {}).items()}
-    faltam = [k for k in ('bank_own', 'mgt_own', 'bank_client') if not acc.get(k)]
-    b2b = _pair_legs(ops_rows, acc.get('bank_own'), acc.get('mgt_own')) if not faltam else []
+    faltam = [k for k in ('mgt_own', 'bank_client') if not acc.get(k)]
     cli = _pair_legs(ops_rows, acc.get('bank_client'), acc.get('mgt_own')) if not faltam else []
     legado = (_pair_legs(ops_rows, acc.get('mgt_own'), acc.get('mgt_client'))
               if acc.get('mgt_own') and acc.get('mgt_client') else [])
@@ -791,13 +786,8 @@ def branch_settlement(ops_rows, accounts, ndf_rows=None):
         if b3 and _entity_side(rec.get('LEGAL', '')) == 'MGT':
             cockpit.setdefault(b3, rec)
 
-    # Cada perna de cliente casa com um B2B de MESMO valor e sinal INVERTIDO.
-    livres = list(range(len(b2b)))
     trades = []
     for c in cli:
-        par = next((i for i in livres if abs(b2b[i]['value'] + c['value']) < 0.01), None)
-        if par is not None:
-            livres.remove(par)
         rec = cockpit.get(c['titulo']) or {}
         gross = round(_num(rec.get('[PROD] Cockpit.SETTLEMENT', '')), 2) if rec else None
         ir = round(_num(rec.get('VL_TAX_INCOME', '')), 2) if rec else None
@@ -807,47 +797,31 @@ def branch_settlement(ops_rows, accounts, ndf_rows=None):
             'counterparty': str(rec.get('NM_COUNTERPARTY', '') or '').strip().upper(),
             'gross': gross, 'ir': ir,
             'total': round(gross + ir, 2) if rec else None,
-            'b2b_id': b2b[par]['titulo'] if par is not None else '',
-            'b2b_value': b2b[par]['value'] if par is not None else None,
-            'matched': par is not None,
         })
-    b2b_net = round(sum(r['value'] for r in b2b), 2)
     cli_net = round(sum(r['value'] for r in cli), 2)
     reversal = round(-cli_net, 2)
-
-    def _dir(v):
-        return ('Receive' if v > 0 else 'Pay') if abs(v) >= 0.005 else ''
-
     return {
-        'has_settlement': bool(b2b or cli or legado),
+        # O botão do e-mail só existe com a ROTA NOVA (73760.20-5): a rota antiga
+        # sozinha não tem reversão para aprovar.
+        'has_settlement': bool(cli),
         'accounts_missing': faltam,
-        'b2b': b2b, 'b2b_net': b2b_net, 'b2b_pay_receive': _dir(b2b_net),
         'trades': trades, 'client_b3_net': cli_net,
-        # A REVERSÃO: o net das pernas de cliente × −1. É o valor e a direção do
-        # pagamento do e-mail do VP.
-        'reversal_net': reversal, 'pay_receive': _dir(reversal),
+        'reversal_net': reversal,
+        'pay_receive': ('Receive' if reversal > 0 else 'Pay') if abs(reversal) >= 0.005 else '',
         'client_gross': round(sum(t['gross'] or 0 for t in trades), 2),
         'client_ir': round(sum(t['ir'] or 0 for t in trades), 2),
         'client_net': round(sum(t['total'] or 0 for t in trades), 2),
-        'unmatched_b2b': [b2b[i] for i in livres],
-        'unmatched_client': [t for t in trades if not t['matched']],
         # A rota antiga (MGT × 04880.10-9): fora da conta, AVISADA.
         'legacy': legado, 'legacy_net': round(sum(r['value'] for r in legado), 2),
-        # B2B × reversão: com todo B2B pareado, os dois são o mesmo número.
-        'difference': round(b2b_net - reversal, 2),
     }
 
 
 def _branch_breaks(branch):
-    """As DUAS linhas (lado JPM) da Branch Settlement: todos os B2B e a
-    reversão. Linha de net zero não nasce."""
-    out = []
-    for kind, v, pr in (('b2b', branch.get('b2b_net'), branch.get('b2b_pay_receive')),
-                        ('reversal', branch.get('reversal_net'), branch.get('pay_receive'))):
-        if pr:
-            out.append({'product': 'NDF', 'cpty': _BRANCH_NAME, 'value': v,
-                        'pay_receive': pr, 'le': 'JPM', 'branch': kind})
-    return out
+    """A linha (lado JPM) da reversão da Branch Settlement; net zero não nasce."""
+    if not (branch or {}).get('pay_receive'):
+        return []
+    return [{'product': 'NDF', 'cpty': _BRANCH_NAME, 'value': branch['reversal_net'],
+             'pay_receive': branch['pay_receive'], 'le': 'JPM', 'branch': 'reversal'}]
 
 
 def _jpm_cashflows(rows, cols, net_map=None, ref_date=None):
@@ -1752,10 +1726,10 @@ def run_payrec(recon_date, files=None, mode='auto', ndf_rows=None, ops_rows=None
         elif bucket == 'spb_mgt':
             client += _cli_spb(rows, cols, mgt=True)
 
-    # Branch Settlement: dia com liquidação com a MGT ganha DUAS linhas — os B2B
-    # e a reversão. Vão por ÚLTIMO no lado JPM, para nunca tomar o par de uma
-    # perna de cliente (só casam com o interbancário, ver `_match_allowed`), e
-    # ficam pendentes até a liquidação acontecer.
+    # Branch Settlement: dia com liquidação com a MGT ganha a linha da REVERSÃO.
+    # Vai por ÚLTIMO no lado JPM, para nunca tomar o par de uma perna de cliente
+    # (só casa com o interbancário, ver `_match_allowed`), e fica pendente até
+    # a reversão liquidar.
     branch = branch_settlement(ops_rows, branch_accounts, ndf_rows)
     jpm += _branch_breaks(branch)
     if branch['accounts_missing']:

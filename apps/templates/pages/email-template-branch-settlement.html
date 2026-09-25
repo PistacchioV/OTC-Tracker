@@ -5,7 +5,6 @@
 {%- set th = 'background:#1c2b6b;color:#fff;padding:7px 10px;font-weight:600;white-space:nowrap;' -%}
 {%- set td = 'padding:6px 10px;border-bottom:1px solid #eee;white-space:nowrap;' -%}
 {%- macro money(v) -%}{%- if v is none -%}&mdash;{%- elif v < 0 -%}<span style="color:#c0392b;">{{ '{:,.2f}'.format(v) }}</span>{%- else -%}{{ '{:,.2f}'.format(v) }}{%- endif -%}{%- endmacro -%}
-{%- macro chip(ok, yes='OK', no='Not OK') -%}{%- if ok -%}<span style="display:inline-block;background:#e8f5e9;color:#1b5e20;padding:2px 10px;border-radius:20px;font-weight:700;font-size:11px;">{{ yes }}</span>{%- else -%}<span style="display:inline-block;background:#fde8e8;color:#b71c1c;padding:2px 10px;border-radius:20px;font-weight:700;font-size:11px;">{{ no }}</span>{%- endif -%}{%- endmacro -%}
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
@@ -46,28 +45,8 @@
                         <tr><td style="{{ td }}font-weight:600;">Destination account</td><td style="{{ td }}">{{ dest.name }} &nbsp;&middot;&nbsp; {% if dest.account %}{{ dest.account }}{% else %}<span style="color:#b71c1c;">Not registered in Reference Data &rsaquo; Counterparty Details</span>{% endif %}</td></tr>
                     </table>
 
-                    <!-- Comparison -->
-                    <p style="color:#1a1a2e;font-size:15px;font-weight:700;margin:0 0 10px;">B2B × Reversal</p>
-                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse:collapse;font-size:12.5px;margin-bottom:24px;">
-                        <thead><tr>
-                            <th style="{{ th }}text-align:right;">B2B net (73760.00-9 × 04880.00-6)</th>
-                            <th style="{{ th }}text-align:right;">Client legs (73760.20-5 × 04880.00-6)</th>
-                            <th style="{{ th }}text-align:right;">Reversal (client legs × −1)</th>
-                            <th style="{{ th }}text-align:right;">Difference</th>
-                            <th style="{{ th }}text-align:center;">Check</th>
-                        </tr></thead>
-                        <tbody><tr>
-                            <td style="{{ td }}text-align:right;">{{ money(branch.b2b_net) }}</td>
-                            <td style="{{ td }}text-align:right;">{{ money(branch.client_b3_net) }}</td>
-                            <td style="{{ td }}text-align:right;">{{ money(branch.reversal_net) }}</td>
-                            <td style="{{ td }}text-align:right;">{{ money(branch.difference) }}</td>
-                            <td style="{{ td }}text-align:center;">{{ chip(check_ok) }}</td>
-                        </tr></tbody>
-                    </table>
-
-                    <!-- Client legs × B2B -->
-                    <p style="color:#1a1a2e;font-size:15px;font-weight:700;margin:0 0 10px;">Client trades and their B2B <span style="color:#555;background:#eeeeee;border-radius:20px;padding:1px 9px;font-size:11px;">{{ branch.trades|length }}</span></p>
-                    {% if branch.trades %}
+                    <!-- Operations -->
+                    <p style="color:#1a1a2e;font-size:15px;font-weight:700;margin:0 0 10px;">Operations <span style="color:#555;background:#eeeeee;border-radius:20px;padding:1px 9px;font-size:11px;">{{ branch.trades|length }}</span></p>
                     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse:collapse;font-size:11.5px;margin-bottom:8px;">
                         <thead><tr>
                             <th style="{{ th }}text-align:left;">B3 ID</th>
@@ -76,9 +55,6 @@
                             <th style="{{ th }}text-align:right;">IR</th>
                             <th style="{{ th }}text-align:right;">Total</th>
                             <th style="{{ th }}text-align:right;">B3 settlement</th>
-                            <th style="{{ th }}text-align:left;">B2B B3 ID</th>
-                            <th style="{{ th }}text-align:right;">B2B value</th>
-                            <th style="{{ th }}text-align:center;">B2B match</th>
                         </tr></thead>
                         <tbody>
                             {% for r in branch.trades %}
@@ -89,9 +65,6 @@
                                 <td style="{{ td }}text-align:right;">{{ money(r.ir) }}</td>
                                 <td style="{{ td }}text-align:right;">{{ money(r.total) }}</td>
                                 <td style="{{ td }}text-align:right;">{{ money(r.value) }}</td>
-                                <td style="{{ td }}">{{ r.b2b_id or '—' }}</td>
-                                <td style="{{ td }}text-align:right;">{{ money(r.b2b_value) }}</td>
-                                <td style="{{ td }}text-align:center;">{{ chip(r.matched, 'OK', 'Missing') }}</td>
                             </tr>
                             {% endfor %}
                             <tr style="background:#eef2ff;font-weight:700;">
@@ -100,33 +73,9 @@
                                 <td style="{{ td }}text-align:right;">{{ money(branch.client_ir) }}</td>
                                 <td style="{{ td }}text-align:right;">{{ money(branch.client_net) }}</td>
                                 <td style="{{ td }}text-align:right;">{{ money(branch.client_b3_net) }}</td>
-                                <td style="{{ td }}"></td>
-                                <td style="{{ td }}text-align:right;">{{ money(branch.b2b_net) }}</td>
-                                <td style="{{ td }}"></td>
                             </tr>
                         </tbody>
                     </table>
-                    {% else %}<p style="font-size:12px;color:#888;margin:0 0 8px;">No client settlement through 73760.20-5 today.</p>{% endif %}
-                    <p style="font-size:11px;color:#777;margin:6px 0 0;">Values in the Bank's view: positive = the Bank receives; negative = the Bank pays. Each client leg pairs with a B2B of the same value and opposite sign.</p>
-
-                    {% if branch.unmatched_b2b %}
-                    <p style="color:#b71c1c;font-size:13px;font-weight:700;margin:20px 0 8px;">B2B without a client leg</p>
-                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;font-size:11.5px;">
-                        <thead><tr><th style="{{ th }}text-align:left;">B3 ID</th><th style="{{ th }}text-align:right;">Value</th></tr></thead>
-                        <tbody>{% for r in branch.unmatched_b2b %}<tr><td style="{{ td }}">{{ r.titulo }}</td><td style="{{ td }}text-align:right;">{{ money(r.value) }}</td></tr>{% endfor %}</tbody>
-                    </table>
-                    {% endif %}
-
-                    {% if branch.legacy %}
-                    <p style="color:#8f5a00;font-size:13px;font-weight:700;margin:20px 0 4px;">Still through the MGT omnibus (04880.00-6 × 04880.10-9) &mdash; not in the reversal</p>
-                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;font-size:11.5px;">
-                        <thead><tr><th style="{{ th }}text-align:left;">B3 ID</th><th style="{{ th }}text-align:right;">Value (MGT view)</th></tr></thead>
-                        <tbody>
-                            {% for r in branch.legacy %}<tr><td style="{{ td }}">{{ r.titulo }}</td><td style="{{ td }}text-align:right;">{{ money(r.value) }}</td></tr>{% endfor %}
-                            <tr style="background:#faeeda;font-weight:700;"><td style="{{ td }}">Total</td><td style="{{ td }}text-align:right;">{{ money(branch.legacy_net) }}</td></tr>
-                        </tbody>
-                    </table>
-                    {% endif %}
 
                     <p style="font-size:13px;line-height:1.6;color:#333333;margin:24px 0 0;">
                         Regards,<br/><strong>Brazil OTC Operations</strong>

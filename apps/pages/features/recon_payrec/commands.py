@@ -48,15 +48,15 @@ def run(recon_date, files=None, mode='auto'):
 
 
 # (LE, tipo) no `b3-accounts` → papel da conta na Branch Settlement.
-_BRANCH_ACCOUNT_ROLES = {('JPM', 'OWN'): 'bank_own', ('MGT', 'OWN'): 'mgt_own',
-                         ('JPM', 'CLIENT 2'): 'bank_client', ('MGT', 'CLIENT 1'): 'mgt_client'}
+_BRANCH_ACCOUNT_ROLES = {('MGT', 'OWN'): 'mgt_own', ('JPM', 'CLIENT 2'): 'bank_client',
+                         ('MGT', 'CLIENT 1'): 'mgt_client'}
 
 
 def branch_accounts():
-    """As quatro contas do controle pelo cadastro `b3-accounts`: Banco própria
-    (73760.00-9), MGT própria (04880.00-6), a guarda-chuva do Banco para o
-    cliente da MGT (73760.20-5, CLIENT 2) e a guarda-chuva da MGT (04880.10-9,
-    CLIENT 1) — a rota antiga, só avisada."""
+    """As contas do controle pelo cadastro `b3-accounts`: MGT própria
+    (04880.00-6), a guarda-chuva do Banco para o cliente da MGT (73760.20-5,
+    CLIENT 2) e a guarda-chuva da MGT (04880.10-9, CLIENT 1) — a rota antiga,
+    só avisada."""
     out = {}
     for row in _routes()._mapping_rows('b3-accounts') or []:
         papel = _BRANCH_ACCOUNT_ROLES.get((str(row.get('LE', '') or '').strip().upper(),
@@ -133,14 +133,6 @@ def branch_draft(recon_date):
                        'text': '{} settlement(s) still through the MGT omnibus 04880.10-9 '
                                '(net {:,.2f}) — not in the reversal.'.format(
                                    len(branch['legacy']), branch.get('legacy_net') or 0)})
-    if branch.get('unmatched_client') or branch.get('unmatched_b2b'):
-        avisos.append({'code': 'branch_unmatched',
-                       'params': {'client': len(branch.get('unmatched_client') or []),
-                                  'b2b': len(branch.get('unmatched_b2b') or [])},
-                       'text': '{} client leg(s) without a B2B of the same value and opposite '
-                               'sign, and {} B2B without a client leg.'.format(
-                                   len(branch.get('unmatched_client') or []),
-                                   len(branch.get('unmatched_b2b') or []))})
     ref_fmt = _fmt_date(recon_date)
     raw = branch_mail.build(ref_fmt, branch, source, dest, to_list, cc_list)
     fname = 'Branch_Settlement_Reverse_Approval_{}.eml'.format(ref_fmt.replace('/', ''))

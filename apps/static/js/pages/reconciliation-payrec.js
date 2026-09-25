@@ -36,8 +36,7 @@
           e_branch_no_reversal: 'Operations B3 has no Branch client settlement (73760.20-5 × 04880.00-6) for this date — there is no reversal to approve.',
           w_branch_no_account: 'No approved {slot} account for {entity} in Reference Data › Counterparty Details.',
           w_branch_legacy_route: '{n} settlement(s) still through the MGT omnibus 04880.10-9 (net {value}) — not in the reversal.',
-          w_branch_unmatched: '{client} client leg(s) without a B2B of the same value and opposite sign; {b2b} B2B without a client leg.',
-          branchTagB2b: 'B2B', branchTagRev: 'Branch Reversal' },
+          branchTagRev: 'Branch Reversal' },
     br: { running: 'Processando…', sending: 'Enviando…', run: 'Rodar reconciliação', end: 'Encerrar processo',
           noFiles: 'Sem arquivos', noFilesMsg: 'Anexe os arquivos no dropzone ou verifique se a pasta Pay/Rec tem os arquivos de insumo desta data.',
           failTitle: 'Reconciliação falhou', netErr: 'Erro de rede.', done: 'Reconciliação concluída',
@@ -60,8 +59,7 @@
           e_branch_no_reversal: 'O Operations B3 não tem liquidação de cliente da Branch (73760.20-5 × 04880.00-6) nesta data — não há reversão para aprovar.',
           w_branch_no_account: 'Sem conta {slot} aprovada para {entity} em Reference Data › Counterparty Details.',
           w_branch_legacy_route: '{n} liquidação(ões) ainda pela guarda-chuva da MGT 04880.10-9 (net {value}) — fora da reversão.',
-          w_branch_unmatched: '{client} perna(s) de cliente sem B2B de mesmo valor e sinal invertido; {b2b} B2B sem perna de cliente.',
-          branchTagB2b: 'B2B', branchTagRev: 'Branch Reversal' },
+          branchTagRev: 'Branch Reversal' },
     es: { running: 'Procesando…', sending: 'Enviando…', run: 'Ejecutar reconciliación', end: 'Finalizar proceso',
           noFiles: 'Sin archivos', noFilesMsg: 'Adjunte los archivos en el dropzone o verifique que la carpeta Pay/Rec tenga los archivos de esta fecha.',
           failTitle: 'La reconciliación falló', netErr: 'Error de red.', done: 'Reconciliación completada',
@@ -84,8 +82,7 @@
           e_branch_no_reversal: 'Operations B3 no tiene liquidación de cliente de la Branch (73760.20-5 × 04880.00-6) en esta fecha — no hay reversión para aprobar.',
           w_branch_no_account: 'Sin cuenta {slot} aprobada para {entity} en Reference Data › Counterparty Details.',
           w_branch_legacy_route: '{n} liquidación(es) aún por la cuenta ómnibus de la MGT 04880.10-9 (net {value}) — fuera de la reversión.',
-          w_branch_unmatched: '{client} pata(s) de cliente sin B2B del mismo valor y signo invertido; {b2b} B2B sin pata de cliente.',
-          branchTagB2b: 'B2B', branchTagRev: 'Branch Reversal' },
+          branchTagRev: 'Branch Reversal' },
   };
   function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k]; }
   function esc(s) {
@@ -166,7 +163,7 @@
       var base =
         '<td>' + esc(r.le || '') + '</td>' +
         '<td>' + esc(r.product) + '</td>' +
-        '<td>' + esc(r.jpm_cpty) + (r.branch ? '<span class="pr-branch-tag">' + esc(t(r.branch === 'b2b' ? 'branchTagB2b' : (r.branch === 'reversal' ? 'branchTagRev' : 'branchTag'))) + '</span>' : '') + '</td>' +
+        '<td>' + esc(r.jpm_cpty) + (r.branch ? '<span class="pr-branch-tag">' + esc(t(r.branch === 'reversal' ? 'branchTagRev' : 'branchTag')) + '</span>' : '') + '</td>' +
         '<td>' + esc(r.client) + '</td>' +
         '<td>' + esc(r.pay_receive) + '</td>' +
         numCell(r.jpm_value) + numCell(r.client_value);

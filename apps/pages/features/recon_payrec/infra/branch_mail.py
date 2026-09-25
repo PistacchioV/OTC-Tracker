@@ -22,7 +22,6 @@ def build(recon_date_fmt, branch, source, dest, to_list, cc_list):
     html = render_template('pages/email-template-branch-settlement.html',
                            recon_date_fmt=recon_date_fmt, branch=branch,
                            source=source, dest=dest, direction_text=direction_text,
-                           check_ok=abs(branch.get('difference') or 0) < 1.0,
                            current_year=datetime.now().year)
     msg = MIMEMultipart('related')
     msg['Subject'] = 'Branch Settlement Reverse Approval — {} — BRL {:,.2f}'.format(
