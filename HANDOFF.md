@@ -24221,6 +24221,16 @@ contas saem do `b3-accounts` por LE × TIPO (`commands.branch_accounts`: MGT
   (sem o ponto) escapava da `_JPM_ENTITIES` e entrava no lado JPM como se fosse
   cliente; `_entity_side` a tira.
 
+**As visões do e-mail** (mesa, 25/09/2026): a tabela das operações é toda da
+BRANCH — Gross/IR/Total do Cockpit são Branch × cliente, e o B3 settlement é
+Branch × 73760.20-5 (o Operations B3 lido pela 205, com o sinal virado). Antes
+o B3 settlement saía pela 205 e o bruto pela Branch: o mesmo número com sinais
+opostos lado a lado, sem nada explicando. A reversão do e-mail é o INVERSO do
+total da tabela, dita também pela Branch (`reversal_branch`, "Branch receives
+from Banco" em vez de "Banco pays Branch"); os cabeçalhos dizem a visão. A
+linha do Pay/Rec continua na visão do Banco, como toda a recon — é o mesmo
+dinheiro, dito pelo outro lado.
+
 Em aberto: o sinal do `Valor` foi lido na visão da conta do Banco (205); se o
 Operations B3 da instância assinar pelo outro lado, a direção da reversão
 inverte — conferir no primeiro dia real. `check_payrec_branch.py`.
