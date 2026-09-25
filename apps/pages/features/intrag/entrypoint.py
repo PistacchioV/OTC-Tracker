@@ -20,6 +20,18 @@ def _R():
     return routes
 
 
+
+def _notif_ref(entries, idx, deal_id):
+    """O id da linha na notificação é o B3 ID, que é a referência da mesa nas
+    telas de Intrag (§558). O `deal_id` é a CHAVE interna — nas páginas que
+    nascem do New Deals ele é o Athena ID — e só aparece quando a linha ainda
+    não tem B3 ID."""
+    try:
+        b3 = str((entries[idx] or {}).get('b3_id') or '').strip()
+    except (TypeError, IndexError, KeyError):
+        b3 = ''
+    return b3 or deal_id
+
 @blueprint.route('/api/intrag/ndf')
 def api_intrag_ndf():
     if not session.get('authenticated'):
@@ -230,7 +242,7 @@ def api_intrag_option_edit():
         entries[idx]['checker'] = ''
         _R()._atomic_write_json(fp, entries)
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Deal Updated', 'Intrag Option', deal_id)
+                         'Deal Updated', 'Intrag Option', _notif_ref(entries, idx, deal_id))
     return jsonify({'success': True, 'status': status})
 
 @blueprint.route('/api/intrag/option/approve', methods=['POST'])
@@ -257,7 +269,7 @@ def api_intrag_option_approve():
         entries[idx]['checker'] = user_sid
         _R()._atomic_write_json(fp, entries)
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Status Updated', 'Intrag Option', deal_id + ' → Approved')
+                         'Status Updated', 'Intrag Option', _notif_ref(entries, idx, deal_id) + ' → Approved')
     return jsonify({'success': True, 'status': 'Approved'})
 
 @blueprint.route('/api/intrag/ndf/send-file', methods=['POST'])
@@ -392,7 +404,7 @@ def api_intrag_ndf_edit():
         _R()._atomic_write_json(fp, entries)
 
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Deal Updated', 'Intrag NDF', deal_id)
+                         'Deal Updated', 'Intrag NDF', _notif_ref(entries, idx, deal_id))
     return jsonify({'success': True, 'status': status})
 
 @blueprint.route('/api/intrag/ndf/approve', methods=['POST'])
@@ -423,7 +435,7 @@ def api_intrag_ndf_approve():
         _R()._atomic_write_json(fp, entries)
 
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Status Updated', 'Intrag NDF', deal_id + ' → Approved')
+                         'Status Updated', 'Intrag NDF', _notif_ref(entries, idx, deal_id) + ' → Approved')
     return jsonify({'success': True, 'status': 'Approved'})
 
 @blueprint.route('/api/intrag/ndf/mapping-intrag-id', methods=['POST'])
@@ -597,7 +609,7 @@ def api_intrag_swap_edit():
         entries[idx]['checker'] = ''
         _R()._atomic_write_json(fp, entries)
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Deal Updated', 'Intrag Swap', deal_id)
+                         'Deal Updated', 'Intrag Swap', _notif_ref(entries, idx, deal_id))
     return jsonify({'success': True, 'status': 'Pending'})
 
 @blueprint.route('/api/intrag/swap/approve', methods=['POST'])
@@ -624,7 +636,7 @@ def api_intrag_swap_approve():
         entries[idx]['checker'] = user_sid
         _R()._atomic_write_json(fp, entries)
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Status Updated', 'Intrag Swap', deal_id + ' → Approved')
+                         'Status Updated', 'Intrag Swap', _notif_ref(entries, idx, deal_id) + ' → Approved')
     return jsonify({'success': True, 'status': 'Approved'})
 
 @blueprint.route('/api/intrag/swap/mapping-intrag-id', methods=['POST'])
@@ -842,7 +854,7 @@ def api_intrag_dce_option_edit():
         entries[idx]['checker'] = ''
         _R()._atomic_write_json(fp, entries)
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Deal Updated', 'Intrag DCE Option', deal_id)
+                         'Deal Updated', 'Intrag DCE Option', _notif_ref(entries, idx, deal_id))
     return jsonify({'success': True, 'status': status})
 
 
@@ -870,7 +882,7 @@ def api_intrag_dce_option_approve():
         entries[idx]['checker'] = user_sid
         _R()._atomic_write_json(fp, entries)
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Status Updated', 'Intrag DCE Option', deal_id + ' → Approved')
+                         'Status Updated', 'Intrag DCE Option', _notif_ref(entries, idx, deal_id) + ' → Approved')
     return jsonify({'success': True, 'status': 'Approved'})
 
 
@@ -1096,7 +1108,7 @@ def api_intrag_dce_ndf_edit():
         entries[idx]['checker'] = ''
         _R()._atomic_write_json(fp, entries)
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Deal Updated', 'Intrag DCE NDF', deal_id)
+                         'Deal Updated', 'Intrag DCE NDF', _notif_ref(entries, idx, deal_id))
     return jsonify({'success': True, 'status': status})
 
 
@@ -1124,7 +1136,7 @@ def api_intrag_dce_ndf_approve():
         entries[idx]['checker'] = user_sid
         _R()._atomic_write_json(fp, entries)
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Status Updated', 'Intrag DCE NDF', deal_id + ' → Approved')
+                         'Status Updated', 'Intrag DCE NDF', _notif_ref(entries, idx, deal_id) + ' → Approved')
     return jsonify({'success': True, 'status': 'Approved'})
 
 
@@ -1334,7 +1346,7 @@ def api_intrag_dce_swap_edit():
         e['checker'] = ''
         _R()._atomic_write_json(fp, entries)
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                              'Deal Updated', 'Intrag DCE Swap', deal_id)
+                              'Deal Updated', 'Intrag DCE Swap', _notif_ref(entries, idx, deal_id))
     return jsonify({'success': True, 'status': status, 'entry': e})
 
 
@@ -1387,7 +1399,7 @@ def api_intrag_dce_swap_approve():
         entries[idx]['checker'] = user_sid
         _R()._atomic_write_json(fp, entries)
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                              'Status Updated', 'Intrag DCE Swap', deal_id + ' → Approved')
+                              'Status Updated', 'Intrag DCE Swap', _notif_ref(entries, idx, deal_id) + ' → Approved')
     return jsonify({'success': True, 'status': 'Approved'})
 
 
@@ -1658,7 +1670,7 @@ def api_intrag_unwind_edit():
         entries[idx]['checker'] = ''
         _R()._atomic_write_json(fp, entries)
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                              'Deal Updated', 'Intrag Unwind', deal_id)
+                              'Deal Updated', 'Intrag Unwind', _notif_ref(entries, idx, deal_id))
     return jsonify({'success': True, 'status': 'Pending'})
 
 
@@ -1688,5 +1700,5 @@ def api_intrag_unwind_approve():
         entries[idx]['checker'] = user_sid
         _R()._atomic_write_json(fp, entries)
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                              'Status Updated', 'Intrag Unwind', deal_id + ' → Approved')
+                              'Status Updated', 'Intrag Unwind', _notif_ref(entries, idx, deal_id) + ' → Approved')
     return jsonify({'success': True, 'status': 'Approved'})
