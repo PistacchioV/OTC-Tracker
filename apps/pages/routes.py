@@ -9769,6 +9769,20 @@ def _ndfsum_b3_legs(ops):
     return strong, weak
 
 
+def _ndfsum_count_accounts():
+    """Dígitos das contas que CONTAM nos cards do NDF Summary: as de tipo
+    `OWN` do Banco (JPM) e da MGT no cadastro `b3-accounts` — hoje 73760.00-9
+    e 04880.00-6. Conta nova se cadastra na tela /mapping."""
+    out = set()
+    for row in _mapping_rows('b3-accounts'):
+        le = str(row.get('LE', '') or '').strip().upper()
+        tipo = str(row.get('ACCOUNT TYPE', '') or '').strip().upper()
+        d = _acc_digits(row.get('ACCOUNT', ''))
+        if d and tipo == 'OWN' and le in ('JPM', 'MGT'):
+            out.add(d)
+    return out
+
+
 def _ndfsum_b3_val(legs, titulo, casa, cpty_acc):
     """Valor B3 do contrato pela ótica de `casa` (a conta da nossa entidade).
 
@@ -10485,6 +10499,14 @@ def _ndfsum_collect(ref):
     # B3 side: Operations B3 settlement (Resgate) rows for FX-whitelisted
     # contracts only — commodity/other NDFs that also live in Operations B3 are
     # excluded because their Título is not in fx_map.
+    #
+    # A QUANTIDADE só conta a linha cuja `Conta` é a PRÓPRIA do Banco ou da MGT
+    # (mesa, 25/09/2026 — as 73760.00-9 e 04880.00-6, lidas do `b3-accounts`
+    # pelo TIPO, nunca fixadas aqui). O mesmo contrato chega por mais de uma
+    # visão da B3 (o intragrupo espelhado, a conta guarda-chuva), e a contagem
+    # somava cada uma como uma operação. O VALOR continua somando toda linha:
+    # o pedido é "apenas na contagem".
+    contas_qtd = _ndfsum_count_accounts()
     for r in (ops or []):
         if _fcst_norm(str(r.get('Tipo Operação', ''))) != 'resgate':
             continue
@@ -10492,9 +10514,10 @@ def _ndfsum_collect(ref):
         if not cat:
             continue
         val = _ndfc_valnum(r.get('Valor')) or 0.0
-        recon_acc[cat]['b3_count'] += 1
+        conta_ok = _acc_digits(r.get('Conta', '')) in contas_qtd
+        recon_acc[cat]['b3_count'] += 1 if conta_ok else 0
         recon_acc[cat]['b3_value'] += val
-        recon_acc['total']['b3_count'] += 1
+        recon_acc['total']['b3_count'] += 1 if conta_ok else 0
         recon_acc['total']['b3_value'] += val
 
     recon = {}
