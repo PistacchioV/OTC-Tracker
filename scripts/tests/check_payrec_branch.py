@@ -70,8 +70,8 @@ OPS = [
     ob('26E002', '04880.00-6', '73760.20-5', '20000,00'),
     # os B2B: mesmo valor, sinal invertido
     ob('26B001', '73760.00-9', '04880.00-6', '-50000,00'),
-    ob('26B002', '73760.00-9', '04880.00-6', '20000,00'),
-    ob('26B002', '04880.00-6', '73760.00-9', '-20000,00'),
+    ob('26B002', '73760.00-9', '04880.00-6', '80000,00'),
+    ob('26B002', '04880.00-6', '73760.00-9', '-80000,00'),
     # rota antiga
     ob('26L001', '04880.00-6', '04880.10-9', '-700,00'),
     # outra conta qualquer — fora
@@ -86,8 +86,9 @@ check('so as operacoes 73760.20-5 x 04880.00-6, sem dobrar, na visao da Branch',
 check('bruto do Cockpit e B3 settlement no MESMO sinal (os dois pela Branch)',
       [(t['gross'], t['value']) for t in b['trades'] if t['b3_id'] == '26E001'], [(-50000.0, -50000.0)])
 check('B2B sem dobrar a visao espelhada', [(r['titulo'], r['value']) for r in b['b2b']],
-      [('26B001', -50000.0), ('26B002', 20000.0)])
-check('net do B2B (visao da 73760.00-9)', (b['b2b_net'], b['b2b_pay_receive']), (-30000.0, 'Pay'))
+      [('26B001', -50000.0), ('26B002', 80000.0)])
+check('net do B2B = 00-9 x 00-6 (+30000) MAIS 20-5 x 00-6 (+30000), visao do Banco',
+      (b['b2b_net'], b['b2b_pay_receive']), (60000.0, 'Receive'))
 check('total da tabela, reversao pela Branch (inverso) e linha da recon (Banco)',
       (b['client_b3_net'], b['reversal_branch'], b['reversal_net']), (-30000.0, 30000.0, -30000.0))
 check('205 recebe no net -> na reversao o Banco paga', b['pay_receive'], 'Pay')
@@ -137,7 +138,7 @@ try:
     linhas = [(r['branch'], r['jpm_value'], r['pay_receive'])
               for r in out['pending_payment'] + out['pending_receivement'] if r.get('branch')]
     check('a linha devida dos B2B e a da reversao', linhas,
-          [('b2b', -30000.0, 'Pay'), ('reversal', -30000.0, 'Pay')])
+          [('reversal', -30000.0, 'Pay'), ('b2b', 60000.0, 'Receive')])
     check('JPM cpty e a Branch, LE JPM',
           {(r['jpm_cpty'], r['le']) for r in out['pending_payment'] if r.get('branch')}, {(MGT, 'JPM')})
     check('dia so com B2B ainda mostra a linha devida',
@@ -148,50 +149,43 @@ try:
           [r for r in run([])['pending_payment'] if r.get('branch')], [])
 
     RP._cli_spb = lambda rows, cols, mgt=False: list(rows)
-    interb = {'value': -30000.0, 'client': '', 'sistema': 'SPB - outros bancos', 'snumconta': '',
-              'product': 'NDF', 'pay_receive': 'Pay', 'le': 'JPM', 'bank': True, 'tol': 20.0,
+    interb = {'value': 60000.0, 'client': '', 'sistema': 'SPB - outros bancos', 'snumconta': '',
+              'product': 'NDF', 'pay_receive': 'Receive', 'le': 'JPM', 'bank': True, 'tol': 20.0,
               'drop_if_unmatched': True}
-    fechou = run(OPS, [interb])
-    check('um interbancario no mesmo sentido casa UMA das linhas',
-          [r['status'] for r in fechou['settled'] if r.get('branch')], ['Settled'])
+    fechou = run(OPS, [dict(interb)])
+    check('o LTR do Historico JPM com o net total fecha o B2B (e so ele) no Settled',
+          [(r['branch'], r['status']) for r in fechou['settled'] if r.get('branch')], [('b2b', 'Settled')])
     cliente = {'value': -30000.0, 'client': 'CLIENTE Z', 'sistema': 'SPB - conta externa',
                'snumconta': '', 'product': 'NDF', 'pay_receive': 'Pay', 'le': 'JPM'}
     nao = run(OPS, [cliente])
     check('perna de cliente de mesmo valor NAO fecha nenhuma',
           [r for r in nao['settled'] if r.get('branch')], [])
 
-    # A reversão só fecha com as DUAS pontas: o Banco paga (interbancário) e a
-    # MGT recebe da conta de derivativos do Banco (RLDOCREC).
-    so_rev = [ob('26E001', '73760.20-5', '04880.00-6', '30000,00')]   # sem B2B
+    # A reversão casa com o recebimento da MGT contra a conta de derivativos
+    # do Banco (RLDOCREC) — não com o LTR, que é do B2B.
+    so_rev = [ob('26E001', '73760.20-5', '04880.00-6', '30000,00')]   # B2B = +30000 (só a 205)
     receb = {'value': 30000.0, 'client': '/OTC DERIVATIVES PRODUCTS', 'sistema': 'SDConta - conta externa',
              'snumconta': '', 'product': 'NDF', 'pay_receive': 'Receive', 'le': 'MGT'}
+    ltr = dict(interb, value=30000.0)
 
     def rev(out):
         return [r for r in out['pending_payment'] + out['settled'] if r.get('branch') == 'reversal']
 
-    ambos = run(so_rev, [dict(interb), dict(receb)], ndf=[])
-    r0 = rev(ambos)
-    check('pagamento do Banco + recebimento da MGT: reversao Settled',
-          [(r['status'], r['reversal_legs']) for r in r0],
-          [('Settled', {'bank': True, 'branch': True})])
-    check('o recebimento da MGT nao sobra no Pending Receivement',
-          [r['client'] for r in ambos['pending_receivement']], [])
-    check('resumo nao conta a ponta espelhada da MGT (Receive zerado)',
-          [(x['client_qty'], x['check_value']) for x in ambos['summary'] if x['pay_receive'] == 'Receive'],
-          [(0, 'OK')])
-    so_rec = run(so_rev, [dict(receb)], ndf=[])
-    check('so o recebimento da MGT: Pending dizendo que falta a ponta do Banco',
-          [(r['status'], r['reversal_legs'], r['client_value']) for r in rev(so_rec)],
-          [('Pending', {'bank': False, 'branch': True}, -30000.0)])
-    so_pag = run(so_rev, [dict(interb)], ndf=[])
-    check('so o pagamento do Banco: Pending dizendo que falta a ponta da MGT',
-          [(r['status'], r['reversal_legs']) for r in rev(so_pag)],
-          [('Pending', {'bank': True, 'branch': False})])
+    ambos = run(so_rev, [dict(ltr), dict(receb)], ndf=[])
+    check('recebimento da MGT fecha a reversao; LTR fecha o B2B — os dois no Settled',
+          sorted((r['branch'], r['status'], r['client_value']) for r in ambos['settled']),
+          [('b2b', 'Settled', 30000.0), ('reversal', 'Settled', -30000.0)])
+    check('nada sobra pendente', ambos['pending_payment'] + ambos['pending_receivement'], [])
+    check('resumo fecha nos dois sentidos',
+          [x['check_value'] for x in ambos['summary']], ['OK', 'OK', 'OK'])
+    check('sem o recebimento da MGT a reversao fica Pending (o LTR nao e dela)',
+          [r['status'] for r in rev(run(so_rev, [dict(ltr)], ndf=[]))], ['Pending'])
     outro = dict(receb, value=12345.0)
     check('recebimento de outro valor nao e a reversao (e sobra)',
-          ([r['reversal_legs'] for r in rev(run(so_rev, [dict(interb), outro], ndf=[]))],
-           [r['client'] for r in run(so_rev, [dict(interb), dict(outro)], ndf=[])['pending_receivement']]),
-          ([{'bank': True, 'branch': False}], ['/OTC DERIVATIVES PRODUCTS']))
+          ([r['status'] for r in rev(run(so_rev, [dict(outro)], ndf=[]))],
+           [r['client'] for r in run(so_rev, [dict(outro)], ndf=[])['pending_receivement']
+            if not r.get('branch')]),
+          (['Pending'], ['/OTC DERIVATIVES PRODUCTS']))
     check('a conta do Banco nunca e par de perna de cliente',
           RP._match_allowed({'cpty': 'CLIENTE X', 'pay_receive': 'Receive'}, receb), False)
 finally:
