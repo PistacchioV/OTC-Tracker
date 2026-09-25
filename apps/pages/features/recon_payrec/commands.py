@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """O Run e a justificativa do Pay/Rec."""
+import traceback
 
 
 def _routes():
@@ -32,7 +33,37 @@ def run(recon_date, files=None, mode='auto'):
         ndf_rows = R._ndfc_liquidacao_do_dia(ref)
     except Exception as exc:                                # noqa: BLE001
         raise NdfSourceError(str(exc)) from exc
-    return run_payrec(recon_date, files=files, mode=mode, ndf_rows=ndf_rows)
+    # Branch Settlement: as liquidações do dia no Operations B3 e as contas do
+    # controle, pelo cadastro `b3-accounts` (LE × tipo) — número de conta não se
+    # escreve no código. Falha aqui não derruba a recon inteira: o controle fica
+    # sem linha e o log diz por quê.
+    try:
+        ops_rows = R._opb3_settle_rows(ref) or []
+    except Exception:                                       # noqa: BLE001
+        R.log.warning('[recon_payrec] Operations B3 ilegível — Branch Settlement sem '
+                      'linhas:\n%s', traceback.format_exc())
+        ops_rows = []
+    return run_payrec(recon_date, files=files, mode=mode, ndf_rows=ndf_rows,
+                      ops_rows=ops_rows, branch_accounts=branch_accounts())
+
+
+# (LE, tipo) no `b3-accounts` → papel da conta na Branch Settlement.
+_BRANCH_ACCOUNT_ROLES = {('JPM', 'OWN'): 'bank_own', ('MGT', 'OWN'): 'mgt_own',
+                         ('JPM', 'CLIENT 2'): 'bank_client', ('MGT', 'CLIENT 1'): 'mgt_client'}
+
+
+def branch_accounts():
+    """As quatro contas do controle pelo cadastro `b3-accounts`: Banco própria
+    (73760.00-9), MGT própria (04880.00-6), a guarda-chuva do Banco para o
+    cliente da MGT (73760.20-5, CLIENT 2) e a guarda-chuva da MGT (04880.10-9,
+    CLIENT 1) — a rota antiga, só avisada."""
+    out = {}
+    for row in _routes()._mapping_rows('b3-accounts') or []:
+        papel = _BRANCH_ACCOUNT_ROLES.get((str(row.get('LE', '') or '').strip().upper(),
+                                           str(row.get('ACCOUNT TYPE', '') or '').strip().upper()))
+        if papel and papel not in out:
+            out[papel] = str(row.get('ACCOUNT', '') or '').strip()
+    return out
 
 
 def justify(recon_date, table, index, comment, status):
@@ -87,11 +118,29 @@ def branch_draft(recon_date):
                                'No TO recipient saved in Control Panel › Branch Settlement '
                                'Reverse Approval.')
     if not branch.get('pay_receive'):
-        # Sem B2B (ou com ele netando zero) não há reversão para aprovar — e a
-        # direção não se chuta pelo lado dos clientes.
-        raise BranchDraftError('branch_no_b2b', 'No Bank × Branch B2B net in the NDF Cockpit '
-                                                'for this date — there is no reversal to approve.')
+        # Sem perna de cliente na 73760.20-5 (ou com ela netando zero) não há
+        # reversão para aprovar.
+        raise BranchDraftError('branch_no_reversal',
+                               'No Branch client settlement (73760.20-5 × 04880.00-6) in '
+                               'Operations B3 for this date — there is no reversal to approve.')
     source, dest, avisos = queries.branch_accounts(branch['pay_receive'])
+    # A validação extra enquanto a rota antiga existir: ela fica FORA da
+    # reversão, e quem aprova tem de saber que há mais liquidação com a MGT.
+    if branch.get('legacy'):
+        avisos.append({'code': 'branch_legacy_route',
+                       'params': {'n': len(branch['legacy']),
+                                  'value': '{:,.2f}'.format(branch.get('legacy_net') or 0)},
+                       'text': '{} settlement(s) still through the MGT omnibus 04880.10-9 '
+                               '(net {:,.2f}) — not in the reversal.'.format(
+                                   len(branch['legacy']), branch.get('legacy_net') or 0)})
+    if branch.get('unmatched_client') or branch.get('unmatched_b2b'):
+        avisos.append({'code': 'branch_unmatched',
+                       'params': {'client': len(branch.get('unmatched_client') or []),
+                                  'b2b': len(branch.get('unmatched_b2b') or [])},
+                       'text': '{} client leg(s) without a B2B of the same value and opposite '
+                               'sign, and {} B2B without a client leg.'.format(
+                                   len(branch.get('unmatched_client') or []),
+                                   len(branch.get('unmatched_b2b') or []))})
     ref_fmt = _fmt_date(recon_date)
     raw = branch_mail.build(ref_fmt, branch, source, dest, to_list, cc_list)
     fname = 'Branch_Settlement_Reverse_Approval_{}.eml'.format(ref_fmt.replace('/', ''))

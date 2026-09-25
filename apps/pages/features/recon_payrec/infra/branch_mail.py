@@ -26,7 +26,7 @@ def build(recon_date_fmt, branch, source, dest, to_list, cc_list):
                            current_year=datetime.now().year)
     msg = MIMEMultipart('related')
     msg['Subject'] = 'Branch Settlement Reverse Approval — {} — BRL {:,.2f}'.format(
-        recon_date_fmt, abs(branch.get('b2b_net') or 0))
+        recon_date_fmt, abs(branch.get('reversal_net') or 0))
     if to_list:
         msg['To'] = ', '.join(to_list)
     if cc_list:
