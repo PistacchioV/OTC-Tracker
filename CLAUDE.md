@@ -1019,6 +1019,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   abria o documento de uma e a outra sumia. Para a linha antiga que já está no
   banco com o eixo velho, o `_mc_generate_url` devolve o grupo da LINHA
   CLICADA (não o primeiro que casar) e loga um aviso.
+- **A taxa do XML do termo de moeda é `Strike` OU `Rate`** (§563, #OTC-0042):
+  o FWD Start grava `Strike`, o Vanilla só `Rate`; lendo só o `Strike`, o XML da
+  MGT saía zerado. E o vencimento do XML é lido antes de qualquer perna ser
+  recusada.
+- **O prêmio D0 das páginas de opção é uma FAIXA, não um Swal** (§565,
+  `premium-d0.js`): contada da grade a cada draw, por qualquer caminho de
+  entrada; o box scan também toca o sino.
 - Só produtos de `_MC_CONFIRMATION_SOURCES` geram documento na esteira;
   `_mc_save_from_deal` é chamado de dentro de `_pc_save_from_deal` e **não
   retroage** — quem recupera o passado é o `backfill_manual_confirmations.py`,
@@ -1878,6 +1885,9 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   procurada em TODAS as pastas gêmeas do Electronic Inventory**
   (`_ei_client_dir_names`): olhar só a vencedora do scan dizia "não
   localizada" com o arquivo salvo na outra.
+- **O Advanced Export tem teto POR PÁGINA** (`daily.timeout`, §562) e uma
+  segunda passada nos dias que falharam; o Operations B3 declara 180 s, e o
+  mapa da coluna Type fica em memória pelo carimbo de cada posição.
 - **Nome da contraparte sai do SPN** (`_athena_settlements` → `_otm_cpty_name`;
   OTM pelo `Cpty SPN`, na leitura).
 - **IR do termo de moeda é CALCULADO** (`_ndfsum_ir_apply`, §423): 0,005%,
@@ -1955,6 +1965,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   depois do carimbo); `MASTER` em todas, `ADMIN` em nenhuma; `target_role`
   aceita vários papéis por vírgula. Destino do aviso é o Confirmations Monitor
   (`page = 'Confirmation'`).
+- **O card do Monitor é o DOCUMENTO** (§564): confirmação já gerada agrupa
+  pelo `Confirmation Link` (que a geração carimba em toda operação do PDF), não
+  pelos campos — eles divergiam da segregação e partiam uma confirmação em dois
+  cards (o Validate carimba as chaves do CARD). Com vários PDFs casando na
+  pasta, vale o do link, no card e na janela de validação. O ativo das
+  commodities é UMA função para o documento e para a Moeda da esteira
+  (`_conf_merc_default`: Commodities → Subjacente → Underlying Asset).
 - **Callback**: falta de `Data Callback` é badge só no card Pending FepWeb (como
   CONTAGEM) e TRAVA o Mark as sent (409 `callback_required`).
 - Nomes de coluna são os da planilha legada (schema dos DuckDB); rótulos pelo
@@ -2358,7 +2375,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (172 scripts)
+### `scripts/tests/` (174 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
