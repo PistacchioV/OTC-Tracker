@@ -116,11 +116,39 @@ class _PorNome:
         return str(rec.get('TAX ID') or '').strip()
 
 
+def _conta8(conta):
+    """A conta CETIP nos OITO digitos. O Live Position de NDF entrega a do
+    Lawton como `41007`, e o `b3-accounts` compara digito a digito com
+    `00041.00-7`: sem os zeros o fundo nao era reconhecido como nosso, e as
+    duas visoes do contrato Banco x Lawton ficavam iguais (a mesma regra do
+    `email_validation._acct8`)."""
+    d = ''.join(ch for ch in str(conta or '') if ch.isdigit())
+    return d.zfill(8) if d else ''
+
+
+# Os fundos: entidades NOSSAS que nao lancam a recompra pelo Batch Conecta (o
+# lado deles vai pela Intrag) — os mesmos do `unwinds.commands.FUNDOS`.
+_FUNDOS = ('LAWTON', 'ATACAMA')
+
+
+def _visao_rank(parte):
+    """Qual visao do contrato vale quando o Live Position traz o MESMO contrato
+    mais de uma vez (Banco x Lawton aparece na visao de cada um): 0 = a Parte e
+    entidade nossa que nao e fundo (o Banco, a MGT), 1 = a Parte e um fundo,
+    2 = a Parte nao e nossa. O lado (`comprado`) e o da Parte: escolher a visao
+    do fundo inverteria o papel no TER 0014."""
+    le = _R()._b3_account_le(_conta8(parte))
+    if not le:
+        return 2
+    return 1 if le in _FUNDOS else 0
+
+
 def _contas(parte, cpty):
     """(nossa, deles, aviso): a conta NOSSA e a que o `b3-accounts` conhece. A
     posicao e do participante, entao a Parte e a nossa na regra; conta fora do
     cadastro fica dita — e o arquivo da B3 recusa (§8, a visao sai da conta)."""
     R = _R()
+    parte, cpty = _conta8(parte) or parte, _conta8(cpty) or cpty
     if R._b3_account_le(parte):
         return parte, cpty, None
     if R._b3_account_le(cpty):
@@ -137,6 +165,7 @@ def _ndf(cel, por_nome):
     nossa, deles, aviso_conta = _contas(cel.get('Codigo da Parte'), cel.get('Codigo da Contraparte'))
     return {
         'contract': cel.get('Contrato', ''),
+        'deal_id': str(cel.get('Codigo Identificador', '') or '').strip(),
         'party_account': cel.get('Codigo da Parte', ''),
         'cpty_account': cel.get('Codigo da Contraparte', ''),
         'our_account': nossa, 'their_account': deles,
@@ -151,6 +180,7 @@ def _ndf(cel, por_nome):
         'underlying': cel.get('Codigo do Ativo Subjacente', ''),
         'currency': str(cel.get('Simbolo da Moeda', '') or '').upper(),
         'comprado': fase1.comprado_na_posicao(cel),
+        'view_rank': _visao_rank(cel.get('Codigo da Parte')),
         'asian_dates': _asiaticas(cel),
         'cpty_warning': aviso_cpty, 'account_warning': aviso_conta,
     }
@@ -308,3 +338,18 @@ def template_blocks(key):
         raise domain.Recusa('unwind_template_missing',
                             'file-interpreter template missing: ' + str(key), 500, key=key)
     return list(tpl.get('blocks') or [])
+
+
+def paginas_com_termo():
+    """As páginas do catálogo que têm esteira e Termo (`PAGINAS_COM_TERMO`)."""
+    return [p for p in catalog.PAGES.values() if p.get('dir') in domain.PAGINAS_COM_TERMO]
+
+
+def termo_entries(ref):
+    """As recompras do dia (arquivo-dia `ref`, ISO ou date) no formato da Fase
+    1 — as linhas do Anexo I do Termo de Resilição."""
+    d = _ref(str(ref or '')[:10]) if not hasattr(ref, 'strftime') else ref
+    if d is None:
+        return []
+    return [domain.para_o_termo(page, l) for page in paginas_com_termo()
+            for l in entries(page, d.strftime('%Y-%m-%d'))]

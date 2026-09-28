@@ -75,7 +75,11 @@ _MC_CONFIRMATION_SOURCES = {'NDF COMM', 'OPTION COMM', 'OPTION', 'NDF FWD START'
                             # source aqui sem família no backfill deixa as
                             # operações ANTIGAS invisíveis para sempre
                             # (`check_mc_backfill.py`).
-                            'UNWIND NDF'}
+                            'UNWIND NDF',
+                            # A recompra de NDF de Commodities (mesa,
+                            # 28/09/2026): o mesmo Termo, a família do backfill
+                            # é `Unwind NDF Commodities`.
+                            'UNWIND NDF COMM'}
 
 
 # LOB da linha espelhada. As duas telas gravavam 'CEM' para tudo, e a mesa de

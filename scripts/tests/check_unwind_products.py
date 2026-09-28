@@ -61,7 +61,7 @@ NDF_COLS = ['Contrato', 'Codigo da Parte', 'Codigo da Contraparte', 'Nome da Con
             'CPF/CNPJ da Contraparte', 'Valor Base no registro', 'Valor Antecipado',
             'Taxa Forward', 'Data de Emissao', 'Data de Vencimento',
             'Codigo do Ativo Subjacente', 'Simbolo da Moeda',
-            'Descricao da posicao do Participante']
+            'Descricao da posicao do Participante', 'Codigo Identificador']
 NDF_POS = {'Contrato': '26G00000001', 'Codigo da Parte': '73760.00-9',
            # a guarda-chuva: o titular e o banco, o cliente e o CPF/CNPJ
            'Codigo da Contraparte': '73760.10-2', 'Nome da Contraparte': 'BANCO J.P. MORGAN S/A',
@@ -449,23 +449,35 @@ def main():
            '\r\n\r\n' + corpo).encode('utf-8')
     pos_cli = dict(NDF_POS, Contrato='26E00000CLI', **{'Taxa Forward': '108.885',
                                                       'Valor Base no registro': '100,000.00',
-                                                      'Valor Antecipado': '0.00'})
+                                                      'Valor Antecipado': '0.00',
+                                                      'Codigo Identificador': 'D5NQ-HMNV-CLI'})
+    # A perna Banco e Banco x Lawton (73760009 x 00041007), e o Live Position
+    # traz o MESMO contrato nas duas visoes — a do Lawton com a conta `41007`.
     pos_bco = dict(NDF_POS, Contrato='26E00000BCO', **{
         'Taxa Forward': '108.985', 'Valor Base no registro': '100,000.00', 'Valor Antecipado': '0.00',
-        'Codigo da Contraparte': '12345678', 'Nome da Contraparte': 'CLIENTE X SA',
-        'CPF/CNPJ da Contraparte': '', 'Descricao da posicao do Participante': 'VENDEDOR'})
-    R._lpndf_collect = _collect(NDF_COLS, [pos_cli, pos_bco])
+        'Codigo da Contraparte': '41007', 'Nome da Contraparte': 'LAWTON FIM',
+        'CPF/CNPJ da Contraparte': '', 'Descricao da posicao do Participante': 'VENDEDOR',
+        'Codigo Identificador': 'D5NQ-HMNV-BCO'})
+    pos_law = dict(pos_bco, **{'Codigo da Parte': '41007', 'Codigo da Contraparte': '73760.00-9',
+                               'Nome da Contraparte': 'BANCO J.P. MORGAN S/A',
+                               'Descricao da posicao do Participante': 'COMPRADOR'})
+    CONTAS['00041007'] = 'LAWTON'
+    R._lpndf_collect = _collect(NDF_COLS, [pos_cli, pos_law, pos_bco])
     n_sino = len(sino)
     st, j = _up(pg_ndf['api'], 'CSN unwind.eml', eml, dry=True)
     rows = j.get('rows') or []
     check('le as duas pernas (Client e Banco), a JPMOCC fica de fora',
           st == 200 and len(rows) == 2, (st, j.get('code'), len(rows)))
     cli, bco = (rows + [{}, {}])[:2]
-    check('nenhuma perna leva o Risk Deal ID', not cli.get('DealID') and not bco.get('DealID'),
+    check('Deal ID = o Codigo Identificador da posicao (nunca o Risk Deal ID)',
+          (cli.get('DealID'), bco.get('DealID')) == ('D5NQ-HMNV-CLI', 'D5NQ-HMNV-BCO'),
           (cli.get('DealID'), bco.get('DealID')))
     check('B3 ID de cada perna pelo Live Position (strike + original)',
           (cli.get('Contract'), bco.get('Contract')) == ('26E00000CLI', '26E00000BCO'),
           (cli.get('Contract'), bco.get('Contract')))
+    check('   Banco x Lawton nas duas visoes: um contrato so, na visao do Banco',
+          (bco.get('PartyAccount'), bco.get('Comprado')) == ('73760009', False),
+          (bco.get('PartyAccount'), bco.get('Comprado'), bco.get('Warnings')))
     check('Pre FWD Rate = 0 e as datas do e-mail',
           cli.get('PreFWDRate') == 0.0 and cli.get('TradeDate') == '2026-05-13', cli)
     check('Termination refeita do FV USD (96.85 exibido -> 96,84626)',
@@ -485,6 +497,26 @@ def main():
           bco.get('FXRate') == 5.2087 and bco.get('Check') == 'NOK',
           (bco.get('FXRate'), bco.get('Check')))
     check('dry-run do e-mail nao toca o sino', len(sino) == n_sino)
+    # O trecho colado como UMA tabela, um cabecalho `Leg` por perna: a perna
+    # Banco nao tem o Risk Deal ID, e lida pelo cabecalho do Client saia com as
+    # colunas deslocadas (strike, quantidade e FX errados).
+    uma = ('<table>' + ''.join(
+        '<tr>' + ''.join(_td(c) for c in l) + '</tr>' for l in (
+            [cab_cli, ['Client', '13-May-26', fix, 'D5NQ-HMNV', 'Client Sells', '100,000',
+                       '108.885', '100,000', '96.85', '1,203,874.00', '5.2087',
+                       '6,270,582.12', 'Client<br>Receives', 'Full'], [''],
+             cab_bco, ['Banco', '13-May-26', fix, 'BJPM Sells', '100,000', '108.985',
+                       '100,000', '96.85', '1,213,500.00', '5.2087', '6,321,326.69'], [''],
+             cab_occ, ['JPMOCC', '13-May-26', fix, 'JPMOCC Sells', '100,000', '108.985',
+                       '100,000', '96.85', '1,213,500.00', '1,213,236.00']])) + '</table>')
+    eml1 = ('MIME-Version: 1.0\r\nContent-Type: text/html; charset=utf-8\r\n\r\n'
+            '<html><body>' + uma + '</body></html>').encode('utf-8')
+    st, j1 = _up(pg_ndf['api'], 'uma-tabela.eml', eml1, dry=True)
+    b1 = ((j1.get('rows') or [{}, {}]) + [{}, {}])[1]
+    check('uma tabela so: a perna Banco le o SEU cabecalho',
+          (b1.get('Strike'), b1.get('UnwoundNotional'), b1.get('FXRate'), b1.get('Result'))
+          == (108.985, 100000.0, 5.2087, 6321326.69),
+          (b1.get('Strike'), b1.get('UnwoundNotional'), b1.get('FXRate'), b1.get('Result')))
     so_occ = ('MIME-Version: 1.0\r\nContent-Type: text/html\r\n\r\n<html><body>'
               + _tab(cab_occ, [['JPMOCC', '13-May-26', fix, 'JPMOCC Sells', '100,000', '108.985',
                                 '100,000', '96.85', '1,213,500.00', '1,213,236.00']])
@@ -492,6 +524,82 @@ def main():
     st, j = _up(pg_ndf['api'], 'so-occ.eml', so_occ, dry=True)
     check('so a perna JPMOCC: recusa por codigo',
           st == 400 and j.get('code') == 'unwind_recap_no_legs', (st, j.get('code')))
+
+    print('\n== 12. NDF Commodities: esteira, Termo e liquidacao (a regra da Fase 1) ==')
+    from apps.pages.features.unwinds import commands as F1C
+    from apps.pages.features.unwinds import queries as F1Q
+    from apps.pages.features.unwinds import domain as F1D
+    pc_salvos, mc_apagados = [], []
+
+    class _MC:                              # a esteira, sem banco
+        TYPE_FOLDER = getattr(R._mc_mod, 'TYPE_FOLDER', {})
+        find_row = staticmethod(lambda k: None)
+        row_untouched = staticmethod(lambda k: True)
+        delete_row = staticmethod(lambda k: mc_apagados.append(k))
+    mc_orig, pcsave_orig = R._mc_mod, R._pc_save_from_deal
+    pcdel_orig = R._pc_delete_trade_number
+    R._mc_mod = _MC
+    R._pc_save_from_deal = lambda deal, *a, **k: pc_salvos.append((deal, a, k))
+    R._pc_delete_trade_number = lambda k: None
+    try:
+        st, j = _up(pg_ndf['api'], 'CSN unwind.eml', eml)
+        rows = j.get('rows') or []
+        check('import grava as duas pernas', st == 200 and len(rows) == 2, (st, j.get('code')))
+        fontes = [(d.get('Deal'), a[0] if a else '') for d, a, _k in pc_salvos]
+        check('Pending Confirmation + esteira no IMPORT, chave = Deal ID',
+              fontes == [('D5NQ-HMNV-CLI', 'UNWIND NDF COMM'), ('D5NQ-HMNV-BCO', 'UNWIND NDF COMM')],
+              fontes)
+        d0 = pc_salvos[0][0] if pc_salvos else {}
+        check('   deal: B3 ID, mercadoria no eixo, reais e FX para o XML',
+              (d0.get('B3_ID'), d0.get('Currency'), d0.get('UnwoundBRL'), d0.get('XmlCcy'))
+              == ('26E00000CLI', 'CTZ6', 6270582.12, 'USD'), d0)
+        deals = F1C.confirmation_deals('2026-09-21')
+        check('a segregacao do Monitor le as recompras de commodities',
+              {'D5NQ-HMNV-CLI', 'D5NQ-HMNV-BCO'} <= {d.get('Deal') for d in deals},
+              [d.get('Deal') for d in deals])
+        grupo = F1Q.termo_grupo('2026-09-21', '', 'CTZ6')
+        trs, _av = F1D.termo_rows(grupo)
+        # (a recompra da secao 3 esta no mesmo dia, sem Deal ID: vale o `_id`)
+        check('Termo: o grupo pela mercadoria, Nº da Confirmacao = Deal ID',
+              {'D5NQ-HMNV-BCO', 'D5NQ-HMNV-CLI'} <= {r['numConf'] for r in trs},
+              [r.get('numConf') for r in trs])
+        cli_tr = next((r for r in trs if r['numConf'] == 'D5NQ-HMNV-CLI'), {})
+        check('   Total, valor em modulo e pagador pelo sinal (o banco paga -> Parte A)',
+              (cli_tr.get('resilicao'), cli_tr.get('valorResilicao'), cli_tr.get('pagador'))
+              == (F1D.RESILICAO_TOTAL, 'R$ 6.270.582,12', F1D.PAGADOR_PARTE_A), cli_tr)
+        F1C.termo_carimbar(['D5NQ-HMNV-CLI'], '2026-09-21', '/x/t.doc', '/x/t.pdf', 'lnk', 'A000001')
+        e_cli = next((e for e in PQ.entries(pg_ndf, '2026-09-21')
+                      if e.get('DealID') == 'D5NQ-HMNV-CLI'), {})
+        check('o Termo salvo carimba a linha do catalogo', e_cli.get('TermoPdf') == '/x/t.pdf',
+              e_cli.get('TermoPdf'))
+        liq = F1C.commodity_settlement_rows('2026-09-21')
+        check('liquidacao do dia: as duas, no sinal do Summary',
+              sorted((u['_chave'], u['_settlement']) for u in liq
+                     if u['_chave'].startswith('D5NQ'))
+              == [('D5NQ-HMNV-BCO', 6321326.69), ('D5NQ-HMNV-CLI', -6270582.12)],
+              [(u.get('_chave'), u.get('_settlement')) for u in liq])
+        R._opb3_settle_rows = lambda ref: []
+        R._ndfadv_otm_by_suffix = lambda ref: ({}, {})
+        R._ndfsum_refdata_spn = lambda: {}
+        R._cpd_load = lambda: []
+        with app.test_request_context():
+            adv = R._ndfadv_collect(datetime(2026, 9, 21), with_ir=False)
+        u_adv = [r for r in adv if r.get('unwind') and r['internal_id'].startswith('D5NQ')]
+        check('Settlement Advice (e com ele Trade Level, Summary e TED): UNWIND',
+              len(u_adv) == 2 and all(r['settle_type'] == 'UNWIND' for r in u_adv)
+              and {r['internal_id'] for r in u_adv} == {'D5NQ-HMNV-CLI', 'D5NQ-HMNV-BCO'},
+              [(r.get('internal_id'), r.get('settle_type')) for r in u_adv])
+        a_cli = next((r for r in u_adv if r['internal_id'] == 'D5NQ-HMNV-CLI'), {'cells': []})
+        check('   o aviso diz o FX, o preco e a quantidade da recompra',
+              a_cli['cells'][5:8] == [str(6270582.12 / 1203874), '96.84626', '100,000.00']
+              and a_cli.get('apurado') == -6270582.12, a_cli['cells'])
+        rid = e_cli.get('_id')
+        st, j = _post(pg_ndf['api'] + '/delete', {'id': rid, 'date': '2026-09-21'})
+        check('delete tira da esteira e do Pending Confirmation',
+              st == 200 and 'D5NQ-HMNV-CLI' in mc_apagados, (st, j, mc_apagados))
+    finally:
+        R._mc_mod, R._pc_save_from_deal = mc_orig, pcsave_orig
+        R._pc_delete_trade_number = pcdel_orig
 
     print('\n%s' % ('TUDO OK' if not FALHAS else '%d FALHA(S): %s' % (len(FALHAS), FALHAS)))
     return 1 if FALHAS else 0

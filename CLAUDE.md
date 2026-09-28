@@ -1540,7 +1540,8 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `unwind_email_table_unknown`. O parser do aviso da Fase 1 não se aplica.
   **O NDF Commodities tem e-mail PRÓPRIO** (mesa, 28/09/2026;
   `domain.linhas_do_recap_commodities`, lido ANTES do genérico): uma tabela
-  por perna (`Leg` … `PV BRL`), só `Client` e `Banco` entram (a `JPMOCC` é
+  por perna (`Leg` … `PV BRL`; colado como UMA tabela, toda linha `Leg` é um
+  cabeçalho NOVO — a perna Banco não tem o `Risk Deal ID`), só `Client` e `Banco` entram (a `JPMOCC` é
   offshore), o `Risk Deal ID` NÃO entra em perna nenhuma (o B3 ID vem do Live
   Position, por strike + original), Pre FWD Rate = 0 (e aí o Check dispensa o
   DU). O sinal do PV é o do BANCO, pela `Original Position` + strikes. O e-mail
@@ -1556,10 +1557,25 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   File Interpreter: TER 0014 (quantidade no 9, paridade no 14), SWAP 0014
   (**111** caracteres pela soma do template, não os 99 que o manual imprime;
   papel pela conta NOSSA; Mantém Prêmios só na parcial) e OPC 0014 (contas do
-  REGISTRO, modalidade da posição). Asiático é RECUSADO (faltam as linhas tipo
-  2). COE/DCE não têm layout: `unwind_no_b3_file`, e no Monitor fecham em
-  `Imported`/`Approved`. **Ainda NÃO têm** Termo de Resilição, esteira, Intrag,
-  Cockpit nem Settlement Summary — só a Fase 1 tem. `check_unwind_products.py`.
+  REGISTRO, modalidade da posição). **O TER 0014 é o MESMO para asiático e não
+  asiático** (mesa, 28/09/2026): as datas de verificação não vão (campo 16 =
+  `000`); só a média asiática PONDERADA da opção ainda recusa. COE/DCE não têm
+  layout: `unwind_no_b3_file`, e no Monitor fecham em `Imported`/`Approved`.
+  **O NDF de Commodities segue a Fase 1** (mesa, 28/09/2026): Deal ID = o
+  `Codigo Identificador` do Live Position (a chave da esteira; sem ele, o
+  `_id`); Pending Confirmation + esteira no IMPORT (`UNWIND NDF COMM`, que sai
+  junto no Delete e recusa linha carimbada); o Termo de Resilição pela mesma
+  família `termo-resilicao` (a linha vai no formato da Fase 1 por
+  `domain.para_o_termo`, com a MERCADORIA no eixo do grupo e o XML na moeda do
+  contrato, `XmlCcy`/`XmlFxRate`); e a liquidação entra no `_ndfadv_collect`
+  como `UNWIND` — com ela o Trade Level, o Summary, a TED e o aviso impresso
+  do Other Products (o Título dela sai da leitura do Operations B3, senão o
+  caixa sairia duas vezes). O Live Position traz o MESMO contrato na visão de
+  cada entidade nossa (Banco × Lawton duas vezes, a do Lawton com a conta
+  `41007`): a conta vai a oito dígitos e vale UMA visão por contrato, a da
+  entidade que não é fundo (`uma_visao_por_contrato`). Os outros produtos do
+  catálogo **ainda NÃO têm** Termo, esteira, Intrag, Cockpit nem Summary.
+  `check_unwind_products.py`.
 - **A ponte até o contrato é o `Código Identificador` do Live Position, e ele
   vem de DUAS formas**: TRUNCADO nos 14 da direita (o aviso traz
   `STP-XE-10G5U5X-0-0` e a posição, `XE-10G5U5X-0-0`) ou INTEIRO

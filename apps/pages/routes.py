@@ -5824,14 +5824,26 @@ def _ndfadv_collect(ref, with_ir=True):
     # do Settlement B3 lá embaixo têm de enxergar as mesmas linhas. Filtrar só a
     # seleção deixava a operação cancelada fora da tabela e dentro do total.
     opb3 = _opb3_settle_rows(ref)
-    if not opb3:
+    # As RECOMPRAS de NDF de Commodities que liquidam hoje (mesa, 28/09/2026 —
+    # a regra da Fase 1, §488): entram pela vertical, que é a autoridade, e o
+    # contrato delas sai da leitura do Operations B3 abaixo — a antecipação
+    # também aparece lá, e lida dos dois lados o mesmo caixa sairia DUAS vezes
+    # na tabela, no aviso e no IR do dia.
+    try:
+        unw = _unwind_engine().commodity_settlement_rows(ref) or []
+    except Exception:                                       # noqa: BLE001
+        log.warning('[ndfadv] recompras do dia ficaram de fora:\n%s', traceback.format_exc())
+        unw = []
+    unw_contratos = {str(u.get('Contract') or '').strip().upper() for u in unw}
+    unw_contratos.discard('')
+    if not opb3 and not unw:
         return []
-    tipo_maps = _opb3_tipo_maps(ref)
+    tipo_maps = _opb3_tipo_maps(ref) if opb3 else {}
 
     titulos, seen = [], set()
     for rec in opb3:
         titulo = str(rec.get('Título', '') or '').strip()
-        if not titulo or titulo.upper() in seen:
+        if not titulo or titulo.upper() in seen or titulo.upper() in unw_contratos:
             continue
         # O EVENTO que liquida sai do cadastro `opb3-events` (o filtro já rodou
         # em `_opb3_settle_rows`), não de um teste aqui. O 'resgate' estava fixo
@@ -5845,7 +5857,7 @@ def _ndfadv_collect(ref, with_ir=True):
             continue
         seen.add(titulo.upper())
         titulos.append((titulo, rec))
-    if not titulos:
+    if not titulos and not unw:
         return []
 
     # Posição NDF pela TELA do Live Position: as datas já vêm dd/mm/yyyy e as
@@ -5952,10 +5964,52 @@ def _ndfadv_collect(ref, with_ir=True):
                 (_lcell(lrow, 'Data de Vencimento'), 'Maturity')),
                 [x for x in opb3 if str(x.get('Título', '') or '').strip().upper() == titulo.upper()]),
         })
+    out.extend(_ndfadv_unwind_rows(ref, unw, opb3, spn_by_name, cpd))
     # O imposto é do BALDE da contraparte no mês, então só dá para calculá-lo
     # com as linhas do dia todas na mão — por isso ele é um passe depois do
-    # laço, e não parte dele (mesmo desenho do aviso de opção).
+    # laço, e não parte dele (mesmo desenho do aviso de opção). A recompra entra
+    # nele como a Fase 1 entra no do NDF: o ledger é mensal.
     return _ndfadv_apply_ir(ref, out) if with_ir else out
+
+
+def _ndfadv_unwind_rows(ref, unw, opb3, spn_by_name, cpd):
+    """As recompras de NDF de Commodities no formato das linhas do aviso: a
+    Ptax é o FX da recompra, a Cotação Mercadoria o preço dela (Termination) e
+    a Quantidade o recomprado — é o que o aviso de recompra diz ao cliente. O
+    Settlement B3 é o do Título no Operations B3 quando a antecipação já está
+    lá; sem ele fica vazio (não há o que conferir, não "diverge")."""
+    out = []
+    for u in unw or []:
+        titulo = str(u.get('Contract') or '').strip()
+        cliente = str(u.get('Counterparty') or '').strip()
+        le = _b3_account_le(u.get('PartyAccount'))
+        legal = (str(_ndf_le_row(le).get('NAME', '') or '').strip() if le else '') or le
+        ref_rec = spn_by_name.get(_fcst_norm(cliente), {})
+        spn = ref_rec.get('spn', '')
+        net_type = _ndfsum_net_type(_cpd_find(cpd, spn) if spn else None)
+        apurado = u.get('_settlement')
+        b3_vals = [_conf_to_float(r.get('Valor')) for r in opb3 or []
+                   if titulo and str(r.get('Título', '') or '').strip().upper() == titulo.upper()]
+        b3_vals = [v for v in b3_vals if v is not None]
+        commodity = _subjacente_commodity(u.get('Commodity') or '')
+        out.append({
+            'cells': [
+                cliente, titulo, u.get('_chave', ''),
+                _conf_fmt_date(u.get('TradeDate')), commodity,
+                str(u.get('FXRate') or ''), str(u.get('TerminationRate') or ''),
+                _ops_fmt_amt(abs(_conf_to_float(u.get('UnwoundNotional')) or 0.0)),
+                _ops_fmt_amt(apurado), _ops_fmt_amt(0.0), _ops_fmt_amt(apurado), net_type,
+            ],
+            'counterparty': cliente, 'legal': legal, 'spn': spn,
+            'taxid': str(u.get('TaxID') or '') or ref_rec.get('taxid', ''),
+            'net_type': net_type, 'commodity': commodity,
+            'b3_id': titulo, 'internal_id': u.get('_chave', ''),
+            'apurado': apurado, 'ir': 0.0, 'liquido': apurado,
+            'b3': sum(b3_vals) if b3_vals else None,
+            'settle_type': 'UNWIND',
+            'unwind': True,
+        })
+    return out
 
 
 # O aviso impresso começa em "B3 ID": Contraparte é o destinatário e
