@@ -84,8 +84,8 @@ _NDM_CARDS = [
     # nessa grafia (o DCE Option carrega o codigo do extrato, tipo `GCCN`; o DCE
     # Swap vem da planilha e nao tem o campo). Sem a chave, o card nao desenha
     # subitem nenhum, em vez de desenhar um LAW/ATA inventado.
-    # A RECOMPRA na visão do fundo (§488): a linha nasce no Send da recompra
-    # para a B3 e vai à Intrag na planilha de onze colunas. Não declara `les`
+    # A RECOMPRA na visão do fundo (§488): a linha nasce no IMPORT da recompra
+    # (§582 — nunca no Send) e vai à Intrag na planilha de onze colunas. Não declara `les`
     # pela mesma razão do DCE — a entidade do fundo está na CARTEIRA, e não
     # numa coluna que o `_ndm_deal_le` saiba ler. E `done` é `Sent`: a Intrag
     # não devolve id nenhum que faça a linha virar Success, e sem isto toda
@@ -193,8 +193,10 @@ _NDM_TAXONOMY = {
     'intrag-ndf':         ('NDF', '—'),
     'intrag-option':      ('Option', '—'),
     'intrag-swap':        ('Swap', '—'),
-    # A recompra TEM sub-variante: é o outro fluxo do mesmo produto, como o DCE.
-    'intrag-unwind':      ('NDF', 'Unwind'),
+    # A Intrag Unwind é de TODOS os produtos (mesa, 22/09/2026): no e-mail ela
+    # é o produto `Unwind`, como o bloco próprio da tela — `NDF` afirmava que a
+    # recompra espelhada é de termo de moeda.
+    'intrag-unwind':      ('Unwind', '—'),
     # O DCE, ao contrario, TEM sub-variante: e o outro fluxo do mesmo produto.
     'intrag-dce-option':  ('Option', 'DCE'),
     'intrag-dce-ndf':     ('NDF', 'DCE'),

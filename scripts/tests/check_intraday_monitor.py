@@ -261,6 +261,33 @@ for _arq, _tid in (('apps/pages/features/cetip/entrypoint.py', 'save-cetip'),
     _src = _io.open(os.path.join(ROOT, _arq), encoding='utf-8').read()
     check('a rotina %s grava task_runs.record' % _tid, "task_runs.record('%s'" % _tid in _src, True)
 
+print('\n== 4e. a Intrag Unwind: a recompra do fundo conta desde o IMPORT (§582) ==')
+from apps.pages.features.unwinds import commands as _UC                     # noqa: E402
+from apps.pages.features.deals_monitor import queries as _DQ                # noqa: E402
+from apps.pages.features.intrag.infra import persistence as _IP             # noqa: E402
+from apps.pages import data_store as _S                                     # noqa: E402
+_L = {'AthenaID': 'D5NQ-HMNV-BCO', 'Contract': '26E02931710', 'Counterparty': 'LAWTON',
+      'Result': 6321326.69, 'Direction': 'RECEIVE', 'PartyAccount': '73760009',
+      'CptyAccount': '00041007', 'TradeDate': '2026-01-05', 'MaturityDate': '2026-12-15',
+      'SettlementDate': '2026-09-30', 'OriginalNotional': 200000.0, 'UnwoundNotional': 100000.0,
+      'UnwoundBefore': 0.0, 'UnwindDate': '2026-09-28', 'Status': 'Imported'}
+with app.test_request_context():
+    check('a recompra do fundo grava a Intrag', len(_UC.intrag_da_recompra([_L])), 1)
+    _ref = datetime(2026, 9, 28)
+    _c = next((x for x in _DQ._ndm_monitor_snapshot(_ref)[0] if x.get('key') == 'intrag-unwind'), {})
+    check('   o card conta a linha no dia da recompra', (_c.get('total'), _c.get('statuses')),
+          (1, {'New': 1}))
+    _rows = [r for b in _DQ._ndm_pending_blocks(_ref)[0]
+             for r in (b.get('rows') or []) if r.get('key') == 'intrag-unwind']
+    check('   no aviso das 19h: pendente, como produto Unwind (a tela e de todos)',
+          [(r['product'], r['pending']) for r in _rows], [('Unwind', 1)])
+    _fp = os.path.join(_IP.INTRAG_UNWIND_CACHE_DIR, '2026', '09', '20260928_intrag_unwind.json')
+    _lst = _S.read(_fp); _lst[0]['status'] = 'Sent'
+    R._atomic_write_json(_fp, _lst); R._daycache_forget(_fp)
+    _rows = [r for b in _DQ._ndm_pending_blocks(_ref)[0]
+             for r in (b.get('rows') or []) if r.get('key') == 'intrag-unwind']
+    check('   Sent na Intrag fecha a pendencia', [r['pending'] for r in _rows if r['pending']], [])
+
 print('\n== 5. o endereço antigo ==')
 r = cl.get('/new-deals-monitor')
 check('/new-deals-monitor redireciona', (r.status_code, r.headers.get('Location', '').endswith('/intraday-monitor')),

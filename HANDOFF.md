@@ -24833,3 +24833,21 @@ na grade; Clear Filters limpa os chips), sem o campo Reference Date.
 **Teste**: `check_unwind_products.py` §12 (reimport com a perna do fundo Sent:
 mantida e vai à Intrag). Página conferida no Chromium (chip do dia, dropdown,
 sem erro de console da página).
+
+## §584 — Intraday Monitor: a contagem da Intrag › Unwind conferida; no e-mail ela é `Unwind`, não `NDF` (2026-09-28)
+
+**Pergunta da mesa**: "a contagem de intrag unwind no intraday monitor está ok?"
+
+**Conferido ponta a ponta** (DATA_DIR tmp): a recompra do fundo gravada pelo
+import (`intrag_da_recompra`) aparece no card `intrag-unwind` no dia da Data da
+Recompra (o arquivo-dia da Intrag), com o `status` minúsculo lido certo; entra
+pendente no aviso das 19h e fecha quando a linha vira `Sent` na Intrag; não
+conta no dia seguinte. Não há contagem dobrada: o `intrag_destino` (o "Awaiting
+B3 ID" projetado) não se aplica às árvores prefixadas das recompras.
+
+**Corrigido**: a taxonomia do e-mail (`_NDM_TAXONOMY`) punha a Intrag Unwind
+como produto `NDF` — a tela a tem em bloco próprio "Unwinds" desde 22/09
+(ela serve todos os produtos). Agora `('Unwind', '—')`. O comentário do card
+ainda dizia que a linha nasce no Send.
+
+**Teste**: `check_intraday_monitor.py` §4e.
