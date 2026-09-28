@@ -7837,7 +7837,7 @@ def _ndfc_api_iso(v):
     return d.strftime('%Y-%m-%d') if d else str(v or '').strip()
 
 
-def _ndfc_api_rolled(sn, cross=False):
+def _ndfc_api_rolled(sn, cross=False, notionais=()):
     """O valor de liquidação do evento: o PRIMEIRO item de `Rolled Positions` —
     salvo no CROSS sem BRL (`cross=True`), em que é o SEGUNDO.
 
@@ -7854,10 +7854,26 @@ def _ndfc_api_rolled(sn, cross=False):
     Lido o primeiro, o Cockpit mostrava o notional como liquidação e o NDF
     Summary somava 43 milhões. Sem o segundo item a célula fica VAZIA, com
     aviso no log — o primeiro ali é notional, não caixa.
+
+    **A posição não basta** (mesa, 28/09/2026): o item igual a um dos
+    `notionais` do registro (Quantity/Other Quantity, em módulo) É o notional,
+    em qualquer ordem, e nunca vira liquidação — era por aí que o card Internal
+    do NDF Summary somava notional num par que fugia da regra da ordem. Sobrando
+    um item só, é ele; sobrando os dois, vale a ordem acima; sobrando nenhum, a
+    célula fica VAZIA com aviso.
     """
     rolled = _ndf_api_get(sn, 'ROLLED POSITIONS', 'ROLLEDPOSITIONS')
     if isinstance(rolled, (list, tuple)):
         nums = [n for n in (_fxo_num(v) for v in rolled) if n is not None]
+        qs = [abs(q) for q in notionais if q]
+        caixa = [n for n in nums if not any(abs(abs(n) - q) < 0.005 for q in qs)]
+        if qs and len(caixa) < len(nums):
+            if len(caixa) == 1:
+                return caixa[0]
+            if not caixa:
+                log.warning('[ndfc] Rolled Positions só com o notional: %r — '
+                            'liquidação fica vazia', list(rolled))
+                return None
         if cross:
             if len(nums) >= 2:
                 return nums[1]
@@ -8008,7 +8024,8 @@ def _ndfc_rec_from_api(rec, refmap_acr, refmap_spn, stl=None):
         'VL_TAX_INCOME': '',
         'ID_DEAL': str(sn.get('EVENT NAME') or '').strip(),
         '[PROD] Cockpit.SETTLEMENT': _ndfc_api_money(_ndfc_api_rolled(
-            sn, cross=bool(qty_ccy and oth_ccy and 'BRL' not in (qty_ccy, oth_ccy)))),
+            sn, cross=bool(qty_ccy and oth_ccy and 'BRL' not in (qty_ccy, oth_ccy)),
+            notionais=(qty_v, oth_v))),
         'NB_BANK': '', 'CD_BRANCH': '', 'CD_BANK_ACCOUNT': '',
     }
     out['_nc_fixing'] = _rate(sn.get('SPOT'))
