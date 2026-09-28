@@ -84,7 +84,18 @@ def _linhas_das_tabelas(page, tabelas):
     """(linhas, avisos) da tabela do corpo do e-mail — o trecho do Excel que a
     mesa colou, com as MESMAS colunas da planilha (rotulos ou campos da grade).
     Vale a primeira tabela que tem o cabecalho da pagina E alguma linha: o corpo
-    pode trazer outras (assinatura, o aviso citado de uma resposta)."""
+    pode trazer outras (assinatura, o aviso citado de uma resposta).
+
+    O NDF de Commodities tem e-mail PROPRIO (uma tabela por perna, `Leg` ...
+    `PV BRL`), e ele vem antes: lido pelo leitor generico, `Trade Date` e `FX
+    Rate` bastariam para ele aceitar a tabela e montar a linha errada."""
+    if page.get('dir') == 'NDF/Commodities':
+        recap = domain.linhas_do_recap_commodities(tabelas)
+        if recap is not None:
+            if not recap[0]:
+                raise domain.Recusa('unwind_recap_no_legs',
+                                    'The e-mail has no Client or Banco leg to import')
+            return recap
     for t in tabelas:
         try:
             linhas, avisos = domain.linhas_da_planilha(t, page)
