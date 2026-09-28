@@ -877,7 +877,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   e o `background: … !important` do `.card` apaga `background-image` (cartão
   com gradiente vai no `streamflow.css`).
 - **Estado visual de widget seu (`is-ok`/`is-check`) leva PREFIXO DE ID**
-  (`#ops-page .ops-recon.is-ok`, como o `#ndm-page` do New Deals Monitor) —
+  (`#ops-page .ops-recon.is-ok`, como o `#ndm-page` do Intraday Monitor) —
   §464. Classe que termina em `-widget` casa com o seletor ESTRUTURAL do tema
   (`div[class*="-widget"]:not([class*="__"]):not(.row)`, §23.1 do
   `streamflow.css`), que declara `box-shadow` com especificidade **0,3,1** e
@@ -1113,7 +1113,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   teste de zona é o prefixo da chave). Foi o que aconteceu com as duas telas
   de DCE, que gravam dia no mesmo cache desde sempre. Card novo mexe em
   `_NDM_CARDS`, `_NDM_TAXONOMY` e nos `GROUPS` do
-  `new-deals-monitor.html`; **o front nunca fabrica card** (o `intrag-swap`
+  `intraday-monitor.html`; **o front nunca fabrica card** (o `intrag-swap`
   nascia de um placeholder no JS e o mesmo produto aparecia duas vezes na
   tela). `les` só se a entidade sair mesmo do portfolio code — sem a chave, o
   card não desenha subitem, em vez de desenhar um LAW/ATA inventado.
