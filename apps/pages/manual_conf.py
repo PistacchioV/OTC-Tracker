@@ -1682,7 +1682,7 @@ def _aging_int(v):
     return int(s) if s.lstrip('-').isdigit() else 0
 
 
-def _extra_card(stage, pending_value, rows, docs_for=None):
+def _extra_card(stage, pending_value, rows, docs_for=None, callback_exempt=None):
     """Card do Monitor para um estado FORA das três mesas (Legal / FepWeb).
 
     O mesmo agrupamento por documento dos cards de mesa, sem regra de validação
@@ -1716,7 +1716,10 @@ def _extra_card(stage, pending_value, rows, docs_for=None):
         # é justamente o que precisa ter acontecido ANTES desse envio. Nos
         # demais estados a coluna ainda está em aberto por construção, e um
         # badge vermelho ali só diria que a esteira mal começou.
-        if not _filled(r, 'Data Callback'):
+        # `callback_exempt(row)`: quem NAO tem callback (MGT x cliente, mesa,
+        # 28/09/2026, §581) — a pergunta vem da camada de rotas, que conhece a
+        # entidade; e a MESMA que o Mark as sent faz antes de recusar.
+        if not _filled(r, 'Data Callback') and not (callback_exempt and callback_exempt(r)):
             item['no_callback'] = item.get('no_callback', 0) + 1
     itens = list(grupos.values())
     for it in itens:
@@ -1728,7 +1731,7 @@ def _extra_card(stage, pending_value, rows, docs_for=None):
             'trades': sum(i['count'] for i in itens), 'items': itens}
 
 
-def monitor_payload(docs_for=None):
+def monitor_payload(docs_for=None, callback_exempt=None):
     """Os cards do Monitor: cada etapa com a sua lista de CONFIRMAÇÕES.
 
     'Pending MO/FO' entra nos DOIS cards — a confirmação está parada de verdade
@@ -1737,6 +1740,9 @@ def monitor_payload(docs_for=None):
     `docs_for(row)` é injetado pela camada de rotas (ela é quem sabe resolver a
     pasta do Electronic Inventory); sem ele o item sai sem documentos, e o card
     continua mostrando a pendência — que existe do mesmo jeito.
+
+    `callback_exempt(row)` diz a linha que NÃO precisa de callback (MGT x
+    cliente, §581): ela não conta no badge "no callback" do Pending FepWeb.
     """
     rows = load_rows('pending')
     rules = validation_rules()
@@ -1808,8 +1814,8 @@ def monitor_payload(docs_for=None):
     # Legal ANTES do OTC (a confirmação ainda não entrou na fila) e Pending
     # FepWeb DEPOIS do FO (validada, aguardando o envio ao cliente). Sem regra
     # de mesa e sem SLA — não há prazo cadastrado para etapas que não assinam.
-    cards.insert(0, _extra_card('LEGAL', PENDING_LEGAL, rows, docs_for))
-    cards.append(_extra_card('FEPWEB', PENDING_FEPWEB, rows, docs_for))
+    cards.insert(0, _extra_card('LEGAL', PENDING_LEGAL, rows, docs_for, callback_exempt))
+    cards.append(_extra_card('FEPWEB', PENDING_FEPWEB, rows, docs_for, callback_exempt))
     # A frase do aviso é montada NA TELA, no idioma selecionado — o servidor só
     # diz QUAIS produtos estão sem cadastro. `warnings` (em PT) permanece para
     # qualquer consumidor antigo.

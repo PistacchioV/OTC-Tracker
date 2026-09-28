@@ -92,7 +92,9 @@ def api_mc_monitor():
         return jsonify({'error': 'Unauthorized'}), 401
     try:
         from apps.pages import manual_conf as _mc
-        payload = _mc.monitor_payload()
+        from apps.pages.platform import manual_confirmation as _pmc
+        # MGT x cliente não tem callback (mesa, 28/09/2026, §581).
+        payload = _mc.monitor_payload(callback_exempt=_pmc._mc_row_is_mgt)
         # Quem a sessão pode assinar, por etapa. O `monitor_payload` não sabe da
         # sessão (e não deve saber: ele é o retrato da fila, igual para todos), e
         # é a página que troca o botão verde de Validar por um de só leitura.
@@ -502,7 +504,12 @@ def api_mc_fepweb_sent():
     # `_filled` é o MESMO teste do badge "no callback" do card (manual_conf,
     # `_extra_card`): duas escritas da mesma pergunta divergiriam no espaço em
     # branco e o endpoint recusaria um item que o card não marca.
-    sem_cb = [r for r in alvo if not _mc._filled(r, 'Data Callback')]
+    # MGT x cliente NÃO tem callback (mesa, 28/09/2026, §581): a confirmação da
+    # JPMORGAN CHASE vai ao cliente sem a conferência por telefone. É a MESMA
+    # pergunta que tira a linha do badge do card (`monitor_payload`).
+    from apps.pages.platform import manual_confirmation as _pmc
+    sem_cb = [r for r in alvo if not _mc._filled(r, 'Data Callback')
+              and not _pmc._mc_row_is_mgt(r)]
     if sem_cb:
         return jsonify({'success': False, 'callback_required': True,
                         'message': 'Callback pending: {} operation(s) have no '
