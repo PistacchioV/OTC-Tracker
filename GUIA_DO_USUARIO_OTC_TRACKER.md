@@ -416,6 +416,8 @@ A tela se atualiza sozinha a cada minuto.
 
 > **As três zonas não se somam.** A mesma operação aparece no registro da B3 e no espelho da Intrag — somá-las daria um número que nenhuma das duas telas confirma.
 
+> **O Termo de Resilição tem linha própria na zona Confirmations** (bloco Unwinds): conta os termos das recompras contra cliente pela etapa da esteira, agrupados como no Confirmations Monitor (contraparte × moeda ou mercadoria). A recompra com fundo nosso não aparece ali — ela vai para a Intrag › Unwind.
+
 > **Aqui não se gera nem se valida documento.** **Generate** e **Validate** vivem no **Confirmations Monitor** (capítulo 9.3). A zona de Confirmations acompanha o ciclo só até a validação do OTC; MO e FO são acompanhados lá.
 
 > **O e-mail das 19h sai daqui.** O aviso *Pending Action - Intraday Monitor* lista as tarefas em aberto e os produtos com pendência (14.2).
@@ -589,7 +591,7 @@ A recompra aparece no **Intraday Monitor** (capítulo 5.1) como *Unwind NDF FX*,
 
 **As recompras dos demais produtos já importam, conferem e enviam.** Arraste para o dropzone a **planilha** da recompra ou o **e-mail** com a tabela colada do Excel no corpo (as mesmas colunas da planilha). A tela casa cada linha com o Live Position — pelo B3 ID, ou, sem ele, pelas características quando há **um** candidato só —, preenche o que a planilha deixou em branco, confere o resultado (coluna **Check**, os mesmos três estados da 5.10) e monta o arquivo de antecipação da B3 para o Batch Conecta; o **Mapping B3 ID** vira a linha para **Success** quando o retorno da B3 chega (5.10). **COE e DCE** não têm arquivo de antecipação na B3: ali a recompra fecha em *Imported*/*Approved*.
 
-**A recompra de NDF de Commodities segue o ciclo completo da de moeda (5.10):** entra no Pending Confirmation e na esteira no import, gera o **Termo de Resilição** pelo Confirmations Monitor, vai para a **Intrag › Unwind** no import quando a outra ponta é um fundo nosso, e aparece no Other Products e no Pay/Rec (como **COMM TER**). No B2B com o Lawton o Send grava **os dois arquivos** — a visão do Banco e a do Lawton. O e-mail de recompra de commodities tem um leitor próprio (uma tabela por perna). Swap, Options, COE e DCE **ainda não** têm Termo, esteira nem Intrag.
+**A recompra de NDF de Commodities segue o ciclo completo da de moeda (5.10):** entra no Pending Confirmation e na esteira no import, gera o **Termo de Resilição** pelo Confirmations Monitor, vai para a **Intrag › Unwind** no import quando a outra ponta é um fundo nosso, e aparece no Other Products e no Pay/Rec (como **COMM TER**). No B2B com o Lawton o Send grava **os dois arquivos** — a visão do Banco e a do Lawton. O e-mail de recompra de commodities tem um leitor próprio (uma tabela por perna). No Termo de Resilição da recompra de commodities, **Valor Base Liquidado** e **Novo Valor Base** saem só com o número (a quantidade), sem o código da mercadoria. Swap, Options, COE e DCE **ainda não** têm Termo, esteira nem Intrag.
 
 **New Deals › Swap › Cashflow** importa o Deal Ticket e gera os arquivos da B3; **New Deals › Options › EDG** ainda só abre a grade.
 

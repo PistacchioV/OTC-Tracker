@@ -373,6 +373,10 @@ para a **Intrag › Unwind** já no **import** (nem toda recompra é registrada 
 pelo OTC Tracker). Linha **Sent** ainda se reenvia (B3 recusou,
 arquivo sumiu) e se edita — volta a *Pending* e passa pelo checker.
 
+O Termo de Resilição tem linha própria na zona **Confirmations** do Intraday
+Monitor (bloco Unwinds), contada pela etapa da esteira com a mesma segregação do
+Confirmations Monitor.
+
 #### Unwinds — demais produtos
 
 As telas de recompra de **Swap (CEM · EDG)**, **NDF Commodities**, **Options
@@ -387,7 +391,8 @@ A de **NDF Commodities** tem o ciclo completo da de moeda: Pending
 Confirmation e esteira no import, Termo de Resilição (só contra o cliente),
 Intrag › Unwind quando a outra ponta é fundo nosso, Other Products e Pay/Rec
 (como **COMM TER**). No B2B com o Lawton o Send grava as duas visões (Banco e
-Lawton). Swap, Options, COE e DCE ainda não têm Termo, esteira nem Intrag.
+Lawton). No Termo de Resilição de commodities, Valor Base Liquidado e Novo
+Valor Base saem só com a quantidade, sem o código da mercadoria. Swap, Options, COE e DCE ainda não têm Termo, esteira nem Intrag.
 
 **New Deals › Swap › Cashflow** importa o Deal Ticket e gera os arquivos da B3;
 **New Deals › Options › EDG** ainda só abre a grade.
