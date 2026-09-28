@@ -102,8 +102,10 @@ chaves = [c['key'] for c in D._NDM_CARDS]
 check('nenhuma chave duplicada no catalogo', len(chaves), len(set(chaves)))
 check('nenhum card sem entrada no _NDM_TAXONOMY',
       sorted(set(chaves) - set(D._NDM_TAXONOMY)), [])
+# `conf-*` é card SÓ da zona Confirmations (o Termo de Resilição): não tem
+# gêmeo no catálogo da B3, e o `_ndm_monitor_snapshot` é quem o monta.
 check('nenhuma taxonomia orfa (card que deixou de existir)',
-      sorted(set(D._NDM_TAXONOMY) - set(chaves)), [])
+      sorted(k for k in set(D._NDM_TAXONOMY) - set(chaves) if not k.startswith('conf-')), [])
 
 print('\n== 4. a zona do e-mail sai do PREFIXO da chave ==')
 for c in D._NDM_CARDS:

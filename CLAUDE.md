@@ -1682,6 +1682,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   da linha INTOCADA para o arquivo-dia novo (`esteira_data_da_operacao`): o
   `_mc_save_from_deal` nunca sobrescreve linha existente — de propósito —, e
   sem isso a linha seguia apontando para o dia em que a recompra não está mais.
+- **O Termo de Resilição tem card na zona Confirmations do Intraday Monitor**
+  (`conf-unwind-termo`, bloco Unwinds; mesa, 28/09/2026, §588): a MESMA
+  segregação do Confirmations Monitor (`_conf_unwind_groups` — só contra o
+  cliente, contraparte × moeda/mercadoria), etapa pela esteira. É card SÓ de
+  Confirmations: a taxonomia é chaveada pela chave inteira, e o
+  `check_ndm_cards` aceita `conf-*` sem gêmeo no catálogo da B3.
 - **No card do Monitor o Termo diz o produto RECOMPRADO**
   (`manual_conf.confirmation_label`, `TERMO DE RESILICAO NDF FX`): o TIPO é um
   só para termo, opção e swap, e na fila três cards com o mesmo nome não dizem

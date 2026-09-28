@@ -288,6 +288,26 @@ with app.test_request_context():
              for r in (b.get('rows') or []) if r.get('key') == 'intrag-unwind']
     check('   Sent na Intrag fecha a pendencia', [r['pending'] for r in _rows if r['pending']], [])
 
+print('\n== 4f. o Termo de Resilição na zona Confirmations ==')
+from apps.pages.features.unwinds.infra import persistence as _UP                # noqa: E402
+_CLI = dict(_L, AthenaID='STP-TERMO-CLI', Contract='26E02931711', Counterparty='CSN MINERACAO S.A.',
+            CptyAccount='73760102', Currency='USD')
+_FUNDO = dict(_L, AthenaID='STP-TERMO-FDO', Contract='26E02931712', Currency='USD')
+with app.test_request_context():
+    _UP.upsert(datetime(2026, 9, 28), [_CLI, _FUNDO])
+    _conf = _DQ._ndm_monitor_snapshot(datetime(2026, 9, 28))[1]
+    _t = next((c for c in _conf if c.get('key') == 'conf-unwind-termo'), None)
+    check('o card existe na zona Confirmations', bool(_t), True)
+    check('   conta só a recompra contra o CLIENTE (o fundo não tem Termo)',
+          (_t or {}).get('total'), 1)
+    _rows = [r for b in _DQ._ndm_pending_blocks(datetime(2026, 9, 28))[0]
+             for r in (b.get('rows') or []) if r.get('key') == 'conf-unwind-termo']
+    check('   pendente no aviso das 19h, como Unwind · Termo de Resilição',
+          [(r['product'], r['detail'], r['pending']) for r in _rows],
+          [('Unwind', 'Termo de Resilição', 1)])
+_html = open(os.path.join(ROOT, 'apps/templates/pages/intraday-monitor.html'), encoding='utf-8').read()
+check('   a tela o desenha no bloco Unwinds', "conf: ['conf-unwind-termo']" in _html, True)
+
 print('\n== 5. o endereço antigo ==')
 r = cl.get('/new-deals-monitor')
 check('/new-deals-monitor redireciona', (r.status_code, r.headers.get('Location', '').endswith('/intraday-monitor')),

@@ -670,7 +670,8 @@
         'conf-ndf-fwdstart':    'ti-player-skip-forward',
         'conf-ndf-mgt':         'ti-building-bank',
         'conf-opt-commodities': 'ti-chart-candle',
-        'conf-opt-fxo':         'ti-currency-dollar'
+        'conf-opt-fxo':         'ti-currency-dollar',
+        'conf-unwind-termo':    'ti-file-x'
     };
     // Ordem canônica de exibição dos status (demais entram no fim, cor neutra)
     // O ciclo inteiro da confirmação numa ordem só: o documento (New →
@@ -916,7 +917,7 @@
         // `intrag-unwind-dce-*` continuam cada uma na família do SEU produto:
         // essas sim são uma tela por produto.
         { key: 'ndm-grp-unwinds', label: 'Unwinds',
-          b3: [], conf: [],
+          b3: [], conf: ['conf-unwind-termo'],
           intrag: ['intrag-unwind'] }
     ];
 

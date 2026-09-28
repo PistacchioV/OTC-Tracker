@@ -226,6 +226,22 @@ def _ndm_monitor_snapshot(ref):
                     'family': g['family'], 'count': g['count']} for g in fxo_groups],
     })
 
+    # Termo de Resilição (mesa, 28/09/2026): as recompras do dia CONTRA O
+    # CLIENTE (NDF FX e as do catálogo com Termo — o fundo não tem Termo, §580),
+    # pela MESMA segregação do Confirmations Monitor (contraparte × moeda, ou
+    # mercadoria no NDF Comm; `_conf_unwind_groups`). A etapa é a da esteira,
+    # onde a recompra entra no import; sem documento gerado ela é `Pending OTC`.
+    unw_groups, _unw_deal_statuses, _unw_total = _R()._conf_unwind_groups(ref)
+    conf_cards.append({
+        'key': 'conf-unwind-termo', 'label': 'Termo de Resilição',
+        'url': '/manual-confirmation/monitor', 'soon': False,
+        'total': len(unw_groups),
+        'statuses': _R()._conf_stage_counts(unw_groups, {}, None, conf_stages),
+        'groups': [{'label': '{} · {}'.format(g['acronym'], g['mercadoria']) if g['mercadoria']
+                    else g['acronym'], 'family': g['family'], 'count': g['count']}
+                   for g in unw_groups],
+    })
+
     return cards, conf_cards
 
 
