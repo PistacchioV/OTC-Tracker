@@ -517,6 +517,33 @@ def main():
           (b1.get('Strike'), b1.get('UnwoundNotional'), b1.get('FXRate'), b1.get('Result'))
           == (108.985, 100000.0, 5.2087, 6321326.69),
           (b1.get('Strike'), b1.get('UnwoundNotional'), b1.get('FXRate'), b1.get('Result')))
+    # O strike registrado da perna Banco tem mais casas do que o Excel exibe
+    # (108.98537 aparece 108.985): comparado exato, "nenhum contrato casa".
+    pos_bco5 = dict(pos_bco, **{'Taxa Forward': '108.98537'})
+    pos_law5 = dict(pos_law, **{'Taxa Forward': '108.98537'})
+    R._lpndf_collect = _collect(NDF_COLS, [pos_cli, pos_law5, pos_bco5])
+    st, j5 = _up(pg_ndf['api'], 'uma-tabela.eml', eml1, dry=True)
+    b5 = ((j5.get('rows') or [{}, {}]) + [{}, {}])[1]
+    check('strike ARREDONDADO no e-mail casa com o da posicao (candidato unico)',
+          b5.get('Contract') == '26E00000BCO' and b5.get('Strike') == 108.98537,
+          (b5.get('Contract'), b5.get('Strike'), b5.get('Warnings')))
+    check('   e a Termination e refeita sobre o strike exato',
+          abs(b5.get('TerminationRate', 0) - (108.98537 - 1213500 / 100000)) < 1e-9,
+          b5.get('TerminationRate'))
+    check('   sem marca interna na linha', '_shown' not in b5 and '_recap' not in b5,
+          sorted(k for k in b5 if k.startswith('_')))
+    pos_bco9 = dict(pos_bco, **{'Taxa Forward': '109.40'})
+    pos_law9 = dict(pos_law, **{'Taxa Forward': '109.40'})
+    R._lpndf_collect = _collect(NDF_COLS, [pos_cli, pos_law9, pos_bco9])
+    st, j9 = _up(pg_ndf['api'], 'uma-tabela.eml', eml1, dry=True)
+    perto = [w for w in j9.get('warnings') or [] if w.get('code') == 'unwind_match_none_near']
+    check('sem contrato: o aviso diz o MAIS PERTO e o valor dos dois lados',
+          len(perto) == 1 and perto[0]['params'].get('contrato') == '26E00000CLI'
+          and perto[0]['params'].get('campo') == 'Strike'
+          and perto[0]['params'].get('planilha') == '108.985'
+          and perto[0]['params'].get('posicao') == '108.885',
+          perto or [w.get('code') for w in j9.get('warnings') or []])
+    R._lpndf_collect = _collect(NDF_COLS, [pos_cli, pos_law, pos_bco])
     so_occ = ('MIME-Version: 1.0\r\nContent-Type: text/html\r\n\r\n<html><body>'
               + _tab(cab_occ, [['JPMOCC', '13-May-26', fix, 'JPMOCC Sells', '100,000', '108.985',
                                 '100,000', '96.85', '1,213,500.00', '1,213,236.00']])
