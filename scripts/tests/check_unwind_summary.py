@@ -15,8 +15,9 @@ numa tela so. O que este teste prende:
   3. ela aparece no Trade Level com o veredito **None** — nao ha resgate da B3
      do outro lado, e "nao ha o que conferir" nao e "diverge";
   4. entra no Summary da contraparte (somando com as liquidacoes do dia);
-  5. e fica FORA do `email_trades`: o aviso em lote sai de manha e a recompra
-     chega durante o dia — o e-mail dela e processo separado;
+  5. e entra no `email_trades` (mesa, 28/09/2026): o Print Advice e o TED
+     saem do mesmo universo do Summary — fora dele, a contraparte que so tinha
+     recompra no dia respondia "Nothing to Generate";
   6. mas entra no IR do dia pela regra do piso MENSAL, que e o que faz a
      recompra da tarde ver o que a manha reteve.
 """
@@ -128,8 +129,14 @@ def main():
               cp[0]['pay'] == '-22,286.88' and cp[0]['receive'] == '',
               (cp[0]['receive'], cp[0]['pay']))
         check('e a direcao do grupo e PAY', cp[0]['direction'] == 'PAY', cp[0]['direction'])
-    check('e NENHUMA delas vai no aviso em lote',
-          not any(t.get('unwind') for t in out['email_trades']))
+    unw_mail = [t for t in out['email_trades'] if t.get('unwind')]
+    check('e as DUAS vao no aviso em lote (Print Advice / TED)',
+          len(unw_mail) == 2, len(unw_mail))
+    from apps.pages import otc_emails as _oe
+    drafts = _oe.build_ndf_settlement_emails(unw_mail, '28/09/2026')
+    check('e o aviso da contraparte sai (nao e mais "Nothing to Generate")',
+          any(d.get('counterparty') == BASE['Counterparty'] for d in drafts),
+          [d.get('counterparty') for d in drafts])
 
     # A recompra tambem e PROJETADA no dia do Cockpit (a tela onde a mesa ve o
     # IR). O Summary tem de IGNORAR essa linha: lida dos dois lados, o mesmo

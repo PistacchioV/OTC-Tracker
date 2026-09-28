@@ -620,6 +620,17 @@ def main():
         check('   o aviso diz o FX, o preco e a quantidade da recompra',
               a_cli['cells'][5:8] == [str(6270582.12 / 1203874), '96.84626', '100,000.00']
               and a_cli.get('apurado') == -6270582.12, a_cli['cells'])
+        # O Print Advice do Other Products: a recompra passa pelo bloqueador de
+        # linha incompleta e sai no aviso da contraparte (o NDF Summary a tirava
+        # do lote e respondia "Nothing to Generate" — §568).
+        from apps.pages import otc_emails as _oe
+        hdr = R._ndfadv_email_headers()
+        vivas, bloq = R._opsadv_block_incomplete('ndf', u_adv, R._NDFADV_COLUMNS)
+        drafts = _oe.build_ndfc_settlement_emails(
+            [dict(r, cells=r['cells'][1:-1]) for r in vivas], hdr, '21/09/2026')
+        check('   e gera o aviso do Other Products (nao bloqueia, nao some)',
+              not bloq and any(d.get('counterparty') == a_cli.get('counterparty') for d in drafts),
+              (bloq, [d.get('counterparty') for d in drafts]))
         rid = e_cli.get('_id')
         st, j = _post(pg_ndf['api'] + '/delete', {'id': rid, 'date': '2026-09-21'})
         check('delete tira da esteira e do Pending Confirmation',

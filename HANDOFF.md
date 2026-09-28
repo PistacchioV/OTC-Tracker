@@ -24414,3 +24414,18 @@ conta 16 cards.
   bateria deixava "Alice Souza rodou a Recon FXO" no Monitor da dev.
   `task_runs._em_teste` recusa a gravação com `TESTING` ou com o User-Agent
   `Werkzeug/` do cliente de teste do Flask (nem todo teste liga o `TESTING`).
+
+## §568 — NDF Summary: a recompra entra no Print Advice e no TED (2026-09-28)
+
+- **Sintoma**: no NDF Summary, o Print Advice de uma contraparte que só tinha
+  recompra no dia respondia "Nothing to Generate", com a linha somada no
+  Summary ao lado.
+- **Causa**: o `_ndfsum_collect` tirava a recompra do `email_trades`
+  (`if not r.get('unwind')`) porque "o e-mail dela é processo separado" (§488),
+  mas esse processo nunca foi escrito. O TED lê o mesmo `email_trades` e também
+  a perdia, embora diga ter o universo do Summary.
+- **Correção**: o `email_trades` passa a ser o dia inteiro do Summary. A linha
+  da recompra já tinha todos os campos do aviso (nocional, taxa de terminação na
+  coluna FIXING, resultado, IR recalculado pelo piso mensal).
+  `check_unwind_summary.py` §5 inverteu: exige a recompra no lote e o draft da
+  contraparte.
