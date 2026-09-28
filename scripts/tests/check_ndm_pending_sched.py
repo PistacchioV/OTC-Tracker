@@ -221,12 +221,15 @@ class _SMTPStub(object):
         _SMTPStub.raw = raw
 
 
-_smtp_real, _blocks_real = R.smtplib.SMTP, Q._ndm_pending_blocks
+# O aviso é do Intraday Monitor (§567): o conteúdo sai de `_intraday_pending`
+# — (tarefas em aberto, blocos por produto, total, kpis).
+_smtp_real, _blocks_real = R.smtplib.SMTP, Q._intraday_pending
 R.smtplib.SMTP = _SMTPStub
-Q._ndm_pending_blocks = lambda ref: ([{'tipo': 'Registration', 'label': 'NDF',
-                                       'itens': [{'produto': 'NDF Commodities',
-                                                  'total': 3, 'detalhe': 'New 3'}],
-                                       'total': 3}], 3)
+Q._intraday_pending = lambda ref: (
+    [{'label': 'Recon FXO', 'deadline': '20:00', 'state': 'late', 'detail': 'Not run yet.'}],
+    [{'type': 'Registration', 'total': 3,
+      'rows': [{'product': 'NDF', 'detail': 'Commodities', 'pending': 3, 'breakdown': '3 New'}]}],
+    3, {'done': 4, 'due': 7, 'pct': 57})
 try:
     check('o app fica disponivel fora do request', R._FLASK_APP is app, True)
     _res = {}
@@ -239,13 +242,13 @@ try:
     _t.join()
     check('o envio funciona SEM request context', _res['r'], True)
     check('   e o corpo foi renderizado',
-          'Pending Action - Deals Monitor' in (_SMTPStub.raw or ''), True)
+          'Pending Action - Intraday Monitor' in (_SMTPStub.raw or ''), True)
     check('   com o logo inline', 'otc_logo' in (_SMTPStub.raw or ''), True)
     with app.test_request_context('/'):
         check('e continua funcionando DENTRO de um request',
               C._send_ndm_pending_email(datetime(2026, 8, 7), ['a@b.com'], []), True)
 finally:
-    R.smtplib.SMTP, Q._ndm_pending_blocks = _smtp_real, _blocks_real
+    R.smtplib.SMTP, Q._intraday_pending = _smtp_real, _blocks_real
 
 cl = app.test_client()
 with cl.session_transaction() as s:

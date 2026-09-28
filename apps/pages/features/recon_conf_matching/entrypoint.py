@@ -4,6 +4,7 @@ from flask import jsonify, redirect, render_template, request, session, url_for
 
 from apps.pages import blueprint
 from apps.pages.features.recon_conf_matching import commands, domain, queries
+from apps.pages.platform import task_runs
 
 
 def _routes():
@@ -48,6 +49,11 @@ def api_conf_matching_run():
                         'error_code': getattr(exc, 'code', ''),
                         'error_params': getattr(exc, 'params', {})}), 500
     res['success'] = True
+    c = res.get('counts') or {}
+    task_runs.record('recon-conf-matching', session.get('user_sid', ''),
+                     session.get('user_name', ''), str(res.get('ref') or ''),
+                     {'open': sum(int(c.get(k) or 0)
+                                  for k in ('missing_fepweb', 'missing_athena', 'duplicated'))})
     return jsonify(res)
 
 

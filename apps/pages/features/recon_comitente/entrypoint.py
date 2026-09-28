@@ -13,6 +13,7 @@ from apps.pages.database_access import (
     verify_sqlite_integrity,
 )
 from apps.pages.features.recon_comitente import commands, queries
+from apps.pages.platform import task_runs
 
 
 def _routes():
@@ -70,6 +71,13 @@ def reconciliation_comitente_run():
             files = (f_b3_cgd, f_dcad, f_party)
         result = commands.run(mode, recon_date, files)
         counts = result.get('counts', {})
+        # A Comitente reescreve UMA tabela a cada execução, sem data nem hora:
+        # sem este registro o Intraday Monitor não tem como saber que ela
+        # rodou na terça (§567).
+        task_runs.record('recon-comitente', session.get('user_sid', ''),
+                         session.get('user_name', ''), recon_date,
+                         {'open': sum(int(counts.get(k) or 0) for k in ('new', 'check', 'amend')),
+                          'total': int(counts.get('total') or 0)})
         if counts.get('total', 0) > 0:
             R._create_notification(
                 session.get('user_sid', ''),

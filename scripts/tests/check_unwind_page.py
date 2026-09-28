@@ -374,7 +374,7 @@ def main():
     check('e esta num grupo do GROUPS da tela',
           "'unwind-ndf-fx'" in io.open(os.path.join(
               os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-              'apps', 'templates', 'pages', 'new-deals-monitor.html'),
+              'apps', 'templates', 'pages', 'intraday-monitor.html'),
               encoding='utf-8').read())
 
     # O snapshot de verdade, com a linha gravada no arquivo-dia.

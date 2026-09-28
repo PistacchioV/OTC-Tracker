@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """As rotas do Pay/Rec e do card Branch Settlement Reverse Approval."""
 import base64
+import re
 import traceback
 from datetime import datetime
 
@@ -8,6 +9,7 @@ from flask import jsonify, redirect, render_template, request, session, url_for
 
 from apps.pages import blueprint
 from apps.pages.features.recon_payrec import commands, queries
+from apps.pages.platform import task_runs
 
 
 def _routes():
@@ -20,6 +22,10 @@ def reconciliation_payrec():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
     ref_date = datetime.now().strftime('%Y-%m-%d')   # Pay/Rec runs on today's date
+    # `?date=` (o link de pendência do Intraday Monitor, §567) abre no dia pedido.
+    link = (request.args.get('date') or '').strip()
+    if re.match(r'^\d{4}-\d{2}-\d{2}$', link):
+        ref_date = link
     return render_template('pages/reconciliation-payrec.html',
                            segment='reconciliation-payrec', ref_date=ref_date)
 
@@ -47,6 +53,11 @@ def reconciliation_payrec_run():
         files = request.files.getlist('files') if mode == 'manual' else None
         result = commands.run(recon_date, files=files, mode=mode)
         if result.get('success'):
+            # O Intraday Monitor lê daqui que a tarefa do dia foi feita (§567).
+            task_runs.record('recon-payrec', session.get('user_sid', ''),
+                             session.get('user_name', ''), recon_date,
+                             {'open': len(result.get('pending_payment') or [])
+                                      + len(result.get('pending_receivement') or [])})
             R._create_notification(
                 session.get('user_sid', ''), session.get('user_name', ''),
                 'Pay/Rec Reconciliation', 'Reconciliation',
@@ -105,6 +116,8 @@ def reconciliation_payrec_end():
         saved, emailed = commands.end_process(recon_date)
         if not saved:
             return jsonify({'success': False, 'error': 'No processed result for this date — run the reconciliation first.'})
+        task_runs.record('recon-payrec', session.get('user_sid', ''),
+                         session.get('user_name', ''), recon_date, event='end')
         R._create_notification(
             session.get('user_sid', ''), session.get('user_name', ''),
             'Pay/Rec End of Day', 'Reconciliation',
@@ -130,6 +143,9 @@ def reconciliation_payrec_branch_email():
         fname, raw, avisos = commands.branch_draft(recon_date)
     except commands.BranchDraftError as e:
         return jsonify({'success': False, 'code': e.code, 'params': {}, 'error': str(e)}), 400
+    # O segundo passo da tarefa Branch Reversal do Intraday Monitor (§567).
+    task_runs.record('branch-reversal', session.get('user_sid', ''),
+                     session.get('user_name', ''), recon_date, event='draft')
     R._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                            'Branch Settlement Approval Draft', 'Reconciliation',
                            'VP approval draft generated' +

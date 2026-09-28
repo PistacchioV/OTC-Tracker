@@ -5,6 +5,7 @@ Sessão, data, o encaminhamento dos arquivos do upload manual e o código de
 status. O batimento é do `recon_fxo.py`; o que se decide aqui é o que a falha
 vira na tela.
 """
+import re
 from datetime import datetime
 
 from flask import (jsonify, redirect, render_template, request, session,
@@ -12,6 +13,7 @@ from flask import (jsonify, redirect, render_template, request, session,
 
 from apps.pages import blueprint
 from apps.pages.features.reconciliation_fxo import commands, queries
+from apps.pages.platform import task_runs
 
 
 def _log():
@@ -31,9 +33,13 @@ def reconciliation_fxo():
     # fechamento anterior. Abrir em "hoje" mandaria todo mundo procurar um
     # arquivo que ainda não existe — e numa segunda-feira, ou no dia seguinte a
     # um feriado, "ontem" no calendário civil não é dia útil nenhum.
+    ref = routes._prev_anbima_bizday(datetime.now()).strftime('%Y-%m-%d')
+    # `?date=` (o link de pendência do Intraday Monitor, §567) abre no dia pedido.
+    link = (request.args.get('date') or '').strip()
+    if re.match(r'^\d{4}-\d{2}-\d{2}$', link):
+        ref = link
     return render_template(
-        'pages/reconciliation-fxo.html', segment='reconciliation-fxo',
-        ref_date=routes._prev_anbima_bizday(datetime.now()).strftime('%Y-%m-%d'))
+        'pages/reconciliation-fxo.html', segment='reconciliation-fxo', ref_date=ref)
 
 
 @blueprint.route('/reconciliation-fxo/data')
@@ -57,6 +63,11 @@ def reconciliation_fxo_run():
         files = request.files.getlist('files') if mode == 'manual' else None
         result = commands.run(recon_date, files, mode)
         if result.get('success'):
+            c = result.get('counts') or {}
+            task_runs.record('recon-fxo', session.get('user_sid', ''),
+                             session.get('user_name', ''), recon_date,
+                             {'open': sum(int(c.get(k) or 0)
+                                          for k in ('nok', 'no_match', 'no_match_ath'))})
             from apps.pages import routes
             routes._create_notification(
                 session.get('user_sid', ''), session.get('user_name', ''),

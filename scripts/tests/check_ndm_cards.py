@@ -112,7 +112,7 @@ for c in D._NDM_CARDS:
     check('   %-20s cai na zona Intrag' % c['key'], c['key'].startswith('intrag-'), True)
 
 print('\n== 5. a tela desenha todo card de Intrag na zona Intrag ==')
-TPL = io.open(os.path.join(ROOT, 'apps', 'templates', 'pages', 'new-deals-monitor.html'),
+TPL = io.open(os.path.join(ROOT, 'apps', 'templates', 'pages', 'intraday-monitor.html'),
               encoding='utf-8').read()
 no_front = set(re.findall(r"intrag:\s*\[([^\]]*)\]", TPL))
 no_front = {k.strip().strip("'\"") for bloco in no_front for k in bloco.split(',') if k.strip()}

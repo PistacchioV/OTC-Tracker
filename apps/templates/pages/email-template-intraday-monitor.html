@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>OTC Tracker – Pending Action – Deals Monitor</title>
+    <title>OTC Tracker – Pending Action – Intraday Monitor</title>
     <!--[if mso]>
     <style type="text/css">body, table, td { font-family: Arial, sans-serif !important; }</style>
     <![endif]-->
@@ -22,7 +22,7 @@
                           box-shadow:0 4px 14px rgba(0,0,0,0.08);overflow:hidden;">
 
                 <!-- ── Header ─────────────────────────────────── -->
-                {% set header_title = 'Deals Monitor — Pending Action' %}
+                {% set header_title = 'Intraday Monitor — Pending Action' %}
                 {% set header_subtitle = 'Reference date &nbsp;·&nbsp; <strong style="color:#ffffff;">' ~ ref_date_fmt ~ '</strong>' %}
                 {% set header_logo_height = 64 %}
                 {% set header_width = 720 %}
@@ -33,12 +33,57 @@
                     <td style="padding:26px 30px 4px;">
                         <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 8px;">All,</p>
                         <p style="color:#444;font-size:14px;line-height:1.6;margin:0;">
-                            The items below are <strong>not yet fully processed</strong> on the Deals Monitor
-                            for {{ ref_date_fmt }}. Each line is a card that still has deals outside
-                            <strong>Success</strong>, with the number of items awaiting action.</p>
+                            The tasks below are <strong>not yet completed</strong> on the Intraday Monitor
+                            for {{ ref_date_fmt }} &mdash; <strong>{{ kpis.done }} of {{ kpis.due }}</strong>
+                            due tasks done ({{ kpis.pct }}%).</p>
                     </td>
                 </tr>
 
+                {% if tasks %}
+                <!-- Open tasks -->
+                <tr>
+                    <td style="padding:18px 30px 4px;">
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                               style="border-collapse:collapse;font-size:13px;">
+                            <thead>
+                                <tr>
+                                    <th bgcolor="#2e5c9e" align="left"
+                                        style="color:#ffffff;padding:8px 12px;font-weight:700;letter-spacing:0.3px;">Task</th>
+                                    <th bgcolor="#2e5c9e" align="left" width="80"
+                                        style="color:#ffffff;padding:8px 12px;font-weight:700;">Deadline</th>
+                                    <th bgcolor="#2e5c9e" align="left" width="100"
+                                        style="color:#ffffff;padding:8px 12px;font-weight:700;">Status</th>
+                                    <th bgcolor="#2e5c9e" align="left"
+                                        style="color:#ffffff;padding:8px 12px;font-weight:700;">Detail</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% set _st = {'late': ('Late', '#c62828', '#fdecea'),
+                                              'in_progress': ('In progress', '#0b6aa2', '#e6f3fb'),
+                                              'todo': ('To do', '#55606e', '#eef1f5')} %}
+                                {% for t in tasks %}
+                                {% set s = _st.get(t.state, ('-', '#55606e', '#eef1f5')) %}
+                                <tr>
+                                    <td valign="top" style="padding:8px 12px;font-weight:700;color:#1a1a2e;border-bottom:1px solid #eef0f4;">{{ t.label }}</td>
+                                    <td valign="top" style="padding:8px 12px;color:#444;border-bottom:1px solid #eef0f4;">{{ t.deadline }}</td>
+                                    <td valign="top" style="padding:8px 12px;border-bottom:1px solid #eef0f4;">
+                                        <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;
+                                                     color:{{ s[1] }};background-color:{{ s[2] }};">{{ s[0] }}</span></td>
+                                    <td valign="top" style="padding:8px 12px;color:#444;border-bottom:1px solid #eef0f4;">{{ t.detail }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </td>
+                </tr>
+                {% endif %}
+                {% if blocks %}
+                <tr>
+                    <td style="padding:22px 30px 0;">
+                        <p style="color:#1a1a2e;font-size:14px;font-weight:700;margin:0;">
+                            Operations pending action, by product</p>
+                    </td>
+                </tr>
                 <!-- ══ Pending table ══ -->
                 <tr>
                     <td style="padding:18px 30px 4px;">
@@ -98,6 +143,32 @@
                     </td>
                 </tr>
 
+                {% endif %}
+                {# Botão: largura FIXA no VML e altura por height + line-height
+                   (CLAUDE §2, e-mail) — o modelo é o do Confirmations Escalation. #}
+                <tr>
+                    <td align="center" style="padding:26px 30px 8px;text-align:center;">
+                        <!--[if mso]>
+                        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml"
+                                     xmlns:w="urn:schemas-microsoft-com:office:word"
+                                     href="{{ monitor_url }}" arcsize="50%" stroke="f"
+                                     fillcolor="#0d6efd"
+                                     style="height:52px;width:320px;v-text-anchor:middle;">
+                            <w:anchorlock/>
+                            <center style="color:#ffffff;font-family:'Segoe UI',Arial,sans-serif;
+                                           font-size:15px;font-weight:bold;">
+                                Open the Intraday Monitor</center>
+                        </v:roundrect>
+                        <![endif]-->
+                        <!--[if !mso]><!-- -->
+                        <a href="{{ monitor_url }}" target="_blank"
+                           style="display:inline-block;height:52px;line-height:52px;padding:0 36px;
+                                  background-color:#0d6efd;color:#ffffff;font-size:15px;font-weight:700;
+                                  text-decoration:none;border-radius:26px;
+                                  mso-hide:all;">Open the Intraday Monitor</a>
+                        <!--<![endif]-->
+                    </td>
+                </tr>
                 <!-- ── Signature ──────────────────────────────── -->
                 <tr>
                     <td style="padding:20px 30px 26px;">

@@ -1,12 +1,15 @@
 {% extends 'layouts/vertical.html' %}
 
-{% block title %}New Deals Monitor{% endblock title %}
+{% block title %}Intraday Monitor{% endblock title %}
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
 <style>
 /* ============================================================================
-   New Deals Monitor — visão por produto × status da reference date.
+   Intraday Monitor (ex-New Deals Monitor, §567) — as tarefas do dia em cima,
+   no desenho do Pulse (KPI com micro-rótulo, quadro por estado, anel de
+   progresso, linha do tempo dos prazos, atividade) sobre os tokens da casa; o
+   detalhe por produto × status embaixo, como sempre foi.
    Camada visual: tokens --ins-* (tema) e --vr-* (visual-refresh). Nunca --bs-*.
    ============================================================================ */
 #ndm-page { --ndm-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
@@ -198,6 +201,9 @@
 #ndm-page .st-pending-mo,
 #ndm-page .st-pending-mo-fo { --st-fg: #8a6100; --st-bg: rgba(214, 158, 46, .18); }
 #ndm-page .st-pending-fo  { --st-fg: #1d7ea8; --st-bg: rgba(29, 126, 168, .13); }
+/* A operação que vai para a Intrag e ainda não tem o espelho (§567) */
+#ndm-page .st-awaiting-b3-id { --st-fg: #9f1239; --st-bg: rgba(225, 29, 72, .11); }
+[data-bs-theme=dark] #ndm-page .st-awaiting-b3-id { --st-fg: #fda4af; --st-bg: rgba(253, 164, 175, .15); }
 [data-bs-theme=dark] #ndm-page .st-new         { --st-fg: #7fd4f2; --st-bg: rgba(127, 212, 242, .16); }
 [data-bs-theme=dark] #ndm-page .st-pending     { --st-fg: #ffd54f; --st-bg: rgba(255, 213, 79, .16); }
 [data-bs-theme=dark] #ndm-page .st-generated   { --st-fg: #c4b5fd; --st-bg: rgba(196, 181, 253, .16); }
@@ -281,12 +287,195 @@
 
 /* Entrada: as zonas aparecem em cascata (uma por vez, não 34 cartões) */
 @media (prefers-reduced-motion: no-preference) {
-    #ndm-page .ndm-zone { opacity: 0; transform: translateY(10px); animation: ndmIn 380ms var(--ndm-ease) both; }
-    #ndm-page .ndm-zone:nth-child(2) { animation-delay:  60ms; }
-    #ndm-page .ndm-zone:nth-child(3) { animation-delay: 120ms; }
-    #ndm-page .ndm-zone:nth-child(4) { animation-delay: 180ms; }
+    /* Só no PRIMEIRO desenho: as zonas são redesenhadas a cada 60 s (§567) */
+    #ndm-page.is-first .ndm-zone { opacity: 0; transform: translateY(10px); animation: ndmIn 380ms var(--ndm-ease) both; }
+    #ndm-page.is-first .ndm-zone:nth-child(2) { animation-delay:  60ms; }
+    #ndm-page.is-first .ndm-zone:nth-child(3) { animation-delay: 120ms; }
+    #ndm-page.is-first .ndm-zone:nth-child(4) { animation-delay: 180ms; }
     @keyframes ndmIn { to { opacity: 1; transform: none; } }
 }
+
+/* ══ O PAINEL DAS TAREFAS (§567) ═════════════════════════════════════════════
+   As cores de ESTADO são quatro e valem em todo lugar da página — KPI, coluna
+   do quadro, barra, anel, marco da linha do tempo. Uma definição só: o anel e
+   a coluna com tons diferentes para "atrasada" fariam a pessoa se perguntar se
+   são a mesma coisa. */
+#ndm-page {
+    --im-done: #0f9f6e; --im-prog: #0284c7; --im-todo: #64748b; --im-late: #e11d48;
+    --im-surface: var(--vr-card-bg, var(--ins-secondary-bg));
+    --im-line: var(--vr-card-border, var(--ins-border-color));
+}
+[data-bs-theme=dark] #ndm-page {
+    --im-done: #34d399; --im-prog: #38bdf8; --im-todo: #94a3b8; --im-late: #fb7185;
+}
+#ndm-page .im-panel {
+    background: var(--im-surface); border: 1px solid var(--im-line);
+    border-radius: var(--vr-card-radius, 18px); box-shadow: var(--vr-card-shadow);
+    padding: 1rem 1.1rem;
+}
+/* micro-rótulo do Pulse: caixa alta, espaçado, pequeno */
+#ndm-page .im-micro {
+    font-size: .66rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ins-secondary-color);
+}
+#ndm-page .im-h { font-size: .9rem; font-weight: 700; margin: 0; color: var(--ins-body-color); }
+
+/* Barra de ferramentas: data, atualização, última leitura */
+#ndm-page .im-bar { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+#ndm-page .im-live { display: inline-flex; align-items: center; gap: .4rem; font-size: .74rem;
+    color: var(--ins-secondary-color); font-variant-numeric: tabular-nums; }
+#ndm-page .im-live i { width: 8px; height: 8px; border-radius: 99px; background: var(--im-done);
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--im-done) 55%, transparent); }
+@media (prefers-reduced-motion: no-preference) {
+    #ndm-page .im-live i { animation: sf-pulse 2.4s ease-out infinite; }
+}
+#ndm-page .im-refresh { width: 34px; height: 34px; padding: 0; border-radius: 10px !important;
+    display: inline-flex; align-items: center; justify-content: center; }
+#ndm-page .im-refresh.is-busy i { animation: im-spin .6s linear infinite; }
+@keyframes im-spin { to { transform: rotate(360deg); } }
+
+/* ── KPIs ── */
+#ndm-page .im-kpis { display: grid; gap: .9rem; grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(0, 1.6fr); }
+@media (max-width: 1399.98px) { #ndm-page .im-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+                                #ndm-page .im-kpi[data-k="prev"] { grid-column: 1 / -1; } }
+@media (max-width: 1199.98px) { #ndm-page .im-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 575.98px)  { #ndm-page .im-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+#ndm-page .im-kpi { position: relative; overflow: hidden; }
+#ndm-page .im-kpi b { display: block; margin-top: .45rem; font-size: 1.9rem; line-height: 1;
+    font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ins-body-color); }
+#ndm-page .im-kpi small { display: block; margin-top: .45rem; font-size: .74rem; color: var(--ins-secondary-color); }
+#ndm-page .im-kpi::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+    background: var(--im-accent, transparent); opacity: .85; }
+#ndm-page .im-kpi[data-k="done"]        { --im-accent: var(--im-done); }
+#ndm-page .im-kpi[data-k="in_progress"] { --im-accent: var(--im-prog); }
+#ndm-page .im-kpi[data-k="todo"]        { --im-accent: var(--im-todo); }
+#ndm-page .im-kpi[data-k="late"]        { --im-accent: var(--im-late); }
+#ndm-page .im-kpi[data-k="due"]         { --im-accent: var(--vr-grad); }
+#ndm-page .im-kpi[data-k="due"]::after  { background: var(--vr-grad); }
+#ndm-page .im-kpi[data-k="late"].is-hot b { color: var(--im-late); }
+/* D-1: o que ficou do dia útil anterior, item a item e clicável */
+#ndm-page .im-kpi[data-k="prev"] { --im-accent: var(--im-late); display: flex; flex-direction: column; }
+#ndm-page .im-kpi[data-k="prev"].is-clear { --im-accent: var(--im-done); }
+#ndm-page .im-kpi[data-k="prev"] .im-prev-top { display: flex; align-items: baseline; gap: .6rem; }
+#ndm-page .im-kpi[data-k="prev"] .im-prev-top b { margin-top: .45rem; }
+#ndm-page .im-kpi[data-k="prev"].is-hot .im-prev-top b { color: var(--im-late); }
+#ndm-page .im-prev-list { margin-top: .5rem; display: flex; flex-direction: column; gap: .15rem;
+    max-height: 104px; overflow-y: auto; }
+#ndm-page .im-prev-item { display: flex; align-items: center; gap: .45rem; font-size: .74rem; line-height: 1.3;
+    padding: .2rem .35rem; border-radius: 8px; color: var(--ins-body-color); text-decoration: none; }
+#ndm-page a.im-prev-item:hover { background: color-mix(in oklab, var(--im-late) 10%, transparent); }
+#ndm-page .im-prev-item i.im-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 99px; background: var(--im-late); }
+#ndm-page .im-prev-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ndm-page .im-prev-item em { font-style: normal; color: var(--ins-secondary-color); }
+#ndm-page .im-prev-item b { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--im-late); }
+#ndm-page .im-prev-item .ti-chevron-right { color: var(--ins-secondary-color); font-size: .85rem; }
+#ndm-page .im-kpi .im-micro { color: color-mix(in oklab, var(--im-accent, var(--ins-secondary-color)) 70%, var(--ins-secondary-color)); }
+#ndm-page .im-kpi[data-k="due"] .im-micro { color: var(--ins-secondary-color); }
+
+/* ── Quadro por estado (o kanban do Pulse) ── */
+#ndm-page .im-board { display: grid; gap: .8rem; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1399.98px) { #ndm-page .im-board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 575.98px)  { #ndm-page .im-board { grid-template-columns: 1fr; } }
+#ndm-page .im-col { border-radius: 16px; padding: .75rem; border: 1px solid var(--im-line);
+    background: color-mix(in oklab, var(--im-c) 4%, var(--im-surface)); min-height: 120px; }
+#ndm-page .im-col[data-s="todo"]        { --im-c: var(--im-todo); }
+#ndm-page .im-col[data-s="in_progress"] { --im-c: var(--im-prog); }
+#ndm-page .im-col[data-s="late"]        { --im-c: var(--im-late); }
+#ndm-page .im-col[data-s="done"]        { --im-c: var(--im-done); }
+#ndm-page .im-col[data-s="late"].has-items { border-color: color-mix(in oklab, var(--im-late) 35%, var(--im-line)); }
+#ndm-page .im-col-head { display: flex; align-items: center; gap: .45rem; margin-bottom: .65rem; }
+#ndm-page .im-col-head .im-dot { width: 8px; height: 8px; border-radius: 99px; background: var(--im-c); }
+#ndm-page .im-col-head .im-h { font-size: .8rem; }
+#ndm-page .im-count { margin-left: auto; font-size: .72rem; font-weight: 700; padding: .1rem .5rem;
+    border-radius: 999px; background: color-mix(in oklab, var(--im-c) 14%, transparent); color: var(--im-c); }
+#ndm-page .im-col-empty { font-size: .74rem; color: var(--ins-secondary-color); padding: .5rem .25rem; }
+#ndm-page .im-list { display: flex; flex-direction: column; gap: .5rem; }
+
+#ndm-page .im-task { display: block; text-decoration: none; color: inherit; border-radius: 13px;
+    padding: .7rem .75rem; background: var(--im-surface); border: 1px solid var(--im-line);
+    transition: border-color 160ms var(--sf-ease-out, ease-out), box-shadow 160ms var(--sf-ease-out, ease-out),
+                transform 160ms var(--sf-ease-out, ease-out); }
+@media (hover: hover) and (pointer: fine) {
+    #ndm-page .im-task:hover { border-color: color-mix(in oklab, var(--im-c) 45%, var(--im-line));
+        box-shadow: 0 8px 22px -12px color-mix(in oklab, var(--im-c) 60%, transparent); transform: translateY(-1px); }
+}
+#ndm-page .im-task:active { transform: scale(.98); }
+#ndm-page .im-task-head { display: flex; align-items: center; gap: .55rem; }
+#ndm-page .im-task-ico { width: 30px; height: 30px; flex: 0 0 auto; border-radius: 9px; display: inline-flex;
+    align-items: center; justify-content: center; color: #fff; font-size: 1rem; background: var(--vr-grad); }
+#ndm-page .im-task-name { font-size: .84rem; font-weight: 700; line-height: 1.2; min-width: 0; }
+#ndm-page .im-task-go { margin-left: auto; color: var(--ins-secondary-color); font-size: .95rem; }
+#ndm-page .im-task-due { margin-top: .5rem; display: flex; align-items: center; gap: .35rem; flex-wrap: wrap;
+    font-size: .72rem; color: var(--ins-secondary-color); font-variant-numeric: tabular-nums; }
+#ndm-page .im-task-due .is-late { color: var(--im-late); font-weight: 700; }
+#ndm-page .im-meter { margin-top: .5rem; height: 6px; border-radius: 99px; overflow: hidden;
+    background: color-mix(in oklab, var(--im-c) 14%, transparent); }
+#ndm-page .im-meter i { display: block; height: 100%; border-radius: 99px; background: var(--im-c);
+    transition: width 420ms var(--sf-ease-out, ease-out); }
+#ndm-page .im-task-meta { margin-top: .45rem; font-size: .72rem; color: var(--ins-secondary-color); line-height: 1.35; }
+#ndm-page .im-task-meta b { color: var(--ins-body-color); font-variant-numeric: tabular-nums; }
+#ndm-page .im-tag { display: inline-flex; align-items: center; gap: .2rem; font-size: .64rem; font-weight: 700;
+    letter-spacing: .04em; text-transform: uppercase; padding: .1rem .45rem; border-radius: 999px;
+    background: color-mix(in oklab, var(--im-t, var(--im-todo)) 14%, transparent); color: var(--im-t, var(--im-todo)); }
+#ndm-page .im-tag.is-done { --im-t: var(--im-done); }
+#ndm-page .im-tag.is-late { --im-t: var(--im-late); }
+
+/* ── Lado direito: anel + atividade ── */
+#ndm-page .im-ring { position: relative; width: 190px; height: 190px; margin: .4rem auto .2rem; }
+#ndm-page .im-ring canvas { position: absolute; inset: 0; }
+#ndm-page .im-ring-mid { position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; pointer-events: none; }
+#ndm-page .im-ring-mid b { font-size: 2.2rem; font-weight: 800; letter-spacing: -.03em; line-height: 1;
+    font-variant-numeric: tabular-nums; color: var(--ins-body-color); }
+#ndm-page .im-ring-mid span { margin-top: .3rem; font-size: .66rem; font-weight: 700; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--ins-secondary-color); }
+#ndm-page .im-legend { display: grid; grid-template-columns: 1fr 1fr; gap: .3rem .8rem; margin-top: .6rem;
+    font-size: .74rem; color: var(--ins-secondary-color); }
+#ndm-page .im-legend span { display: flex; align-items: center; gap: .4rem; }
+#ndm-page .im-legend i { width: 8px; height: 8px; border-radius: 99px; background: var(--im-c); }
+#ndm-page .im-legend b { margin-left: auto; color: var(--ins-body-color); font-variant-numeric: tabular-nums; }
+#ndm-page .im-avg { margin-top: .75rem; }
+#ndm-page .im-avg .im-meter { --im-c: var(--vr-accent-2); }
+
+#ndm-page .im-feed { display: flex; flex-direction: column; gap: .6rem; max-height: 250px; overflow-y: auto; }
+#ndm-page .im-feed-item { display: flex; gap: .55rem; font-size: .76rem; line-height: 1.4; }
+#ndm-page .im-feed-item i { margin-top: .35rem; width: 8px; height: 8px; flex: 0 0 auto; border-radius: 99px;
+    background: var(--im-c, var(--im-prog)); }
+#ndm-page .im-feed-item time { margin-left: auto; padding-left: .5rem; color: var(--ins-secondary-color);
+    font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ndm-page .im-feed-empty { font-size: .76rem; color: var(--ins-secondary-color); }
+
+/* ── Linha do tempo dos prazos (os marcos do Pulse) ── */
+#ndm-page .im-tl { position: relative; height: 92px; margin: .4rem .6rem 0; }
+#ndm-page .im-tl-axis { position: absolute; left: 0; right: 0; top: 34px; height: 2px; border-radius: 2px;
+    background: var(--im-line); }
+#ndm-page .im-tl-fill { position: absolute; left: 0; top: 34px; height: 2px; border-radius: 2px;
+    background: var(--vr-grad); }
+#ndm-page .im-tl-hour { position: absolute; top: 44px; transform: translateX(-50%); font-size: .64rem;
+    color: var(--ins-secondary-color); font-variant-numeric: tabular-nums; }
+/* termina NA régua: descendo até as horas, riscava o rótulo da hora cheia */
+#ndm-page .im-tl-now { position: absolute; top: 18px; height: 20px; width: 2px; margin-left: -1px;
+    background: var(--vr-accent-2); border-radius: 2px; }
+#ndm-page .im-tl-now span { position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+    font-size: .62rem; font-weight: 700; color: var(--vr-accent-2); white-space: nowrap; }
+#ndm-page .im-tl-mark { position: absolute; top: 26px; width: 18px; height: 18px; margin-left: -9px; border-radius: 99px;
+    border: 2px solid var(--im-c); background: var(--im-surface); cursor: default; }
+#ndm-page .im-tl-mark.is-done { background: var(--im-c); }
+/* o rótulo do marco fica ABAIXO da régua das horas: na mesma altura, um prazo
+   em hora cheia escrevia por cima do "20:00" do eixo */
+#ndm-page .im-tl-mark b { position: absolute; top: 38px; left: 50%; transform: translateX(-50%);
+    font-size: .64rem; font-weight: 700; color: var(--im-c); white-space: nowrap; font-variant-numeric: tabular-nums; }
+#ndm-page .im-offday { font-size: .74rem; color: var(--ins-secondary-color); }
+#ndm-page .im-offday b { color: var(--ins-body-color); font-weight: 600; }
+
+/* Entrada: só no PRIMEIRO desenho (a atualização de 60 s não pisca a tela) */
+@media (prefers-reduced-motion: no-preference) {
+    #ndm-page.is-first .im-kpi, #ndm-page.is-first .im-task {
+        animation: im-in 320ms var(--sf-ease-out, ease-out) both; animation-delay: calc(var(--i, 0) * 35ms);
+    }
+    @keyframes im-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+}
+#ndm-page .im-section-title { display: flex; align-items: baseline; gap: .6rem; margin: 1.6rem 0 .8rem; }
 
 /* daterangepicker fora do #ndm-page (anexa no body) — fundo sólido + seleção azul */
 .daterangepicker { z-index: 1090; border-radius: 12px; border: 1px solid var(--ins-border-color);
@@ -332,29 +521,107 @@
 {% block page_content %}
 <div id="ndm-page" class="container-fluid" data-content="">
 
-    {% set subtitle='Products' %}
-    {% set title='Monitor' %}
+    {% set subtitle='Dashboards' %}
+    {% set title='Intraday Monitor' %}
     {% include 'partials/page-title.html' %}
 
-    <!-- Reference date -->
-    <div class="row mb-3">
-        <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <p class="text-muted mb-0 fs-sm" data-lang="ndm-sub">
-                Imported operations by product and status for the reference date — what still needs action on each page.
-            </p>
-            <div class="d-flex align-items-center gap-2">
-                <label class="fs-sm fw-semibold mb-0" data-lang="ndm-ref-date">Reference date</label>
-                <div class="ndm-datewrap" id="ndmDateWrap">
-                    <input type="text" id="ndm-ref-date" readonly autocomplete="off" placeholder="dd/mm/yyyy">
-                    <span class="ndm-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
-                </div>
+    <!-- Data de referência + atualização -->
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <p class="text-muted mb-0 fs-sm" data-lang="im-sub">
+            Every task due today and how far it has gone — registration, confirmations, Intrag and the reconciliations.
+        </p>
+        <div class="im-bar">
+            <span class="im-live"><i></i><span id="im-updated">—</span></span>
+            <button type="button" class="btn btn-sm btn-soft-primary im-refresh" id="im-refresh"
+                    data-bs-toggle="tooltip" title="Refresh now">
+                <i class="ti ti-refresh"></i>
+            </button>
+            <label class="fs-sm fw-semibold mb-0" data-lang="ndm-ref-date">Reference date</label>
+            <div class="ndm-datewrap" id="ndmDateWrap">
+                <input type="text" id="ndm-ref-date" readonly autocomplete="off" placeholder="dd/mm/yyyy">
+                <span class="ndm-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
             </div>
         </div>
     </div>
 
-    <!-- Zonas (preenchidas pelo JS a partir de /api/new-deals/monitor):
-         esquerda = registro na B3, direita = Intrag; subgrupos NDF/Options/Swaps -->
-    <div class="row g-3 gy-4" id="ndmZones"></div>
+    <!-- KPIs -->
+    <div class="im-kpis mb-3" id="im-kpis">
+        <div class="im-panel im-kpi" data-k="due" style="--i:0">
+            <span class="im-micro" data-lang="im-k-due">Due today</span><b>—</b><small></small></div>
+        <div class="im-panel im-kpi" data-k="done" style="--i:1">
+            <span class="im-micro" data-lang="im-k-done">Completed</span><b>—</b><small></small></div>
+        <div class="im-panel im-kpi" data-k="in_progress" style="--i:2">
+            <span class="im-micro" data-lang="im-k-in_progress">In progress</span><b>—</b><small></small></div>
+        <div class="im-panel im-kpi" data-k="todo" style="--i:3">
+            <span class="im-micro" data-lang="im-k-todo">To do</span><b>—</b><small></small></div>
+        <div class="im-panel im-kpi" data-k="late" style="--i:4">
+            <span class="im-micro" data-lang="im-k-late">Late</span><b>—</b><small></small></div>
+        <!-- O que ficou do dia útil anterior, clicável até a página já filtrada -->
+        <div class="im-panel im-kpi" data-k="prev" style="--i:5">
+            <span class="im-micro"><span data-lang="im-k-prev">Pending from D-1</span> <span id="im-prev-date"></span></span>
+            <div class="im-prev-top"><b id="im-prev-n">—</b><small id="im-prev-sub"></small></div>
+            <div class="im-prev-list" id="im-prev-list"></div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <!-- O quadro: uma coluna por estado, um cartão por tarefa -->
+        <div class="col-12 col-xxl-8">
+            <div class="im-panel h-100">
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <h5 class="im-h" data-lang="im-board">Today's tasks</h5>
+                    <span class="im-offday ms-auto" id="im-offday"></span>
+                </div>
+                <div class="im-board" id="im-board"></div>
+            </div>
+        </div>
+        <!-- O anel e a atividade -->
+        <div class="col-12 col-xxl-4">
+            <div class="row g-3">
+                <div class="col-12 col-md-6 col-xxl-12">
+                    <div class="im-panel h-100">
+                        <h5 class="im-h" data-lang="im-completion">Completion</h5>
+                        <div class="im-ring">
+                            <canvas id="im-ring" width="190" height="190" aria-hidden="true"></canvas>
+                            <div class="im-ring-mid"><b id="im-pct">—</b><span data-lang="im-k-done">Completed</span></div>
+                        </div>
+                        <div class="im-legend" id="im-legend"></div>
+                        <div class="im-avg">
+                            <div class="d-flex justify-content-between fs-xs text-muted">
+                                <span data-lang="im-avg">Average progress</span><b id="im-avg">—</b>
+                            </div>
+                            <div class="im-meter"><i id="im-avg-bar" style="width:0"></i></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6 col-xxl-12">
+                    <div class="im-panel h-100">
+                        <h5 class="im-h mb-3" data-lang="im-activity">Activity</h5>
+                        <div class="im-feed" id="im-feed"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Os prazos no dia -->
+        <div class="col-12">
+            <div class="im-panel">
+                <h5 class="im-h" data-lang="im-timeline">Deadlines</h5>
+                <div class="im-tl" id="im-tl"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- O detalhe: registro, confirmações e Intrag por produto × status —
+         o que era a página inteira do New Deals Monitor -->
+    <div class="im-section-title" id="ndm-detail">
+        <h5 class="im-h" data-lang="im-detail">Detail by product</h5>
+        <span class="text-muted fs-xs" data-lang="ndm-sub">
+            Imported operations by product and status for the reference date — what still needs action on each page.
+        </span>
+    </div>
+    <!-- Sem `.row`: os filhos são as zonas, não colunas — a margem negativa da
+         `.row` deixava o detalhe mais largo que os painéis de cima -->
+    <div id="ndmZones"></div>
 
 </div>
 {% endblock page_content %}
@@ -363,6 +630,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/chartjs/chart.umd.js"></script>
 <script>
 (function () {
     'use strict';
@@ -409,7 +677,9 @@
     // Generated → … → Success) e, depois dele, as mesas da esteira. Um grupo que
     // já entrou na esteira aparece na etapa dela, nunca mais em 'Generated' — é
     // o passo seguinte do MESMO ciclo, não outro.
-    var STATUS_ORDER = ['New', 'Pending', 'Generated', 'Approved', 'Sent', 'Success',
+    // `Awaiting B3 ID` abre a fila: é a operação que vai para a Intrag e ainda
+    // não tem o espelho (§567) — o primeiro passo do ciclo dela.
+    var STATUS_ORDER = ['Awaiting B3 ID', 'New', 'Pending', 'Generated', 'Approved', 'Sent', 'Success',
                         'Pending OTC', 'Pending MO/FO', 'Pending MO', 'Pending FO', 'Ok'];
 
     function esc(s) {
@@ -703,15 +973,275 @@
         });
     }
 
-    function load(ymd) {
-        fetch('/api/new-deals/monitor' + (ymd ? '?date=' + encodeURIComponent(ymd) : ''))
-            .then(function (r) { return r.json(); })
-            .then(function (j) {
-                if (!j || !j.success) return;
-                render(j.cards || [], j.conf_cards || []);
-            })
-            .catch(function (e) { console.error('ndm load error', e); });
+    /* ══ O PAINEL DAS TAREFAS (§567) ═══════════════════════════════════════
+       Tudo sai de UM request (`/api/intraday-monitor`): as tarefas com estado,
+       os KPIs, a atividade e os cards das zonas, que viram o detalhe abaixo.
+       Quem decide o estado é o servidor (`domain.avalia`): a tela só desenha —
+       uma segunda cópia da regra aqui divergiria do que o Control Panel
+       configurou. */
+    var ESTADOS = ['todo', 'in_progress', 'late', 'done'];
+    var ESTADO_TXT = { todo: 'To do', in_progress: 'In progress', late: 'Late', done: 'Completed' };
+    var DIAS_TXT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    var refAtual = '{{ today }}', primeira = true, anel = null, timer = null;
+
+    function cor(nome) {
+        return getComputedStyle(document.getElementById('ndm-page')).getPropertyValue('--im-' + nome).trim();
     }
+    function nomeTarefa(tk) { return t('im-task-' + tk.id, tk.label); }
+    function duracao(min) {
+        min = Math.abs(min);
+        var h = Math.floor(min / 60), m = min % 60;
+        return h ? h + 'h' + (m ? (m < 10 ? '0' : '') + m : '') : m + 'min';
+    }
+    function prazoTxt(tk) {
+        var base = '<i class="ti ti-clock"></i>' + esc(t('im-until', 'until')) + ' ' + esc(tk.deadline);
+        if (tk.state === 'done') {
+            return base + (tk.late_done ? ' · <span class="is-late">' + esc(t('im-done-late', 'done after the deadline')) + '</span>' : '');
+        }
+        if (tk.minutes_left == null) return base;
+        if (tk.minutes_left < 0) {
+            return base + ' · <span class="is-late">' + esc(t('im-overdue', 'overdue by')) + ' ' + duracao(tk.minutes_left) + '</span>';
+        }
+        return base + ' · ' + esc(t('im-left', 'in')) + ' ' + duracao(tk.minutes_left);
+    }
+    function metaTxt(tk) {
+        if (tk.kind === 'zone') {
+            if (!tk.total) return esc(t('im-zone-empty', 'Nothing imported for this date.'));
+            return '<b>' + num(tk.closed) + '</b>/' + num(tk.total) + ' ' + esc(t('im-zone-closed', 'closed')) +
+                   (tk.open ? ' · <b>' + num(tk.open) + '</b> ' + esc(t('im-zone-open', 'open')) : '');
+        }
+        if (tk.kind === 'branch') {
+            var sentido = tk.pay_receive === 'Pay' ? t('im-br-pays', 'Bank pays') : t('im-br-receives', 'Bank receives');
+            var valor = esc(sentido) + ' <b>R$ ' + Number(Math.abs(tk.amount || 0)).toLocaleString('en-US',
+                            { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</b>';
+            if (tk.settled) return valor + ' · ' + esc(t('im-br-settled', 'settled in Pay/Rec'));
+            if (tk.draft_at) return valor + ' · ' + esc(t('im-br-draft', 'VP approval draft at')) + ' <b>' +
+                                    esc(tk.draft_at) + '</b>' + (tk.draft_by ? ' ' + esc(t('im-by', 'by')) + ' ' + esc(tk.draft_by) : '') +
+                                    ' · ' + esc(t('im-br-wait', 'awaiting settlement'));
+            return valor + ' · ' + esc(t('im-br-nodraft', 'approval draft not generated'));
+        }
+        if (!tk.runs) return esc(t('im-not-run', 'Not run yet.'));
+        var partes = [esc(t('im-ran-at', 'Ran at')) + ' <b>' + esc(tk.last_at || tk.ran_at) + '</b>' +
+                      (tk.by ? ' ' + esc(t('im-by', 'by')) + ' ' + esc(tk.by) : '')];
+        if (tk.runs > 1) partes.push(num(tk.runs) + ' ' + esc(t('im-runs', 'runs')));
+        if (tk.open != null) {
+            partes.push(tk.open ? '<b>' + num(tk.open) + '</b> ' + esc(t('im-open-breaks', 'open breaks'))
+                                : esc(t('im-no-breaks', 'no open breaks')));
+        }
+        if (tk.done_on === 'end' && !tk.ended) {
+            partes.push('<span class="im-tag">' + esc(t('im-end-pending', 'End process pending')) + '</span>');
+        }
+        return partes.join(' · ') + (tk.ended ? ' <span class="im-tag is-done"><i class="ti ti-check"></i>' +
+                                     esc(t('im-ended', 'End of day')) + (tk.ended_at ? ' ' + esc(tk.ended_at) : '') +
+                                     '</span>' : '');
+    }
+    function cartao(tk, i) {
+        var link = tk.url || '#';
+        return '<a class="im-task" href="' + esc(link) + '" style="--i:' + i + ';--im-c:var(--im-' +
+                   (tk.state === 'in_progress' ? 'prog' : tk.state) + ')">' +
+                 '<span class="im-task-head">' +
+                   '<span class="im-task-ico"><i class="ti ' + esc(tk.icon) + '"></i></span>' +
+                   '<span class="im-task-name">' + esc(nomeTarefa(tk)) + '</span>' +
+                   '<i class="ti ti-chevron-right im-task-go"></i>' +
+                 '</span>' +
+                 '<span class="im-task-due">' + prazoTxt(tk) + '</span>' +
+                 '<span class="im-meter"><i style="width:' + (tk.progress || 0) + '%"></i></span>' +
+                 '<span class="im-task-meta d-block">' + metaTxt(tk) + '</span>' +
+               '</a>';
+    }
+
+    function desenhaKpis(k) {
+        var box = document.getElementById('im-kpis');
+        function poe(chave, valor, sub) {
+            var el = box.querySelector('[data-k="' + chave + '"]');
+            el.querySelector('b').textContent = valor;
+            el.querySelector('small').innerHTML = sub || '';
+        }
+        poe('due', num(k.due), esc(t('im-k-due-sub', 'tasks scheduled for the date')));
+        poe('done', num(k.done), '<span style="color:var(--im-done)">' + k.pct + '%</span> ' + esc(t('im-k-done-sub', 'of the day')));
+        poe('in_progress', num(k.in_progress), esc(t('im-k-prog-sub', 'started, still open')));
+        poe('todo', num(k.todo), esc(t('im-k-todo-sub', 'not started')));
+        poe('late', num(k.late), k.late ? '<span style="color:var(--im-late)">' + esc(t('im-k-late-sub', 'past the deadline')) + '</span>'
+                                         : esc(t('im-k-late-none', 'nothing overdue')));
+        box.querySelector('[data-k="late"]').classList.toggle('is-hot', k.late > 0);
+    }
+
+    function desenhaQuadro(tarefas) {
+        var devidas = tarefas.filter(function (x) { return x.due; });
+        var i = 0;
+        document.getElementById('im-board').innerHTML = ESTADOS.map(function (st) {
+            var lista = devidas.filter(function (x) { return x.state === st; });
+            return '<div class="im-col' + (lista.length ? ' has-items' : '') + '" data-s="' + st + '">' +
+                     '<div class="im-col-head"><span class="im-dot"></span>' +
+                       '<h6 class="im-h">' + esc(t('im-k-' + st, ESTADO_TXT[st])) + '</h6>' +
+                       '<span class="im-count">' + lista.length + '</span></div>' +
+                     (lista.length ? '<div class="im-list">' + lista.map(function (x) { return cartao(x, i++); }).join('') + '</div>'
+                                   : '<div class="im-col-empty">' + esc(t('im-col-empty', 'Nothing here.')) + '</div>') +
+                   '</div>';
+        }).join('');
+        // O que NÃO é deste dia, dito numa linha: some calado, e "fora da
+        // agenda" e "tarefa que não existe" viram a mesma coisa.
+        // A Branch Reversal é condicional (só existe com liquidação da Branch):
+        // fora dela o dia não é "fora da agenda", é "não houve".
+        var fora = tarefas.filter(function (x) { return !x.due && !x.conditional && x.days && x.days.length; });
+        document.getElementById('im-offday').innerHTML = !fora.length ? '' :
+            esc(t('im-offday', 'Not scheduled for this date:')) + ' ' + fora.map(function (x) {
+                return '<b>' + esc(nomeTarefa(x)) + '</b> (' + x.days.map(function (d) {
+                    return esc(t('cp-it-d' + d, DIAS_TXT[d]));
+                }).join(', ') + ')';
+            }).join(' · ');
+    }
+
+    function desenhaAnel(k) {
+        document.getElementById('im-pct').textContent = k.due ? k.pct + '%' : '—';
+        document.getElementById('im-avg').textContent = k.due ? k.progress + '%' : '—';
+        document.getElementById('im-avg-bar').style.width = (k.due ? k.progress : 0) + '%';
+        var dados = [k.done, k.in_progress, k.todo, k.late];
+        var cores = [cor('done'), cor('prog'), cor('todo'), cor('late')];
+        document.getElementById('im-legend').innerHTML = ['done', 'in_progress', 'todo', 'late'].map(function (st, i) {
+            return '<span style="--im-c:' + cores[i] + '"><i></i>' + esc(t('im-k-' + st, ESTADO_TXT[st])) +
+                   '<b>' + num(dados[i]) + '</b></span>';
+        }).join('');
+        if (!window.Chart) return;
+        var vazio = !k.due;
+        var trilho = getComputedStyle(document.getElementById('ndm-page')).getPropertyValue('--im-line').trim() || 'rgba(128,128,128,.2)';
+        var cfg = { data: vazio ? [1] : dados, backgroundColor: vazio ? [trilho] : cores,
+                    borderWidth: 0, borderRadius: vazio ? 0 : 6, spacing: vazio ? 0 : 2 };
+        if (anel) {
+            anel.data.datasets[0] = cfg;
+            anel.update();
+            return;
+        }
+        var reduzido = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        anel = new Chart(document.getElementById('im-ring'), {
+            type: 'doughnut',
+            data: { labels: ['done', 'in_progress', 'todo', 'late'], datasets: [cfg] },
+            options: { cutout: '78%', responsive: false, events: [],
+                       animation: reduzido ? false : { duration: 450, easing: 'easeOutQuart' },
+                       plugins: { legend: { display: false }, tooltip: { enabled: false } } }
+        });
+    }
+
+    function desenhaAtividade(itens) {
+        var cores = { run: 'var(--im-prog)', end: 'var(--im-done)' };
+        document.getElementById('im-feed').innerHTML = !itens.length
+            ? '<div class="im-feed-empty">' + esc(t('im-feed-empty', 'No routine has run on this date yet.')) + '</div>'
+            : itens.map(function (a) {
+                var o_que = a.event === 'end' ? t('im-feed-end', 'finalized the day on') : t('im-feed-run', 'ran');
+                return '<div class="im-feed-item" style="--im-c:' + (cores[a.event] || cores.run) + '"><i></i>' +
+                         '<span><b>' + esc(a.by || '—') + '</b> ' + esc(o_que) + ' <b>' +
+                           esc(t('im-task-' + a.task, a.label)) + '</b>' +
+                           (a.open != null ? ' · ' + num(a.open) + ' ' + esc(t('im-open-breaks', 'open breaks')) : '') +
+                         '</span><time>' + esc(a.time || '') + '</time></div>';
+            }).join('');
+    }
+
+    // A régua do dia: das 08:00 ao último prazo (no mínimo 20:00), com o
+    // "agora" marcado só quando a data é HOJE.
+    function desenhaLinha(snap) {
+        var devidas = snap.tasks.filter(function (x) { return x.due; });
+        var box = document.getElementById('im-tl');
+        if (!devidas.length) {
+            box.innerHTML = '<div class="im-feed-empty pt-3">' + esc(t('im-tl-none', 'No task scheduled for this date.')) + '</div>';
+            return;
+        }
+        function minutos(hhmm) { var p = String(hhmm).split(':'); return (+p[0]) * 60 + (+p[1]); }
+        var ini = 8 * 60, fim = 20 * 60;
+        devidas.forEach(function (x) { fim = Math.max(fim, minutos(x.deadline) + 60); ini = Math.min(ini, minutos(x.deadline) - 60); });
+        var pos = function (m) { return Math.max(0, Math.min(100, 100 * (m - ini) / (fim - ini))); };
+        var html = '<div class="im-tl-axis"></div>';
+        for (var h = Math.ceil(ini / 60); h * 60 <= fim; h += 2) {
+            html += '<span class="im-tl-hour" style="left:' + pos(h * 60) + '%">' + (h < 10 ? '0' : '') + h + ':00</span>';
+        }
+        var hoje = snap.now && snap.now.slice(0, 10) === snap.date;
+        if (hoje) {
+            var agora = minutos(snap.now.slice(11, 16));
+            html += '<div class="im-tl-fill" style="width:' + pos(agora) + '%"></div>' +
+                    '<div class="im-tl-now" style="left:' + pos(agora) + '%"><span>' + esc(snap.now.slice(11, 16)) + '</span></div>';
+        }
+        // Prazos iguais se empilham no MESMO ponto: um marco por horário, com
+        // a pior situação dele (atrasada vence em andamento, que vence feita).
+        var porHora = {};
+        devidas.forEach(function (x) { (porHora[x.deadline] = porHora[x.deadline] || []).push(x); });
+        var peso = { late: 3, in_progress: 2, todo: 1, done: 0 };
+        Object.keys(porHora).forEach(function (hh) {
+            var g = porHora[hh];
+            var pior = g.slice().sort(function (a, b) { return peso[b.state] - peso[a.state]; })[0].state;
+            var feitas = g.filter(function (x) { return x.state === 'done'; }).length;
+            var dica = g.map(function (x) { return nomeTarefa(x) + ' — ' + t('im-k-' + x.state, ESTADO_TXT[x.state]); }).join('\n');
+            html += '<span class="im-tl-mark' + (pior === 'done' ? ' is-done' : '') + '" title="' + esc(dica) + '" ' +
+                    'style="left:' + pos(minutos(hh)) + '%;--im-c:var(--im-' + (pior === 'in_progress' ? 'prog' : pior) + ')">' +
+                    '<b>' + esc(hh) + ' · ' + feitas + '/' + g.length + '</b></span>';
+        });
+        box.innerHTML = html;
+    }
+
+    function desenhaPrev(p) {
+        var card = document.querySelector('#im-kpis [data-k="prev"]');
+        var n = document.getElementById('im-prev-n'), sub = document.getElementById('im-prev-sub');
+        var box = document.getElementById('im-prev-list');
+        document.getElementById('im-prev-date').textContent = p && p.date_fmt ? '· ' + p.date_fmt : '';
+        if (!p || p.error) {
+            n.textContent = '—';
+            sub.textContent = t('im-prev-fail', 'Could not read D-1.');
+            box.innerHTML = p && p.error ? '<span class="im-feed-empty">' + esc(p.error) + '</span>' : '';
+            return;
+        }
+        var itens = p.items || [];
+        n.textContent = num(itens.length);
+        card.classList.toggle('is-hot', itens.length > 0);
+        card.classList.toggle('is-clear', !itens.length);
+        sub.innerHTML = itens.length ? esc(t('im-prev-sub', 'items left open')) :
+                        '<span style="color:var(--im-done)">' + esc(t('im-prev-none', 'nothing left behind')) + '</span>';
+        box.innerHTML = itens.map(function (it) {
+            var nome = it.task ? t('im-task-' + it.task, it.label) : it.label;
+            var zona = it.zone ? ' <em>· ' + esc(t('im-zone-' + it.zone.toLowerCase(), it.zone)) + '</em>' : '';
+            var dica = it.detail ? ' title="' + esc(it.detail) + '"' : '';
+            var corpo = '<i class="im-dot"></i><span>' + esc(nome) + zona + '</span>' +
+                        (it.count != null ? '<b>' + num(it.count) + '</b>' : '') +
+                        (it.url ? '<i class="ti ti-chevron-right"></i>' : '');
+            return it.url ? '<a class="im-prev-item" href="' + esc(it.url) + '"' + dica + '>' + corpo + '</a>'
+                          : '<div class="im-prev-item"' + dica + '>' + corpo + '</div>';
+        }).join('');
+    }
+
+    function desenha(snap) {
+        desenhaKpis(snap.kpis);
+        desenhaPrev(snap.prev);
+        desenhaQuadro(snap.tasks);
+        desenhaAnel(snap.kpis);
+        desenhaAtividade(snap.activity || []);
+        desenhaLinha(snap);
+        render(snap.cards || [], snap.conf_cards || []);
+        document.getElementById('im-updated').textContent =
+            t('im-updated', 'Updated') + ' ' + new Date().toTimeString().slice(0, 5);
+        if (primeira) {
+            primeira = false;
+            // tira a classe da entrada depois dela: a atualização de 60 s não
+            // pode fazer os cartões entrarem de novo
+            setTimeout(function () { document.getElementById('ndm-page').classList.remove('is-first'); }, 900);
+        }
+    }
+
+    function load(ymd) {
+        if (ymd) refAtual = ymd;
+        var btn = document.getElementById('im-refresh');
+        btn.classList.add('is-busy');
+        return fetch('/api/intraday-monitor?date=' + encodeURIComponent(refAtual), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (j) { if (j && j.success) desenha(j); })
+            .catch(function (e) { console.error('intraday monitor load error', e); })
+            .then(function () { btn.classList.remove('is-busy'); });
+    }
+
+    // Atualiza sozinho a cada minuto — o que a mesa roda em outra aba aparece
+    // aqui sem recarregar. Aba escondida não consulta (volta a consultar ao
+    // reaparecer, na hora).
+    function agenda() {
+        clearInterval(timer);
+        timer = setInterval(function () { if (!document.hidden) load(); }, 60000);
+    }
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
 
     function initDatePicker() {
         var inp = document.getElementById('ndm-ref-date');
@@ -731,8 +1261,13 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
+        document.getElementById('ndm-page').classList.add('is-first');
+        var rb = document.getElementById('im-refresh');
+        rb.setAttribute('title', t('im-refresh', 'Refresh now'));
+        rb.addEventListener('click', function () { load(); });
         initDatePicker();
         load('{{ today }}');
+        agenda();
     });
 })();
 </script>
@@ -758,6 +1293,60 @@
     <span data-lang="ndm-grp-swaps">Swaps</span>
     <span data-lang="ndm-grp-unwinds">Unwinds</span>
     <span data-lang="ndm-grp-others">Others</span>
+    <!-- Intraday Monitor (§567) -->
+    <span data-lang="im-refresh">Refresh now</span>
+    <span data-lang="im-updated">Updated</span>
+    <span data-lang="im-k-due-sub">tasks scheduled for the date</span>
+    <span data-lang="im-k-done-sub">of the day</span>
+    <span data-lang="im-k-prog-sub">started, still open</span>
+    <span data-lang="im-k-todo-sub">not started</span>
+    <span data-lang="im-k-late-sub">past the deadline</span>
+    <span data-lang="im-k-late-none">nothing overdue</span>
+    <span data-lang="im-until">until</span>
+    <span data-lang="im-left">in</span>
+    <span data-lang="im-overdue">overdue by</span>
+    <span data-lang="im-done-late">done after the deadline</span>
+    <span data-lang="im-zone-empty">Nothing imported for this date.</span>
+    <span data-lang="im-zone-closed">closed</span>
+    <span data-lang="im-zone-open">open</span>
+    <span data-lang="im-not-run">Not run yet.</span>
+    <span data-lang="im-ran-at">Ran at</span>
+    <span data-lang="im-by">by</span>
+    <span data-lang="im-runs">runs</span>
+    <span data-lang="im-open-breaks">open breaks</span>
+    <span data-lang="im-no-breaks">no open breaks</span>
+    <span data-lang="im-ended">End of day</span>
+    <span data-lang="im-col-empty">Nothing here.</span>
+    <span data-lang="im-offday">Not scheduled for this date:</span>
+    <span data-lang="im-feed-empty">No routine has run on this date yet.</span>
+    <span data-lang="im-feed-run">ran</span>
+    <span data-lang="im-feed-end">finalized the day on</span>
+    <span data-lang="im-tl-none">No task scheduled for this date.</span>
+    <span data-lang="im-task-registration">B3 Registration</span>
+    <span data-lang="im-task-confirmation">Confirmations</span>
+    <span data-lang="im-task-intrag">Intrag</span>
+    <span data-lang="im-task-recon-payrec">Recon Pay/Rec</span>
+    <span data-lang="im-task-recon-fxo">Recon FXO</span>
+    <span data-lang="im-task-recon-comitente">Recon Comitente</span>
+    <span data-lang="im-task-recon-cgd">Recon CGD</span>
+    <span data-lang="im-task-recon-conf-matching">Recon Conf. Matching</span>
+    <span data-lang="im-task-branch-reversal">Branch Reversal</span>
+    <span data-lang="im-br-pays">Bank pays</span>
+    <span data-lang="im-br-receives">Bank receives</span>
+    <span data-lang="im-br-settled">settled in Pay/Rec</span>
+    <span data-lang="im-br-draft">VP approval draft at</span>
+    <span data-lang="im-br-wait">awaiting settlement</span>
+    <span data-lang="im-br-nodraft">approval draft not generated</span>
+    <span data-lang="im-end-pending">End process pending</span>
+    <span data-lang="im-prev-sub">items left open</span>
+    <span data-lang="im-prev-none">nothing left behind</span>
+    <span data-lang="im-prev-fail">Could not read D-1.</span>
+    <span data-lang="im-zone-registration">Registration</span>
+    <span data-lang="im-zone-confirmation">Confirmation</span>
+    <span data-lang="im-zone-intrag">Intrag</span>
+    <span data-lang="cp-it-d0">Mon</span><span data-lang="cp-it-d1">Tue</span><span data-lang="cp-it-d2">Wed</span>
+    <span data-lang="cp-it-d3">Thu</span><span data-lang="cp-it-d4">Fri</span><span data-lang="cp-it-d5">Sat</span>
+    <span data-lang="cp-it-d6">Sun</span>
 </div>
 <!-- Ícones das zonas — mesmos SVGs do sidenav (Index B3 e Intrag); o JS clona daqui -->
 <div class="d-none" aria-hidden="true">

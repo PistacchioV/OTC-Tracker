@@ -62,7 +62,9 @@ _NAV_URLS = _load_nav_urls()
 _CONTROL_PANEL_CARDS = [
     # Intraday Routines
     {'id': 'cetip',       'label': 'Save CETIP Files'},
-    {'id': 'dealsmonitor', 'label': 'Deals Monitor — Pending Action'},
+    # O antigo `dealsmonitor` (o aviso de pendências) entrou neste card (§567);
+    # o token antigo segue valendo pelo mapa do `_read_user_authz`.
+    {'id': 'intradaytasks', 'label': 'Intraday Monitor — Tasks & Pending Action'},
     {'id': 'confescalation', 'label': 'Confirmations Escalation'},
     # Settlement Reporting
     {'id': 'daily',       'label': 'Save Daily Settlement Files'},
@@ -99,8 +101,9 @@ _CP_ENDPOINT_CARD = {
     '/api/control-panel/weekly-escalation/run': 'weeklyescalation',
     '/api/control-panel/signature-collection/preview': 'signaturecollection',
     '/api/control-panel/signature-collection/generate': 'signaturecollection',
-    '/api/control-panel/deals-monitor/recipients': 'dealsmonitor',
-    '/api/control-panel/deals-monitor/run': 'dealsmonitor',
+    '/api/control-panel/deals-monitor/recipients': 'intradaytasks',
+    '/api/control-panel/deals-monitor/run': 'intradaytasks',
+    '/api/control-panel/intraday-tasks': 'intradaytasks',
     '/api/control-panel/pending-spreadsheet/run': 'pendingspreadsheet',
     '/api/control-panel/pending-spreadsheet/status': 'pendingspreadsheet',
     '/api/control-panel/confirmations-escalation/recipients': 'confescalation',
@@ -274,8 +277,12 @@ def _read_user_authz(sid):
             # /file-interpreter): o valor antigo gravado no cadastro segue
             # valendo — renomear página não pode revogar acesso em silêncio.
             # O item CGD virou a seção Onboarding, e o mesmo vale para ele.
+            # O New Deals Monitor virou o Intraday Monitor (§567).
             _renomeadas = {'/file-interface': '/file-interpreter',
-                           '/cgd': '/onboarding'}
+                           '/cgd': '/onboarding',
+                           '/new-deals-monitor': '/intraday-monitor',
+                           # o card do aviso entrou no da agenda (§567)
+                           '/control-panel#dealsmonitor': '/control-panel#intradaytasks'}
             return (True, set(_renomeadas.get(str(u), str(u)) for u in arr), papel)
     except Exception:
         pass

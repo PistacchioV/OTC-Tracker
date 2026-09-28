@@ -473,7 +473,7 @@ $(document).ready(function () {
             if (refDateWrap && !document.getElementById('unwRefDate')) {
                 refDateWrap.innerHTML =
                     '<label for="unwRefDate" class="form-label fs-xs text-muted mb-0 me-1 text-nowrap" data-lang="b3-reference-date">Reference Date</label>' +
-                    '<input type="text" id="unwRefDate" class="form-control form-control-sm otc-datefield" style="width:130px" value="' + _todayDmy() + '" placeholder="dd/mm/yyyy">';
+                    '<input type="text" id="unwRefDate" class="form-control form-control-sm otc-datefield" style="width:130px" value="' + ((window.otcLinkDmy && window.otcLinkDmy()) || _todayDmy()) + '" placeholder="dd/mm/yyyy">';
                 var el = document.getElementById('unwRefDate');
                 if (el && typeof flatpickr !== 'undefined') flatpickr(el, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
                 if (el) el.addEventListener('change', load);

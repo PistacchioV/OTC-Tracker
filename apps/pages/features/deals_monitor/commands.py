@@ -35,17 +35,21 @@ def _send_ndm_pending_email(ref, to_list, cc_list):
         # of application context" por outro, três linhas abaixo. Dentro do
         # request do botão Run isto é no-op (ver `_app_context`).
         with _R()._app_context():
-            blocks, grand_total = queries._ndm_pending_blocks(ref)
-            if not blocks:
-                _R().log.info('[deals-monitor] %s: nada pendente, e-mail não enviado',
+            # O aviso é do INTRADAY MONITOR (§567): as tarefas do dia que não
+            # fecharam — recons, Branch Reversal, zonas — e, embaixo, o detalhe
+            # por produto das zonas, que era o e-mail inteiro do Deals Monitor.
+            tasks, blocks, grand_total, kpis = queries._intraday_pending(ref)
+            if not tasks and not blocks:
+                _R().log.info('[intraday-monitor] %s: nada pendente, e-mail não enviado',
                          ref.strftime('%Y-%m-%d'))
                 return 'empty'
             ref_fmt = ref.strftime('%d/%m/%Y')
-            html = render_template('pages/email-template-deals-monitor.html',
-                                   ref_date_fmt=ref_fmt, blocks=blocks,
-                                   grand_total=grand_total, current_year=datetime.now().year)
+            html = render_template('pages/email-template-intraday-monitor.html',
+                                   ref_date_fmt=ref_fmt, tasks=tasks, kpis=kpis, blocks=blocks,
+                                   grand_total=grand_total, current_year=datetime.now().year,
+                                   monitor_url=_R()._otc_app_url('/intraday-monitor'))
             msg = MIMEMultipart('related')
-            msg['Subject'] = 'Pending Action - Deals Monitor'
+            msg['Subject'] = 'Pending Action - Intraday Monitor'
             msg['From'] = _R().SHARED_MAILBOX
             if to_list:
                 msg['To'] = ', '.join(to_list)
@@ -65,9 +69,9 @@ def _send_ndm_pending_email(ref, to_list, cc_list):
             _R()._attach_email_gradient(msg)
         with _R().smtplib.SMTP(_R().SMTP_HOST, _R().SMTP_PORT, timeout=20) as server:
             server.sendmail(_R().SHARED_MAILBOX, to_list + cc_list, msg.as_string())
-        _R().log.info('[deals-monitor] aviso de pendências enviado — ref=%s · %d item(ns) '
-                 'em %d tipo(s) · to=%s cc=%s', ref.strftime('%Y-%m-%d'), grand_total,
-                 len(blocks), to_list, cc_list)
+        _R().log.info('[intraday-monitor] aviso de pendências enviado — ref=%s · %d tarefa(s) · '
+                 '%d operação(ões) em %d tipo(s) · to=%s cc=%s', ref.strftime('%Y-%m-%d'),
+                 len(tasks), grand_total, len(blocks), to_list, cc_list)
         return True
     except Exception as e:                                  # noqa: BLE001
         _R().log.error('[deals-monitor] aviso de pendências FALHOU:\n%s', traceback.format_exc())

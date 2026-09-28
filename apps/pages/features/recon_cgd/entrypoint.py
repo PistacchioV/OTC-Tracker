@@ -4,6 +4,7 @@ from flask import jsonify, render_template, request, session
 
 from apps.pages import blueprint, recon_cgd as motor
 from apps.pages.features.recon_cgd import commands, queries
+from apps.pages.platform import task_runs
 
 
 def _routes():
@@ -44,6 +45,11 @@ def api_cgd_recon_run():
         R.log.exception('[recon-cgd] falha ao rodar o batimento')
         return jsonify({'success': False, 'error': str(exc)}), 500
     res['success'] = True
+    c = res.get('counts') or {}
+    task_runs.record('recon-cgd', session.get('user_sid', ''), session.get('user_name', ''),
+                     str(res.get('ref') or ''),
+                     {'open': sum(int(c.get(k) or 0)
+                                  for k in ('pending_b3', 'pending_action', 'only_b3'))})
     res['recipients'] = queries.recipients()
     return jsonify(res)
 

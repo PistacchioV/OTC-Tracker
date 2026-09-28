@@ -238,3 +238,172 @@ def _ndm_pending_times():
         if 0 <= hh <= 23 and 0 <= mm <= 59:
             out.append((hh, mm))
     return sorted(set(out)) or [(19, 0), (19, 30), (20, 0)]
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# INTRAG DESDE O IMPORT (§567)
+# --------------------------------------------------------------------------
+# A linha da Intrag só NASCE quando a operação do New Deals ganha B3 ID (o
+# espelho é gravado no Success, pelos `_save_intrag_*` / `_maybe_save_intrag_*`
+# e pelo `swap_new_deals.b3_mapped`). Contar só o arquivo da Intrag deixava a
+# zona zerada o dia inteiro, com a operação já importada e a instrução ao
+# custodiante por fazer: a mesa só via a pendência DEPOIS do registro. Agora a
+# operação que VAI para a Intrag conta na zona desde o import, com o status
+# `AWAITING_B3`; quando o espelho nasce, quem conta é a linha real da Intrag —
+# a operação em `Success` sai daqui, e ninguém é contado duas vezes.
+#
+# A regra é a MESMA dos pontos que gravam o espelho — escrita aqui porque
+# feature não importa feature. Mudou lá, muda aqui (`check_intraday_monitor.py`
+# prende os casos):
+#   · NDF Commodities, Commodities Options e FX Options contra o BANCO J.P.
+#     MORGAN (`'banco' in cl and 'morgan' in cl`, a grafia do espelho);
+#   · NDF Vanilla e Other Publisher contra o LAWTON (FWD Start fica fora: o
+#     strike só existe na strike set date, e o espelho também não o grava);
+#   · Swap no B2B Banco × Atacama (`swap_deal_ticket.is_b2b`).
+# ══════════════════════════════════════════════════════════════════════════
+AWAITING_B3 = 'Awaiting B3 ID'
+
+_INTRAG_BANCO_DIRS = {'NDF/Commodities': 'Intrag/NDF',
+                      'Option/Commodities': 'Intrag/Option',
+                      'Option/FXO': 'Intrag/Option'}
+_INTRAG_LAWTON_DIRS = {'NDF/Vanilla': 'Intrag/NDF', 'NDF/OtherPublisher': 'Intrag/NDF'}
+_INTRAG_SWAP_DIRS = ('Swap/Bullet', 'Swap/Cashflow')
+
+
+def intrag_destino(pkey, d):
+    """O balde da Intrag para onde a operação `d` do New Deals VAI, enquanto o
+    espelho ainda não existe — ou `None` (não vai, ou já foi: `Success` é
+    contado pela linha real da Intrag; `Canceled` não conta em lugar nenhum)."""
+    st = str(d.get('Status') or d.get('status') or '').strip().lower()
+    if st in ('success', 'canceled'):
+        return None
+    cl = str(d.get('Client') or '').lower()
+    if pkey in _INTRAG_BANCO_DIRS:
+        return _INTRAG_BANCO_DIRS[pkey] if ('banco' in cl and 'morgan' in cl) else None
+    if pkey in _INTRAG_LAWTON_DIRS:
+        return _INTRAG_LAWTON_DIRS[pkey] if 'lawton' in cl else None
+    if pkey in _INTRAG_SWAP_DIRS:
+        from apps.pages.platform import swap_deal_ticket     # puro: só o parser do DT
+        return 'Intrag/Swap' if swap_deal_ticket.is_b2b(d) else None
+    return None
+
+
+def intrag_destino_le(balde):
+    """A entidade do espelho: o fundo que a Intrag carteira — Atacama no swap,
+    Lawton nos demais (INTRAGJP633 × INTRAGJP552, a leitura do `_ndm_deal_le`)."""
+    return 'ATA' if balde == 'Intrag/Swap' else 'LAW'
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# INTRADAY MONITOR — as tarefas do dia (§567)
+# --------------------------------------------------------------------------
+# O catálogo diz QUAIS tarefas existem e de onde o estado de cada uma vem; a
+# AGENDA (dias da semana e horário limite) é do Control Panel, card
+# `intradaytasks`, e o que está aqui é só o padrão de quem nunca salvou.
+#
+# `kind`:
+#   · `zone`  — as três zonas do monitor (registro na B3, confirmações,
+#               Intrag). Conclui com ZERO em aberto, pela mesma regra do aviso
+#               das 19h (`_ndm_pending_blocks`): duas definições de "em aberto"
+#               fariam a tela e o e-mail cobrarem números diferentes;
+#   · `recon` — conclui quando RODOU no dia (mesa, 28/09/2026): as quebras
+#               abertas são informação do card, não o critério. Quem diz que
+#               rodou é o registro de execuções (`platform/task_runs`). TODA
+#               recon é uma tarefa aqui — a que nasce entra no catálogo e grava
+#               `task_runs.record` no `run` dela (`check_intraday_monitor.py`
+#               varre o `url_map` e recusa recon de fora). Quem a mesa não
+#               cobra nasce com `days=()`: está no card, fora do Monitor.
+#               Conf. Matching é diária (mesa, 28/09/2026);
+#   · `branch` — a reversão da Branch Settlement (§560/§566): só EXISTE no dia
+#               em que o Pay/Rec achou liquidação com a Branch. Anda em três
+#               passos — detectada, rascunho de aprovação ao VP gerado (o botão
+#               Branch Settl.), a linha da reversão casada no Pay/Rec — e só o
+#               último conclui: o rascunho é o pedido, o dinheiro é o fato.
+#
+# Dia da semana no padrão do Python: 0 = segunda … 6 = domingo. "Diário" é
+# segunda a sexta, e feriado ANBIMA não tem tarefa.
+# ══════════════════════════════════════════════════════════════════════════
+DIAS_UTEIS = (0, 1, 2, 3, 4)
+DEADLINE_PADRAO = '20:00'
+
+TASKS = (
+    {'id': 'registration', 'kind': 'zone', 'zone': 'Registration', 'label': 'B3 Registration',
+     'icon': 'ti-building-bank', 'url': '#ndm-detail', 'days': DIAS_UTEIS},
+    {'id': 'confirmation', 'kind': 'zone', 'zone': 'Confirmation', 'label': 'Confirmations',
+     'icon': 'ti-file-check', 'url': '/manual-confirmation/monitor', 'days': DIAS_UTEIS},
+    {'id': 'intrag', 'kind': 'zone', 'zone': 'Intrag', 'label': 'Intrag',
+     'icon': 'ti-building', 'url': '#ndm-detail', 'days': DIAS_UTEIS},
+    # O Pay/Rec só conclui no END PROCESS (mesa, 28/09/2026): rodar é o meio
+    # do caminho (em andamento, 50%) — o dia só fecha quando é finalizado.
+    # `link_ref`: a data que o link de pendência leva à recon. A referência de
+    # uma recon não é o dia em que ela roda — FXO, CGD, Comitente e Conf.
+    # Matching rodam sobre o dia útil ANTERIOR (`prev`, o padrão de `recon`);
+    # o Pay/Rec, sobre o próprio dia (`same`).
+    {'id': 'recon-payrec', 'kind': 'recon', 'label': 'Recon Pay/Rec', 'done_on': 'end', 'link_ref': 'same',
+     'icon': 'ti-arrows-left-right', 'url': '/reconciliation-payrec', 'days': DIAS_UTEIS},
+    {'id': 'branch-reversal', 'kind': 'branch', 'label': 'Branch Reversal',
+     'icon': 'ti-arrow-back-up', 'url': '/reconciliation-payrec', 'days': DIAS_UTEIS},
+    {'id': 'recon-fxo', 'kind': 'recon', 'label': 'Recon FXO',
+     'icon': 'ti-currency-dollar', 'url': '/reconciliation-fxo', 'days': DIAS_UTEIS},
+    {'id': 'recon-comitente', 'kind': 'recon', 'label': 'Recon Comitente',
+     'icon': 'ti-users', 'url': '/reconciliation-comitente', 'days': (1,)},
+    {'id': 'recon-cgd', 'kind': 'recon', 'label': 'Recon CGD',
+     'icon': 'ti-file-certificate', 'url': '/reconciliation-cgd', 'days': (4,)},
+    {'id': 'recon-conf-matching', 'kind': 'recon', 'label': 'Recon Conf. Matching',
+     'icon': 'ti-file-search', 'url': '/reconciliation-conf-matching', 'days': DIAS_UTEIS},
+)
+TASK_IDS = tuple(t['id'] for t in TASKS)
+
+_HHMM = re.compile(r'^([01]\d|2[0-3]):([0-5]\d)$')
+
+
+def task_config(salvo):
+    """A agenda de cada tarefa: o salvo no Control Panel por cima do padrão.
+
+    Valor ruim de UMA tarefa cai no padrão DELA (e só dela): um horário
+    digitado errado não pode tirar a tarefa da tela nem derrubar as outras.
+    Dias fora de 0..6 somem; lista vazia é "nunca" — uma escolha, não um erro
+    (é assim que se desliga uma tarefa sem apagar o horário)."""
+    salvo = salvo if isinstance(salvo, dict) else {}
+    out = {}
+    for t in TASKS:
+        s = salvo.get(t['id']) if isinstance(salvo.get(t['id']), dict) else {}
+        dias = s.get('days')
+        if isinstance(dias, (list, tuple)):
+            dias = sorted({int(x) for x in dias
+                           if str(x).lstrip('-').isdigit() and 0 <= int(x) <= 6})
+        else:
+            dias = list(t['days'])
+        hora = str(s.get('deadline') or '').strip()
+        out[t['id']] = {'days': dias,
+                        'deadline': hora if _HHMM.match(hora) else DEADLINE_PADRAO}
+    return out
+
+
+def avalia(cfg, dia, agora, feriado, feito, iniciado, feito_em=None):
+    """O estado de UMA tarefa em `dia`, visto em `agora` (datetime, BRT).
+
+    Devolve `due` (a tarefa existe neste dia), o prazo e `state`:
+      · `done`        — concluída (`late_done` quando depois do prazo);
+      · `late`        — o prazo passou e ela não foi concluída;
+      · `in_progress` — começou e não terminou (zona com parte fechada);
+      · `todo`        — ainda nada.
+    Dia que já passou e ficou por fazer é `late`; dia futuro é `todo`."""
+    from datetime import datetime as _dt
+    hh, mm = (int(x) for x in cfg['deadline'].split(':'))
+    prazo = _dt(dia.year, dia.month, dia.day, hh, mm)
+    due = (dia.weekday() in cfg['days']) and not feriado
+    if feito:
+        state = 'done'
+    elif agora > prazo:
+        state = 'late'
+    elif iniciado:
+        state = 'in_progress'
+    else:
+        state = 'todo'
+    return {
+        'due': due, 'state': state,
+        'deadline': cfg['deadline'], 'deadline_at': prazo.strftime('%Y-%m-%dT%H:%M'),
+        'late_done': bool(feito and feito_em and feito_em > prazo),
+        'minutes_left': int((prazo - agora).total_seconds() // 60) if not feito else None,
+    }

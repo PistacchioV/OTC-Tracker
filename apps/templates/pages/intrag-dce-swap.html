@@ -1099,7 +1099,7 @@ $(document).ready(function() {
 
     // Default view: Trade Date = today.
     fiLoadSpec();
-    sfAddFilter(SF_TRADE_DATE, _todayDmy());
+    sfAddFilter(SF_TRADE_DATE, ((window.otcLinkDmy && window.otcLinkDmy()) || _todayDmy()));
     document.getElementById('sfSearchBtn').click();
 
     if (window.otcExportAdvanced) otcExportAdvanced('#intrag-dces-legs');
