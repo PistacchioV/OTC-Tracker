@@ -39,6 +39,13 @@
 /* Ellipsis nas colunas de texto longo — razão social e contatos estouram a
    linha e empurram as colunas de data para fora da tela. */
 #ob-table tbody td.ob-ell { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+/* Legal Name (Razão Social) NUNCA corta: é por ela que a mesa reconhece o
+   cliente, e com o ellipsis metade dos nomes aparecia pela metade. A célula traz
+   o GRUPO inteiro (`;`), e cada entidade vai numa linha — o `;` continua no
+   texto, então o filtro e o export seguem lendo a lista como ela é gravada. */
+#ob-table tbody td.ob-name { min-width: 280px; max-width: 460px; white-space: normal !important;
+                             line-height: 1.3; }
+#ob-table tbody td.ob-name > span { display: block; }
 
 /* A linha de filtro (2ª do thead) é montada ANTES do `.DataTable()`, com
    `orderCellsTop: true`: no initComplete ela nasceria dentro do corpo rolável e
@@ -482,6 +489,7 @@
     var COLS = [];            // nomes das colunas do banco, na ordem
     var IDCOL = '_id';
     var DATECOLS = [];
+    var TAXIDCOLS = [];       // colunas de Tax ID: máscara de CNPJ no modal
     var SIGTYPES = [];        // domínio do Tipo de Assinatura, vindo do servidor
     var SIGCOL = '';          // e qual coluna o usa
     var DOCTYPES = [];        // domínio do Doc Type (Transactional Type do EI)
@@ -624,7 +632,16 @@
                 td.push('<td class="ob-age' + cls + '">' + ageCell(v) + '</td>');
                 return;
             }
-            var ell = (c === 'Razão Social' || c === 'Contacts' || c === 'Grupo Economico'
+            if (c === 'Razão Social') {
+                var nomes = String(v || '').split(';').map(function (x) { return x.trim(); })
+                                                 .filter(Boolean);
+                td.push('<td class="ob-name" title="' + esc(v) + '">' +
+                        nomes.map(function (n, k) {
+                            return '<span>' + esc(n) + (k < nomes.length - 1 ? ';' : '') + '</span>';
+                        }).join('') + '</td>');
+                return;
+            }
+            var ell = (c === 'Contacts' || c === 'Grupo Economico'
                        || c === 'Nome Garantidor') ? ' class="ob-ell"' : '';
             // Coluna de data ordena pela data, não pelo texto. O servidor manda
             // dd/mm/aaaa (é o formato da tela em todo o app) e por texto
@@ -768,6 +785,7 @@
                 COLS = j.columns || [];
                 IDCOL = j.id_column || '_id';
                 DATECOLS = j.date_columns || [];
+                TAXIDCOLS = j.taxid_columns || [];
                 SIGTYPES = j.signature_types || [];
                 SIGCOL = j.signature_column || '';
                 DOCTYPES = j.doc_types || [];
@@ -802,6 +820,49 @@
     // mesmo formulário — o que muda é o `id` ir ou não no payload, e o endpoint
     // já trata os dois (`/docs/save` sem `id` chama `add_row`).
     var editandoId = null;
+
+    // ── Máscaras ──────────────────────────────────────────────────────────
+    // CNPJ: digita-se só os números e a pontuação se escreve sozinha. A célula
+    // guarda o GRUPO separado por `;` (o contrato do formulário), então cada
+    // entidade é mascarada sozinha. Pedaço com LETRA fica como foi digitado: é
+    // Tax ID estrangeiro ou `N/A`, e a máscara o apagaria calada ao editar a
+    // linha. A regra que VALE é a do servidor (`cgd_docs.fmt_cnpj`, no funil de
+    // gravação); esta só poupa a pontuação a quem digita.
+    function cnpjTexto(d) {
+        var t = d.slice(0, 2);
+        if (d.length > 2)  { t += '.' + d.slice(2, 5); }
+        if (d.length > 5)  { t += '.' + d.slice(5, 8); }
+        if (d.length > 8)  { t += '/' + d.slice(8, 12); }
+        if (d.length > 12) { t += '-' + d.slice(12, 14); }
+        return t;
+    }
+    function cnpjMask(inp) {
+        if (!inp || inp._cnpjMask) { return; }
+        inp._cnpjMask = 1;
+        inp.setAttribute('placeholder', '00.000.000/0000-00');
+        inp.setAttribute('autocomplete', 'off');
+        inp.addEventListener('input', function () {
+            var partes = String(inp.value || '').split(';');
+            var txt = partes.map(function (p, i) {
+                if (/[A-Za-z]/.test(p)) { return i ? p.replace(/^\s*/, ' ') : p; }
+                var m = cnpjTexto(p.replace(/\D/g, '').slice(0, 14));
+                return i ? ' ' + m : m;
+            }).join(';');
+            if (txt !== inp.value) {
+                inp.value = txt;
+                try { inp.setSelectionRange(txt.length, txt.length); } catch (e) {}
+            }
+        });
+    }
+    // Data: a máscara da casa (`otcDateMask`, export-advanced.js) — as barras
+    // se escrevem sozinhas e a data inteira vai ao calendário na hora. Sem o
+    // flatpickr, a máscara vale sozinha.
+    function dataMask(inp) {
+        var fp = (typeof flatpickr !== 'undefined')
+            ? flatpickr(inp, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true })
+            : null;
+        if (window.otcDateMask) { window.otcDateMask(inp, fp); }
+    }
 
     function campoDoModal(c, v) {
         var id = 'obm-' + c.replace(/[^A-Za-z0-9]+/g, '-');
@@ -880,14 +941,13 @@
         $('#ob-modal-body .ob-fld').each(function (i) { $(this).attr('data-col', cols[i]); });
         // Datas em dd/mm/aaaa: `<input type="date">` visível é proibido (o campo
         // nativo desenha no locale do SISTEMA, e no Windows do JP isso é
-        // mm/dd/yyyy). Guard: sem o flatpickr, degrada para texto.
-        if (typeof flatpickr !== 'undefined') {
-            DATECOLS.forEach(function (c) {
-                $('#ob-modal-body .ob-fld[data-col="' + c + '"]').each(function () {
-                    flatpickr(this, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
-                });
-            });
-        }
+        // mm/dd/yyyy).
+        DATECOLS.forEach(function (c) {
+            $('#ob-modal-body .ob-fld[data-col="' + c + '"]').each(function () { dataMask(this); });
+        });
+        TAXIDCOLS.forEach(function (c) {
+            $('#ob-modal-body .ob-fld[data-col="' + c + '"]').each(function () { cnpjMask(this); });
+        });
         modal().show();
     }
 
@@ -1024,12 +1084,9 @@
         var i = $('<input type="text" class="form-control form-control-sm" id="ob-mass-value">');
         if (DATECOLS.indexOf(col) !== -1) {
             i.attr('placeholder', 'dd/mm/aaaa').attr('autocomplete', 'off');
-            // Guard: sem o flatpickr o campo degrada para texto, não quebra.
-            setTimeout(function () {
-                if (typeof flatpickr !== 'undefined') {
-                    flatpickr(i[0], { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
-                }
-            }, 0);
+            setTimeout(function () { dataMask(i[0]); }, 0);
+        } else if (TAXIDCOLS.indexOf(col) !== -1) {
+            cnpjMask(i[0]);
         }
         $w.append(i);
     }
