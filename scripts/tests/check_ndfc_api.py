@@ -220,6 +220,19 @@ try:
                              'Rolled Positions': [-33273.3984, -113872.0]})]})
     check('com BRL segue o 1o',
           R._ndfc_rec_from_api(rec_b, REF, {})[0]['[PROD] Cockpit.SETTLEMENT'], '-33273.40')
+    # A ordem nao basta (mesa, 28/09/2026): o item igual ao notional e o
+    # notional em QUALQUER posicao — senao o card Internal soma notional.
+    rec_i = dict(rec_b, settlement=[dict(REC['settlement'][0], **{
+        'Rolled Positions': [-113872.0, -33273.3984]})])
+    check('com BRL e a ordem invertida: o caixa, nunca o notional',
+          R._ndfc_rec_from_api(rec_i, REF, {})[0]['[PROD] Cockpit.SETTLEMENT'], '-33273.40')
+    rec_n = dict(rec_b, settlement=[dict(REC['settlement'][0], **{'Rolled Positions': [-113872.0]})])
+    check('so o notional no Rolled: vazio',
+          R._ndfc_rec_from_api(rec_n, REF, {})[0]['[PROD] Cockpit.SETTLEMENT'], '')
+    rec_xi = dict(rec_x, settlement=[dict(REC['settlement'][0], **{
+        'Rolled Positions': [-5167299.250000021, -43000000.0]})])
+    check('cross sem BRL com a ordem invertida: o caixa',
+          R._ndfc_rec_from_api(rec_xi, REF, {})[0]['[PROD] Cockpit.SETTLEMENT'], '-5167299.25')
     WEAK.add('MXN')
     rec4 = dict(REC, **{'Quantity Currency': 'BRR', 'Other Quantity Units': 'MXN', 'Strike': 3.2,
                         'settlement': [dict(REC['settlement'][0], Spot=3.33)]})

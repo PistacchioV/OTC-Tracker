@@ -399,6 +399,21 @@ def main():
           rot.get('Unwind NDF Commodities') == 1 and rot.get('Unwind Options FXO') == 1
           and rot.get('Unwind Swap CEM') == 1 and rot.get('Unwind COE') == 1, rot)
 
+    print('\n== 10. O Reference Data e montado UMA vez por coleta ==')
+    # Montado a cada linha da posicao, o indice relia o cadastro e normalizava
+    # todos os nomes por linha: no NDF da instancia, o import nao terminava.
+    chamadas = []
+    _por_nome = R._refdata_by_name
+    R._refdata_by_name = lambda *a, **k: chamadas.append(1) or _por_nome()
+    R._lpndf_collect = _collect(NDF_COLS, [dict(NDF_POS, Contrato='26G%08d' % i) for i in range(50)])
+    try:
+        with app.test_request_context():
+            pos, _src = PQ.posicoes(catalog.page('ndf/commodities'), datetime(2026, 9, 21))
+    finally:
+        R._refdata_by_name = _por_nome
+    got = (len(pos), len(chamadas), pos[0]['taxid'] if pos else '')
+    check('50 posicoes, uma montagem do indice', got == (50, 1, '12.345.678/0001-90'), got)
+
     print('\n%s' % ('TUDO OK' if not FALHAS else '%d FALHA(S): %s' % (len(FALHAS), FALHAS)))
     return 1 if FALHAS else 0
 

@@ -243,10 +243,11 @@ try:
     check('nada de B2B nem da nota explicativa no e-mail',
           ('B2B' in html, '26B001' in html, 'Values in' in html, '× −1' in html), (False, False, False, False))
     check('direcao dita pela Branch: recebe do Banco',
-          (MGT + ' receives from ' + BANCO) in html, True)
+          (MGT + ' <strong>receives</strong> from ' + BANCO) in html, True)
     check('cabecalhos dizem a visao',
           ('Gross value (Branch × Client)' in html, 'B3 settlement (Branch × 73760.20-5)' in html,
-           'Net value (Branch view)' in html), (True, True, True))
+           'Net value (Branch view)' in html, 'Operations (Branch View)' in html), (True, True, True, True))
+    check('valor liquido em negrito', '<strong>BRL 30,000.00</strong>' in html, True)
     check('valor da reversao no assunto',
           'BRL 30,000.00' in str(email.header.make_header(email.header.decode_header(msg['Subject']))), True)
     check('sem "Dear VP"', 'Dear VP' in html, False)

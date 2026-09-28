@@ -20,13 +20,15 @@ def build(recon_date_fmt, branch, source, dest, to_list, cc_list):
     R = _routes()
     # A direção dita pela BRANCH, na mesma visão da tabela e do valor:
     # "Branch recebe do Banco" em vez de "Banco paga a Branch".
+    # Em partes (quem, verbo, o resto) para o template pôr o verbo em negrito
+    # sem montar HTML aqui — os nomes continuam escapados pelo Jinja.
     if (branch.get('reversal_branch') or 0) > 0:
-        direction_text = '{} receives from {}'.format(dest['name'], source['name'])
+        direction = (dest['name'], 'receives', 'from ' + source['name'])
     else:
-        direction_text = '{} pays {}'.format(source['name'], dest['name'])
+        direction = (source['name'], 'pays', dest['name'])
     html = render_template('pages/email-template-branch-settlement.html',
                            recon_date_fmt=recon_date_fmt, branch=branch,
-                           source=source, dest=dest, direction_text=direction_text,
+                           source=source, dest=dest, direction=direction,
                            current_year=datetime.now().year)
     msg = MIMEMultipart('related')
     msg['Subject'] = 'Branch Settlement Reverse Approval — {} — BRL {:,.2f}'.format(

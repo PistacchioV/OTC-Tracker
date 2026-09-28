@@ -39,14 +39,14 @@
                     <!-- Reversal -->
                     <p style="color:#1a1a2e;font-size:15px;font-weight:700;margin:0 0 10px;">Reversal</p>
                     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse:collapse;font-size:12.5px;margin-bottom:24px;">
-                        <tr><td style="{{ td }}width:24%;font-weight:600;">Net value (Branch view)</td><td style="{{ td }}">BRL {{ money(branch.reversal_branch) }}</td></tr>
-                        <tr><td style="{{ td }}font-weight:600;">Direction</td><td style="{{ td }}">{{ direction_text }}</td></tr>
+                        <tr><td style="{{ td }}width:24%;font-weight:600;">Net value (Branch view)</td><td style="{{ td }}"><strong>BRL {{ money(branch.reversal_branch) }}</strong></td></tr>
+                        <tr><td style="{{ td }}font-weight:600;">Direction</td><td style="{{ td }}">{{ direction[0] }} <strong>{{ direction[1] }}</strong> {{ direction[2] }}</td></tr>
                         <tr><td style="{{ td }}font-weight:600;">Source account</td><td style="{{ td }}">{{ source.name }} &nbsp;&middot;&nbsp; {% if source.account %}{{ source.account }}{% else %}<span style="color:#b71c1c;">Not registered in Reference Data &rsaquo; Counterparty Details</span>{% endif %}</td></tr>
                         <tr><td style="{{ td }}font-weight:600;">Destination account</td><td style="{{ td }}">{{ dest.name }} &nbsp;&middot;&nbsp; {% if dest.account %}{{ dest.account }}{% else %}<span style="color:#b71c1c;">Not registered in Reference Data &rsaquo; Counterparty Details</span>{% endif %}</td></tr>
                     </table>
 
                     <!-- Operations -->
-                    <p style="color:#1a1a2e;font-size:15px;font-weight:700;margin:0 0 10px;">Operations <span style="color:#555;background:#eeeeee;border-radius:20px;padding:1px 9px;font-size:11px;">{{ branch.trades|length }}</span></p>
+                    <p style="color:#1a1a2e;font-size:15px;font-weight:700;margin:0 0 10px;">Operations (Branch View) <span style="color:#555;background:#eeeeee;border-radius:20px;padding:1px 9px;font-size:11px;">{{ branch.trades|length }}</span></p>
                     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse:collapse;font-size:11.5px;margin-bottom:8px;">
                         <thead><tr>
                             <th style="{{ th }}text-align:left;">B3 ID</th>
