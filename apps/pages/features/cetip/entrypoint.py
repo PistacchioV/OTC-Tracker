@@ -10,6 +10,7 @@ from apps.pages import blueprint
 from apps.pages.features.cetip import commands, queries
 from apps.pages.features.cetip.infra import mail, persistence
 from apps.pages import data_store as _store  # noqa: E402
+from apps.pages.platform import task_runs
 
 
 def _R():
@@ -184,6 +185,13 @@ def api_cp_cetip_settlement():
             except Exception:
                 exp = ''
             missing.append({'dest': exp, 'type': rule['label']})
+
+    # O Intraday Monitor cobra o Save do dia (tarefa `save-cetip`): conta como
+    # feito quando ao menos um arquivo foi salvo — pasta vazia não é rotina feita.
+    if saved:
+        task_runs.record('save-cetip', session.get('user_sid', ''), session.get('user_name', ''),
+                         ref=ref.strftime('%Y-%m-%d'),
+                         summary={'saved': len(saved), 'missing': len(missing)})
 
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'CETIP Files Saved', 'Control Panel',

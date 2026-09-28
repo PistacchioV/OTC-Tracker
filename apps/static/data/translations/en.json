@@ -2821,6 +2821,8 @@
   "im-zone-intrag": "Intrag",
   "im-task-recon-conf-matching": "Recon Conf. Matching",
   "im-task-branch-reversal": "Branch Reversal",
+  "im-task-save-cetip": "Save CETIP Files",
+  "im-task-conf-escalation": "Confirmations Escalation",
   "im-br-pays": "Bank pays",
   "im-br-receives": "Bank receives",
   "im-br-settled": "settled in Pay/Rec",
