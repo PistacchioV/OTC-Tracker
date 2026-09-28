@@ -44,6 +44,25 @@
 
   #iuw-table td .btn-sm.rounded-circle { width: 32px; height: 32px; padding: 0 !important; border-radius: 10px !important; display: inline-flex; align-items: center; justify-content: center; }
   #iuw-table td .btn-sm.rounded-circle i { font-size: 1rem; }
+  /* Filtro inteligente — o mesmo das outras paginas de Intrag. */
+  .smart-filter-wrapper { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; padding: 4px 8px; min-height: 38px; background: var(--ins-secondary-bg, #fff); cursor: text; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+  .smart-filter-wrapper:focus-within { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
+  .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .smart-filter-chip { display: inline-flex; align-items: center; gap: 5px; background: #6c757d; color: #fff; border-radius: 50rem; padding: 2px 8px; font-size: 10px; font-weight: 500; white-space: nowrap; }
+  .smart-filter-chip .sf-chip-remove { cursor: pointer; opacity: .75; font-size: 13px; line-height: 1; margin-left: 2px; }
+  .smart-filter-chip .sf-chip-remove:hover { opacity: 1; }
+  .smart-filter-input { border: none; outline: none; flex: 1; min-width: 200px; font-size: 0.82rem; background: transparent; padding: 2px 0; color: inherit; }
+  .smart-filter-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1055; background: var(--ins-secondary-bg, #fff); border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; box-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04); max-height: 240px; overflow-y: auto; display: none; padding: 4px 0; }
+  .smart-filter-dropdown li { padding: 6px 12px; cursor: pointer; font-size: 0.81rem; display: flex; align-items: center; gap: 8px; list-style: none; color: inherit; }
+  .smart-filter-dropdown li:hover, .smart-filter-dropdown li.sf-kbd-active { background: rgba(0,102,204,0.06); }
+  .sf-type-badge { font-size: 9px; padding: 1px 5px; border-radius: 50rem; text-transform: uppercase; font-weight: 600; color: #fff; opacity: .85; }
+  .sf-type-text   { background: #6c757d; }
+  .sf-type-date   { background: #0dcaf0; color: #000 !important; }
+  .sf-type-number { background: #ffc107; color: #000 !important; }
+  [data-bs-theme=dark] .smart-filter-wrapper { background: var(--ins-secondary-bg) !important; border-color: rgba(255,255,255,0.1) !important; }
+  [data-bs-theme=dark] .smart-filter-wrapper:focus-within { border-color: #0066cc !important; }
+  [data-bs-theme=dark] .smart-filter-dropdown { background: var(--ins-secondary-bg) !important; border-color: rgba(255,255,255,0.08) !important; box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06) !important; }
+  [data-bs-theme=dark] .smart-filter-dropdown li:hover, [data-bs-theme=dark] .smart-filter-dropdown li.sf-kbd-active { background: rgba(0,102,204,0.12) !important; }
 </style>
 {% endblock extra_css %}
 
@@ -68,6 +87,23 @@
     <div class="row">
         <div class="col-12">
             <div class="card nd-deal-card">
+                <!-- ── Filtro inteligente (o das outras páginas de Intrag) ── -->
+                <div class="d-flex align-items-center gap-2 px-2 py-2 border-bottom">
+                    <div class="flex-grow-1 position-relative">
+                        <div class="smart-filter-wrapper" id="sfWrapper">
+                            <div class="smart-filter-chips" id="sfChips"></div>
+                            <input type="text" class="smart-filter-input" id="sfInput"
+                                   placeholder="Type a letter for text fields, or a number / date for value fields…"
+                                   autocomplete="off">
+                            <ul class="smart-filter-dropdown mb-0 ps-0" id="sfDropdown"></ul>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn btn-secondary bg-gradient btn-toolbar-all" type="button" id="sfSearchBtn">
+                            <i class="ti ti-search fs-xl me-1"></i> <span data-lang="b3-btn-search">Search</span>
+                        </button>
+                    </div>
+                </div>
                 <div class="card-header">
                     <div class="d-flex align-items-center gap-2">
                         <label class="form-label mb-0" data-lang="b3-show">Show</label>
@@ -78,7 +114,7 @@
                             <option value="200">200</option>
                         </select>
                         <label class="form-label mb-0" data-lang="b3-entries">entries</label>
-                        <span class="text-muted fs-xs ms-auto d-none d-lg-inline" data-lang="iuw-hint">The line is created when the unwind is sent to B3 and the fund is one of the legs.</span>
+                        <span class="text-muted fs-xs ms-auto d-none d-lg-inline" data-lang="iuw-hint">The line is created when the unwind is imported and the fund is one of the legs.</span>
                     </div>
                 </div>
 
@@ -219,7 +255,6 @@ $(document).ready(function () {
             "<'btn-toolbar d-flex flex-wrap align-items-center'" +
             "<'columnToggleWrapper me-2'>" +
             "B" +
-            "<'refDateWrap ms-2 d-flex align-items-center'>" +
             "<'clearFiltersBtn ms-2 me-2'>" +
             "<'conditionalActions ms-2 d-flex align-items-center gap-2'>" +
             ">" +
@@ -283,16 +318,6 @@ $(document).ready(function () {
                 });
             }
 
-            var refDateWrap = document.querySelector('.refDateWrap');
-            if (refDateWrap && !document.getElementById('iuwRefDate')) {
-                refDateWrap.innerHTML =
-                    '<label for="iuwRefDate" class="form-label fs-xs text-muted mb-0 me-1 text-nowrap" data-lang="b3-reference-date">Reference Date</label>' +
-                    '<input type="text" id="iuwRefDate" class="form-control form-control-sm otc-datefield" style="width:130px" value="' + ((window.otcLinkDmy && window.otcLinkDmy()) || _todayDmy()) + '" placeholder="dd/mm/yyyy">';
-                var el = document.getElementById('iuwRefDate');
-                if (el && typeof flatpickr !== 'undefined') flatpickr(el, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
-                if (el) el.addEventListener('change', load);
-            }
-
             var clearWrap = document.querySelector('.clearFiltersBtn');
             if (clearWrap && !document.getElementById('clearFiltersBtn')) {
                 var cb2 = document.createElement('button');
@@ -303,6 +328,8 @@ $(document).ready(function () {
                 cb2.addEventListener('click', function () {
                     // As DUAS cópias do cabeçalho (original e clone do scrollX).
                     $(api.table().container()).find('.column-search-input-bar th input').val('');
+                    iuwDateRanges = {};
+                    sfActive = []; sfRenderChips(); sfInput.value = ''; sfDropdown.style.display = 'none';
                     api.columns().search('').draw();
                 });
             }
@@ -317,17 +344,191 @@ $(document).ready(function () {
             }
 
             setTimeout(function () { api.columns.adjust(); }, 150);
-            load();
+            // Abre no dia de hoje (ou no do link), como as outras páginas de Intrag.
+            // Depois do init: o filtro é montado abaixo da criação da tabela.
+            setTimeout(function () {
+                sfAddFilter(SF_COLS[0], ((window.otcLinkDmy && window.otcLinkDmy()) || _todayDmy()));
+                document.getElementById('sfSearchBtn').click();
+            }, 0);
         }
     });
     $(window).on('resize', function () { table.columns.adjust(); });
 
-    function refDateIso() {
-        var el = document.getElementById('iuwRefDate');
-        var v = (el && el.value) || '';
-        var m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-        return m ? (m[3] + '-' + m[2] + '-' + m[1]) : v;
+    function _dmyToIso(v) {
+        var m = String(v || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        return m ? (m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2)) : String(v || '');
     }
+    // A data do nome do export: a Data da Recompra pedida (exata ou o início).
+    function refDateIso() {
+        var f = sfActive.find(function (x) { return x.col.isDate && (x.mode === 'exact' || x.mode === 'from'); });
+        return f ? _dmyToIso(f.value) : '';
+    }
+
+    // ── Filtro inteligente ─────────────────────────────────────────────────
+    // A Data da Recompra comanda a API (é o dia do arquivo da Intrag); as outras
+    // colunas filtram na grade. dtCol = índice da coluna (C_OFF + campo).
+    var sfInput = document.getElementById('sfInput'), sfDropdown = document.getElementById('sfDropdown'),
+        sfChips = document.getElementById('sfChips'), sfWrapper = document.getElementById('sfWrapper'),
+        sfActive = [], sfKbdIdx = -1, _lastQs = '', _lastCols = [];
+    function _dc(f) { return C_OFF + IUW_FIELDS.indexOf(f); }
+    var SF_COLS = [
+        { label: 'Data da Recompra',      type: 'date',   dtCol: -1, isDate: true },
+        { label: 'Data Início',           type: 'date',   dtCol: _dc('data_inicio') },
+        { label: 'Data Vencimento',       type: 'date',   dtCol: _dc('data_vencimento') },
+        { label: 'Data da Liquidação',    type: 'date',   dtCol: _dc('data_liquidacao') },
+        { label: 'Valor Base Original',   type: 'number', dtCol: _dc('valor_base_original') },
+        { label: 'Valor Base Recomprado', type: 'number', dtCol: _dc('valor_base_recomprado') },
+        { label: 'Valor de Liquidação',   type: 'number', dtCol: _dc('valor_liquidacao') },
+        { label: 'ID B3',                 type: 'text',   dtCol: _dc('b3_id') },
+        { label: 'Carteira',              type: 'text',   dtCol: _dc('carteira') },
+        { label: 'Situação',              type: 'text',   dtCol: _dc('situacao') },
+        { label: 'Sentido (Visão do Fundo)', type: 'text', dtCol: _dc('sentido') },
+        { label: 'Status',                type: 'text',   dtCol: 2 }
+    ];
+    function sfIsDateLike(v) { return /^\d{1,2}[\/\-]\d/.test(v) || /^\d{4}[\/\-]/.test(v); }
+    function sfToDate(v) {
+        v = String(v || '').trim().split('T')[0].split(' ')[0];
+        var m;
+        if ((m = v.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/))) return new Date(+m[3], +m[2] - 1, +m[1]);
+        if ((m = v.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/))) return new Date(+m[1], +m[2] - 1, +m[3]);
+        if ((m = v.match(/^(\d{4})(\d{2})(\d{2})$/))) return new Date(+m[1], +m[2] - 1, +m[3]);
+        return null;
+    }
+    var SF_RANGE_WORDS = { en: { from: 'FROM', to: 'TO' }, br: { from: 'DE', to: 'ATÉ' }, es: { from: 'DESDE', to: 'HASTA' } };
+    function sfRangeWord(mode) {
+        var l = 'en';
+        try { l = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) {}
+        var w = SF_RANGE_WORDS[l] || SF_RANGE_WORDS.en;
+        return mode === 'from' ? w.from : w.to;
+    }
+    function sfFilterKey(col, mode) { return col.type === 'date' ? (col.dtCol + '|' + mode) : String(col.dtCol); }
+    function sfDateCandidates() {
+        var out = [];
+        SF_COLS.filter(function (c) { return c.type === 'date'; }).forEach(function (col) {
+            var hasFrom = sfActive.some(function (f) { return f.col.dtCol === col.dtCol && f.mode === 'from'; });
+            var hasTo = sfActive.some(function (f) { return f.col.dtCol === col.dtCol && f.mode === 'to'; });
+            if (hasFrom && !hasTo) out.push({ col: col, mode: 'to', label: sfRangeWord('to') + ': ' + col.label });
+            else {
+                out.push({ col: col, mode: 'from', label: sfRangeWord('from') + ': ' + col.label });
+                out.push({ col: col, mode: 'exact', label: col.label });
+            }
+        });
+        out.sort(function (a, b) { return (a.mode === 'to' ? 0 : 1) - (b.mode === 'to' ? 0 : 1); });
+        return out;
+    }
+    function _textCands() { return SF_COLS.filter(function (c) { return c.type === 'text'; }).map(function (c) { return { col: c, mode: 'text', label: c.label }; }); }
+    function sfCandidates(val) {
+        if (!val) return [];
+        if (otcSfMulti.isMulti(val)) return _textCands();
+        if (!/^\d/.test(val)) return _textCands();
+        if (sfIsDateLike(val)) return sfDateCandidates();
+        var out = [];
+        SF_COLS.forEach(function (c) {
+            if (c.type === 'number') out.push({ col: c, mode: 'number', label: c.label });
+            else if (c.type === 'date') out.push({ col: c, mode: 'exact', label: c.label });
+        });
+        return out.concat(_textCands());           // o ID B3 começa com dígito
+    }
+    function sfRenderDropdown(val) {
+        sfDropdown.innerHTML = ''; sfKbdIdx = -1;
+        var matches = sfCandidates(val);
+        if (!matches.length) { sfDropdown.style.display = 'none'; return; }
+        matches.forEach(function (cand) {
+            var li = document.createElement('li');
+            li.innerHTML = '<span class="sf-type-badge sf-type-' + cand.col.type + '">' + cand.col.type + '</span><span>' + esc(cand.label) + '</span>';
+            li.addEventListener('mousedown', function (e) { e.preventDefault(); sfAddFilter(cand.col, sfInput.value.trim(), cand.mode); });
+            sfDropdown.appendChild(li);
+        });
+        sfDropdown.style.display = 'block';
+    }
+    function sfAddFilter(col, value, mode) {
+        if (!value) return;
+        mode = mode || (col.type === 'date' ? 'exact' : col.type);
+        if (col.type === 'date' && mode !== 'exact') {
+            sfActive = sfActive.filter(function (f) { return !(f.col.dtCol === col.dtCol && (f.mode === mode || f.mode === 'exact')); });
+        } else {
+            sfActive = sfActive.filter(function (f) { return f.col.dtCol !== col.dtCol; });
+        }
+        sfActive.push({ col: col, value: value, mode: mode, key: sfFilterKey(col, mode) });
+        sfInput.value = ''; sfDropdown.style.display = 'none'; sfKbdIdx = -1;
+        sfRenderChips();
+    }
+    function sfRenderChips() {
+        sfChips.innerHTML = '';
+        sfActive.forEach(function (f) {
+            var pre = (f.col.type === 'date' && (f.mode === 'from' || f.mode === 'to'))
+                ? sfRangeWord(f.mode) + ' ' + f.col.label.toUpperCase() : f.col.label.toUpperCase();
+            var chip = document.createElement('span'); chip.className = 'smart-filter-chip';
+            chip.innerHTML = '<strong>' + esc(pre) + ':</strong>&nbsp;' + esc(f.value) + '<span class="sf-chip-remove">&#215;</span>';
+            chip.querySelector('.sf-chip-remove').addEventListener('click', function () {
+                sfActive = sfActive.filter(function (x) { return x.key !== f.key; });
+                sfRenderChips();
+            });
+            sfChips.appendChild(chip);
+        });
+    }
+    sfInput.addEventListener('input', function () { sfRenderDropdown(this.value.trim()); });
+    sfInput.addEventListener('blur', function () { setTimeout(function () { sfDropdown.style.display = 'none'; }, 160); });
+    sfInput.addEventListener('focus', function () { if (this.value.trim()) sfRenderDropdown(this.value.trim()); });
+    sfWrapper.addEventListener('click', function () { sfInput.focus(); });
+    sfInput.addEventListener('keydown', function (e) {
+        var items = sfDropdown.querySelectorAll('li');
+        var open = sfDropdown.style.display !== 'none' && items.length;
+        if (e.key === 'Backspace' && !this.value && sfActive.length) {
+            e.preventDefault(); sfActive.pop(); sfRenderChips(); return;
+        }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (open && sfKbdIdx >= 0 && items[sfKbdIdx]) items[sfKbdIdx].dispatchEvent(new MouseEvent('mousedown'));
+            else { sfDropdown.style.display = 'none'; document.getElementById('sfSearchBtn').click(); }
+            return;
+        }
+        if (!items.length) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); sfKbdIdx = Math.min(sfKbdIdx + 1, items.length - 1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); sfKbdIdx = Math.max(sfKbdIdx - 1, 0); }
+        else if (e.key === 'Escape') { sfDropdown.style.display = 'none'; return; }
+        items.forEach(function (li, i) { li.classList.toggle('sf-kbd-active', i === sfKbdIdx); });
+    });
+    // Intervalo de datas das colunas da grade (Início, Vencimento, Liquidação).
+    var iuwDateRanges = {};
+    $.fn.dataTable.ext.search.push(function (settings, rowData) {
+        if (settings.nTable.id !== 'iuw-table') return true;
+        for (var k in iuwDateRanges) {
+            if (!iuwDateRanges.hasOwnProperty(k)) continue;
+            var r = iuwDateRanges[k], cell = sfToDate(rowData[+k]);
+            if (!cell) return false;
+            if (r.from && cell < r.from) return false;
+            if (r.to && cell > r.to) return false;
+        }
+        return true;
+    });
+    function _applyColFilters() {
+        table.columns().search('');
+        iuwDateRanges = {};
+        _lastCols.forEach(function (f) {
+            if (f.col.type === 'date' && (f.mode === 'from' || f.mode === 'to')) {
+                iuwDateRanges[f.col.dtCol] = iuwDateRanges[f.col.dtCol] || { from: null, to: null };
+                iuwDateRanges[f.col.dtCol][f.mode] = sfToDate(f.value);
+            } else {
+                otcSfMulti.columnSearch(table.column(f.col.dtCol), f.value, f.col.type === 'number');
+            }
+        });
+    }
+    document.getElementById('sfSearchBtn').addEventListener('click', function () {
+        var ex = sfActive.find(function (f) { return f.col.isDate && f.mode === 'exact'; });
+        var fr = sfActive.find(function (f) { return f.col.isDate && f.mode === 'from'; });
+        var to = sfActive.find(function (f) { return f.col.isDate && f.mode === 'to'; });
+        var parts = [];
+        if (fr || to) {
+            if (fr) parts.push('date_from=' + encodeURIComponent(_dmyToIso(fr.value)));
+            if (to) parts.push('date_to=' + encodeURIComponent(_dmyToIso(to.value)));
+        } else if (ex) {
+            parts.push('date=' + encodeURIComponent(_dmyToIso(ex.value)));
+        }
+        _lastQs = parts.join('&');
+        _lastCols = sfActive.filter(function (f) { return !f.col.isDate && f.col.dtCol >= 0; });
+        load();
+    });
 
     // Ordem do §7: Confirm → Edit → Delete → Send; na edição, Save + Cancel.
     function _actionsCell() {
@@ -356,6 +557,7 @@ $(document).ready(function () {
             var node = table.row.add(rowOf(e)).node();
             $(node).attr('data-deal', e._deal);
         });
+        _applyColFilters();
         table.draw(false);
         // O `data-deal` é reescrito a cada draw: sem isto a linha perde a chave
         // na primeira ordenação, e o Save iria para a recompra errada.
@@ -375,7 +577,7 @@ $(document).ready(function () {
 
     function load() {
         selected.clear();
-        fetch('/api/intrag/unwind?date=' + encodeURIComponent(refDateIso()), { credentials: 'same-origin' })
+        fetch('/api/intrag/unwind' + (_lastQs ? '?' + _lastQs : ''), { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(function (res) {
                 if (!res || !res.success) { ENTRIES = []; renderAll(); return; }

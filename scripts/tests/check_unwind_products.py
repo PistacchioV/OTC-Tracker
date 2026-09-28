@@ -734,6 +734,14 @@ def main():
                       {'items': [{'id': e_bco.get('_id')}], 'date': '2026-09-21'})
         check('send da perna do fundo', st == 200, (st, j))
         check('   e o Send nao toca a Intrag', intrag_salvas == [], intrag_salvas)
+        # Reimport com a perna do fundo JA ENVIADA: a linha e mantida como esta,
+        # e mesmo assim vai a Intrag — era o caso da instancia (a recompra
+        # enviada antes da regra do import nunca chegava la).
+        st, j = _up(pg_ndf['api'], 'CSN unwind.eml', eml)
+        check('reimport com a perna do fundo Sent: mantida e vai a Intrag',
+              st == 200 and j.get('skipped') == 1
+              and [k.get('deal') for k in intrag_salvas] == ['D5NQ-HMNV-BCO'],
+              (st, j.get('skipped'), [k.get('deal') for k in intrag_salvas]))
         rid = e_cli.get('_id')
         st, j = _post(pg_ndf['api'] + '/delete', {'id': rid, 'date': '2026-09-21'})
         check('delete tira da esteira e do Pending Confirmation',

@@ -24811,3 +24811,25 @@ que a mesa ditou (a palavra SUCESSO e o B3 ID na linha). Linha com
 e §13 (mapping: casa, apaga só o arquivo todo nosso, B3 ID dentro de outra
 palavra não casa, segunda passada não remapeia, Success não se apaga, pasta
 ausente com código); `check_intrag_unwind.py`, `check_unwind_page.py` (done).
+
+## §583 — Recompras: o reimport com a linha Sent leva o fundo à Intrag; filtro inteligente na Intrag › Unwind (2026-09-28)
+
+**Relato**: depois do §582, o reimport do e-mail de NDF Comm (CSN) avisava
+"Row … was already sent to B3 and was kept as it is" e a Intrag › Unwind
+continuava vazia; e a página da Intrag › Unwind não tinha o filtro inteligente.
+
+**Causa-raiz**: o `importar` do catálogo chamava a Intrag só com as linhas
+GRAVADAS. As duas pernas estavam `Sent` (enviadas antes da regra do import), o
+reimport as MANTÉM — e por isso elas eram justamente as que ficavam de fora.
+Agora vão `gravadas + mantidas` (a mantida como está no dia). A página da
+Intrag › Unwind nasceu só com a Reference Date: o filtro inteligente das outras
+páginas de Intrag nunca foi montado nela.
+
+**O que mudou**: `product/commands.importar` (as mantidas vão à Intrag);
+`intrag-unwind.html` com o filtro inteligente (Data da Recompra comanda a API,
+exata ou DE/ATÉ; Data Início/Vencimento/Liquidação, valores e textos filtram
+na grade; Clear Filters limpa os chips), sem o campo Reference Date.
+
+**Teste**: `check_unwind_products.py` §12 (reimport com a perna do fundo Sent:
+mantida e vai à Intrag). Página conferida no Chromium (chip do dia, dropdown,
+sem erro de console da página).

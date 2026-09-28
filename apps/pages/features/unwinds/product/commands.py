@@ -192,7 +192,7 @@ def importar(page, filename, dados, ref, dry_run=False):
                 'duplicates': [{'Contract': l.get('Contract') or '', 'DealID': l.get('DealID') or '',
                                 'UnwindDate': l.get('UnwindDate') or ''} for l in dup],
                 'source_date': fonte}
-    gravadas, puladas = [], []
+    gravadas, puladas, mantidas = [], [], []
     with _R()._cache_lock:
         dia = product_store.read_day(fp)
         for linha in linhas:
@@ -201,6 +201,7 @@ def importar(page, filename, dados, ref, dry_run=False):
                         if chave is not None and domain.chave_natural(e) == chave), None)
             if idx is not None and dia[idx].get('Status') in domain.STATUS_REGISTRADO:
                 puladas.append(linha)
+                mantidas.append(dict(dia[idx]))
                 avisos.append(domain.aviso('unwind_already_sent',
                                            'Row %s was already sent to B3 and was kept'
                                            % (linha.get('Contract') or linha.get('DealID') or ''),
@@ -220,8 +221,10 @@ def importar(page, filename, dados, ref, dry_run=False):
     # Track e Confirmations Monitor mostram a recompra sem esperar o Send.
     esteira(page, gravadas, ref)
     # E a perna do FUNDO na Intrag › Unwind, tambem no IMPORT (mesa,
-    # 28/09/2026): nem toda recompra e registrada na B3 pelo OTC Tracker.
-    intrag(page, gravadas)
+    # 28/09/2026): nem toda recompra e registrada na B3 pelo OTC Tracker. A
+    # linha ja ENVIADA que o reimport manteve vai tambem, como esta no dia:
+    # sem isso a recompra enviada antes desta regra nunca chegava a Intrag.
+    intrag(page, gravadas + mantidas)
     _R().log.info('[UNWIND %s] %d linha(s) importada(s), %d ja enviada(s) mantida(s) -> %s',
                   page['label'], len(gravadas), len(puladas), fp)
     return {'rows': gravadas, 'warnings': avisos, 'skipped': len(puladas),
