@@ -24721,3 +24721,32 @@ Delete e reimport continuam travados em `Sent`.
 
 **Testes**: `check_unwind_page` e `check_unwind_products` (a linha Sent se
 envia de novo).
+
+## §580 — Recompras: Termo e Pending só contra o cliente; o B2B vai para a Intrag (2026-09-28)
+
+**Pedido da mesa**: o Termo de Resilição é só contra o cliente. A recompra
+contra o Lawton (o B2B) não gera Termo nem entra no Pending Confirmation, e tem
+de ir para a Intrag › Unwind, cujo padrão é o mesmo para todos os produtos.
+
+**Antes**: o import do NDF Comm punha as duas pernas (Cliente e Banco × Lawton)
+na esteira e no Termo; o catálogo não mandava nada para a Intrag (só a Fase 1
+mandava, no Send).
+
+**Agora**:
+- `queries.e_do_fundo(linha)`: LAWTON/ATACAMA na Parte ou na Contraparte, pelo
+  `b3-accounts` (mora na `queries` porque o `termo_grupo` também pergunta).
+- Fora da esteira nas duas telas: `esteira_da_recompra` (Fase 1) e
+  `product/commands.esteira` pulam a perna do fundo; `confirmation_deals` (a
+  segregação do Monitor) e `termo_grupo` (o Anexo I) a excluem. A perna que
+  entrou ANTES desta regra sai da esteira no próximo import, se ainda estiver
+  intocada (`esteira_fora_do_fundo`: existe e `row_untouched`).
+- Intrag: o Send do catálogo chama `product/commands.intrag`, que passa as
+  linhas do fundo no formato da Fase 1 (`para_o_termo`, Deal ID como chave)
+  para a mesma `intrag_from_send`. Falha não derruba o envio.
+- Liquidação (Summary, Advice, Pay/Rec, Cockpit) não muda: a perna do fundo
+  continua liquidando caixa.
+
+**Testes**: `check_unwind_products.py` §12 (só o cliente na esteira, na
+segregação e no Termo; o Send do fundo grava a Intrag com LAWTON, o Deal ID e o
+sentido do fundo). A Fase 1 não ganhou caso de fundo na esteira — a pergunta é
+a mesma função.

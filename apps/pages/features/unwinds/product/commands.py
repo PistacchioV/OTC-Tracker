@@ -510,7 +510,32 @@ def enviar(page, items, sid='', download=False, date_str=''):
         _R().log.info('[UNWIND %s] Wrote %s (%d record(s))', page['label'], destino,
                       len(g['records']))
     _marcar_enviadas(page, alvos, sid, [g['filename'] for g in gerados])
+    intrag(page, alvos)
     return {'files': gerados, 'count': total}
+
+
+def intrag(page, alvos):
+    """A perna do FUNDO (o B2B Banco x Lawton/Atacama) vai para a Intrag >
+    Unwind no Send, pela MESMA porta da Fase 1 (`intrag_from_send`): a planilha
+    de onze colunas e uma so para todos os produtos (mesa, 28/09/2026, §580), e
+    a linha chega no formato da Fase 1 (`para_o_termo`, com o Deal ID como
+    chave). Falha aqui nao derruba o envio: o arquivo da B3 ja foi gerado."""
+    from apps.pages.features.unwinds import commands as fase1_cmd
+    try:
+        por_arquivo = {}
+        for fp, rid in alvos:
+            por_arquivo.setdefault(fp, set()).add(rid)
+        linhas = []
+        for fp, ids in por_arquivo.items():
+            for e in product_store.read_day(fp):
+                if (isinstance(e, dict) and str(e.get(catalog.KEY_FIELD) or '') in ids
+                        and fase1_cmd.e_do_fundo(e)):
+                    linhas.append(para_o_termo(page, e))
+        if linhas:
+            fase1_cmd.intrag_from_send(linhas)
+    except Exception:                                       # noqa: BLE001
+        _R().log.warning('[UNWIND %s] Intrag ficou de fora:\n%s', page['label'],
+                         traceback.format_exc())
 
 
 def _marcar_enviadas(page, alvos, sid, nomes):
@@ -591,10 +616,13 @@ def _dia(ref):
 def confirmation_deals(ref):
     """As recompras do dia (arquivo-dia `ref`) no formato das confirmações."""
     d = _dia(ref)
+    from apps.pages.features.unwinds import commands as fase1_cmd
     out = []
     for page in paginas_com_esteira():
         for l in queries.entries(page, d.strftime('%Y-%m-%d')):
-            out.append(confirmation_deal(page, l, d))
+            # Contra fundo nosso (o B2B) nao ha Termo (§580).
+            if not fase1_cmd.e_do_fundo(l):
+                out.append(confirmation_deal(page, l, d))
     return out
 
 
@@ -608,6 +636,11 @@ def esteira(page, linhas, ref):
     d = _dia(ref)
     for l in linhas or []:
         try:
+            # Termo e Pending Confirmation so contra o CLIENTE (mesa, 28/09/2026,
+            # §580); a perna do fundo vai para a Intrag no Send.
+            if fase1_cmd.e_do_fundo(l):
+                fase1_cmd.esteira_fora_do_fundo(chave(l))
+                continue
             deal = confirmation_deal(page, l, d)
             if not deal['Deal']:
                 continue
