@@ -10458,9 +10458,11 @@ def _ndfsum_collect(ref):
 
     # ── As RECOMPRAS que liquidam hoje (§488) ────────────────────────────────
     # A recompra liquida caixa como qualquer termo do dia, e a mesa vê o dia
-    # inteiro numa tela só. Ela entra aqui — no Trade Level e no Summary — e
-    # NÃO no `email_trades`: o aviso de liquidação sai de manhã em lote e a
-    # recompra chega durante o dia (o e-mail dela é processo separado).
+    # inteiro numa tela só. Ela entra aqui — no Trade Level, no Summary e no
+    # `email_trades` (mesa, 28/09/2026): o Print Advice e o TED da contraparte
+    # saem do MESMO universo do Summary. Fora do aviso, a contraparte que só
+    # tinha recompra no dia respondia "Nothing to Generate" — o "processo de
+    # e-mail próprio" da recompra nunca existiu.
     #
     # Entrando em `raws` ANTES do bloco de IR, ela participa do imposto do dia
     # pela mesma regra do piso mensal — que é o certo: o ledger é mensal, e a
@@ -10603,10 +10605,9 @@ def _ndfsum_collect(ref):
                         and abs(a['b3_value'] - a['int_value']) <= _NDFSUM_TOL),
         }
 
-    # O aviso em lote é só das liquidações do Cockpit: a recompra tem processo
-    # de e-mail PRÓPRIO, que sai quando ela chega (§488).
+    # O aviso e o TED leem o mesmo dia do Summary, recompras incluídas.
     return {'trade': trade, 'summary': summary, 'recon': recon,
-            'email_trades': [r for r in raws if not r.get('unwind')]}
+            'email_trades': list(raws)}
 
 
 # TED release request (TEDs button on the Settlement Summary) — fixed recipients.
