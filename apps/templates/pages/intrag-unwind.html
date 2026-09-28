@@ -44,7 +44,6 @@
 
   #iuw-table td .btn-sm.rounded-circle { width: 32px; height: 32px; padding: 0 !important; border-radius: 10px !important; display: inline-flex; align-items: center; justify-content: center; }
   #iuw-table td .btn-sm.rounded-circle i { font-size: 1rem; }
-  #iuw-table td input.iuw-edit { width: 100%; font-size: 0.78rem; text-align: center; padding: 2px 4px; }
 </style>
 {% endblock extra_css %}
 
@@ -105,6 +104,25 @@
             </div>
         </div>
     </div>
+</div>
+
+<!-- Edit da linha: SEMPRE em modal (regra da mesa, 28/09/2026). -->
+<div class="modal fade" id="iuwEditModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content liquid-glass">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6"><i class="ti ti-edit me-1"></i><span id="iuwEditTitle">Edit Row</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3" id="iuwEditFields"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success" id="iuwEditSave" title="Save"><i class="ti ti-device-floppy"></i></button>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock page_content %}
 
@@ -319,11 +337,6 @@ $(document).ready(function () {
             '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Delete" data-bs-custom-class="tooltip-danger"><i class="ti ti-trash"></i></a>' +
             '<a class="btn btn-primary btn-sm rounded-circle btn-row-send" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Send" data-bs-custom-class="tooltip-primary"><i class="ti ti-brand-telegram"></i></a></div>';
     }
-    function _editCell() {
-        return '<div class="d-flex justify-content-center gap-1">' +
-            '<a class="btn btn-success btn-sm rounded-circle btn-row-save" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Save" data-bs-custom-class="tooltip-success"><i class="ti ti-device-floppy"></i></a>' +
-            '<a class="btn btn-secondary btn-sm rounded-circle btn-row-cancel" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Cancel" data-bs-custom-class="tooltip-secondary"><i class="ti ti-x"></i></a></div>';
-    }
     // Tooltip colorido no primeiro hover (os <td> são reescritos a cada redraw).
     $('#iuw-table tbody').on('mouseenter', '[data-bs-toggle="tooltip"]', function () {
         if (window.bootstrap && !bootstrap.Tooltip.getInstance(this)) new bootstrap.Tooltip(this).show();
@@ -373,33 +386,69 @@ $(document).ready(function () {
     }
     window.iuwReload = load;
 
-    // ── Edição inline ──────────────────────────────────────────────────────
+    // ── Edição em MODAL ────────────────────────────────────────────────────
+    // O Edit SEMPRE abre o modal (regra da mesa, 28/09/2026). As datas da
+    // planilha da Intrag são dd/mm/aaaa, e é nesse formato que o campo grava.
+    // Vai ao servidor só o que MUDOU.
+    var IUW_DATE = { data_inicio: 1, data_vencimento: 1, data_recompra: 1, data_liquidacao: 1 };
+    var _editId = null, _editOrig = {};
+    function _lbl(key, fallback) {
+        try {
+            var l = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en';
+            var d = window.__OTC_TRANSLATIONS__ && window.__OTC_TRANSLATIONS__[l];
+            if (d && d[key]) return d[key];
+        } catch (e) {}
+        return fallback;
+    }
     $('#iuw-table tbody').on('click', '.btn-row-edit', function (e) {
         e.preventDefault();
-        var tr = $(this).closest('tr'), id = tr.attr('data-deal'), row = ROWS[id];
+        var id = $(this).closest('tr').attr('data-deal'), row = ROWS[id];
         if (!row) return;
-        tr.find('td').each(function (i) {
-            if (i < C_OFF) return;
-            var f = IUW_FIELDS[i - C_OFF];
-            $(this).html('<input class="form-control form-control-sm iuw-edit" data-f="' + f + '" value="' + esc(row[f] == null ? '' : row[f]) + '">');
-        });
-        tr.find('td').eq(1).html(_editCell());
+        _editId = id; _editOrig = {};
+        var box = document.getElementById('iuwEditFields');
+        box.innerHTML = IUW_COLS.map(function (c) {
+            var v = row[c[0]] == null ? '' : String(row[c[0]]);
+            _editOrig[c[0]] = v;
+            return '<div class="col-md-4"><label class="form-label fs-xs text-muted mb-1">' +
+                esc(_lbl('iuw-col-' + c[0].replace(/_/g, '-'), c[1])) +
+                '</label><input type="text" class="form-control form-control-sm iuw-edit" data-f="' + esc(c[0]) +
+                '" value="' + esc(v) + '"' + (IUW_DATE[c[0]] ? ' placeholder="dd/mm/aaaa" autocomplete="off"' : '') + '></div>';
+        }).join('');
+        if (window.otcDateField) {
+            $(box).find('input.iuw-edit[data-f]').each(function () {
+                if (IUW_DATE[$(this).data('f')]) window.otcDateField(this, { dateFormat: 'd/m/Y' });
+            });
+        }
+        document.getElementById('iuwEditTitle').textContent = _lbl('iuw-edit-row', 'Edit Row') +
+            ' — ' + (row.b3_id || id);
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('iuwEditModal')).show();
     });
-    $('#iuw-table tbody').on('click', '.btn-row-cancel', function (e) { e.preventDefault(); load(); });
-    $('#iuw-table tbody').on('click', '.btn-row-save', function (e) {
-        e.preventDefault();
-        var tr = $(this).closest('tr'), id = tr.attr('data-deal'), row = ROWS[id];
+    $('#iuwEditModal').on('hidden.bs.modal', function () {
+        $('#iuwEditFields input.iuw-edit[data-f]').each(function () { if (this._flatpickr) this._flatpickr.destroy(); });
+        document.getElementById('iuwEditFields').innerHTML = '';
+        _editId = null; _editOrig = {};
+    });
+    $('#iuwEditSave').on('click', function () {
+        var row = _editId && ROWS[_editId];
         if (!row) return;
-        var fields = {};
-        tr.find('input.iuw-edit').each(function () { fields[$(this).data('f')] = this.value; });
+        var fields = {}, n = 0;
+        $('#iuwEditFields input.iuw-edit[data-f]').each(function () {
+            var f = $(this).data('f'), v = String(this.value == null ? '' : this.value).trim();
+            if (v !== String(_editOrig[f] == null ? '' : _editOrig[f]).trim()) { fields[f] = v; n++; }
+        });
+        var modal = bootstrap.Modal.getInstance(document.getElementById('iuwEditModal'));
+        if (!n) { if (modal) modal.hide(); return; }
+        var btn = this; btn.disabled = true;
         fetch('/api/intrag/unwind/edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-                                           body: JSON.stringify({ deal_id: id, trade_date: row.data_recompra, fields: fields }) })
+                                           body: JSON.stringify({ deal_id: _editId, trade_date: row.data_recompra, fields: fields }) })
             .then(function (r) { return r.json(); })
             .then(function (res) {
+                btn.disabled = false;
                 if (!res || !res.success) { Swal.fire({ icon: 'error', title: 'Not saved', text: (res && res.message) || 'Edit failed' }); return; }
+                if (modal) modal.hide();
                 load();
             })
-            .catch(function (err) { Swal.fire({ icon: 'error', title: 'Error', text: String(err) }); });
+            .catch(function (err) { btn.disabled = false; Swal.fire({ icon: 'error', title: 'Error', text: String(err) }); });
     });
 
     $('#iuw-table tbody').on('click', '.btn-row-approve', function (e) {

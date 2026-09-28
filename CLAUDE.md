@@ -769,10 +769,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `toggleClass('d-none', …)` de botão de ação era mudo — o botão continuava na
   tela e só o servidor recusava. O par `.btn-row-x.d-none` (0,2,0) no mesmo
   arquivo resolve para o app inteiro; página nova não escreve nada.
-  **Editor inline acha a célula pela API (`table.cell(linha, coluna)`), nunca
-  pelo índice do `<td>`**: coluna escondida sai do DOM, e daí o i-ésimo `td`
-  deixa de ser o i-ésimo campo — o que se digita numa coluna é gravado no
-  campo de outra, calado.
+  **O Edit da linha SEMPRE abre um MODAL** (regra da mesa, 28/09/2026, §572):
+  nunca `<input>` nas células com Save/Cancel na coluna Actions. O modal é o
+  padrão `liquid-glass`, traz TODOS os campos editáveis (inclusive os de
+  coluna oculta) e manda ao servidor só o que MUDOU. As três recompras
+  (catálogo, NDF FX, Intrag Unwind) editavam na linha. `check_edit_modal.py`
+  reprova página com Edit sem modal e o par `btn-row-save`/`btn-row-cancel`.
 - **Toolbar** `mb-3` (o DataTables come a margem do irmão), `.btn-toolbar-all`;
   cores por função: Columns soft-primary, Add Row primary, Export info
   (**Copy · CSV · Excel · Print · PDF**, DataTables Buttons; CSV `;` + BOM;
@@ -2455,7 +2457,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (174 scripts)
+### `scripts/tests/` (175 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
