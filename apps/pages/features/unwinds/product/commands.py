@@ -58,10 +58,12 @@ def _linhas_do_arquivo(page, filename, dados):
     if len(dados) > email_file.MAX_BYTES:
         raise domain.Recusa('unwind_file_too_large', 'File too large')
     if _e_email(dados):
-        raise domain.Recusa(
-            'unwind_email_format_pending',
-            'The unwind e-mail of %s has no known format yet (there is no sample): import the '
-            'spreadsheet with the grid columns instead' % page['label'], produto=page['label'])
+        try:
+            html, _assunto = email_file.ler(filename, dados)
+        except ValueError as exc:
+            raise domain.Recusa('unwind_email_unreadable', 'Could not read the e-mail: %s' % exc,
+                                motivo=str(exc))
+        return _linhas_das_tabelas(page, email_file.tabelas(html)) + ('email',)
     try:
         rows, fmt = _R()._latam_read_rows(dados)
     except RuntimeError as exc:                         # .xls sem o xlrd: diz o que instalar
@@ -70,17 +72,30 @@ def _linhas_do_arquivo(page, filename, dados):
         raise domain.Recusa('unwind_sheet_unreadable', 'Could not read %s: %s: %s'
                             % (filename, type(exc).__name__, exc),
                             motivo='%s: %s' % (type(exc).__name__, exc))
-    try:
-        linhas, avisos = domain.linhas_da_planilha(rows, page)
-    except domain.Recusa:
-        if fmt == 'html':
-            # Um corpo de e-mail salvo como .htm cai aqui (tabela sem as colunas
-            # da pagina): e o e-mail, e o formato dele ainda nao existe.
-            raise domain.Recusa('unwind_email_format_pending',
-                                'The unwind e-mail of %s has no known format yet'
-                                % page['label'], produto=page['label'])
-        raise
+    if fmt == 'html':
+        # Um corpo de e-mail salvo como .htm: a tabela colada pode nao ser a
+        # PRIMEIRA do corpo, que e a unica que o leitor de planilha HTML le.
+        return _linhas_das_tabelas(page, email_file.tabelas(dados)) + (fmt,)
+    linhas, avisos = domain.linhas_da_planilha(rows, page)
     return linhas, avisos, fmt
+
+
+def _linhas_das_tabelas(page, tabelas):
+    """(linhas, avisos) da tabela do corpo do e-mail — o trecho do Excel que a
+    mesa colou, com as MESMAS colunas da planilha (rotulos ou campos da grade).
+    Vale a primeira tabela que tem o cabecalho da pagina E alguma linha: o corpo
+    pode trazer outras (assinatura, o aviso citado de uma resposta)."""
+    for t in tabelas:
+        try:
+            linhas, avisos = domain.linhas_da_planilha(t, page)
+        except domain.Recusa:
+            continue
+        if linhas:
+            return linhas, avisos
+    raise domain.Recusa('unwind_email_table_unknown',
+                        'No table with the columns of this page was found in the e-mail body '
+                        '(paste the spreadsheet with the grid column labels as the header)',
+                        tabelas=len(tabelas))
 
 
 # ── Import ───────────────────────────────────────────────────────────────────

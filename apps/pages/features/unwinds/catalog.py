@@ -142,11 +142,10 @@ _CK_SWAP = ('balance',)
 _CK_TERMO = ('balance', 'termo')
 _CK_PREMIO = ('balance', 'premio')
 
-# E-MAIL de recompra destes produtos: o aviso do Athena que a Fase 1 le (`BRL
-# NDF Unwind Notification`) e o UNICO formato que esta casa conhece, e nenhum
-# dos onze tem amostra. O import de .msg/.eml responde
-# `unwind_email_format_pending` em vez de adivinhar um parser; so a PLANILHA
-# (rotulos ou campos das colunas abaixo) entra.
+# E-MAIL de recompra destes produtos: nao e o aviso do Athena da Fase 1 (`BRL
+# NDF Unwind Notification`), e a PLANILHA colada do Excel no corpo — o import de
+# .msg/.eml le a tabela do corpo com as MESMAS colunas abaixo (rotulos ou
+# campos); sem ela, `unwind_email_table_unknown`.
 
 
 def _page(path, group, product, columns, b3=None, group_lang='', product_lang='',

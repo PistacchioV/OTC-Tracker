@@ -1533,8 +1533,11 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `/api/unwinds/<path:sub>` (que a estática da Fase 1 vence;
   `page_and_action` separa produto de um ou dois segmentos da ação). **Entra
   PLANILHA**, lida pelo conteúdo, com cabeçalho de rótulos OU campos da grade;
-  **e-mail responde `unwind_email_format_pending`** — não há amostra do aviso
-  destes produtos, e o parser da Fase 1 não se aplica. A posição (os MESMOS
+  **e-mail (`.msg`/`.eml`/`.htm`) entra pela TABELA colada do Excel no corpo**
+  (mesa, 28/09/2026; `email_file.tabelas`): as MESMAS colunas da planilha, vale
+  a primeira `<table>` com o cabeçalho da página e alguma linha (assinatura
+  antes não atrapalha), texto puro com TAB também; sem ela,
+  `unwind_email_table_unknown`. O parser do aviso da Fase 1 não se aplica. A posição (os MESMOS
   coletores do Live Position) só preenche o que a planilha deixou em BRANCO:
   divergência vira aviso e a planilha vence. **Sem B3 ID, casa por
   características só com candidato ÚNICO** (≥ 2 critérios, todos batendo);

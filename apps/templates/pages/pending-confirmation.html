@@ -1287,6 +1287,7 @@
                                 <option value="">— Select —</option>
                                 <option value="CEM">CEM</option>
                                 <option value="EDG">EDG</option>
+                                <option value="COMMODITY">COMMODITY</option>
                             </select>
                             <div class="invalid-feedback">This field is required.</div>
                         </div>
@@ -1576,7 +1577,7 @@ $(document).ready(function() {
     //  a construção dela, e uma `var` atribuída depois chegaria como undefined.
     var PC_MASS_COLUMNS = [
         { dtCol: 3,  label: 'LOB',            kind: 'select',
-          options: ['CEM', 'EDG'] },
+          options: ['CEM', 'EDG', 'COMMODITY'] },
         { dtCol: 4,  label: 'SPN',            kind: 'refdata', field: 'SPN' },
         { dtCol: 5,  label: 'Client',         kind: 'refdata', field: 'COUNTERPARTY' },
         { dtCol: 7,  label: 'Product Type',   kind: 'select',
@@ -2870,7 +2871,7 @@ $(document).ready(function() {
         })
         .catch(function(){ console.warn('RefData.json not loaded'); });
 
-    var LOB_OPTS = ['CEM', 'EDG'];
+    var LOB_OPTS = ['CEM', 'EDG', 'COMMODITY'];
     var arEditTr = null; // null = add mode; <tr> element = edit mode
     var PENDING_STATUS_OPTS = [
         'Abonado via PDF','Client Treasury Allowance','Concluded',
@@ -3145,7 +3146,7 @@ $(document).ready(function() {
         // célula (sem ele o Status auto aparecia como "&lt; 10 dias..." e
         // qualquer valor com & vinha escapado).
         document.getElementById('ar_status').value          = _pcStrip(d[2]);
-        document.getElementById('ar_lob').value             = _pcStrip(d[3]);
+        document.getElementById('ar_lob').value             = _pcStrip(d[3]).trim().toUpperCase();
         document.getElementById('ar_spn').value             = _pcStrip(d[4]);
         document.getElementById('ar_client').value          = _pcStrip(d[5]);
         document.getElementById('ar_aging').value           = _pcStrip(d[6]);
