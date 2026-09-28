@@ -1837,6 +1837,14 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   avisos de termo e de opção carregam `settle_type` — é o que a geração dos
   avisos vai ler. No NDF Summary as `cells` são posicionais: o TAX virou
   `_NDFSUM_TAX_CELL`.
+- **O aviso de liquidação da RECOMPRA é PRÓPRIO** (mesa, 28/09/2026, §569),
+  no NDF Summary e no Termo de Commodities do Other Products: nunca neta com o
+  vencimento, o assunto é `(Recompra) Liquidação de Operação de Derivativo
+  (<produto>) + Callback - …`, o `.eml` sai em alta prioridade (`importance`
+  no draft → `Importance`/`X-Priority`) e a tabela troca o Fixing/Cotação
+  Mercadoria por nocional recomprado, taxa pré e taxa de recompra. A linha da
+  recompra traz o PRÓPRIO cabeçalho (`headers`), e o bloqueador de linha
+  incompleta confere cada linha pelo dela.
 - **`_ops_trade_rows(settle_ref)` é o único lugar que sabe quais famílias
   existem** (SWAP + NDF Commodities); página, cards e e-mail de TED chamam
   ele. Status do aviso vive no overlay `other-products-summary_YYYYMMDD.json`

@@ -137,6 +137,22 @@ def main():
     check('e o aviso da contraparte sai (nao e mais "Nothing to Generate")',
           any(d.get('counterparty') == BASE['Counterparty'] for d in drafts),
           [d.get('counterparty') for d in drafts])
+    d0 = drafts[0] if drafts else {}
+    check('o aviso da recompra: (Recompra) no inicio, + Callback depois do produto',
+          d0.get('subject', '').startswith('(Recompra) Liquidação de Operação de Derivativo '
+                                           '(Termo de Moeda) + Callback - 28/09/2026'),
+          d0.get('subject'))
+    check('e sai em alta prioridade', d0.get('importance') == 'high'
+          and b'X-Priority: 1' in _oe.build_eml_bytes(d0), d0.get('importance'))
+    check('com notional recomprado, taxa pre e taxa de recompra (e sem Fixing)',
+          all(h in d0.get('html', '') for h in ('Notional Recomprado', 'Taxa Pré', 'Taxa de Recompra'))
+          and '>Fixing<' not in d0.get('html', ''), '')
+    # Com uma liquidacao de VENCIMENTO da mesma contraparte, sao DOIS avisos.
+    venc = dict(unw_mail[0], unwind=False)
+    dois = _oe.build_ndf_settlement_emails([venc] + unw_mail, '28/09/2026')
+    check('vencimento e recompra da mesma contraparte nao netam no mesmo aviso',
+          sorted(d['subject'].startswith('(Recompra)') for d in dois) == [False, True]
+          and not dois[0].get('importance'), [d['subject'] for d in dois])
 
     # A recompra tambem e PROJETADA no dia do Cockpit (a tela onde a mesa ve o
     # IR). O Summary tem de IGNORAR essa linha: lida dos dois lados, o mesmo

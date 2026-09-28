@@ -625,12 +625,25 @@ def main():
         # do lote e respondia "Nothing to Generate" — §568).
         from apps.pages import otc_emails as _oe
         hdr = R._ndfadv_email_headers()
-        vivas, bloq = R._opsadv_block_incomplete('ndf', u_adv, R._NDFADV_COLUMNS)
-        drafts = _oe.build_ndfc_settlement_emails(
-            [dict(r, cells=r['cells'][1:-1]) for r in vivas], hdr, '21/09/2026')
+        em = [dict(r, cells=R._ndfadv_unwind_email_cells(r),
+                   headers=list(R._NDFADV_UNWIND_EMAIL_HEADERS)) for r in u_adv]
+        vivas, bloq = R._opsadv_block_incomplete('ndf', em, hdr)
+        drafts = _oe.build_ndfc_settlement_emails(vivas, hdr, '21/09/2026')
+        d_cli = next((d for d in drafts if d.get('counterparty') == a_cli.get('counterparty')), {})
         check('   e gera o aviso do Other Products (nao bloqueia, nao some)',
-              not bloq and any(d.get('counterparty') == a_cli.get('counterparty') for d in drafts),
-              (bloq, [d.get('counterparty') for d in drafts]))
+              not bloq and bool(d_cli), (bloq, [d.get('counterparty') for d in drafts]))
+        subj = d_cli.get('subject', '')
+        check('   aviso da recompra: (Recompra) no inicio e + Callback depois do produto',
+              subj.startswith('(Recompra) Liquidação de Operação de Derivativo '
+                              '(Termo de Commodities) + Callback - 21/09/2026'), subj)
+        check('   em alta prioridade no .eml',
+              d_cli.get('importance') == 'high'
+              and b'Importance: High' in _oe.build_eml_bytes(d_cli), d_cli.get('importance'))
+        html = d_cli.get('html', '')
+        check('   tabela com quantidade recomprada, taxa pre e taxa de recompra',
+              all(h in html for h in ('Quantidade Recomprada', 'Taxa Pré', 'Taxa de Recompra',
+                                      '100,000.00', '96.84626'))
+              and 'Cotação Mercadoria' not in html, subj)
         rid = e_cli.get('_id')
         st, j = _post(pg_ndf['api'] + '/delete', {'id': rid, 'date': '2026-09-21'})
         check('delete tira da esteira e do Pending Confirmation',
