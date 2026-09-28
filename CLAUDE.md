@@ -1688,7 +1688,9 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 - **Os botões da linha são os QUATRO da casa** (§7): Confirm, Edit, Delete,
   Send, e **aparecem em TODO status** (mesa, 28/09/2026, §574): a tela não
   esconde ação pelo Status — quem recusa o que o status não permite é o
-  servidor, com a frase traduzida. O preview do arquivo da B3 é o **duplo clique** na linha e o Termo de
+  servidor, com a frase traduzida. **Linha `Sent` também se EDITA** (mesa,
+  28/09/2026, §575): o Save a devolve a `Pending` e ela só volta à B3 depois do
+  checker; o que segue travado em `Sent` é o Delete e o reimport. O preview do arquivo da B3 é o **duplo clique** na linha e o Termo de
   Resilição se gera no **Confirmations Monitor** — um olho e um documento na
   coluna Actions eram dois caminhos a mais para onde já se chega. A **edição
   segue o 4-olhos das páginas de Intrag**: salvar põe a linha em `Pending` e

@@ -177,15 +177,10 @@ def api_unwinds_ndf_fx_edit():
     aid = str(payload.get('athena_id') or '').strip()
     if not aid:
         return jsonify({'success': False, 'message': 'Missing athena_id'}), 400
-    try:
-        linha = commands.editar(aid, str(payload.get('date') or ''),
-                                payload.get('fields') or {},
-                                sid=session.get('user_sid', ''))
-    except ValueError as exc:
-        # O erro sai com CÓDIGO (§486): quem diz a frase é a tela, no idioma
-        # de quem está olhando; o `message` é só o fallback.
-        return jsonify({'success': False, 'code': 'unwind_already_sent',
-                        'message': str(exc)}), 409
+    # Linha já enviada também se edita (mesa, 28/09/2026): volta a Pending.
+    linha = commands.editar(aid, str(payload.get('date') or ''),
+                            payload.get('fields') or {},
+                            sid=session.get('user_sid', ''))
     if linha is None:
         return jsonify({'success': False, 'code': 'unwind_not_found',
                         'message': 'Entry not found'}), 404

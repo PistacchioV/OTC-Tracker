@@ -476,8 +476,8 @@ def editar(athena_id, ref_date='', fields=None, sid=''):
         fp, lst, idx = queries.find(alvo, ref_date)
         if idx is None:
             return None
-        if (lst[idx].get('Status') or '') == domain.STATUS_ENVIADO:
-            raise ValueError('This unwind was already sent to B3')
+        # Linha ja ENVIADA tambem se edita (mesa, 28/09/2026): volta a
+        # `Pending` e so sai de novo depois do checker.
         liq_antes = lst[idx].get('SettlementDate')
         mudou = set()
         for k, v in (fields or {}).items():
