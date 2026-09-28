@@ -802,6 +802,52 @@ UNW_LABELS = (
 STATUS_NOVO, STATUS_ENVIADO = 'Imported', 'Sent'
 STATUS_PENDENTE, STATUS_APROVADO = 'Pending', 'Approved'
 STATUS_ENVIAVEL = (STATUS_NOVO, STATUS_APROVADO, STATUS_ENVIADO)
+# `Success` e o retorno da B3 dizendo SUCESSO para o B3 ID da recompra (o
+# Mapping B3 ID da tela, `commands.mapear_retornos`). Como o `Sent`, e
+# registro na B3: nao se apaga nem se sobrescreve no reimport.
+STATUS_SUCESSO = 'Success'
+STATUS_REGISTRADO = (STATUS_ENVIADO, STATUS_SUCESSO)
+
+
+# ── O retorno da B3 (Batch Conecta \ Return) ────────────────────────────────
+# A linha do retorno e `…;<B3 ID>;…;<status>;<registro ecoado>`. O que a mesa
+# definiu (28/09/2026): a recompra deu certo quando a linha traz a palavra
+# SUCESSO e o B3 ID dela. O casamento e pelo B3 ID como PALAVRA inteira em
+# qualquer coluna — o eco do registro tambem o carrega —, nunca substring (um
+# B3 ID dentro de outro numero nao conta).
+def _sem_acento(txt):
+    import unicodedata
+    return ''.join(c for c in unicodedata.normalize('NFKD', str(txt or ''))
+                   if not unicodedata.combining(c))
+
+
+def linha_de_sucesso(linha):
+    """A linha do retorno diz SUCESSO? (cego a caixa e acento)."""
+    return 'SUCESSO' in _sem_acento(linha).upper()
+
+
+def tokens_do_retorno(linha):
+    """As PALAVRAS da linha (separadas por `;`, `|` e espaco), em maiusculas."""
+    import re
+    return {t for t in re.split(r'[;|\s]+', str(linha or '').upper()) if t}
+
+
+def b3_ids_com_sucesso(texto, b3_ids):
+    """Dos `b3_ids` pedidos, os que aparecem numa linha de SUCESSO do texto.
+    -> (achados, linhas de dado do arquivo, linhas usadas)."""
+    alvos = {str(b or '').strip().upper() for b in b3_ids or ()} - {''}
+    achados, dados, usadas = set(), 0, 0
+    for ln in str(texto or '').splitlines():
+        if ln.count(';') < 3:
+            continue
+        dados += 1
+        if not linha_de_sucesso(ln):
+            continue
+        hit = alvos & tokens_do_retorno(ln)
+        if hit:
+            achados |= hit
+            usadas += 1
+    return achados, dados, usadas
 
 # O que a edicao de linha NAO toca. A chave, porque e por ela que a linha se
 # acha; os dois veredictos, porque sao apurados e nao digitados; e o rastro do

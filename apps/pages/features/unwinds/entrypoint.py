@@ -164,6 +164,35 @@ def api_unwinds_ndf_fx_send():
     return jsonify(out)
 
 
+def _mapping_b3(rotulo_sino):
+    """Mapping B3 ID: le o retorno da B3 e vira `Success` a recompra cujo B3 ID
+    vem numa linha de SUCESSO (`commands.mapear_retornos`). Uma varredura so
+    para todas as telas de recompra."""
+    p = request.get_json(silent=True) or {}
+    try:
+        out = commands.mapear_retornos(p.get('date') or None, sid=session.get('user_sid', ''))
+    except FileNotFoundError as exc:
+        return jsonify({'success': False, 'code': 'unwind_return_folder_missing',
+                        'params': {'path': str(exc)},
+                        'message': 'Return folder not found: %s' % exc}), 400
+    n = len(out['mapped'])
+    if n:
+        _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                                  'Status Updated', rotulo_sino,
+                                  '%d unwind%s → Success (B3 return)'
+                                  % (n, '' if n == 1 else 's'))
+    out['success'] = True
+    return jsonify(out)
+
+
+@blueprint.route('/api/unwinds/ndf/fx/mapping-b3', methods=['POST'])
+def api_unwinds_ndf_fx_mapping_b3():
+    err = _auth()
+    if err:
+        return err
+    return _mapping_b3(PAGE)
+
+
 @blueprint.route('/api/unwinds/ndf/fx/edit', methods=['POST'])
 def api_unwinds_ndf_fx_edit():
     """Edição de linha → status `Pending` e o editor vira o maker (4 olhos).
@@ -463,4 +492,5 @@ _PRODUCT_ACTIONS = {
     ('POST', 'edit'): _p_edit,
     ('POST', 'approve'): _p_approve,
     ('POST', 'delete'): _p_delete,
+    ('POST', 'mapping-b3'): lambda pagina: _mapping_b3(pagina['label']),
 }

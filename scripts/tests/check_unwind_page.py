@@ -399,7 +399,7 @@ def main():
     # A pendencia: `Sent` e o estado FECHADO desta recompra (o B3 ID de volta
     # ainda nao existe para ela). Sem o `done`, toda recompra ja enviada
     # apareceria no aviso das 19h todos os dias.
-    check('o card declara onde fecha', c10 and c10.get('done') == ['Sent'], c10 and c10.get('done'))
+    check('o card declara onde fecha', c10 and c10.get('done') == ['Sent', 'Success'], c10 and c10.get('done'))
     fp10, l10, i10 = queries.find('STP-XE-10G5U5X-0-0', '2026-09-10')
     for e in l10:
         e['Status'] = 'Sent'

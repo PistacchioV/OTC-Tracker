@@ -125,23 +125,23 @@ def main():
     check('sem direcao apurada fica em BRANCO', sem3['sentido'] == '')
     check('e avisa', any(a['code'] == 'intrag_unwind_sem_sentido' for a in av3))
 
-    print('\n== 4. o gatilho: o Send da recompra ==')
+    print('\n== 4. o gatilho: o IMPORT da recompra ==')
     check('o fundo e achado na CONTRAPARTE',
           commands._fundo_da_recompra(L_LAWTON) == ('LAWTON', False))
     check('e na PARTE quando e ele que lanca',
           commands._fundo_da_recompra(dict(L_LAWTON, PartyAccount='00041007'))[0] == 'LAWTON')
     check('contrato sem fundo nenhum nao tem linha da Intrag',
           commands._fundo_da_recompra(L_CLIENTE) == (None, None))
-    out = commands.intrag_from_send([L_LAWTON, L_CLIENTE], HOJE)
+    out = commands.intrag_da_recompra([L_LAWTON, L_CLIENTE], HOJE)
     check('so a recompra com o fundo entrou', len(out) == 1, len(out))
     entry = out[0][0] if out else {}
     check('o b3 id e o contrato', entry.get('b3_id') == '00041252DLL')
-    check('a Data da Recompra e a do envio', entry.get('data_recompra') == '18/09/2026')
+    check('a Data da Recompra e a do arquivo-dia da recompra', entry.get('data_recompra') == '18/09/2026')
     # O banco RECEBE e o fundo esta na contraparte: ele PAGA.
     check('com o fundo na contraparte o sentido INVERTE',
           entry.get('sentido') == I.INTRAG_UNWIND_DEVEDOR, entry.get('sentido'))
     check('com o fundo na PARTE, nao',
-          commands.intrag_from_send([dict(L_LAWTON, AthenaID='A2', PartyAccount='00041007',
+          commands.intrag_da_recompra([dict(L_LAWTON, AthenaID='A2', PartyAccount='00041007',
                                           CptyAccount='73760009')], HOJE)[0][0]['sentido']
           == I.INTRAG_UNWIND_CREDOR)
     check('a linha foi gravada no arquivo-dia da Data da Recompra',

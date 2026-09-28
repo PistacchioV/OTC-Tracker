@@ -199,7 +199,7 @@ def importar(page, filename, dados, ref, dry_run=False):
             chave = domain.chave_natural(linha)
             idx = next((i for i, e in enumerate(dia)
                         if chave is not None and domain.chave_natural(e) == chave), None)
-            if idx is not None and dia[idx].get('Status') == domain.STATUS_ENVIADO:
+            if idx is not None and dia[idx].get('Status') in domain.STATUS_REGISTRADO:
                 puladas.append(linha)
                 avisos.append(domain.aviso('unwind_already_sent',
                                            'Row %s was already sent to B3 and was kept'
@@ -219,6 +219,9 @@ def importar(page, filename, dados, ref, dry_run=False):
     # A esteira nasce no IMPORT (a regra da Fase 1, §488): Pending Confirmation,
     # Track e Confirmations Monitor mostram a recompra sem esperar o Send.
     esteira(page, gravadas, ref)
+    # E a perna do FUNDO na Intrag › Unwind, tambem no IMPORT (mesa,
+    # 28/09/2026): nem toda recompra e registrada na B3 pelo OTC Tracker.
+    intrag(page, gravadas)
     _R().log.info('[UNWIND %s] %d linha(s) importada(s), %d ja enviada(s) mantida(s) -> %s',
                   page['label'], len(gravadas), len(puladas), fp)
     return {'rows': gravadas, 'warnings': avisos, 'skipped': len(puladas),
@@ -286,7 +289,10 @@ def editar(page, row_id, date_str, fields, sid=''):
         linha['Maker'] = sid or ''
         linha['Checker'] = ''
         product_store.save(fp, lst)
-        return dict(linha)
+        editada = dict(linha)
+    # A Intrag acompanha a edicao (o upsert preserva o status de la).
+    intrag(page, [editada])
+    return editada
 
 
 def aprovar(page, row_id, date_str, sid=''):
@@ -314,7 +320,7 @@ def apagar(page, row_id, date_str):
         fp, lst, idx = queries.find(page, row_id, date_str)
         if idx is None:
             return None
-        if lst[idx].get('Status') == domain.STATUS_ENVIADO:
+        if lst[idx].get('Status') in domain.STATUS_REGISTRADO:
             raise domain.Recusa('unwind_already_sent', 'This unwind was already sent to B3', 409)
         # A esteira sai junto com a recompra — mas nao por cima de carimbo de
         # mesa (documento gerado, validacao, envio ao cliente): isso e REGISTRO.
@@ -326,6 +332,8 @@ def apagar(page, row_id, date_str):
         apagada = lst.pop(idx)
         product_store.save(fp, lst)
     esteira_sem(page, apagada)
+    from apps.pages.features.unwinds import commands as fase1_cmd
+    fase1_cmd.intrag_sem_a_recompra([para_o_termo(page, apagada)])
     return apagada
 
 
@@ -510,29 +518,23 @@ def enviar(page, items, sid='', download=False, date_str=''):
         _R().log.info('[UNWIND %s] Wrote %s (%d record(s))', page['label'], destino,
                       len(g['records']))
     _marcar_enviadas(page, alvos, sid, [g['filename'] for g in gerados])
-    intrag(page, alvos)
     return {'files': gerados, 'count': total}
 
 
-def intrag(page, alvos):
+def intrag(page, linhas):
     """A perna do FUNDO (o B2B Banco x Lawton/Atacama) vai para a Intrag >
-    Unwind no Send, pela MESMA porta da Fase 1 (`intrag_from_send`): a planilha
-    de onze colunas e uma so para todos os produtos (mesa, 28/09/2026, §580), e
-    a linha chega no formato da Fase 1 (`para_o_termo`, com o Deal ID como
-    chave). Falha aqui nao derruba o envio: o arquivo da B3 ja foi gerado."""
+    Unwind no IMPORT e no Edit (mesa, 28/09/2026 — nem toda recompra e
+    registrada na B3 pelo OTC Tracker, e a Intrag nao pode esperar o Send),
+    pela MESMA porta da Fase 1 (`intrag_da_recompra`): a planilha de onze
+    colunas e uma so para todos os produtos (§580), e a linha chega no formato
+    da Fase 1 (`para_o_termo`, com o Deal ID como chave). Falha aqui nao
+    derruba o import: a recompra ja foi gravada."""
     from apps.pages.features.unwinds import commands as fase1_cmd
     try:
-        por_arquivo = {}
-        for fp, rid in alvos:
-            por_arquivo.setdefault(fp, set()).add(rid)
-        linhas = []
-        for fp, ids in por_arquivo.items():
-            for e in product_store.read_day(fp):
-                if (isinstance(e, dict) and str(e.get(catalog.KEY_FIELD) or '') in ids
-                        and fase1_cmd.e_do_fundo(e)):
-                    linhas.append(para_o_termo(page, e))
-        if linhas:
-            fase1_cmd.intrag_from_send(linhas)
+        fundo = [para_o_termo(page, e) for e in linhas or []
+                 if isinstance(e, dict) and fase1_cmd.e_do_fundo(e)]
+        if fundo:
+            fase1_cmd.intrag_da_recompra(fundo)
     except Exception:                                       # noqa: BLE001
         _R().log.warning('[UNWIND %s] Intrag ficou de fora:\n%s', page['label'],
                          traceback.format_exc())
