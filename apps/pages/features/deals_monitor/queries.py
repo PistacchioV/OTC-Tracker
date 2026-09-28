@@ -258,10 +258,13 @@ def _zone_totals(cards, conf_cards):
     return out
 
 
-def _ndm_pending_blocks(ref):
+def _ndm_pending_blocks(ref, cards=None, conf_cards=None):
     """Blocos (um por tipo) com os cards que ainda não estão 100% Success.
-    Retorna (blocks, grand_total); lista vazia = nada pendente na data."""
-    cards, conf_cards = _ndm_monitor_snapshot(ref)
+    Retorna (blocks, grand_total); lista vazia = nada pendente na data.
+    Quem já tem os cards (o snapshot do Intraday Monitor) os passa, e a zona
+    não é contada duas vezes."""
+    if cards is None or conf_cards is None:
+        cards, conf_cards = _ndm_monitor_snapshot(ref)
     by_type = {}
     for zone, group in (('Registration', cards), ('Confirmation', conf_cards)):
         for card in group:
@@ -293,7 +296,8 @@ def _ndm_pending_blocks(ref):
                 if str(k).strip().lower() not in fechados and v)
             by_type.setdefault(_z, []).append(
                 {'product': product, 'detail': detail, 'pending': pending,
-                 'breakdown': breakdown, 'total': total, 'success': success})
+                 'breakdown': breakdown, 'total': total, 'success': success,
+                 'key': card.get('key'), 'url': card.get('url')})
     blocks = []
     for t in domain._NDM_TYPE_ORDER + sorted(k for k in by_type
                                              if k not in domain._NDM_TYPE_ORDER):
@@ -387,6 +391,59 @@ def _recon_fallback(task_id, dia):
     return False, '', None
 
 
+def _branch_state(dia, runs):
+    """O estado da Branch Reversal no dia, pelo resultado do Pay/Rec (o
+    finalizado quando há, senão o de trabalho) e pelo registro de execuções.
+
+    `detected` só com a ROTA NOVA e reversão a fazer (`has_settlement` +
+    `pay_receive`, a mesma condição do botão Branch Settl.). Pay/Rec que não
+    rodou não diz nada — a tarefa não aparece, e o cartão do Pay/Rec já diz
+    que ele não rodou. `settled` é a linha da reversão (`branch == 'reversal'`)
+    casada com o extrato ou justificada."""
+    from apps.pages import recon_payrec
+    try:
+        d = recon_payrec.load_last(dia.strftime('%Y-%m-%d')) or {}
+    except Exception:                                       # noqa: BLE001
+        _R().log.warning('[intraday-monitor] Pay/Rec ilegível para a Branch', exc_info=True)
+        d = {}
+    b = d.get('branch') or {}
+    out = {'detected': bool(b.get('has_settlement') and b.get('pay_receive')),
+           'pay_receive': b.get('pay_receive') or '', 'amount': b.get('reversal_net'),
+           'settled': False, 'draft_at': None, 'draft_by': None}
+    for lista, fechou in (('settled', True), ('pending_payment', False),
+                          ('pending_receivement', False)):
+        for r in d.get(lista) or []:
+            if isinstance(r, dict) and r.get('branch') == 'reversal':
+                if fechou or str(r.get('status') or '').strip().lower() == 'justified':
+                    out['settled'] = True
+    drafts = [r for r in runs if r.get('task') == 'branch-reversal' and r.get('event') == 'draft']
+    if drafts:
+        out['draft_at'] = drafts[-1].get('time')
+        out['draft_by'] = drafts[-1].get('name') or drafts[-1].get('sid')
+    return out
+
+
+def _payrec_ended_fallback(task_id, dia):
+    """(finalizado?, 'HH:MM') do Pay/Rec pelo histórico que o End process grava
+    — o plano B para o dia finalizado antes de existir o registro. Vale só com o
+    carimbo no dia pedido, pela mesma razão do `_recon_fallback`."""
+    if task_id != 'recon-payrec':
+        return False, None
+    try:
+        from apps.pages import recon_payrec
+        from datetime import datetime as _dt
+        p = recon_payrec._history_path(dia.strftime('%Y-%m-%d'))
+        if p and _store.exists(p):
+            quando = _dt.fromtimestamp(_store.stat(p).st_mtime)
+            if quando.date() == dia:
+                return True, quando.strftime('%H:%M')
+    except FileNotFoundError:
+        pass
+    except Exception:                                       # noqa: BLE001
+        _R().log.warning('[intraday-monitor] histórico do Pay/Rec ilegível', exc_info=True)
+    return False, None
+
+
 def _intraday_snapshot(ref):
     """O que a página do Intraday Monitor desenha, num request só: as tarefas
     do dia com estado e progresso, os KPIs, a atividade (quem rodou o quê) e
@@ -406,8 +463,18 @@ def _intraday_snapshot(ref):
     for t in domain.TASKS:
         c = cfg[t['id']]
         item = {'id': t['id'], 'kind': t['kind'], 'label': t['label'], 'icon': t['icon'],
-                'url': t['url'], 'days': c['days']}
-        if t['kind'] == 'zone':
+                'url': t['url'], 'days': c['days'], 'done_on': t.get('done_on') or 'run'}
+        if t['kind'] == 'branch':
+            b = _branch_state(dia, runs)
+            item.update(b)
+            passos = 2 if b['settled'] else (1 if b['draft_at'] else 0)
+            item['progress'] = passos * 50
+            est = domain.avalia(c, dia, agora, feriado, b['settled'], bool(b['draft_at']))
+            # Só EXISTE no dia com liquidação da Branch: fora disso não é devida
+            # nem aparece na linha "fora da agenda" (`conditional`).
+            est['due'] = est['due'] and b['detected']
+            item['conditional'] = True
+        elif t['kind'] == 'zone':
             z = zonas.get(t['zone']) or {'total': 0, 'closed': 0}
             total, fechado = z['total'], z['closed']
             feito = fechado >= total                  # zona vazia: nada a fazer
@@ -429,10 +496,22 @@ def _intraday_snapshot(ref):
                 if rodou:
                     item.update({'ran_at': hora, 'last_at': hora, 'open': pend, 'runs': 1})
                 feito_em = _parse_hora(dia, hora) if rodou else None
-            item['ended'] = any(r.get('event') == 'end' for r in meus)
-            feito = bool(item.get('runs'))
-            item['progress'] = 100 if feito else 0
-            est = domain.avalia(c, dia, agora, feriado, feito, False, feito_em)
+            fins = [r for r in meus if r.get('event') == 'end']
+            if fins:
+                item['ended'], item['ended_at'] = True, fins[-1].get('time')
+            else:
+                item['ended'], item['ended_at'] = _payrec_ended_fallback(t['id'], dia)
+            rodou = bool(item.get('runs'))
+            if t.get('done_on') == 'end':
+                # Conclui no End process: rodar é o meio do caminho.
+                feito = bool(item['ended'])
+                item['progress'] = 100 if feito else (50 if rodou else 0)
+                est = domain.avalia(c, dia, agora, feriado, feito, rodou,
+                                    _parse_hora(dia, item['ended_at']) if feito else None)
+            else:
+                feito = rodou
+                item['progress'] = 100 if feito else 0
+                est = domain.avalia(c, dia, agora, feriado, feito, False, feito_em)
         item.update(est)
         tarefas.append(item)
 
@@ -462,3 +541,102 @@ def _parse_hora(dia, hhmm):
         return _dt(dia.year, dia.month, dia.day, hh, mm)
     except (TypeError, ValueError):
         return None
+
+
+def _fmt_brl(v):
+    try:
+        return 'R$ {:,.2f}'.format(abs(float(v)))
+    except (TypeError, ValueError):
+        return ''
+
+
+def task_detail(t):
+    """A situação de UMA tarefa em frase curta — a coluna Detail do e-mail
+    (que é em inglês, como o resto dele)."""
+    if t['kind'] == 'zone':
+        if not t.get('total'):
+            return 'Nothing imported for this date.'
+        return '{}/{} closed · {} open'.format(t['closed'], t['total'], t['open'])
+    if t['kind'] == 'branch':
+        valor = '{} {}'.format('Bank pays' if t.get('pay_receive') == 'Pay' else 'Bank receives',
+                               _fmt_brl(t.get('amount')))
+        if t.get('settled'):
+            return valor + ' — settled in Pay/Rec.'
+        if t.get('draft_at'):
+            return valor + ' — VP approval draft at {}; reversal not settled in Pay/Rec yet.'.format(
+                t['draft_at'])
+        return valor + ' — VP approval draft not generated yet.'
+    if not t.get('runs'):
+        return 'Not run yet.'
+    txt = 'Ran at {}'.format(t.get('last_at') or t.get('ran_at'))
+    if t.get('open') is not None:
+        txt += ' · {} open break(s)'.format(t['open'])
+    if t.get('done_on') == 'end' and not t.get('ended'):
+        txt += ' — End process not run yet.'
+    return txt
+
+
+def _intraday_pending(ref):
+    """O conteúdo do aviso de pendências do Intraday Monitor: (tarefas,
+    blocos, total, kpis). `tarefas` são as DEVIDAS e não concluídas, com a
+    frase da situação; `blocos` é o detalhe por produto das zonas, do MESMO
+    snapshot (a zona não é contada duas vezes). Nada nos dois = nada a cobrar."""
+    snap = _intraday_snapshot(ref)
+    tarefas = [dict(t, detail=task_detail(t)) for t in snap['tasks']
+               if t['due'] and t['state'] != 'done']
+    ordem = {'late': 0, 'in_progress': 1, 'todo': 2}
+    tarefas.sort(key=lambda t: (ordem.get(t['state'], 3), t['deadline']))
+    blocks, total = _ndm_pending_blocks(ref, snap['cards'], snap['conf_cards'])
+    return tarefas, blocks, total, snap['kpis']
+
+
+# ══ PENDENTE DE D-1 (§567) ═══════════════════════════════════════════════════
+# O card "From D-1" do Monitor: o que ficou por fazer no dia útil anterior, item
+# a item, cada um com o link para a página JÁ na data (`?tradedate=` nas telas
+# de operação, `?date=` nas recons — `static/js/deep-link.js`). É o MESMO
+# snapshot do dia, aplicado ao D-1, e fica em memória por alguns minutos: o
+# Monitor consulta a cada 60 s, e o D-1 muda pouco — refazer as duas contagens
+# em todo poll dobraria as idas ao share.
+_PREV_CACHE = {}
+_PREV_TTL = 180
+
+
+def _link(url, param, iso):
+    if not url or url.startswith('#'):
+        return None
+    return '{}{}{}={}'.format(url, '&' if '?' in url else '?', param, iso)
+
+
+def _prev_items(ref):
+    """{date, date_fmt, items, tasks}: as pendências do dia útil anterior a `ref`."""
+    import time as _t
+    d1 = _R()._prev_anbima_bizday(ref.date() if hasattr(ref, 'date') else ref)
+    chave = d1.strftime('%Y-%m-%d')
+    em = _PREV_CACHE.get(chave)
+    if em and em[0] > _t.time():
+        return em[1]
+    tarefas, blocks, _total, _kpis = _intraday_pending(d1)
+    itens = []
+    zonas_abertas = set()
+    for b in blocks:
+        for r in b['rows']:
+            zonas_abertas.add(b['type'])
+            nome = r['product'] if r['detail'] in ('—', '') else '{} {}'.format(r['product'], r['detail'])
+            itens.append({'kind': 'zone', 'zone': b['type'], 'label': nome, 'count': r['pending'],
+                          'detail': r['breakdown'], 'url': _link(r.get('url'), 'tradedate', chave)})
+    ids = {t['id']: t for t in domain.TASKS}
+    for t in tarefas:
+        if t['kind'] == 'zone':
+            continue                       # já está acima, produto a produto
+        cat = ids.get(t['id']) or {}
+        if t['kind'] == 'recon' and cat.get('link_ref', 'prev') == 'prev':
+            dia_ref = _R()._prev_anbima_bizday(d1).strftime('%Y-%m-%d')
+        else:
+            dia_ref = chave
+        itens.append({'kind': t['kind'], 'task': t['id'], 'label': t['label'], 'count': None,
+                      'detail': t['detail'], 'url': _link(t['url'], 'date', dia_ref)})
+    out = {'date': chave, 'date_fmt': d1.strftime('%d/%m/%Y'), 'items': itens,
+           'tasks': len(tarefas)}
+    _PREV_CACHE.clear()                    # só o D-1 corrente importa
+    _PREV_CACHE[chave] = (_t.time() + _PREV_TTL, out)
+    return out

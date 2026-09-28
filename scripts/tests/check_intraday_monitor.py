@@ -16,7 +16,16 @@ O que prende:
      (com o `End process` como selo), a Comitente só é devida na terça, e a
      operação importada contra o Banco aparece na zona Intrag como
      `Awaiting B3 ID` — e some de lá quando vira `Success`;
-  5. o endereço antigo redireciona e a allowlist antiga continua valendo.
+  4b. o Pay/Rec só conclui no End process (rodar é 50%); a Branch Reversal só
+      existe com liquidação da Branch e anda em três passos — detectada,
+      rascunho do VP, reversão casada no Pay/Rec — e o e-mail diz o passo;
+  4c. o card de D-1: cada pendência com o link já na data (`?tradedate=` no
+      New Deals; na recon, a REFERÊNCIA que ela teria usado), e as páginas de
+      destino abrindo nessa data;
+  4d. TODA `/reconciliation-*/run` do `url_map` é uma tarefa do catálogo e
+      grava `task_runs.record` — recon nova sem isso reprova aqui;
+  5. o endereço antigo redireciona e as allowlists antigas (a página e o card
+     do aviso) continuam valendo.
 """
 import os
 import sys
@@ -48,7 +57,10 @@ from apps.pages.features.deals_monitor import domain as D     # noqa: E402
 
 print('== 1. a agenda ==')
 cfg = D.task_config({})
-check('sete tarefas', sorted(cfg), sorted(D.TASK_IDS))
+check('uma agenda por tarefa do catálogo', sorted(cfg), sorted(D.TASK_IDS))
+check('Conf. Matching: diária', cfg['recon-conf-matching']['days'], [0, 1, 2, 3, 4])
+check('Branch Reversal: seg-sex (só existe com liquidação da Branch)',
+      cfg['branch-reversal']['days'], [0, 1, 2, 3, 4])
 check('Pay/Rec: diária (seg-sex) até 20:00', cfg['recon-payrec'], {'days': [0, 1, 2, 3, 4], 'deadline': '20:00'})
 check('Comitente: toda terça', cfg['recon-comitente']['days'], [1])
 check('CGD: toda sexta', cfg['recon-cgd']['days'], [4])
@@ -172,6 +184,73 @@ snap = cl.get('/api/intraday-monitor?date=2026-09-22').get_json()
 intrag = [c for c in snap['cards'] if c['key'] == 'intrag-ndf'][0]
 check('no Success sai daqui (quem conta é o espelho)', intrag['statuses'].get(D.AWAITING_B3), None)
 
+print('\n== 4b. Pay/Rec só conclui no End process; a Branch Reversal ==')
+from apps.pages import recon_payrec                           # noqa: E402
+from apps.pages.features.deals_monitor import queries as Q    # noqa: E402
+task_runs.record('recon-payrec', 'T000000', 'Tester', '2026-09-23', {'open': 1},
+                 now=datetime(2026, 9, 23, 11, 0))
+R._atomic_write_json(os.path.join(recon_payrec._CACHE_DIR, '2026-09-23.json'), {
+    'recon_date': '2026-09-23', 'summary': [], 'settled': [], 'pending_receivement': [],
+    'branch': {'has_settlement': True, 'pay_receive': 'Pay', 'reversal_net': -1564325.5},
+    'pending_payment': [{'branch': 'reversal', 'status': 'Pending', 'jpm_value': -1564325.5}]})
+snap = cl.get('/api/intraday-monitor?date=2026-09-23').get_json()
+tk = {t['id']: t for t in snap['tasks']}
+check('Pay/Rec que só RODOU não está concluído', tk['recon-payrec']['state'] != 'done', True)
+check('... e anda pela metade', tk['recon-payrec']['progress'], 50)
+check('Branch Reversal devida (houve liquidação da Branch)', tk['branch-reversal']['due'], True)
+check('... sem rascunho: 0%', tk['branch-reversal']['progress'], 0)
+check('Branch na terça 22 (sem liquidação) não é devida',
+      [t for t in cl.get('/api/intraday-monitor?date=2026-09-22').get_json()['tasks']
+       if t['id'] == 'branch-reversal'][0]['due'], False)
+task_runs.record('branch-reversal', 'T000000', 'Tester', '2026-09-23', event='draft',
+                 now=datetime(2026, 9, 23, 15, 30))
+tk = {t['id']: t for t in cl.get('/api/intraday-monitor?date=2026-09-23').get_json()['tasks']}
+check('rascunho do VP gerado: 50%, não concluída',
+      (tk['branch-reversal']['progress'], tk['branch-reversal']['state'] != 'done',
+       tk['branch-reversal']['draft_at']), (50, True, '15:30'))
+tarefas, _b, _t, _k = Q._intraday_pending(datetime(2026, 9, 23))
+det = {t['id']: t['detail'] for t in tarefas}
+check('o e-mail diz que falta o End process', 'End process not run yet' in det.get('recon-payrec', ''), True)
+check('o e-mail diz o valor e o passo da Branch',
+      'Bank pays R$ 1,564,325.50' in det.get('branch-reversal', '') and 'not settled' in det['branch-reversal'], True)
+R._atomic_write_json(os.path.join(recon_payrec._CACHE_DIR, '2026-09-23.json'), {
+    'recon_date': '2026-09-23', 'summary': [], 'pending_payment': [], 'pending_receivement': [],
+    'branch': {'has_settlement': True, 'pay_receive': 'Pay', 'reversal_net': -1564325.5},
+    'settled': [{'branch': 'reversal', 'status': 'Settled', 'jpm_value': -1564325.5}]})
+tk = {t['id']: t for t in cl.get('/api/intraday-monitor?date=2026-09-23').get_json()['tasks']}
+check('reversão casada no Pay/Rec: concluída', tk['branch-reversal']['state'], 'done')
+
+print('\n== 4c. o que ficou de D-1, com o link já filtrado ==')
+Q._PREV_CACHE.clear()
+prev = cl.get('/api/intraday-monitor?date=2026-09-23').get_json()['prev']
+check('D-1 da quarta 23 é a terça 22', prev['date'], '2026-09-22')
+urls = [i.get('url') for i in prev['items']]
+check('a operação de registro abre o New Deals no Trade Date de D-1',
+      '/new_deals-ndf-commodities?tradedate=2026-09-22' in urls, True)
+check('a recon que não rodou abre na referência que ela teria (o dia útil anterior)',
+      '/reconciliation-fxo?date=2026-09-21' in urls, True)
+check('o Pay/Rec finalizado em D-1 não aparece', any('reconciliation-payrec' in (u or '') for u in urls), False)
+check('a página carrega o leitor da data do link', 'deep-link.js' in cl.get('/intraday-monitor').data.decode('utf-8'), True)
+check('a FXO abre na data do link', 'value="2026-09-01"' in cl.get('/reconciliation-fxo?date=2026-09-01').data.decode('utf-8'), True)
+check('o Pay/Rec abre na data do link',
+      'data-ref-date="2026-09-01"' in cl.get('/reconciliation-payrec?date=2026-09-01').data.decode('utf-8'), True)
+check('data malformada é ignorada',
+      'data-ref-date="x"' in cl.get('/reconciliation-payrec?date=x').data.decode('utf-8'), False)
+
+print('\n== 4d. TODA recon é uma tarefa (e grava o registro) ==')
+import inspect, re as _re                                      # noqa: E401,E402
+por_url = {t['url']: t for t in D.TASKS if t['kind'] == 'recon'}
+runs = [r for r in app.url_map.iter_rules() if _re.match(r'^/reconciliation-[a-z0-9-]+/run$', r.rule)]
+check('há recons no url_map', len(runs) >= 5, True)
+for r in runs:
+    pagina = r.rule[:-len('/run')]
+    tk = por_url.get(pagina)
+    check('%s está no catálogo de tarefas' % pagina, bool(tk), True)
+    if tk:
+        fonte = inspect.getsource(app.view_functions[r.endpoint])
+        check('   e o run grava task_runs.record(%r)' % tk['id'],
+              "task_runs.record('%s'" % tk['id'] in fonte, True)
+
 print('\n== 5. o endereço antigo ==')
 r = cl.get('/new-deals-monitor')
 check('/new-deals-monitor redireciona', (r.status_code, r.headers.get('Location', '').endswith('/intraday-monitor')),
@@ -198,6 +277,9 @@ try:
     from apps.pages.platform import authz
     check('a allowlist antiga vale para a página nova',
           '/intraday-monitor' in authz._read_user_authz('T000009')[1], True)
+    _Con.fetchone = lambda self: ('["/control-panel#dealsmonitor"]', 'BO')
+    check('e o card antigo do aviso vale para o card novo',
+          '/control-panel#intradaytasks' in authz._read_user_authz('T000009')[1], True)
 finally:
     R.get_db_connection = _orig
 

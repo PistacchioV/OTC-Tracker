@@ -24379,3 +24379,38 @@ embaixo como DETALHE. Atualiza sozinha a cada 60 s (aba escondida não consulta)
 `check_intraday_monitor.py` (agenda, estado, destino Intrag, ponta a ponta num
 DATA_DIR tmp, redirecionamento e allowlist); `check_control_panel_sections.py`
 conta 16 cards.
+
+### §567 (segunda rodada, 28/09/2026) — o aviso, a Branch, o D-1
+
+- **O aviso das 19h é do Intraday Monitor.** `_send_ndm_pending_email` monta pelo
+  `queries._intraday_pending`: as tarefas DEVIDAS e não concluídas (com a frase
+  da situação, `task_detail`) e, embaixo, o detalhe por produto das zonas — do
+  MESMO snapshot, sem contar a zona duas vezes. Assunto `Pending Action -
+  Intraday Monitor`, template `email-template-intraday-monitor.html`, botão para
+  o Monitor. O card `dealsmonitor` saiu: TO/CC/Run/status foram para o card
+  `intradaytasks` (coluna empilhada com o Save CETIP Files; 15 cards), e o token
+  antigo `/control-panel#dealsmonitor` segue valendo pelo mapa do `authz`.
+- **Toda recon é tarefa** (regra da mesa): a Conf. Matching entrou (diária), e o
+  `check_intraday_monitor` §4d varre o `url_map` — `/reconciliation-*/run` sem
+  tarefa no catálogo, ou sem `task_runs.record` no run, reprova.
+- **O Pay/Rec só conclui no End process** (mesa): rodar é 50% (`done_on: 'end'`
+  no catálogo). O plano B do "finalizado" é o histórico que o End process grava,
+  carimbado no dia.
+- **Branch Reversal** (`kind: 'branch'`): só existe no dia em que o Pay/Rec achou
+  liquidação com a Branch e reversão a fazer (a condição do botão Branch
+  Settl.). 0% detectada, 50% com o rascunho de aprovação ao VP (o
+  `/branch-email` grava o evento `draft`), concluída com a linha `reversal`
+  Settled ou Justified no Pay/Rec. Fora disso não é devida nem aparece como
+  "fora da agenda" (`conditional`).
+- **O card "Pending from D-1"**: o que ficou por fazer no dia útil anterior, item
+  a item, cada um com o link já na data — `?tradedate=` nas telas de operação
+  (as de New Deals já liam; Intrag, DCE e recompras passaram a ler pelo
+  `static/js/deep-link.js`, carregado no `<head>`), `?date=` nas recons. O link
+  da recon leva a REFERÊNCIA que ela teria usado (`link_ref`: o dia útil anterior
+  para FXO/CGD/Comitente/Conf. Matching, o próprio dia para o Pay/Rec). Em
+  memória por 3 min (o Monitor consulta a cada 60 s).
+- **Teste não grava no registro**: dezenas de testes sobem o app sobre o
+  `DATA_DIR` do checkout e chamam os `run` com espiões; com o gancho, cada
+  bateria deixava "Alice Souza rodou a Recon FXO" no Monitor da dev.
+  `task_runs._em_teste` recusa a gravação com `TESTING` ou com o User-Agent
+  `Werkzeug/` do cliente de teste do Flask (nem todo teste liga o `TESTING`).

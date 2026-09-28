@@ -335,7 +335,9 @@
 @keyframes im-spin { to { transform: rotate(360deg); } }
 
 /* ── KPIs ── */
-#ndm-page .im-kpis { display: grid; gap: .9rem; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+#ndm-page .im-kpis { display: grid; gap: .9rem; grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(0, 1.6fr); }
+@media (max-width: 1399.98px) { #ndm-page .im-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+                                #ndm-page .im-kpi[data-k="prev"] { grid-column: 1 / -1; } }
 @media (max-width: 1199.98px) { #ndm-page .im-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 575.98px)  { #ndm-page .im-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 #ndm-page .im-kpi { position: relative; overflow: hidden; }
@@ -351,6 +353,22 @@
 #ndm-page .im-kpi[data-k="due"]         { --im-accent: var(--vr-grad); }
 #ndm-page .im-kpi[data-k="due"]::after  { background: var(--vr-grad); }
 #ndm-page .im-kpi[data-k="late"].is-hot b { color: var(--im-late); }
+/* D-1: o que ficou do dia útil anterior, item a item e clicável */
+#ndm-page .im-kpi[data-k="prev"] { --im-accent: var(--im-late); display: flex; flex-direction: column; }
+#ndm-page .im-kpi[data-k="prev"].is-clear { --im-accent: var(--im-done); }
+#ndm-page .im-kpi[data-k="prev"] .im-prev-top { display: flex; align-items: baseline; gap: .6rem; }
+#ndm-page .im-kpi[data-k="prev"] .im-prev-top b { margin-top: .45rem; }
+#ndm-page .im-kpi[data-k="prev"].is-hot .im-prev-top b { color: var(--im-late); }
+#ndm-page .im-prev-list { margin-top: .5rem; display: flex; flex-direction: column; gap: .15rem;
+    max-height: 104px; overflow-y: auto; }
+#ndm-page .im-prev-item { display: flex; align-items: center; gap: .45rem; font-size: .74rem; line-height: 1.3;
+    padding: .2rem .35rem; border-radius: 8px; color: var(--ins-body-color); text-decoration: none; }
+#ndm-page a.im-prev-item:hover { background: color-mix(in oklab, var(--im-late) 10%, transparent); }
+#ndm-page .im-prev-item i.im-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 99px; background: var(--im-late); }
+#ndm-page .im-prev-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ndm-page .im-prev-item em { font-style: normal; color: var(--ins-secondary-color); }
+#ndm-page .im-prev-item b { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--im-late); }
+#ndm-page .im-prev-item .ti-chevron-right { color: var(--ins-secondary-color); font-size: .85rem; }
 #ndm-page .im-kpi .im-micro { color: color-mix(in oklab, var(--im-accent, var(--ins-secondary-color)) 70%, var(--ins-secondary-color)); }
 #ndm-page .im-kpi[data-k="due"] .im-micro { color: var(--ins-secondary-color); }
 
@@ -538,6 +556,12 @@
             <span class="im-micro" data-lang="im-k-todo">To do</span><b>—</b><small></small></div>
         <div class="im-panel im-kpi" data-k="late" style="--i:4">
             <span class="im-micro" data-lang="im-k-late">Late</span><b>—</b><small></small></div>
+        <!-- O que ficou do dia útil anterior, clicável até a página já filtrada -->
+        <div class="im-panel im-kpi" data-k="prev" style="--i:5">
+            <span class="im-micro"><span data-lang="im-k-prev">Pending from D-1</span> <span id="im-prev-date"></span></span>
+            <div class="im-prev-top"><b id="im-prev-n">—</b><small id="im-prev-sub"></small></div>
+            <div class="im-prev-list" id="im-prev-list"></div>
+        </div>
     </div>
 
     <div class="row g-3">
@@ -986,6 +1010,16 @@
             return '<b>' + num(tk.closed) + '</b>/' + num(tk.total) + ' ' + esc(t('im-zone-closed', 'closed')) +
                    (tk.open ? ' · <b>' + num(tk.open) + '</b> ' + esc(t('im-zone-open', 'open')) : '');
         }
+        if (tk.kind === 'branch') {
+            var sentido = tk.pay_receive === 'Pay' ? t('im-br-pays', 'Bank pays') : t('im-br-receives', 'Bank receives');
+            var valor = esc(sentido) + ' <b>R$ ' + Number(Math.abs(tk.amount || 0)).toLocaleString('en-US',
+                            { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</b>';
+            if (tk.settled) return valor + ' · ' + esc(t('im-br-settled', 'settled in Pay/Rec'));
+            if (tk.draft_at) return valor + ' · ' + esc(t('im-br-draft', 'VP approval draft at')) + ' <b>' +
+                                    esc(tk.draft_at) + '</b>' + (tk.draft_by ? ' ' + esc(t('im-by', 'by')) + ' ' + esc(tk.draft_by) : '') +
+                                    ' · ' + esc(t('im-br-wait', 'awaiting settlement'));
+            return valor + ' · ' + esc(t('im-br-nodraft', 'approval draft not generated'));
+        }
         if (!tk.runs) return esc(t('im-not-run', 'Not run yet.'));
         var partes = [esc(t('im-ran-at', 'Ran at')) + ' <b>' + esc(tk.last_at || tk.ran_at) + '</b>' +
                       (tk.by ? ' ' + esc(t('im-by', 'by')) + ' ' + esc(tk.by) : '')];
@@ -994,8 +1028,12 @@
             partes.push(tk.open ? '<b>' + num(tk.open) + '</b> ' + esc(t('im-open-breaks', 'open breaks'))
                                 : esc(t('im-no-breaks', 'no open breaks')));
         }
+        if (tk.done_on === 'end' && !tk.ended) {
+            partes.push('<span class="im-tag">' + esc(t('im-end-pending', 'End process pending')) + '</span>');
+        }
         return partes.join(' · ') + (tk.ended ? ' <span class="im-tag is-done"><i class="ti ti-check"></i>' +
-                                     esc(t('im-ended', 'End of day')) + '</span>' : '');
+                                     esc(t('im-ended', 'End of day')) + (tk.ended_at ? ' ' + esc(tk.ended_at) : '') +
+                                     '</span>' : '');
     }
     function cartao(tk, i) {
         var link = tk.url || '#';
@@ -1043,7 +1081,9 @@
         }).join('');
         // O que NÃO é deste dia, dito numa linha: some calado, e "fora da
         // agenda" e "tarefa que não existe" viram a mesma coisa.
-        var fora = tarefas.filter(function (x) { return !x.due && x.days && x.days.length; });
+        // A Branch Reversal é condicional (só existe com liquidação da Branch):
+        // fora dela o dia não é "fora da agenda", é "não houve".
+        var fora = tarefas.filter(function (x) { return !x.due && !x.conditional && x.days && x.days.length; });
         document.getElementById('im-offday').innerHTML = !fora.length ? '' :
             esc(t('im-offday', 'Not scheduled for this date:')) + ' ' + fora.map(function (x) {
                 return '<b>' + esc(nomeTarefa(x)) + '</b> (' + x.days.map(function (d) {
@@ -1136,8 +1176,38 @@
         box.innerHTML = html;
     }
 
+    function desenhaPrev(p) {
+        var card = document.querySelector('#im-kpis [data-k="prev"]');
+        var n = document.getElementById('im-prev-n'), sub = document.getElementById('im-prev-sub');
+        var box = document.getElementById('im-prev-list');
+        document.getElementById('im-prev-date').textContent = p && p.date_fmt ? '· ' + p.date_fmt : '';
+        if (!p || p.error) {
+            n.textContent = '—';
+            sub.textContent = t('im-prev-fail', 'Could not read D-1.');
+            box.innerHTML = p && p.error ? '<span class="im-feed-empty">' + esc(p.error) + '</span>' : '';
+            return;
+        }
+        var itens = p.items || [];
+        n.textContent = num(itens.length);
+        card.classList.toggle('is-hot', itens.length > 0);
+        card.classList.toggle('is-clear', !itens.length);
+        sub.innerHTML = itens.length ? esc(t('im-prev-sub', 'items left open')) :
+                        '<span style="color:var(--im-done)">' + esc(t('im-prev-none', 'nothing left behind')) + '</span>';
+        box.innerHTML = itens.map(function (it) {
+            var nome = it.task ? t('im-task-' + it.task, it.label) : it.label;
+            var zona = it.zone ? ' <em>· ' + esc(t('im-zone-' + it.zone.toLowerCase(), it.zone)) + '</em>' : '';
+            var dica = it.detail ? ' title="' + esc(it.detail) + '"' : '';
+            var corpo = '<i class="im-dot"></i><span>' + esc(nome) + zona + '</span>' +
+                        (it.count != null ? '<b>' + num(it.count) + '</b>' : '') +
+                        (it.url ? '<i class="ti ti-chevron-right"></i>' : '');
+            return it.url ? '<a class="im-prev-item" href="' + esc(it.url) + '"' + dica + '>' + corpo + '</a>'
+                          : '<div class="im-prev-item"' + dica + '>' + corpo + '</div>';
+        }).join('');
+    }
+
     function desenha(snap) {
         desenhaKpis(snap.kpis);
+        desenhaPrev(snap.prev);
         desenhaQuadro(snap.tasks);
         desenhaAnel(snap.kpis);
         desenhaAtividade(snap.activity || []);
@@ -1259,6 +1329,21 @@
     <span data-lang="im-task-recon-fxo">Recon FXO</span>
     <span data-lang="im-task-recon-comitente">Recon Comitente</span>
     <span data-lang="im-task-recon-cgd">Recon CGD</span>
+    <span data-lang="im-task-recon-conf-matching">Recon Conf. Matching</span>
+    <span data-lang="im-task-branch-reversal">Branch Reversal</span>
+    <span data-lang="im-br-pays">Bank pays</span>
+    <span data-lang="im-br-receives">Bank receives</span>
+    <span data-lang="im-br-settled">settled in Pay/Rec</span>
+    <span data-lang="im-br-draft">VP approval draft at</span>
+    <span data-lang="im-br-wait">awaiting settlement</span>
+    <span data-lang="im-br-nodraft">approval draft not generated</span>
+    <span data-lang="im-end-pending">End process pending</span>
+    <span data-lang="im-prev-sub">items left open</span>
+    <span data-lang="im-prev-none">nothing left behind</span>
+    <span data-lang="im-prev-fail">Could not read D-1.</span>
+    <span data-lang="im-zone-registration">Registration</span>
+    <span data-lang="im-zone-confirmation">Confirmation</span>
+    <span data-lang="im-zone-intrag">Intrag</span>
     <span data-lang="cp-it-d0">Mon</span><span data-lang="cp-it-d1">Tue</span><span data-lang="cp-it-d2">Wed</span>
     <span data-lang="cp-it-d3">Thu</span><span data-lang="cp-it-d4">Fri</span><span data-lang="cp-it-d5">Sat</span>
     <span data-lang="cp-it-d6">Sun</span>

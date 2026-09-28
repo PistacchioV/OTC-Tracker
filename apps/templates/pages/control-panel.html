@@ -127,11 +127,23 @@
 }
 .cp-it-reset:hover { background: var(--ins-tertiary-bg); color: var(--ins-body-color); }
 .cp-it-row.is-off .cp-it-task { opacity: .5; }
-@media (max-width: 767.98px) {
-    .cp-it-row { grid-template-columns: 1fr 92px 34px; }
+/* O card mora em MEIA largura (a coluna empilhada): quem decide o desenho é a
+   largura do CARD, não a da tela — container query. Estreito, os dias descem
+   para a linha de baixo da tarefa. */
+.cp-card[data-cp-card="intradaytasks"] { container-type: inline-size; }
+@container (max-width: 760px) {
+    .cp-it-row { grid-template-columns: 1fr 92px 34px; row-gap: .4rem; }
     .cp-it-row .cp-it-days { grid-column: 1 / -1; order: 3; }
     .cp-it-head { display: none; }
 }
+.cp-it-mailhead {
+    margin-top: 1.3rem; padding-top: 1rem; display: flex; flex-direction: column; gap: .2rem;
+    border-top: 1px solid var(--vr-card-border, var(--ins-border-color));
+}
+.cp-it-mailtitle { font-size: .66rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ins-secondary-color); }
+.cp-it-mailsub { font-size: .78rem; color: var(--ins-secondary-color); }
+.cp-it-mailhead + .cp-field { margin-top: .6rem; }
 .cp-field label {
     display: block;
     font-size: .7rem; font-weight: 600;
@@ -369,7 +381,7 @@
     <div class="row g-3 g-xl-4 mb-4 cp-cards">
 
         <!-- Esta coluna carrega DOIS cards empilhados: Save CETIP Files e
-             Deals Monitor. Juntos eles preenchem a altura do Confirmations
+             Intraday Monitor (a agenda + o aviso de pendências, §567). Juntos eles preenchem a altura do Confirmations
              Escalation, que divide a linha e e o card mais alto do painel —
              sozinho, qualquer um dos dois esticava ate la e virava meia tela de
              branco. `flex-column` e o que faz os `.cp-reveal` (que ja sao
@@ -452,15 +464,30 @@
             </div>
 
             <div class="cp-reveal">
-                <div class="cp-card" data-cp-card="dealsmonitor">
-                    <div class="cp-card__icon"><i class="ti ti-clock-exclamation"></i></div>
-                    <h3 class="cp-card__title" data-lang="cp-r-dm2-title">Deals Monitor — Pending Action</h3>
-                    <p class="cp-card__desc" data-lang="cp-r-dm2-desc">
-                        Sent automatically at 19:00, 19:30 and 20:00 with every Deals Monitor card that still
-                        has deals outside Success — by type (Registration / Confirmation / Intrag),
-                        product and detail. Nothing pending, no e-mail. Set the TO / CC once — they are
-                        saved and reused on every run.
+                <div class="cp-card" data-cp-card="intradaytasks">
+                    <div class="cp-card__icon"><i class="ti ti-calendar-check"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-it-title">Intraday Monitor — Tasks &amp; Pending Action</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-it-desc">
+                        The days of the week each task is due on the Intraday Monitor and the time by which
+                        it must be completed (Brasília). ANBIMA holidays have no tasks. A task with no day
+                        ticked leaves the Monitor. Saved changes show on the Monitor's next refresh.
                     </p>
+                    <div class="cp-it-grid" id="cp-it-grid">
+                        <div class="cp-it-row cp-it-head">
+                            <span data-lang="cp-it-col-task">Task</span>
+                            <span data-lang="cp-it-col-days">Due on</span>
+                            <span data-lang="cp-it-col-deadline">Deadline</span>
+                            <span></span>
+                        </div>
+                        <div id="cp-it-rows"></div>
+                    </div>
+                    <!-- O aviso de pendências (ex-card Deals Monitor, §567): sai às
+                         19:00, 19:30 e 20:00 com TODAS as tarefas do dia que não
+                         fecharam e o detalhe por produto. Nada pendente, sem e-mail. -->
+                    <div class="cp-it-mailhead">
+                        <span class="cp-it-mailtitle" data-lang="cp-it-mail-title">Pending Action e-mail</span>
+                        <span class="cp-it-mailsub" data-lang="cp-it-mail-sub">Daily at 19:00, 19:30 and 20:00 with every task still open and the operations pending by product. Nothing pending, no e-mail.</span>
+                    </div>
                     <div class="cp-field">
                         <label data-lang="cp-dm-to">TO</label>
                         <input type="text" id="cp-dm2-to" class="form-control form-control-sm"
@@ -478,12 +505,19 @@
                          style="display:block;margin-top:.35rem;line-height:1.5;"></div>
                     <div class="cp-card__foot">
                         <span class="cp-card__meta">
-                            <i class="ti ti-mail"></i><span data-lang="cp-dm2-meta">Daily 19:00, 19:30 &amp; 20:00 → e-mail</span>
+                            <i class="ti ti-layout-dashboard"></i>
+                            <a href="/intraday-monitor" data-lang="cp-it-meta">Intraday Monitor → tasks &amp; deadlines</a>
                         </span>
-                        <button type="button" class="cp-run-btn" data-dealsmonitor-run>
-                            <i class="ti ti-player-play"></i>
-                            <span data-lang="cp-run">Run</span>
-                        </button>
+                        <div class="cp-btn-row">
+                            <button type="button" class="cp-run-btn" id="cp-it-save">
+                                <i class="ti ti-device-floppy"></i>
+                                <span data-lang="cp-it-save">Save schedule</span>
+                            </button>
+                            <button type="button" class="cp-run-btn cp-run-btn--alt" data-dealsmonitor-run>
+                                <i class="ti ti-mail-forward"></i>
+                                <span data-lang="cp-it-mail-run">Send e-mail now</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -632,42 +666,6 @@
             </div>
         </div>
 
-        <!-- A agenda das tarefas do Intraday Monitor (§567). Largura inteira:
-             é uma grade (tarefa × sete dias × horário), e na metade da linha os
-             dias quebrariam em duas. As linhas vêm do servidor
-             (`domain.TASKS`): tarefa nova aparece aqui sem mexer no HTML. -->
-        <div class="col-12 d-flex" data-cp-group="intraday">
-            <div class="cp-reveal">
-                <div class="cp-card" data-cp-card="intradaytasks">
-                    <div class="cp-card__icon"><i class="ti ti-calendar-check"></i></div>
-                    <h3 class="cp-card__title" data-lang="cp-r-it-title">Intraday Monitor — Task Schedule</h3>
-                    <p class="cp-card__desc" data-lang="cp-r-it-desc">
-                        The days of the week each task is due on the Intraday Monitor and the time by which
-                        it must be completed (Brasília). ANBIMA holidays have no tasks. A task with no day
-                        ticked leaves the Monitor. Saved changes show on the Monitor's next refresh.
-                    </p>
-                    <div class="cp-it-grid" id="cp-it-grid">
-                        <div class="cp-it-row cp-it-head">
-                            <span data-lang="cp-it-col-task">Task</span>
-                            <span data-lang="cp-it-col-days">Due on</span>
-                            <span data-lang="cp-it-col-deadline">Deadline</span>
-                            <span></span>
-                        </div>
-                        <div id="cp-it-rows"></div>
-                    </div>
-                    <div class="cp-card__foot">
-                        <span class="cp-card__meta">
-                            <i class="ti ti-layout-dashboard"></i>
-                            <a href="/intraday-monitor" data-lang="cp-it-meta">Intraday Monitor → tasks &amp; deadlines</a>
-                        </span>
-                        <button type="button" class="cp-run-btn" id="cp-it-save">
-                            <i class="ti ti-device-floppy"></i>
-                            <span data-lang="cp-it-save">Save schedule</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
 
     <!-- ── Section: Settlement Reporting ──────────────────── -->

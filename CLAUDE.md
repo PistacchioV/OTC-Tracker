@@ -589,7 +589,7 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   sem o card (`_CP_ENDPOINT_CARD`). **O `id` é o token gravado**: renomear
   revoga em silêncio. A seção do card é o DOM (`data-cp-hdr` + `.row.cp-cards`),
   nunca um mapa no JS. Seis seções: Intraday, Settlement Reporting, Pending
-  Confirmation, Economic Affirmation, Reference Data, Application; dezesseis cards
+  Confirmation, Economic Affirmation, Reference Data, Application; quinze cards
   (o `check_control_panel_sections.py` conta — card novo mexe nele). O card *New
   Version Released* lê a versão do `link.txt` ao lado do
   `start-otc-tracker.bat`; sem versão o envio é recusado; destinatário é quem
@@ -1095,6 +1095,14 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   **A Intrag conta desde o import** como `Awaiting B3 ID`
   (`domain.intrag_destino`, a MESMA regra dos pontos que gravam o espelho —
   mudou lá, muda aqui). `/new-deals-monitor` redireciona e vale na allowlist.
+  **Recon NOVA entra no catálogo `domain.TASKS` e grava `task_runs.record` no
+  `run`** (regra da mesa; o §4d do teste varre o `url_map` e reprova recon de
+  fora). O Pay/Rec só conclui no End process (`done_on: 'end'`); a Branch
+  Reversal é tarefa condicional. O aviso das 19h é DAQUI (`_intraday_pending`)
+  e se configura no card `intradaytasks` (o `dealsmonitor` saiu). O card de D-1
+  aponta cada pendência com a data no link (`static/js/deep-link.js`:
+  `?tradedate=`/`?date=`) — página que vira destino lê `otcLinkDmy()`/
+  `otcLinkIso()`. Teste não grava no registro (`task_runs._em_teste`).
   `check_intraday_monitor.py`.
 - **O Monitor não recebe lista de produto: ele VARRE o `cache/new deals/`**
   e agrupa pelos dois primeiros níveis não numéricos do caminho (§454). Quem

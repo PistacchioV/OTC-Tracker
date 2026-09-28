@@ -70,11 +70,11 @@ def api_cp_deals_monitor_run():
     result = commands._send_ndm_pending_email(ref, to_list, cc_list)
     if result == 'empty':
         return jsonify({'success': True,
-                        'message': 'Nothing pending on the Deals Monitor — no e-mail sent.'})
+                        'message': 'Nothing pending on the Intraday Monitor — no e-mail sent.'})
     if result is not True:
         return jsonify({'success': False, 'error': 'E-mail failed: {}'.format(result)}), 500
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Deals Monitor Sent', 'Control Panel',
+                         'Intraday Monitor Sent', 'Control Panel',
                          'Pending Action e-mailed ({})'.format(ref.strftime('%Y-%m-%d')))
     return jsonify({'success': True,
                     'message': 'Pending Action enviado para {} destinatário(s).'.format(
@@ -111,7 +111,15 @@ def _ref_da(ds):
 def api_intraday_monitor():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'message': 'Not authenticated'}), 401
-    snap = queries._intraday_snapshot(_ref_da((request.args.get('date') or '').strip()))
+    ref = _ref_da((request.args.get('date') or '').strip())
+    snap = queries._intraday_snapshot(ref)
+    try:
+        snap['prev'] = queries._prev_items(ref)
+    except Exception as e:                                  # noqa: BLE001
+        # O D-1 é um card da página, não a página: ilegível, ele diz o motivo
+        # e o resto continua.
+        _R().log.warning('[intraday-monitor] pendências de D-1 falharam', exc_info=True)
+        snap['prev'] = {'error': '{}: {}'.format(type(e).__name__, e)}
     return jsonify({'success': True, **snap})
 
 

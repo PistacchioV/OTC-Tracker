@@ -308,7 +308,17 @@ def intrag_destino_le(balde):
 #               fariam a tela e o e-mail cobrarem números diferentes;
 #   · `recon` — conclui quando RODOU no dia (mesa, 28/09/2026): as quebras
 #               abertas são informação do card, não o critério. Quem diz que
-#               rodou é o registro de execuções (`platform/task_runs`).
+#               rodou é o registro de execuções (`platform/task_runs`). TODA
+#               recon é uma tarefa aqui — a que nasce entra no catálogo e grava
+#               `task_runs.record` no `run` dela (`check_intraday_monitor.py`
+#               varre o `url_map` e recusa recon de fora). Quem a mesa não
+#               cobra nasce com `days=()`: está no card, fora do Monitor.
+#               Conf. Matching é diária (mesa, 28/09/2026);
+#   · `branch` — a reversão da Branch Settlement (§560/§566): só EXISTE no dia
+#               em que o Pay/Rec achou liquidação com a Branch. Anda em três
+#               passos — detectada, rascunho de aprovação ao VP gerado (o botão
+#               Branch Settl.), a linha da reversão casada no Pay/Rec — e só o
+#               último conclui: o rascunho é o pedido, o dinheiro é o fato.
 #
 # Dia da semana no padrão do Python: 0 = segunda … 6 = domingo. "Diário" é
 # segunda a sexta, e feriado ANBIMA não tem tarefa.
@@ -323,14 +333,24 @@ TASKS = (
      'icon': 'ti-file-check', 'url': '/manual-confirmation/monitor', 'days': DIAS_UTEIS},
     {'id': 'intrag', 'kind': 'zone', 'zone': 'Intrag', 'label': 'Intrag',
      'icon': 'ti-building', 'url': '#ndm-detail', 'days': DIAS_UTEIS},
-    {'id': 'recon-payrec', 'kind': 'recon', 'label': 'Recon Pay/Rec',
+    # O Pay/Rec só conclui no END PROCESS (mesa, 28/09/2026): rodar é o meio
+    # do caminho (em andamento, 50%) — o dia só fecha quando é finalizado.
+    # `link_ref`: a data que o link de pendência leva à recon. A referência de
+    # uma recon não é o dia em que ela roda — FXO, CGD, Comitente e Conf.
+    # Matching rodam sobre o dia útil ANTERIOR (`prev`, o padrão de `recon`);
+    # o Pay/Rec, sobre o próprio dia (`same`).
+    {'id': 'recon-payrec', 'kind': 'recon', 'label': 'Recon Pay/Rec', 'done_on': 'end', 'link_ref': 'same',
      'icon': 'ti-arrows-left-right', 'url': '/reconciliation-payrec', 'days': DIAS_UTEIS},
+    {'id': 'branch-reversal', 'kind': 'branch', 'label': 'Branch Reversal',
+     'icon': 'ti-arrow-back-up', 'url': '/reconciliation-payrec', 'days': DIAS_UTEIS},
     {'id': 'recon-fxo', 'kind': 'recon', 'label': 'Recon FXO',
      'icon': 'ti-currency-dollar', 'url': '/reconciliation-fxo', 'days': DIAS_UTEIS},
     {'id': 'recon-comitente', 'kind': 'recon', 'label': 'Recon Comitente',
      'icon': 'ti-users', 'url': '/reconciliation-comitente', 'days': (1,)},
     {'id': 'recon-cgd', 'kind': 'recon', 'label': 'Recon CGD',
      'icon': 'ti-file-certificate', 'url': '/reconciliation-cgd', 'days': (4,)},
+    {'id': 'recon-conf-matching', 'kind': 'recon', 'label': 'Recon Conf. Matching',
+     'icon': 'ti-file-search', 'url': '/reconciliation-conf-matching', 'days': DIAS_UTEIS},
 )
 TASK_IDS = tuple(t['id'] for t in TASKS)
 
