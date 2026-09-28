@@ -119,3 +119,75 @@ def ler(filename, dados):
             log.error('[UNWIND NDF FX] .eml ilegivel (%s): %s', nome, exc)
             raise ValueError('could not read the e-mail file: %s' % exc)
     return _texto(dados), ''
+
+
+def tabelas(html):
+    """Todas as <table> de um corpo de e-mail, cada uma como [[celula]].
+
+    A mesa cola no e-mail um trecho do Excel, e o Outlook o guarda como uma
+    <table> com cada celula dentro de `<p class=MsoNormal><span>` — o texto e o
+    que importa, a marcacao nao. Vem TODAS as tabelas, porque o corpo pode ter
+    outras antes (assinatura, banner): quem escolhe e quem reconhece as colunas.
+    Tabela dentro de tabela sai separada (a de dentro e a que tem os dados).
+    `colspan` repete a celula vazia, para as colunas seguintes nao andarem, e o
+    `&nbsp;` do Outlook vira espaco (senao `1 234` e numero nenhum).
+
+    Sem <table> (o e-mail em texto puro), o trecho colado do Excel chega
+    separado por TAB: cada linha com TAB vira uma linha da tabela."""
+    from html.parser import HTMLParser
+
+    class _P(HTMLParser):
+        def __init__(self):
+            HTMLParser.__init__(self, convert_charrefs=True)
+            self.prontas, self.pilha = [], []     # pilha: [linhas, linha, celula, span]
+            self.texto = []
+
+        def handle_starttag(self, tag, attrs):
+            if tag == 'table':
+                self.pilha.append([[], None, None, 1])
+            elif not self.pilha:
+                if tag in ('br', 'p', 'div'):
+                    self.texto.append('\n')
+            elif tag == 'tr':
+                self.pilha[-1][1] = []
+            elif tag in ('td', 'th') and self.pilha[-1][1] is not None:
+                span = dict(attrs).get('colspan') or '1'
+                self.pilha[-1][2] = []
+                self.pilha[-1][3] = int(span) if str(span).isdigit() else 1
+            elif tag in ('br', 'p', 'div') and self.pilha[-1][2] is not None:
+                self.pilha[-1][2].append(' ')
+
+        def handle_endtag(self, tag):
+            if not self.pilha:
+                if tag in ('p', 'div'):
+                    self.texto.append('\n')
+                return
+            t = self.pilha[-1]
+            if tag in ('td', 'th') and t[2] is not None:
+                cel = re.sub(r'\s+', ' ', ''.join(t[2]).replace('\xa0', ' ')).strip()
+                t[1].extend([cel] + [''] * (max(t[3], 1) - 1))
+                t[2] = None
+            elif tag == 'tr' and t[1] is not None:
+                t[0].append(t[1])
+                t[1] = None
+            elif tag == 'table':
+                self.pilha.pop()
+                if t[0]:
+                    self.prontas.append(t[0])
+
+        def handle_data(self, data):
+            if self.pilha and self.pilha[-1][2] is not None:
+                self.pilha[-1][2].append(data)
+            elif not self.pilha:
+                self.texto.append(data)
+
+    p = _P()
+    p.feed(_texto(html))
+    p.close()
+    out = [t for t in p.prontas if t]
+    if not out:
+        linhas = [ln.replace('\xa0', ' ') for ln in ''.join(p.texto).splitlines()]
+        tab = [[c.strip() for c in ln.split('\t')] for ln in linhas if '\t' in ln]
+        if tab:
+            out.append(tab)
+    return out

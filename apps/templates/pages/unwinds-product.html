@@ -120,8 +120,8 @@
                                     <i class="fs-24 ti ti-cloud-upload"></i>
                                 </span>
                             </div>
-                            <h4 class="mb-2" data-lang="unw-dropzone-title-generic">Drop the unwind spreadsheet here, or click to upload.</h4>
-                            <p class="text-muted fst-italic mb-3" data-lang="unw-dropzone-hint-generic">Excel or CSV with the grid columns as the header (labels or field names) — then click Import.</p>
+                            <h4 class="mb-2" data-lang="unw-dropzone-title-generic">Drop the unwind spreadsheet or e-mail here, or click to upload.</h4>
+                            <p class="text-muted fst-italic mb-3" data-lang="unw-dropzone-hint-generic">Excel, CSV or the e-mail (.msg/.eml) with the table pasted from Excel — grid columns as the header (labels or field names) — then click Import.</p>
                             <button class="btn btn-sm shadow btn-default" type="button" data-lang="nd-browse">Browse</button>
                         </div>
                     </form>
@@ -239,7 +239,8 @@ var _TRANS = {
         'unw_replace_text': '{n} row(s) of this spreadsheet are already in the day file (same B3 ID / Deal ID and unwind date) and will be replaced.',
         'unw_replace_btn': 'Replace',
         'unw_check_before': 'Check before sending',
-        'e_unwind_email_format_pending': 'The unwind e-mail of {produto} has no known format yet (no sample) — import the spreadsheet with the grid columns instead',
+        'e_unwind_email_table_unknown': 'No table with the columns of this page was found in the e-mail body — paste the spreadsheet with the grid column labels as the header',
+        'e_unwind_email_unreadable': 'The e-mail could not be read: {motivo}',
         'e_unwind_sheet_header_unknown': 'No header row with the columns of this page was found — use the column labels or field names of the grid',
         'e_unwind_sheet_unreadable': 'The spreadsheet could not be read: {motivo}',
         'e_unwind_sheet_empty': 'The spreadsheet has no data rows',
@@ -295,7 +296,8 @@ var _TRANS = {
         'unw_replace_text': '{n} linha(s) desta planilha já estão no arquivo do dia (mesmo B3 ID / Deal ID e data da recompra) e serão substituídas.',
         'unw_replace_btn': 'Substituir',
         'unw_check_before': 'Confira antes de enviar',
-        'e_unwind_email_format_pending': 'O e-mail de recompra de {produto} ainda não tem formato conhecido (sem amostra) — importe a planilha com as colunas da grade',
+        'e_unwind_email_table_unknown': 'Nenhuma tabela com as colunas desta página foi encontrada no corpo do e-mail — cole a planilha com os rótulos das colunas da grade no cabeçalho',
+        'e_unwind_email_unreadable': 'Não foi possível ler o e-mail: {motivo}',
         'e_unwind_sheet_header_unknown': 'Nenhuma linha de cabeçalho com as colunas desta página — use os rótulos ou os nomes de campo da grade',
         'e_unwind_sheet_unreadable': 'Não foi possível ler a planilha: {motivo}',
         'e_unwind_sheet_empty': 'A planilha não tem linhas de dado',
@@ -351,7 +353,8 @@ var _TRANS = {
         'unw_replace_text': '{n} línea(s) de esta planilla ya están en el archivo del día (mismo B3 ID / Deal ID y fecha de la recompra) y serán reemplazadas.',
         'unw_replace_btn': 'Reemplazar',
         'unw_check_before': 'Revise antes de enviar',
-        'e_unwind_email_format_pending': 'El correo de recompra de {produto} aún no tiene formato conocido (sin muestra) — importe la planilla con las columnas de la grilla',
+        'e_unwind_email_table_unknown': 'No se encontró en el cuerpo del correo ninguna tabla con las columnas de esta página — pegue la planilla con los rótulos de las columnas de la grilla en el encabezado',
+        'e_unwind_email_unreadable': 'No fue posible leer el correo: {motivo}',
         'e_unwind_sheet_header_unknown': 'Ninguna fila de encabezado con las columnas de esta página — use los rótulos o los nombres de campo de la grilla',
         'e_unwind_sheet_unreadable': 'No se pudo leer la planilla: {motivo}',
         'e_unwind_sheet_empty': 'La planilla no tiene filas de datos',

@@ -193,7 +193,8 @@ def main():
     pg_opt = catalog.PAGES['/unwinds/options/fxo']
     st, j = _up(pg_opt['api'], 'aviso.eml',
                 b'MIME-Version: 1.0\r\nSubject: Unwind\r\nContent-Type: text/html\r\n\r\n<table></table>')
-    check('e-mail: formato pendente, por codigo', st == 400 and j.get('code') == 'unwind_email_format_pending', (st, j))
+    check('e-mail sem a tabela da pagina: recusa por codigo',
+          st == 400 and j.get('code') == 'unwind_email_table_unknown', (st, j))
     st, j = _up(pg_opt['api'], 'lixo.csv', b'foo;bar\n1;2\n')
     check('planilha sem as colunas da pagina: cabecalho desconhecido',
           st == 400 and j.get('code') == 'unwind_sheet_header_unknown', (st, j))
@@ -214,6 +215,31 @@ def main():
     check('dry-run le e nao grava', st == 200 and dry.get('success') and dry['duplicates'] == []
           and PQ.entries(pg_ndf, '2026-09-21') == [], (st, dry))
     check('   e nao toca o sino', sino == [])
+    # A MESMA tabela colada do Excel no corpo do e-mail (a marcacao do Outlook:
+    # <p class=MsoNormal><span>, &nbsp;, cabecalho quebrado em duas linhas), com
+    # uma tabela de assinatura ANTES dela e a data como o Excel a cola.
+    def _td(v):
+        return '<td nowrap><p class=MsoNormal><span style="font-size:9pt">%s</span></p></td>' % v
+    cab = ['B3 ID', 'Unwound<br>Quantity', 'Termination&nbsp;Price', 'FX Rate', 'Pre FWD Rate',
+           'DU', 'Result', 'Unwind Date']
+    val = ['26G00000001', '300', '5.00', '5.40', '14.00', '60', '%.6f' % res, '21-Sep-26']
+    corpo = ('<html><body><table><tr><td>Mesa OTC</td></tr></table><p>Segue:</p>'
+             '<table border=0 cellpadding=0><tr>%s</tr><tr>%s</tr></table></body></html>'
+             % (''.join(_td(c) for c in cab), ''.join(_td(v) for v in val)))
+    eml = ('MIME-Version: 1.0\r\nSubject: Unwind NDF Comm\r\nContent-Type: text/html; '
+           'charset=utf-8\r\n\r\n' + corpo).encode('utf-8')
+    st, dm = _up(pg_ndf['api'], 'Unwind NDF Comm.eml', eml, dry=True)
+    _sem = lambda rs: [{k: v for k, v in r.items() if k not in ('_id', 'MyNumber', 'ImportedAt',
+                                                               'SourceFile')} for r in rs]
+    check('e-mail com a tabela colada do Excel: as MESMAS linhas da planilha',
+          st == 200 and _sem(dm.get('rows') or []) == _sem(dry.get('rows') or []), (st, dm))
+    txt = ('MIME-Version: 1.0\r\nSubject: x\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n'
+           'Segue:\r\n' + '\t'.join(c.replace('<br>', ' ').replace('&nbsp;', ' ') for c in cab)
+           + '\r\n' + '\t'.join(val) + '\r\n').encode('utf-8')
+    st, dt = _up(pg_ndf['api'], 'x.eml', txt, dry=True)
+    check('   e o e-mail em texto puro (TAB do Excel) tambem',
+          st == 200 and _sem(dt.get('rows') or []) == _sem(dry.get('rows') or []), (st, dt))
+    check('   sem gravar nem tocar o sino', PQ.entries(pg_ndf, '2026-09-21') == [] and sino == [])
     st, j = _up(pg_ndf['api'], 'recompra.csv', csv_ndf)
     l = (j.get('rows') or [{}])[0]
     check('import 200', st == 200 and j.get('success'), (st, j))

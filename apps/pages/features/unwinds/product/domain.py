@@ -139,7 +139,10 @@ def data_iso(v):
     if not t:
         return None
     t = t.split(' ')[0].split('T')[0]
-    for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%Y%m%d', '%d-%m-%Y', '%d.%m.%Y'):
+    # `21/09/26` e `21-Sep-26` sao como o Excel cola a data num e-mail (a
+    # celula vai como TEXTO, no formato de exibicao dela).
+    for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%Y%m%d', '%d-%m-%Y', '%d.%m.%Y', '%d/%m/%y',
+                '%d-%b-%y', '%d-%b-%Y'):
         try:
             return datetime.strptime(t, fmt).date().isoformat()
         except ValueError:
