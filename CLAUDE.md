@@ -894,6 +894,14 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 - **Regra de brilho alcança as DUAS famílias de seletor** (estrutural
   `[class*="-widget"]` e as quinze classes próprias), calibrada por tipo de
   superfície.
+- **Movimento é um SISTEMA** (`streamflow.css` §52): duração e curva só por
+  token (`--sf-dur-*`, `--sf-ease-*`); entra com ease-out, sai mais curto; UI
+  abaixo de 300 ms; botão afunda (`scale(.97)`). Menu e tooltip são do Popper
+  (`transform` inline): anima-se `scale`/`translate` INDIVIDUAIS, nunca
+  `transform`. Modal troca o keyframe do tema (repouso VISÍVEL) e **não escala**
+  — o `shown.bs.modal` dispara durante a entrada e escala muda a largura que o
+  DataTables mede. Saída do Swal tem keyframe PRÓPRIO: mesmo nome com `reverse`
+  não reinicia e o popup não fecha.
 - **`.modal-content.liquid-glass` é exceção da regra genérica das
   sobreposições** (`--sf-overlay-bg` a 82% matava o vidro dos modais, §387).
 - **Modo de efeitos reduzidos** (`sf-reduced` no `<html>`, decidido pela IIFE
