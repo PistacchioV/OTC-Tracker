@@ -90,17 +90,30 @@ def _asiaticas(cel):
     return sorted(set(datas))
 
 
-def _taxid_por_nome(nome):
-    """O CPF/CNPJ do Reference Data pela razao social ('' sem cadastro)."""
-    if not nome:
-        return ''
-    try:
-        rec = _R()._refdata_by_name().get(_R()._pc_norm(nome)) or {}
-    except Exception:                                       # noqa: BLE001
-        _R().log.warning('[UNWIND] Reference Data ilegivel ao buscar o CNPJ de %r:\n%s',
-                         nome, traceback.format_exc())
-        return ''
-    return str(rec.get('TAX ID') or '').strip()
+class _PorNome:
+    """O CPF/CNPJ do Reference Data pela razao social ('' sem cadastro).
+
+    O indice e montado UMA vez por coleta, no primeiro nome que precisa dele:
+    montado a cada linha da posicao, ele relia o cadastro inteiro e normalizava
+    os ~7 mil nomes por linha — no NDF, milhares de linhas, e o import do dia
+    nao terminava."""
+
+    def __init__(self):
+        self._idx = None
+
+    def __call__(self, nome):
+        if not nome:
+            return ''
+        R = _R()
+        if self._idx is None:
+            try:
+                self._idx = R._refdata_by_name()
+            except Exception:                               # noqa: BLE001
+                R.log.warning('[UNWIND] Reference Data ilegivel ao buscar o CNPJ de %r:\n%s',
+                              nome, traceback.format_exc())
+                self._idx = {}
+        rec = self._idx.get(R._pc_norm(nome)) or {}
+        return str(rec.get('TAX ID') or '').strip()
 
 
 def _contas(parte, cpty):
@@ -117,7 +130,7 @@ def _contas(parte, cpty):
         conta=str(parte or ''))
 
 
-def _ndf(cel):
+def _ndf(cel, por_nome):
     R = _R()
     omnibus = bool(R._b3_is_omnibus(cel.get('Codigo da Contraparte')))
     nome, doc, aviso_cpty = fase1.contraparte_da_posicao(cel, omnibus)
@@ -128,7 +141,7 @@ def _ndf(cel):
         'cpty_account': cel.get('Codigo da Contraparte', ''),
         'our_account': nossa, 'their_account': deles,
         'counterparty': nome or '',
-        'taxid': doc or _taxid_por_nome(nome),
+        'taxid': doc or por_nome(nome),
         'original': domain.numero(cel.get('Valor Base no registro')),
         'before': domain.numero(cel.get('Valor Antecipado')) or 0.0,
         'strike': (domain.numero(cel.get('Taxa Forward'), taxa=True)
@@ -143,7 +156,7 @@ def _ndf(cel):
     }
 
 
-def _opcao(cel):
+def _opcao(cel, por_nome):
     R = _R()
     conta = cel.get('Contraparte (Conta)', '')
     doc = cel.get('CPF/CNPJ Cliente Contraparte', '')
@@ -172,7 +185,7 @@ def _opcao(cel):
         'contract': cel.get('Código IF', ''),
         'party_account': cel.get('Parte (Conta)', ''), 'cpty_account': conta,
         'our_account': nossa, 'their_account': deles,
-        'counterparty': nome, 'taxid': doc if fase1.parece_documento(doc) else _taxid_por_nome(nome),
+        'counterparty': nome, 'taxid': doc if fase1.parece_documento(doc) else por_nome(nome),
         'option_type': ('Call' if ('call' in tipo or 'compra' in tipo)
                         else 'Put' if ('put' in tipo or 'venda' in tipo) else ''),
         'side': ('Titular' if 'titular' in lado
@@ -264,12 +277,13 @@ def posicoes(page, ref):
     Produto sem posicao (`position: None`) devolve ([], '')."""
     R = _R()
     kind = page.get('position')
+    por_nome = _PorNome()
     if kind == catalog.POS_NDF:
         dados = R._lpndf_collect(ref) or {}
-        return [_ndf(c) for c in _cells(dados)], dados.get('source_date') or ''
+        return [_ndf(c, por_nome) for c in _cells(dados)], dados.get('source_date') or ''
     if kind == catalog.POS_OPCAO:
         dados = R._lpopt_collect(ref) or {}
-        return [_opcao(c) for c in _cells(dados)], dados.get('source_date') or ''
+        return [_opcao(c, por_nome) for c in _cells(dados)], dados.get('source_date') or ''
     if kind == catalog.POS_SWAP:
         path, dref = _sf.swap_day_file('73760_{}_DPOSICAO-SWAP.json', ref.date()
                                        if hasattr(ref, 'date') else ref)
