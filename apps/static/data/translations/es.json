@@ -2604,6 +2604,7 @@
   "unw-col-du": "DH",
   "unw-col-result": "Resultado",
   "iuw-edit-row": "Editar Fila",
+  "unw-col-calcresult": "Resultado OTC Tracker",
   "unw-col-otc-tracker-result": "Resultado OTC Tracker",
   "unw-col-underlying": "Activo Subyacente",
   "unw-col-call-put": "Call / Put",

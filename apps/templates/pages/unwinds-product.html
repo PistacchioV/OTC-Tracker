@@ -576,14 +576,10 @@ $(document).ready(function () {
                 var d = this.data(), id = d ? d[C_KEY] : null, node = this.node();
                 if (!node) return;
                 $(node).find('input[type="checkbox"]').prop('checked', !!(id && selected.has(id)));
-                var st = (ROWS[id] || {}).Status || 'Imported';
-                // `Pending` é o único que oferece o Confirm, e é o único que
-                // NÃO oferece o Send: edição sem segundo par de olhos não vai
-                // para a B3. Enviada não se edita nem se apaga.
-                $(node).find('.btn-row-approve').toggleClass('d-none', st !== 'Pending');
-                $(node).find('.btn-row-send').toggleClass('d-none', !(st === 'Imported' || st === 'Approved'));
-                $(node).find('.btn-row-edit').toggleClass('d-none', st === 'Sent');
-                $(node).find('.btn-row-delete').toggleClass('d-none', st === 'Sent');
+                // Os QUATRO botões aparecem em TODO status (mesa, 28/09/2026): a
+                // tela não esconde ação pelo Status. Quem recusa o que o status
+                // não permite é o SERVIDOR, com a frase traduzida (Sent não se
+                // edita/apaga/reenvia; Confirm só de Pending, por outro usuário).
             });
             syncSelectAll();
             setTimeout(function () { api.columns.adjust(); }, 0);
@@ -695,7 +691,7 @@ $(document).ready(function () {
     // no Confirmations Monitor, que é onde vivem os documentos da esteira.
     function _actionsCell() {
         return '<div class="d-flex justify-content-center gap-1">' +
-            '<a class="btn btn-success btn-sm rounded-circle btn-row-approve d-none" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Confirm" data-bs-custom-class="tooltip-success"><i class="ti ti-check"></i></a>' +
+            '<a class="btn btn-success btn-sm rounded-circle btn-row-approve" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Confirm" data-bs-custom-class="tooltip-success"><i class="ti ti-check"></i></a>' +
             '<a class="btn btn-info btn-sm rounded-circle btn-row-edit" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Edit" data-bs-custom-class="tooltip-info"><i class="ti ti-edit"></i></a>' +
             '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Delete" data-bs-custom-class="tooltip-danger"><i class="ti ti-trash"></i></a>' +
             '<a class="btn btn-primary btn-sm rounded-circle btn-row-send" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Send" data-bs-custom-class="tooltip-primary"><i class="ti ti-brand-telegram"></i></a></div>';

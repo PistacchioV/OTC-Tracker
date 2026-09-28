@@ -479,11 +479,21 @@ def editar(athena_id, ref_date='', fields=None, sid=''):
         if (lst[idx].get('Status') or '') == domain.STATUS_ENVIADO:
             raise ValueError('This unwind was already sent to B3')
         liq_antes = lst[idx].get('SettlementDate')
+        mudou = set()
         for k, v in (fields or {}).items():
             # `k in lst[idx]` de proposito: a tela manda as colunas da grade, e
             # campo que a linha nao tem nao se INVENTA aqui.
             if k in lst[idx] and k not in domain.UNW_NAO_EDITAVEL:
+                if str(lst[idx][k] if lst[idx][k] is not None else '').strip() != \
+                        str(v if v is not None else '').strip():
+                    mudou.add(k)
                 lst[idx][k] = v
+        # Dado economico mudado refaz o Result e a Direction (o que foi
+        # digitado no mesmo Save vence); o Check e o `CalcResult` sao sempre
+        # reconferidos — um OK que sobrevivesse a edicao seria falso (§571).
+        domain.reconferir_linha(
+            lst[idx], refazer_resultado=bool(mudou & set(domain.UNW_ECONOMICOS))
+            and 'Result' not in mudou)
         lst[idx]['Status'] = domain.STATUS_PENDENTE
         lst[idx]['Maker'] = sid or ''
         lst[idx]['Checker'] = ''

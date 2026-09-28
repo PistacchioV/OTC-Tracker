@@ -1625,7 +1625,11 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `BRL` entra junto para o dia em que o Athena mandar o ISO a regra não virar
   "não é fixo em reais", que é o caso que dá valor errado.
 - **O veredito da conferência tem TRÊS estados** (fecha / não fecha / não dá
-  para conferir): "passou por omissão" não existe.
+  para conferir): "passou por omissão" não existe. Quando não fecha, a coluna
+  **OTC Tracker Result** (`CalcResult`, não editável, §573) mostra o que o app
+  calculou; e o Edit reconfere pelas COLUNAS da grade
+  (`domain.reconferir_linha`) — dado econômico mudado refaz Result e Direction,
+  como no catálogo (§571).
 - **O Novo Valor Base do Termo são TRÊS parcelas** (mesa, 18/09/2026): o
   nocional **ORIGINAL** (o do aviso), menos o que a posição já mostra como
   recomprado (`Valor Antecipado`), menos o recomprado agora. As três são
@@ -1682,7 +1686,9 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   o Outlook renomeia anexo e um `.msg` chega como `.txt` sem aviso. O assunto
   sai do arquivo quando ele o carrega; só o corpo solto cai para o nome.
 - **Os botões da linha são os QUATRO da casa** (§7): Confirm, Edit, Delete,
-  Send. O preview do arquivo da B3 é o **duplo clique** na linha e o Termo de
+  Send, e **aparecem em TODO status** (mesa, 28/09/2026, §574): a tela não
+  esconde ação pelo Status — quem recusa o que o status não permite é o
+  servidor, com a frase traduzida. O preview do arquivo da B3 é o **duplo clique** na linha e o Termo de
   Resilição se gera no **Confirmations Monitor** — um olho e um documento na
   coluna Actions eram dois caminhos a mais para onde já se chega. A **edição
   segue o 4-olhos das páginas de Intrag**: salvar põe a linha em `Pending` e

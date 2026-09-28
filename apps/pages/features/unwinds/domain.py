@@ -778,13 +778,13 @@ def valores_ter_0014(campos):
 UNW_FIELDS = (
     'Status', 'AthenaID', 'Contract', 'Counterparty', 'TaxID', 'Currency',
     'OriginalNotional', 'UnwoundBefore', 'UnwoundNotional', 'Strike', 'TerminationRate',
-    'PreFWDRate', 'DU', 'Result', 'Direction', 'SettlementDate',
+    'PreFWDRate', 'DU', 'Result', 'CalcResult', 'Direction', 'SettlementDate',
     'TradeDate', 'MaturityDate', 'BRLFixed', 'Check',
 )
 UNW_LABELS = (
     'Status', 'Athena ID', 'B3 ID', 'Counterparty', 'Tax ID', 'Ccy',
     'Original Notional', 'Unwound Before', 'Unwound Notional', 'Strike', 'Termination Rate',
-    'Pre FWD Rate', 'DU', 'Result', 'Direction', 'Settlement Date',
+    'Pre FWD Rate', 'DU', 'Result', 'OTC Tracker Result', 'Direction', 'Settlement Date',
     'Trade Date', 'Maturity Date', 'BRL Fixed', 'Check',
 )
 
@@ -804,13 +804,80 @@ STATUS_ENVIAVEL = (STATUS_NOVO, STATUS_APROVADO)
 # O que a edicao de linha NAO toca. A chave, porque e por ela que a linha se
 # acha; os dois veredictos, porque sao apurados e nao digitados; e o rastro do
 # 4-olhos — quem edita nao escreve o proprio carimbo de conferido.
-UNW_NAO_EDITAVEL = ('AthenaID', 'Check', 'Status', 'Maker', 'Checker',
+UNW_NAO_EDITAVEL = ('AthenaID', 'Check', 'CalcResult', 'Status', 'Maker', 'Checker',
                     'MyNumber', 'SentFiles', 'SentAt', 'Warnings',
                     'ImportedAt', 'PositionDate')
 
 # O veredito da conferencia, para a coluna `Check`. Tres estados, como o
 # `conferido` do `conferir_apuracao`: nao existe "deu certo por omissao".
 CHECK_OK, CHECK_NOK, CHECK_NA = 'OK', 'NOK', '-'
+
+# O que, mudado no Edit, refaz as contas da linha (a regra do catalogo, §571).
+UNW_ECONOMICOS = ('OriginalNotional', 'UnwoundBefore', 'UnwoundNotional', 'Strike',
+                  'TerminationRate', 'PreFWDRate', 'DU')
+# Os codigos que a conferencia escreve — a reconferencia do Edit os troca.
+_CODIGOS_DA_CONFERENCIA = ('unwind_result_mismatch', 'unwind_check_missing',
+                           'unwind_position_unknown')
+
+
+def _num_linha(v, taxa=False):
+    """Numero de uma coluna da linha gravada. O que o import gravou ja e
+    NUMERO e passa direto (`numero_flex(108.885)` leria o texto '108.885' como
+    milhar, e o zero como vazio); o texto do Edit segue o `numero_flex`, menos
+    numa TAXA, onde um separador so e sempre decimal (`5.125` e 5,125)."""
+    if isinstance(v, bool) or v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    t = str(v).strip()
+    if taxa and t.count('.') + t.count(',') == 1:
+        t = t.replace(',', '.')
+        try:
+            return float(t)
+        except ValueError:
+            return None
+    return numero_flex(t)
+
+
+def resultado_da_linha(linha):
+    """O resultado refeito pelas COLUNAS da grade — a mesma formula do
+    `conferir_apuracao`, sobre o que a mesa pode ter corrigido na tela.
+    (valor, codigo do que falta) — o valor e None quando nao da para refazer."""
+    l = linha or {}
+    comprado = l.get('Comprado')
+    if comprado is None:
+        return None, 'unwind_position_unknown'
+    me, du = _num_linha(l.get('UnwoundNotional')), _num_linha(l.get('DU'))
+    strike, term, pre = (_num_linha(l.get(k), taxa=True)
+                         for k in ('Strike', 'TerminationRate', 'PreFWDRate'))
+    if None in (me, strike, term, pre, du):
+        return None, 'unwind_check_missing'
+    fv = abs(me) * (term - strike) * (1 if comprado else -1)
+    return fv / ((1.0 + pre / 100.0) ** (du / BASE_DU)), None
+
+
+def reconferir_linha(linha, refazer_resultado=False):
+    """Refaz, NO LUGAR, o Check e o `CalcResult` da linha pelas colunas da
+    grade; com `refazer_resultado` (dado economico mudado no Edit e o Result
+    nao digitado) o Result e a Direction passam a ser os da conta."""
+    res, falta = resultado_da_linha(linha)
+    if refazer_resultado and res is not None:
+        linha['Result'] = round(res, 2)
+        linha['Direction'] = 'RECEIVE' if res > 0 else ('PAY' if res < 0 else '')
+    fee = _num_linha(linha.get('Result'))
+    if res is None or fee is None:
+        veredito, calc, codigo = CHECK_NA, None, falta or 'unwind_check_missing'
+    elif _perto(fee, res):
+        veredito, calc, codigo = CHECK_OK, None, None
+    else:
+        veredito, calc, codigo = CHECK_NOK, round(res, 2), 'unwind_result_mismatch'
+    linha['Check'] = veredito
+    linha['CalcResult'] = calc
+    avisos = [c for c in (linha.get('Warnings') or []) if c not in _CODIGOS_DA_CONFERENCIA]
+    if codigo:
+        avisos.append(codigo)
+    linha['Warnings'] = avisos
+    return linha
 
 
 def linha_da_recompra(rec, posicao, hoje, contrato=None, omnibus=None):
@@ -864,6 +931,11 @@ def linha_da_recompra(rec, posicao, hoje, contrato=None, omnibus=None):
         'PreFWDRate': numero(depois.get('Pre FWD Rate')),
         'DU': numero(depois.get('DU')),
         'Result': resultado_apurado(depois),
+        # O resultado que o OTC Tracker calculou, SO quando nao bate com o
+        # informado (vazio quando bate): a divergencia a vista (mesa, 28/09/2026).
+        'CalcResult': (round(conf['resultado_calc'], 2)
+                       if conf['conferido'] is False and conf['resultado_calc'] is not None
+                       else None),
         # A direcao e a do SINAL do resultado, nunca o campo `Direction` do
         # e-mail: na amostra fixa em reais ele dizia PAY numa recompra a
         # RECEBER. O campo do e-mail fica guardado para a conferencia.
