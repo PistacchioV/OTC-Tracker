@@ -1550,7 +1550,9 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   na tela um strike e uma paridade que o e-mail não tem. Quando a conta com os
   números mostrados não fecha com o PV, o Check dá NOK e a coluna **OTC Tracker
   Result** (`CalcResult`, não editável) diz o que o app calculou — vazia quando
-  bate. O casamento com o Live Position aceita o arredondado: sem candidato
+  bate. **O Edit que muda dado ECONÔMICO refaz as contas** (§571,
+  `commands._refazer_calculos`): DU se uma data mudou, Result pela fórmula do
+  termo e Direction pelo sinal — o que foi digitado no mesmo Save vence. O casamento com o Live Position aceita o arredondado: sem candidato
   exato, vale o contrato cujo strike/volume ARREDONDA para as casas exibidas
   (ainda ÚNICO), e a linha continua com o valor do e-mail; sem nenhum, o aviso
   diz o contrato mais perto e os dois valores (`unwind_match_none_near`). A posição (os MESMOS

@@ -227,10 +227,34 @@ def importar(page, filename, dados, ref, dry_run=False):
 
 # ── Edicao, 4-olhos, delete ──────────────────────────────────────────────────
 
+def _refazer_calculos(page, linha, mudou, kinds):
+    """Dado ECONOMICO mudado no Edit refaz as contas da linha (mesa,
+    28/09/2026): o DU quando uma data mudou, o Result pela formula do termo e
+    a Direction pelo sinal dele. O que a pessoa digitou no mesmo Save VENCE —
+    Result, DU ou Direction editados a mao ficam, e o Check confere."""
+    if not (mudou & set(domain.CAMPOS_ECONOMICOS)):
+        return
+    if 'DU' in kinds and 'DU' not in mudou and \
+            mudou & {'UnwindDate', 'SettlementDate', 'MaturityDate'} and linha.get('MaturityDate'):
+        du = queries.dias_uteis(linha.get('SettlementDate') or linha.get('UnwindDate'),
+                                linha['MaturityDate'])
+        if du is not None:
+            linha['DU'] = du
+    if 'termo' in (page.get('checks') or ()) and 'Result' in kinds and 'Result' not in mudou:
+        res, faltam = domain.resultado_termo(linha, page)
+        if not faltam:
+            linha['Result'] = round(res, 2)
+    if 'Direction' in kinds and 'Direction' not in mudou:
+        d = domain.direcao_do_resultado(linha)
+        if d:
+            linha['Direction'] = d
+
+
 def editar(page, row_id, date_str, fields, sid=''):
     """Edicao -> `Pending`, com o editor como MAKER (o 4-olhos da Fase 1). O
     veredito e REFEITO com os valores novos: um Check `OK` que sobrevivesse a
-    uma edicao afirmaria uma conferencia que ninguem fez. None se a linha nao
+    uma edicao afirmaria uma conferencia que ninguem fez. Dado economico
+    mudado refaz as contas (`_refazer_calculos`). None se a linha nao
     existe; Recusa se ja foi enviada ou se um valor nao se le no tipo da coluna."""
     kinds = catalog.column_kinds(page)
     with _R()._cache_lock:
@@ -240,6 +264,7 @@ def editar(page, row_id, date_str, fields, sid=''):
         linha = lst[idx]
         if linha.get('Status') == domain.STATUS_ENVIADO:
             raise domain.Recusa('unwind_already_sent', 'This unwind was already sent to B3', 409)
+        mudou = set()
         for k, v in (fields or {}).items():
             if k not in kinds or k in domain.NAO_EDITAVEL:
                 continue
@@ -247,7 +272,10 @@ def editar(page, row_id, date_str, fields, sid=''):
             if erro:
                 raise domain.Recusa('unwind_bad_value', '%s: %r is not a valid %s'
                                     % (k, v, kinds[k]), campo=k, valor=str(v))
+            if not domain.mesmo_valor(linha.get(k), val):
+                mudou.add(k)
             linha[k] = val
+        _refazer_calculos(page, linha, mudou, kinds)
         veredito, avisos = domain.conferir(linha, page)
         linha['Check'] = veredito
         if 'CalcResult' in kinds:

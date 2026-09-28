@@ -558,6 +558,24 @@ def main():
     check('so a perna JPMOCC: recusa por codigo',
           st == 400 and j.get('code') == 'unwind_recap_no_legs', (st, j.get('code')))
 
+    # O Edit que muda dado ECONOMICO refaz as contas (mesa, 28/09/2026): o
+    # Result pela formula do termo e a Direction pelo sinal; Result digitado
+    # no mesmo Save vence, e o Check confere.
+    kinds = catalog.column_kinds(pg_ndf)
+    l_ed = dict(cli, TerminationRate=96.84626, FXRate=6270582.12 / 1203874)
+    PC._refazer_calculos(pg_ndf, l_ed, {'TerminationRate', 'FXRate'}, kinds)
+    check('edit economico: Result e Direction refeitos',
+          (l_ed.get('Result'), l_ed.get('Direction')) == (-6270582.12, 'PAY'),
+          (l_ed.get('Result'), l_ed.get('Direction')))
+    l_ed2 = dict(cli, Result=-1.0, TerminationRate=110.0)
+    PC._refazer_calculos(pg_ndf, l_ed2, {'TerminationRate', 'Result'}, kinds)
+    check('   Result digitado no mesmo Save vence', l_ed2.get('Result') == -1.0, l_ed2.get('Result'))
+    l_ed3 = dict(cli, Result=-1.0)
+    PC._refazer_calculos(pg_ndf, l_ed3, {'Counterparty'}, kinds)
+    check('   campo nao economico nao refaz nada', l_ed3.get('Result') == -1.0, l_ed3.get('Result'))
+    check('   mesmo_valor: 100000 gravado = 100,000.00 do Save',
+          PD.mesmo_valor(100000.0, '100,000.00') and not PD.mesmo_valor(96.85, 96.84626))
+
     print('\n== 12. NDF Commodities: esteira, Termo e liquidacao (a regra da Fase 1) ==')
     from apps.pages.features.unwinds import commands as F1C
     from apps.pages.features.unwinds import queries as F1Q

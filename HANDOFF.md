@@ -24491,3 +24491,25 @@ Linha `Imported` é sobrescrita pelo reimport.
 
 **Testes**: `check_unwind_products` troca as asserções da precisão refeita
 pelas do número do e-mail e pelo `CalcResult`.
+
+## §571 — Edit da recompra refaz as contas quando muda dado econômico (2026-09-28)
+
+**Pedido da mesa**: no Edit da recompra de NDF Commodities, mudar uma
+informação econômica e salvar tem de refazer os cálculos. Até aqui o Save só
+refazia o Check (e o `CalcResult`), e o Result continuava o do e-mail, que já
+não correspondia aos números da linha.
+
+**Como ficou** (`commands._refazer_calculos`):
+- O Save compara cada campo com o valor gravado (`domain.mesmo_valor`: número
+  compara como número). Se algum de `domain.CAMPOS_ECONOMICOS` mudou (volumes,
+  strike, Termination, FX, Pre FWD, DU, moeda, datas), refaz nesta ordem:
+  1. o DU, quando mudou uma data;
+  2. o Result, pela fórmula do termo (`resultado_termo`, a mesma do Check);
+  3. a Direction, pelo sinal do Result.
+- O que a pessoa digitou no MESMO Save vence: Result, DU ou Direction editados
+  à mão ficam como digitados, e o Check confere.
+- Vale para as páginas com a conferência `termo` (NDF FX e NDF Commodities do
+  catálogo). Nas páginas de opção só o Check é refeito.
+- A edição continua levando a linha a `Pending`, pelo 4-olhos de sempre.
+
+**Testes**: `check_unwind_products`, antes do §12.

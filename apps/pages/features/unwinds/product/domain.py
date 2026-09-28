@@ -765,6 +765,21 @@ def conferir(linha, page):
     return CHECK_NA, avisos
 
 
+# O que, mudado no Edit, refaz as contas da linha (`commands._refazer_calculos`).
+CAMPOS_ECONOMICOS = ('OriginalNotional', 'UnwoundBefore', 'UnwoundNotional', 'Strike',
+                     'TerminationRate', 'FXRate', 'PreFWDRate', 'DU', 'Currency',
+                     'UnwindDate', 'SettlementDate', 'MaturityDate')
+
+
+def mesmo_valor(a, b):
+    """O valor gravado e o do Save sao o mesmo? Numero compara como numero
+    (`100000` gravado e `100,000.00` digitado sao iguais), o resto como texto."""
+    na, nb = numero(a, taxa=True), numero(b, taxa=True)
+    if na is not None and nb is not None:
+        return abs(na - nb) < 1e-12
+    return texto(a) == texto(b)
+
+
 _DIVERGENCIAS = ('unwind_result_mismatch', 'unwind_amount_mismatch')
 
 
