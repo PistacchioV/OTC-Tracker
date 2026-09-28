@@ -86,6 +86,10 @@ def import_email(html, subject='', ref_dt=None, dry_run=False):
         # A recompra entra na esteira JÁ NO IMPORT (mesa): Pending Confirmation,
         # Track e Confirmations Monitor a mostram sem esperar o Send.
         esteira_da_recompra([linha], ref)
+        # E a perna do FUNDO na Intrag › Unwind, também no IMPORT (mesa,
+        # 28/09/2026): nem toda recompra é registrada na B3 pelo OTC Tracker,
+        # e esperar o Send deixava a Intrag sem a instrução das que não são.
+        intrag_da_recompra([linha], ref)
         # E no NDF Cockpit, que é a tela onde a mesa acompanha a liquidação e o
         # imposto — o dia dela é o da LIQUIDAÇÃO, não o do import.
         cockpit_da_recompra([linha])
@@ -419,13 +423,10 @@ def send(items, sid='', download=False, ref_date=''):
         gerados.append({'filename': os.path.basename(destino), 'count': g['count']})
         _R().log.info('[UNWIND NDF FX] Wrote %s (%d record(s))', destino, len(g['records']))
     enviadas = marcar_enviadas(alvos, sid, [g['filename'] for g in gerados])
-    # A esteira NÃO se refaz aqui: ela nasce no import (`esteira_da_recompra`),
-    # e um segundo `_pc_save_from_deal` por cima reabriria uma validação que o
-    # OTC já tivesse feito entre o import e o Send.
-    # A ponta do FUNDO, essa sim, sai no Send: a Intrag é quem lança
-    # por ele, e a instrução sai na planilha de onze colunas da página
-    # Intrag › Unwind.
-    intrag_from_send(enviadas)
+    # A esteira e a Intrag NÃO se refazem aqui: as duas nascem no IMPORT
+    # (`esteira_da_recompra`, `intrag_da_recompra`) — nem toda recompra passa
+    # pelo Send, porque nem toda é registrada na B3 pelo OTC Tracker.
+    del enviadas
     return {'files': gerados, 'count': sum(g['count'] for g in grupos.values())}
 
 
@@ -506,6 +507,8 @@ def editar(athena_id, ref_date='', fields=None, sid=''):
     if str(liq_antes or '') != str(linha.get('SettlementDate') or ''):
         cockpit_sem_a_recompra([{'AthenaID': alvo, 'SettlementDate': liq_antes}])
     cockpit_da_recompra([linha])
+    # A Intrag acompanha a edicao (o upsert preserva o status de la).
+    intrag_da_recompra([linha], ref_date)
     return linha
 
 
@@ -540,7 +543,7 @@ def delete(athena_id, ref_date=''):
     fp, lst, idx = queries.find(athena_id, ref_date)
     if idx is None:
         return False
-    if (lst[idx].get('Status') or '') == domain.STATUS_ENVIADO:
+    if (lst[idx].get('Status') or '') in domain.STATUS_REGISTRADO:
         raise ValueError('This unwind was already sent to B3')
     # A esteira nasce no import junto com a recompra e sai junto com ela — mas
     # nao por cima de carimbo de mesa. Linha ja validada, ja com documento
@@ -569,6 +572,7 @@ def delete(athena_id, ref_date=''):
     # recompra que nao existe mais, com o Generate respondendo "nenhuma
     # operacao encontrada no arquivo-dia" para sempre.
     esteira_sem_a_recompra([athena_id])
+    intrag_sem_a_recompra([apagada], ref_date)
     return True
 
 
@@ -1145,7 +1149,7 @@ def e_do_fundo(linha):
     Termo de Resilicao e Pending Confirmation sao SO contra o cliente (mesa,
     28/09/2026, §580): o distrato e o documento que o CLIENTE assina, e do
     lado do fundo quem instrui a antecipacao e a Intrag, pela planilha da
-    Intrag > Unwind (`intrag_from_send`)."""
+    Intrag > Unwind (`intrag_da_recompra`)."""
     return queries.e_do_fundo(linha)
 
 
@@ -1158,14 +1162,60 @@ def esteira_fora_do_fundo(chave):
         esteira_sem_a_recompra([chave])
 
 
-def intrag_from_send(linhas, ref=None):
-    """Grava na Intrag as recompras que têm o fundo numa das pontas.
+def _dia_da_recompra(linha, ref=None):
+    """O dia da linha na Intrag › Unwind (a Data da Recompra): o dia do
+    arquivo-dia da recompra, ou a `UnwindDate` das do catalogo."""
+    R = _R()
+    return (R._parse_date_any(ref) or R._parse_date_any((linha or {}).get('UnwindDate'))
+            or _hoje())
+
+
+def intrag_da_recompra(linhas, ref=None):
+    """Grava na Intrag › Unwind as recompras que têm o fundo numa das pontas.
     -> [(entry, avisos)] das que entraram.
 
-    Falha aqui NÃO derruba o envio: o arquivo da B3 já foi gerado."""
-    ref = _R()._parse_date_any(ref) or _hoje()
+    Roda no IMPORT (mesa, 28/09/2026) e no Edit — nunca no Send: nem toda
+    recompra e registrada na B3 pelo OTC Tracker, e a instrucao da Intrag nao
+    pode depender disso. O upsert (chave `_deal`) preserva o status da linha
+    na Intrag. Falha aqui NÃO derruba o import: a recompra ja foi gravada."""
     out = []
     for l in linhas or []:
+        ref_l = _dia_da_recompra(l, ref)
+        out.extend(_intrag_uma(l, ref_l))
+    return out
+
+
+def intrag_sem_a_recompra(linhas, ref=None):
+    """Tira da Intrag › Unwind a recompra APAGADA — so a linha que la ainda
+    esta `New` (intocada): aprovada ou enviada a Intrag e registro."""
+    try:
+        eng = _R()._intrag_engine()
+        iq = eng.queries           # feature nao importa feature: pelo gancho do routes
+    except Exception:                                       # noqa: BLE001
+        return 0
+    n = 0
+    for l in linhas or []:
+        deal = str((l or {}).get('AthenaID') or '').strip()
+        if not deal or not e_do_fundo(l):
+            continue
+        td = _dia_da_recompra(l, ref).strftime('%Y-%m-%d')
+        try:
+            fp, entries, idx = iq._find_intrag_unwind_entry(deal, td)
+            if fp is None or idx is None:
+                continue
+            if str(entries[idx].get('status') or 'New') != 'New':
+                _R().log.warning('[UNWIND] Intrag: %s ja saiu de New la e foi mantida', deal)
+                continue
+            n += eng._intrag_delete_entries('unwind', [{'deal_id': deal, 'trade_date': td}])[0]
+        except Exception:                                   # noqa: BLE001
+            _R().log.warning('[UNWIND] Intrag: %s nao foi apagada — %s', deal,
+                             traceback.format_exc())
+    return n
+
+
+def _intrag_uma(linha, ref):
+    out = []
+    for l in [linha]:
         fundo, fundo_e_parte = _fundo_da_recompra(l)
         if not fundo:
             continue
@@ -1207,6 +1257,125 @@ def intrag_from_send(linhas, ref=None):
             _R().log.warning('[UNWIND NDF FX] Intrag: %s ficou de fora — %s',
                              l.get('AthenaID'), traceback.format_exc())
     return out
+
+
+# ── O retorno da B3: Mapping B3 ID (mesa, 28/09/2026) ──────────────────────
+# O Conecta devolve em `Batch Conecta \\ Return` uma linha por registro; a
+# recompra deu certo quando a linha traz SUCESSO e o B3 ID dela (o `Contract`).
+# UMA varredura atende a NDF FX e as onze do catalogo — o arquivo de retorno e
+# um so para todas, e a tela que clicou nao sabe de quem e cada linha.
+RETORNO_LOOKBACK_DIAS = 10
+
+
+def _retornos():
+    """[(caminho, texto)] dos arquivos da pasta de retorno. Pasta ausente
+    LEVANTA (a tela diz qual): "nao ha retorno" e "nao achei a pasta" nao podem
+    virar a mesma resposta."""
+    raiz = _R().RETURN_PATH
+    if not os.path.isdir(raiz):
+        raise FileNotFoundError(raiz)
+    out = []
+    for nome in sorted(os.listdir(raiz)):
+        fp = os.path.join(raiz, nome)
+        if not os.path.isfile(fp):
+            continue
+        try:
+            with open(fp, 'rb') as fh:
+                out.append((fp, fh.read().decode('cp1252', errors='replace')))
+        except OSError:
+            _R().log.warning('[UNWIND] retorno ilegivel: %s\n%s', fp, traceback.format_exc())
+    return out
+
+
+def _dias_da_janela(ref):
+    from datetime import timedelta
+    ref = _R()._parse_date_any(ref) or _hoje()
+    try:
+        ref = ref.date()
+    except AttributeError:
+        pass
+    return [ref - timedelta(days=n) for n in range(RETORNO_LOOKBACK_DIAS + 1)]
+
+
+def _arquivos_da_janela(ref):
+    """[(rotulo da pagina, caminho do arquivo-dia, leitor, gravador)] da NDF FX
+    e das paginas do catalogo nos dias da janela."""
+    from apps.pages.features.unwinds import catalog
+    from apps.pages.features.unwinds.infra import product_store
+    out = []
+    for d in _dias_da_janela(ref):
+        dt = datetime(d.year, d.month, d.day)
+        out.append((PAGE, persistence.day_path(dt), _ler_dia, persistence.save))
+        for pagina in catalog.PAGES.values():
+            out.append((pagina['label'], product_store.day_path(pagina, d),
+                        product_store.read_day, product_store.save))
+    return out
+
+
+def _ler_dia(fp):
+    try:
+        lst = _store.read(fp) if _store.exists(fp) else []
+    except (ValueError, OSError):
+        lst = []
+    return lst if isinstance(lst, list) else []
+
+
+def mapear_retornos(ref=None, sid=''):
+    """Le a pasta de retorno e vira `Success` toda recompra cujo B3 ID aparece
+    numa linha de SUCESSO. -> {mapped: [{page, contract, deal}], files, deleted}.
+
+    Janela de `RETORNO_LOOKBACK_DIAS` dias corridos ate `ref`: o retorno chega
+    depois do envio, e a recompra fica no arquivo-dia em que entrou. Linha ja
+    `Success` fica como esta. O arquivo de retorno so e apagado quando TODAS as
+    linhas de dado dele foram usadas aqui — a pasta e a mesma do New Deals, e
+    linha que nao e nossa fica para quem a le."""
+    retornos = _retornos()
+    alvos = _arquivos_da_janela(ref)
+    contratos = set()
+    for _rot, fp, ler, _grv in alvos:
+        for e in ler(fp):
+            if isinstance(e, dict) and e.get('Status') != domain.STATUS_SUCESSO:
+                c = str(e.get('Contract') or '').strip().upper()
+                if c:
+                    contratos.add(c)
+    ok, apagar, por_arquivo = set(), [], {}
+    for fp, texto in retornos:
+        achados, dados, usadas = domain.b3_ids_com_sucesso(texto, contratos)
+        if achados:
+            ok |= achados
+            por_arquivo[os.path.basename(fp)] = sorted(achados)
+            if usadas == dados:
+                apagar.append(fp)
+    mapeadas = []
+    if ok:
+        quando = _R()._br_now().strftime('%Y-%m-%d %H:%M')
+        with _R()._cache_lock:
+            for rot, fp, ler, grv in alvos:
+                lst = ler(fp)
+                mudou = False
+                for e in lst:
+                    c = str((e or {}).get('Contract') or '').strip().upper()
+                    if (isinstance(e, dict) and c in ok
+                            and e.get('Status') != domain.STATUS_SUCESSO):
+                        e['Status'] = domain.STATUS_SUCESSO
+                        e['B3ReturnAt'] = quando
+                        e['B3ReturnFile'] = ', '.join(n for n, ids in por_arquivo.items()
+                                                      if c in ids)
+                        mudou = True
+                        mapeadas.append({'page': rot, 'contract': c,
+                                         'deal': e.get('AthenaID') or e.get('DealID') or ''})
+                if mudou:
+                    grv(fp, lst)
+    apagados = []
+    for fp in apagar:
+        try:
+            os.remove(fp)
+            apagados.append(os.path.basename(fp))
+        except OSError:
+            _R().log.warning('[UNWIND] retorno nao apagado: %s', fp)
+    _R().log.info('[UNWIND] Mapping B3 ID: %d recompra(s) -> Success; %d retorno(s) lido(s), '
+                  '%d apagado(s)', len(mapeadas), len(retornos), len(apagados))
+    return {'mapped': mapeadas, 'files': len(retornos), 'deleted': apagados}
 
 
 # ── A recompra no Settlement Summary de NDF ──────────────────────────────────

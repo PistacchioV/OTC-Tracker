@@ -624,10 +624,31 @@ def main():
     R._mc_mod = _MC
     R._pc_save_from_deal = lambda deal, *a, **k: pc_salvos.append((deal, a, k))
     R._pc_delete_trade_number = lambda k: None
+    # A perna do fundo vai para a Intrag > Unwind no IMPORT (mesa, 28/09/2026:
+    # nem toda recompra e registrada na B3 pelo OTC Tracker), pela porta da
+    # Fase 1; a do cliente nao.
+    intrag_salvas = []
+
+    class _IE:
+        @staticmethod
+        def _save_intrag_unwind_entry(**kw):
+            intrag_salvas.append(kw)
+            return {'_deal': kw.get('deal')}, []
+    ie_orig = R._intrag_engine
+    R._intrag_engine = lambda: _IE
     try:
         st, j = _up(pg_ndf['api'], 'CSN unwind.eml', eml)
         rows = j.get('rows') or []
         check('import grava as duas pernas', st == 200 and len(rows) == 2, (st, j.get('code')))
+        check('   a perna do fundo vai para a Intrag JA NO IMPORT, com o Deal ID e o LAWTON',
+              [(k.get('deal'), k.get('fundo')) for k in intrag_salvas]
+              == [('D5NQ-HMNV-BCO', 'LAWTON')],
+              [(k.get('deal'), k.get('fundo')) for k in intrag_salvas])
+        k0 = intrag_salvas[0] if intrag_salvas else {}
+        check('   Banco recebe -> o fundo PAGA; valores do contrato; dia da recompra',
+              (k0.get('credor'), k0.get('b3_id'), k0.get('valor_base_recomprado'),
+               k0.get('valor_liquidacao'), str(k0.get('data_recompra'))[:10])
+              == (False, '26E00000BCO', 100000.0, 6321326.69, '2026-09-21'), k0)
         fontes = [(d.get('Deal'), a[0] if a else '') for d, a, _k in pc_salvos]
         # Termo e Pending Confirmation so contra o CLIENTE (mesa, 28/09/2026,
         # §580): a perna Banco x Lawton (o B2B) nao entra na esteira.
@@ -705,41 +726,59 @@ def main():
               all(h in html for h in ('Quantidade Recomprada', 'Taxa Pré', 'Taxa de Recompra',
                                       '100,000.00', '96.85'))
               and 'Cotação Mercadoria' not in html, subj)
-        # A perna do fundo vai para a Intrag > Unwind no SEND (§580), pela porta
-        # da Fase 1; a do cliente nao.
-        intrag_salvas = []
-
-        class _IE:
-            @staticmethod
-            def _save_intrag_unwind_entry(**kw):
-                intrag_salvas.append(kw)
-                return {'_deal': kw.get('deal')}, []
-        ie_orig = R._intrag_engine
-        R._intrag_engine = lambda: _IE
-        try:
-            e_bco = next((e for e in PQ.entries(pg_ndf, '2026-09-21')
-                          if e.get('DealID') == 'D5NQ-HMNV-BCO'), {})
-            st, j = _post(pg_ndf['api'] + '/send-conecta',
-                          {'items': [{'id': e_bco.get('_id')}], 'date': '2026-09-21'})
-            check('send da perna do fundo', st == 200, (st, j))
-            check('   vai para a Intrag, com o Deal ID e o LAWTON',
-                  [(k.get('deal'), k.get('fundo')) for k in intrag_salvas]
-                  == [('D5NQ-HMNV-BCO', 'LAWTON')],
-                  [(k.get('deal'), k.get('fundo')) for k in intrag_salvas])
-            k0 = intrag_salvas[0] if intrag_salvas else {}
-            check('   Banco recebe -> o fundo PAGA; valores do contrato',
-                  (k0.get('credor'), k0.get('b3_id'), k0.get('valor_base_recomprado'),
-                   k0.get('valor_liquidacao')) == (False, '26E00000BCO', 100000.0, 6321326.69),
-                  k0)
-        finally:
-            R._intrag_engine = ie_orig
+        # O Send NAO grava a Intrag de novo: ela nasceu no import.
+        del intrag_salvas[:]
+        e_bco = next((e for e in PQ.entries(pg_ndf, '2026-09-21')
+                      if e.get('DealID') == 'D5NQ-HMNV-BCO'), {})
+        st, j = _post(pg_ndf['api'] + '/send-conecta',
+                      {'items': [{'id': e_bco.get('_id')}], 'date': '2026-09-21'})
+        check('send da perna do fundo', st == 200, (st, j))
+        check('   e o Send nao toca a Intrag', intrag_salvas == [], intrag_salvas)
         rid = e_cli.get('_id')
         st, j = _post(pg_ndf['api'] + '/delete', {'id': rid, 'date': '2026-09-21'})
         check('delete tira da esteira e do Pending Confirmation',
               st == 200 and 'D5NQ-HMNV-CLI' in mc_apagados, (st, j, mc_apagados))
     finally:
+        R._intrag_engine = ie_orig
         R._mc_mod, R._pc_save_from_deal = mc_orig, pcsave_orig
         R._pc_delete_trade_number = pcdel_orig
+
+    print('\n== 13. Mapping B3 ID: retorno com SUCESSO + B3 ID vira Success ==')
+    ret = os.path.join(tmp, 'Return')
+    os.makedirs(ret, exist_ok=True)
+    ret_orig = R.RETURN_PATH
+    R.RETURN_PATH = ret
+    try:
+        f_ok = os.path.join(ret, 'retorno_unwind.txt')
+        with open(f_ok, 'w', encoding='cp1252') as fh:
+            fh.write('0;26E00000BCO;1;SUCESSO;TER  10014 ...\n')
+        f_outro = os.path.join(ret, 'retorno_new_deals.txt')
+        with open(f_outro, 'w', encoding='cp1252') as fh:
+            fh.write('0;26E00000BCO;1;SUCESSO;x\n0;26E99999999;1;EXECUCAO OK;OPC ...\n')
+        f_quase = os.path.join(ret, 'retorno_quase.txt')
+        with open(f_quase, 'w', encoding='cp1252') as fh:
+            fh.write('0;26E00000BCOX;1;SUCESSO;x\n')
+        st, j = _post(pg_ndf['api'] + '/mapping-b3', {'date': '2026-09-22'})
+        check('mapping responde e vira UMA recompra', st == 200
+              and [m['contract'] for m in j.get('mapped') or []] == ['26E00000BCO'], (st, j))
+        e_bco2 = next((e for e in PQ.entries(pg_ndf, '2026-09-21')
+                       if e.get('DealID') == 'D5NQ-HMNV-BCO'), {})
+        check('   a linha fica Success', e_bco2.get('Status') == 'Success', e_bco2.get('Status'))
+        check('   o retorno todo nosso e apagado; o que tem linha de outro fica',
+              not os.path.exists(f_ok) and os.path.exists(f_outro), os.listdir(ret))
+        check('   B3 ID dentro de outra palavra nao casa', os.path.exists(f_quase))
+        st, j = _post(pg_ndf['api'] + '/mapping-b3', {'date': '2026-09-22'})
+        check('   segunda passada nao remapeia', st == 200 and not j.get('mapped'), j)
+        st, j = _post(pg_ndf['api'] + '/delete', {'id': e_bco2.get('_id'), 'date': '2026-09-21'})
+        check('   Success nao se apaga (e registro na B3)', st == 409, (st, j))
+        st, j = _post('/api/unwinds/ndf/fx/mapping-b3', {'date': '2026-09-22'})
+        check('a rota da NDF FX tambem mapeia', st == 200 and j.get('success'), (st, j))
+        R.RETURN_PATH = os.path.join(tmp, 'nao-existe')
+        st, j = _post(pg_ndf['api'] + '/mapping-b3', {})
+        check('pasta de retorno ausente responde com codigo',
+              st == 400 and j.get('code') == 'unwind_return_folder_missing', (st, j))
+    finally:
+        R.RETURN_PATH = ret_orig
 
     print('\n%s' % ('TUDO OK' if not FALHAS else '%d FALHA(S): %s' % (len(FALHAS), FALHAS)))
     return 1 if FALHAS else 0

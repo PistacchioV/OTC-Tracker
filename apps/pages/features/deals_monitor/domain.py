@@ -57,15 +57,15 @@ _NDM_CARDS = [
     # em `Sent`. Sem declarar isto, TODA recompra já enviada apareceria como
     # pendência no aviso das 19h, todos os dias — o falso alarme diário é o
     # jeito mais rápido de a mesa parar de ler o e-mail.
-    {'key': 'unwind-ndf-fx',      'label': 'Unwind NDF FX',       'url': '/unwinds/ndf/fx',               'dirs': (PREFIXO_UNWIND + 'NDF/FX',),                  'done': ('Sent',)},
+    {'key': 'unwind-ndf-fx',      'label': 'Unwind NDF FX',       'url': '/unwinds/ndf/fx',               'dirs': (PREFIXO_UNWIND + 'NDF/FX',),                  'done': ('Sent', 'Success')},
     # As recompras do CATÁLOGO (`unwinds/catalog.py`): a pasta é o `dir` da
     # entrada, e o mesmo raciocínio do card acima — registro na B3, fecha em
     # `Sent`, sem `les`. O swap NÃO tem card de recompra: `Unwind/Swap/CEM` e
     # `Unwind/Swap/EDG` já somam nos dois cards de swap pela LOB da linha (§517).
-    {'key': 'unwind-ndf-commodities', 'label': 'Unwind NDF Commodities', 'url': '/unwinds/ndf/commodities', 'dirs': (PREFIXO_UNWIND + 'NDF/Commodities',), 'done': ('Sent',)},
-    {'key': 'unwind-opt-fxo',     'label': 'Unwind Options FXO',  'url': '/unwinds/options/fxo',          'dirs': (PREFIXO_UNWIND + 'Options/FXO',),             'done': ('Sent',)},
-    {'key': 'unwind-opt-commodities', 'label': 'Unwind Options Commodities', 'url': '/unwinds/options/commodities', 'dirs': (PREFIXO_UNWIND + 'Options/Commodities',), 'done': ('Sent',)},
-    {'key': 'unwind-opt-edg',     'label': 'Unwind Options EDG',  'url': '/unwinds/options/edg',          'dirs': (PREFIXO_UNWIND + 'Options/EDG',),             'done': ('Sent',)},
+    {'key': 'unwind-ndf-commodities', 'label': 'Unwind NDF Commodities', 'url': '/unwinds/ndf/commodities', 'dirs': (PREFIXO_UNWIND + 'NDF/Commodities',), 'done': ('Sent', 'Success')},
+    {'key': 'unwind-opt-fxo',     'label': 'Unwind Options FXO',  'url': '/unwinds/options/fxo',          'dirs': (PREFIXO_UNWIND + 'Options/FXO',),             'done': ('Sent', 'Success')},
+    {'key': 'unwind-opt-commodities', 'label': 'Unwind Options Commodities', 'url': '/unwinds/options/commodities', 'dirs': (PREFIXO_UNWIND + 'Options/Commodities',), 'done': ('Sent', 'Success')},
+    {'key': 'unwind-opt-edg',     'label': 'Unwind Options EDG',  'url': '/unwinds/options/edg',          'dirs': (PREFIXO_UNWIND + 'Options/EDG',),             'done': ('Sent', 'Success')},
     # COE e DCE não têm arquivo da B3 (`b3: None` no catálogo): não existe
     # `Sent` para eles. Fecham na linha CONFERIDA — `Imported` (intocada) ou
     # `Approved`; só a edição sem segundo par de olhos (`Pending`) fica pendente.

@@ -141,7 +141,7 @@ Hub das rotinas operacionais diárias, dividido em **cinco seções** — e o qu
 
 | Seção | Rotinas |
 |---|---|
-| **Intraday Routines** | Save CETIP Files (lê os arquivos brutos da B3, renomeia no padrão e salva nas pastas de liquidação; o `INDEXADORESSWAP_VCP` e o `CADASTROCURVASMOEDASFEEDERDOMINIOS` também atualizam as bases de indexadores e de domínios, e o de domínios vai anexo no e-mail) · Deals Monitor — Pending Action · Confirmations Escalation |
+| **Intraday Routines** | Save CETIP Files (lê os arquivos brutos da B3, renomeia no padrão e salva nas pastas de liquidação; o `INDEXADORESSWAP_VCP` e o `CADASTROCURVASMOEDASFEEDERDOMINIOS` também atualizam as bases de indexadores e de domínios, e o de domínios vai anexo no e-mail) · Intraday Monitor — Tasks & Pending Action · Confirmations Escalation (Save CETIP Files e Confirmations Escalation também são tarefas do Intraday Monitor) |
 | **Settlement Reporting** | Save Daily Settlement Files (dropzone que processa todos os arquivos do dia em JSON) · Settlement Forecast (projeta as liquidações dos próximos dias úteis e envia por e-mail) |
 | **Pending Confirmation Routines** | Daily Metric — Outstanding Confirmation Brazil OTC · Pending Confirmations Spreadsheet Metrics · Pending Confirmation — Weekly Escalation (CEM/EDG) · Pending Signature Confirmations — Collection |
 | **Economic Affirmation Routines** | Manual Deals EA · BACC EA Metrics · MT300 |
@@ -243,7 +243,7 @@ Concilia as posições por comitente entre a base interna e o retorno da câmara
 
 #### Conciliação — Pay/Rec
 
-Concilia os valores a pagar e a receber (Pay/Rec), apontando as diferenças a tratar antes do encerramento. O lado de NDF do banco vem da API da Athena (liquidações da data) somada às recompras de NDF que a API ainda não traz, com o IR calculado — o mesmo dia do NDF Cockpit; o `settlement.csv` da pasta deixou de ser insumo.
+Concilia os valores a pagar e a receber (Pay/Rec), apontando as diferenças a tratar antes do encerramento. O lado de NDF do banco vem da API da Athena (liquidações da data) somada às recompras de NDF que a API ainda não traz, com o IR calculado — o mesmo dia do NDF Cockpit; a recompra de NDF de Commodities entra como COMM TER; o `settlement.csv` da pasta deixou de ser insumo.
 
 ![Conciliação — Pay/Rec](docs/sop-screenshots/reconciliation-payrec.png)
 
@@ -273,7 +273,7 @@ Fila da confirmação manual, na ordem **(Pending Legal) → Pending OTC → Pen
 
 **A confirmação também é GERADA aqui.** Enquanto não há documento na pasta da contraparte, o botão do item de *Pending OTC* aparece como **Generate**: ele abre o editor da confirmação em aba nova, onde o único botão é *Salvar Word + PDF no Inventory*; gravado o documento, a tela de validação abre na sequência. Fechando sem validar, a confirmação continua em *Pending OTC* e o botão volta a ser *Validate*. As telas de New Deals não têm mais o botão *Confirmation* — gerar e validar são o mesmo trabalho e moram no mesmo lugar. Nas etapas de MO e FO, sem documento na pasta o botão continua riscado: essas mesas conferem o papel, não o produzem.
 
-As duas pontas não são de validação: **Pending Legal** é hold manual (o card tem o botão de soltar para o OTC) e **Pending FepWeb** é derivado — validações feitas, faltando o envio ao cliente, que é o que o botão desse card marca.
+As duas pontas não são de validação: **Pending Legal** é hold manual (o card tem o botão de soltar para o OTC) e **Pending FepWeb** é derivado — validações feitas, faltando o envio ao cliente, que é o que o botão desse card marca. O envio exige a *Data Callback* de cada operação — exceto na confirmação de MGT contra cliente, que não tem callback.
 
 **Cada etapa é assinada pela mesa dela**, pelo papel do usuário: Pending OTC é do Back Office, Pending MO do MO e Pending FO do FO. Quem não é da mesa abre a confirmação e lê o documento, mas não assina — o botão do card aparece como *View*. O **prazo** de cada mesa, em dias úteis contados da data da operação, é cadastrável em *Mapping → Manual Confirmations — SLA* (OTC D+3, MO D+4, FO D+6 de fábrica); validar fora do prazo exige justificativa, gravada na coluna daquela mesa.
 
@@ -357,7 +357,9 @@ conferir). **Só se envia com OK.**
 
 A recompra é acompanhada pelo **Intraday Monitor** (linha *Unwind NDF FX*, na
 zona B3 Registration, grupo NDF) e entra no aviso diário de pendências
-enquanto houver linha não enviada; o estado que a encerra é **Sent**.
+enquanto houver linha não enviada; o estado que a encerra é **Sent** — ou
+**Success**, quando o botão verde **Mapping B3 ID** acha no retorno da B3 uma
+linha com a palavra SUCESSO e o B3 ID da recompra.
 
 O ciclo da recompra de NDF de moeda está completo no sistema: além do arquivo da
 B3, a operação gera o **Termo de Resilição** (pelo Confirmations Monitor), a
@@ -365,15 +367,30 @@ linha da **Intrag** quando há fundo numa das pontas (Intrag › Unwind), entra 
 **esteira de confirmação** e aparece no **NDF Summary** do dia da liquidação,
 com o *Settlement Type* `UNWIND`.
 
+O **Termo de Resilição e o Pending Confirmation são só contra o cliente**: a
+recompra com um fundo nosso numa das pontas (B2B Banco × Lawton/Atacama) vai
+para a **Intrag › Unwind** já no **import** (nem toda recompra é registrada na B3
+pelo OTC Tracker). Linha **Sent** ainda se reenvia (B3 recusou,
+arquivo sumiu) e se edita — volta a *Pending* e passa pelo checker.
+
 #### Unwinds — demais produtos
 
 As telas de recompra de **Swap (CEM · EDG)**, **NDF Commodities**, **Options
-(FXO · Commodities · EDG)**, **COE** e **DCE** já abrem, com a grade e as
-colunas de cada produto, mas **ainda não importam nem enviam**: ao acionar
-Import, Send ou os botões da linha, a tela avisa que o servidor daquele produto
-ainda não existe. Até que entrem, essas recompras seguem por fora do sistema. O
-mesmo vale para as telas novas de **New Deals › Swap › Cashflow** e **New Deals
-› Options › EDG**.
+(FXO · Commodities · EDG)**, **COE** e **DCE** são uma tela só, com as colunas
+de cada produto. Elas importam a **planilha** da recompra ou o **e-mail** com a
+tabela colada do Excel no corpo, casam a operação com o Live Position (B3 ID,
+ou características com candidato único), conferem o resultado (coluna
+**Check**) e enviam o arquivo de antecipação da B3 ao Batch Conecta. COE e DCE
+não têm layout de antecipação e fecham em *Imported*/*Approved*.
+
+A de **NDF Commodities** tem o ciclo completo da de moeda: Pending
+Confirmation e esteira no import, Termo de Resilição (só contra o cliente),
+Intrag › Unwind quando a outra ponta é fundo nosso, Other Products e Pay/Rec
+(como **COMM TER**). No B2B com o Lawton o Send grava as duas visões (Banco e
+Lawton). Swap, Options, COE e DCE ainda não têm Termo, esteira nem Intrag.
+
+**New Deals › Swap › Cashflow** importa o Deal Ticket e gera os arquivos da B3;
+**New Deals › Options › EDG** ainda só abre a grade.
 
 Para conferir o valor de uma recompra de NDF fora do fluxo do dia, use **Apps ›
 Tools › Calculators › Unwind NDF Calculator**, que faz a mesma conta desta tela.

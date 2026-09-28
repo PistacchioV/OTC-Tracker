@@ -1126,7 +1126,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `cache/new deals/` entra com o pkey PREFIXADO (`PREFIXO_UNWIND`), senão um
   `NDF/FX` de lá soma no mesmo card de um `NDF/FX` daqui. E **o card pode
   declarar onde FECHA** (`done`): quem não fecha em `Success` — a recompra
-  acaba em `Sent`, porque o B3 ID de volta ainda não existe para ela — ficaria
+  fecha em `Sent` ou, com o retorno da B3 mapeado, `Success` (§582) — ficaria
   pendente no aviso das 19h para sempre. E **o card pode declarar uma `lob`**
   (§517): os DOIS cards de swap — Equities (`EDG`) e CEM (`CEM`) — leem as
   MESMAS pastas, e quem decide é a coluna LOB da LINHA (`_ndm_bucket`, balde
@@ -1654,8 +1654,11 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   28/09/2026, §580): recompra com fundo nosso numa ponta (o B2B Banco × Lawton/
   Atacama, `queries.e_do_fundo` pelo `b3-accounts`) não entra na esteira, na
   segregação do Monitor nem no grupo do Termo — nas DUAS telas (NDF FX e o
-  catálogo). Ela vai para a **Intrag › Unwind** no Send, pela mesma
-  `intrag_from_send` da Fase 1 (a planilha de onze colunas é uma para todos os
+  catálogo). Ela vai para a **Intrag › Unwind** no **IMPORT** (e o Edit a
+  atualiza; o Delete a tira se lá ela ainda é `New`) — **nunca no Send** (mesa,
+  28/09/2026, §582, e já dito antes): nem toda recompra é registrada na B3 pelo
+  OTC Tracker, e a instrução da Intrag não pode depender disso. Porta única:
+  `intrag_da_recompra` da Fase 1 (a planilha de onze colunas é uma para todos os
   produtos; o catálogo entra por `product/commands.intrag`, no formato
   `para_o_termo`). A liquidação (Summary, Advice, Pay/Rec) continua com as duas.
 - **A esteira nasce e morre com a recompra.** Apagar a recompra tira a linha do
@@ -1694,7 +1697,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   nenhum: a recompra grava por ele e o Monitor varre por ele (§491).
 - **Ela TEM card no Monitor** (`unwind-ndf-fx`, coluna B3 Registration, grupo
   NDF): a chave não leva prefixo `intrag-` porque a recompra é registro na B3,
-  o card declara `done: ('Sent',)` — é onde ela fecha —, e não declara `les`,
+  o card declara `done: ('Sent', 'Success')` — é onde ela fecha —, e não declara `les`,
   porque a entidade sai da CONTA e quem a traduz é cadastro (§491).
 - **A rota da página é PRÓPRIA** (`/unwinds/ndf/fx`, três segmentos): o
   catch-all só atende `/<template>`.
@@ -1726,8 +1729,18 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   recompra assim que ela chega. A recompra é **elegível** para o documento
   desde aí (`confirmation_deal` devolve `Success`), e o que se paga é que uma
   recompra corrigida ou apagada depois já deixou linha — a correção é
-  reimportar (o upsert refaz pela mesma chave). **A Intrag continua no SEND**:
-  ali a linha é INSTRUÇÃO ao custodiante, não cobrança de documento.
+  reimportar (o upsert refaz pela mesma chave). **A Intrag TAMBÉM nasce no
+  IMPORT** (§582): ela chegou a ficar no Send, e a recompra que não passa pelo
+  Send do OTC Tracker nunca chegava à Intrag.
+- **O retorno da B3 vira `Success` pelo Mapping B3 ID** (mesa, 28/09/2026,
+  §582; botão verde das DUAS telas, `commands.mapear_retornos`): linha do
+  `RETURN_PATH` com a palavra SUCESSO (cega a caixa/acento) e o B3 ID da
+  recompra (o `Contract`) como PALAVRA inteira em qualquer coluna. UMA
+  varredura cobre a NDF FX e as onze do catálogo nos últimos
+  `RETORNO_LOOKBACK_DIAS` (10) dias corridos; o arquivo de retorno só é apagado
+  quando TODAS as linhas de dado dele casaram (a pasta é a do New Deals).
+  `Success` é registro como o `Sent` (`STATUS_REGISTRADO`): não se apaga nem se
+  sobrescreve no reimport, e o Monitor fecha nos dois.
 - **A recompra é PROJETADA no arquivo-dia do NDF Cockpit** da sua data de
   LIQUIDAÇÃO, marcada com `_nc_unwind` e chaveada por `UNW-<athena id>`. Duas
   coisas seguram isso: o import do Cockpit **preserva** essas linhas

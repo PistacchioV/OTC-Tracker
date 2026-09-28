@@ -279,6 +279,10 @@ var _TRANS = {
         'e_unwind_no_rows': 'No rows selected',
         'e_unwind_unknown_action': 'Unknown action',
         'e_unwind_already_sent': 'This unwind was already sent to B3',
+        'unw_mapping_title': 'Mapping B3 ID',
+        'unw_mapping_done': '{n} unwind(s) → Success',
+        'unw_mapping_none': 'No B3 return with SUCESSO for the unwinds of the last days',
+        'e_unwind_return_folder_missing': 'B3 return folder not found: {path}',
         'e_unwind_trail_signed': 'This unwind already has a signed trail entry (document generated, validated or sent to the client) — delete it on the Confirmations Monitor first',
         'e_unwind_not_found': 'Entry not found',
         'e_unwind_only_pending': 'Only Pending unwinds can be confirmed',
@@ -342,6 +346,10 @@ var _TRANS = {
         'e_unwind_no_rows': 'Nenhuma linha selecionada',
         'e_unwind_unknown_action': 'Ação desconhecida',
         'e_unwind_already_sent': 'Esta recompra já foi enviada à B3',
+        'unw_mapping_title': 'Mapping B3 ID',
+        'unw_mapping_done': '{n} recompra(s) → Success',
+        'unw_mapping_none': 'Nenhum retorno da B3 com SUCESSO para as recompras dos últimos dias',
+        'e_unwind_return_folder_missing': 'Pasta de retorno da B3 não encontrada: {path}',
         'e_unwind_trail_signed': 'Esta recompra já tem registro na esteira (documento gerado, validado ou enviado ao cliente) — apague-a antes no Confirmations Monitor',
         'e_unwind_not_found': 'Linha não encontrada',
         'e_unwind_only_pending': 'Só recompras Pending podem ser confirmadas',
@@ -405,6 +413,10 @@ var _TRANS = {
         'e_unwind_no_rows': 'Ninguna línea seleccionada',
         'e_unwind_unknown_action': 'Acción desconocida',
         'e_unwind_already_sent': 'Esta recompra ya fue enviada a la B3',
+        'unw_mapping_title': 'Mapping B3 ID',
+        'unw_mapping_done': '{n} recompra(s) → Success',
+        'unw_mapping_none': 'Ningún retorno de la B3 con SUCESSO para las recompras de los últimos días',
+        'e_unwind_return_folder_missing': 'Carpeta de retorno de la B3 no encontrada: {path}',
         'e_unwind_trail_signed': 'Esta recompra ya tiene registro en el flujo (documento generado, validado o enviado al cliente) — bórrela antes en el Confirmations Monitor',
         'e_unwind_not_found': 'Línea no encontrada',
         'e_unwind_only_pending': 'Solo las recompras Pending pueden confirmarse',
@@ -479,7 +491,8 @@ function fmtMoney(v){var n=parseFloat(String(v==null?'':v).replace(/[^\d.\-]/g,'
 // Os quatro estados da linha. `Pending` é amarelo porque é o único que PEDE
 // alguma coisa de alguém: uma edição esperando o segundo par de olhos.
 var STATUS_META = { 'Imported': { cls: 'bg-info text-white' }, 'Pending': { cls: 'bg-warning text-dark' },
-                    'Approved': { cls: 'bg-success text-white' }, 'Sent': { cls: 'badge-sent' } };
+                    'Approved': { cls: 'bg-success text-white' }, 'Sent': { cls: 'badge-sent' },
+                    'Success': { cls: 'text-bg-success' } };
 function statusBadge(status) {
     var txt = String(status == null ? '' : status).replace(/<[^>]*>/g, '').trim() || 'Imported';
     var m = STATUS_META[txt] || STATUS_META['Imported'];
@@ -551,6 +564,7 @@ $(document).ready(function () {
             "B" +
             "<'refDateWrap ms-2 d-flex align-items-center'>" +
             "<'importBtn ms-2 me-2'>" +
+            "<'mappingBtn me-2'>" +
             "<'clearFiltersBtn me-2'>" +
             "<'conditionalActions ms-2 d-flex align-items-center gap-2'>" +
             ">" +
@@ -645,6 +659,46 @@ $(document).ready(function () {
                 importWrap.appendChild(ib);
                 ib.addEventListener('click', runImport);
                 if (window.bootstrap && !bootstrap.Tooltip.getInstance(ib)) new bootstrap.Tooltip(ib, { trigger: 'hover' });
+            }
+
+            // ── Mapping B3 ID: o retorno da B3 (SUCESSO + B3 ID) vira Success ──
+            // Uma varredura para todas as telas de recompra (o retorno é um só).
+            var mapWrap = document.querySelector('.mappingBtn');
+            if (mapWrap && !document.getElementById('mappingB3Btn')) {
+                var mb = document.createElement('button');
+                mb.id = 'mappingB3Btn'; mb.type = 'button';
+                mb.className = 'btn btn-sm btn-success bg-gradient btn-toolbar-all btn-toolbar-refresh';
+                mb.setAttribute('data-bs-toggle', 'tooltip');
+                mb.setAttribute('data-bs-placement', 'bottom');
+                mb.setAttribute('data-bs-title', t('unw_mapping_title', 'Mapping B3 ID'));
+                mb.setAttribute('data-bs-custom-class', 'tooltip-success');
+                mb.innerHTML = '<i class="ti ti-refresh"></i>';
+                mapWrap.appendChild(mb);
+                if (window.bootstrap && !bootstrap.Tooltip.getInstance(mb)) new bootstrap.Tooltip(mb, { trigger: 'hover' });
+                mb.addEventListener('click', function () {
+                    if (mb.disabled) return;
+                    mb.disabled = true;
+                    mb.innerHTML = '<i class="ti ti-loader-2 ti-spin"></i>';
+                    fetch(PAGE.api + '/mapping-b3', { method: 'POST', credentials: 'same-origin',
+                                     headers: { 'Content-Type': 'application/json' },
+                                     body: JSON.stringify({ date: refDateIso() }) })
+                        .then(function (r) { return r.json(); })
+                        .then(function (res) {
+                            if (!res || !res.success) {
+                                var msg = erroTexto(res, 'Error');
+                                if (res && res.params && res.params.path) msg = msg.replace('{path}', res.params.path);
+                                Swal.fire({ icon: 'error', title: t('unw_mapping_title', 'Mapping B3 ID'), text: msg });
+                                return;
+                            }
+                            var n = (res.mapped || []).length;
+                            Swal.fire({ icon: n ? 'success' : 'info', title: t('unw_mapping_title', 'Mapping B3 ID'),
+                                        text: n ? t('unw_mapping_done', '{n} unwind(s) → Success').replace('{n}', n)
+                                                : t('unw_mapping_none', 'No B3 return with SUCESSO') });
+                            if (n) load();
+                        })
+                        .catch(function (e) { Swal.fire({ icon: 'error', title: t('unw_mapping_title', 'Mapping B3 ID'), text: String(e) }); })
+                        .finally(function () { mb.disabled = false; mb.innerHTML = '<i class="ti ti-refresh"></i>'; });
+                });
             }
 
             var clearWrap = document.querySelector('.clearFiltersBtn');

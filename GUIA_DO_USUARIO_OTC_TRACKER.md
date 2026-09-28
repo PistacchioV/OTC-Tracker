@@ -149,7 +149,7 @@ O menu é em **níveis**: um item com **›** à direita tem submenu. Clicar nel
 | **PRODUCTS › New Deals › NDF** | FWD Start · Other Publisher · Vanilla · Commodities |
 | **PRODUCTS › New Deals › Options** | FXO · Commodities · EDG *(tela pronta; importação em construção)* |
 | **PRODUCTS › New Deals › DCE** | Deliverable Forward · NDF · Option · Swap *(em construção)* |
-| **PRODUCTS › Unwinds** | **NDF › FX** · Swap (CEM · EDG) · NDF Commodities · Options (FXO · Commodities · EDG) · COE · DCE *(a de NDF › FX funciona de ponta a ponta; nas demais a tela está pronta e a importação em construção — ver 5.11)* |
+| **PRODUCTS › Unwinds** | **NDF › FX** · Swap (CEM · EDG) · NDF Commodities · Options (FXO · Commodities · EDG) · COE · DCE *(NDF › FX e NDF Commodities com o ciclo completo; as demais importam, conferem e enviam à B3 — ver 5.11)* |
 | **PRODUCTS › Intrag** | NDF · Option · Swap |
 | **PRODUCTS › Regulatory** | e-Financeira · WHT *(em construção)* |
 | **PRODUCTS** | Accrual Swap · MtM Swap |
@@ -372,7 +372,7 @@ O **sino** da barra superior mostra em vermelho quantos avisos você tem. O sist
 
 ![Intraday Monitor](docs/sop-screenshots/intraday-monitor.png)
 
-**Para que serve:** é o painel das **tarefas do dia**. Ele diz, num relance, o que precisa ser feito hoje, até que horas, e quanto já foi feito: registro na B3, confirmações, Intrag e as reconciliações.
+**Para que serve:** é o painel das **tarefas do dia**. Ele diz, num relance, o que precisa ser feito hoje, até que horas, e quanto já foi feito: registro na B3, confirmações, Intrag, as reconciliações e as rotinas do Control Panel (Save CETIP Files e Confirmations Escalation).
 
 **As tarefas e a agenda padrão** (horário limite 20:00 em todas):
 
@@ -384,6 +384,8 @@ O **sino** da barra superior mostra em vermelho quantos avisos você tem. O sist
 | **Recon FXO** · **Recon Conf. Matching** | Todo dia útil | a recon **roda** no dia |
 | **Recon Comitente** | Terça-feira | a recon roda no dia |
 | **Recon CGD** | Sexta-feira | a recon roda no dia |
+| **Save CETIP Files** | Todo dia útil | a rotina do Control Panel salva os arquivos do dia |
+| **Confirmations Escalation** | Segunda e quinta-feira (feriado rola para o dia útil seguinte) | a cobrança sai sem erro — pelo **Run** do cartão ou pelo envio automático, que aparece como *Automatic* |
 
 Os dias e o horário limite de cada tarefa se ajustam no cartão **Intraday Monitor — Tasks & Pending Action** do Control Panel (14.2). Feriado ANBIMA e dia fora da agenda não cobram a tarefa.
 
@@ -555,9 +557,11 @@ Depois que a B3 devolve o arquivo de retorno:
 
 A recompra desfaz, no todo ou em parte, um termo de moeda que já está registrado na B3. O aviso vem por e-mail do Athena (*BRL NDF Unwind Notification*) durante o dia — não é o lote da manhã da liquidação normal.
 
-**A tela faz três coisas hoje:** importa o aviso, confere a conta e monta o arquivo da B3. O restante do ciclo (Termo de Resilição, arquivo da Intrag, esteira de confirmação e a entrada no Summary de NDF) **ainda não está pronto** e continua sendo feito por fora.
+**O ciclo está completo no sistema:** a tela importa o aviso, confere a conta e monta o arquivo da B3; a partir do import a recompra entra no Pending Confirmation, na esteira (o **Termo de Resilição** se gera no Confirmations Monitor), no NDF Cockpit e no NDF Summary do dia da liquidação, com o *Settlement Type* `UNWIND`.
 
-A recompra aparece no **Intraday Monitor** (capítulo 5.1) como *Unwind NDF FX*, na zona **B3 Registration**, junto dos demais produtos de NDF — é de lá que se vê, sem abrir a tela, se sobrou alguma recompra do dia para enviar. Ela some da coluna **Open** quando fica **Sent**: é onde a recompra fecha, porque o B3 ID de volta ainda não existe para ela.
+> **Termo de Resilição só contra o cliente.** A recompra que tem um fundo nosso numa das pontas (o B2B Banco × Lawton ou Atacama) **não** gera Termo nem entra no Pending Confirmation: ela vai para a **Intrag › Unwind** já no **import** (nem toda recompra é registrada na B3 pelo OTC Tracker), e a Intrag › Unwind é a mesma tela para todos os produtos. Editar a recompra atualiza a linha de lá; apagar a tira, se lá ela ainda estiver *New*. A liquidação (Summary, aviso, Pay/Rec) continua mostrando as duas pontas.
+
+A recompra aparece no **Intraday Monitor** (capítulo 5.1) como *Unwind NDF FX*, na zona **B3 Registration**, junto dos demais produtos de NDF — é de lá que se vê, sem abrir a tela, se sobrou alguma recompra do dia para enviar. Ela some da coluna **Open** quando fica **Sent** ou **Success**.
 
 **Passo a passo:**
 
@@ -568,8 +572,12 @@ A recompra aparece no **Intraday Monitor** (capítulo 5.1) como *Unwind NDF FX*,
    - **OK** (verde) — o resultado do e-mail bate com o recalculado;
    - **NOK** (vermelho) — não bate. **Não envie**: passe o mouse no badge para ver o que divergiu;
    - **–** (cinza) — não deu para conferir (faltou um valor no e-mail, ou a operação não foi encontrada no Live Position). Também não envie.
-5. **Duplo clique na linha** abre o arquivo da B3 campo a campo, com o texto cru embaixo. É aqui que se confere antes de mandar. O rodapé tem **Export** (baixa o arquivo para conferir, sem enviar), **Edit** (edita a linha, e some quando ela já está **Sent**) e **Close** — o mesmo nas demais telas de recompra.
+5. **Duplo clique na linha** abre o arquivo da B3 campo a campo, com o texto cru embaixo. É aqui que se confere antes de mandar. O rodapé tem **Export** (baixa o arquivo para conferir, sem enviar), **Edit** e **Close** — o mesmo nas demais telas de recompra.
 6. Selecione a linha e clique em **Send** para gravar o arquivo no Batch Conecta. A linha vira **Sent** e deixa de poder ser apagada.
+
+7. Depois que a B3 processar, clique no botão **verde de atualizar** (*Mapping B3 ID*), à direita do Import. Ele lê a pasta de retorno do Batch Conecta e vira **Success** toda recompra cujo B3 ID aparece numa linha com a palavra **SUCESSO** — de qualquer tela de recompra e dos últimos dez dias, num clique só. Linha **Success** não se apaga nem é sobrescrita por um reimport.
+
+> **Linha `Sent` ainda se edita e se reenvia.** Se a B3 recusou o arquivo ou ele sumiu da pasta, clique em **Send** de novo: o arquivo é regravado. Editar uma linha `Sent` a devolve a **Pending**, e ela só volta à B3 depois que outra pessoa aprovar. O que continua travado em `Sent` é apagar e reimportar.
 
 **O que a tela preenche sozinha, e de onde:** o **B3 ID**, a **contraparte**, a **moeda** e as **contas** não vêm do e-mail — vêm da linha do Live Position da operação, achada pelos 14 últimos caracteres do Athena ID. Se a coluna **B3 ID** vier vazia, é porque a operação não foi encontrada lá: confira o *Código Identificador* no Live Position de NDF antes de qualquer outra coisa.
 
@@ -579,7 +587,11 @@ A recompra aparece no **Intraday Monitor** (capítulo 5.1) como *Unwind NDF FX*,
 
 **Menu › PRODUCTS › New Deals › Swap › Cashflow** · **New Deals › Options › EDG** · **Unwinds › (todos os produtos)**
 
-Estas telas já abrem, com a grade, as colunas do produto, o filtro por coluna, o **Columns**, o **Export** e a área de upload — mas **ainda não importam nem enviam para a B3**. Ao clicar em **Import**, **Send** ou nos botões da linha, a tela responde com o aviso *"o servidor deste produto ainda não existe"*. Não é defeito nem falta de acesso: a parte de importação de cada produto está sendo construída, uma de cada vez. A recompra de **NDF › FX** (5.10) é a única que já funciona de ponta a ponta.
+**As recompras dos demais produtos já importam, conferem e enviam.** Arraste para o dropzone a **planilha** da recompra ou o **e-mail** com a tabela colada do Excel no corpo (as mesmas colunas da planilha). A tela casa cada linha com o Live Position — pelo B3 ID, ou, sem ele, pelas características quando há **um** candidato só —, preenche o que a planilha deixou em branco, confere o resultado (coluna **Check**, os mesmos três estados da 5.10) e monta o arquivo de antecipação da B3 para o Batch Conecta; o **Mapping B3 ID** vira a linha para **Success** quando o retorno da B3 chega (5.10). **COE e DCE** não têm arquivo de antecipação na B3: ali a recompra fecha em *Imported*/*Approved*.
+
+**A recompra de NDF de Commodities segue o ciclo completo da de moeda (5.10):** entra no Pending Confirmation e na esteira no import, gera o **Termo de Resilição** pelo Confirmations Monitor, vai para a **Intrag › Unwind** no import quando a outra ponta é um fundo nosso, e aparece no Other Products e no Pay/Rec (como **COMM TER**). No B2B com o Lawton o Send grava **os dois arquivos** — a visão do Banco e a do Lawton. O e-mail de recompra de commodities tem um leitor próprio (uma tabela por perna). Swap, Options, COE e DCE **ainda não** têm Termo, esteira nem Intrag.
+
+**New Deals › Swap › Cashflow** importa o Deal Ticket e gera os arquivos da B3; **New Deals › Options › EDG** ainda só abre a grade.
 
 Duas coisas para saber desde já:
 
@@ -895,7 +907,7 @@ São cinco batimentos, cada um comparando duas fontes que deveriam dizer a mesma
 4. Escreva a explicação na coluna **Comment** da linha que divergiu.
 5. Quando tudo estiver resolvido ou justificado, clique em **End process** (botão verde) — ele só habilita depois de o Run rodar, e é ele que fecha e comunica o resultado.
 
-**De onde vem o NDF do nosso lado:** do mesmo dia que o NDF Cockpit mostra — as operações que liquidam na data mais as **recompras de NDF**, com o IR já calculado. Se o Cockpit já foi importado para a data, o Run usa esse dia e responde na hora; se não, ele busca na API da Athena, o que pode levar alguns minutos. **Rode o Import do NDF Cockpit antes do Pay/Rec**: além de mais rápido, é o jeito de a recon ver uma liquidação que entrou na Athena depois do último import. O arquivo `settlement.csv` **não é mais usado**: se ele estiver na pasta do Pay/Rec, é ignorado. Se a API não responder, o Run para e diz o motivo; tente de novo em alguns minutos, e se persistir, chame o suporte com a mensagem.
+**De onde vem o NDF do nosso lado:** do mesmo dia que o NDF Cockpit mostra — as operações que liquidam na data mais as **recompras de NDF**, com o IR já calculado. Se o Cockpit já foi importado para a data, o Run usa esse dia e responde na hora; se não, ele busca na API da Athena, o que pode levar alguns minutos. **Rode o Import do NDF Cockpit antes do Pay/Rec**: além de mais rápido, é o jeito de a recon ver uma liquidação que entrou na Athena depois do último import. A recompra de **NDF de Commodities** entra como **COMM TER** (termo), não como prêmio de opção. O arquivo `settlement.csv` **não é mais usado**: se ele estiver na pasta do Pay/Rec, é ignorado. Se a API não responder, o Run para e diz o motivo; tente de novo em alguns minutos, e se persistir, chame o suporte com a mensagem.
 
 ### 8.3. FXO
 
@@ -1084,7 +1096,7 @@ Este bloco acompanha a confirmação depois que a operação já está registrad
 | `faltam Nd` / `{n}d left` | Dentro do prazo |
 | `vence amanhã` / `vence hoje` | Véspera ou o próprio dia |
 | `Nd de atraso` | Prazo estourado — a marca fica vermelha |
-| `no callback` | Falta a conferência por telefone com o cliente (só no cartão *Pending FepWeb*) |
+| `no callback` | Falta a conferência por telefone com o cliente (só no cartão *Pending FepWeb*; confirmação de MGT contra cliente não tem callback) |
 
 **Os prazos**, contados em **dias úteis a partir da data da operação** (e não da data em que o documento foi gerado): **OTC D+3**, **MO D+4**, **FO D+6**. Eles são cadastráveis na tela Mapping (`manual-conf-sla`).
 
@@ -1123,6 +1135,9 @@ Este bloco acompanha a confirmação depois que a operação já está registrad
 > Confirmations (9.5) e volte — o botão passa a funcionar. O grupo é
 > tudo-ou-nada: basta **uma** operação sem callback para o envio inteiro ficar
 > retido.
+>
+> **Confirmação de MGT contra cliente não tem callback**: ela não recebe a marca
+> `no callback` e o **Mark as sent** não a retém.
 
 ### 9.4. A tela de validação
 
@@ -1863,7 +1878,7 @@ Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de pa
 Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devolve "página não encontrada". Não é defeito do seu acesso:
 
 - **New Deals › DCE** — Deliverable Forward · NDF · Option · Swap
-- **Unwinds** e **New Deals › Swap › Cashflow / Options › EDG** — *estas telas já abrem*, mas ainda **não importam nem enviam** (capítulo 5.11): Unwinds de Swap (CEM · EDG) · NDF Commodities · Options (FXO · Commodities · EDG) · COE · DCE. **Unwinds › NDF › FX funciona de ponta a ponta** (capítulo 5.10)
+- **New Deals › Options › EDG** — *a tela já abre*, mas ainda **não importa nem envia** (capítulo 5.11)
 - **Regulatory › e-Financeira** — Kapital · Athena NDF · Athena FXO · Pyramid
 - **Regulatory › WHT**
 

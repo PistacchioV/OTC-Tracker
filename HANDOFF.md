@@ -24771,3 +24771,43 @@ continua listando todas as linhas.
 
 **Teste**: `check_manual_conf.py` (card não conta a isenta; Mark as sent de
 linha MGT sem Data Callback passa).
+
+## §582 — Recompras: Intrag › Unwind no IMPORT; Mapping B3 ID do retorno vira Success (2026-09-28)
+
+**Pedido da mesa**: "tem que ser no import e não no send, já disse isso várias
+vezes. nem todas as recompras são registradas pelo OTC Tracker" — e "crie um
+mapping para os arquivos de retorno, que terão a palavra sucesso, B3 ID
+referente, para alterar o status para sucesso".
+
+**Causa-raiz (Intrag)**: o §580 levou a perna do fundo à Intrag › Unwind pela
+mesma porta da Fase 1, e a Fase 1 gravava a Intrag no `send`. A recompra que a
+mesa registra na B3 por fora do OTC Tracker nunca passa pelo Send — e nunca
+chegava à Intrag. O reimport de NDF Comm fazia o replace na página e a Intrag
+seguia vazia.
+
+**O que mudou**:
+- `unwinds/commands.intrag_from_send` → `intrag_da_recompra`, chamada no
+  `import_email` e no `editar` (NDF FX) e no `importar`/`editar` do catálogo
+  (`product/commands.intrag(page, linhas)`). O Send não toca mais a Intrag. O
+  upsert da Intrag (`_intrag_day_persist`, chave `_deal`) preserva o status de
+  lá. O dia na Intrag é o do arquivo-dia da recompra (ou `UnwindDate`).
+- `intrag_sem_a_recompra`: o Delete da recompra tira a linha da Intrag só se lá
+  ela ainda está `New` (via `_intrag_engine().queries` — feature não importa
+  feature, o `check_soc_layers` reprovou o import direto).
+- **Mapping B3 ID** (`commands.mapear_retornos`, rotas
+  `/api/unwinds/ndf/fx/mapping-b3` e `<api do catálogo>/mapping-b3`, botão
+  verde nas duas telas): linha do `RETURN_PATH` com SUCESSO + o `Contract` como
+  palavra inteira → `Status = Success` (+ `B3ReturnAt`/`B3ReturnFile`). Uma
+  varredura para todas as telas, janela de 10 dias corridos; o arquivo só é
+  apagado quando todas as linhas de dado dele casaram. `Success` entra em
+  `STATUS_REGISTRADO` (Delete recusa, reimport mantém) e no `done` dos cards de
+  recompra do Monitor.
+
+**Suposição**: o layout do retorno de antecipação não foi visto — a regra é a
+que a mesa ditou (a palavra SUCESSO e o B3 ID na linha). Linha com
+`EXECUCAO OK` sem SUCESSO NÃO conta.
+
+**Testes**: `check_unwind_products.py` §12 (Intrag no import; Send não toca)
+e §13 (mapping: casa, apaga só o arquivo todo nosso, B3 ID dentro de outra
+palavra não casa, segunda passada não remapeia, Success não se apaga, pasta
+ausente com código); `check_intrag_unwind.py`, `check_unwind_page.py` (done).
