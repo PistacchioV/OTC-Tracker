@@ -62,6 +62,9 @@ _COLS_TERMO_FX = _HEAD + (
     ('PreFWDRate', 'Pre FWD Rate', 'rate'),
     ('DU', 'DU', 'text'),
     ('Result', 'Result', 'money'),
+    # O resultado que o OTC Tracker calculou, SO quando nao bate com o
+    # informado (vazio quando bate): e a conferencia a vista (mesa, 28/09/2026).
+    ('CalcResult', 'OTC Tracker Result', 'money'),
 ) + _TAIL
 
 # Termo de MERCADORIA: o "notional" e a quantidade, e o preco e na moeda da
@@ -78,6 +81,9 @@ _COLS_TERMO_COMM = _HEAD + (
     ('PreFWDRate', 'Pre FWD Rate', 'rate'),
     ('DU', 'DU', 'text'),
     ('Result', 'Result', 'money'),
+    # O resultado que o OTC Tracker calculou, SO quando nao bate com o
+    # informado (vazio quando bate): e a conferencia a vista (mesa, 28/09/2026).
+    ('CalcResult', 'OTC Tracker Result', 'money'),
 ) + _TAIL
 
 # Opcao flexivel — as colunas sao os campos do OPC 0014 (`antecipacao-opcao`):

@@ -910,8 +910,8 @@ $(document).ready(function () {
     // Salvar põe a linha em `Pending` e marca o maker; quem confere é OUTRO
     // usuário, pelo Confirm. O Status e o Check ficam de FORA dos campos: um
     // é o estado da esteira e o outro é veredito apurado — nenhum dos dois se
-    // digita.
-    var NAO_EDITA = { Status: 1, Check: 1 };
+    // digita. O `CalcResult` é a conta do OTC Tracker, e conta não se digita.
+    var NAO_EDITA = { Status: 1, Check: 1, CalcResult: 1 };
     $('#unw-table tbody').on('click', '.btn-row-edit', function (e) {
         e.preventDefault();
         var tr = $(this).closest('tr'), d = table.row(tr).data();

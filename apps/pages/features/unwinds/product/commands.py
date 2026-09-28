@@ -151,6 +151,8 @@ def _completar_linha(page, linha, posicoes, ref_iso):
         linha['Direction'] = domain.direcao_do_resultado(linha)
     veredito, av_ck = domain.conferir(linha, page)
     linha['Check'] = veredito
+    if 'CalcResult' in campos:
+        linha['CalcResult'] = domain.resultado_calculado(av_ck)
     avisos.extend(av_ck)
     linha['Warnings'] = domain.codigos(avisos)
     return avisos
@@ -248,6 +250,8 @@ def editar(page, row_id, date_str, fields, sid=''):
             linha[k] = val
         veredito, avisos = domain.conferir(linha, page)
         linha['Check'] = veredito
+        if 'CalcResult' in kinds:
+            linha['CalcResult'] = domain.resultado_calculado(avisos)
         linha['Warnings'] = domain.codigos(avisos)
         linha['Status'] = domain.STATUS_PENDENTE
         linha['Maker'] = sid or ''

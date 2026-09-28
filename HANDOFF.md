@@ -24458,3 +24458,36 @@ conta 16 cards.
   nomes do vencimento, que são o que ele procura.
 - **Testes**: `check_unwind_summary` e `check_unwind_products` prendem o assunto,
   a prioridade no `.eml`, as colunas e a separação do vencimento.
+
+## §570 — Recompra de NDF Commodities: a grade mostra o número do e-mail (2026-09-28)
+
+**Sintoma**: na perna Client do e-mail da CSN, a grade mostrava Unwind Strike
+96.84626 e FX 5.2088697777… onde o e-mail diz 96.85 e 5.2087.
+
+**Causa**: de propósito. O parser refazia a precisão que o Excel esconde
+(`Termination = Strike ± FV USD / Qtd`, `FX = PV BRL / FV USD`) sempre que o
+número refeito arredondava para o que a célula mostrava. O `ao_mostrado` ainda
+trocava o strike do e-mail pelo exato da posição. A mesa quer ver na tela o que
+mandou: é esse o número que ela confere.
+
+**Correção**:
+- O parser grava Unwind Strike, FX, Strike e volume como vieram. O casamento
+  com o Live Position continua aceitando o arredondado, e o `ao_mostrado` só
+  tira as marcas internas.
+- Nova coluna `CalcResult` (**OTC Tracker Result**) nos dois catálogos de termo
+  (FX e Commodities). É o resultado da conta do app, preenchido só quando o
+  Check acusa divergência (`domain.resultado_calculado`, lido do aviso
+  `unwind_result_mismatch`/`unwind_amount_mismatch`), no import e no Edit. Não
+  é editável (`NAO_EDITAVEL` e `NAO_EDITA` do template).
+- No e-mail da CSN as duas pernas ficam em NOK: Client calcula −6.268.670,45
+  contra −6.270.582,12, e Banco calcula 6.320.757,45 contra 6.321.326,69.
+- O Result segue sendo o PV BRL do e-mail.
+
+**Consequência**: a Taxa Termo do TER 0014 e o aviso de liquidação passam a
+usar o 96.85 do e-mail.
+
+**Linhas já importadas**: guardam os números antigos até serem reimportadas.
+Linha `Imported` é sobrescrita pelo reimport.
+
+**Testes**: `check_unwind_products` troca as asserções da precisão refeita
+pelas do número do e-mail e pelo `CalcResult`.

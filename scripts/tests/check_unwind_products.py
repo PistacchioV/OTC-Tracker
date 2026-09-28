@@ -480,22 +480,28 @@ def main():
           (bco.get('PartyAccount'), bco.get('Comprado'), bco.get('Warnings')))
     check('Pre FWD Rate = 0 e as datas do e-mail',
           cli.get('PreFWDRate') == 0.0 and cli.get('TradeDate') == '2026-05-13', cli)
-    check('Termination refeita do FV USD (96.85 exibido -> 96,84626)',
-          abs(cli.get('TerminationRate', 0) - 96.84626) < 1e-9, cli.get('TerminationRate'))
-    check('FX refeito do PV BRL, que arredonda para o 5.2087 exibido',
-          abs(cli.get('FXRate', 0) - 6270582.12 / 1203874) < 1e-12, cli.get('FXRate'))
+    # A grade mostra o numero do E-MAIL (mesa, 28/09/2026): refeito pelo FV USD
+    # e pelo PV BRL, ela dizia 96,84626 e 5,20887 onde o e-mail diz 96.85 e 5.2087.
+    check('Unwind Strike e FX Rate como vieram no e-mail (96.85, 5.2087)',
+          (cli.get('TerminationRate'), cli.get('FXRate')) == (96.85, 5.2087),
+          (cli.get('TerminationRate'), cli.get('FXRate')))
     check('Client Receives: o banco PAGA, resultado negativo',
           (cli.get('Result'), cli.get('Direction')) == (-6270582.12, 'PAY'),
           (cli.get('Result'), cli.get('Direction')))
-    check('   e a conferencia do termo FECHA', cli.get('Check') == 'OK', cli.get('Warnings'))
+    # 100.000 x (96,85 - 108,885) x 5,2087 = -6.268.670,45 contra o PV de
+    # -6.270.582,12: nao fecha, e a coluna do OTC Tracker diz a conta dele.
+    check('   conta com os numeros do e-mail nao fecha: Check NOK e o calculado na coluna',
+          cli.get('Check') == 'NOK' and cli.get('CalcResult') == -6268670.45,
+          (cli.get('Check'), cli.get('CalcResult')))
     check('Banco vendeu e o preco caiu: RECEBE',
           (bco.get('Result'), bco.get('Direction')) == (6321326.69, 'RECEIVE'),
           (bco.get('Result'), bco.get('Direction')))
     # 1.213.500 x 5,2087 = 6.320.757,45: o PV do e-mail pede FX 5,20917, que NAO
     # arredonda para o 5.2087 exibido. A celula vence e a linha diz que nao fecha.
     check('   FX que nao arredonda para o exibido: fica o exibido, e o Check acusa',
-          bco.get('FXRate') == 5.2087 and bco.get('Check') == 'NOK',
-          (bco.get('FXRate'), bco.get('Check')))
+          bco.get('FXRate') == 5.2087 and bco.get('Check') == 'NOK'
+          and bco.get('CalcResult') == 6320757.45,
+          (bco.get('FXRate'), bco.get('Check'), bco.get('CalcResult')))
     check('dry-run do e-mail nao toca o sino', len(sino) == n_sino)
     # O trecho colado como UMA tabela, um cabecalho `Leg` por perna: a perna
     # Banco nao tem o Risk Deal ID, e lida pelo cabecalho do Client saia com as
@@ -525,11 +531,11 @@ def main():
     st, j5 = _up(pg_ndf['api'], 'uma-tabela.eml', eml1, dry=True)
     b5 = ((j5.get('rows') or [{}, {}]) + [{}, {}])[1]
     check('strike ARREDONDADO no e-mail casa com o da posicao (candidato unico)',
-          b5.get('Contract') == '26E00000BCO' and b5.get('Strike') == 108.98537,
+          b5.get('Contract') == '26E00000BCO',
           (b5.get('Contract'), b5.get('Strike'), b5.get('Warnings')))
-    check('   e a Termination e refeita sobre o strike exato',
-          abs(b5.get('TerminationRate', 0) - (108.98537 - 1213500 / 100000)) < 1e-9,
-          b5.get('TerminationRate'))
+    check('   e a grade fica com o strike e a Unwind Strike do E-MAIL',
+          (b5.get('Strike'), b5.get('TerminationRate')) == (108.985, 96.85),
+          (b5.get('Strike'), b5.get('TerminationRate')))
     check('   sem marca interna na linha', '_shown' not in b5 and '_recap' not in b5,
           sorted(k for k in b5 if k.startswith('_')))
     pos_bco9 = dict(pos_bco, **{'Taxa Forward': '109.40'})
@@ -618,7 +624,7 @@ def main():
               [(r.get('internal_id'), r.get('settle_type')) for r in u_adv])
         a_cli = next((r for r in u_adv if r['internal_id'] == 'D5NQ-HMNV-CLI'), {'cells': []})
         check('   o aviso diz o FX, o preco e a quantidade da recompra',
-              a_cli['cells'][5:8] == [str(6270582.12 / 1203874), '96.84626', '100,000.00']
+              a_cli['cells'][5:8] == ['5.2087', '96.85', '100,000.00']
               and a_cli.get('apurado') == -6270582.12, a_cli['cells'])
         # O Print Advice do Other Products: a recompra passa pelo bloqueador de
         # linha incompleta e sai no aviso da contraparte (o NDF Summary a tirava
@@ -642,7 +648,7 @@ def main():
         html = d_cli.get('html', '')
         check('   tabela com quantidade recomprada, taxa pre e taxa de recompra',
               all(h in html for h in ('Quantidade Recomprada', 'Taxa Pré', 'Taxa de Recompra',
-                                      '100,000.00', '96.84626'))
+                                      '100,000.00', '96.85'))
               and 'Cotação Mercadoria' not in html, subj)
         rid = e_cli.get('_id')
         st, j = _post(pg_ndf['api'] + '/delete', {'id': rid, 'date': '2026-09-21'})
