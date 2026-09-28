@@ -173,6 +173,33 @@ check('COMM TER segue com os seus 0,005%',
       swap_val([cf('C1', -1000.0, 'SUZANO SA', '01/01/2023', asset='COMMODITY'),
                 cf('C1', -1000.0, 'SUZANO SA', '01/01/2023', asset='COMMODITY')]), -1999.90)
 
+print('\n== 7. recompra de NDF Comm e COMM TER, nao COMM OPT ==')
+# No cashflows a recompra chega como UMA perna so no Trade Id, e a regra "perna
+# unica e COMM OPT" a lia como premio de opcao. Quem diz que e recompra de termo
+# e a vertical das recompras (mesa, 28/09/2026).
+
+
+def prods(rows, unwinds):
+    return sorted({r['product'] for r in RP._jpm_cashflows(rows, CF_COLS, None, ref_date=REF,
+                                                           unwinds=unwinds)})
+
+
+_leg = [cf('U1', -12345.67, 'SUZANO SA', '01/01/2026', asset='COMMODITY')]
+check('sem recompra no dia, perna unica segue COMM OPT', prods(_leg, []), ['COMM OPT'])
+check('casa pelo valor + contraparte (S.A. x SA)',
+      prods(_leg, [{'Counterparty': 'SUZANO S.A.', '_settlement': -12345.67}]), ['COMM TER'])
+check('casa pelo Trade Id',
+      prods(_leg, [{'Counterparty': 'OUTRA', 'DealID': 'U1', '_settlement': 1.0}]), ['COMM TER'])
+check('valor diferente nao casa',
+      prods(_leg, [{'Counterparty': 'SUZANO S.A.', '_settlement': -999.0}]), ['COMM OPT'])
+check('contraparte diferente nao casa',
+      prods(_leg, [{'Counterparty': 'VALE S.A.', '_settlement': -12345.67}]), ['COMM OPT'])
+_dois = _leg + [cf('P9', -12345.67, 'SUZANO SA', '01/01/2026', asset='COMMODITY')]
+_out = RP._jpm_cashflows(_dois, CF_COLS, None, ref_date=REF,
+                         unwinds=[{'Counterparty': 'SUZANO S.A.', '_settlement': -12345.67}])
+check('cada recompra casa UMA perna so',
+      sorted(r['product'] for r in _out), ['COMM OPT', 'COMM TER'])
+
 # Uma regra so: a aliquota vem da funcao que o Trade Level e o aviso usam.
 SRC = read('apps/pages/recon_payrec.py')
 check('a aliquota vem do _ops_swap_ir_rate', 'from apps.pages.routes import _ops_swap_ir_rate' in SRC, True)

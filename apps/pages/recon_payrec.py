@@ -855,13 +855,65 @@ def _branch_breaks(branch):
     return out
 
 
-def _jpm_cashflows(rows, cols, net_map=None, ref_date=None):
+# Casamento da perna do cashflows com a recompra de NDF Comm pelo VALOR: o
+# cashflows traz o bruto do Athena e a recompra o PV BRL do mesmo recap.
+_UNWIND_TOL = 1.00
+
+
+def _cpty_key(name):
+    """Nome da contraparte só com letras e dígitos, sem o sufixo societário —
+    o cashflows escreve `SUZANO SA` e o Reference Data `SUZANO S.A.`."""
+    u = unicodedata.normalize('NFKD', str(name or '')).encode('ascii', 'ignore').decode().upper()
+    u = re.sub(r'[^A-Z0-9 ]', '', u)
+    u = re.sub(r'\s+(SA|LTDA|ME|EPP)$', '', u.strip())
+    return u.replace(' ', '')
+
+
+def _unwind_matcher(unwinds):
+    """As recompras de NDF de Commodities que liquidam no dia → função que diz
+    se uma perna do cashflows é uma delas (cada recompra casa UMA vez).
+
+    A recompra chega ao cashflows como UMA perna só no Trade Id — o termo tem
+    duas —, e a regra "perna única é COMM OPT" a lia como prêmio de opção.
+    Quem sabe que ela é recompra de termo é a vertical das recompras: casa pelo
+    Trade Id (id exato ou os 14 da direita, a ponte do §488) e, sem ele, pela
+    contraparte + valor."""
+    pend = []
+    for u in unwinds or []:
+        ids = {str(u.get(k) or '').strip().upper() for k in ('DealID', 'Contract', '_chave')}
+        ids.discard('')
+        pend.append({'ids': ids, 'cpty': _cpty_key(u.get('Counterparty')),
+                     'value': abs(_num(u.get('_settlement', u.get('Result')) or 0))})
+
+    def _mesmo_id(trade, ids):
+        t = trade.upper()
+        return bool(t) and any(t == i or (len(t) >= 14 and len(i) >= 14 and t[-14:] == i[-14:])
+                               for i in ids)
+
+    def is_unwind(rec):
+        if not pend:
+            return False
+        hit = next((u for u in pend if _mesmo_id(rec['trade'], u['ids'])), None)
+        if hit is None:
+            ck = _cpty_key(rec['cpty'])
+            hit = next((u for u in pend if ck and u['cpty']
+                        and (ck == u['cpty'] or ck.startswith(u['cpty']) or u['cpty'].startswith(ck))
+                        and abs(abs(rec['amount']) - u['value']) <= _UNWIND_TOL), None)
+        if hit is None:
+            return False
+        pend.remove(hit)
+        return True
+    return is_unwind
+
+
+def _jpm_cashflows(rows, cols, net_map=None, ref_date=None, unwinds=None):
     """cashflows → COMM TER / COMM OPT / SWAP, reduced per the client's net type.
 
     `ref_date` (a date) é a data da conciliação e serve ao IR do SWAP: o prazo
     da tabela regressiva conta do Trade Date até ela. Usar `hoje` faria uma
     reexecução de um dia antigo cair noutra faixa e mudar um número já
-    conferido."""
+    conferido. `unwinds` são as recompras de NDF de Commodities que liquidam no
+    dia (`_unwind_matcher`): a perna delas é COMM TER, não COMM OPT."""
     c_trade = _resolve(cols, 'Trade Id')
     # Trade Date = coluna K do arquivo. Resolve pelo nome quando o cabeçalho o
     # traz e cai na POSIÇÃO quando não — é o que o `_rec_col` faz, e o arquivo
@@ -893,6 +945,7 @@ def _jpm_cashflows(rows, cols, net_map=None, ref_date=None):
     counts = {}
     for rec in recs:
         counts[rec['trade']] = counts.get(rec['trade'], 0) + 1
+    is_unwind = _unwind_matcher(unwinds)
     for rec in recs:
         if _is_atacama(rec['cpty']):
             rec['prod'] = 'EQUITIES'      # Atacama always EQUITIES → one group, netted together
@@ -902,6 +955,8 @@ def _jpm_cashflows(rows, cols, net_map=None, ref_date=None):
             rec['prod'] = 'EQUITIES'
         elif rec['trade'] and counts[rec['trade']] > 1:
             rec['prod'] = 'COMM TER'
+        elif is_unwind(rec):
+            rec['prod'] = 'COMM TER'      # recompra de NDF Comm: perna única, mas é termo
         else:
             rec['prod'] = 'COMM OPT'
     # Per-(client, product) contributions. Drop ONLY J.P. Morgan's own bank leg
@@ -1772,12 +1827,13 @@ def _net_client(client, net_map):
 
 
 def run_payrec(recon_date, files=None, mode='auto', ndf_rows=None, ops_rows=None,
-               branch_accounts=None):
+               branch_accounts=None, unwind_rows=None):
     """`ndf_rows` são os registros do NDF Cockpit do dia (API + recompras), que
     o chamador busca (`routes._ndfc_liquidacao_do_dia`): o motor não importa o
     `routes` para isso, e o teste passa a lista pronta. Pelo mesmo motivo chegam
     prontas as linhas de liquidação do Operations B3 (`ops_rows`) e as contas da
-    Branch Settlement (`branch_accounts`, do `b3-accounts`)."""
+    Branch Settlement (`branch_accounts`, do `b3-accounts`) e as recompras de
+    NDF de Commodities do dia (`unwind_rows`, da vertical das recompras)."""
     srcs = _gather_sources(files, mode)
     if not srcs and not ndf_rows:
         raise FileNotFoundError('No Pay/Rec input files provided or found for this date.')
@@ -1798,7 +1854,8 @@ def run_payrec(recon_date, files=None, mode='auto', ndf_rows=None, ops_rows=None
                          'Athena API + unwinds')
             continue
         elif bucket == 'jpm_cash':
-            jpm += _jpm_cashflows(rows, cols, net_map, ref_date=_parse_dmy(recon_date))
+            jpm += _jpm_cashflows(rows, cols, net_map, ref_date=_parse_dmy(recon_date),
+                                  unwinds=unwind_rows)
         elif bucket == 'jpm_fxo':
             jpm += _jpm_fxo(rows, cols, net_map)
         elif bucket == 'sdconta_int':

@@ -2125,6 +2125,14 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   IGNORADO (dobraria o NDF). A conta é a dele: `SETTLEMENT + TAX` por cliente
   × LE, e LEGAL fora do JPM fica de fora (`_jpm_cockpit`). API fora do ar PARA
   o Run (`ndf_source_failed`): sem NDF, toda perna de cliente vira pendência.
+- **Pay/Rec: a recompra de NDF de Commodities é COMM TER, não COMM OPT**
+  (mesa, 28/09/2026, §576). No `cashflows` ela chega como UMA perna só no
+  Trade Id, e a regra do `_jpm_cashflows` (mais de uma perna = COMM TER, uma =
+  COMM OPT) a lia como prêmio de opção. Quem diz que é recompra é a vertical
+  (`commodity_settlement_rows`, as que liquidam no dia, passadas pelo Run como
+  `unwind_rows`): casa pelo Trade Id (exato ou os 14 da direita) ou, sem ele,
+  por contraparte (sem pontuação e sufixo societário) + valor dentro de R$ 1,00,
+  cada recompra UMA perna. Vertical ilegível não derruba a recon (avisa no log).
 - **Pay/Rec**: `SPB - outros bancos` casa só com BANCO (`_match_allowed`, pelo
   `bank-name`, por PALAVRA nunca substring, `banco` é token significativo,
   direção entra pela mesma porta, vale nos três estágios; fora do cadastro
