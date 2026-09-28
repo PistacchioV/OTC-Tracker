@@ -207,11 +207,13 @@ def main():
         check('linha enviada NAO se apaga', False)
     except ValueError as exc:
         check('linha enviada NAO se apaga', 'already sent' in str(exc))
+    # A linha Sent se REENVIA (mesa, 28/09/2026, §579): a B3 recusou, o arquivo
+    # sumiu da pasta — o que vai e a linha como esta.
     try:
-        commands.send([{'athena_id': 'STP-XE-10G5U5X-0-0', 'ref_date': '2026-09-10'}])
-        check('e nao se envia de novo', False)
+        r2 = commands.send([{'athena_id': 'STP-XE-10G5U5X-0-0', 'ref_date': '2026-09-10'}])
+        check('linha Sent se envia de novo', r2.get('count') == 1, r2)
     except ValueError as exc:
-        check('e nao se envia de novo', 'status Sent' in str(exc))
+        check('linha Sent se envia de novo', False, str(exc))
     l5 = commands.editar('STP-XE-10G5U5X-0-0', '2026-09-10', {'Counterparty': 'EDITADA'}, sid='E1')
     check('linha enviada SE edita e volta a Pending', l5 and l5['Status'] == 'Pending'
           and l5['Counterparty'] == 'EDITADA', l5)

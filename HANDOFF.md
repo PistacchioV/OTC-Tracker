@@ -24647,3 +24647,77 @@ se o Trade Id do cashflows é o id da posição; por isso o plano B por
 contraparte + valor.
 
 **Teste**: `check_payrec_run.py` §7.
+
+## §577 — Intraday Monitor: Save CETIP Files e Confirmations Escalation (2026-09-28)
+
+**Pedido da mesa**: o Intraday Monitor passa a cobrar também o Save CETIP Files
+(diário) e a cobrança das confirmações (segunda e quinta).
+
+**Como**: tipo novo `routine` no `domain.TASKS`, que conclui como a recon —
+rodou no dia, pelo registro de execuções (`platform/task_runs`); o ramo
+genérico do `_intraday_snapshot` e o front já desenhavam qualquer tarefa com
+execuções, então não houve tela nova.
+
+- `save-cetip` (`cetip/entrypoint`): registra no stage `save` quando ao menos
+  um arquivo foi salvo (resumo: salvos e faltantes). O `distribute` não conta:
+  o Save é o que alimenta as telas.
+- `conf-escalation` (`conf_escalation/commands._registra`): registra quando o
+  PACOTE da rotina (`routine`/`both`) sai sem erro e com destinatário — pelo
+  Run do card (com a sessão) ou pelo `fire_slot` do automático (`Automatic`).
+  E-mail avulso e a escalação diária não fecham a tarefa.
+
+Os dois apontam para o Control Panel; agenda e horário limite (padrão 20:00)
+se ajustam no card `intradaytasks`. Rótulos nas três línguas.
+
+**Teste**: `check_intraday_monitor.py` (dias padrão e as duas rotinas gravando
+o registro).
+
+## §578 — Recompra NDF Comm: o B2B não gerava o arquivo na visão do Lawton (2026-09-28)
+
+**Relato da mesa**: na recompra de NDF de Commodities o arquivo da visão Lawton
+do B2B não era gerado.
+
+**Causa**: o backend do catálogo (`unwinds/product/commands.arquivo`) gera UM
+arquivo por linha, na visão da conta da Parte — e a linha do B2B é, de
+propósito, a visão do Banco (`uma_visao_por_contrato`, §570). Num contrato
+entre duas entidades NOSSAS cada ponta lança a sua antecipação na B3, e a do
+Lawton simplesmente não existia. Havia um segundo defeito escondido atrás do
+primeiro: o template `antecipacao-termo-multiclasses` tem o Participante do
+header (campo 4) como `Fixed` `JPMORGANBM`, e o Fixed vence o gerador — o
+arquivo do Lawton sairia com o nome do Banco.
+
+**Correção**:
+- `arquivos(page, linha)` devolve a visão da Parte e, no B2B, a da
+  contraparte (`_espelho`): conta da contraparte com LE no `b3-accounts`,
+  diferente da LE da Parte e que não é guarda-chuva (`_b3_is_omnibus`). O
+  espelho (`domain.espelho_b2b`) troca as duas contas e inverte o `Comprado`;
+  contrato, quantidade, taxas, datas e Nº de controle são os mesmos.
+- Preview (duplo clique) mostra as duas abas; o Send grava
+  `UNWIND_NDF_COMMODITIES_BANCO.txt` e `..._LAWTON.txt` e conta LINHAS
+  enviadas, não registros.
+- O header vai com `force_values={'4': participante da visão}` — sem migrar o
+  template no banco da instância.
+- Só o layout do termo (`LAYOUTS_COM_ESPELHO`): swap e opção têm regra de papel
+  própria e ficam para quando a mesa pedir.
+
+**Pendente**: a Fase 1 (NDF FX, `unwinds/commands.ter_file`) tem o mesmo
+desenho de um arquivo só e o mesmo template; um NDF FX Banco × Lawton também
+não gera a visão do fundo.
+
+**Teste**: `check_unwind_products.py` (B2B gera as duas visões com contas
+trocadas, lado invertido e header do Lawton; cliente e guarda-chuva geram uma).
+
+## §579 — Recompras: linha `Sent` se reenvia (2026-09-28)
+
+**Pedido da mesa**: tirar a trava que impedia gerar de novo o arquivo da B3 de
+uma recompra já `Sent`.
+
+**Mudança**: `STATUS_ENVIAVEL` (Fase 1, e o catálogo herda) passa a ser
+`Imported`, `Approved` e `Sent`. `Pending` continua fora — edição não conferida
+não vai à B3. O reenvio grava um arquivo NOVO na pasta do Conecta
+(`_unique_filepath`, nunca sobrescreve) e recarimba `SentFiles`/`SentAt`; no
+NDF FX a linha da Intrag é regravada pela mesma chave (`_deal`), sem duplicar.
+Delete e reimport continuam travados em `Sent`.
+
+**Testes**: `check_unwind_page` e `check_unwind_products` (a linha Sent se
+envia de novo).

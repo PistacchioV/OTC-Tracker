@@ -796,10 +796,12 @@ UNW_LABELS = (
 # conferindo. Uma linha `Pending` NAO e enviavel — edicao que ninguem conferiu
 # indo para a B3 e exatamente o que o gate existe para segurar —, e por isso o
 # `STATUS_ENVIAVEL` tem `Imported` (veio da maquina, intocada) e `Approved`
-# (mexida e conferida), nunca `Pending`.
+# (mexida e conferida), nunca `Pending`. E tem `Sent` (mesa, 28/09/2026, §579):
+# o arquivo se REENVIA — a B3 recusou, o arquivo sumiu da pasta, faltou uma
+# visao —, e o que vai e a linha como ela esta, ja conferida.
 STATUS_NOVO, STATUS_ENVIADO = 'Imported', 'Sent'
 STATUS_PENDENTE, STATUS_APROVADO = 'Pending', 'Approved'
-STATUS_ENVIAVEL = (STATUS_NOVO, STATUS_APROVADO)
+STATUS_ENVIAVEL = (STATUS_NOVO, STATUS_APROVADO, STATUS_ENVIADO)
 
 # O que a edicao de linha NAO toca. A chave, porque e por ela que a linha se
 # acha; os dois veredictos, porque sao apurados e nao digitados; e o rastro do

@@ -1058,6 +1058,17 @@ GERADORES = {
 }
 
 
+def espelho_b2b(linha):
+    """A MESMA recompra na visao da CONTRAPARTE, quando ela tambem e nossa (o
+    B2B Banco x Lawton): as duas contas trocam de lugar e o lado se inverte —
+    o comprado de um e o vendido do outro. O resto (contrato, quantidade,
+    taxas, datas) e do contrato e nao muda."""
+    comprado = linha.get('Comprado')
+    return dict(linha, PartyAccount=linha.get('CptyAccount'),
+                CptyAccount=linha.get('PartyAccount'),
+                Comprado=None if comprado is None else not comprado)
+
+
 def nome_do_arquivo(page, visao):
     """`UNWIND_<PRODUTO>_<VISAO>.txt` — o produto no nome porque o Batch Conecta
     e UMA pasta para todos, e o `UNWIND_BANCO.txt` e o da Fase 1."""
