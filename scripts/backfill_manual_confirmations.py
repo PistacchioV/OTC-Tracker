@@ -130,6 +130,12 @@ FAMILIES = {
     # nunca um caminho escrito de novo aqui.
     'Unwind NDF FX':      {'root': 'unwinds', 'dir': ('NDF', 'FX'),
                            'source': 'UNWIND NDF', 'key': 'deal'},
+    # A recompra de NDF de Commodities (28/09/2026): a linha da página vira
+    # deal pelo MESMO `confirmation_deal` que o import usa (a chave é o Deal ID,
+    # o `Codigo Identificador` do Live Position).
+    'Unwind NDF Commodities': {'root': 'unwinds', 'dir': ('NDF', 'Commodities'),
+                               'source': 'UNWIND NDF COMM', 'key': 'deal',
+                               'unwind_page': 'ndf/commodities'},
 }
 
 
@@ -236,6 +242,15 @@ def main():
                 if deal_source is None:
                     fora_regra += 1
                     continue
+            if cfg.get('unwind_page'):
+                # A linha da recompra do catálogo vem no formato da PÁGINA: o
+                # tradutor do import a põe no formato da esteira (o dia é o do
+                # arquivo, que o import grava no `ImportedAt`).
+                from apps.pages.features.unwinds import catalog as _ucat
+                from apps.pages.features.unwinds.product import commands as _ucmd
+                dia = R._parse_date_any(str(deal.get('ImportedAt') or '')[:10]) \
+                    or R._parse_date_any(deal.get('UnwindDate'))
+                deal = _ucmd.confirmation_deal(_ucat.page(cfg['unwind_page']), deal, dia)
             if cfg.get('swap'):
                 # O deal do Swap Bullet vem no formato da PÁGINA (B3ID, sem
                 # SettlementDate): o mesmo tradutor do mapeamento o põe no

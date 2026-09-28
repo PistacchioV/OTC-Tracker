@@ -490,9 +490,11 @@ from apps.pages import routes as R                                # noqa: E402
 # 'UNWIND NDF' entrou em 18/09/2026 (§488) pela recompra de termo de moeda: o
 # Produto é o mesmo valor do Product Type do Pending Confirmation, e o
 # documento dele é o Termo de Resilição (o `confirmation_type` traduz).
-check('os oito produtos', sorted(R._MC_CONFIRMATION_SOURCES),
+# 'UNWIND NDF COMM' entrou em 28/09/2026 pela recompra de NDF de Commodities:
+# o mesmo Termo, a família `Unwind NDF Commodities` do backfill.
+check('os nove produtos', sorted(R._MC_CONFIRMATION_SOURCES),
       ['NDF COMM', 'NDF FWD START', 'NDF VANILLA', 'OPTION', 'OPTION COMM', 'SWAP',
-       'SWAP CORPORATE', 'UNWIND NDF'])
+       'SWAP CORPORATE', 'UNWIND NDF', 'UNWIND NDF COMM'])
 # As três páginas genéricas de NDF gravam o MESMO Product Type: o recorte tem de
 # ser pelo `source`, senão Vanilla e Other Publisher entrariam junto.
 check('as três páginas de NDF gravam o mesmo Product Type',

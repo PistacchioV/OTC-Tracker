@@ -215,7 +215,10 @@ def termo_grupo(ref, acr='', moeda=''):
     alvo = str(acr or '').strip().upper()
     m = str(moeda or '').strip().upper()
     out = []
-    for e in entries(date_str=str(ref or '')):
+    # As recompras do catálogo com Termo (NDF de Commodities) vêm no formato
+    # desta vertical, com a MERCADORIA no lugar da moeda (o eixo do grupo).
+    from apps.pages.features.unwinds.product import queries as produto
+    for e in entries(date_str=str(ref or '')) + produto.termo_entries(ref):
         if alvo and alvo not in (_acr_da_linha(e).upper(),
                                  str(e.get('Counterparty') or '').strip().upper()):
             continue

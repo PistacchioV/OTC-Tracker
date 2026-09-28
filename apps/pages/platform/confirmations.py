@@ -1795,7 +1795,9 @@ def _conf_unwind_legs(deal, subj):
     Sem a taxa não há perna estrangeira que se possa afirmar — a operação fica
     de fora do XML com aviso, como qualquer outra sem strike."""
     brl = _conf_to_float(deal.get('UnwoundBRL'))
-    taxa = _conf_to_float(deal.get('TerminationRate'))
+    # Na recompra de MERCADORIA a taxa que leva os reais à moeda do contrato é
+    # o FX da recompra (`XmlFxRate`), não o preço da mercadoria.
+    taxa = _conf_to_float(deal.get('XmlFxRate') or deal.get('TerminationRate'))
     if brl is None or not taxa:
         return None
     return brl / taxa, brl
@@ -1809,6 +1811,9 @@ def _conf_unwind_xml(picked, merc, ref):
     **RE**, de resilição (mesa, 22/09/2026; era `R`) — é o que separa o distrato do registro. A moeda vai
     EXPLÍCITA — é a Moeda Base do grupo, o mesmo eixo do documento (§457) —
     porque o deal da recompra não tem campo de moeda de strike."""
+    # A moeda é a do grupo no termo de moeda; na recompra de MERCADORIA o grupo
+    # é a mercadoria, e a moeda estrangeira é a do contrato (`XmlCcy`).
+    ccy = (str(picked[0][0].get('XmlCcy') or '').strip() if picked else '') or merc
     return _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='Termo_Resilicao',
-                         warn_no_spot=False, legs_fn=_conf_unwind_legs, ccy=merc,
+                         warn_no_spot=False, legs_fn=_conf_unwind_legs, ccy=ccy,
                          evento='RE')

@@ -8,6 +8,7 @@ arquivo-dia roda INTEIRO sob o `_cache_lock`.
 """
 import os
 import random
+import traceback
 import uuid
 
 from apps.pages.features.unwinds import catalog
@@ -212,6 +213,9 @@ def importar(page, filename, dados, ref, dry_run=False):
             gravadas.append(linha)
         if gravadas:
             product_store.save(fp, dia)
+    # A esteira nasce no IMPORT (a regra da Fase 1, §488): Pending Confirmation,
+    # Track e Confirmations Monitor mostram a recompra sem esperar o Send.
+    esteira(page, gravadas, ref)
     _R().log.info('[UNWIND %s] %d linha(s) importada(s), %d ja enviada(s) mantida(s) -> %s',
                   page['label'], len(gravadas), len(puladas), fp)
     return {'rows': gravadas, 'warnings': avisos, 'skipped': len(puladas),
@@ -278,8 +282,16 @@ def apagar(page, row_id, date_str):
             return None
         if lst[idx].get('Status') == domain.STATUS_ENVIADO:
             raise domain.Recusa('unwind_already_sent', 'This unwind was already sent to B3', 409)
+        # A esteira sai junto com a recompra — mas nao por cima de carimbo de
+        # mesa (documento gerado, validacao, envio ao cliente): isso e REGISTRO.
+        k = chave(lst[idx])
+        if com_esteira(page) and k and not _R()._mc_mod.row_untouched(k):
+            raise domain.Recusa('unwind_trail_signed',
+                                'This unwind already has a signed trail entry (document '
+                                'generated, validated or sent to the client)', 409)
         apagada = lst.pop(idx)
         product_store.save(fp, lst)
+    esteira_sem(page, apagada)
     return apagada
 
 
@@ -442,3 +454,151 @@ def _marcar_enviadas(page, alvos, sid, nomes):
                     e['SentAt'] = quando
                     e['Maker'] = sid or e.get('Maker') or ''
             product_store.save(fp, lst)
+
+
+# ── A recompra de NDF de Commodities fora da tela (mesa, 28/09/2026) ─────────
+# O MESMO desenho da Fase 1 (`unwinds/commands.py`, §488), e pelas MESMAS
+# funções dela: a esteira (Pending Confirmation + Monitor) nasce no IMPORT e
+# morre com a recompra, o Termo de Resilição sai do Confirmations Monitor pela
+# família `termo-resilicao`, e a liquidação entra no Other Products pelas
+# linhas do Settlement Advice de NDF (`_ndfadv_collect`) — que são também as do
+# Trade Level, do Summary e do e-mail de TED.
+#
+# Quem fala com aquelas funções é a linha no FORMATO da Fase 1
+# (`para_o_termo`): o `AthenaID` é o Deal ID (o `Codigo Identificador` do Live
+# Position) e a "moeda" do agrupamento é a MERCADORIA — o eixo contraparte ×
+# ativo é o mesmo das confirmações de NDF de Commodities (§457).
+ESTEIRA_SOURCE = {d: s for d, s in domain.PAGINAS_COM_TERMO.items()}
+SETTLEMENT_LOOKBACK_DIAS = 4        # a janela da Fase 1: a B3 aceita até D+1
+
+
+def com_esteira(page):
+    return bool(page) and page.get('dir') in ESTEIRA_SOURCE
+
+
+def paginas_com_esteira():
+    return queries.paginas_com_termo()
+
+
+def chave(linha):
+    return domain.chave_da_esteira(linha)
+
+
+def para_o_termo(page, linha):
+    return domain.para_o_termo(page, linha)
+
+
+def confirmation_deal(page, linha, ref):
+    """A recompra no formato de DEAL da esteira — o da Fase 1, com as duas
+    parcelas do XML do FepWeb na régua da mercadoria: o `valor` é o resultado
+    em REAIS e o `valorEstrangeiro` é ele pelo FX da recompra (o FV USD do
+    e-mail), na moeda do contrato."""
+    from apps.pages.features.unwinds import commands as fase1_cmd
+    l = para_o_termo(page, linha)
+    deal = fase1_cmd.confirmation_deal(l, ref)
+    res = domain.numero((linha or {}).get('Result'))
+    deal.update({
+        'UnwoundBRL': abs(res) if res is not None else None,
+        'XmlFxRate': (linha or {}).get('FXRate'),
+        'XmlCcy': l['MoedaDoContrato'],
+        '_page': page['path'],
+    })
+    return deal
+
+
+def _dia(ref):
+    d = _R()._parse_date_any(ref) or _hoje()
+    try:
+        return d.date()
+    except AttributeError:
+        return d
+
+
+def confirmation_deals(ref):
+    """As recompras do dia (arquivo-dia `ref`) no formato das confirmações."""
+    d = _dia(ref)
+    out = []
+    for page in paginas_com_esteira():
+        for l in queries.entries(page, d.strftime('%Y-%m-%d')):
+            out.append(confirmation_deal(page, l, d))
+    return out
+
+
+def esteira(page, linhas, ref):
+    """Pending Confirmation + esteira no IMPORT (a regra da Fase 1). Falha
+    aqui não derruba o import — a linha já está no arquivo-dia."""
+    if not com_esteira(page):
+        return
+    from apps.pages.features.unwinds import commands as fase1_cmd
+    source = ESTEIRA_SOURCE[page['dir']]
+    d = _dia(ref)
+    for l in linhas or []:
+        try:
+            deal = confirmation_deal(page, l, d)
+            if not deal['Deal']:
+                continue
+            _R()._pc_save_from_deal(deal, source, source=source, trade_number=deal['Deal'])
+            fase1_cmd.esteira_data_da_operacao(para_o_termo(page, l), d)
+        except Exception:                                   # noqa: BLE001
+            _R().log.warning('[UNWIND %s] esteira: %s ficou de fora — %s', page['label'],
+                             chave(l), traceback.format_exc())
+
+
+def esteira_sem(page, linha):
+    if com_esteira(page) and chave(linha):
+        from apps.pages.features.unwinds import commands as fase1_cmd
+        fase1_cmd.esteira_sem_a_recompra([chave(linha)])
+
+
+def termo_carimbar(chaves, ref_date, doc_path, pdf_path, link='', sid=''):
+    """Carimba o Termo nas recompras do catálogo; devolve as chaves achadas."""
+    alvo = {str(c or '').strip().upper() for c in chaves or []}
+    alvo.discard('')
+    achadas = set()
+    if not alvo:
+        return achadas
+    quando = _agora()
+    with _R()._cache_lock:
+        for page in paginas_com_esteira():
+            fp = product_store.day_path(page, _dia(ref_date))
+            lst = product_store.read_day(fp)
+            mexeu = False
+            for e in lst:
+                k = chave(e).upper()
+                if isinstance(e, dict) and k in alvo:
+                    e.update({'TermoDoc': doc_path, 'TermoPdf': pdf_path, 'TermoLink': link,
+                              'TermoAt': quando, 'TermoBy': sid or e.get('TermoBy') or ''})
+                    achadas.add(k)
+                    mexeu = True
+            if mexeu:
+                product_store.save(fp, lst)
+    return achadas
+
+
+def settlement_rows(ref):
+    """As recompras de NDF de Commodities que LIQUIDAM em `ref` (a regra da
+    Fase 1: entram desde o IMPORT; sem resultado ou sem direção apurada ficam
+    de fora, avisando). O sinal é o do Summary — negativo é o banco pagando."""
+    from datetime import timedelta
+    alvo = _dia(ref)
+    out = []
+    for page in paginas_com_esteira():
+        for n in range(SETTLEMENT_LOOKBACK_DIAS + 1):
+            dia = alvo - timedelta(days=n)
+            for l in queries.entries(page, dia.strftime('%Y-%m-%d')):
+                liq = _R()._parse_date_any(l.get('SettlementDate'))
+                try:
+                    liq = liq.date()
+                except AttributeError:
+                    pass
+                if liq != alvo:
+                    continue
+                res = domain.numero(l.get('Result'))
+                direcao = str(l.get('Direction') or '').strip().upper()
+                if res is None or direcao not in ('RECEIVE', 'PAY'):
+                    _R().log.warning('[UNWIND %s] %s fora da liquidação de %s: sem resultado '
+                                     'ou sem direção apurada', page['label'], chave(l), alvo)
+                    continue
+                out.append(dict(l, _settlement=abs(res) if direcao == 'RECEIVE' else -abs(res),
+                                _chave=chave(l), _page=page['path']))
+    return out

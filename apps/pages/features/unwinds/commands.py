@@ -773,6 +773,11 @@ def termo_carimbar(athena_ids, ref_date, doc_path, pdf_path, link='', sid=''):
     """Grava na linha da recompra o documento que acabou de sair — agrupando
     por arquivo-dia, um read-modify-write por arquivo sob o `_cache_lock`."""
     quando = _R()._br_now().strftime('%Y-%m-%d %H:%M')
+    # As recompras do catálogo (NDF de Commodities) carimbam na árvore delas; o
+    # que sobra é da Fase 1.
+    from apps.pages.features.unwinds.product import commands as produto
+    achadas = produto.termo_carimbar(athena_ids, ref_date, doc_path, pdf_path, link, sid)
+    athena_ids = [a for a in athena_ids or [] if str(a or '').strip().upper() not in achadas]
     por_arquivo = {}
     for aid in athena_ids or []:
         fp, _lst, idx = queries.find(aid, ref_date)
@@ -864,8 +869,12 @@ def confirmation_deals(ref_dt):
     """As recompras do dia no formato das confirmações — o que a segregação
     (`platform/confirmations`) lê pelo gancho `routes._unwind_engine()`."""
     ref = _R()._parse_date_any(ref_dt) or _hoje()
-    return [confirmation_deal(l, ref)
-            for l in queries.entries(date_str=ref.strftime('%Y-%m-%d'))]
+    from apps.pages.features.unwinds.product import commands as produto
+    # As recompras do catálogo que têm esteira (NDF de Commodities) entram na
+    # MESMA segregação: o Termo é um tipo só, e é daqui que o Monitor as lê.
+    return ([confirmation_deal(l, ref)
+             for l in queries.entries(date_str=ref.strftime('%Y-%m-%d'))]
+            + produto.confirmation_deals(ref))
 
 
 def esteira_sem_a_recompra(athena_ids):
@@ -1237,3 +1246,12 @@ def settlement_rows(ref):
             'unwind': True,
         })
     return out
+
+
+def commodity_settlement_rows(ref):
+    """As recompras de NDF de Commodities que liquidam em `ref` — o que o
+    Settlement Advice de NDF de mercadoria (`_ndfadv_collect`) soma, e com ele
+    o Trade Level, o Summary e a TED do Other Products. Mora no catálogo; a
+    porta é esta porque é ela que o `routes._unwind_engine()` devolve."""
+    from apps.pages.features.unwinds.product import commands as produto
+    return produto.settlement_rows(ref)

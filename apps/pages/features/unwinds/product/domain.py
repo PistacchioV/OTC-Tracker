@@ -310,14 +310,23 @@ def linhas_do_recap_commodities(tabelas):
     quando nenhuma tabela tem o cabecalho dele (`Leg` + `Unwind Strike`)."""
     linhas, avisos, achou = [], [], False
     for t in tabelas or []:
-        if not t:
-            continue
-        cab = [_rotulo_recap(h) for h in t[0]]
-        if not cab or cab[0] != 'leg' or 'unwindstrike' not in cab:
-            continue
-        achou = True
-        mapa = {i: _RECAP_COLS[c] for i, c in enumerate(cab) if c in _RECAP_COLS}
-        for n, r in enumerate(t[1:], start=2):
+        # O trecho colado do Excel costuma ser UMA tabela com um cabecalho
+        # `Leg ...` por perna — e as pernas NAO tem as mesmas colunas (a do
+        # Client tem o `Risk Deal ID`, a do Banco nao). Toda linha que abre com
+        # `Leg` e um cabecalho NOVO e vale para as linhas de baixo; lendo so o
+        # primeiro, a perna Banco saia com as colunas deslocadas uma casa.
+        mapa = None
+        for n, r in enumerate(t or [], start=1):
+            cab = [_rotulo_recap(h) for h in r]
+            if cab and cab[0] == 'leg':
+                if 'unwindstrike' in cab:
+                    achou = True
+                    mapa = {i: _RECAP_COLS[c] for i, c in enumerate(cab) if c in _RECAP_COLS}
+                else:
+                    mapa = None
+                continue
+            if mapa is None:
+                continue
             cel = {k: (r[i] if i < len(r) else '') for i, k in mapa.items()}
             perna = norm(cel.get('leg'))
             if perna not in _RECAP_PERNAS:
@@ -377,6 +386,35 @@ def linhas_do_recap_commodities(tabelas):
     return linhas, avisos
 
 
+# As recompras do catálogo que têm esteira e Termo de Resilição (mesa,
+# 28/09/2026): pasta da página -> o source da esteira (o Product Type do
+# Pending Confirmation).
+PAGINAS_COM_TERMO = {'NDF/Commodities': 'UNWIND NDF COMM'}
+
+
+def chave_da_esteira(linha):
+    """A chave da recompra na esteira e no Pending Confirmation: o Deal ID (o
+    `Codigo Identificador` do Live Position); sem ele, o `_id` interno —
+    estável entre reimports, porque o upsert o preserva."""
+    return (texto((linha or {}).get('DealID'))
+            or texto((linha or {}).get(catalog.KEY_FIELD)))
+
+
+def para_o_termo(page, linha):
+    """A linha no formato que a Fase 1 lê (Termo, esteira): o `AthenaID` é a
+    chave da esteira e a "moeda" do agrupamento é a MERCADORIA — o eixo
+    contraparte × ativo das confirmações de NDF de Commodities (§457)."""
+    l = dict(linha or {})
+    l.update({
+        'AthenaID': chave_da_esteira(linha),
+        'Currency': (texto(l.get('Commodity')) or texto(l.get('Currency'))).upper(),
+        'MoedaDoContrato': texto((linha or {}).get('Currency')).upper(),
+        'ClientAcronym': '',
+        '_page': page['path'],
+    })
+    return l
+
+
 def chave_natural(linha):
     """A tupla da chave natural (`catalog.NATURAL_KEY`), ou None."""
     for campos in catalog.NATURAL_KEY:
@@ -401,6 +439,10 @@ def chave_natural(linha):
 # campo da linha <- chave da posicao, e o tipo de comparacao da divergencia
 _DA_POSICAO = (
     ('Contract', 'contract', 'text'),
+    # O Deal ID do NDF de Commodities e o `Codigo Identificador` do Live
+    # Position (mesa, 28/09/2026): e o numero pelo qual a operacao original se
+    # identifica, o Nº da Confirmacao do Termo e a chave da esteira.
+    ('DealID', 'deal_id', 'text'),
     ('Counterparty', 'counterparty', 'name'),
     ('TaxID', 'taxid', 'doc'),
     ('OriginalNotional', 'original', 'num'),
@@ -520,8 +562,9 @@ def casar_por_caracteristicas(linha, posicoes):
                            'matched against the Live Position (has: %s)'
                            % (MIN_CRITERIOS, ', '.join(nomes) or '-'),
                            minimo=MIN_CRITERIOS, criterios=', '.join(nomes))
-    achadas = [p for p in posicoes or []
-               if all(_casa(linha.get(c), p.get(k), m) for c, k, m in usados)]
+    achadas = uma_visao_por_contrato(
+        [p for p in posicoes or []
+         if all(_casa(linha.get(c), p.get(k), m) for c, k, m in usados)])
     if len(achadas) == 1:
         return achadas[0], aviso('unwind_matched_by_characteristics',
                                  'B3 ID %s found in the Live Position by %s'
@@ -538,15 +581,32 @@ def casar_por_caracteristicas(linha, posicoes):
                        n=len(achadas), criterios=', '.join(nomes))
 
 
+def uma_visao_por_contrato(posicoes):
+    """As posicoes com UMA linha por contrato. O Live Position traz o mesmo
+    contrato na visao de cada entidade nossa (Banco x Lawton aparece duas
+    vezes): contadas como dois candidatos, a perna Banco nunca casava — era
+    "ambiguo" com um contrato so. Vale a visao de menor `view_rank` (a do
+    Banco antes da do fundo); empate fica com a primeira."""
+    melhor, ordem = {}, []
+    for p in posicoes or []:
+        k = norm(p.get('contract')) or id(p)
+        if k not in melhor:
+            ordem.append(k)
+            melhor[k] = p
+        elif p.get('view_rank', 2) < melhor[k].get('view_rank', 2):
+            melhor[k] = p
+    return [melhor[k] for k in ordem]
+
+
 def posicao_pelo_contrato(contrato, posicoes):
-    """A posicao do B3 ID (sem caixa nem espaco), ou None."""
+    """A posicao do B3 ID (sem caixa nem espaco), ou None — na visao que vale
+    quando o contrato aparece mais de uma vez (`uma_visao_por_contrato`)."""
     alvo = norm(contrato)
     if not alvo:
         return None
-    for p in posicoes or []:
-        if norm(p.get('contract')) == alvo:
-            return p
-    return None
+    achadas = uma_visao_por_contrato([p for p in posicoes or []
+                                      if norm(p.get('contract')) == alvo])
+    return achadas[0] if achadas else None
 
 
 # ==============================================================================
@@ -889,7 +949,8 @@ def campos_ter_0014(linha, participante, hoje_ymd):
     """TER 0014 (`antecipacao-termo-multiclasses`) do termo de MERCADORIA: os
     MESMOS nomes e formatos da Fase 1 (`fase1.valores_ter_0014`), com a
     quantidade no campo 9 e a paridade no 14 (a taxa termo e na moeda cotada).
-    Asiatico pede as linhas tipo 2 com as datas de verificacao — recusa."""
+    Asiatico ou nao, o arquivo e o MESMO (mesa, 28/09/2026): a antecipacao nao
+    leva as datas de verificacao — o campo 16 vai `000` e nao ha linha tipo 2."""
     faltas = []
     comprado = linha.get('Comprado')
     papel = None if comprado is None else (fase1.PAPEL_COMPRADO if comprado else fase1.PAPEL_VENDIDO)
@@ -914,9 +975,6 @@ def campos_ter_0014(linha, participante, hoje_ymd):
     if fx is None and str(linha.get('Currency') or '').strip().upper() in CCY_REAIS:
         fx = 1.0
     campos['Taxa de Câmbio (R$/Moeda Cotada)'] = fx
-    if linha.get('VerificationDates'):
-        faltas.append('16 Asian contract: the type-2 lines (verification dates) are not '
-                      'supported yet')
     valores, av = fase1.valores_ter_0014(campos)
     faltas.extend('%s %s' % (a['params'].get('seq', ''), a['params'].get('campo', ''))
                   for a in av)
