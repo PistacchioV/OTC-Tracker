@@ -1657,7 +1657,9 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   catálogo). Ela vai para a **Intrag › Unwind** no **IMPORT** (e o Edit a
   atualiza; o Delete a tira se lá ela ainda é `New`) — **nunca no Send** (mesa,
   28/09/2026, §582, e já dito antes): nem toda recompra é registrada na B3 pelo
-  OTC Tracker, e a instrução da Intrag não pode depender disso. Porta única:
+  OTC Tracker, e a instrução da Intrag não pode depender disso. A linha JÁ
+  ENVIADA que o reimport MANTÉM também vai (§583) — só as gravadas deixavam de
+  fora justamente a recompra enviada antes da regra. Porta única:
   `intrag_da_recompra` da Fase 1 (a planilha de onze colunas é uma para todos os
   produtos; o catálogo entra por `product/commands.intrag`, no formato
   `para_o_termo`). A liquidação (Summary, Advice, Pay/Rec) continua com as duas.
