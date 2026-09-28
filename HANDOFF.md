@@ -24963,3 +24963,17 @@ código — mas passou porque o §580 não rodou esse teste.
 
 **Teste**: `check_unwind_products.py` §12 (Valor Base Liquidado `100.000,00`);
 `check_unwind_termo.py` de volta a zero falhas.
+
+## §590 — Termo de Resilição: Anexo I conferido; o Pagador saía com fonte menor (2026-09-28)
+
+**Pedido**: "veja se a tabela do termo de resilição está saindo ok ou
+desalinhado". Renderizado com três recompras de exemplo (parcial e total em
+USD; parcial de commodity) e medido no Chromium: as sete colunas têm as MESMAS
+bordas no cabeçalho e nas linhas, tudo centralizado, sem quebra — alinhada. A
+de commodity já sai sem o código (§589).
+
+**Defeito achado**: a célula do **Pagador do Valor de Resilição** tinha
+`font-size:11pt` fixo no span do dado, enquanto as vizinhas herdam os 12pt do
+`MsoNormal` — "Parte A/B" saía visivelmente menor. Igualada ao molde das outras
+células (dado em span sem tamanho, o 11pt só no `<o:p>`). As linhas do painel
+são CLONES da primeira, então a correção vale para elas também.
