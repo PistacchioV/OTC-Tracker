@@ -24880,3 +24880,43 @@ marca é a suposição, apoiada na Situação que o próprio arquivo manda
 `only_original` e é a hora de pedir um exemplo.
 
 **Teste**: `check_intrag_unwind.py` §7.
+
+## §586 — Recompras: o e-mail processado sai do dropzone mesmo sem linha nova (2026-09-28)
+
+**Relato**: "o e-mail que fica no dropzone do unwind NDF Comm, ao finalizar o
+processamento, tem que sumir dali. Ele continua anexado ad eternum."
+
+**Causa-raiz**: o `runImport` das duas telas (`unwinds-product.html` e
+`unwinds-ndf-fx.html`) só esvaziava a fila com `rows.length` > 0. Um reimport
+em que tudo já estava `Sent` (mantido, §583) devolve 0 linhas — e o e-mail
+ficava. Na NDF FX havia o defeito inverso: com alguma linha gravada,
+`removeAllFiles` levava junto o arquivo que tinha dado ERRO.
+
+**O que mudou**: sai da fila cada arquivo que o servidor PROCESSOU
+(`success`), com ou sem linha nova; ficam só o que deu erro e o que a pessoa
+cancelou no "Replace?". Conferido no Chromium com o import simulado (sucesso
+sem linha sai, erro fica), nas duas telas.
+
+## §587 — Mapping B3 ID da recompra no layout REAL do retorno; o New Deals parou de apagar o retorno da recompra (2026-09-28)
+
+**Insumo**: a mesa mandou o arquivo de retorno de NDF FX e Commodities —
+`Numero da Linha Original;Codigo IF;Cod. Oper. Cetip;Descricao da Mensagem;Texto
+da Linha Original`, com `EXECUCAO OK` e o TER 0014 ecoado (`TER  10014…`).
+
+**Causa-raiz de dois defeitos**:
+1. O §582 casava pela palavra SUCESSO (a do pedido) — o retorno real diz
+   `EXECUCAO OK`, e nada casaria nunca.
+2. O Mapping B3 ID do New Deals (NDF Vanilla e o outro leitor de TER) APAGA todo
+   arquivo do Return com `TER` na posição 57 — o de antecipação também. Quem
+   clicasse lá antes levava embora o retorno da recompra, sem mapear nada.
+
+**O que mudou**: `unwinds.domain.linha_do_retorno`/`e_antecipacao`: B3 ID do
+Codigo IF, status `EXECUCAO OK` (SUCESSO segue valendo), só a linha de
+antecipação (`TER  1` + `0014`; SWAP/OPC no mesmo molde) — o registro de NDF novo
+usa o mesmo arquivo com o mesmo TER. Cabeçalho não é dado. No New Deals,
+`_e_antecipacao` pula essas linhas: o arquivo só de recompra não é mais apagado
+por lá. Retorno com erro da B3 na antecipação NÃO vira `Error` na recompra
+(não foi pedido; fica como está).
+
+**Teste**: `check_unwind_products.py` §13 (fixtures no layout real; registro
+0003 não conta; erro da B3 não conta; o New Deals ignora a antecipação).

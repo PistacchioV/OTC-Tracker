@@ -809,43 +809,57 @@ STATUS_SUCESSO = 'Success'
 STATUS_REGISTRADO = (STATUS_ENVIADO, STATUS_SUCESSO)
 
 
-# ── O retorno da B3 (Batch Conecta \ Return) ────────────────────────────────
-# A linha do retorno e `…;<B3 ID>;…;<status>;<registro ecoado>`. O que a mesa
-# definiu (28/09/2026): a recompra deu certo quando a linha traz a palavra
-# SUCESSO e o B3 ID dela. O casamento e pelo B3 ID como PALAVRA inteira em
-# qualquer coluna — o eco do registro tambem o carrega —, nunca substring (um
-# B3 ID dentro de outro numero nao conta).
+# ── O retorno da B3 (Batch Conecta \\ Return) ────────────────────────────────
+# O arquivo (mesa, 28/09/2026, exemplo real): cabecalho `Numero da Linha
+# Original;Codigo IF;Cod. Oper. Cetip;Descricao da Mensagem;Texto da Linha
+# Original` e uma linha por registro — `<n>;<B3 ID>;<oper>;EXECUCAO OK;TER  10014…`.
+# O B3 ID e o `Codigo IF`; o status, a `Descricao da Mensagem` (`EXECUCAO OK`;
+# `SUCESSO` tambem vale, a palavra que a mesa usou ao pedir); e so conta a linha
+# que ecoa uma ANTECIPACAO (`e_antecipacao`) — o registro de um NDF novo usa o
+# mesmo arquivo com o mesmo TER.
+RETORNO_OK = ('EXECUCAO OK', 'SUCESSO')
+
+
 def _sem_acento(txt):
     import unicodedata
     return ''.join(c for c in unicodedata.normalize('NFKD', str(txt or ''))
                    if not unicodedata.combining(c))
 
 
-def linha_de_sucesso(linha):
-    """A linha do retorno diz SUCESSO? (cego a caixa e acento)."""
-    return 'SUCESSO' in _sem_acento(linha).upper()
+def e_antecipacao(registro):
+    """O texto ecoado e o 0014 (antecipacao) do TER/SWAP/OPC? `TER  1` + `0014`:
+    sigla em 5 posicoes, tipo `1` e o codigo da operacao."""
+    r = str(registro or '').lstrip()
+    if not r.upper().startswith(('TER', 'SWAP', 'OPC')):
+        return False
+    return r[5:6] == '1' and r[6:10] == '0014' or ('0014' in r[:16] and r.upper().startswith('OPC'))
 
 
-def tokens_do_retorno(linha):
-    """As PALAVRAS da linha (separadas por `;`, `|` e espaco), em maiusculas."""
-    import re
-    return {t for t in re.split(r'[;|\s]+', str(linha or '').upper()) if t}
+def linha_do_retorno(linha):
+    """-> {b3_id, ok, antecipacao} de uma linha de DADO do retorno, ou None
+    (cabecalho, linha vazia, fora do layout)."""
+    parts = str(linha or '').rstrip('\r\n').split(';', 4)
+    if len(parts) < 5 or not parts[0].strip().isdigit():
+        return None
+    status = _sem_acento(parts[3]).strip().upper()
+    return {'b3_id': parts[1].strip().upper(),
+            'ok': any(k in status for k in RETORNO_OK),
+            'antecipacao': e_antecipacao(parts[4])}
 
 
 def b3_ids_com_sucesso(texto, b3_ids):
-    """Dos `b3_ids` pedidos, os que aparecem numa linha de SUCESSO do texto.
-    -> (achados, linhas de dado do arquivo, linhas usadas)."""
+    """Dos `b3_ids` pedidos, os que voltaram OK numa linha de ANTECIPACAO.
+    -> (achados, linhas de dado do arquivo, linhas usadas) — o arquivo so e
+    apagado quando todas as linhas de dado dele foram usadas aqui."""
     alvos = {str(b or '').strip().upper() for b in b3_ids or ()} - {''}
     achados, dados, usadas = set(), 0, 0
     for ln in str(texto or '').splitlines():
-        if ln.count(';') < 3:
+        r = linha_do_retorno(ln)
+        if r is None:
             continue
         dados += 1
-        if not linha_de_sucesso(ln):
-            continue
-        hit = alvos & tokens_do_retorno(ln)
-        if hit:
-            achados |= hit
+        if r['ok'] and r['antecipacao'] and r['b3_id'] in alvos:
+            achados.add(r['b3_id'])
             usadas += 1
     return achados, dados, usadas
 

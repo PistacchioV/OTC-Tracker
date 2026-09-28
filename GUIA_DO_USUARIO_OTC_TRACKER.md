@@ -575,7 +575,7 @@ A recompra aparece no **Intraday Monitor** (capítulo 5.1) como *Unwind NDF FX*,
 5. **Duplo clique na linha** abre o arquivo da B3 campo a campo, com o texto cru embaixo. É aqui que se confere antes de mandar. O rodapé tem **Export** (baixa o arquivo para conferir, sem enviar), **Edit** e **Close** — o mesmo nas demais telas de recompra.
 6. Selecione a linha e clique em **Send** para gravar o arquivo no Batch Conecta. A linha vira **Sent** e deixa de poder ser apagada.
 
-7. Depois que a B3 processar, clique no botão **verde de atualizar** (*Mapping B3 ID*), à direita do Import. Ele lê a pasta de retorno do Batch Conecta e vira **Success** toda recompra cujo B3 ID aparece numa linha com a palavra **SUCESSO** — de qualquer tela de recompra e dos últimos dez dias, num clique só. Linha **Success** não se apaga nem é sobrescrita por um reimport.
+7. Depois que a B3 processar, clique no botão **verde de atualizar** (*Mapping B3 ID*), à direita do Import. Ele lê a pasta de retorno do Batch Conecta e vira **Success** toda recompra cujo B3 ID (coluna *Codigo IF*) volta como **EXECUCAO OK** numa linha de antecipação — de qualquer tela de recompra e dos últimos dez dias, num clique só. Linha **Success** não se apaga nem é sobrescrita por um reimport.
 
 > **Linha `Sent` ainda se edita e se reenvia.** Se a B3 recusou o arquivo ou ele sumiu da pasta, clique em **Send** de novo: o arquivo é regravado. Editar uma linha `Sent` a devolve a **Pending**, e ela só volta à B3 depois que outra pessoa aprovar. O que continua travado em `Sent` é apagar e reimportar.
 

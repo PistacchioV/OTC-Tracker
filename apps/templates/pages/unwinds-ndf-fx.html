@@ -669,7 +669,7 @@ $(document).ready(function () {
         btn.disabled = true;
         btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i> Importing...';
         function _restore() { btn.disabled = false; btn.innerHTML = '<i class="ti ti-upload me-1"></i> Import'; }
-        var rows = [], warns = [], errors = [];
+        var rows = [], warns = [], errors = [], processados = [];
         var chain = Promise.resolve();
         files.forEach(function (f) {
             chain = chain.then(function () {
@@ -680,6 +680,7 @@ $(document).ready(function () {
                     .then(function (r) { return r.json(); })
                     .then(function (res) {
                         if (!res || !res.success) { errors.push(f.name + ': ' + ((res && res.message) || 'Import failed')); return; }
+                        processados.push(f);
                         rows = rows.concat(res.rows || []);
                         warns = warns.concat(res.warnings || []);
                     });
@@ -687,7 +688,11 @@ $(document).ready(function () {
         });
         chain.then(function () {
             _restore();
-            if (dz && rows.length) dz.removeAllFiles(true);
+            // Sai da fila todo arquivo que o servidor PROCESSOU — inclusive o
+            // que não gravou linha nova (tudo já Sent e mantido). Ficam só o que
+            // deu erro e o que a pessoa cancelou no "Replace?". Antes a fila só
+            // esvaziava com alguma linha gravada, e o e-mail ficava ad eternum.
+            if (dz) processados.forEach(function (f) { try { dz.removeFile(f); } catch (e) {} });
             load();
             reportImport(rows.length, warns, errors);
         }).catch(function (e) { _restore(); Swal.fire({ icon: 'error', title: 'Error', text: String(e) }); });
