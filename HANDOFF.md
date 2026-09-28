@@ -24429,3 +24429,32 @@ conta 16 cards.
   coluna FIXING, resultado, IR recalculado pelo piso mensal).
   `check_unwind_summary.py` §5 inverteu: exige a recompra no lote e o draft da
   contraparte.
+
+## §569 — O aviso de liquidação da recompra tem modelo próprio (2026-09-28)
+
+- **Pedido da mesa**: a recompra saía no modelo do vencimento ("Liquidação de
+  Operação de Derivativo", com Fixing ou Cotação Mercadoria). O aviso dela tem de:
+  - dizer que é recompra no início do assunto;
+  - pedir callback;
+  - sair em alta prioridade;
+  - mostrar o nocional recomprado, a taxa pré e a taxa de recompra.
+- **Assunto**: `(Recompra) Liquidação de Operação de Derivativo (<produto>) +
+  Callback - <data> - <contraparte>`. O prefixo segue a regra do `(Pagamento de
+  Prêmio)`, porque a lista de e-mails é lida da esquerda. O `+ Callback` vem logo
+  depois do produto (`Termo de Moeda`, `Termo de Commodities`).
+- **Prioridade**: `importance: 'high'` no draft; o `build_eml_bytes` escreve
+  `Importance: High`, `X-Priority: 1` e `X-MSMail-Priority: High`.
+- **Agrupamento**: a recompra entra na chave do grupo nos dois geradores. Com
+  vencimento e recompra da mesma contraparte no dia, saem dois avisos. Netados,
+  um documento só teria dois assuntos e duas prioridades.
+- **Tabelas**:
+  - Termo de Moeda: `Nº da Confirmação · Data de Início · Notional Original ·
+    Notional Recomprado · Taxa Pré · Taxa de Recompra · Apurado · IR · Líquido`.
+    Sai o Fixing, que a recompra não tem.
+  - Commodities: sai a Cotação Mercadoria (seria a própria taxa de recompra) e
+    entram a Quantidade Recomprada, a Taxa Pré e a Taxa de Recompra.
+- **Bloqueador**: a linha da recompra carrega o próprio `headers`, e o
+  `_opsadv_block_incomplete` a confere por ele. As colunas de valor mantêm os
+  nomes do vencimento, que são o que ele procura.
+- **Testes**: `check_unwind_summary` e `check_unwind_products` prendem o assunto,
+  a prioridade no `.eml`, as colunas e a separação do vencimento.

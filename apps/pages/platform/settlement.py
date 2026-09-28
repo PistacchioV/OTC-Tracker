@@ -1561,17 +1561,23 @@ def _opsadv_block_incomplete(family, rows, headers):
     uma contraparte que ninguém vai cobrar."""
     from apps.pages import routes
     faltando = {}
-    idx = []
-    for nome in _OPSADV_REQUIRED.get(family, ()):
-        try:
-            idx.append((nome, headers.index(nome)))
-        except ValueError:
-            # Cabeçalho renomeado: o blocker não pode inventar um índice e cortar
-            # a contraparte errada. Avisa e deixa passar, como era antes.
-            log.warning('[ops-advice] %s: coluna %r não está no cabeçalho do aviso — '
-                        'o blocker não confere essa coluna', family, nome)
+
+    def _indices(hdr):
+        idx = []
+        for nome in _OPSADV_REQUIRED.get(family, ()):
+            try:
+                idx.append((nome, hdr.index(nome)))
+            except ValueError:
+                # Cabeçalho renomeado: o blocker não pode inventar um índice e
+                # cortar a contraparte errada. Avisa e deixa passar.
+                log.warning('[ops-advice] %s: coluna %r não está no cabeçalho do aviso — '
+                            'o blocker não confere essa coluna', family, nome)
+        return idx
+    idx_padrao = _indices(headers)
     for r in rows:
         cells = r.get('cells') or []
+        # A linha que traz o SEU cabeçalho (a recompra) é conferida por ele.
+        idx = _indices(r['headers']) if r.get('headers') else idx_padrao
         vazias = [nome for nome, i in idx
                   if i >= len(cells) or not str(cells[i] or '').strip()]
         if not vazias:

@@ -775,10 +775,13 @@ def build_ndf_settlement_emails(trades, ref_date=None):
         name = str(t.get('counterparty', '') or '').strip()
         if not name or _is_lawton(name) or _is_jpmorgan(name):
             continue
-        groups.setdefault((name, _ndf_legal_class(t.get('legal'))), []).append(t)
+        # A recompra é aviso PRÓPRIO (assunto, tabela e prioridade dela): nunca
+        # neta no mesmo documento que a liquidação de vencimento.
+        groups.setdefault((name, _ndf_legal_class(t.get('legal')), bool(t.get('unwind'))),
+                          []).append(t)
 
     drafts = []
-    for (name, le), items in sorted(groups.items()):
+    for (name, le, unwind), items in sorted(groups.items()):
         nt = str(items[0].get('net_type', '') or 'Total Net')
         if nt == 'No Net':
             batches = [[t] for t in items]
@@ -789,8 +792,31 @@ def build_ndf_settlement_emails(trades, ref_date=None):
         else:                                   # Total Net (and the safe default)
             batches = [items]
         for batch in batches:
-            drafts.append(_ndf_settlement_email(batch, name, le, ref_date, cpd))
+            drafts.append(_ndf_settlement_email(batch, name, le, ref_date, cpd, unwind=unwind))
     return drafts
+
+
+# ── O aviso da RECOMPRA (mesa, 28/09/2026) ─────────────────────────────────
+# A tabela é a do aviso de vencimento com o que a recompra tem e o vencimento
+# não: o nocional RECOMPRADO, a taxa pré e a taxa de recompra. O assunto começa
+# por `(Recompra)` — como o `(Pagamento de Prêmio)`: é lido da esquerda —, leva
+# `+ Callback` logo depois do produto, e o e-mail sai em alta prioridade.
+_UNWIND_SUBJECT_PREFIX = '(Recompra) '
+_UNWIND_SUBJECT_TAG = ' + Callback'
+
+
+def _taxa_pre_br(v):
+    """Taxa pré ao ano (`13.75` → `13,75%`); vazio fica '—'."""
+    t = str(v if v is not None else '').strip()
+    if not t:
+        return '—'
+    try:
+        n = float(t.replace(' ', '').replace(',', '.'))
+    except ValueError:
+        return t
+    s = '{:.8f}'.format(n).rstrip('0')
+    inteiro, dec = s.split('.')
+    return inteiro + ',' + (dec + '00')[:max(2, len(dec))] + '%'
 
 
 # ── Ficha de Liquidação em PDF (NDF de Moeda) ─────────────────────────────
@@ -1086,7 +1112,7 @@ def _ndf_fixing_br(v):
     return inteiro + ',' + dec
 
 
-def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
+def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd, unwind=False):
     apurado = sum(float(t.get('settlement') or 0.0) for t in items)
     ir = sum(float(t.get('tax') or 0.0) for t in items)
     # Sign-aware net (see _ndf_liquido): the IR shrinks the cash moving, so on a
@@ -1097,21 +1123,44 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
     taxid = items[0].get('taxid', '')
     to_emails = '; '.join(_contacts_emails(cp, _SETTLEMENT_KEYWORDS))
 
-    data_rows = [[
-        t.get('athena', ''),
-        t.get('trade_date', '') or '—',
-        ((str(t.get('ccy', '') or '').strip().upper() + ' ') if str(t.get('ccy', '') or '').strip() else '')
-        + _br(abs(float(t.get('notional_fc') or 0.0))),
-        _ndf_fixing_br(t.get('fixing', '')),          # FIXING — o Spot da API (§423)
-        _brl(float(t.get('settlement') or 0.0)),
-        _brl(float(t.get('tax') or 0.0)),
-        _brl(_ndf_liquido(t)),
-    ] for t in items]
+    def _ccy_amt(t, v):
+        ccy = str(t.get('ccy', '') or '').strip().upper()
+        return (ccy + ' ' if ccy else '') + _br(abs(float(v or 0.0)))
 
-    table = _email_data_table(
-        ['Nº da Confirmação', 'Data de Início da Operação', 'Notional Original da Operação',
-         'Fixing', 'Resultado Apurado', 'IR (0,005%)', 'Resultado Líquido'],
-        data_rows)
+    if unwind:
+        # A recompra não tem fixing: a taxa dela é a de RECOMPRA, em coluna
+        # própria ao lado da taxa pré.
+        headers = ['Nº da Confirmação', 'Data de Início da Operação',
+                   'Notional Original da Operação', 'Notional Recomprado', 'Taxa Pré',
+                   'Taxa de Recompra', 'Resultado Apurado', 'IR (0,005%)', 'Resultado Líquido']
+        data_rows = [[
+            t.get('athena', ''),
+            t.get('trade_date', '') or '—',
+            _ccy_amt(t, t.get('original_fc') if t.get('original_fc') is not None
+                     else t.get('notional_fc')),
+            _ccy_amt(t, t.get('unwound_fc') if t.get('unwound_fc') is not None
+                     else t.get('notional_fc')),
+            _taxa_pre_br(t.get('pre_rate')),
+            _ndf_fixing_br(t.get('termination', t.get('fixing', ''))),
+            _brl(float(t.get('settlement') or 0.0)),
+            _brl(float(t.get('tax') or 0.0)),
+            _brl(_ndf_liquido(t)),
+        ] for t in items]
+    else:
+        headers = ['Nº da Confirmação', 'Data de Início da Operação',
+                   'Notional Original da Operação', 'Fixing', 'Resultado Apurado',
+                   'IR (0,005%)', 'Resultado Líquido']
+        data_rows = [[
+            t.get('athena', ''),
+            t.get('trade_date', '') or '—',
+            _ccy_amt(t, t.get('notional_fc')),
+            _ndf_fixing_br(t.get('fixing', '')),          # FIXING — o Spot da API (§423)
+            _brl(float(t.get('settlement') or 0.0)),
+            _brl(float(t.get('tax') or 0.0)),
+            _brl(_ndf_liquido(t)),
+        ] for t in items]
+
+    table = _email_data_table(headers, data_rows)
 
     summary_pairs = [
         ('Resultado Apurado', 'R$ ' + _br_currency(apurado), False),
@@ -1197,8 +1246,10 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
 
     html = _email_shell('Liquidação de Operação de Derivativo', ref_date, intro, body_html)
 
-    subject = 'Liquidação de Operação de Derivativo (Termo de Moeda) - {} - {}'.format(
-        ref_date, _subject_cpty(contraparte, taxid))
+    subject = 'Liquidação de Operação de Derivativo (Termo de Moeda){} - {} - {}'.format(
+        _UNWIND_SUBJECT_TAG if unwind else '', ref_date, _subject_cpty(contraparte, taxid))
+    if unwind:
+        subject = _UNWIND_SUBJECT_PREFIX + subject
     if le_class == 'MGT':
         subject += ' x JPMORGAN CHASE'
 
@@ -1209,6 +1260,8 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
         'to': to_emails,
         'counterparty': contraparte,           # for the caller's per-cpty count; not emitted in the .eml
     }
+    if unwind:
+        draft['importance'] = 'high'
 
     # Contrapartes que exigem a Ficha de Liquidação também em PDF anexo (mesmo
     # conteúdo do cartão branco do e-mail). Nome do anexo: "<cpty> - <yyyymmdd>".
@@ -1219,9 +1272,7 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
             ymd = datetime.now().strftime('%Y%m%d')
         pdf = _ndf_settlement_pdf(
             ref_date=ref_date,
-            headers=['Nº da Confirmação', 'Data de Início da Operação',
-                     'Notional Original da Operação', 'Fixing', 'Resultado Apurado',
-                     'IR (0,005%)', 'Resultado Líquido'],
+            headers=headers,
             data_rows=data_rows, summary_pairs=summary_pairs,
             instr_text=instr_text, notice_text=notice_text,
             bank_title=bank_title, bank_pairs=bank_pairs)
@@ -1408,10 +1459,11 @@ def build_ndfc_settlement_emails(rows, headers, ref_date=None, split_commodity=N
             continue
         groups.setdefault((name, _ndf_legal_class(r.get('legal')),
                            bool(r.get('premium')),
-                           str(r.get('product_label') or product_label)), []).append(r)
+                           str(r.get('product_label') or product_label),
+                           bool(r.get('unwind'))), []).append(r)
 
     drafts = []
-    for (name, le, premium, label), items in sorted(groups.items()):
+    for (name, le, premium, label, unwind), items in sorted(groups.items()):
         nt = str(items[0].get('net_type', '') or 'Total Net')
         if nt == 'No Net':
             batches = [[t] for t in items]
@@ -1433,13 +1485,16 @@ def build_ndfc_settlement_emails(rows, headers, ref_date=None, split_commodity=N
                 split.extend([per[k] for k in sorted(per)])
             batches = split
         for batch in batches:
-            drafts.append(_ndfc_settlement_email(batch, name, le, ref_date, cpd, headers,
-                                                 label, premium))
+            # A linha da recompra traz o SEU cabeçalho (`headers`, montado junto
+            # com as células dela): as colunas não são as do vencimento.
+            drafts.append(_ndfc_settlement_email(batch, name, le, ref_date, cpd,
+                                                 batch[0].get('headers') or headers,
+                                                 label, premium, unwind=unwind))
     return drafts
 
 
 def _ndfc_settlement_email(items, contraparte, le_class, ref_date, cpd, headers,
-                           product_label='Termo de Commodities', premium=False):
+                           product_label='Termo de Commodities', premium=False, unwind=False):
     apurado = sum(float(t.get('apurado') or 0.0) for t in items)
     ir = sum(float(t.get('ir') or 0.0) for t in items)
     final = sum(float(t.get('liquido') or 0.0) for t in items)
@@ -1533,8 +1588,9 @@ def _ndfc_settlement_email(items, contraparte, le_class, ref_date, cpd, headers,
              _ep('Vimos confirmar a(s) liquidação(ões) da(s) operação(ões) de derivativos abaixo especificada(s):'))
     html = _email_shell('Liquidação de Operação de Derivativo', ref_date, intro, body_html)
 
-    subject = 'Liquidação de Operação de Derivativo ({}) - {} - {}'.format(
-        product_label, ref_date, _subject_cpty(contraparte, taxid))
+    subject = 'Liquidação de Operação de Derivativo ({}){} - {} - {}'.format(
+        product_label, _UNWIND_SUBJECT_TAG if unwind else '', ref_date,
+        _subject_cpty(contraparte, taxid))
     # Um aviso por commodity precisa se distinguir na caixa de entrada: três
     # assuntos idênticos no mesmo dia são três anexos que ninguém sabe separar.
     commodities = {str(t.get('commodity', '') or '') for t in items}
@@ -1545,11 +1601,15 @@ def _ndfc_settlement_email(items, contraparte, le_class, ref_date, cpd, headers,
     # mesmo texto do aviso de Swap.
     if premium:
         subject = '(Pagamento de Prêmio) ' + subject
+    if unwind:
+        subject = _UNWIND_SUBJECT_PREFIX + subject
     if le_class == 'MGT':
         subject += ' x JPMORGAN CHASE'
 
     draft = {'subject': subject, 'html': html, 'cc': 'Liquidação', 'to': to_emails,
              'counterparty': contraparte}
+    if unwind:
+        draft['importance'] = 'high'
 
     # Ficha em PDF: MESMO gerador do aviso de NDF de moeda e MESMO cadastro de
     # quem recebe (`ndf-pdf-cpty`) — "vale para aqui também".
@@ -1957,6 +2017,10 @@ def build_eml_bytes(draft, sender_email=None):
     if bcc:
         lines.append('Bcc: ' + bcc)
     lines.append('X-Unsent: 1')                 # → opens as editable draft in Outlook
+    # Alta prioridade (o aviso da recompra, mesa 28/09/2026): o Outlook lê o
+    # `Importance`; os dois `X-` são para os clientes que só olham o antigo.
+    if str(draft.get('importance') or '').lower() == 'high':
+        lines += ['Importance: High', 'X-Priority: 1 (Highest)', 'X-MSMail-Priority: High']
     html = draft.get('html', '') or ''
     attachments = [a for a in (draft.get('attachments') or []) if a.get('data')]
 

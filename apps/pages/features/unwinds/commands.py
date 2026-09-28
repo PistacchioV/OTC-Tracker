@@ -1241,8 +1241,16 @@ def settlement_rows(ref):
             'settlement': valor,
             'tax': 0.0,
             'fixing': str(l.get('TerminationRate') or ''),
-            # A marca que tira a recompra do aviso em lote — e que a tela usa
-            # para dizer que esta linha não tem conferência contra a B3.
+            # O que o aviso da RECOMPRA mostra e o de vencimento não (mesa,
+            # 28/09/2026): nocional original × recomprado, taxa pré e taxa de
+            # recompra.
+            'original_fc': abs(domain.numero_flex(l.get('OriginalNotional')) or 0.0) or None,
+            'unwound_fc': abs(domain.numero_flex(l.get('UnwoundNotional')) or 0.0),
+            'pre_rate': l.get('PreFWDRate'),
+            'termination': str(l.get('TerminationRate') or ''),
+            # A marca que separa a recompra no aviso (assunto, tabela e
+            # prioridade próprios) e que a tela usa para dizer que esta linha
+            # não tem conferência contra a B3.
             'unwind': True,
         })
     return out

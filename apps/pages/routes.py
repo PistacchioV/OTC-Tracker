@@ -6008,6 +6008,14 @@ def _ndfadv_unwind_rows(ref, unw, opb3, spn_by_name, cpd):
             'b3': sum(b3_vals) if b3_vals else None,
             'settle_type': 'UNWIND',
             'unwind': True,
+            # O aviso da RECOMPRA (mesa, 28/09/2026): quantidade original ×
+            # recomprada, taxa pré e taxa de recompra — `_ndfadv_email_rows`.
+            'fx_rate': str(u.get('FXRate') or ''),
+            'original_qty': _conf_to_float(u.get('OriginalNotional')),
+            'unwound_qty': _conf_to_float(u.get('UnwoundNotional')),
+            'pre_rate': u.get('PreFWDRate'),
+            'termination': str(u.get('TerminationRate') or ''),
+            'trade_date': _conf_fmt_date(u.get('TradeDate')),
         })
     return out
 
@@ -6021,6 +6029,31 @@ _NDFADV_EMAIL_DROP = ('Settlement Net',)
 
 def _ndfadv_email_headers():
     return [c for c in _NDFADV_COLUMNS[_NDFADV_EMAIL_FROM:] if c not in _NDFADV_EMAIL_DROP]
+
+
+# O aviso da RECOMPRA tem tabela PRÓPRIA (mesa, 28/09/2026): a do vencimento
+# com a quantidade recomprada, a taxa pré e a taxa de recompra — no lugar da
+# Cotação Mercadoria, que na recompra seria a própria taxa de recompra. Os
+# nomes das colunas de valor são os MESMOS do vencimento: é por eles que o
+# bloqueador de linha incompleta as acha.
+_NDFADV_UNWIND_EMAIL_HEADERS = [
+    'B3 ID', 'Nº da Confirmação', 'Data de Início da Operação', 'Ativo Subjacente', 'Ptax',
+    'Quantidade da Operação', 'Quantidade Recomprada', 'Taxa Pré', 'Taxa de Recompra',
+    'Resultado Apurado (R$)', 'IR 0,005% (R$)', 'Resultado Líquido (R$)',
+]
+
+
+def _ndfadv_unwind_email_cells(r):
+    from apps.pages import otc_emails
+    def _qtd(v):
+        return _ops_fmt_amt(abs(v)) if v is not None else ''
+    def _brl(v):
+        return otc_emails._brl(v) if v is not None else ''
+    return [r.get('b3_id', ''), r.get('internal_id', ''), r.get('trade_date', ''),
+            r.get('commodity', ''), r.get('fx_rate', ''),
+            _qtd(r.get('original_qty')), _qtd(r.get('unwound_qty')),
+            otc_emails._taxa_pre_br(r.get('pre_rate')), r.get('termination', ''),
+            _brl(r.get('apurado')), _brl(r.get('ir')), _brl(r.get('liquido'))]
 
 
 def _ndfadv_email_rows(ref):
@@ -6038,6 +6071,10 @@ def _ndfadv_email_rows(ref):
                   _NDFADV_COLUMNS.index('Resultado Líquido (R$)'): 'liquido'}
     out = []
     for r in _ndfadv_collect(ref):
+        if r.get('unwind'):
+            out.append(dict(r, cells=_ndfadv_unwind_email_cells(r),
+                            headers=list(_NDFADV_UNWIND_EMAIL_HEADERS)))
+            continue
         cells = []
         for i in keep:
             if i in money_at:
