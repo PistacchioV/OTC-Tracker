@@ -24545,3 +24545,55 @@ Intrag, Swap Bullet, catálogo de New Deals e `/mapping`.
 - Sem mudança, o Save só fecha o modal.
 
 **Teste**: novo `check_edit_modal.py`.
+
+## §573 — Recompra de NDF FX (Fase 1): coluna OTC Tracker Result e Edit que reconfere (2026-09-28)
+
+**Pedido da mesa**: a coluna do resultado calculado pelo OTC Tracker também na
+recompra de NDF de moeda. É a mesma coluna do catálogo (§570).
+
+**Como ficou**:
+- **A coluna**: `CalcResult` entrou em `UNW_FIELDS`/`UNW_LABELS`, logo depois
+  do Result, e em `UNW_NAO_EDITAVEL`. No import ela sai do `conferir_apuracao`
+  e só é preenchida quando o Check dá NOK. O template tem o fallback da coluna
+  e a chave `unw-col-calcresult`.
+- **O Edit da Fase 1 não reconferia nada**: gravava os campos e deixava o Check
+  do import. Agora o `domain.reconferir_linha` refaz o Check e o `CalcResult`
+  pelas colunas da grade, e sai no mesmo Save.
+- **A regra do §571 vale aqui também**: dado econômico mudado (`UNW_ECONOMICOS`)
+  refaz o Result e a Direction, e o Result digitado no mesmo Save vence. Os
+  avisos da conferência são trocados; os outros ficam.
+
+**Armadilha**: `numero_flex` recebe TEXTO de tela, e a linha gravada guarda
+NÚMERO. `numero_flex(108.885)` lê `'108.885'` como milhar (108885), e o zero
+como vazio. Para isso existe o `_num_linha`: número gravado passa direto, e em
+taxa um separador só é decimal.
+
+**Linhas já importadas**: ficam sem a coluna até o reimport ou o próximo Edit.
+
+**Testes**: `check_unwind_page`.
+
+## §574 — Recompras: os botões da linha aparecem em todo status (2026-09-28)
+
+**Sintoma**: na prod, a coluna Actions da recompra de NDF Commodities aparecia
+sem botões, e na dev com eles. O código das duas branches é o mesmo; o que
+muda são os DADOS. O `drawCallback` escondia os botões pelo Status:
+- Confirm só em `Pending`;
+- Send só em `Imported`/`Approved`;
+- Edit e Delete fora de `Sent`.
+
+Uma linha `Sent` ficava com a coluna vazia. Na dev as linhas estão `Imported`.
+
+**Pedido da mesa**: os botões aparecem independentemente do status.
+
+**Correção**: saiu a regra de visibilidade nas duas telas (`unwinds-product` e
+`unwinds-ndf-fx`), e o Confirm não nasce mais com `d-none`.
+
+**As travas continuam no SERVIDOR**, com frase traduzida pelo código:
+- `unwind_already_sent`: Edit ou Delete de linha enviada;
+- `unwind_only_pending`: Confirm fora de `Pending`;
+- `unwind_maker_is_checker`: Confirm pelo próprio maker;
+- `unwind_nothing_sent`: Send de linha fora de `Imported`/`Approved`;
+- `unwind_trail_signed`: Delete de linha com a esteira carimbada.
+
+Quer dizer: o botão aparece, e o clique que o status não permite volta
+recusado, dizendo por quê.

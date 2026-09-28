@@ -493,6 +493,29 @@ def main():
     check('o veredito Check nao se edita', linha.get('Check') != 'OK', linha.get('Check'))
     check('o maker ficou registrado', linha.get('Maker') == 'T000000', linha.get('Maker'))
 
+    # A coluna do resultado calculado pelo OTC Tracker (mesa, 28/09/2026): so
+    # fala quando o informado nao bate; o Edit economico refaz Result/Direction.
+    check('coluna CalcResult na grade, depois do Result e nao editavel',
+          domain.UNW_FIELDS.index('CalcResult') == domain.UNW_FIELDS.index('Result') + 1
+          and 'CalcResult' in domain.UNW_NAO_EDITAVEL)
+    base = {'Comprado': True, 'UnwoundNotional': 100000.0, 'Strike': 5.0,
+            'TerminationRate': 5.2, 'PreFWDRate': 0.0, 'DU': 0, 'Warnings': []}
+    l1 = domain.reconferir_linha(dict(base, Result=20000.0))
+    check('resultado que bate: OK e CalcResult vazio',
+          (l1['Check'], l1['CalcResult']) == ('OK', None), l1)
+    l2 = domain.reconferir_linha(dict(base, Result=19000.0))
+    check('resultado que nao bate: NOK e o calculado na coluna',
+          (l2['Check'], l2['CalcResult'], l2['Warnings'])
+          == ('NOK', 20000.0, ['unwind_result_mismatch']), l2)
+    check('taxa gravada como numero nao vira milhar (108.885)',
+          domain._num_linha(108.885, taxa=True) == 108.885
+          and domain._num_linha('108.885', taxa=True) == 108.885
+          and domain._num_linha(0) == 0.0 and domain._num_linha('100,000.00') == 100000.0)
+    l3 = domain.reconferir_linha(dict(base, Result=19000.0, TerminationRate='4.9'),
+                                 refazer_resultado=True)
+    check('edit economico refaz Result e Direction pelo sinal',
+          (l3['Result'], l3['Direction'], l3['Check']) == (-10000.0, 'PAY', 'OK'), l3)
+
     # Pending NAO vai para a B3: e o gate inteiro.
     check('recompra Pending nao e enviavel',
           domain.STATUS_PENDENTE not in domain.STATUS_ENVIAVEL)
