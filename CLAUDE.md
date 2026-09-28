@@ -1744,9 +1744,14 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   IMPORT** (§582): ela chegou a ficar no Send, e a recompra que não passa pelo
   Send do OTC Tracker nunca chegava à Intrag.
 - **O retorno da B3 vira `Success` pelo Mapping B3 ID** (mesa, 28/09/2026,
-  §582; botão verde das DUAS telas, `commands.mapear_retornos`): linha do
-  `RETURN_PATH` com a palavra SUCESSO (cega a caixa/acento) e o B3 ID da
-  recompra (o `Contract`) como PALAVRA inteira em qualquer coluna. UMA
+  §582/§587; botão verde das DUAS telas, `commands.mapear_retornos`): o
+  retorno é `Numero;Codigo IF;Cod. Oper.;Descricao;Texto da Linha Original` —
+  vale a linha com `EXECUCAO OK` (ou SUCESSO) na Descrição, o B3 ID da recompra
+  (o `Contract`) no **Codigo IF** e o texto ecoando uma ANTECIPAÇÃO
+  (`domain.e_antecipacao`: `TER  1` + `0014`). **O Mapping do New Deals
+  ignora essas linhas** (`new_deals/entrypoint._e_antecipacao`): ele apagava
+  todo arquivo com `TER` na posição 57, e o retorno da recompra sumia antes de
+  ser lido. UMA
   varredura cobre a NDF FX e as onze do catálogo nos últimos
   `RETORNO_LOOKBACK_DIAS` (10) dias corridos; o arquivo de retorno só é apagado
   quando TODAS as linhas de dado dele casaram (a pasta é a do New Deals).

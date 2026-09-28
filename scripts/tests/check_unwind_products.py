@@ -757,15 +757,32 @@ def main():
     ret_orig = R.RETURN_PATH
     R.RETURN_PATH = ret
     try:
+        # O layout REAL do retorno (exemplo da mesa, 28/09/2026): cabecalho,
+        # B3 ID no Codigo IF, status EXECUCAO OK e o TER 0014 ecoado.
+        HDR = 'Numero da Linha Original;Codigo IF;Cod. Oper. Cetip;Descricao da Mensagem;Texto da Linha Original\n'
+        ANT = 'TER  1001414636617479737600091737601022602277343000000000003000020260928\n'
+        REG = 'TER  1000314636617479737600091737601022602277343000000000003000020260928\n'
         f_ok = os.path.join(ret, 'retorno_unwind.txt')
         with open(f_ok, 'w', encoding='cp1252') as fh:
-            fh.write('0;26E00000BCO;1;SUCESSO;TER  10014 ...\n')
-        f_outro = os.path.join(ret, 'retorno_new_deals.txt')
+            fh.write(HDR + '00000000000002;26E00000BCO;2026092821484501;EXECUCAO OK;' + ANT)
+        f_outro = os.path.join(ret, 'retorno_misto.txt')
         with open(f_outro, 'w', encoding='cp1252') as fh:
-            fh.write('0;26E00000BCO;1;SUCESSO;x\n0;26E99999999;1;EXECUCAO OK;OPC ...\n')
-        f_quase = os.path.join(ret, 'retorno_quase.txt')
+            fh.write(HDR + '00000000000002;26E00000BCO;2026092821484501;EXECUCAO OK;' + ANT
+                     + '00000000000003;26E99999999;2026092821484502;EXECUCAO OK;' + REG)
+        f_quase = os.path.join(ret, 'retorno_registro.txt')
         with open(f_quase, 'w', encoding='cp1252') as fh:
-            fh.write('0;26E00000BCOX;1;SUCESSO;x\n')
+            fh.write(HDR + '00000000000002;26E00000BCOX;2026092821484501;EXECUCAO OK;' + ANT)
+        from apps.pages.features.unwinds import domain as _UD
+        check('o parser: registro (0003) NAO e antecipacao; 0014 e',
+              (_UD.e_antecipacao(REG), _UD.e_antecipacao(ANT)) == (False, True))
+        check('   linha com erro da B3 nao conta; cabecalho nao e dado',
+              _UD.b3_ids_com_sucesso(HDR + '00000000000002;26E1;x;CAMPO 9 INVALIDO;' + ANT
+                                     + '00000000000003;26E2;x;EXECUCAO OK;' + REG,
+                                     ['26E1', '26E2'])[0] == set())
+        from apps.pages.features.new_deals import entrypoint as _NDE
+        check('o Mapping do New Deals ignora a linha de antecipacao (nao apaga o retorno)',
+              (_NDE._e_antecipacao('00000000000002;26E1;x;EXECUCAO OK;' + ANT),
+               _NDE._e_antecipacao('00000000000002;26E1;x;EXECUCAO OK;' + REG)) == (True, False))
         st, j = _post(pg_ndf['api'] + '/mapping-b3', {'date': '2026-09-22'})
         check('mapping responde e vira UMA recompra', st == 200
               and [m['contract'] for m in j.get('mapped') or []] == ['26E00000BCO'], (st, j))
@@ -774,7 +791,7 @@ def main():
         check('   a linha fica Success', e_bco2.get('Status') == 'Success', e_bco2.get('Status'))
         check('   o retorno todo nosso e apagado; o que tem linha de outro fica',
               not os.path.exists(f_ok) and os.path.exists(f_outro), os.listdir(ret))
-        check('   B3 ID dentro de outra palavra nao casa', os.path.exists(f_quase))
+        check('   B3 ID parecido nao casa (o arquivo fica)', os.path.exists(f_quase))
         st, j = _post(pg_ndf['api'] + '/mapping-b3', {'date': '2026-09-22'})
         check('   segunda passada nao remapeia', st == 200 and not j.get('mapped'), j)
         st, j = _post(pg_ndf['api'] + '/delete', {'id': e_bco2.get('_id'), 'date': '2026-09-21'})

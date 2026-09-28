@@ -359,7 +359,7 @@ A recompra é acompanhada pelo **Intraday Monitor** (linha *Unwind NDF FX*, na
 zona B3 Registration, grupo NDF) e entra no aviso diário de pendências
 enquanto houver linha não enviada; o estado que a encerra é **Sent** — ou
 **Success**, quando o botão verde **Mapping B3 ID** acha no retorno da B3 uma
-linha com a palavra SUCESSO e o B3 ID da recompra.
+linha `EXECUCAO OK` de antecipação com o B3 ID da recompra.
 
 O ciclo da recompra de NDF de moeda está completo no sistema: além do arquivo da
 B3, a operação gera o **Termo de Resilição** (pelo Confirmations Monitor), a

@@ -991,6 +991,17 @@ def api_fxo_send_conecta():
     except Exception as exc:                          # noqa: BLE001
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
+def _e_antecipacao(linha):
+    """A linha do retorno ecoa uma ANTECIPACAO (`TER  1` + `0014`) — a recompra
+    (§587), que tem Mapping proprio nas telas de Unwinds. A regra e a de
+    `unwinds.domain.e_antecipacao`; feature nao importa feature."""
+    parts = str(linha or '').split(';', 4)
+    if len(parts) < 5:
+        return False
+    r = parts[4].lstrip()
+    return r[5:6] == '1' and r[6:10] == '0014'
+
+
 @blueprint.route('/api/new-deals/opt-fxo/mapping-b3', methods=['POST'])
 def api_fxo_mapping_b3():
     """Same B3-ID mapping as opt-commodities (Conecta return files carry 'OPC'
@@ -1496,8 +1507,11 @@ def api_ndf_mapping_b3():
                     line = line.strip()
                     if not line:
                         continue
-                    # Sigla at chars 57-59 (1-based): NDF maps only 'TER' (termo) lines
-                    if line[56:59] != 'TER':
+                    # Sigla at chars 57-59 (1-based): only 'TER' (termo) lines —
+                    # e nunca a ANTECIPACAO (0014) da recompra: ela volta no
+                    # mesmo arquivo de retorno com o mesmo TER, e contada aqui o
+                    # arquivo era APAGADO antes do Mapping da recompra le-lo.
+                    if line[56:59] != 'TER' or _e_antecipacao(line):
                         continue
                     file_has_ter = True
                     if 'EXECUCAO OK' not in line:
@@ -2611,8 +2625,11 @@ def api_generic_nd_mapping_b3(product):
                     line = line.strip()
                     if not line:
                         continue
-                    # Sigla at chars 57-59 (1-based): only 'TER' (termo) lines
-                    if line[56:59] != 'TER':
+                    # Sigla at chars 57-59 (1-based): only 'TER' (termo) lines —
+                    # e nunca a ANTECIPACAO (0014) da recompra: ela volta no
+                    # mesmo arquivo de retorno com o mesmo TER, e contada aqui o
+                    # arquivo era APAGADO antes do Mapping da recompra le-lo.
+                    if line[56:59] != 'TER' or _e_antecipacao(line):
                         continue
                     file_has_ter = True
                     if 'EXECUCAO OK' not in line:
