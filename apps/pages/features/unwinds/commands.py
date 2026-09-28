@@ -882,8 +882,9 @@ def confirmation_deals(ref_dt):
     from apps.pages.features.unwinds.product import commands as produto
     # As recompras do catálogo que têm esteira (NDF de Commodities) entram na
     # MESMA segregação: o Termo é um tipo só, e é daqui que o Monitor as lê.
+    # Recompra contra fundo nosso nao tem Termo (§580): fica fora da segregacao.
     return ([confirmation_deal(l, ref)
-             for l in queries.entries(date_str=ref.strftime('%Y-%m-%d'))]
+             for l in queries.entries(date_str=ref.strftime('%Y-%m-%d')) if not e_do_fundo(l)]
             + produto.confirmation_deals(ref))
 
 
@@ -955,6 +956,9 @@ def esteira_da_recompra(linhas, ref=None):
     `backfill_manual_confirmations.py`."""
     for l in linhas or []:
         try:
+            if e_do_fundo(l):
+                esteira_fora_do_fundo(l.get('AthenaID'))
+                continue
             deal = confirmation_deal(l, ref)
             _R()._pc_save_from_deal(deal, MC_SOURCE, source=MC_SOURCE,
                                     trade_number=deal['Deal'])
@@ -1117,7 +1121,7 @@ def cockpit_sem_a_recompra(linhas):
 # antes de ir para a B3 a recompra ainda pode ser corrigida, e uma linha na
 # Intrag por uma antecipação que não aconteceu é instrução errada no
 # custodiante.
-FUNDOS = ('LAWTON', 'ATACAMA')
+FUNDOS = queries.FUNDOS
 
 
 def _fundo_da_recompra(linha):
@@ -1133,6 +1137,25 @@ def _fundo_da_recompra(linha):
     if cpty in FUNDOS:
         return cpty, False
     return None, None
+
+
+def e_do_fundo(linha):
+    """A recompra e contra um FUNDO nosso (o B2B Banco x Lawton/Atacama)?
+
+    Termo de Resilicao e Pending Confirmation sao SO contra o cliente (mesa,
+    28/09/2026, §580): o distrato e o documento que o CLIENTE assina, e do
+    lado do fundo quem instrui a antecipacao e a Intrag, pela planilha da
+    Intrag > Unwind (`intrag_from_send`)."""
+    return queries.e_do_fundo(linha)
+
+
+def esteira_fora_do_fundo(chave):
+    """Tira da esteira a recompra de fundo que entrou antes da regra do §580 —
+    so a INTOCADA: documento gerado ou validacao assinada e registro."""
+    chave = str(chave or '').strip()
+    mc = _R()._mc_mod
+    if chave and mc.find_row(chave) is not None and mc.row_untouched(chave):
+        esteira_sem_a_recompra([chave])
 
 
 def intrag_from_send(linhas, ref=None):

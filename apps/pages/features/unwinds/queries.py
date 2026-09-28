@@ -201,6 +201,19 @@ def _acr_da_linha(linha):
             or str((linha or {}).get('Counterparty') or '').strip())
 
 
+# Os fundos NOSSOS: contrato com um deles numa ponta e o B2B, e a recompra dele
+# nao tem Termo nem Pending Confirmation — vai para a Intrag (§580).
+FUNDOS = ('LAWTON', 'ATACAMA')
+
+
+def e_do_fundo(linha):
+    """A recompra tem um fundo nosso numa das pontas? A entidade sai da CONTA,
+    pelo `b3-accounts` — o mesmo cadastro que decide a visao do arquivo."""
+    R = _R()
+    return any(R._b3_account_le(str((linha or {}).get(k) or '')) in FUNDOS
+               for k in ('PartyAccount', 'CptyAccount'))
+
+
 def termo_grupo(ref, acr='', moeda=''):
     """As recompras de UMA contraparte (× moeda) na data — as linhas do Anexo I
     do Termo de Resilição, na ordem em que a grade as mostra.
@@ -219,6 +232,8 @@ def termo_grupo(ref, acr='', moeda=''):
     # desta vertical, com a MERCADORIA no lugar da moeda (o eixo do grupo).
     from apps.pages.features.unwinds.product import queries as produto
     for e in entries(date_str=str(ref or '')) + produto.termo_entries(ref):
+        if e_do_fundo(e):
+            continue                    # contra fundo nosso nao ha Termo (§580)
         if alvo and alvo not in (_acr_da_linha(e).upper(),
                                  str(e.get('Counterparty') or '').strip().upper()):
             continue

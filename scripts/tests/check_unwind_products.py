@@ -629,22 +629,27 @@ def main():
         rows = j.get('rows') or []
         check('import grava as duas pernas', st == 200 and len(rows) == 2, (st, j.get('code')))
         fontes = [(d.get('Deal'), a[0] if a else '') for d, a, _k in pc_salvos]
-        check('Pending Confirmation + esteira no IMPORT, chave = Deal ID',
-              fontes == [('D5NQ-HMNV-CLI', 'UNWIND NDF COMM'), ('D5NQ-HMNV-BCO', 'UNWIND NDF COMM')],
-              fontes)
+        # Termo e Pending Confirmation so contra o CLIENTE (mesa, 28/09/2026,
+        # §580): a perna Banco x Lawton (o B2B) nao entra na esteira.
+        check('   a perna do fundo, que nao estava na esteira, nao dispara delete la',
+              'D5NQ-HMNV-BCO' not in mc_apagados, mc_apagados)
+        check('Pending Confirmation + esteira no IMPORT, so a perna do CLIENTE',
+              fontes == [('D5NQ-HMNV-CLI', 'UNWIND NDF COMM')], fontes)
         d0 = pc_salvos[0][0] if pc_salvos else {}
         check('   deal: B3 ID, mercadoria no eixo, reais e FX para o XML',
               (d0.get('B3_ID'), d0.get('Currency'), d0.get('UnwoundBRL'), d0.get('XmlCcy'))
               == ('26E00000CLI', 'CTZ6', 6270582.12, 'USD'), d0)
         deals = F1C.confirmation_deals('2026-09-21')
-        check('a segregacao do Monitor le as recompras de commodities',
-              {'D5NQ-HMNV-CLI', 'D5NQ-HMNV-BCO'} <= {d.get('Deal') for d in deals},
+        check('a segregacao do Monitor le a recompra do cliente, nao a do fundo',
+              'D5NQ-HMNV-CLI' in {d.get('Deal') for d in deals}
+              and 'D5NQ-HMNV-BCO' not in {d.get('Deal') for d in deals},
               [d.get('Deal') for d in deals])
         grupo = F1Q.termo_grupo('2026-09-21', '', 'CTZ6')
         trs, _av = F1D.termo_rows(grupo)
         # (a recompra da secao 3 esta no mesmo dia, sem Deal ID: vale o `_id`)
-        check('Termo: o grupo pela mercadoria, Nº da Confirmacao = Deal ID',
-              {'D5NQ-HMNV-BCO', 'D5NQ-HMNV-CLI'} <= {r['numConf'] for r in trs},
+        check('Termo: o grupo pela mercadoria, Nº da Confirmacao = Deal ID, sem o fundo',
+              'D5NQ-HMNV-CLI' in {r['numConf'] for r in trs}
+              and 'D5NQ-HMNV-BCO' not in {r['numConf'] for r in trs},
               [r.get('numConf') for r in trs])
         cli_tr = next((r for r in trs if r['numConf'] == 'D5NQ-HMNV-CLI'), {})
         check('   Total, valor em modulo e pagador pelo sinal (o banco paga -> Parte A)',
@@ -700,6 +705,34 @@ def main():
               all(h in html for h in ('Quantidade Recomprada', 'Taxa Pré', 'Taxa de Recompra',
                                       '100,000.00', '96.85'))
               and 'Cotação Mercadoria' not in html, subj)
+        # A perna do fundo vai para a Intrag > Unwind no SEND (§580), pela porta
+        # da Fase 1; a do cliente nao.
+        intrag_salvas = []
+
+        class _IE:
+            @staticmethod
+            def _save_intrag_unwind_entry(**kw):
+                intrag_salvas.append(kw)
+                return {'_deal': kw.get('deal')}, []
+        ie_orig = R._intrag_engine
+        R._intrag_engine = lambda: _IE
+        try:
+            e_bco = next((e for e in PQ.entries(pg_ndf, '2026-09-21')
+                          if e.get('DealID') == 'D5NQ-HMNV-BCO'), {})
+            st, j = _post(pg_ndf['api'] + '/send-conecta',
+                          {'items': [{'id': e_bco.get('_id')}], 'date': '2026-09-21'})
+            check('send da perna do fundo', st == 200, (st, j))
+            check('   vai para a Intrag, com o Deal ID e o LAWTON',
+                  [(k.get('deal'), k.get('fundo')) for k in intrag_salvas]
+                  == [('D5NQ-HMNV-BCO', 'LAWTON')],
+                  [(k.get('deal'), k.get('fundo')) for k in intrag_salvas])
+            k0 = intrag_salvas[0] if intrag_salvas else {}
+            check('   Banco recebe -> o fundo PAGA; valores do contrato',
+                  (k0.get('credor'), k0.get('b3_id'), k0.get('valor_base_recomprado'),
+                   k0.get('valor_liquidacao')) == (False, '26E00000BCO', 100000.0, 6321326.69),
+                  k0)
+        finally:
+            R._intrag_engine = ie_orig
         rid = e_cli.get('_id')
         st, j = _post(pg_ndf['api'] + '/delete', {'id': rid, 'date': '2026-09-21'})
         check('delete tira da esteira e do Pending Confirmation',

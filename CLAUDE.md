@@ -1650,6 +1650,14 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   encerrado com saldo aberto na coluna ao lado. Sem posição nenhuma a conta
   ainda sai, pelo original, presumindo zero — e DIZENDO que presumiu: o
   documento é assinado.
+- **Termo de Resilição e Pending Confirmation são SÓ contra o CLIENTE** (mesa,
+  28/09/2026, §580): recompra com fundo nosso numa ponta (o B2B Banco × Lawton/
+  Atacama, `queries.e_do_fundo` pelo `b3-accounts`) não entra na esteira, na
+  segregação do Monitor nem no grupo do Termo — nas DUAS telas (NDF FX e o
+  catálogo). Ela vai para a **Intrag › Unwind** no Send, pela mesma
+  `intrag_from_send` da Fase 1 (a planilha de onze colunas é uma para todos os
+  produtos; o catálogo entra por `product/commands.intrag`, no formato
+  `para_o_termo`). A liquidação (Summary, Advice, Pay/Rec) continua com as duas.
 - **A esteira nasce e morre com a recompra.** Apagar a recompra tira a linha do
   Pending Confirmation e da esteira (`esteira_sem_a_recompra`) — sem isso ficava
   um card de Pending OTC de uma operação que não existe mais, com o Generate
