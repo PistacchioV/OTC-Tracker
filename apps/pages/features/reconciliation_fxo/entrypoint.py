@@ -12,6 +12,7 @@ from flask import (jsonify, redirect, render_template, request, session,
 
 from apps.pages import blueprint
 from apps.pages.features.reconciliation_fxo import commands, queries
+from apps.pages.platform import task_runs
 
 
 def _log():
@@ -57,6 +58,11 @@ def reconciliation_fxo_run():
         files = request.files.getlist('files') if mode == 'manual' else None
         result = commands.run(recon_date, files, mode)
         if result.get('success'):
+            c = result.get('counts') or {}
+            task_runs.record('recon-fxo', session.get('user_sid', ''),
+                             session.get('user_name', ''), recon_date,
+                             {'open': sum(int(c.get(k) or 0)
+                                          for k in ('nok', 'no_match', 'no_match_ath'))})
             from apps.pages import routes
             routes._create_notification(
                 session.get('user_sid', ''), session.get('user_name', ''),
