@@ -90,6 +90,48 @@
 
 /* ── Date field ─────────────────────────────────────────────── */
 .cp-field { margin-top: 1.15rem; }
+
+/* ── Intraday Monitor — Task Schedule (§567) ─────────────────────────────── */
+.cp-it-grid { margin-top: 1rem; }
+.cp-it-row {
+    display: grid; grid-template-columns: minmax(170px, 1.2fr) minmax(260px, 2fr) 92px 34px;
+    align-items: center; gap: .75rem; padding: .5rem .25rem;
+    border-bottom: 1px solid var(--vr-card-border, var(--ins-border-color));
+}
+.cp-it-row:last-child { border-bottom: 0; }
+.cp-it-head {
+    font-size: .66rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ins-secondary-color); padding-top: 0;
+}
+.cp-it-task { display: flex; align-items: center; gap: .55rem; font-weight: 600; font-size: .85rem; min-width: 0; }
+.cp-it-task i {
+    width: 28px; height: 28px; flex: 0 0 auto; border-radius: 9px; display: inline-flex;
+    align-items: center; justify-content: center; font-size: .95rem; color: #fff;
+    background: var(--vr-grad);
+}
+.cp-it-days { display: flex; gap: .3rem; flex-wrap: wrap; }
+.cp-it-day {
+    min-width: 40px; padding: .22rem .45rem; border-radius: 999px; font-size: .72rem; font-weight: 700;
+    border: 1px solid var(--vr-card-border, var(--ins-border-color));
+    background: transparent; color: var(--ins-secondary-color);
+    transition: background-color 140ms var(--sf-ease-out, ease-out), color 140ms var(--sf-ease-out, ease-out),
+                border-color 140ms var(--sf-ease-out, ease-out), scale 90ms var(--sf-ease-out, ease-out);
+}
+.cp-it-day[aria-pressed="true"] { background: var(--vr-accent-2); border-color: var(--vr-accent-2); color: #fff; }
+.cp-it-day:active { scale: .95; }
+.cp-it-time { text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+.cp-it-time.is-invalid { border-color: #d93025 !important; }
+.cp-it-reset {
+    width: 30px; height: 30px; border-radius: 9px; border: 0; background: transparent;
+    color: var(--ins-secondary-color); display: inline-flex; align-items: center; justify-content: center;
+}
+.cp-it-reset:hover { background: var(--ins-tertiary-bg); color: var(--ins-body-color); }
+.cp-it-row.is-off .cp-it-task { opacity: .5; }
+@media (max-width: 767.98px) {
+    .cp-it-row { grid-template-columns: 1fr 92px 34px; }
+    .cp-it-row .cp-it-days { grid-column: 1 / -1; order: 3; }
+    .cp-it-head { display: none; }
+}
 .cp-field label {
     display: block;
     font-size: .7rem; font-weight: 600;
@@ -584,6 +626,43 @@
                         <button type="button" class="cp-run-btn" data-ce-run="routine">
                             <i class="ti ti-player-play"></i>
                             <span data-lang="cp-ce-run-all">Run all</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- A agenda das tarefas do Intraday Monitor (§567). Largura inteira:
+             é uma grade (tarefa × sete dias × horário), e na metade da linha os
+             dias quebrariam em duas. As linhas vêm do servidor
+             (`domain.TASKS`): tarefa nova aparece aqui sem mexer no HTML. -->
+        <div class="col-12 d-flex" data-cp-group="intraday">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="intradaytasks">
+                    <div class="cp-card__icon"><i class="ti ti-calendar-check"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-it-title">Intraday Monitor — Task Schedule</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-it-desc">
+                        The days of the week each task is due on the Intraday Monitor and the time by which
+                        it must be completed (Brasília). ANBIMA holidays have no tasks. A task with no day
+                        ticked leaves the Monitor. Saved changes show on the Monitor's next refresh.
+                    </p>
+                    <div class="cp-it-grid" id="cp-it-grid">
+                        <div class="cp-it-row cp-it-head">
+                            <span data-lang="cp-it-col-task">Task</span>
+                            <span data-lang="cp-it-col-days">Due on</span>
+                            <span data-lang="cp-it-col-deadline">Deadline</span>
+                            <span></span>
+                        </div>
+                        <div id="cp-it-rows"></div>
+                    </div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-layout-dashboard"></i>
+                            <a href="/intraday-monitor" data-lang="cp-it-meta">Intraday Monitor → tasks &amp; deadlines</a>
+                        </span>
+                        <button type="button" class="cp-run-btn" id="cp-it-save">
+                            <i class="ti ti-device-floppy"></i>
+                            <span data-lang="cp-it-save">Save schedule</span>
                         </button>
                     </div>
                 </div>
@@ -1148,7 +1227,9 @@
 var _TRANS_CACHE = {};
 (function () {
     var lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en';
-    fetch('/static/data/translations/' + lang + '.json')
+    // A promessa fica exposta para quem desenha texto por JS esperar por ela
+    // (senão a linha nasce no fallback em inglês e não é traduzida depois).
+    window._cpTransReady = fetch('/static/data/translations/' + lang + '.json')
         .then(function (r) { return r.json(); })
         .then(function (d) { _TRANS_CACHE = d; })
         .catch(function () {});
@@ -1669,6 +1750,127 @@ document.addEventListener('click', function (e) {
             if (label) label.textContent = orig;
             if (icon) icon.className = origIcon || 'ti ti-player-play';
         });
+    });
+})();
+
+// ── Intraday Monitor — Task Schedule (§567) ───────────────────────────────
+// As linhas vêm do servidor (`domain.TASKS`); o que se grava é a agenda
+// INTEIRA de uma vez, já que o servidor a normaliza por tarefa.
+(function () {
+    var box = document.getElementById('cp-it-rows');
+    var btn = document.getElementById('cp-it-save');
+    if (!box || !btn) return;
+    var URL = '/api/control-panel/intraday-tasks';
+    var DIAS = [['cp-it-d0', 'Mon'], ['cp-it-d1', 'Tue'], ['cp-it-d2', 'Wed'], ['cp-it-d3', 'Thu'],
+                ['cp-it-d4', 'Fri'], ['cp-it-d5', 'Sat'], ['cp-it-d6', 'Sun']];
+    var HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    var tarefas = [];
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]; });
+    }
+    function linha(tk) {
+        var dias = DIAS.map(function (d, i) {
+            var on = (tk.days || []).indexOf(i) !== -1;
+            return '<button type="button" class="cp-it-day" data-day="' + i + '" aria-pressed="' + on + '">' +
+                   esc(t(d[0], d[1])) + '</button>';
+        }).join('');
+        return '<div class="cp-it-row' + ((tk.days || []).length ? '' : ' is-off') + '" data-task="' + esc(tk.id) + '">' +
+                 '<span class="cp-it-task"><i class="ti ' + esc(tk.icon) + '"></i>' +
+                   '<span>' + esc(t('im-task-' + tk.id, tk.label)) + '</span></span>' +
+                 '<span class="cp-it-days">' + dias + '</span>' +
+                 '<input type="text" class="form-control form-control-sm cp-it-time" maxlength="5" ' +
+                   'inputmode="numeric" placeholder="HH:MM" value="' + esc(tk.deadline) + '">' +
+                 '<button type="button" class="cp-it-reset" data-bs-toggle="tooltip" ' +
+                   'title="' + esc(t('cp-it-reset', 'Back to default')) + '"><i class="ti ti-rotate"></i></button>' +
+               '</div>';
+    }
+    function desenha() {
+        box.innerHTML = tarefas.map(linha).join('');
+    }
+    function carrega() {
+        fetch(URL, { credentials: 'same-origin' })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+            .then(function (res) {
+                if (!res.ok || !res.body || !res.body.success) throw new Error((res.body && res.body.error) || '');
+                btn.disabled = false;
+                tarefas = res.body.tasks || [];
+                return (window._cpTransReady || Promise.resolve()).then(desenha);
+            })
+            .catch(function (e) {
+                // Sem a agenda na tela o Save gravaria vazio por cima: o botão
+                // fica desligado até a leitura dar certo.
+                btn.disabled = true;
+                box.innerHTML = '<div class="text-danger fs-xs py-2">' +
+                    esc(t('cp-it-loadfail', 'Could not read the saved schedule — try again in a moment.')) +
+                    (e && e.message ? ' (' + esc(e.message) + ')' : '') + '</div>';
+            });
+    }
+    carrega();
+
+    box.addEventListener('click', function (ev) {
+        var dia = ev.target.closest('.cp-it-day');
+        var reset = ev.target.closest('.cp-it-reset');
+        var row = ev.target.closest('.cp-it-row');
+        if (!row) return;
+        var tk = tarefas.filter(function (x) { return x.id === row.getAttribute('data-task'); })[0];
+        if (dia) {
+            var on = dia.getAttribute('aria-pressed') !== 'true';
+            dia.setAttribute('aria-pressed', String(on));
+            row.classList.toggle('is-off', !row.querySelector('.cp-it-day[aria-pressed="true"]'));
+        } else if (reset && tk) {
+            row.querySelectorAll('.cp-it-day').forEach(function (b) {
+                b.setAttribute('aria-pressed', String(tk.default_days.indexOf(+b.getAttribute('data-day')) !== -1));
+            });
+            row.querySelector('.cp-it-time').value = tk.default_deadline;
+            row.classList.toggle('is-off', !tk.default_days.length);
+        }
+    });
+    // Horário: digita-se só os números e os dois-pontos se escrevem sozinhos.
+    box.addEventListener('input', function (ev) {
+        var inp = ev.target.closest('.cp-it-time');
+        if (!inp) return;
+        var d = inp.value.replace(/\D/g, '').slice(0, 4);
+        var v = d.length > 2 ? d.slice(0, 2) + ':' + d.slice(2) : d;
+        if (v !== inp.value) inp.value = v;
+        inp.classList.remove('is-invalid');
+    });
+
+    btn.addEventListener('click', function () {
+        var agenda = {}, ruim = [];
+        box.querySelectorAll('.cp-it-row[data-task]').forEach(function (row) {
+            var inp = row.querySelector('.cp-it-time');
+            if (!HHMM.test(inp.value)) { inp.classList.add('is-invalid'); ruim.push(inp); }
+            agenda[row.getAttribute('data-task')] = {
+                days: Array.prototype.map.call(row.querySelectorAll('.cp-it-day[aria-pressed="true"]'),
+                                               function (b) { return +b.getAttribute('data-day'); }),
+                deadline: inp.value
+            };
+        });
+        if (ruim.length) {
+            ruim[0].focus();
+            Swal.fire({ icon: 'warning', title: t('cp-it-bad-time-title', 'Invalid deadline'),
+                        html: esc(t('cp-it-bad-time', 'Use a 24h time, e.g. 20:00.')), confirmButtonColor: '#0066cc' });
+            return;
+        }
+        btn.disabled = true;
+        fetch(URL, { method: 'POST', credentials: 'same-origin',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ tasks: agenda }) })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+            .then(function (res) {
+                if (!res.ok || !res.body || !res.body.success) throw new Error((res.body && res.body.error) || res.body.code || '');
+                Swal.fire({ icon: 'success', title: t('cp-it-saved', 'Schedule saved'), timer: 1400,
+                            showConfirmButton: false });
+                carrega();
+            })
+            .catch(function (e) {
+                Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
+                            html: esc((e && e.message) || t('cp-err-msg', 'An error occurred while running the routine.')),
+                            confirmButtonColor: '#0066cc' });
+            })
+            .then(function () { btn.disabled = false; });
     });
 })();
 

@@ -76,3 +76,35 @@ def _ndm_pending_status_write(slot, result, when):
     except Exception:                                       # noqa: BLE001
         _R().log.warning('[deals-monitor] não consegui gravar o status do disparo:\n%s',
                     traceback.format_exc())
+
+
+# ── Intraday Monitor: a agenda das tarefas (card `intradaytasks`, §567) ──────
+_INTRADAY_TASKS_FILE = os.path.join(_R()._DAILY_METRIC_DIR, 'intraday_tasks.json')
+
+
+def _load_intraday_tasks(strict=False):
+    """A agenda SALVA (`{task_id: {days, deadline}}`), crua — quem aplica o
+    padrão é o `domain.task_config`. Nada salvo é `{}`.
+
+    `strict=True` é a leitura do Control Panel: banco ocupado ou ilegível SOBE
+    (§548). Lida como `{}`, a tela mostraria os padrões e o Save seguinte
+    gravaria os padrões por cima da agenda da mesa. A tolerante é a do Monitor:
+    falha vira padrão, com a causa no log."""
+    try:
+        d = _store.read(_INTRADAY_TASKS_FILE)
+    except FileNotFoundError:
+        return {}
+    except Exception:
+        if strict:
+            raise
+        _R().log.warning('[intraday-monitor] agenda ilegível — valendo o padrão:\n%s',
+                         traceback.format_exc())
+        return {}
+    return d if isinstance(d, dict) else {}
+
+
+def _save_intraday_tasks(cfg):
+    """Grava a agenda INTEIRA (o card manda todas as tarefas de uma vez), já
+    normalizada pelo `domain.task_config` — o arquivo nunca guarda o que a
+    leitura não saberia interpretar."""
+    _R()._atomic_write_json(_INTRADAY_TASKS_FILE, domain.task_config(cfg))

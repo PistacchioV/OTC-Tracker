@@ -71,6 +71,13 @@ def _ndm_monitor_snapshot(ref):
                     balde = domain._ndm_bucket(pkey, d)
                     found.setdefault(balde, _R().Counter())[st] += 1
                     found_les.setdefault(balde, _R().Counter())[domain._ndm_deal_le(pkey, d)] += 1
+                    # A operação que VAI para a Intrag conta lá desde o import,
+                    # não só quando o espelho nasce no Success (§567).
+                    destino = domain.intrag_destino(pkey, d) if not prefixo else None
+                    if destino:
+                        found.setdefault(destino, _R().Counter())[domain.AWAITING_B3] += 1
+                        found_les.setdefault(destino, _R().Counter())[
+                            domain.intrag_destino_le(destino)] += 1
 
     _varre(_R().NEW_DEALS_CACHE_ROOT)
     # As RECOMPRAS: outra árvore, mesmo Monitor. O caminho vem do `data_paths`
@@ -222,6 +229,35 @@ def _ndm_monitor_snapshot(ref):
     return cards, conf_cards
 
 
+def _fechados(card):
+    """Os status em que o card FECHA, sem caixa: `success`/`ok` mais o `done`
+    que o card declara. UMA regra para a tela, o aviso das 19h e as tarefas do
+    Intraday Monitor — ver o comentário do `_ndm_pending_blocks`."""
+    f = {'success', 'ok'}
+    f.update(str(x).strip().lower() for x in (card.get('done') or ()))
+    return f
+
+
+def _card_zone(card, zone):
+    """A zona do card: Intrag é zona própria na tela, mas vem junto dos cards
+    de B3 (o único teste é o prefixo da chave)."""
+    return 'Intrag' if str(card.get('key') or '').startswith('intrag-') else zone
+
+
+def _zone_totals(cards, conf_cards):
+    """{zona: {total, closed}} — o progresso de cada zona, pela regra do
+    `_fechados`. Zona sem nada importado vem com zero nos dois."""
+    out = {z: {'total': 0, 'closed': 0} for z in domain._NDM_TYPE_ORDER}
+    for zone, group in (('Registration', cards), ('Confirmation', conf_cards)):
+        for card in group:
+            z = out.setdefault(_card_zone(card, zone), {'total': 0, 'closed': 0})
+            fim = _fechados(card)
+            z['total'] += int(card.get('total') or 0)
+            z['closed'] += sum(int(v or 0) for k, v in (card.get('statuses') or {}).items()
+                               if str(k).strip().lower() in fim)
+    return out
+
+
 def _ndm_pending_blocks(ref):
     """Blocos (um por tipo) com os cards que ainda não estão 100% Success.
     Retorna (blocks, grand_total); lista vazia = nada pendente na data."""
@@ -229,8 +265,7 @@ def _ndm_pending_blocks(ref):
     by_type = {}
     for zone, group in (('Registration', cards), ('Confirmation', conf_cards)):
         for card in group:
-            # Intrag é zona própria na tela, mas vem junto dos cards de B3.
-            z = 'Intrag' if str(card.get('key') or '').startswith('intrag-') else zone
+            z = _card_zone(card, zone)
             total = int(card.get('total') or 0)
             statuses = card.get('statuses') or {}
             # ⚠️ Success comparado SEM caixa: o cache do Intrag grava o status em
@@ -243,8 +278,7 @@ def _ndm_pending_blocks(ref):
             # continuaria aparecendo como ação pendente no e-mail.
             # O card pode DECLARAR onde ele fecha (`done`): a recompra acaba
             # em `Sent`, porque o B3 ID de volta ainda não existe para ela.
-            fechados = set(('success', 'ok'))
-            fechados.update(str(x).strip().lower() for x in (card.get('done') or ()))
+            fechados = _fechados(card)
             success = sum(int(v or 0) for k, v in statuses.items()
                           if str(k).strip().lower() in fechados)
             pending = total - success
@@ -304,3 +338,127 @@ def _ndm_pending_status():
         'now_br': now.strftime('%d/%m/%Y %H:%M'),
         'last': last,
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# INTRADAY MONITOR (§567)
+# ══════════════════════════════════════════════════════════════════════════
+
+def _recon_fallback(task_id, dia):
+    """(rodou?, hora 'HH:MM', pendências) pelo cache da PRÓPRIA recon — o plano
+    B para o que rodou antes de existir o registro de execuções (o dia do
+    deploy). Só vale execução CARIMBADA no dia pedido: a data de referência de
+    uma recon não é o dia em que alguém a rodou (a CGD lê o D-1), e aceitar a
+    referência como execução daria como feita hoje a recon rodada ontem.
+    A Comitente não tem plano B: ela não guarda nem data nem hora (§567)."""
+    ymd = dia.strftime('%Y-%m-%d')
+    br = dia.strftime('%d/%m/%Y')
+    try:
+        if task_id == 'recon-fxo':
+            from apps.pages import recon_fxo
+            d = _store.read(recon_fxo._cache_path(ymd))
+            ran = str((d or {}).get('ran_at') or '')
+            if ran.startswith(br):
+                c = d.get('counts') or {}
+                return True, ran[11:16], sum(int(c.get(k) or 0)
+                                             for k in ('nok', 'no_match', 'no_match_ath'))
+        elif task_id == 'recon-cgd':
+            from apps.pages import recon_cgd
+            d = recon_cgd.carregar(recon_cgd.dia_util_anterior(dia).strftime('%Y-%m-%d'))
+            ger = str((d or {}).get('generated_at') or '')
+            if ger.startswith(br):
+                c = d.get('counts') or {}
+                return True, ger[11:16], sum(int(c.get(k) or 0)
+                                             for k in ('pending_b3', 'pending_action', 'only_b3'))
+        elif task_id == 'recon-payrec':
+            from apps.pages import recon_payrec
+            path = os.path.join(recon_payrec._CACHE_DIR, ymd + '.json')
+            if _store.exists(path):
+                from datetime import datetime as _dt
+                quando = _dt.fromtimestamp(_store.stat(path).st_mtime)
+                if quando.date() == dia:
+                    d = _store.read(path) or {}
+                    return True, quando.strftime('%H:%M'), (
+                        len(d.get('pending_payment') or []) + len(d.get('pending_receivement') or []))
+    except FileNotFoundError:
+        pass
+    except Exception:                                       # noqa: BLE001
+        _R().log.warning('[intraday-monitor] plano B de %s falhou', task_id, exc_info=True)
+    return False, '', None
+
+
+def _intraday_snapshot(ref):
+    """O que a página do Intraday Monitor desenha, num request só: as tarefas
+    do dia com estado e progresso, os KPIs, a atividade (quem rodou o quê) e
+    os cards das zonas — que são o DETALHE da página, então saem da mesma
+    contagem que decidiu o estado das três tarefas de zona."""
+    from apps.pages.platform import task_runs
+    dia = ref.date() if hasattr(ref, 'date') else ref
+    agora = _R()._br_now().replace(tzinfo=None)
+    feriado = dia.strftime('%Y-%m-%d') in (_R()._anbima_holidays() or ())
+    cfg = domain.task_config(persistence._load_intraday_tasks())
+
+    cards, conf_cards = _ndm_monitor_snapshot(ref)
+    zonas = _zone_totals(cards, conf_cards)
+    runs = task_runs.runs_of(dia)
+
+    tarefas = []
+    for t in domain.TASKS:
+        c = cfg[t['id']]
+        item = {'id': t['id'], 'kind': t['kind'], 'label': t['label'], 'icon': t['icon'],
+                'url': t['url'], 'days': c['days']}
+        if t['kind'] == 'zone':
+            z = zonas.get(t['zone']) or {'total': 0, 'closed': 0}
+            total, fechado = z['total'], z['closed']
+            feito = fechado >= total                  # zona vazia: nada a fazer
+            item.update({'total': total, 'closed': fechado, 'open': total - fechado,
+                         'progress': 100 if not total else int(round(100.0 * fechado / total))})
+            est = domain.avalia(c, dia, agora, feriado, feito, fechado > 0)
+        else:
+            meus = [r for r in runs if r.get('task') == t['id']]
+            execs = [r for r in meus if r.get('event', 'run') == 'run']
+            if execs:
+                ultimo = execs[-1]
+                item.update({'ran_at': execs[0].get('time'), 'last_at': ultimo.get('time'),
+                             'by': ultimo.get('name') or ultimo.get('sid'),
+                             'open': (ultimo.get('summary') or {}).get('open'),
+                             'runs': len(execs)})
+                feito_em = _parse_hora(dia, execs[0].get('time'))
+            else:
+                rodou, hora, pend = _recon_fallback(t['id'], dia)
+                if rodou:
+                    item.update({'ran_at': hora, 'last_at': hora, 'open': pend, 'runs': 1})
+                feito_em = _parse_hora(dia, hora) if rodou else None
+            item['ended'] = any(r.get('event') == 'end' for r in meus)
+            feito = bool(item.get('runs'))
+            item['progress'] = 100 if feito else 0
+            est = domain.avalia(c, dia, agora, feriado, feito, False, feito_em)
+        item.update(est)
+        tarefas.append(item)
+
+    devidas = [x for x in tarefas if x['due']]
+    kpis = {s: sum(1 for x in devidas if x['state'] == s)
+            for s in ('done', 'in_progress', 'todo', 'late')}
+    kpis['due'] = len(devidas)
+    kpis['pct'] = int(round(100.0 * kpis['done'] / len(devidas))) if devidas else 100
+    # O progresso MÉDIO: a zona pela metade conta pela metade. É o segundo
+    # número do anel — "concluídas" só anda quando uma tarefa inteira fecha.
+    kpis['progress'] = (int(round(sum(x['progress'] for x in devidas) / float(len(devidas))))
+                        if devidas else 100)
+    rotulo = {t['id']: t['label'] for t in domain.TASKS}
+    atividade = [{'task': r.get('task'), 'label': rotulo.get(r.get('task'), r.get('task')),
+                  'time': r.get('time'), 'by': r.get('name') or r.get('sid'),
+                  'event': r.get('event', 'run'), 'open': (r.get('summary') or {}).get('open')}
+                 for r in reversed(runs)]
+    return {'date': dia.strftime('%Y-%m-%d'), 'now': agora.strftime('%Y-%m-%dT%H:%M'),
+            'holiday': feriado, 'tasks': tarefas, 'kpis': kpis, 'activity': atividade,
+            'cards': cards, 'conf_cards': conf_cards}
+
+
+def _parse_hora(dia, hhmm):
+    from datetime import datetime as _dt
+    try:
+        hh, mm = (int(x) for x in str(hhmm or '').split(':')[:2])
+        return _dt(dia.year, dia.month, dia.day, hh, mm)
+    except (TypeError, ValueError):
+        return None

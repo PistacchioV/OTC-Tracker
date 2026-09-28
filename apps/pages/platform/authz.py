@@ -64,6 +64,7 @@ _CONTROL_PANEL_CARDS = [
     {'id': 'cetip',       'label': 'Save CETIP Files'},
     {'id': 'dealsmonitor', 'label': 'Deals Monitor — Pending Action'},
     {'id': 'confescalation', 'label': 'Confirmations Escalation'},
+    {'id': 'intradaytasks', 'label': 'Intraday Monitor — Task Schedule'},
     # Settlement Reporting
     {'id': 'daily',       'label': 'Save Daily Settlement Files'},
     {'id': 'forecast',    'label': 'Settlement Forecast'},
@@ -101,6 +102,7 @@ _CP_ENDPOINT_CARD = {
     '/api/control-panel/signature-collection/generate': 'signaturecollection',
     '/api/control-panel/deals-monitor/recipients': 'dealsmonitor',
     '/api/control-panel/deals-monitor/run': 'dealsmonitor',
+    '/api/control-panel/intraday-tasks': 'intradaytasks',
     '/api/control-panel/pending-spreadsheet/run': 'pendingspreadsheet',
     '/api/control-panel/pending-spreadsheet/status': 'pendingspreadsheet',
     '/api/control-panel/confirmations-escalation/recipients': 'confescalation',
@@ -274,8 +276,10 @@ def _read_user_authz(sid):
             # /file-interpreter): o valor antigo gravado no cadastro segue
             # valendo — renomear página não pode revogar acesso em silêncio.
             # O item CGD virou a seção Onboarding, e o mesmo vale para ele.
+            # O New Deals Monitor virou o Intraday Monitor (§567).
             _renomeadas = {'/file-interface': '/file-interpreter',
-                           '/cgd': '/onboarding'}
+                           '/cgd': '/onboarding',
+                           '/new-deals-monitor': '/intraday-monitor'}
             return (True, set(_renomeadas.get(str(u), str(u)) for u in arr), papel)
     except Exception:
         pass

@@ -98,7 +98,7 @@ MUST = [
     # New Deals
     '/new_deals-ndf-commodities', '/new_deals-ndf-fwdstart', '/new_deals-ndf-otherpublisher',
     '/new_deals-ndf-vanilla', '/new_deals-opt-commodities', '/new_deals-opt-fxo',
-    '/new-deals-monitor',
+    '/intraday-monitor',
     # Daily Settlement
     '/ndf-cockpit', '/other-products-summary', '/other-products-swap-settlement-advice',
     '/other-products-ndf-settlement-advice', '/otm-settlements', '/operations-b3', '/cognos',

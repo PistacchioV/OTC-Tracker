@@ -24328,3 +24328,54 @@ e o recebimento da MGT), com etiquetas ✓/✗: estava errada — o LTR é do B2
 Saiu inteira. A conta do Banco (`/OTC DERIVATIVES PRODUCTS`) nunca é par de
 perna de cliente (`_match_allowed`). O `bank-name` não entra em nenhuma das
 duas: as linhas da Branch ignoram o cadastro. `check_payrec_branch.py`.
+
+## §567 — Intraday Monitor: o New Deals Monitor vira o painel das tarefas do dia (2026-09-28)
+
+O Monitor respondia uma pergunta só — quanto do registro, das confirmações e da
+Intrag ainda está em aberto — e a mesa tinha outras tarefas diárias sem lugar
+nenhum para acompanhar: as quatro reconciliações, cada uma com o seu dia e o seu
+horário. A página virou o **Intraday Monitor** (Dashboards › KPI › Intraday
+Monitor, `/intraday-monitor`), no desenho do Pulse SaaS sobre os tokens da casa:
+KPIs (previstas / concluídas / em andamento / a fazer / atrasadas), quadro por
+estado com um cartão por tarefa, anel de conclusão (Chart.js, o do KPI), feed de
+atividade e a linha do tempo dos prazos; as tabelas produto × status ficaram
+embaixo como DETALHE. Atualiza sozinha a cada 60 s (aba escondida não consulta).
+
+- **O catálogo é do código, a agenda é do Control Panel.** `domain.TASKS` diz
+  quais tarefas existem e de onde o estado vem; o card novo `intradaytasks`
+  (seção Intraday, largura inteira, o 16º) grava os dias da semana e o horário
+  limite de cada uma (`control-panel/intraday_tasks.json`). O padrão: registro,
+  confirmações, Intrag, Pay/Rec e FXO de segunda a sexta; Comitente toda terça;
+  CGD toda sexta; todas até 20:00. Feriado ANBIMA não tem tarefa. Valor ruim de
+  UMA tarefa cai no padrão dela (`task_config`), e o GET do card lê ESTRITO
+  (§548): lido como vazio, o Save gravaria os padrões por cima da agenda.
+- **Quando uma tarefa está concluída** (mesa, 28/09/2026): recon, quando RODOU
+  no dia — as quebras abertas são informação do cartão, não o critério; o End
+  process do Pay/Rec é selo. Zona, com ZERO em aberto, pela MESMA regra do aviso
+  das 19h (`queries._fechados`, agora uma função só para a tela, o e-mail e as
+  tarefas). Zona sem nada importado conta como concluída.
+- **O registro de execuções** (`platform/task_runs.py`): a Comitente reescreve
+  UMA tabela a cada execução, sem data nem hora; o Pay/Rec não grava hora; as
+  outras gravam pela DATA DE REFERÊNCIA, que não é o dia em que alguém rodou (a
+  CGD lê o D-1). Cada `run` das quatro recons (e o End process do Pay/Rec) grava
+  quem, quando e quantas quebras em aberto num arquivo-dia pelo DIA DA EXECUÇÃO
+  (`cache/intraday-monitor/AAAA/MM/AAAAMMDD_task-runs.json`), read-modify-write
+  estrito sob o `_cache_lock`. Nunca derruba a rotina: falha vai para o log em
+  WARNING. Para o que rodou antes de existir o registro (o dia do deploy), o
+  plano B é o cache da própria recon — só quando o CARIMBO de hora cai no dia
+  pedido (a Comitente não tem plano B).
+- **A Intrag conta desde o import** (pedido da mesa, 28/09/2026). A linha da
+  Intrag só nasce quando a operação ganha B3 ID, e a zona ficava zerada o dia
+  inteiro com a instrução ao custodiante por fazer. Agora a operação que VAI
+  para a Intrag conta lá com o status `Awaiting B3 ID` (`domain.intrag_destino`,
+  a mesma regra dos pontos que gravam o espelho: NDF Commodities / Commodities
+  Options / FX Options contra o Banco J.P. Morgan, NDF Vanilla / Other Publisher
+  contra o Lawton, swap B2B); no `Success` ela sai daqui e quem conta é a linha
+  real — ninguém conta duas vezes. O aviso das 19h passa a cobrar essas também.
+- **O endereço antigo** `/new-deals-monitor` redireciona, e a allowlist que o
+  tem continua valendo (`authz._read_user_authz`, o mapa das páginas
+  renomeadas). A página deixou o grupo Products do menu.
+
+`check_intraday_monitor.py` (agenda, estado, destino Intrag, ponta a ponta num
+DATA_DIR tmp, redirecionamento e allowlist); `check_control_panel_sections.py`
+conta 16 cards.

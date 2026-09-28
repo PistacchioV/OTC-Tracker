@@ -589,7 +589,7 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   sem o card (`_CP_ENDPOINT_CARD`). **O `id` é o token gravado**: renomear
   revoga em silêncio. A seção do card é o DOM (`data-cp-hdr` + `.row.cp-cards`),
   nunca um mapa no JS. Seis seções: Intraday, Settlement Reporting, Pending
-  Confirmation, Economic Affirmation, Reference Data, Application; quinze cards
+  Confirmation, Economic Affirmation, Reference Data, Application; dezesseis cards
   (o `check_control_panel_sections.py` conta — card novo mexe nele). O card *New
   Version Released* lê a versão do `link.txt` ao lado do
   `start-otc-tracker.bat`; sem versão o envio é recusado; destinatário é quem
@@ -1085,6 +1085,17 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   recompra espelhada é de termo de moeda — a de opção e a de swap caem na mesma
   página. As `intrag-unwind-dce-*` continuam cada uma na família do SEU produto:
   essas sim são uma tela por produto.
+- **O Monitor é o INTRADAY MONITOR** (`/intraday-monitor`, Dashboards › KPI;
+  §567): as tarefas do dia em cima (catálogo `domain.TASKS`, agenda de dias e
+  horário limite no card `intradaytasks` do Control Panel), o detalhe produto ×
+  status embaixo. Recon conclui ao RODAR no dia, zona com ZERO em aberto (a
+  regra do aviso das 19h, `queries._fechados`). Quem diz que a recon rodou é o
+  **registro de execuções** (`platform/task_runs.record`, chamado no `run` de
+  cada recon): recon nova que vira tarefa grava lá, senão o cartão nunca fecha.
+  **A Intrag conta desde o import** como `Awaiting B3 ID`
+  (`domain.intrag_destino`, a MESMA regra dos pontos que gravam o espelho —
+  mudou lá, muda aqui). `/new-deals-monitor` redireciona e vale na allowlist.
+  `check_intraday_monitor.py`.
 - **O Monitor não recebe lista de produto: ele VARRE o `cache/new deals/`**
   e agrupa pelos dois primeiros níveis não numéricos do caminho (§454). Quem
   diz que um produto EXISTE é o `_NDM_CARDS` (`deals_monitor/domain.py`); o
