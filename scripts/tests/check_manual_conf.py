@@ -288,6 +288,12 @@ _cb = {i['Cliente']: i['no_callback'] for i in _cb_card['items']}
 check('o grupo sem callback nenhum conta as duas', _cb['ACME'], 2)
 check('   o grupo com callback nas duas não é marcado', _cb['BETA'], 0)
 check('   e o misto conta só a que falta', _cb['GAMA'], 1)
+# MGT x cliente NÃO tem callback (mesa, 28/09/2026, §581): quem a camada de
+# rotas diz isenta não conta no badge.
+_cb_mgt = M._extra_card('FEPWEB', M.PENDING_FEPWEB, [_fep('CB7', 'DELTA', '')],
+                        callback_exempt=lambda r: r.get('Trade ID') == 'CB7')
+check('   linha isenta (MGT x cliente) não conta como sem callback',
+      _cb_mgt['items'][0]['no_callback'], 0)
 check('   com a luz do prazo da ETAPA daquele card',
       sorted(por_label[M.PENDING_OTC]['items'][0]['sla'].keys()),
       ['deadline', 'left', 'level'])
@@ -971,6 +977,12 @@ _r = cl.post('/api/manual-confirmation/fepweb-sent', json={'keys': ['CB1']})
 check('com o callback o envio passa', _r.status_code, 200)
 check('   e o Enviado p/ cliente é carimbado',
       M.find_row('CB1').get(M.SENT_COLUMN, '') != '', True)
+# MGT x cliente fecha SEM callback (§581): a confirmação da JPMORGAN CHASE não
+# passa pela conferência por telefone.
+novo('CBM', **{'Conferido OTC': _hoje, 'VALIDADO p/ MO': _hoje, 'Legal Entity': 'MGT'})
+_r = cl.post('/api/manual-confirmation/fepweb-sent', json={'keys': ['CBM']})
+check('MGT x cliente: Mark as sent sem Data Callback passa', _r.status_code, 200)
+check('   e carimba o envio', M.find_row('CBM').get(M.SENT_COLUMN, '') != '', True)
 # E a metade da TELA: o botão carrega a contagem do item e o clique com
 # pendência abre o aviso em vez da confirmação.
 check('o botão do card leva o no_callback do item', 'data-nocb=' in MON, True)

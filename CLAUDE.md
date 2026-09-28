@@ -2072,7 +2072,10 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   commodities é UMA função para o documento e para a Moeda da esteira
   (`_conf_merc_default`: Commodities → Subjacente → Underlying Asset).
 - **Callback**: falta de `Data Callback` é badge só no card Pending FepWeb (como
-  CONTAGEM) e TRAVA o Mark as sent (409 `callback_required`).
+  CONTAGEM) e TRAVA o Mark as sent (409 `callback_required`). **MGT × cliente não tem
+  callback** (mesa, 28/09/2026, §581): `_mc_row_is_mgt` (a Legal Entity da
+  linha) tira a linha do badge — injetada no `monitor_payload` como
+  `callback_exempt` — e do 409.
 - Nomes de coluna são os da planilha legada (schema dos DuckDB); rótulos pelo
   `COLUMN_LABELS` completo. Coluna nova em `DB_COLUMNS` é só isso — `ensure_db`
   faz `ADD COLUMN IF NOT EXISTS`, sem script.

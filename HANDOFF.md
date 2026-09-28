@@ -24750,3 +24750,24 @@ mandava, no Send).
 segregação e no Termo; o Send do fundo grava a Intrag com LAWTON, o Deal ID e o
 sentido do fundo). A Fase 1 não ganhou caso de fundo na esteira — a pergunta é
 a mesma função.
+
+## §581 — Confirmations Monitor: MGT × cliente sem callback (2026-09-28)
+
+**Pedido da mesa**: a confirmação de MGT contra cliente não precisa de
+callback no Confirmations Monitor.
+
+**Mudança**: a MESMA pergunta nos dois lugares que exigiam o callback —
+`platform/manual_confirmation._mc_row_is_mgt(row)`, pela coluna Legal Entity
+(sigla MGT ou a razão social do `le-spn`):
+- badge "no callback" do card Pending FepWeb: `manual_conf.monitor_payload`
+  ganhou `callback_exempt(row)` (injetado pelo entrypoint, como o `docs_for`;
+  o `manual_conf` não conhece entidade), e a linha isenta não conta;
+- Mark as sent (`/api/manual-confirmation/fepweb-sent`): a linha MGT não entra
+  no `sem_cb` e o 409 `callback_required` não a segura.
+O front só lê a contagem, então acompanha sem mudança.
+
+**Fora do escopo**: o anexo do BACC EA Metrics (corte "sem Data Callback")
+continua listando todas as linhas.
+
+**Teste**: `check_manual_conf.py` (card não conta a isenta; Mark as sent de
+linha MGT sem Data Callback passa).
