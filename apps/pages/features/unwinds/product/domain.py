@@ -37,7 +37,7 @@ CHECK_OK, CHECK_NOK, CHECK_NA = fase1.CHECK_OK, fase1.CHECK_NOK, fase1.CHECK_NA
 # (estado da esteira e conferencia apurada) e o rastro. Coluna de planilha com
 # um desses rotulos e IGNORADA — um `Status = Sent` colado de outra aba nao pode
 # pular o 4-olhos.
-NAO_EDITAVEL = ('_id', 'Status', 'Check', 'Maker', 'Checker', 'MyNumber', 'SentFiles',
+NAO_EDITAVEL = ('_id', 'Status', 'Check', 'CalcResult', 'Maker', 'Checker', 'MyNumber', 'SentFiles',
                 'SentAt', 'Warnings', 'ImportedAt', 'PositionDate', 'SourceFile',
                 'PositionFound')
 
@@ -261,12 +261,13 @@ def linhas_da_planilha(rows, page, max_busca=15):
 # perna nenhuma (pedido da mesa): quem identifica o contrato e o Live Position.
 # O Pre FWD Rate e ZERO (a liquidacao e em T+0, nao ha desconto).
 #
-# **O e-mail traz o numero como o Excel o EXIBE**: `96.85` na celula que vale
-# 96,84626, `5.2087` na que vale 5,20867. Com eles a conferencia (tolerancia de
-# um centavo) nunca fecharia, e a Taxa Termo iria arredondada a B3. A precisao
-# volta do FV USD e do PV BRL — `|Termination - Strike| = FV / Qtd` e `FX =
-# PV / FV` — e SO quando o numero refeito arredonda para o que a celula mostra:
-# fora disso a celula vence e a linha diz que os numeros nao fecham.
+# **A grade mostra o numero do E-MAIL, como veio** (mesa, 28/09/2026): o
+# e-mail traz o que o Excel EXIBE (`96.85` na celula que vale 96,84626,
+# `5.2087` na que vale 5,20867), e e esse o numero que a mesa confere na tela.
+# Refazer a precisao pelo FV USD e pelo PV BRL punha na grade um strike e uma
+# paridade que o e-mail nao tem. Quando a conta com os numeros mostrados nao
+# fecha com o PV BRL, o Check da NOK e a coluna `CalcResult` diz o resultado
+# que o OTC Tracker calculou — a divergencia fica a vista, nunca escondida.
 
 _RECAP_COLS = {
     'leg': 'leg', 'tradedate': 'TradeDate', 'originalposition': 'posicao',
@@ -285,23 +286,6 @@ def _casas(t):
     t = texto(t).replace(' ', '')
     i = max(t.rfind('.'), t.rfind(','))
     return len(t) - i - 1 if i >= 0 else 0
-
-
-def _refina(mostrado_txt, mostrado, exato):
-    """O `exato` quando ele arredonda para o que a celula mostra; senao None."""
-    if mostrado is None or exato is None:
-        return None
-    meio = 0.5 * 10 ** -_casas(mostrado_txt) + 1e-9
-    return exato if abs(exato - mostrado) <= meio else None
-
-
-def _termination_exata(t_txt, tt, k, fv, q):
-    """A Unwind Strike com a precisao de volta pelo FV USD (quando o refeito
-    arredonda para o que a celula mostra); senao a mostrada."""
-    if q and k is not None and tt is not None and fv is not None and tt != k:
-        exato = k + (1 if tt > k else -1) * abs(fv) / abs(q)
-        return _refina(t_txt, tt, exato) or tt
-    return tt
 
 
 def _banco_comprou(posicao):
@@ -342,9 +326,9 @@ def linhas_do_recap_commodities(tabelas):
                 continue
             q = numero(cel.get('UnwoundNotional'))
             k = numero(cel.get('Strike'), taxa=True)
-            t_txt, fx_txt = cel.get('TerminationRate'), cel.get('FXRate')
-            tt, fx = numero(t_txt, taxa=True), numero(fx_txt, taxa=True)
-            fv, pv = numero(cel.get('fv')), numero(cel.get('pv'))
+            tt = numero(cel.get('TerminationRate'), taxa=True)
+            fx = numero(cel.get('FXRate'), taxa=True)
+            pv = numero(cel.get('pv'))
             linha = {'PreFWDRate': 0.0, '_sheet_row': n}
             d = data_iso(cel.get('TradeDate'))
             if d:
@@ -358,11 +342,6 @@ def linhas_do_recap_commodities(tabelas):
             # aceitar o valor que arredonda para o mostrado (`_mostrado`).
             linha['_shown'] = {c: _casas(cel.get(c)) for c in ('Strike', 'OriginalNotional')
                                if texto(cel.get(c))}
-            linha['_recap'] = {'t_txt': t_txt, 'tt': tt, 'fv': fv, 'q': q}
-            # A precisao que o Excel escondeu, de volta pelo FV e pelo PV.
-            tt = _termination_exata(t_txt, tt, k, fv, q)
-            if fx is not None and fv and pv is not None:
-                fx = _refina(fx_txt, fx, abs(pv) / abs(fv)) or fx
             if tt is not None:
                 linha['TerminationRate'] = tt
             if fx is not None:
@@ -592,27 +571,10 @@ def _aviso_sem_contrato(linha, posicoes, usados, nomes, mostrado):
 
 
 def ao_mostrado(linha, pos):
-    """Depois do casamento, o Strike e o volume que o e-mail trouxe
-    ARREDONDADOS voltam com o valor exato da posicao (a diferenca e so a
-    exibicao do Excel), e a Unwind Strike e refeita sobre o strike exato.
-    Tira as marcas internas da linha."""
-    mostrado = linha.pop('_shown', None) or {}
-    rc = linha.pop('_recap', None) or {}
-    if not pos:
-        return
-    for campo, chave, modo in (('Strike', 'strike', 'rate'), ('OriginalNotional', 'original', 'num')):
-        casas = mostrado.get(campo)
-        if casas is None or linha.get(campo) in (None, ''):
-            continue
-        pv = numero(pos.get(chave), taxa=(modo == 'rate'))
-        if pv is not None and not _iguais(linha[campo], pv, modo) and \
-                _casa(linha[campo], pv, modo, casas):
-            linha[campo] = pv
-    if rc.get('tt') is not None and linha.get('Strike') is not None:
-        tt = _termination_exata(rc.get('t_txt'), rc['tt'], numero(linha['Strike'], taxa=True),
-                                rc.get('fv'), rc.get('q'))
-        if tt is not None:
-            linha['TerminationRate'] = tt
+    """Tira as marcas internas da linha depois do casamento. Os numeros ficam
+    os do E-MAIL (mesa, 28/09/2026): o casamento aceita o valor arredondado,
+    mas a grade mostra o que a mesa mandou — nao o valor exato da posicao."""
+    linha.pop('_shown', None)
 
 
 def casar_por_caracteristicas(linha, posicoes):
@@ -801,6 +763,19 @@ def conferir(linha, page):
     if all(r is True for r in resultados):
         return CHECK_OK, avisos
     return CHECK_NA, avisos
+
+
+_DIVERGENCIAS = ('unwind_result_mismatch', 'unwind_amount_mismatch')
+
+
+def resultado_calculado(avisos):
+    """O resultado que o OTC Tracker calculou, quando ele NAO bate com o
+    informado (a coluna `CalcResult`); None quando bate ou nao deu para
+    conferir — a coluna so fala quando ha divergencia."""
+    for a in avisos or []:
+        if (a or {}).get('code') in _DIVERGENCIAS:
+            return (a.get('params') or {}).get('calculado')
+    return None
 
 
 def direcao_do_resultado(linha):

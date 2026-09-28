@@ -2603,6 +2603,7 @@
   "unw-col-pre-fwd-rate": "Pre FWD Rate",
   "unw-col-du": "DU",
   "unw-col-result": "Result",
+  "unw-col-otc-tracker-result": "OTC Tracker Result",
   "unw-col-underlying": "Underlying",
   "unw-col-call-put": "Call / Put",
   "unw-col-position": "Position",

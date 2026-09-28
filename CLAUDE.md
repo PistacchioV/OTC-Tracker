@@ -1544,12 +1544,15 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   cabeçalho NOVO — a perna Banco não tem o `Risk Deal ID`), só `Client` e `Banco` entram (a `JPMOCC` é
   offshore), o `Risk Deal ID` NÃO entra em perna nenhuma (o B3 ID vem do Live
   Position, por strike + original), Pre FWD Rate = 0 (e aí o Check dispensa o
-  DU). O sinal do PV é o do BANCO, pela `Original Position` + strikes. O e-mail
-  traz o número como o Excel o EXIBE: a Termination volta do FV USD e o FX do
-  PV BRL, só quando o refeito arredonda para o que a célula mostra. E o
-  casamento com o Live Position aceita o mesmo: sem candidato exato, vale o
-  contrato cujo strike/volume ARREDONDA para as casas exibidas (ainda ÚNICO), e
-  a linha fica com o valor exato da posição (`ao_mostrado`); sem nenhum, o aviso
+  DU). O sinal do PV é o do BANCO, pela `Original Position` + strikes. **A grade
+  mostra o número do E-MAIL como veio** (mesa, 28/09/2026, §570): o Excel
+  arredonda (`96.85`, `5.2087`) e refazer a precisão pelo FV USD/PV BRL punha
+  na tela um strike e uma paridade que o e-mail não tem. Quando a conta com os
+  números mostrados não fecha com o PV, o Check dá NOK e a coluna **OTC Tracker
+  Result** (`CalcResult`, não editável) diz o que o app calculou — vazia quando
+  bate. O casamento com o Live Position aceita o arredondado: sem candidato
+  exato, vale o contrato cujo strike/volume ARREDONDA para as casas exibidas
+  (ainda ÚNICO), e a linha continua com o valor do e-mail; sem nenhum, o aviso
   diz o contrato mais perto e os dois valores (`unwind_match_none_near`). A posição (os MESMOS
   coletores do Live Position) só preenche o que a planilha deixou em BRANCO:
   divergência vira aviso e a planilha vence. **Sem B3 ID, casa por
