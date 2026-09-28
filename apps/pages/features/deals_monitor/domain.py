@@ -197,6 +197,9 @@ _NDM_TAXONOMY = {
     # é o produto `Unwind`, como o bloco próprio da tela — `NDF` afirmava que a
     # recompra espelhada é de termo de moeda.
     'intrag-unwind':      ('Unwind', '—'),
+    # O Termo de Resilição só existe na zona Confirmations (não há card da B3
+    # de que ele seja o `conf-` gêmeo): chave inteira.
+    'conf-unwind-termo':  ('Unwind', 'Termo de Resilição'),
     # O DCE, ao contrario, TEM sub-variante: e o outro fluxo do mesmo produto.
     'intrag-dce-option':  ('Option', 'DCE'),
     'intrag-dce-ndf':     ('NDF', 'DCE'),

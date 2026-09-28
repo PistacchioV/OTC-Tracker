@@ -24920,3 +24920,24 @@ por lá. Retorno com erro da B3 na antecipação NÃO vira `Error` na recompra
 
 **Teste**: `check_unwind_products.py` §13 (fixtures no layout real; registro
 0003 não conta; erro da B3 não conta; o New Deals ignora a antecipação).
+
+## §588 — Intraday Monitor: card do Termo de Resilição na zona Confirmations (2026-09-28)
+
+**Relato**: "está faltando termo de resilição na parte de confirmations do
+intraday monitor".
+
+**Causa**: a zona Confirmations tinha cards só para os produtos de New Deals
+(NDF Commodities, FWD Start, MGT, Commodities Options, FX Options). A
+segregação do Termo existia (`_conf_unwind_groups`, a do Confirmations Monitor)
+e ninguém a chamava no Monitor.
+
+**O que mudou**: `conf-unwind-termo` ("Termo de Resilição", link para o
+Confirmations Monitor) no `_ndm_monitor_snapshot`: grupos contraparte × moeda
+(mercadoria no NDF Comm), só recompras contra o CLIENTE (§580), etapa pela
+esteira (`_conf_stage_counts`; a recompra entra nela no import, Pending OTC →
+Ok). Na tela, bloco Unwinds da zona Confirmations; no e-mail das 19h,
+`Unwind · Termo de Resilição` (taxonomia pela chave inteira — o card não tem
+gêmeo na zona da B3; o guarda do `check_ndm_cards` aceita `conf-*`).
+
+**Teste**: `check_intraday_monitor.py` §4f (conta só a do cliente, pendente no
+aviso, a tela o desenha no bloco Unwinds); tela conferida no Chromium.
