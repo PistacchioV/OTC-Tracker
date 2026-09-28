@@ -514,7 +514,8 @@
     }
 
     function carrega() {
-        var d = $('#cgd-date').val() || '';
+        // A data do link vale na PRIMEIRA leitura (o Intraday Monitor, §567).
+        var d = $('#cgd-date').val() || (window.otcLinkIso && window.otcLinkIso()) || '';
         fetch('/api/reconciliation-cgd/data' + (d ? '?recon_date=' + encodeURIComponent(d) : ''),
               { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })

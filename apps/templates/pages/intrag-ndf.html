@@ -1290,7 +1290,7 @@ $(document).ready(function() {
     });
 
     // Pre-add today's Trade Date chip and auto-load
-    sfAddFilter(SF_COLS[0], _todayDmy());
+    sfAddFilter(SF_COLS[0], ((window.otcLinkDmy && window.otcLinkDmy()) || _todayDmy()));
     document.getElementById('sfSearchBtn').click();
 });
 </script>

@@ -643,7 +643,8 @@
     }
 
     function carrega() {
-        var d = $('#cfm-date').val() || '';
+        // A data do link vale na PRIMEIRA leitura (o Intraday Monitor, §567).
+        var d = $('#cfm-date').val() || (window.otcLinkIso && window.otcLinkIso()) || '';
         fetch('/api/reconciliation-conf-matching/data' + (d ? '?recon_date=' + encodeURIComponent(d) : ''),
               { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })

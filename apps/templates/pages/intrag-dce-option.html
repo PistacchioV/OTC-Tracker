@@ -1116,7 +1116,7 @@ $(document).ready(function() {
     });
 
     // Default view: Trade Date = today, fetched from the server (like the sisters).
-    sfAddFilter(SF_COLS[3], _todayDmy());
+    sfAddFilter(SF_COLS[3], ((window.otcLinkDmy && window.otcLinkDmy()) || _todayDmy()));
     document.getElementById('sfSearchBtn').click();
 });
 </script>

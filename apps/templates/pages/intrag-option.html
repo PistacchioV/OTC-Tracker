@@ -1211,7 +1211,7 @@ $(document).ready(function() {
     });
 
     // Default view: Registration Date = today, fetched from the server (like NDF).
-    sfAddFilter(SF_COLS[3], _todayDmy());
+    sfAddFilter(SF_COLS[3], ((window.otcLinkDmy && window.otcLinkDmy()) || _todayDmy()));
     document.getElementById('sfSearchBtn').click();
 });
 </script>

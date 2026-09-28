@@ -576,7 +576,8 @@ $(document).ready(function() {
     ld.setDate(ld.getDate() - 1);
     if (ld.getDay() === 0) ld.setDate(ld.getDate() - 2);
     else if (ld.getDay() === 6) ld.setDate(ld.getDate() - 1);
-    setReconDate(ld.toISOString().split('T')[0]);
+    // A data do link vence o padrão (o Intraday Monitor, §567).
+    setReconDate((window.otcLinkIso && window.otcLinkIso()) || ld.toISOString().split('T')[0]);
 
     /* ── 3. DataTable init ───────────────────────────────────────── */
     try {
