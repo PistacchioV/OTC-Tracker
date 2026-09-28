@@ -1151,6 +1151,12 @@ def termo_linha(linha):
                        'text': 'Recompra sem contrato da B3 — a coluna Registro CETIP nº '
                                'sai vazia'})
     moeda = str((linha or {}).get('Currency') or '').strip()
+    # Na recompra de MERCADORIA o `Currency` e o eixo do grupo (a commodity,
+    # `product.domain.para_o_termo`) e o recomprado e QUANTIDADE: o Valor Base
+    # Liquidado e o Novo Valor Base vao so com o numero (mesa, 28/09/2026) — o
+    # codigo da commodity na frente lia como moeda.
+    e_mercadoria = bool(str((linha or {}).get('Commodity') or '').strip())
+    prefixo_vbl = '' if e_mercadoria else moeda
     recomprado = numero_flex((linha or {}).get('UnwoundNotional'))
     resultado = numero_flex((linha or {}).get('Result'))
     direcao = str((linha or {}).get('Direction') or '').strip().upper()
@@ -1184,7 +1190,7 @@ def termo_linha(linha):
         tipo, novo_base = RESILICAO_TOTAL, NOVO_BASE_ZERO
     else:
         tipo = RESILICAO_PARCIAL
-        novo_base = '{} {}'.format(moeda, num_br(saldo_apos_a_recompra(linha))).strip()
+        novo_base = '{} {}'.format(prefixo_vbl, num_br(saldo_apos_a_recompra(linha))).strip()
 
     # O pagador é o SINAL do resultado: recebemos -> paga a Parte B.
     if direcao == 'RECEIVE':
@@ -1203,7 +1209,7 @@ def termo_linha(linha):
         'numConf':        athena_id,
         'registroCetip':  contrato,
         'resilicao':      tipo,
-        'valorBaseLiq':   '{} {}'.format(moeda, num_br(recomprado)).strip() if recomprado is not None else '',
+        'valorBaseLiq':   '{} {}'.format(prefixo_vbl, num_br(recomprado)).strip() if recomprado is not None else '',
         # O Valor de Resilição vai em MÓDULO: quem paga está na coluna ao lado,
         # e um valor negativo ali leria como se a Parte pagasse um valor
         # negativo — que é o mesmo que receber.

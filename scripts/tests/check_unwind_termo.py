@@ -64,7 +64,9 @@ L1 = {'AthenaID': 'STP-XE-10G5U5X-0-0', 'Contract': '26C03202688', 'Currency': '
       'ClientAcronym': 'COFCO', 'UnwoundNotional': 11529.81, 'Balance': 587224.31,
       'UnwoundAmount': '59,999.98', 'BRLFixed': 'YES', 'TerminationRate': 5.2000,
       'Result': 42.80, 'Direction': 'RECEIVE', 'PartyAccount': '73760009',
-      'CptyAccount': '00041007', 'Status': 'Imported'}
+      # Contra o CLIENTE: a conta guarda-chuva (CLIENT 1). Com a do Lawton aqui
+      # (como era) a recompra e a perna do FUNDO, que nao tem Termo (§580).
+      'CptyAccount': '73760102', 'Status': 'Imported'}
 L2 = dict(L1, AthenaID='STP-XE-10G5U5X-0-1', Contract='26C03202689',
           UnwoundNotional=144122.68, Balance=144122.68, Result=-9350.12, Direction='PAY',
           UnwoundAmount='750,000.00')
