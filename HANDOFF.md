@@ -24513,3 +24513,35 @@ não correspondia aos números da linha.
 - A edição continua levando a linha a `Pending`, pelo 4-olhos de sempre.
 
 **Testes**: `check_unwind_products`, antes do §12.
+
+## §572 — O Edit da linha sempre abre modal (2026-09-28)
+
+**Regra da mesa**: clicar no Edit abre SEMPRE o modal de edição, em qualquer
+tela.
+
+**O que estava fora**: três telas ainda editavam na própria linha, trocando as
+células por `<input>` e pondo Save/Cancel na coluna Actions:
+- as recompras do catálogo (`unwinds-product.html`, onde está o NDF
+  Commodities);
+- a recompra de NDF FX (`unwinds-ndf-fx.html`);
+- a Intrag Unwind (`intrag-unwind.html`).
+
+As outras telas com Edit já abriam modal: New Deals (`arOpenEditModal`),
+Intrag, Swap Bullet, catálogo de New Deals e `/mapping`.
+
+**Como ficou** (nas três telas):
+- Modal no padrão `liquid-glass` (cabeçalho `py-2`, `row g-3`, rótulo
+  `fs-xs text-muted`, rodapé com X vermelho e disquete verde).
+- Os campos são montados na abertura, a partir das colunas da página, e
+  incluem os de coluna OCULTA. Isso aposenta o cuidado com o índice do `<td>`
+  que a edição na linha exigia.
+- Status, Check e o OTC Tracker Result não aparecem no modal. No NDF FX, o
+  Athena ID também não.
+- As datas usam o `otcDateField`, com `dd/mm/aaaa` visível. Na Intrag Unwind
+  o valor gravado também é `dd/mm/aaaa`, como a planilha da mesa.
+- Vai ao servidor SÓ o campo que mudou. Um número intocado não passa por
+  reparse de texto, e o recálculo do §571 só dispara pelo que a pessoa mexeu
+  de fato.
+- Sem mudança, o Save só fecha o modal.
+
+**Teste**: novo `check_edit_modal.py`.
