@@ -212,6 +212,9 @@ def main():
         check('e nao se envia de novo', False)
     except ValueError as exc:
         check('e nao se envia de novo', 'status Sent' in str(exc))
+    l5 = commands.editar('STP-XE-10G5U5X-0-0', '2026-09-10', {'Counterparty': 'EDITADA'}, sid='E1')
+    check('linha enviada SE edita e volta a Pending', l5 and l5['Status'] == 'Pending'
+          and l5['Counterparty'] == 'EDITADA', l5)
 
     print('\n== 6. sem contrato na posicao, nada sai ==')
     R._lpndf_collect = _collect([])

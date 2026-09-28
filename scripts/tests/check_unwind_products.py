@@ -357,6 +357,10 @@ def main():
     st, j = _up(pg_ndf['api'], 'recompra.csv', csv_ndf)
     check('re-import nao sobrescreve a enviada', j.get('skipped') == 1 and j['rows'] == []
           and len(PQ.entries(pg_ndf, '2026-09-21')) == 1, j)
+    st, j = _post(pg_ndf['api'] + '/edit', {'id': rid_ndf, 'date': '2026-09-21',
+                                           'fields': {'Counterparty': 'EDITADA APOS ENVIO'}})
+    check('enviada SE edita e volta a Pending', st == 200 and j.get('row', {}).get('Status') == 'Pending'
+          and j['row'].get('Counterparty') == 'EDITADA APOS ENVIO', (st, j))
     st, j = _post(pg_opt['api'] + '/delete', {'id': b['_id'], 'date': '2026-09-21'})
     check('delete da ambigua', st == 200 and j.get('success'))
     check('   e ela saiu do arquivo-dia',

@@ -694,7 +694,7 @@ $(document).ready(function () {
                                  fields: f.fields, header: f.header, records: f.records };
                     }), t: t,
                     // O rodapé da casa (Export · Edit · Close), o mesmo do New Deals.
-                    buttons: { download: 'raw', edit: !!tr && e.Status !== 'Sent' },
+                    buttons: { download: 'raw', edit: !!tr },
                     onEdit: function () { $(tr).find('.btn-row-edit').trigger('click'); }
                 });
             })

@@ -24589,7 +24589,7 @@ Uma linha `Sent` ficava com a coluna vazia. Na dev as linhas estão `Imported`.
 `unwinds-ndf-fx`), e o Confirm não nasce mais com `d-none`.
 
 **As travas continuam no SERVIDOR**, com frase traduzida pelo código:
-- `unwind_already_sent`: Edit ou Delete de linha enviada;
+- `unwind_already_sent`: Delete de linha enviada (o Edit saiu, §575);
 - `unwind_only_pending`: Confirm fora de `Pending`;
 - `unwind_maker_is_checker`: Confirm pelo próprio maker;
 - `unwind_nothing_sent`: Send de linha fora de `Imported`/`Approved`;
@@ -24597,3 +24597,26 @@ Uma linha `Sent` ficava com a coluna vazia. Na dev as linhas estão `Imported`.
 
 Quer dizer: o botão aparece, e o clique que o status não permite volta
 recusado, dizendo por quê.
+
+## §575 — Recompras: linha já enviada à B3 também se edita (2026-09-28)
+
+**Pedido da mesa**: tirar a trava que recusava o Save do Edit em linha `Sent`.
+Corrigir o dado depois do envio é legítimo, e a trava obrigava a apagar e
+reimportar, o que também era recusado.
+
+**Correção**: saiu o `unwind_already_sent` dos dois `editar`:
+- catálogo: `product/commands.py`;
+- NDF FX: `unwinds/commands.py`, junto com o `except ValueError` morto do
+  entrypoint.
+
+O botão Edit do preview (`edit: !!tr`) também não olha mais o Status.
+
+**O 4-olhos segue valendo**: a linha editada volta a `Pending` com o editor
+como maker, e só é enviada de novo depois do Confirm de outro usuário.
+`SentFiles`/`SentAt` ficam como rastro do envio anterior.
+
+**Continua travado em `Sent`**: o Delete (o arquivo já foi à B3) e o reimport
+(não sobrescreve a enviada).
+
+**Testes**: `check_unwind_products` e `check_unwind_page` (a linha enviada se
+edita e volta a Pending).

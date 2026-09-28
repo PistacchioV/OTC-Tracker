@@ -255,15 +255,16 @@ def editar(page, row_id, date_str, fields, sid=''):
     veredito e REFEITO com os valores novos: um Check `OK` que sobrevivesse a
     uma edicao afirmaria uma conferencia que ninguem fez. Dado economico
     mudado refaz as contas (`_refazer_calculos`). None se a linha nao
-    existe; Recusa se ja foi enviada ou se um valor nao se le no tipo da coluna."""
+    existe; Recusa se um valor nao se le no tipo da coluna (linha `Sent` se edita)."""
     kinds = catalog.column_kinds(page)
     with _R()._cache_lock:
         fp, lst, idx = queries.find(page, row_id, date_str)
         if idx is None:
             return None
         linha = lst[idx]
-        if linha.get('Status') == domain.STATUS_ENVIADO:
-            raise domain.Recusa('unwind_already_sent', 'This unwind was already sent to B3', 409)
+        # Linha ja ENVIADA tambem se edita (mesa, 28/09/2026): corrigir o dado
+        # depois do envio e legitimo, e a edicao a devolve a `Pending` — ela so
+        # volta a B3 depois de outro usuario conferir.
         mudou = set()
         for k, v in (fields or {}).items():
             if k not in kinds or k in domain.NAO_EDITAVEL:
