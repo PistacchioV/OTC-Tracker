@@ -396,7 +396,11 @@ def arquivo(page, linha, hoje_ymd=None):
     if faltas:
         raise domain.Recusa('unwind_b3_missing', 'missing: ' + '; '.join(faltas), 422,
                             campos='; '.join(faltas))
-    header = R._fi_build_line(key, 'header', blocos['header'], page_url=page['path'])
+    # O Participante do header e o da VISAO, e vence o `Fixed` do cadastro: o
+    # template da antecipacao nasceu com `JPMORGANBM` travado, e o arquivo do
+    # Lawton (o B2B, `_espelho`) sairia com o nome do Banco no header.
+    header = R._fi_build_line(key, 'header', blocos['header'], page_url=page['path'],
+                              force_values={'4': participante} if participante else None)
     record = R._fi_build_line(key, bloco_reg, blocos[bloco_reg], page_url=page['path'])
     # Posicional: a linha tem de ter a largura que o TEMPLATE soma — largura que
     # discorde desloca todos os campos seguintes sem mudar nada que se veja.
@@ -413,11 +417,45 @@ def arquivo(page, linha, hoje_ymd=None):
             'fields': _campos_do_preview(key, blocos)}
 
 
+# Layouts em que a contraparte NOSSA tambem lanca a antecipacao (mesa,
+# 28/09/2026): o termo de mercadoria. Swap e opcao tem regra propria de papel
+# e ficam de fora ate a mesa pedir.
+LAYOUTS_COM_ESPELHO = ('antecipacao-termo-multiclasses',)
+
+
+def _espelho(page, linha):
+    """A linha na visao da contraparte quando o contrato e B2B — as DUAS
+    pontas sao entidades nossas (Banco x Lawton) e cada uma lanca a sua visao
+    na B3; senao None. Quem diz que a conta e nossa e o `b3-accounts`, e conta
+    GUARDA-CHUVA nao conta: ela e nossa, mas a ponta e um cliente."""
+    if page['b3']['layout'] not in LAYOUTS_COM_ESPELHO:
+        return None
+    R = _R()
+    conta = str(linha.get('CptyAccount') or '').strip()
+    le = R._b3_account_le(conta) if conta else ''
+    if not le or R._b3_is_omnibus(conta):
+        return None
+    if le == R._b3_account_le(str(linha.get('PartyAccount') or '')):
+        return None
+    return domain.espelho_b2b(linha)
+
+
+def arquivos(page, linha, hoje_ymd=None):
+    """Os arquivos da B3 de UMA recompra: a visao da Parte e, no B2B, a da
+    contraparte (`_espelho`) — sem ela o Lawton nunca lanca a antecipacao e a
+    B3 fica esperando o outro lado."""
+    out = [arquivo(page, linha, hoje_ymd)]
+    esp = _espelho(page, linha)
+    if esp is not None:
+        out.append(arquivo(page, esp, hoje_ymd))
+    return out
+
+
 def preview(page, row_id, date_str):
     fp, lst, idx = queries.find(page, row_id, date_str)
     if idx is None:
         raise domain.Recusa('unwind_not_found', 'Entry not found', 404)
-    return [arquivo(page, lst[idx])]
+    return arquivos(page, lst[idx])
 
 
 def enviar(page, items, sid='', download=False, date_str=''):
@@ -441,20 +479,22 @@ def enviar(page, items, sid='', download=False, date_str=''):
             problemas.append('%s: status %s' % (linha.get('Contract') or rid, st))
             continue
         try:
-            f = arquivo(page, linha, hoje)
+            fs = arquivos(page, linha, hoje)
         except domain.Recusa as exc:
             problemas.append('%s: %s' % (linha.get('Contract') or rid, exc.text))
             continue
-        g = grupos.setdefault(f['file_name'], {'header': f['header'], 'records': [], 'count': 0})
-        g['records'].extend(f['records'])
-        g['count'] += 1
+        for f in fs:
+            g = grupos.setdefault(f['file_name'], {'header': f['header'], 'records': [],
+                                                   'count': 0})
+            g['records'].extend(f['records'])
+            g['count'] += 1
         alvos.append((fp, rid))
     if problemas:
         raise domain.Recusa('unwind_nothing_sent', 'Nothing sent — ' + '; '.join(problemas),
                             motivos='; '.join(problemas))
     if not grupos:
         raise domain.Recusa('unwind_no_rows', 'No valid rows provided')
-    total = sum(g['count'] for g in grupos.values())
+    total = len(alvos)
     if download:
         return {'files': [{'filename': n, 'count': g['count'],
                            'content': '\n'.join([g['header']] + g['records'])}

@@ -136,7 +136,7 @@ def main():
     CONTAS = {'73760009': 'JPM', '73760102': 'JPM'}
     R._b3_account_le = lambda a: CONTAS.get(_digitos(a).zfill(8), '')
     R._b3_is_omnibus = lambda a: _digitos(a).zfill(8) == '73760102'
-    R._b3_participant_name = lambda le: 'JPMORGANBM' if le == 'JPM' else ''
+    R._b3_participant_name = lambda le: {'JPM': 'JPMORGANBM', 'LAWTON': 'INTRAGLAWTONFDO'}.get(le, '')
     R._lp_cpty_by_account = lambda a: {'12345678': 'CLIENTE X SA',
                                        '55555005': 'EMPRESA Y SA'}.get(_digitos(a), '')
     R._lp_cpty_name_by_taxid = lambda d: ''
@@ -350,6 +350,10 @@ def main():
     check('header + um registro de 133', len(escrito) == 2 and len(escrito[1]) == 133)
     linha = [e for e in PQ.entries(pg_ndf, '2026-09-21') if e['_id'] == rid_ndf][0]
     check('virou Sent', linha['Status'] == 'Sent' and linha['SentFiles'])
+    # E se REENVIA (mesa, 28/09/2026, §579): o arquivo novo nao sobrescreve o
+    # que ja esta na pasta (`_unique_filepath`).
+    st, j = _post(pg_ndf['api'] + '/send-conecta', {'items': [{'id': rid_ndf}], 'date': '2026-09-21'})
+    check('linha Sent se envia de novo', st == 200 and j.get('count') == 1, (st, j))
     st, j = _post(pg_ndf['api'] + '/delete', {'id': rid_ndf, 'date': '2026-09-21'})
     check('enviada nao se apaga: 409', st == 409 and j.get('code') == 'unwind_already_sent', (st, j))
     st, dry = _up(pg_ndf['api'], 'recompra.csv', csv_ndf, dry=True)
@@ -482,6 +486,30 @@ def main():
     check('   Banco x Lawton nas duas visoes: um contrato so, na visao do Banco',
           (bco.get('PartyAccount'), bco.get('Comprado')) == ('73760009', False),
           (bco.get('PartyAccount'), bco.get('Comprado'), bco.get('Warnings')))
+    # O B2B: as DUAS pontas sao nossas, e cada uma lanca a sua visao na B3
+    # (mesa, 28/09/2026) — sem o arquivo do Lawton a antecipacao fica pela metade.
+    fs = PC.arquivos(pg_ndf, dict(bco, MyNumber='1234567890'), '20260928')
+    check('B2B Banco x Lawton: gera a visao do Banco E a do Lawton',
+          [f['file_name'] for f in fs] == ['UNWIND_NDF_COMMODITIES_BANCO.txt',
+                                           'UNWIND_NDF_COMMODITIES_LAWTON.txt'],
+          [f['file_name'] for f in fs])
+    if len(fs) == 2:
+        _v = {f['view']: {c['field']: c['value'] for c in f['fields']} for f in fs}
+        _papel = [k for k in _v['JPM'] if k.startswith('Papel')]
+        _parte = [k for k in _v['JPM'] if k.startswith('Lançamento do Participante')]
+        check('   na visao do Lawton as contas trocam e o lado inverte',
+              (_v['LAWTON'][_parte[0]], _v['LAWTON']['Contraparte'],
+               _v['LAWTON'][_papel[0]] != _v['JPM'][_papel[0]])
+              == (_v['JPM']['Contraparte'], _v['JPM'][_parte[0]], True),
+              (_v['JPM'], _v['LAWTON']))
+        check('   e o header e do participante Lawton',
+              'INTRAGLAWTONFDO' in fs[1]['header'], fs[1]['header'])
+    fc = PC.arquivos(pg_ndf, dict(cli, MyNumber='1234567890'), '20260928')
+    check('contra cliente (conta que nao e nossa): um arquivo so', len(fc) == 1,
+          [f['file_name'] for f in fc])
+    _omni = dict(bco, MyNumber='1234567890', CptyAccount='73760102')
+    check('conta GUARDA-CHUVA na contraparte nao vira espelho',
+          len(PC.arquivos(pg_ndf, _omni, '20260928')) == 1)
     check('Pre FWD Rate = 0 e as datas do e-mail',
           cli.get('PreFWDRate') == 0.0 and cli.get('TradeDate') == '2026-05-13', cli)
     # A grade mostra o numero do E-MAIL (mesa, 28/09/2026): refeito pelo FV USD

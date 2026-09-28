@@ -59,6 +59,10 @@ print('== 1. a agenda ==')
 cfg = D.task_config({})
 check('uma agenda por tarefa do catálogo', sorted(cfg), sorted(D.TASK_IDS))
 check('Conf. Matching: diária', cfg['recon-conf-matching']['days'], [0, 1, 2, 3, 4])
+# As rotinas do Control Panel (mesa, 28/09/2026): Save CETIP Files é diária e a
+# cobrança das confirmações é de segunda e quinta — o mesmo dia do pacote dela.
+check('Save CETIP Files: diária', cfg['save-cetip']['days'], [0, 1, 2, 3, 4])
+check('Confirmations Escalation: segunda e quinta', cfg['conf-escalation']['days'], [0, 3])
 check('Branch Reversal: seg-sex (só existe com liquidação da Branch)',
       cfg['branch-reversal']['days'], [0, 1, 2, 3, 4])
 check('Pay/Rec: diária (seg-sex) até 20:00', cfg['recon-payrec'], {'days': [0, 1, 2, 3, 4], 'deadline': '20:00'})
@@ -250,6 +254,12 @@ for r in runs:
         fonte = inspect.getsource(app.view_functions[r.endpoint])
         check('   e o run grava task_runs.record(%r)' % tk['id'],
               "task_runs.record('%s'" % tk['id'] in fonte, True)
+
+import io as _io                                               # noqa: E402
+for _arq, _tid in (('apps/pages/features/cetip/entrypoint.py', 'save-cetip'),
+                   ('apps/pages/features/conf_escalation/commands.py', 'conf-escalation')):
+    _src = _io.open(os.path.join(ROOT, _arq), encoding='utf-8').read()
+    check('a rotina %s grava task_runs.record' % _tid, "task_runs.record('%s'" % _tid in _src, True)
 
 print('\n== 5. o endereço antigo ==')
 r = cl.get('/new-deals-monitor')

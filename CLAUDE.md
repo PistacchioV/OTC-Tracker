@@ -1100,7 +1100,10 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   **Recon NOVA entra no catálogo `domain.TASKS` e grava `task_runs.record` no
   `run`** (regra da mesa; o §4d do teste varre o `url_map` e reprova recon de
   fora). O Pay/Rec só conclui no End process (`done_on: 'end'`); a Branch
-  Reversal é tarefa condicional. O aviso das 19h é DAQUI (`_intraday_pending`)
+  Reversal é tarefa condicional. **As rotinas do Control Panel também são tarefas** (tipo
+  `routine`, §577): Save CETIP Files (diária, grava no Save com arquivo salvo) e
+  Confirmations Escalation (segunda e quinta, grava quando o PACOTE da rotina
+  sai sem erro, pelo Run do card ou pelo automático como `Automatic`). O aviso das 19h é DAQUI (`_intraday_pending`)
   e se configura no card `intradaytasks` (o `dealsmonitor` saiu). O card de D-1
   aponta cada pendência com a data no link (`static/js/deep-link.js`:
   `?tradedate=`/`?date=`) — página que vira destino lê `otcLinkDmy()`/
@@ -1584,7 +1587,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   caixa sairia duas vezes). O Live Position traz o MESMO contrato na visão de
   cada entidade nossa (Banco × Lawton duas vezes, a do Lawton com a conta
   `41007`): a conta vai a oito dígitos e vale UMA visão por contrato, a da
-  entidade que não é fundo (`uma_visao_por_contrato`). Os outros produtos do
+  entidade que não é fundo (`uma_visao_por_contrato`). **O B2B gera as DUAS visões**
+  (mesa, 28/09/2026, §578): contraparte que também é nossa no `b3-accounts`
+  (e não guarda-chuva) ganha o arquivo na visão dela
+  (`commands._espelho` → `domain.espelho_b2b`: contas trocadas, lado
+  invertido), `UNWIND_NDF_COMMODITIES_LAWTON.txt` ao lado do do Banco. Só o
+  layout do termo (`LAYOUTS_COM_ESPELHO`). O Participante do header vai por
+  `force_values` — o template da antecipação o tem `Fixed` em `JPMORGANBM`. Os outros produtos do
   catálogo **ainda NÃO têm** Termo, esteira, Intrag, Cockpit nem Summary.
   `check_unwind_products.py`.
 - **A ponte até o contrato é o `Código Identificador` do Live Position, e ele
@@ -1690,13 +1699,14 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   esconde ação pelo Status — quem recusa o que o status não permite é o
   servidor, com a frase traduzida. **Linha `Sent` também se EDITA** (mesa,
   28/09/2026, §575): o Save a devolve a `Pending` e ela só volta à B3 depois do
-  checker; o que segue travado em `Sent` é o Delete e o reimport. O preview do arquivo da B3 é o **duplo clique** na linha e o Termo de
+  checker; e se REENVIA (§579: a B3 recusou, o arquivo sumiu da pasta). O que
+  segue travado em `Sent` é o Delete e o reimport. O preview do arquivo da B3 é o **duplo clique** na linha e o Termo de
   Resilição se gera no **Confirmations Monitor** — um olho e um documento na
   coluna Actions eram dois caminhos a mais para onde já se chega. A **edição
   segue o 4-olhos das páginas de Intrag**: salvar põe a linha em `Pending` e
   marca o maker, `Approved` é outro usuário conferindo (o próprio é 403), e
   **`Pending` não é enviável** — `STATUS_ENVIAVEL` é `Imported` (veio da
-  máquina, intocada) e `Approved` (mexida e conferida). O `Status` e o `Check`
+  máquina, intocada), `Approved` (mexida e conferida) e `Sent` (reenvio). O `Status` e o `Check`
   ficam fora dos campos editáveis: um é estado da esteira, o outro é veredito
   apurado.
 - **O `Status` é a PRIMEIRA coluna de dado**, logo depois das Actions: em

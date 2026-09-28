@@ -11,6 +11,7 @@ from datetime import timedelta
 
 from apps.pages.features.conf_escalation import domain, queries
 from apps.pages.features.conf_escalation.infra import mail, persistence
+from apps.pages.platform import task_runs
 
 
 def _routes():
@@ -89,7 +90,20 @@ def run(mode='routine', ref=None):
     return out
 
 
-def run_manual(mode):
+def _registra(mode, out, sid='', name=''):
+    """A tarefa `conf-escalation` do Intraday Monitor: o PACOTE da rotina
+    (segunda e quinta) que saiu sem erro. Um e-mail avulso ou só a escalação
+    não fecham a rotina, e sem destinatário a cobrança não saiu de casa."""
+    if mode not in ('routine', 'both') or out['errors']:
+        return
+    if any(s['reason'] == 'no_recipient' for s in out['skipped']):
+        return
+    task_runs.record('conf-escalation', sid, name,
+                     summary={'sent': len(out['sent']),
+                              'rows': sum(s['rows'] for s in out['sent'])})
+
+
+def run_manual(mode, sid='', name=''):
     """O Run do card: dispara agora, mesmo fora de segunda/quinta e mesmo em
     feriado — quem clicou decidiu. NÃO consome o claim do automático, e o
     desfecho entra na FAMÍLIA do modo ('escalation' ou 'routine'), não numa
@@ -97,6 +111,7 @@ def run_manual(mode):
     'fo-edg-swap' ficaria gravada sem ninguém para lê-la."""
     R = _routes()
     out = run(mode, R._br_now())
+    _registra(mode, out, sid, name)
     persistence.write_status(
         'escalation' if mode == 'escalation' else 'routine', 'manual',
         ('error:' + '; '.join(e['error'] for e in out['errors'])) if out['errors']
@@ -116,6 +131,7 @@ def fire_slot(mode, slot, fired):
     if not persistence.claim_slot(slot):
         return False
     out = run(mode, fired)
+    _registra(mode, out, name='Automatic')
     if out['errors']:
         result = 'error:' + '; '.join(e['error'] for e in out['errors'])
         persistence.release_slot(slot)

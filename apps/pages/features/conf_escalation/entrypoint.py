@@ -65,7 +65,8 @@ def api_cp_conf_escalation_run():
     if mode not in domain.MODES:
         mode = 'routine'
     try:
-        out = commands.run_manual(mode)
+        out = commands.run_manual(mode, session.get('user_sid', ''),
+                                  session.get('user_name', ''))
     except Exception as e:                                  # noqa: BLE001
         R.log.error('[conf-escalation] run manual falhou:\n%s', traceback.format_exc())
         return jsonify({'success': False,

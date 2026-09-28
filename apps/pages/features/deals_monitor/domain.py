@@ -314,6 +314,11 @@ def intrag_destino_le(balde):
 #               varre o `url_map` e recusa recon de fora). Quem a mesa não
 #               cobra nasce com `days=()`: está no card, fora do Monitor.
 #               Conf. Matching é diária (mesa, 28/09/2026);
+#   · `routine` — rotina do Control Panel (mesa, 28/09/2026): conclui quando
+#               RODOU no dia, pelo mesmo registro de execuções. O Save CETIP
+#               Files grava no Save com ao menos um arquivo salvo; a cobrança das
+#               confirmações, quando o PACOTE da rotina (segunda e quinta) sai
+#               sem erro — pelo Run do card ou pelo disparo automático;
 #   · `branch` — a reversão da Branch Settlement (§560/§566): só EXISTE no dia
 #               em que o Pay/Rec achou liquidação com a Branch. Anda em três
 #               passos — detectada, rascunho de aprovação ao VP gerado (o botão
@@ -351,6 +356,10 @@ TASKS = (
      'icon': 'ti-file-certificate', 'url': '/reconciliation-cgd', 'days': (4,)},
     {'id': 'recon-conf-matching', 'kind': 'recon', 'label': 'Recon Conf. Matching',
      'icon': 'ti-file-search', 'url': '/reconciliation-conf-matching', 'days': DIAS_UTEIS},
+    {'id': 'save-cetip', 'kind': 'routine', 'label': 'Save CETIP Files',
+     'icon': 'ti-file-download', 'url': '/control-panel', 'days': DIAS_UTEIS},
+    {'id': 'conf-escalation', 'kind': 'routine', 'label': 'Confirmations Escalation',
+     'icon': 'ti-mail-exclamation', 'url': '/control-panel', 'days': (0, 3)},
 )
 TASK_IDS = tuple(t['id'] for t in TASKS)
 
