@@ -24620,3 +24620,30 @@ como maker, e só é enviada de novo depois do Confirm de outro usuário.
 
 **Testes**: `check_unwind_products` e `check_unwind_page` (a linha enviada se
 edita e volta a Pending).
+
+## §576 — Pay/Rec: recompra de NDF Comm saía como COMM OPT (2026-09-28)
+
+**Relato da mesa**: no Pay/Rec as recompras de NDF de Commodities apareciam
+como COMM OPT.
+
+**Causa**: o lado JPM de commodities sai do `cashflows_*.xlsx`, e o
+`_jpm_cashflows` decide o produto pela CONTAGEM de pernas no Trade Id — mais de
+uma é termo (COMM TER), uma só é prêmio de opção (COMM OPT). A recompra do
+termo liquida um valor só (a termination fee), então chega com UMA perna e caía
+em COMM OPT: produto errado na tela, sem a regra de IR por trade do termo e com
+a tolerância da opção.
+
+**Correção**: o Run (`recon_payrec/commands.run`) busca na vertical as
+recompras de NDF Comm que liquidam no dia (`_unwind_engine().
+commodity_settlement_rows`, a mesma porta do Settlement Advice) e passa como
+`unwind_rows`. O `_unwind_matcher` casa cada uma com UMA perna de Trade Id
+único: pelo id (DealID/Contract/chave, exato ou 14 da direita) ou, sem ele,
+pela contraparte normalizada (`_cpty_key`: sem acento, pontuação e sufixo
+SA/LTDA) + |valor| dentro de R$ 1,00. Casou → COMM TER. Sem recompra no dia
+nada muda; vertical ilegível só avisa no log.
+
+**Suposição a conferir**: não havia arquivo de cashflows real na dev para ver
+se o Trade Id do cashflows é o id da posição; por isso o plano B por
+contraparte + valor.
+
+**Teste**: `check_payrec_run.py` §7.

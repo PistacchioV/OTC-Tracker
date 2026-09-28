@@ -43,8 +43,18 @@ def run(recon_date, files=None, mode='auto'):
         R.log.warning('[recon_payrec] Operations B3 ilegível — Branch Settlement sem '
                       'linhas:\n%s', traceback.format_exc())
         ops_rows = []
+    # As recompras de NDF de Commodities que liquidam hoje: no cashflows elas
+    # são UMA perna só, e sem a vertical dizer que são recompra de TERMO o motor
+    # as lê como prêmio de opção (COMM OPT). Falha aqui não derruba a recon.
+    try:
+        unwind_rows = R._unwind_engine().commodity_settlement_rows(ref) or []
+    except Exception:                                       # noqa: BLE001
+        R.log.warning('[recon_payrec] recompras de NDF Comm ilegíveis — a perna delas '
+                      'pode sair como COMM OPT:\n%s', traceback.format_exc())
+        unwind_rows = []
     return run_payrec(recon_date, files=files, mode=mode, ndf_rows=ndf_rows,
-                      ops_rows=ops_rows, branch_accounts=branch_accounts())
+                      ops_rows=ops_rows, branch_accounts=branch_accounts(),
+                      unwind_rows=unwind_rows)
 
 
 # (LE, tipo) no `b3-accounts` → papel da conta na Branch Settlement.
