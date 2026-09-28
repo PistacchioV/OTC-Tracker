@@ -83,7 +83,7 @@ fictício; as demais chamadas seguem normalmente (retornando vazio/real).
   é a lista de rotas, por vírgula. Ex.:
 
   ```bash
-  SOP_BASE_URL=http://127.0.0.1:5005 SOP_ONLY=/new-deals-monitor \
+  SOP_BASE_URL=http://127.0.0.1:5005 SOP_ONLY=/intraday-monitor \
     SOP_OUT_DIR=/tmp/shot python scripts/sop-capture/capture_screens.py
   ```
 - Os PNGs do repositório são **1920 px, 256 cores + dither** (captura dark em RGB

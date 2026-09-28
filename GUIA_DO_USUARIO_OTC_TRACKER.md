@@ -134,18 +134,17 @@ O menu é em **níveis**: um item com **›** à direita tem submenu. Clicar nel
 
 | Grupo | Itens |
 |---|---|
-| **NAVIGATION** | Dashboards › Dashboard 1 · Dashboard 2 — About |
+| **NAVIGATION** | Dashboards › KPI · Intraday Monitor — About |
 | **APPS** | Holidays Calendar · Electronic Inventory · Control Panel · File Interpreter · Tools |
 | **APPS › Tools** | **Calculators** (NDF Calculator · Option Calculator · Swap Calculator · Unwind NDF Calculator) · Euribor · Fixed Income · Quotes · SOFR Index · Term SOFR |
 | **APPS › Daily Settlement › NDF** | NDF Summary · NDF Cockpit · Other Publisher |
 | **APPS › Daily Settlement › Other Products** | Other Products Summary · OTM Settlements · Latam Desk Position · **Swap** (Settlement Advice · Athena · VCP · Events · Kapital Hybrids) · **NDF** (Settlement Advice) · **Option** (Settlement Advice · Cognos) |
 | **APPS › Daily Settlement** | Operations B3 |
 | **APPS › Live Position** | Live Position NDF · **Swap** (Characteristics · Cashflow · Premium) · Live Position Option |
-| **RECONCILIATIONS** | Comitente · Pay/Rec · FXO · CGD |
+| **RECONCILIATIONS** | Comitente · Pay/Rec · FXO · CGD · Conf. Matching |
 | **DOCUMENTATION › Pending Confirmation** | Pending Confirmation · Metrics |
 | **DOCUMENTATION › Manual Confirmation** | Confirmations Monitor · Track Confirmations |
 | **DOCUMENTATION › Onboarding** | Overview · Tracking Docs |
-| **PRODUCTS** | Monitor (New Deals Monitor) |
 | **PRODUCTS › New Deals › Swap** | Bullet · Cashflow *(tela pronta; importação em construção)* |
 | **PRODUCTS › New Deals › NDF** | FWD Start · Other Publisher · Vanilla · Commodities |
 | **PRODUCTS › New Deals › Options** | FXO · Commodities · EDG *(tela pronta; importação em construção)* |
@@ -367,40 +366,57 @@ O **sino** da barra superior mostra em vermelho quantos avisos você tem. O sist
 | Options › **FXO** | Opção de câmbio |
 | Options › **Commodities** | Opção de mercadoria |
 
-### 5.1. New Deals Monitor — por onde começar o dia
+### 5.1. Intraday Monitor — por onde começar o dia
 
-**Menu › PRODUCTS › Monitor**
+**Menu › Dashboards › Intraday Monitor** (logo abaixo do KPI). O endereço antigo, `/new-deals-monitor`, leva para cá.
 
-![New Deals Monitor](docs/sop-screenshots/new-deals-monitor.png)
+![Intraday Monitor](docs/sop-screenshots/intraday-monitor.png)
 
-**Para que serve:** é o painel do dia. Ele responde, num relance, quanto já foi registrado na B3, quanto já virou confirmação e quanto falta — por produto.
+**Para que serve:** é o painel das **tarefas do dia**. Ele diz, num relance, o que precisa ser feito hoje, até que horas, e quanto já foi feito: registro na B3, confirmações, Intrag e as reconciliações.
 
-A tela tem três seções, e cada uma é **uma tabela: uma linha por produto**.
+**As tarefas e a agenda padrão** (horário limite 20:00 em todas):
 
-| Seção | O que ela conta |
+| Tarefa | Quando | Está feita quando… |
+|---|---|---|
+| **B3 Registration** · **Confirmations** · **Intrag** | Todo dia útil | não sobra nenhuma operação **em aberto** na zona (a mesma regra do e-mail das 19h). Zona sem nada importado conta como feita |
+| **Recon Pay/Rec** | Todo dia útil | o **End process** é rodado. Só rodar a recon deixa a tarefa **em andamento** |
+| **Branch Reversal** | Só no dia em que o Pay/Rec encontra liquidação com a Branch e reversão a fazer | a reversão casa no Pay/Rec |
+| **Recon FXO** · **Recon Conf. Matching** | Todo dia útil | a recon **roda** no dia |
+| **Recon Comitente** | Terça-feira | a recon roda no dia |
+| **Recon CGD** | Sexta-feira | a recon roda no dia |
+
+Os dias e o horário limite de cada tarefa se ajustam no cartão **Intraday Monitor — Tasks & Pending Action** do Control Panel (14.2). Feriado ANBIMA e dia fora da agenda não cobram a tarefa.
+
+**O que a tela mostra, de cima para baixo:**
+
+| Faixa | O que ela conta |
 |---|---|
-| **B3 Registration** | Quantas operações do dia já têm B3 ID |
-| **Confirmations** | Quantas já têm o documento de confirmação gerado e validado pelo OTC |
-| **Intrag** | Quantas já foram enviadas à Intrag |
+| **Cartões do topo** | Tarefas do dia, concluídas (com o % do dia), em andamento, a fazer e atrasadas |
+| **Pending from D-1** | O que ficou por fazer no dia útil anterior. **Cada item é um link**: abre a tela da pendência já filtrada na data certa (a New Deals do dia, a recon da data de referência) |
+| **Today's tasks** | Um quadro com quatro colunas — To do, In progress, Late, Completed — e um cartão por tarefa, com o prazo, quanto falta e quem rodou. Clique no cartão para abrir a tela da tarefa |
+| **Completion** | O anel com o % concluído e a barra de progresso médio |
+| **Activity** | Quem rodou o quê e a que horas, na ordem em que aconteceu |
+| **Deadlines** | A linha do dia, com a hora atual e os prazos marcados |
+| **Detail by product** | As três zonas — B3 Registration, Confirmations e Intrag —, cada uma uma tabela com uma linha por produto e as contagens por status |
 
-**Como ler uma seção.** No alto, à direita, o resumo dela em dois números: **Open** (o que ainda precisa de ação) e **Imported** (o total que entrou). Embaixo do título, quantos produtos da seção se moveram hoje. A barra colorida que atravessa a seção é a composição do dia: cada faixa é um status, nas mesmas cores das colunas da tabela.
-
-Na tabela, as colunas do meio são os **status** (New, Pending, Approved, Sent, Success na B3; Pending OTC, Pending MO, Pending FO e Ok nas confirmações), e as duas últimas resumem a linha: **Open** e **Total**. A barrinha ao lado do nome do produto é a composição daquela linha — dá para ver a forma do dia de cada produto sem ler número nenhum.
+A tela se atualiza sozinha a cada minuto.
 
 **Passo a passo:**
 
-1. Confira a **data** no alto da tela — por padrão é hoje. Troque para olhar um dia anterior.
-2. Leia o **Open** de cada seção: é a resposta da tela. Zerado, a seção mostra **all done**.
-3. Percorra as linhas com número na coluna **Open** — são os produtos com trabalho pendente.
-4. **Clique na linha do produto** para abrir a tela dele já filtrada por aquele dia.
+1. Confira a **Reference date** no alto — por padrão é hoje.
+2. Olhe o cartão **Pending from D-1**: se ele tem itens, comece por eles, clicando em cada um.
+3. Percorra as colunas **Late** e **To do** do quadro e abra cada tarefa pelo cartão dela.
+4. Para saber **qual produto** segura uma zona, desça até **Detail by product** e procure os números na coluna **Open**. Clique na linha para abrir a tela do produto já filtrada por aquele dia.
 
-> **Produto sem movimento não some: ele fica recolhido.** No fim de cada seção há uma linha dizendo quantos produtos não tiveram nada importado hoje; clique nela para abrir a lista. É assim que "não houve operação" não se confunde com "esse produto não existe".
+> **A Intrag conta desde o import.** A operação que vai virar linha na Intrag aparece na zona Intrag como **Awaiting B3 ID** assim que entra nas telas de New Deals, e sai quando chega ao **Success**.
 
-> **As três seções não se somam.** A mesma operação aparece no registro da B3 e no espelho da Intrag — somá-las daria um número que nenhuma das duas telas confirma. Compare cada seção com ela mesma.
+> **Produto sem movimento não some: ele fica recolhido.** No fim de cada zona há uma linha dizendo quantos produtos não tiveram nada importado hoje; clique nela para abrir a lista.
 
-> **Aqui não se gera nem se valida documento.** A seção de Confirmations mostra em que etapa está cada produto; **Generate** e **Validate** vivem no **Confirmations Monitor** (capítulo 9.3), que é onde o ciclo inteiro do documento mora.
+> **As três zonas não se somam.** A mesma operação aparece no registro da B3 e no espelho da Intrag — somá-las daria um número que nenhuma das duas telas confirma.
 
-> **A seção de Confirmations acompanha UM ciclo só, e ele termina no OTC.** Validada a etapa do OTC, a confirmação conta como concluída aqui. O que vem depois (Middle e Front Office) é acompanhado no **Confirmations Monitor** (capítulo 9.3).
+> **Aqui não se gera nem se valida documento.** **Generate** e **Validate** vivem no **Confirmations Monitor** (capítulo 9.3). A zona de Confirmations acompanha o ciclo só até a validação do OTC; MO e FO são acompanhados lá.
+
+> **O e-mail das 19h sai daqui.** O aviso *Pending Action - Intraday Monitor* lista as tarefas em aberto e os produtos com pendência (14.2).
 
 ### 5.2. A tela de produto
 
@@ -541,7 +557,7 @@ A recompra desfaz, no todo ou em parte, um termo de moeda que já está registra
 
 **A tela faz três coisas hoje:** importa o aviso, confere a conta e monta o arquivo da B3. O restante do ciclo (Termo de Resilição, arquivo da Intrag, esteira de confirmação e a entrada no Summary de NDF) **ainda não está pronto** e continua sendo feito por fora.
 
-A recompra aparece no **Monitor** (capítulo 5.1) como *Unwind NDF FX*, na seção **B3 Registration**, junto dos demais produtos de NDF — é de lá que se vê, sem abrir a tela, se sobrou alguma recompra do dia para enviar. Ela some da coluna **Open** quando fica **Sent**: é onde a recompra fecha, porque o B3 ID de volta ainda não existe para ela.
+A recompra aparece no **Intraday Monitor** (capítulo 5.1) como *Unwind NDF FX*, na zona **B3 Registration**, junto dos demais produtos de NDF — é de lá que se vê, sem abrir a tela, se sobrou alguma recompra do dia para enviar. Ela some da coluna **Open** quando fica **Sent**: é onde a recompra fecha, porque o B3 ID de volta ainda não existe para ela.
 
 **Passo a passo:**
 
@@ -1634,7 +1650,7 @@ Os cartões estão em **cinco seções**, e o que agrupa não é o que a rotina 
 
 | Seção | Cartões |
 |---|---|
-| **Intraday Routines** (ao longo do pregão) | Save CETIP Files · Deals Monitor — Pending Action · Confirmations Escalation |
+| **Intraday Routines** (ao longo do pregão) | Save CETIP Files · Intraday Monitor — Tasks & Pending Action · Confirmations Escalation |
 | **Settlement Reporting** | Save Daily Settlement Files · Settlement Forecast |
 | **Pending Confirmation Routines** | Daily Metric — Outstanding Confirmation Brazil OTC · Pending Confirmations Spreadsheet Metrics · Pending Confirmation — Weekly Escalation (CEM/EDG) · Pending Signature Confirmations — Collection |
 | **Economic Affirmation Routines** | Manual Deals EA · BACC EA Metrics · MT300 |
@@ -1654,7 +1670,7 @@ Os cartões estão em **cinco seções**, e o que agrupa não é o que a rotina 
 | Cartão | O que faz | Quando roda sozinho |
 |---|---|---|
 | **Save CETIP Files** | Salva os arquivos da CETIP na pasta do dia e manda o e-mail para o OTC. Dois deles não são posição e atualizam uma base: o `INDEXADORESSWAP_VCP` atualiza os indexadores de swap e o `CADASTROCURVASMOEDASFEEDERDOMINIOS` atualiza o cadastro de domínios — este último vai **anexo** no e-mail | Ao longo do pregão |
-| **Deals Monitor — Pending Action** | Manda o e-mail do que está parado no New Deals Monitor | 19:00 e 19:30 (horário de Brasília) |
+| **Intraday Monitor — Tasks & Pending Action** | Define os dias e o horário limite de cada tarefa do Intraday Monitor (5.1) e manda o e-mail *Pending Action - Intraday Monitor* com as tarefas e os produtos em aberto. Recon nova aparece aqui sozinha | 19:00 e 19:30 (horário de Brasília) |
 | **Confirmations Escalation** | Cobra por e-mail o que está parado na esteira de confirmação — sete listas, uma por destinatário | Segundas e quintas; feriado **rola** para o próximo dia útil |
 | **Save Daily Settlement Files** | Salva os arquivos de liquidação do dia | Fim do dia |
 | **Settlement Forecast** | Monta e envia a projeção de liquidações | Diário |
@@ -1907,7 +1923,7 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 | Track Confirmations | Documentation › Manual Confirmation | 9.5 |
 | Onboarding Overview | Documentation › Onboarding | 10.1 |
 | Tracking Docs | Documentation › Onboarding | 10.2 |
-| New Deals Monitor | Products › Monitor | 5.1 |
+| Intraday Monitor | Dashboards | 5.1 |
 | New Deals (6 telas de produto) | Products › New Deals | 5.2 |
 | Intrag NDF · Option · Swap | Products › Intrag | 11 |
 | Accrual Swap · MtM Swap | Products | 12 |
