@@ -665,7 +665,7 @@ body::after {
 .page-title-head {
   padding: 1.7rem 1.8rem !important;
   margin-bottom: 1.5rem;
-  animation: sf-rise 0.7s var(--vr-ease) both;
+  animation: sf-rise var(--sf-dur-page) var(--vr-ease) both;
 }
 .page-title-head h4 {
   font-size: 2.35rem !important;
@@ -716,12 +716,12 @@ body::after {
 
 /* ── 15.3 Entrada dos cartões — OPACIDADE apenas (ver a nota do bloco) ────── */
 @media (prefers-reduced-motion: no-preference) {
-  .content-page .card { animation: sf-fade 0.75s var(--vr-ease) both; }
-  .content-page .card:nth-of-type(1) { animation-delay: 0.04s; }
-  .content-page .card:nth-of-type(2) { animation-delay: 0.10s; }
-  .content-page .card:nth-of-type(3) { animation-delay: 0.16s; }
-  .content-page .card:nth-of-type(4) { animation-delay: 0.22s; }
-  .content-page .card:nth-of-type(n+5) { animation-delay: 0.28s; }
+  .content-page .card { animation: sf-fade var(--sf-dur-page) var(--vr-ease) both; }
+  .content-page .card:nth-of-type(1) { animation-delay: calc(var(--sf-stagger) * 1); }
+  .content-page .card:nth-of-type(2) { animation-delay: calc(var(--sf-stagger) * 2); }
+  .content-page .card:nth-of-type(3) { animation-delay: calc(var(--sf-stagger) * 3); }
+  .content-page .card:nth-of-type(4) { animation-delay: calc(var(--sf-stagger) * 4); }
+  .content-page .card:nth-of-type(n+5) { animation-delay: calc(var(--sf-stagger) * 5); }
 }
 @keyframes sf-fade { from { opacity: 0; } to { opacity: 1; } }
 
@@ -3243,3 +3243,171 @@ input#apiRefDate {
   border: none !important; border-radius: 8px !important; font-weight: 600;
 }
 [data-bs-theme="dark"] .otc-premium-d0 > .ti { color: #ffd54f; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   52. MOVIMENTO — o sistema, não o enfeite
+   --------------------------------------------------------------------------
+   As seções 15.x deram ao app movimento DECORATIVO (feixes, título que
+   cintila, ponto pulsante). O que faltava era o movimento FUNCIONAL, e ele
+   tinha quatro sotaques: o `ease-out` 0,3 s do Bootstrap no modal, o
+   `translate -50px` + escala 0,9 do SweetAlert, o `ease` 0,35 s do collapse e
+   o `ease-in-out` do offcanvas — cada peça respondendo num tempo diferente.
+   Aqui eles viram UMA linguagem, pelas mesmas regras em todo lugar:
+
+     · toda duração e curva sai de token (`--sf-dur-*`, `--sf-ease-*`);
+     · o que ENTRA usa ease-out forte (o movimento começa na hora em que se
+       olha); o que SAI é mais curto que o que entra — o sistema respondendo
+       não faz esperar;
+     · nada nasce do nada: entrada é opacidade + 3–4% de escala, nunca
+       `scale(0)` nem o salto de 50px;
+     · menu ancorado cresce do GATILHO (`transform-origin` pelo lado do
+       Popper); modal não tem gatilho e só sobe 10px no lugar;
+     · o que se aperta, afunda (`scale(.97)`) — é a confirmação de que o
+       clique foi ouvido, antes da resposta do servidor;
+     · tudo de UI fica abaixo de 300 ms. A mesa passa o dia nestas telas: o
+       que ela vê dezenas de vezes por dia tem de ser rápido ou não existir.
+
+   Duas restrições da casa valem aqui também:
+     · nada ESCALA elemento que HOSPEDA tabela (nota do §15): o DataTables
+       mede as colunas nessa janela, e escala muda a largura medida —
+       deslocar não muda. Modal com tabela é o caso (§52.3);
+     · menu e tooltip são posicionados pelo Popper com `transform` INLINE.
+       Animar `transform` neles o sobrescreveria e o menu nasceria no canto da
+       tela. Por isso a entrada usa as propriedades INDIVIDUAIS `scale` e
+       `translate`, que se compõem com o `transform` em vez de trocá-lo.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --sf-dur-press: 90ms;    /* botão afundando */
+  --sf-dur-fast:  140ms;   /* saídas, tooltip */
+  --sf-dur-base:  200ms;   /* menus, popovers, collapse */
+  --sf-dur-slow:  260ms;   /* modal, offcanvas */
+  --sf-dur-page:  460ms;   /* entrada da página (uma vez por navegação) */
+  --sf-stagger:   40ms;    /* cascata dos cartões */
+
+  --sf-ease-out:    cubic-bezier(0.23, 1, 0.32, 1);
+  --sf-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --sf-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* SweetAlert2 v11 lê a animação destas variáveis — é o gancho oficial, sem
+     precisar vencer especificidade das classes dele. */
+  --swal2-show-animation: sf-pop-in var(--sf-dur-slow) var(--sf-ease-out);
+  --swal2-hide-animation: sf-pop-out var(--sf-dur-fast) var(--sf-ease-out) forwards;
+}
+
+@keyframes sf-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes sf-pop-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes sf-pop-out {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: scale(0.97); }
+}
+/* versão para quem é posicionado pelo Popper (ver o cabeçalho) */
+@keyframes sf-menu-in {
+  from { opacity: 0; scale: 0.97; translate: 0 -4px; }
+  to   { opacity: 1; scale: 1;    translate: 0 0; }
+}
+
+/* ── 52.1 Pressionar ─────────────────────────────────────────────────────────
+   Afunda rápido e volta no tempo normal do `.btn` (180 ms): aperto curto,
+   soltura macia. O `!important` é porque o hover-lift do visual-refresh tem
+   uma cadeia de 18 `:not()` — especificidade que nenhum seletor razoável
+   alcança —, e sem ele o botão continuaria SUBINDO enquanto é apertado. */
+.btn:not(:disabled):not(.disabled):not(.btn-link):active {
+  transform: scale(0.97) !important;
+  transition-duration: var(--sf-dur-press);
+}
+.side-nav .side-nav-item .side-nav-link,
+.dropdown-item { transition: scale var(--sf-dur-base) var(--sf-ease-out), transform var(--sf-dur-base) var(--sf-ease-out), background-color var(--sf-dur-fast) var(--sf-ease-out), color var(--sf-dur-fast) var(--sf-ease-out); }
+.side-nav .side-nav-item .side-nav-link:active,
+.dropdown-item:active { scale: 0.98; transition-duration: var(--sf-dur-press); }
+
+/* ── 52.2 Menus suspensos e tooltips ─────────────────────────────────────────
+   Crescem do lado do gatilho. Tooltip é o mais frequente de todos (cada botão
+   de linha tem um): só opacidade, e curta. */
+.dropdown-menu.show { animation: sf-menu-in var(--sf-dur-base) var(--sf-ease-out); }
+.dropdown-menu[data-popper-placement^="bottom"] { transform-origin: top center; }
+.dropdown-menu[data-popper-placement^="top"]    { transform-origin: bottom center; }
+.dropdown-menu[data-popper-placement^="top"].show { animation-name: sf-menu-in-up; }
+@keyframes sf-menu-in-up {
+  from { opacity: 0; scale: 0.97; translate: 0 4px; }
+  to   { opacity: 1; scale: 1;    translate: 0 0; }
+}
+.tooltip.fade { transition: opacity var(--sf-dur-fast) var(--sf-ease-out); }
+
+/* ── 52.3 Modal ──────────────────────────────────────────────────────────────
+   O tema já anima o diálogo por KEYFRAME (`zoomInModal`, `_modal.scss`: 0,1 s
+   de `scale(.85)`), e o comentário dele traz a regra que fica: o estado de
+   REPOUSO do diálogo é visível — se a animação não roda (o Windows 11 vem com
+   os efeitos de animação desligados, que o navegador lê como
+   `prefers-reduced-motion`), o modal simplesmente aparece. Por isso aqui se
+   troca só o keyframe, nunca se estaciona o diálogo escondido esperando uma
+   transição.
+
+   SEM escala, de propósito: o diálogo não tem `transition`, então o Bootstrap
+   dispara o `shown.bs.modal` na hora — e é nele que as páginas chamam o
+   `columns.adjust()` das tabelas de dentro do modal. `translate` não muda a
+   largura que o DataTables mede; `scale` mudaria, e o cabeçalho sairia
+   desalinhado do corpo (nota do §15). O SweetAlert não hospeda tabela e fica
+   com a escala.
+
+   Na saída o `.modal` só esmaece (o diálogo vai junto), mais curto que a
+   entrada, e o backdrop acompanha. */
+@keyframes sf-dialog-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+.modal.show .modal-dialog { animation: sf-dialog-in var(--sf-dur-slow) var(--sf-ease-out); }
+/* o Bootstrap ainda sobe o diálogo 50px ao fechar (`.modal.fade .modal-dialog`
+   vence o `transition: none` do tema por especificidade): a saída vira só
+   esmaecer */
+.modal.fade .modal-dialog { transform: none; transition: none; }
+.modal.fade { transition: opacity var(--sf-dur-base) var(--sf-ease-out); }
+.modal.fade:not(.show) { transition-duration: var(--sf-dur-fast); }
+.modal-backdrop.fade { transition: opacity var(--sf-dur-base) var(--sf-ease-out); }
+.modal-backdrop.fade:not(.show) { transition-duration: var(--sf-dur-fast); }
+
+/* ── 52.4 Offcanvas e collapse ───────────────────────────────────────────────
+   Gaveta usa a curva de gaveta (a do iOS); collapse — submenu da sidenav,
+   acordeão — encurta de 0,35 s para 0,2 s. É o que se abre dezenas de vezes
+   por dia. */
+.offcanvas { transition: transform var(--sf-dur-slow) var(--sf-ease-drawer), visibility var(--sf-dur-slow) var(--sf-ease-drawer); }
+.collapsing { transition: height var(--sf-dur-base) var(--sf-ease-out); }
+
+/* ── 52.5 Carregando ─────────────────────────────────────────────────────────
+   Spinner mais rápido PARECE carregar mais rápido — mesma espera, outra
+   percepção. */
+.spinner-border { --ins-spinner-animation-speed: 0.6s; }
+
+/* ── 52.6 Faixas que aparecem sozinhas ───────────────────────────────────────
+   A faixa do prêmio D0 sai do `[hidden]` sem transição (display none → flex).
+   `@starting-style` dá a entrada sem JS; navegador sem suporte só a mostra,
+   como hoje. */
+.otc-premium-d0 {
+  transition: opacity var(--sf-dur-slow) var(--sf-ease-out), translate var(--sf-dur-slow) var(--sf-ease-out);
+}
+@starting-style {
+  .otc-premium-d0 { opacity: 0; translate: 0 -6px; }
+}
+
+/* ── 52.7 Movimento reduzido ─────────────────────────────────────────────────
+   Reduzir é tirar o DESLOCAMENTO, não a informação: o que muda de lugar ou de
+   tamanho passa a só aparecer (opacidade), e o afundar do botão sai. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --swal2-show-animation: sf-fade var(--sf-dur-base) var(--sf-ease-out);
+    /* keyframe PRÓPRIO de saída: `sf-fade` com `reverse` tem o mesmo nome da
+       entrada, e trocar só a direção não reinicia a animação — o
+       `animationend` que o SweetAlert espera nunca chegava e o popup não
+       fechava */
+    --swal2-hide-animation: sf-fade-out var(--sf-dur-fast) var(--sf-ease-out) forwards;
+  }
+  .btn:not(:disabled):not(.disabled):not(.btn-link):active { transform: none !important; }
+  .side-nav .side-nav-item .side-nav-link:active,
+  .dropdown-item:active { scale: none; }
+  .dropdown-menu.show,
+  .dropdown-menu[data-popper-placement^="top"].show { animation: sf-fade var(--sf-dur-base) var(--sf-ease-out); }
+  .modal.show .modal-dialog { animation: sf-fade var(--sf-dur-base) var(--sf-ease-out); }
+  .otc-premium-d0 { translate: none; }
+}

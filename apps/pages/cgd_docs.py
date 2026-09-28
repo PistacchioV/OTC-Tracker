@@ -27,6 +27,7 @@ Três coisas que não são óbvias:
 
 import logging
 import os
+import re
 import threading
 from datetime import date, datetime
 
@@ -123,6 +124,39 @@ AGING_STOP = 'Conclusion - Stamp'
 # `check_cgd_docs.py` recusa coluna de data que fique de fora.
 DATE_COLUMNS = ('OTC - STAMP', 'MO - STAMP', 'Data Solicitação', 'Emissão',
                 'Signature Date', 'B3 Register', 'Captis', 'Conclusion - Stamp')
+
+# As colunas de Tax ID, que a tela mostra como CNPJ (xx.xxx.xxx/xxxx-xx) e a
+# que o Add Row aplica a máscara. Vão para a tela no payload (`field_domains`),
+# como as de data: uma segunda lista no template envelheceria calada.
+TAXID_COLUMNS = ('CNPJ', 'CNPJ Garantidor')
+
+# O separador das entidades do grupo (ver `REQUEST_FORM`, Razão Social/CNPJ).
+_TAXID_SEP = re.compile(r'\s*;\s*')
+
+
+def fmt_cnpj(value):
+    """O Tax ID em `xx.xxx.xxx/xxxx-xx`, entidade a entidade.
+
+    A célula carrega o GRUPO inteiro separado por `;` (é o contrato do
+    formulário), então cada pedaço é formatado sozinho. Só vira CNPJ o pedaço
+    que é CNPJ — 12 a 14 dígitos e nada além de dígito e pontuação de CNPJ. De
+    12 e 13 dígitos são o CNPJ que perdeu o zero da frente quando a planilha
+    tratou a coluna como número, e o zero volta. O resto fica como veio: CPF,
+    Tax ID estrangeiro, `N/A` e texto livre não têm por que ganhar a máscara, e
+    inventar dígito seria afirmar um documento que ninguém informou."""
+    if value is None:
+        return value
+    texto = str(value).strip()
+    if not texto:
+        return texto
+    out = []
+    for pedaco in _TAXID_SEP.split(texto):
+        d = re.sub(r'\D', '', pedaco)
+        if 12 <= len(d) <= 14 and not re.search(r'[^\d./\-\s]', pedaco):
+            d = d.zfill(14)
+            pedaco = '{}.{}.{}/{}-{}'.format(d[:2], d[2:5], d[5:8], d[8:12], d[12:])
+        out.append(pedaco)
+    return '; '.join(p for p in out if p)
 
 
 # ── Datas ────────────────────────────────────────────────────────────────────
@@ -333,6 +367,10 @@ def load_all(path=None):
         r = {c: ('' if v is None else str(v)) for c, v in zip(DB_COLUMNS, l)}
         for c in DATE_COLUMNS:
             r[c] = fmt_date(r.get(c))
+        # Também na LEITURA: a linha gravada antes da máscara (ou importada do
+        # SharePoint, que exporta só os dígitos) aparece formatada sem migração.
+        for c in TAXID_COLUMNS:
+            r[c] = fmt_cnpj(r.get(c))
         r['Aging'] = aging_of(r, hoje)
         out.append(r)
     return out
@@ -358,6 +396,33 @@ def update_row(row_id, values, path=None, gen=None):
         r = con.execute('UPDATE {} SET {} WHERE "{}" = ?'.format(TABLE, sets, ID_COLUMN),
                         args).fetchone()
     return int(r[0]) if r else 0
+
+
+def update_rows(changes, path=None):
+    """Grava VÁRIAS linhas numa abertura só: `{_id: {coluna: valor}}`.
+
+    É o caminho dos scripts de preenchimento. `update_row` abre o banco em
+    escrita a cada linha, e no share cada abertura é ida e volta de rede com
+    trava exclusiva — centenas de linhas eram minutos segurando a lista da mesa
+    inteira. Tudo-ou-nada, pela transação do `duckdb_write`. Mesmas regras do
+    `update_row`: só colunas conhecidas, pelo funil `padroniza`. Devolve
+    quantas linhas o banco confirmou."""
+    path = ensure_db(path)
+    if duckdb is None or not changes:
+        return 0
+    feitas = 0
+    with duckdb_write(path) as con:
+        for row_id, values in changes.items():
+            values = padroniza(values)
+            campos = [(c, values[c]) for c in COLUMNS if c in values]
+            if not campos:
+                continue
+            sets = ', '.join('"{}" = ?'.format(c) for c, _v in campos)
+            args = ['' if v is None else str(v) for _c, v in campos] + [str(row_id)]
+            r = con.execute('UPDATE {} SET {} WHERE "{}" = ?'
+                            .format(TABLE, sets, ID_COLUMN), args).fetchone()
+            feitas += int(r[0]) if r else 0
+    return feitas
 
 
 def delete_row(row_id, path=None, gen=None):
@@ -723,6 +788,11 @@ def padroniza(values):
     for c in UPPERCASE_COLUMNS:
         if c in out and out[c] is not None:
             out[c] = str(out[c]).upper()
+    # O Tax ID pelo MESMO funil e pela mesma razão: a importação reescreve a
+    # tabela, e a máscara só na tela se desfaria na rodada seguinte.
+    for c in TAXID_COLUMNS:
+        if c in out and out[c] is not None:
+            out[c] = fmt_cnpj(out[c])
     return out
 
 _STAGE_MAP = {'mtime': None, 'rows': None}

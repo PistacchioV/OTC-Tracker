@@ -25,6 +25,7 @@ def field_domains():
     return {'columns': cgd_docs.COLUMNS,
             'id_column': cgd_docs.ID_COLUMN,
             'date_columns': list(cgd_docs.DATE_COLUMNS),
+            'taxid_columns': list(cgd_docs.TAXID_COLUMNS),
             'stages': list(cgd_docs.STAGES),
             'signature_types': list(cgd_docs.SIGNATURE_TYPES),
             'signature_column': cgd_docs.SIGNATURE_COLUMN,

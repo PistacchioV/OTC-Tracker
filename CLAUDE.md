@@ -894,6 +894,14 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 - **Regra de brilho alcança as DUAS famílias de seletor** (estrutural
   `[class*="-widget"]` e as quinze classes próprias), calibrada por tipo de
   superfície.
+- **Movimento é um SISTEMA** (`streamflow.css` §52): duração e curva só por
+  token (`--sf-dur-*`, `--sf-ease-*`); entra com ease-out, sai mais curto; UI
+  abaixo de 300 ms; botão afunda (`scale(.97)`). Menu e tooltip são do Popper
+  (`transform` inline): anima-se `scale`/`translate` INDIVIDUAIS, nunca
+  `transform`. Modal troca o keyframe do tema (repouso VISÍVEL) e **não escala**
+  — o `shown.bs.modal` dispara durante a entrada e escala muda a largura que o
+  DataTables mede. Saída do Swal tem keyframe PRÓPRIO: mesmo nome com `reverse`
+  não reinicia e o popup não fecha.
 - **`.modal-content.liquid-glass` é exceção da regra genérica das
   sobreposições** (`--sf-overlay-bg` a 82% matava o vidro dos modais, §387).
 - **Modo de efeitos reduzidos** (`sf-reduced` no `<html>`, decidido pela IIFE
@@ -2143,6 +2151,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   empresa e é por este texto que a pasta da contraparte é procurada no
   Electronic Inventory (pasta gêmea não nasce daí: o `_ei_match_key` já compara
   em maiúsculas e sem pontuação).
+- **Tax ID é CNPJ formatado no FUNIL** (`cgd_docs.fmt_cnpj`, `TAXID_COLUMNS`,
+  no `padroniza` e na leitura do `load_all`): entidade a entidade (`;`),
+  12–14 dígitos viram `xx.xxx.xxx/xxxx-xx` com o zero perdido de volta; CPF,
+  estrangeiro e `N/A` ficam como vieram. O modal (Add Row/Edit e a edição em
+  massa) tem a máscara de CNPJ e a `otcDateMask` nas datas; a Legal Name não
+  corta (uma entidade por linha).
 - **O `_id` muda a cada importação do SharePoint** (§548): a escrita por
   `_id` leva a GERAÇÃO (`cgd_meta`) que a tela leu, e geração velha é 409
   `onboarding_reimported` — sem isso, uma tela aberta antes carimbava outro CGD.
@@ -2360,6 +2374,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 | `backfill_manual_confirmations.py [--dry-run] [--source] [--repair]` | traz para a esteira o que foi mapeado antes dela (FWD Start pelo B3 ID; `--dry-run` lembra as chaves da passada). **`--repair` refaz as CASCAS** (§546): linha só com Trade ID + Callback/FepWeb ID é reconstruída pelo `_mc_save_from_deal` a partir do deal, e o que a casca tinha volta por cima; casca sem deal no cache é listada no fim. A família de página genérica tira a PASTA do `_GENERIC_ND_PRODUCTS` e o SOURCE do `_generic_nd_mc_source`, por deal — é o que faz o Vanilla entrar só no de MGT (§453) e o que impede o rótulo de tela (`NDF/FWD Start`) de virar caminho. Source de `_MC_CONFIRMATION_SOURCES` sem família aqui = operação antiga invisível para sempre no Monitor: `check_mc_backfill.py` |
 | os scripts que leem RefData/calendário/arquivos-dia (`create_counterparty_folders`, `create_cetip_folders`, `import_pending_confirmation`, `update_pending_confirmation_*`, `backfill_manual_confirmations`, `export_new_deals_excel`, `fix_cgd_economic_group`) | leem pelo ARMAZÉM e pelo `data_path` (§440): o `apps/static/data/*.json` do checkout é a seed, não o dado |
 | `import_cgd_sharepoint.py` · `import_cgd_auxiliar.py` | lista de CGDs e as três abas do `Auxiliar.xlsx` |
+| `fill_cgd_from_refdata_spn.py [--dry-run] [--force] [--db] [--refdata]` | completa o Tracking Docs pelo **SPN**: Economic Group, ECI, CASID e UCN do Reference Data. Chave de dígitos (sem zero à esquerda e sem `.0`), célula com o grupo (`;`) junta os valores, **SPN ambíguo no cadastro não preenche** a coluna divergente, só o vazio (`0`/`N/A` contam) sem `--force`, UMA abertura do banco (`cgd_docs.update_rows`). `check_cgd_spn_fill.py` |
 | `import_file_interpreter_template.py [--key <k>] [--force] [--dry-run]` | leva ao BANCO um template do File Interpreter corrigido no repositório. O `.json` versionado é a SEED, e a semeadura da subida não sobrescreve o que o banco tem (§434/§488): sem este script o motor segue lendo o layout velho e o arquivo vai errado para a B3, sem erro nenhum. Template que o banco tem EDITADO (algum `source` preenchido) fica de fora sem `--force` |
 | `split_notifications_db.py --dry-run` | mostra o que a separação do sino vai copiar |
 | `dev_seed_positions.py` | só na DEV: reemite a última posição B3 numa data recente (`--from … --force`) |
