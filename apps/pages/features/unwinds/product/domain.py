@@ -295,6 +295,15 @@ def _refina(mostrado_txt, mostrado, exato):
     return exato if abs(exato - mostrado) <= meio else None
 
 
+def _termination_exata(t_txt, tt, k, fv, q):
+    """A Unwind Strike com a precisao de volta pelo FV USD (quando o refeito
+    arredonda para o que a celula mostra); senao a mostrada."""
+    if q and k is not None and tt is not None and fv is not None and tt != k:
+        exato = k + (1 if tt > k else -1) * abs(fv) / abs(q)
+        return _refina(t_txt, tt, exato) or tt
+    return tt
+
+
 def _banco_comprou(posicao):
     """`Client Sells` -> o banco COMPROU; `BJPM Sells` -> o banco VENDEU.
     None quando o texto nao diz quem e o lado."""
@@ -344,10 +353,14 @@ def linhas_do_recap_commodities(tabelas):
                              ('Strike', k), ('UnwoundNotional', q)):
                 if v is not None:
                     linha[campo] = v
+            # As casas que a celula MOSTRA: o Excel arredonda o strike e o
+            # volume da perna Banco, e o casamento com o Live Position tem de
+            # aceitar o valor que arredonda para o mostrado (`_mostrado`).
+            linha['_shown'] = {c: _casas(cel.get(c)) for c in ('Strike', 'OriginalNotional')
+                               if texto(cel.get(c))}
+            linha['_recap'] = {'t_txt': t_txt, 'tt': tt, 'fv': fv, 'q': q}
             # A precisao que o Excel escondeu, de volta pelo FV e pelo PV.
-            if q and k is not None and tt is not None and fv is not None and tt != k:
-                exato = k + (1 if tt > k else -1) * abs(fv) / abs(q)
-                tt = _refina(t_txt, tt, exato) or tt
+            tt = _termination_exata(t_txt, tt, k, fv, q)
             if fx is not None and fv and pv is not None:
                 fx = _refina(fx_txt, fx, abs(pv) / abs(fv)) or fx
             if tt is not None:
@@ -533,7 +546,9 @@ _CRITERIOS = (
 MIN_CRITERIOS = 2
 
 
-def _casa(valor, pv, modo):
+def _casa(valor, pv, modo, casas=None):
+    """`casas`: as decimais que a celula MOSTRAVA — o valor da posicao casa
+    quando arredonda para o mostrado (meia unidade da ultima casa)."""
     if pv is None or pv == '':
         return False
     if modo == 'contains':
@@ -541,7 +556,63 @@ def _casa(valor, pv, modo):
         return bool(a) and bool(b) and (a in b or b in a)
     if modo == 'name':
         return norm_nome(valor) == norm_nome(pv) if norm_nome(valor) else False
+    if casas is not None and modo in ('num', 'rate'):
+        x, y = numero(valor, taxa=(modo == 'rate')), numero(pv, taxa=(modo == 'rate'))
+        if x is None or y is None:
+            return False
+        return abs(x - y) <= 0.5 * 10 ** -casas + 1e-9
     return _iguais(valor, pv, modo)
+
+
+def _aviso_sem_contrato(linha, posicoes, usados, nomes, mostrado):
+    """`unwind_match_none`, dizendo o contrato MAIS PERTO quando um criterio
+    so o separou (o valor do e-mail e o da posicao lado a lado): e o que a mesa
+    precisa para saber se o e-mail ou a posicao esta errado."""
+    params = {'criterios': ', '.join(nomes)}
+    texto_ = 'No Live Position contract matches %s' % ', '.join(nomes)
+    if len(usados) >= 2:
+        for c, k, m in usados:
+            outros = [u for u in usados if u[0] != c]
+            quase = uma_visao_por_contrato(
+                [p for p in posicoes or []
+                 if all(_casa(linha.get(c2), p.get(k2), m2, mostrado.get(c2))
+                        for c2, k2, m2 in outros)])
+            if not quase:
+                continue
+            alvo = numero(linha.get(c), taxa=(m == 'rate'))
+            if alvo is not None and m in ('num', 'rate'):
+                quase.sort(key=lambda p: abs((numero(p.get(k), taxa=(m == 'rate')) or 0) - alvo))
+            p = quase[0]
+            params.update({'campo': c, 'contrato': p.get('contract') or '',
+                           'planilha': texto(linha.get(c)), 'posicao': texto(p.get(k))})
+            texto_ += ' (closest: B3 ID %s, %s %s in the e-mail and %s in the position)' % (
+                params['contrato'], c, params['planilha'], params['posicao'])
+            return aviso('unwind_match_none_near', texto_, **params)
+    return aviso('unwind_match_none', texto_, **params)
+
+
+def ao_mostrado(linha, pos):
+    """Depois do casamento, o Strike e o volume que o e-mail trouxe
+    ARREDONDADOS voltam com o valor exato da posicao (a diferenca e so a
+    exibicao do Excel), e a Unwind Strike e refeita sobre o strike exato.
+    Tira as marcas internas da linha."""
+    mostrado = linha.pop('_shown', None) or {}
+    rc = linha.pop('_recap', None) or {}
+    if not pos:
+        return
+    for campo, chave, modo in (('Strike', 'strike', 'rate'), ('OriginalNotional', 'original', 'num')):
+        casas = mostrado.get(campo)
+        if casas is None or linha.get(campo) in (None, ''):
+            continue
+        pv = numero(pos.get(chave), taxa=(modo == 'rate'))
+        if pv is not None and not _iguais(linha[campo], pv, modo) and \
+                _casa(linha[campo], pv, modo, casas):
+            linha[campo] = pv
+    if rc.get('tt') is not None and linha.get('Strike') is not None:
+        tt = _termination_exata(rc.get('t_txt'), rc['tt'], numero(linha['Strike'], taxa=True),
+                                rc.get('fv'), rc.get('q'))
+        if tt is not None:
+            linha['TerminationRate'] = tt
 
 
 def casar_por_caracteristicas(linha, posicoes):
@@ -562,9 +633,16 @@ def casar_por_caracteristicas(linha, posicoes):
                            'matched against the Live Position (has: %s)'
                            % (MIN_CRITERIOS, ', '.join(nomes) or '-'),
                            minimo=MIN_CRITERIOS, criterios=', '.join(nomes))
+    mostrado = linha.get('_shown') or {}
     achadas = uma_visao_por_contrato(
         [p for p in posicoes or []
          if all(_casa(linha.get(c), p.get(k), m) for c, k, m in usados)])
+    if not achadas and mostrado:
+        # O e-mail traz o numero como o Excel o EXIBE: vale a posicao cujo
+        # valor arredonda para o mostrado — continua exigindo candidato UNICO.
+        achadas = uma_visao_por_contrato(
+            [p for p in posicoes or []
+             if all(_casa(linha.get(c), p.get(k), m, mostrado.get(c)) for c, k, m in usados)])
     if len(achadas) == 1:
         return achadas[0], aviso('unwind_matched_by_characteristics',
                                  'B3 ID %s found in the Live Position by %s'
@@ -572,9 +650,7 @@ def casar_por_caracteristicas(linha, posicoes):
                                  contrato=achadas[0].get('contract') or '',
                                  criterios=', '.join(nomes))
     if not achadas:
-        return None, aviso('unwind_match_none',
-                           'No Live Position contract matches %s' % ', '.join(nomes),
-                           criterios=', '.join(nomes))
+        return None, _aviso_sem_contrato(linha, posicoes, usados, nomes, mostrado)
     return None, aviso('unwind_match_ambiguous',
                        '%d Live Position contracts match %s — fill in the B3 ID'
                        % (len(achadas), ', '.join(nomes)),

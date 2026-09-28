@@ -1546,7 +1546,11 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   Position, por strike + original), Pre FWD Rate = 0 (e aí o Check dispensa o
   DU). O sinal do PV é o do BANCO, pela `Original Position` + strikes. O e-mail
   traz o número como o Excel o EXIBE: a Termination volta do FV USD e o FX do
-  PV BRL, só quando o refeito arredonda para o que a célula mostra. A posição (os MESMOS
+  PV BRL, só quando o refeito arredonda para o que a célula mostra. E o
+  casamento com o Live Position aceita o mesmo: sem candidato exato, vale o
+  contrato cujo strike/volume ARREDONDA para as casas exibidas (ainda ÚNICO), e
+  a linha fica com o valor exato da posição (`ao_mostrado`); sem nenhum, o aviso
+  diz o contrato mais perto e os dois valores (`unwind_match_none_near`). A posição (os MESMOS
   coletores do Live Position) só preenche o que a planilha deixou em BRANCO:
   divergência vira aviso e a planilha vence. **Sem B3 ID, casa por
   características só com candidato ÚNICO** (≥ 2 critérios, todos batendo);

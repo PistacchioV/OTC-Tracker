@@ -132,6 +132,7 @@ def _completar_linha(page, linha, posicoes, ref_iso):
         else:
             pos, av = domain.casar_por_caracteristicas(linha, posicoes)
             avisos.append(av)
+        domain.ao_mostrado(linha, pos)
         if pos is not None:
             linha['PositionFound'] = True
             avisos.extend(domain.completar(linha, pos, page))
