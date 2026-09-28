@@ -24941,3 +24941,25 @@ gêmeo na zona da B3; o guarda do `check_ndm_cards` aceita `conf-*`).
 
 **Teste**: `check_intraday_monitor.py` §4f (conta só a do cliente, pendente no
 aviso, a tela o desenha no bloco Unwinds); tela conferida no Chromium.
+
+## §589 — Termo de Resilição da recompra de commodities: Valor Base Liquidado só com o número (2026-09-28)
+
+**Pedido da mesa**: "no termo de resilição para recompra de comm, na parte de
+valor base liquidado, deixe apenas o número sem o código da commodities".
+
+**Causa**: o Anexo I monta `'<Currency> <número>'`, e na recompra de mercadoria
+o `Currency` é o EIXO do grupo — a commodity (`product.domain.para_o_termo`) —,
+enquanto o recomprado é QUANTIDADE. Saía `CTZ6 100.000,00`, lido como moeda.
+Agora a linha com `Commodity` vai só com o número (`domain.termo_linha`). O
+NDF FX segue com a moeda (`USD 11.529,81`). O **Novo Valor Base** da parcial
+também sai só com o número (pedido logo em seguida).
+
+**Achado junto — `check_unwind_termo.py` estava quebrado desde o §580**
+(`bd9c5984`, 18 falhas; bisect nos commits do dia): a fixture descrevia uma
+recompra contra a COFCO com a conta do LAWTON (`00041007`) na contraparte, que
+depois do §580 é a perna do fundo e sai do Termo e da esteira. Fixture corrigida
+para a guarda-chuva do cliente (`73760102`). O defeito era do teste, não do
+código — mas passou porque o §580 não rodou esse teste.
+
+**Teste**: `check_unwind_products.py` §12 (Valor Base Liquidado `100.000,00`);
+`check_unwind_termo.py` de volta a zero falhas.

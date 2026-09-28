@@ -676,6 +676,14 @@ def main():
         check('   Total, valor em modulo e pagador pelo sinal (o banco paga -> Parte A)',
               (cli_tr.get('resilicao'), cli_tr.get('valorResilicao'), cli_tr.get('pagador'))
               == (F1D.RESILICAO_TOTAL, 'R$ 6.270.582,12', F1D.PAGADOR_PARTE_A), cli_tr)
+        check('   Valor Base Liquidado so com o numero (sem o codigo da commodity)',
+              cli_tr.get('valorBaseLiq') == '100.000,00', cli_tr.get('valorBaseLiq'))
+        _cli_l = next(l for l in grupo if l.get('AthenaID') == 'D5NQ-HMNV-CLI')
+        _parc = dict(_cli_l, OriginalNotional=300000.0, UnwoundBefore=0.0, Balance=300000.0)
+        _pr, _ = F1D.termo_linha(_parc)
+        check('   Novo Valor Base da parcial tambem so com o numero',
+              (_pr.get('resilicao'), _pr.get('novoValorBase'))
+              == (F1D.RESILICAO_PARCIAL, '200.000,00'), (_pr.get('resilicao'), _pr.get('novoValorBase')))
         F1C.termo_carimbar(['D5NQ-HMNV-CLI'], '2026-09-21', '/x/t.doc', '/x/t.pdf', 'lnk', 'A000001')
         e_cli = next((e for e in PQ.entries(pg_ndf, '2026-09-21')
                       if e.get('DealID') == 'D5NQ-HMNV-CLI'), {})
