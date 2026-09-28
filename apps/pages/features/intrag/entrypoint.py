@@ -1665,13 +1665,41 @@ def api_intrag_unwind_edit():
             for k, v in fields.items():
                 if k in entries[idx] and k not in ('_deal', '_client', 'status', 'maker', 'checker'):
                     entries[idx][k] = v
-        entries[idx]['status'] = 'Pending'
+        # A regra das outras paginas de Intrag: Intrag ID digitado = Success (o
+        # desfecho do Mapping); sem mudanca nele, a edicao segue o 4-olhos.
+        status = 'Pending'
+        if 'intrag_id' in payload:
+            novo = str(payload.get('intrag_id') or '').strip()
+            antigo = str(entries[idx].get('intrag_id') or '').strip()
+            entries[idx]['intrag_id'] = novo
+            if novo and novo != antigo:
+                status = 'Success'
+        entries[idx]['status'] = status
         entries[idx]['maker'] = session.get('user_sid', '')
         entries[idx]['checker'] = ''
         _R()._atomic_write_json(fp, entries)
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                               'Deal Updated', 'Intrag Unwind', _notif_ref(entries, idx, deal_id))
-    return jsonify({'success': True, 'status': 'Pending'})
+    return jsonify({'success': True, 'status': status})
+
+
+@blueprint.route('/api/intrag/unwind/mapping-intrag-id', methods=['POST'])
+def api_intrag_unwind_mapping_intrag_id():
+    """Intrag ID da recompra pelo CSV de Boletas do Return — so a linha que se
+    diz recompra (`mappers._intrag_unwind_b3_map`). `so_original` = B3 IDs que
+    so apareceram na boleta do registro original: nao se grava o ID errado."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    deals = (request.get_json(silent=True) or {}).get('deals', [])
+    results, so_original, err = commands._intrag_unwind_run_mapping(deals)
+    if results is None:
+        return jsonify({'ok': False, 'error': err}), 400
+    n = sum(1 for r in results if r.get('status') == 'Success')
+    if n:
+        _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                                  'Status Updated', 'Intrag Unwind',
+                                  '%d Intrag ID%s mapped' % (n, '' if n == 1 else 's'))
+    return jsonify({'ok': True, 'results': results, 'only_original': so_original})
 
 
 @blueprint.route('/api/intrag/unwind/approve', methods=['POST'])

@@ -772,6 +772,46 @@ def _intrag_run_mapping(deals, match_col, match_val, b3_col, finder):
     return results, None
 
 
+def _intrag_unwind_run_mapping(deals):
+    """Intrag ID da RECOMPRA pelo CSV de Boletas (`mappers._intrag_unwind_b3_map`:
+    so linha que se diz recompra). -> (results, so_original, err)."""
+    csv_path = queries._intrag_find_export_csv()
+    if not csv_path:
+        return None, [], 'No Boletas CSV found in the Return folder.'
+    try:
+        b3map, sem_marca = mappers._intrag_unwind_b3_map(csv_path)
+    except Exception:                                       # noqa: BLE001
+        _R().log.error('[intrag-map unwind] CSV parse failed:\n%s', traceback.format_exc())
+        return None, [], 'Failed to read the Boletas CSV.'
+    results, so_original = [], []
+    with _R()._cache_lock:
+        for d in (deals or []):
+            did = str(d.get('id') or '').strip()
+            b3 = domain._intrag_b3_key(d.get('b3_id'))
+            if not did or not b3:
+                continue
+            if b3 not in b3map:
+                if b3 in sem_marca:
+                    so_original.append(str(d.get('b3_id') or '').strip())
+                continue
+            intrag_id = b3map[b3]
+            fp, entries, idx = queries._find_intrag_unwind_entry(did, d.get('trade_date') or '')
+            if idx is None:
+                results.append({'id': did, 'intrag_id': intrag_id, 'status': 'Error'})
+                continue
+            entries[idx]['intrag_id'] = intrag_id
+            entries[idx]['status'] = 'Success'
+            try:
+                _R()._atomic_write_json(fp, entries)
+            except Exception:                               # noqa: BLE001
+                _R().log.error('[intrag-map unwind] save failed %s:\n%s', fp,
+                               traceback.format_exc())
+                results.append({'id': did, 'intrag_id': intrag_id, 'status': 'Error'})
+                continue
+            results.append({'id': did, 'intrag_id': intrag_id, 'status': 'Success'})
+    return results, so_original, None
+
+
 # ── Delete: a linha sai do ARQUIVO, não só da tela ──────────────────────────
 # As quatro páginas de Intrag tinham um Delete que era `table.row().remove()` e
 # mais nada: nenhum endpoint, nenhuma gravação. A linha sumia da tela até o F5,

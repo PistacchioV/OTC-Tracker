@@ -24851,3 +24851,32 @@ como produto `NDF` — a tela a tem em bloco próprio "Unwinds" desde 22/09
 ainda dizia que a linha nasce no Send.
 
 **Teste**: `check_intraday_monitor.py` §4e.
+
+## §585 — Intrag › Unwind: coluna Intrag ID e Mapping Intrag ID (2026-09-28)
+
+**Pedido da mesa**: "tá faltando a coluna de Intrag ID no Intrag Unwind" / "e o
+botão de mapping para puxar o id" — e, no meio, "no arquivo que envia para a
+Intrag, na coluna Situação, está Recomprado totalmente ou recomprado
+parcialmente" (confirmado: é o que o arquivo já grava, `INTRAG_UNWIND_SIT_*`).
+
+**O que mudou**:
+- Coluna **Intrag ID** logo depois do Status (como nas outras telas de
+  Intrag); filtro por coluna e no filtro inteligente; campo no modal do Edit —
+  Intrag ID novo digitado vira `Success` (a regra das outras páginas), editar
+  outro campo segue o 4-olhos.
+- Botão verde **Mapping Intrag ID** (`/api/intrag/unwind/mapping-intrag-id`,
+  `commands._intrag_unwind_run_mapping`): lê o CSV de Boletas do Return (o
+  mesmo `_intrag_find_export_csv`), col A = Intrag ID. **Só casa a linha que se
+  diz recompra** (`mappers._intrag_unwind_b3_map`: o B3 ID numa célula e
+  RECOMPRA/ANTECIPA/UNWIND/RESILI no texto) — a boleta do registro ORIGINAL tem
+  o mesmo B3 ID e daria à recompra o Intrag ID da operação original. B3 ID que
+  só aparece em boleta sem a marca volta em `only_original` e a tela lista, sem
+  gravar. Delete escondido em `Success`; card `intrag-unwind` fecha em
+  `Sent`/`Success`.
+
+**Suposição**: o layout da boleta de antecipação da Intrag não foi visto — a
+marca é a suposição, apoiada na Situação que o próprio arquivo manda
+("Recomprado …"). Se a boleta não ecoar isso, o mapping volta tudo em
+`only_original` e é a hora de pedir um exemplo.
+
+**Teste**: `check_intrag_unwind.py` §7.

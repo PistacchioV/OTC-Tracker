@@ -39,8 +39,11 @@
   /* A Situação é a coluna que a Intrag lê para saber o que fazer com o
      contrato — cortá-la obriga a abrir a linha para ver o que já devia estar
      na grade. */
-  #iuw-table th:nth-child(11), #iuw-table td:nth-child(11),
-  #iuw-table_wrapper .dt-scroll-head thead th:nth-child(11), #iuw-table_wrapper .dataTables_scrollHead thead th:nth-child(11) { width: 190px; min-width: 190px; }
+  #iuw-table th:nth-child(12), #iuw-table td:nth-child(12),
+  #iuw-table_wrapper .dt-scroll-head thead th:nth-child(12), #iuw-table_wrapper .dataTables_scrollHead thead th:nth-child(12) { width: 190px; min-width: 190px; }
+  /* Intrag ID — o numero que a Intrag devolve na boleta (Mapping Intrag ID). */
+  #iuw-table th:nth-child(4), #iuw-table td:nth-child(4),
+  #iuw-table_wrapper .dt-scroll-head thead th:nth-child(4), #iuw-table_wrapper .dataTables_scrollHead thead th:nth-child(4) { width: 140px; min-width: 140px; }
 
   #iuw-table td .btn-sm.rounded-circle { width: 32px; height: 32px; padding: 0 !important; border-radius: 10px !important; display: inline-flex; align-items: center; justify-content: center; }
   #iuw-table td .btn-sm.rounded-circle i { font-size: 1rem; }
@@ -126,10 +129,12 @@
                                     <th class="ps-3" style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" id="selectAll"></th>
                                     <th data-lang="nd-col-actions">Actions</th>
                                     <th data-lang="iuw-col-status">Status</th>
+                                    <th data-lang="intrag-col-intrag-id">Intrag ID</th>
                                     <!-- as onze colunas entram por JS (IUW_COLS) -->
                                 </tr>
                                 <tr class="column-search-input-bar" id="column-search-inputs">
                                     <th></th><th></th><th></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Intrag ID"></th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -194,9 +199,9 @@ var IUW_COLS = [
 ];
 var IUW_FIELDS = IUW_COLS.map(function (c) { return c[0]; });
 var IUW_MONEY = { valor_base_original: 1, valor_base_recomprado: 1, valor_liquidacao: 1 };
-// [0]=checkbox [1]=actions [2]=Status [3..]=IUW_FIELDS. A chave é o `_deal`
-// (o Athena ID da recompra), que não é coluna da planilha.
-var C_OFF = 3;
+// [0]=checkbox [1]=actions [2]=Status [3]=Intrag ID [4..]=IUW_FIELDS. A chave é
+// o `_deal` (o Athena ID da recompra), que não é coluna da planilha.
+var C_OFF = 4;
 var ENTRIES = [], ROWS = {}, selected = new Set();
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -204,7 +209,8 @@ function _todayDmy(){var d=new Date();return ('0'+d.getDate()).slice(-2)+'/'+('0
 function fmtMoney(v){var n=parseFloat(String(v==null?'':v).replace(/[^\d.\-]/g,''));if(isNaN(n))return v==null?'':String(v);return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
 
 var STATUS_META = { 'New': { cls: 'bg-secondary text-white' }, 'Pending': { cls: 'bg-warning text-dark' },
-                    'Approved': { cls: 'bg-success text-white' }, 'Sent': { cls: 'badge-sent' } };
+                    'Approved': { cls: 'bg-success text-white' }, 'Sent': { cls: 'badge-sent' },
+                    'Success': { cls: 'text-bg-success' } };
 function statusBadge(status) {
     var txt = String(status == null ? '' : status).replace(/<[^>]*>/g, '').trim() || 'New';
     var m = STATUS_META[txt] || STATUS_META['New'];
@@ -255,6 +261,7 @@ $(document).ready(function () {
             "<'btn-toolbar d-flex flex-wrap align-items-center'" +
             "<'columnToggleWrapper me-2'>" +
             "B" +
+            "<'mappingBtn ms-2'>" +
             "<'clearFiltersBtn ms-2 me-2'>" +
             "<'conditionalActions ms-2 d-flex align-items-center gap-2'>" +
             ">" +
@@ -285,7 +292,7 @@ $(document).ready(function () {
                 $(node).find('.btn-row-approve').toggleClass('d-none', st !== 'Pending');
                 $(node).find('.btn-row-send').toggleClass('d-none', !(st === 'New' || st === 'Approved'));
                 $(node).find('.btn-row-edit').toggleClass('d-none', st === 'Sent');
-                $(node).find('.btn-row-delete').toggleClass('d-none', st === 'Sent');
+                $(node).find('.btn-row-delete').toggleClass('d-none', st === 'Sent' || st === 'Success');
             });
             syncSelectAll();
             setTimeout(function () { api.columns.adjust(); }, 0);
@@ -318,6 +325,54 @@ $(document).ready(function () {
                 });
             }
 
+            // ── Mapping Intrag ID: o CSV de Boletas do Return → coluna Intrag ID ──
+            // Só a linha do CSV que SE DIZ recompra (o B3 ID é o do contrato
+            // original, que tem boleta própria): o servidor devolve em
+            // `only_original` o B3 ID que só apareceu na boleta do registro.
+            var mapWrap = document.querySelector('.mappingBtn');
+            if (mapWrap && !document.getElementById('btnMappingIuw')) {
+                var mb = document.createElement('button');
+                mb.id = 'btnMappingIuw'; mb.type = 'button';
+                mb.className = 'btn btn-sm btn-success bg-gradient btn-toolbar-all btn-toolbar-refresh';
+                mb.setAttribute('data-bs-toggle', 'tooltip');
+                mb.setAttribute('data-bs-placement', 'bottom');
+                mb.setAttribute('data-bs-title', 'Mapping Intrag ID');
+                mb.setAttribute('data-bs-custom-class', 'tooltip-success');
+                mb.innerHTML = '<i class="ti ti-refresh"></i>';
+                mapWrap.appendChild(mb);
+                if (window.bootstrap && !bootstrap.Tooltip.getInstance(mb)) new bootstrap.Tooltip(mb, { trigger: 'hover' });
+                mb.addEventListener('click', function () {
+                    var deals = ENTRIES.filter(function (e) { return e && e._deal && !e.intrag_id && e.b3_id; })
+                        .map(function (e) { return { id: e._deal, b3_id: e.b3_id, trade_date: e.data_recompra || '' }; });
+                    if (!deals.length) {
+                        Swal.fire({ icon: 'info', title: 'Mapping Intrag ID',
+                                    text: ENTRIES.length ? 'Every loaded row already has an Intrag ID.'
+                                                         : 'No rows loaded — search a Data da Recompra first.' });
+                        return;
+                    }
+                    mb.disabled = true; mb.innerHTML = '<i class="ti ti-loader-2 ti-spin"></i>';
+                    fetch('/api/intrag/unwind/mapping-intrag-id', { method: 'POST', credentials: 'same-origin',
+                                                                   headers: { 'Content-Type': 'application/json' },
+                                                                   body: JSON.stringify({ deals: deals }) })
+                        .then(function (r) { return r.json(); })
+                        .then(function (res) {
+                            if (!res || !res.ok) {
+                                Swal.fire({ icon: 'error', title: 'Mapping Intrag ID', text: (res && res.error) || 'Mapping failed' });
+                                return;
+                            }
+                            var ok = (res.results || []).filter(function (r) { return r.status === 'Success'; }).length;
+                            var html = ok + ' of ' + deals.length + ' mapped.';
+                            if ((res.only_original || []).length) {
+                                html += '<br><br><b>Found only in the ORIGINAL registration ticket (not mapped):</b><br>' +
+                                        res.only_original.map(esc).join(', ');
+                            }
+                            Swal.fire({ icon: ok ? 'success' : 'info', title: 'Mapping Intrag ID', html: html });
+                            if (ok) load();
+                        })
+                        .catch(function (e) { Swal.fire({ icon: 'error', title: 'Mapping Intrag ID', text: String(e) }); })
+                        .finally(function () { mb.disabled = false; mb.innerHTML = '<i class="ti ti-refresh"></i>'; });
+                });
+            }
             var clearWrap = document.querySelector('.clearFiltersBtn');
             if (clearWrap && !document.getElementById('clearFiltersBtn')) {
                 var cb2 = document.createElement('button');
@@ -380,6 +435,7 @@ $(document).ready(function () {
         { label: 'Valor Base Recomprado', type: 'number', dtCol: _dc('valor_base_recomprado') },
         { label: 'Valor de Liquidação',   type: 'number', dtCol: _dc('valor_liquidacao') },
         { label: 'ID B3',                 type: 'text',   dtCol: _dc('b3_id') },
+        { label: 'Intrag ID',             type: 'text',   dtCol: 3 },
         { label: 'Carteira',              type: 'text',   dtCol: _dc('carteira') },
         { label: 'Situação',              type: 'text',   dtCol: _dc('situacao') },
         { label: 'Sentido (Visão do Fundo)', type: 'text', dtCol: _dc('sentido') },
@@ -545,7 +601,7 @@ $(document).ready(function () {
 
     function rowOf(e) {
         var row = ['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">',
-                   _actionsCell(), e.status || 'New'];
+                   _actionsCell(), e.status || 'New', e.intrag_id != null ? String(e.intrag_id) : ''];
         IUW_FIELDS.forEach(function (f) { row.push(e[f] != null ? String(e[f]) : ''); });
         return row;
     }
@@ -608,7 +664,10 @@ $(document).ready(function () {
         if (!row) return;
         _editId = id; _editOrig = {};
         var box = document.getElementById('iuwEditFields');
-        box.innerHTML = IUW_COLS.map(function (c) {
+        _editOrig.__intrag_id = row.intrag_id == null ? '' : String(row.intrag_id);
+        box.innerHTML = '<div class="col-md-4"><label class="form-label fs-xs text-muted mb-1">' +
+            esc(_lbl('intrag-col-intrag-id', 'Intrag ID')) + '</label><input type="text" class="form-control form-control-sm" id="iuwEditIntragId" value="' +
+            esc(_editOrig.__intrag_id) + '"></div>' + IUW_COLS.map(function (c) {
             var v = row[c[0]] == null ? '' : String(row[c[0]]);
             _editOrig[c[0]] = v;
             return '<div class="col-md-4"><label class="form-label fs-xs text-muted mb-1">' +
@@ -638,11 +697,16 @@ $(document).ready(function () {
             var f = $(this).data('f'), v = String(this.value == null ? '' : this.value).trim();
             if (v !== String(_editOrig[f] == null ? '' : _editOrig[f]).trim()) { fields[f] = v; n++; }
         });
+        // Intrag ID digitado vira Success no servidor (a regra das outras
+        // páginas de Intrag); só vai quando mudou.
+        var body = { deal_id: _editId, trade_date: row.data_recompra, fields: fields };
+        var iid = String(($('#iuwEditIntragId').val()) || '').trim();
+        if (iid !== String(_editOrig.__intrag_id || '').trim()) { body.intrag_id = iid; n++; }
         var modal = bootstrap.Modal.getInstance(document.getElementById('iuwEditModal'));
         if (!n) { if (modal) modal.hide(); return; }
         var btn = this; btn.disabled = true;
         fetch('/api/intrag/unwind/edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-                                           body: JSON.stringify({ deal_id: _editId, trade_date: row.data_recompra, fields: fields }) })
+                                           body: JSON.stringify(body) })
             .then(function (r) { return r.json(); })
             .then(function (res) {
                 btn.disabled = false;

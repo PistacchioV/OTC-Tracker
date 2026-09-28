@@ -219,6 +219,62 @@ def main():
     finally:
         R._create_notification = _orig
 
+    print('\n== 7. Mapping Intrag ID: so a boleta que se diz RECOMPRA ==')
+    L3 = dict(L_LAWTON, AthenaID='STP-MAP-1', Contract='26E02931710')
+    L4 = dict(L_LAWTON, AthenaID='STP-MAP-2', Contract='26E09999999')
+    commands.intrag_da_recompra([L3, L4], HOJE)
+    ret = os.path.join(tmp, 'Return')
+    os.makedirs(ret, exist_ok=True)
+    with open(os.path.join(ret, 'Boletas_20260918.csv'), 'w', encoding='latin-1') as fh:
+        # A boleta do registro ORIGINAL tem o mesmo B3 ID — nao pode casar.
+        fh.write('111;NDF - TERMO DE MOEDAS;26E02931710;x\n')
+        fh.write('222;INTRAGJP552;26E02931710;Recomprado Parcialmente\n')
+        fh.write('333;NDF - TERMO DE MOEDAS;26E09999999;x\n')
+    ret_orig = R.RETURN_PATH
+    R.RETURN_PATH = ret
+    avisos2 = []
+    _orig2 = R._create_notification
+    R._create_notification = lambda *a, **k: avisos2.append(a[2:4])
+    try:
+        with app.test_client() as c:
+            with c.session_transaction() as sess:
+                sess['authenticated'] = True
+                sess['user_sid'] = 'E930179'
+                sess['user_name'] = 'Teste'
+                sess['session_ip'] = '127.0.0.1'
+            deals = [{'id': l['AthenaID'], 'b3_id': l['Contract'], 'trade_date': '18/09/2026'}
+                     for l in (L3, L4)]
+            j = c.post('/api/intrag/unwind/mapping-intrag-id', json={'deals': deals}).get_json() or {}
+            check('mapeia so a linha de RECOMPRA',
+                  [(r['id'], r['intrag_id'], r['status']) for r in j.get('results') or []]
+                  == [('STP-MAP-1', '222', 'Success')], j)
+            check('o B3 ID so da boleta original volta avisado, sem gravar',
+                  j.get('only_original') == ['26E09999999'], j.get('only_original'))
+            e3 = IQ._find_intrag_unwind_entry('STP-MAP-1', '18/09/2026')
+            check('a linha fica com o Intrag ID e Success',
+                  (e3[1][e3[2]].get('intrag_id'), e3[1][e3[2]].get('status')) == ('222', 'Success'))
+            e4 = IQ._find_intrag_unwind_entry('STP-MAP-2', '18/09/2026')
+            check('a sem boleta de recompra fica sem Intrag ID',
+                  not e4[1][e4[2]].get('intrag_id'))
+            check('o mapping avisa no sino', ('Status Updated', 'Intrag Unwind') in avisos2, avisos2)
+            r = c.post('/api/intrag/unwind/edit',
+                       json={'deal_id': 'STP-MAP-2', 'trade_date': '18/09/2026',
+                             'fields': {}, 'intrag_id': '999'}).get_json() or {}
+            e4 = IQ._find_intrag_unwind_entry('STP-MAP-2', '18/09/2026')
+            check('Intrag ID digitado no Edit vira Success',
+                  r.get('status') == 'Success' and e4[1][e4[2]].get('intrag_id') == '999', r)
+            r = c.post('/api/intrag/unwind/edit',
+                       json={'deal_id': 'STP-MAP-2', 'trade_date': '18/09/2026',
+                             'fields': {'situacao': 'Recomprado Totalmente'}}).get_json() or {}
+            check('   editar outro campo segue o 4-olhos (Pending)', r.get('status') == 'Pending', r)
+            commands.intrag_da_recompra([L3], HOJE)
+            e3 = IQ._find_intrag_unwind_entry('STP-MAP-1', '18/09/2026')
+            check('o reimport preserva Intrag ID e status',
+                  (e3[1][e3[2]].get('intrag_id'), e3[1][e3[2]].get('status')) == ('222', 'Success'))
+    finally:
+        R.RETURN_PATH = ret_orig
+        R._create_notification = _orig2
+
     print('\n' + ('tudo ok' if not FALHAS else 'FALHAS: ' + '; '.join(FALHAS)))
     return 1 if FALHAS else 0
 

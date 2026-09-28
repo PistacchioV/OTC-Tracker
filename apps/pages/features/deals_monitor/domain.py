@@ -90,7 +90,7 @@ _NDM_CARDS = [
     # numa coluna que o `_ndm_deal_le` saiba ler. E `done` é `Sent`: a Intrag
     # não devolve id nenhum que faça a linha virar Success, e sem isto toda
     # recompra já instruída ficaria pendente no aviso das 19h para sempre.
-    {'key': 'intrag-unwind',      'label': 'Intrag Unwind',       'url': '/intrag-unwind',                'dirs': ('Intrag/Unwind',),                            'done': ('Sent',)},
+    {'key': 'intrag-unwind',      'label': 'Intrag Unwind',       'url': '/intrag-unwind',                'dirs': ('Intrag/Unwind',),                            'done': ('Sent', 'Success')},
     {'key': 'intrag-dce-option',  'label': 'Intrag DCE Option',   'url': '/intrag-dce-option',            'dirs': ('Intrag/DCE Option',)},
     {'key': 'intrag-dce-ndf',     'label': 'Intrag DCE NDF',      'url': '/intrag-dce-ndf',               'dirs': ('Intrag/DCE NDF',)},
     {'key': 'intrag-dce-swap',    'label': 'Intrag DCE Swap',     'url': '/intrag-dce-swap',              'dirs': ('Intrag/DCE Swap',)},

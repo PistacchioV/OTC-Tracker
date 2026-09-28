@@ -1663,6 +1663,15 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `intrag_da_recompra` da Fase 1 (a planilha de onze colunas é uma para todos os
   produtos; o catálogo entra por `product/commands.intrag`, no formato
   `para_o_termo`). A liquidação (Summary, Advice, Pay/Rec) continua com as duas.
+  **O Intrag ID da recompra** (§585) é coluna da Intrag › Unwind (depois do
+  Status), digitável no Edit (novo = `Success`) e puxado pelo **Mapping Intrag
+  ID** do CSV de Boletas do Return — mas SÓ da linha que se diz recompra
+  (`mappers.UNWIND_MARKS`: RECOMPRA/ANTECIPA/UNWIND/RESILI; a Situação que o
+  arquivo manda é `Recomprado Totalmente/Parcialmente`). O B3 ID da recompra é
+  o do contrato original, que tem boleta PRÓPRIA: casado só pelo B3 ID, a
+  recompra levaria o Intrag ID da operação original. O que só aparece na boleta
+  original volta em `only_original`, sem gravar. O card do Monitor fecha em
+  `Sent` ou `Success`.
 - **A esteira nasce e morre com a recompra.** Apagar a recompra tira a linha do
   Pending Confirmation e da esteira (`esteira_sem_a_recompra`) — sem isso ficava
   um card de Pending OTC de uma operação que não existe mais, com o Generate
