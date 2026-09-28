@@ -251,6 +251,132 @@ def linhas_da_planilha(rows, page, max_busca=15):
     return linhas, avisos
 
 
+# ==============================================================================
+#  O E-MAIL DE RECOMPRA DE NDF DE COMMODITIES (mesa, 28/09/2026)
+# ==============================================================================
+# A mesa fecha a recompra num e-mail com UMA tabela por perna, cada uma com o
+# cabecalho `Leg · Trade Date · Fixing · … · Unwind Strike · FV USD · FX Rate ·
+# PV BRL · Direction · Unwind`. Entram so as pernas `Client` e `Banco` — a
+# `JPMOCC` e offshore, nao tem contrato na B3. O `Risk Deal ID` NAO entra em
+# perna nenhuma (pedido da mesa): quem identifica o contrato e o Live Position.
+# O Pre FWD Rate e ZERO (a liquidacao e em T+0, nao ha desconto).
+#
+# **O e-mail traz o numero como o Excel o EXIBE**: `96.85` na celula que vale
+# 96,84626, `5.2087` na que vale 5,20867. Com eles a conferencia (tolerancia de
+# um centavo) nunca fecharia, e a Taxa Termo iria arredondada a B3. A precisao
+# volta do FV USD e do PV BRL — `|Termination - Strike| = FV / Qtd` e `FX =
+# PV / FV` — e SO quando o numero refeito arredonda para o que a celula mostra:
+# fora disso a celula vence e a linha diz que os numeros nao fecham.
+
+_RECAP_COLS = {
+    'leg': 'leg', 'tradedate': 'TradeDate', 'originalposition': 'posicao',
+    'originalvolume': 'OriginalNotional', 'originalstrike': 'Strike',
+    'unwindvolume': 'UnwoundNotional', 'unwindstrike': 'TerminationRate',
+    'fvusd': 'fv', 'fxrate': 'FXRate', 'pvbrl': 'pv', 'direction': 'direcao',
+}
+_RECAP_PERNAS = ('client', 'banco')
+
+
+def _rotulo_recap(h):
+    return norm(re.sub(r'\(.*?\)', '', str(h or '')))
+
+
+def _casas(t):
+    t = texto(t).replace(' ', '')
+    i = max(t.rfind('.'), t.rfind(','))
+    return len(t) - i - 1 if i >= 0 else 0
+
+
+def _refina(mostrado_txt, mostrado, exato):
+    """O `exato` quando ele arredonda para o que a celula mostra; senao None."""
+    if mostrado is None or exato is None:
+        return None
+    meio = 0.5 * 10 ** -_casas(mostrado_txt) + 1e-9
+    return exato if abs(exato - mostrado) <= meio else None
+
+
+def _banco_comprou(posicao):
+    """`Client Sells` -> o banco COMPROU; `BJPM Sells` -> o banco VENDEU.
+    None quando o texto nao diz quem e o lado."""
+    p = norm_nome(posicao).split()
+    if len(p) < 2 or p[-1] not in ('SELLS', 'BUYS', 'SELL', 'BUY'):
+        return None
+    compra = p[-1].startswith('BUY')
+    return (not compra) if p[0] == 'CLIENT' else compra
+
+
+def linhas_do_recap_commodities(tabelas):
+    """(linhas, avisos) do e-mail de recompra de NDF de Commodities, ou None
+    quando nenhuma tabela tem o cabecalho dele (`Leg` + `Unwind Strike`)."""
+    linhas, avisos, achou = [], [], False
+    for t in tabelas or []:
+        if not t:
+            continue
+        cab = [_rotulo_recap(h) for h in t[0]]
+        if not cab or cab[0] != 'leg' or 'unwindstrike' not in cab:
+            continue
+        achou = True
+        mapa = {i: _RECAP_COLS[c] for i, c in enumerate(cab) if c in _RECAP_COLS}
+        for n, r in enumerate(t[1:], start=2):
+            cel = {k: (r[i] if i < len(r) else '') for i, k in mapa.items()}
+            perna = norm(cel.get('leg'))
+            if perna not in _RECAP_PERNAS:
+                continue
+            q = numero(cel.get('UnwoundNotional'))
+            k = numero(cel.get('Strike'), taxa=True)
+            t_txt, fx_txt = cel.get('TerminationRate'), cel.get('FXRate')
+            tt, fx = numero(t_txt, taxa=True), numero(fx_txt, taxa=True)
+            fv, pv = numero(cel.get('fv')), numero(cel.get('pv'))
+            linha = {'PreFWDRate': 0.0, '_sheet_row': n}
+            d = data_iso(cel.get('TradeDate'))
+            if d:
+                linha['TradeDate'] = d
+            for campo, v in (('OriginalNotional', numero(cel.get('OriginalNotional'))),
+                             ('Strike', k), ('UnwoundNotional', q)):
+                if v is not None:
+                    linha[campo] = v
+            # A precisao que o Excel escondeu, de volta pelo FV e pelo PV.
+            if q and k is not None and tt is not None and fv is not None and tt != k:
+                exato = k + (1 if tt > k else -1) * abs(fv) / abs(q)
+                tt = _refina(t_txt, tt, exato) or tt
+            if fx is not None and fv and pv is not None:
+                fx = _refina(fx_txt, fx, abs(pv) / abs(fv)) or fx
+            if tt is not None:
+                linha['TerminationRate'] = tt
+            if fx is not None:
+                linha['FXRate'] = fx
+            comprou = _banco_comprou(cel.get('posicao'))
+            if comprou is not None:
+                linha['Comprado'] = comprou
+            # O PV vem em modulo; o sinal e o do BANCO (a regra do Check:
+            # comprado ganha quando a Termination passa do Strike).
+            if pv is not None:
+                sinal = None
+                if comprou is not None and tt is not None and k is not None and tt != k:
+                    sinal = 1 if (tt > k) == comprou else -1
+                dtxt = norm_nome(cel.get('direcao'))
+                pelo_texto = None
+                if dtxt.startswith('CLIENT '):
+                    pelo_texto = -1 if 'RECEIVE' in dtxt else (1 if 'PAY' in dtxt else None)
+                if sinal is None:
+                    sinal = pelo_texto
+                elif pelo_texto is not None and pelo_texto != sinal:
+                    avisos.append(aviso('unwind_recap_direction_differs',
+                                        'Row %d: the Direction of the e-mail (%s) does not match '
+                                        'the position and the strikes' % (n, texto(cel.get('direcao'))),
+                                        linha=n, direcao=texto(cel.get('direcao'))))
+                if sinal is None:
+                    avisos.append(aviso('unwind_recap_no_sign',
+                                        'Row %d: could not tell whether the bank pays or receives'
+                                        % n, linha=n))
+                else:
+                    linha['Result'] = round(abs(pv) * sinal, 2)
+            linhas.append(linha)
+    if not achou:
+        return None
+    return linhas, avisos
+
+
 def chave_natural(linha):
     """A tupla da chave natural (`catalog.NATURAL_KEY`), ou None."""
     for campos in catalog.NATURAL_KEY:
@@ -468,6 +594,8 @@ def resultado_termo(linha, page):
     t = numero(linha.get('TerminationRate'), taxa=True)
     pre = numero(linha.get('PreFWDRate'), taxa=True)
     du = numero(linha.get('DU'))
+    if pre == 0 and du is None:
+        du = 0.0                        # sem juros o desconto e 1: o DU nao muda nada
     fx = fx_da_linha(linha, page)
     lado = linha.get('Comprado')
     faltam = [n for n, v in (('UnwoundNotional', q), ('Strike', k), ('TerminationRate', t),

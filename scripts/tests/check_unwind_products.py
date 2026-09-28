@@ -414,6 +414,85 @@ def main():
     got = (len(pos), len(chamadas), pos[0]['taxid'] if pos else '')
     check('50 posicoes, uma montagem do indice', got == (50, 1, '12.345.678/0001-90'), got)
 
+    print('\n== 11. O e-mail de recompra de NDF Commodities (uma tabela por perna) ==')
+    # O modelo da mesa (28/09/2026), como o Outlook guarda o trecho colado do
+    # Excel: cabecalho quebrado em <br>, o Fixing em duas linhas, o numero como
+    # a celula EXIBE (96.85 e 5.2087 no Client valem 96,84626 e 5,20867).
+    def _td(v):
+        return '<td><p class=MsoNormal><span>%s</span></p></td>' % v
+
+    def _tab(cab, linhas):
+        return ('<table class=MsoNormalTable>' + '<tr>' + ''.join(_td(c) for c in cab) + '</tr>'
+                + ''.join('<tr>' + ''.join(_td(c) for c in l) + '</tr>' for l in linhas)
+                + '</table><p class=MsoNormal>&nbsp;</p>')
+    cab_cli = ['Leg', 'Trade Date', 'Fixing', 'Risk Deal ID', 'Original<br>Position',
+               'Original<br>Volume (MT)', 'Original Strike<br>(USD/MT)', 'Unwind<br>Volume (MT)',
+               'Unwind Strike', 'FV USD', 'FX Rate', 'PV BRL', 'Direction', 'Unwind']
+    cab_bco = ['Leg', 'Trade Date', 'Fixing', 'Original<br>Position', 'Original<br>Volume',
+               'Original<br>Strike', 'Unwind<br>Volume', 'Unwind<br>Strike', 'FV USD', 'FX Rate',
+               'PV BRL']
+    cab_occ = ['Leg', 'Trade Date', 'Fixing', 'Original<br>Position', 'Original<br>Volume',
+               'Original<br>Strike', 'Unwind<br>Volume', 'Unwind<br>Strike', 'FV USD', 'PV USD']
+    fix = '01-Sep-26/30-<br>Sep-26'
+    corpo = ('<html><body><p class=MsoNormal>Hi all,</p><p class=MsoNormal>We have closed the '
+             'followings full unwinds for CSN:</p><p class=MsoNormal><u>CSNMINER</u><br>'
+             '<u>Trade IDs: D5NQ-HMNV</u></p>'
+             + _tab(cab_cli, [['Client', '13-May-26', fix, 'D5NQ-HMNV', 'Client Sells', '100,000',
+                               '108.885', '100,000', '96.85', '1,203,874.00', '5.2087',
+                               '6,270,582.12', 'Client<br>Receives', 'Full']])
+             + _tab(cab_bco, [['Banco', '13-May-26', fix, 'BJPM Sells', '100,000', '108.985',
+                               '100,000', '96.85', '1,213,500.00', '5.2087', '6,321,326.69']])
+             + _tab(cab_occ, [['JPMOCC', '13-May-26', fix, 'JPMOCC Sells', '100,000', '108.985',
+                               '100,000', '96.85', '1,213,500.00', '1,213,236.00']])
+             + '</body></html>')
+    eml = ('MIME-Version: 1.0\r\nSubject: CSN unwind\r\nContent-Type: text/html; charset=utf-8'
+           '\r\n\r\n' + corpo).encode('utf-8')
+    pos_cli = dict(NDF_POS, Contrato='26E00000CLI', **{'Taxa Forward': '108.885',
+                                                      'Valor Base no registro': '100,000.00',
+                                                      'Valor Antecipado': '0.00'})
+    pos_bco = dict(NDF_POS, Contrato='26E00000BCO', **{
+        'Taxa Forward': '108.985', 'Valor Base no registro': '100,000.00', 'Valor Antecipado': '0.00',
+        'Codigo da Contraparte': '12345678', 'Nome da Contraparte': 'CLIENTE X SA',
+        'CPF/CNPJ da Contraparte': '', 'Descricao da posicao do Participante': 'VENDEDOR'})
+    R._lpndf_collect = _collect(NDF_COLS, [pos_cli, pos_bco])
+    n_sino = len(sino)
+    st, j = _up(pg_ndf['api'], 'CSN unwind.eml', eml, dry=True)
+    rows = j.get('rows') or []
+    check('le as duas pernas (Client e Banco), a JPMOCC fica de fora',
+          st == 200 and len(rows) == 2, (st, j.get('code'), len(rows)))
+    cli, bco = (rows + [{}, {}])[:2]
+    check('nenhuma perna leva o Risk Deal ID', not cli.get('DealID') and not bco.get('DealID'),
+          (cli.get('DealID'), bco.get('DealID')))
+    check('B3 ID de cada perna pelo Live Position (strike + original)',
+          (cli.get('Contract'), bco.get('Contract')) == ('26E00000CLI', '26E00000BCO'),
+          (cli.get('Contract'), bco.get('Contract')))
+    check('Pre FWD Rate = 0 e as datas do e-mail',
+          cli.get('PreFWDRate') == 0.0 and cli.get('TradeDate') == '2026-05-13', cli)
+    check('Termination refeita do FV USD (96.85 exibido -> 96,84626)',
+          abs(cli.get('TerminationRate', 0) - 96.84626) < 1e-9, cli.get('TerminationRate'))
+    check('FX refeito do PV BRL, que arredonda para o 5.2087 exibido',
+          abs(cli.get('FXRate', 0) - 6270582.12 / 1203874) < 1e-12, cli.get('FXRate'))
+    check('Client Receives: o banco PAGA, resultado negativo',
+          (cli.get('Result'), cli.get('Direction')) == (-6270582.12, 'PAY'),
+          (cli.get('Result'), cli.get('Direction')))
+    check('   e a conferencia do termo FECHA', cli.get('Check') == 'OK', cli.get('Warnings'))
+    check('Banco vendeu e o preco caiu: RECEBE',
+          (bco.get('Result'), bco.get('Direction')) == (6321326.69, 'RECEIVE'),
+          (bco.get('Result'), bco.get('Direction')))
+    # 1.213.500 x 5,2087 = 6.320.757,45: o PV do e-mail pede FX 5,20917, que NAO
+    # arredonda para o 5.2087 exibido. A celula vence e a linha diz que nao fecha.
+    check('   FX que nao arredonda para o exibido: fica o exibido, e o Check acusa',
+          bco.get('FXRate') == 5.2087 and bco.get('Check') == 'NOK',
+          (bco.get('FXRate'), bco.get('Check')))
+    check('dry-run do e-mail nao toca o sino', len(sino) == n_sino)
+    so_occ = ('MIME-Version: 1.0\r\nContent-Type: text/html\r\n\r\n<html><body>'
+              + _tab(cab_occ, [['JPMOCC', '13-May-26', fix, 'JPMOCC Sells', '100,000', '108.985',
+                                '100,000', '96.85', '1,213,500.00', '1,213,236.00']])
+              + '</body></html>').encode('utf-8')
+    st, j = _up(pg_ndf['api'], 'so-occ.eml', so_occ, dry=True)
+    check('so a perna JPMOCC: recusa por codigo',
+          st == 400 and j.get('code') == 'unwind_recap_no_legs', (st, j.get('code')))
+
     print('\n%s' % ('TUDO OK' if not FALHAS else '%d FALHA(S): %s' % (len(FALHAS), FALHAS)))
     return 1 if FALHAS else 0
 

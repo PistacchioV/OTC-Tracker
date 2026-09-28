@@ -1537,7 +1537,15 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   (mesa, 28/09/2026; `email_file.tabelas`): as MESMAS colunas da planilha, vale
   a primeira `<table>` com o cabeçalho da página e alguma linha (assinatura
   antes não atrapalha), texto puro com TAB também; sem ela,
-  `unwind_email_table_unknown`. O parser do aviso da Fase 1 não se aplica. A posição (os MESMOS
+  `unwind_email_table_unknown`. O parser do aviso da Fase 1 não se aplica.
+  **O NDF Commodities tem e-mail PRÓPRIO** (mesa, 28/09/2026;
+  `domain.linhas_do_recap_commodities`, lido ANTES do genérico): uma tabela
+  por perna (`Leg` … `PV BRL`), só `Client` e `Banco` entram (a `JPMOCC` é
+  offshore), o `Risk Deal ID` NÃO entra em perna nenhuma (o B3 ID vem do Live
+  Position, por strike + original), Pre FWD Rate = 0 (e aí o Check dispensa o
+  DU). O sinal do PV é o do BANCO, pela `Original Position` + strikes. O e-mail
+  traz o número como o Excel o EXIBE: a Termination volta do FV USD e o FX do
+  PV BRL, só quando o refeito arredonda para o que a célula mostra. A posição (os MESMOS
   coletores do Live Position) só preenche o que a planilha deixou em BRANCO:
   divergência vira aviso e a planilha vence. **Sem B3 ID, casa por
   características só com candidato ÚNICO** (≥ 2 critérios, todos batendo);
