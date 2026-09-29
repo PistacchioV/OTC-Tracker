@@ -25126,3 +25126,23 @@ grade própria — ela nasceu assim, e o §556 só completou o Export em cima de
   agora sobre `rows({search:'applied', order:'applied'})`; o
   `check_export_padrao` §1 passa a listar o `mapping.html` entre as telas com
   CSV próprio.
+
+## §595 — fix_asian_dates_xlsx: o calendário é o do ATIVO (2026-09-29)
+
+A planilha de asiáticas do Live Position Option passou a trazer, além do
+`CO1-2` (Brent), opções de `USD`. O script contava toda janela no IPE, e o
+dólar liquida no calendário brasileiro: uma janela de USD em abril sairia com o
+feriado ANBIMA dentro e o dia de bolsa de Londres fechada fora, sem erro nenhum.
+
+Agora o calendário sai da coluna `Ativo subjacente / Moeda base` da LINHA
+(`CALENDARIO_DO_ATIVO`: `CO1-2` → IPE, `USD` → ANBIMA; caixa e espaço
+normalizados). **Ativo fora da lista não é ajustado** e vai para o log com o
+nome, em vez de cair num calendário qualquer. Planilha sem a coluna segue no
+`--calendario`, avisando. `--feriados` virou repetível e nomeado
+(`--feriados IPE=ipe.json --feriados ANBIMA=anbima.json`; o arquivo solto vale
+para o `--calendario`). A trava de "calendário sem feriado no ano" é por
+calendário, e diz qual. O log ganhou as colunas Ativo e Calendário, e a linha
+que ficou no mesmo mês é conferida contra o calendário do ativo: data em fim de
+semana ou feriado sai como `DIA NÃO ÚTIL` (não é mexida — a janela certa não se
+deduz de uma data errada). Na dev o `ipe.json` segue vazio e o ANBIMA tem 1263
+datas. `check_fix_asian_dates.py`.

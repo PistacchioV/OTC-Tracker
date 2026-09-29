@@ -3,7 +3,7 @@
 
     python scripts/fix_asian_dates_xlsx.py "C:\\Users\\<sid>\\Downloads\\Live Position Option OTC Tracker - Sistema de Gestão OTC.xlsx"
     python scripts/fix_asian_dates_xlsx.py <arquivo> --dry-run      # só o relatório
-    python scripts/fix_asian_dates_xlsx.py <arquivo> --feriados ipe.xlsx
+    python scripts/fix_asian_dates_xlsx.py <arquivo> --feriados IPE=ipe.xlsx --feriados ANBIMA=anbima.json
 
 Cria uma aba NOVA no mesmo arquivo (`--aba`, padrão `Ajustado`) e deixa a aba
 original como está. As colunas antes do bloco da Média Asiática (até a BH) são
@@ -14,10 +14,18 @@ reescrito linha a linha:
     mesmas datas e a mesma quantidade;
   · datas em DOIS (ou mais) meses → a JANELA está errada: vale o mês com MAIS
     datas, e a linha passa a ter todo dia útil desse mês, do primeiro ao
-    último, no calendário `--calendario` (padrão IPE). A quantidade pode mudar
-    (21 datas que viram os 22 dias úteis do mês), e o relatório diz quando muda;
+    último, no calendário DO ATIVO. A quantidade pode mudar (21 datas que
+    viram os 22 dias úteis do mês), e o relatório diz quando muda;
   · EMPATE entre dois meses não se decide: a linha fica como está e sai no
     relatório para a mesa olhar.
+
+**O calendário é o do ATIVO da linha** (coluna `Ativo subjacente / Moeda
+base`, `CALENDARIO_DO_ATIVO`): `CO1-2` (Brent) conta no IPE e `USD` no ANBIMA.
+Ativo fora dessa lista NÃO é ajustado (fica como está e sai no relatório):
+contar a janela de um ativo no calendário de outro põe dia de bolsa fechada
+dentro dela sem erro nenhum. Planilha SEM a coluna usa `--calendario` para
+todas as linhas, avisando. Data de uma linha que cai em fim de semana ou
+feriado do calendário do ativo sai no log como DIA NÃO ÚTIL (não é mexida).
 
 As datas saem como DATA de verdade (`dd/mm/aaaa`), não como texto. Célula
 mexida ganha fundo amarelo, e a aba `Log Ajuste Datas` diz, por linha, o que foi
@@ -25,8 +33,9 @@ feito e por quê.
 
 **Os feriados são os do Holidays Calendar do app** (o mesmo arquivo que a tela
 de feriados grava), lidos pelo armazém — rode de dentro do checkout da
-instância. Fora dele, `--feriados` aponta para uma planilha (datas na coluna A)
-ou um `.json` do Holidays. Calendário VAZIO, ou sem nenhum feriado num ano que
+instância. Fora dele, `--feriados CAL=arquivo` (repetível) aponta para uma
+planilha (datas na coluna A) ou um `.json` do Holidays; sem o `CAL=`, o
+arquivo vale para o `--calendario`. Calendário VAZIO, ou sem nenhum feriado num ano que
 a planilha usa, PARA o script: sem feriado, "dia útil" vira "dia de semana", e
 a janela sairia com o dia de bolsa fechada dentro, sem erro nenhum.
 
@@ -58,6 +67,8 @@ from openpyxl.utils import get_column_letter             # noqa: E402
 FORMATO = 'dd/mm/yyyy'
 AMARELO = PatternFill('solid', fgColor='FFF2CC')
 _EXCEL_ZERO = date(1899, 12, 30)
+COLUNA_ATIVO = 'ativo subjacente / moeda base'        # normalizada (_norm)
+CALENDARIO_DO_ATIVO = {'CO1-2': 'IPE', 'USD': 'ANBIMA'}
 
 
 def _norm(texto):
@@ -135,6 +146,30 @@ def achar_bloco(ws):
     return None, []
 
 
+def coluna_do_ativo(ws, linha_cab):
+    for c in range(1, ws.max_column + 1):
+        if _norm(ws.cell(linha_cab, c).value) == COLUNA_ATIVO:
+            return c
+    return None
+
+
+def _ativo(valor):
+    return str(valor or '').strip().upper()
+
+
+def fontes_de_feriado(itens, padrao):
+    """`--feriados` → {calendário: arquivo}. `IPE=x.json` nomeia o
+    calendário; o arquivo solto vale para o `--calendario`."""
+    saida = {}
+    for item in itens or []:
+        nome, sep, caminho = item.partition('=')
+        if sep and nome.strip() and not os.path.exists(item):
+            saida[nome.strip().upper()] = caminho
+        else:
+            saida[padrao.upper()] = item
+    return saida
+
+
 def colunas_de_id(ws, linha_cab):
     """As colunas que identificam o trade no log (contrato/identificador)."""
     saida = []
@@ -167,8 +202,10 @@ def main(argv=None):
     ap.add_argument('arquivo')
     ap.add_argument('--aba-origem', help='aba a ler (padrão: a primeira)')
     ap.add_argument('--aba', default='Ajustado', help='nome da aba nova')
-    ap.add_argument('--calendario', default='IPE', help='calendário do Holidays (padrão IPE)')
-    ap.add_argument('--feriados', help='planilha (coluna A) ou .json com os feriados, no lugar do app')
+    ap.add_argument('--calendario', default='IPE',
+                    help='calendário das linhas quando a planilha não tem a coluna do ativo (padrão IPE)')
+    ap.add_argument('--feriados', action='append',
+                    help='CAL=planilha (coluna A) ou .json com os feriados, no lugar do app; repetível')
     ap.add_argument('--dry-run', action='store_true', help='só o relatório, não grava')
     args = ap.parse_args(argv)
 
@@ -185,9 +222,21 @@ def main(argv=None):
     if get_column_letter(bloco[0]) != 'BI':
         print('  aviso: o bloco começa na %s, não na BI' % get_column_letter(bloco[0]))
     ids = colunas_de_id(origem, linha_cab)
+    col_ativo = coluna_do_ativo(origem, linha_cab)
+    if col_ativo:
+        print('Ativo em %s: %s' % (get_column_letter(col_ativo), ', '.join(
+            '%s → %s' % kv for kv in CALENDARIO_DO_ATIVO.items())))
+    else:
+        print('  aviso: sem a coluna "Ativo subjacente / Moeda base" — todas as linhas no %s'
+              % args.calendario)
+
+    def calendario_da_linha(r):
+        if not col_ativo:
+            return args.calendario.upper()
+        return CALENDARIO_DO_ATIVO.get(_ativo(origem.cell(r, col_ativo).value))
 
     # 1. ler e decidir
-    planos, ilegiveis, anos = [], [], set()
+    planos, ilegiveis = [], []
     for r in range(linha_cab + 1, origem.max_row + 1):
         datas = []
         for c in bloco:
@@ -201,34 +250,44 @@ def main(argv=None):
         if not datas:
             continue
         acao, meses, alvo = decidir(datas)
-        planos.append((r, datas, acao, meses, alvo))
-        if alvo:
-            anos.add(alvo[0])
+        planos.append((r, datas, acao, meses, alvo, calendario_da_linha(r)))
     if ilegiveis:
         print('\nCélulas que não são data (ficam como estão): %d' % len(ilegiveis))
         for x in ilegiveis[:10]:
             print('   ', x)
 
-    # 2. feriados — calendário vazio ou ano sem feriado PARA (sem eles a
-    #    janela sairia com dia de bolsa fechada dentro)
-    precisa = sorted({p[4][0] for p in planos if p[2] == 'janela'})
-    if args.feriados:
-        feriados, fonte = feriados_do_arquivo(args.feriados), args.feriados
-    else:
-        feriados, fonte = feriados_do_app(args.calendario), 'Holidays %s do app' % args.calendario
-    print('\nFeriados: %s — %d datas' % (fonte, len(feriados)))
-    sem = [a for a in precisa if not any(f.year == a for f in feriados)]
-    if precisa and sem:
-        sys.exit('PARADO: o calendário não tem nenhum feriado em %s. Cadastre o %s na tela '
-                 'de Holidays (ou passe --feriados) antes de ajustar as janelas.'
-                 % (', '.join(map(str, sem)), args.calendario))
-    for a in precisa:
-        print('   %d: %s' % (a, ', '.join(f.strftime('%d/%m') for f in sorted(feriados) if f.year == a)))
+    # 2. feriados de cada calendário usado — calendário vazio ou ano sem
+    #    feriado PARA (sem eles a janela sairia com dia de bolsa fechada dentro)
+    arquivos = fontes_de_feriado(args.feriados, args.calendario)
+    feriados_de = {}
+    for cal in sorted({p[5] for p in planos if p[5]}):
+        if cal in arquivos:
+            feriados_de[cal], fonte = feriados_do_arquivo(arquivos[cal]), arquivos[cal]
+        else:
+            feriados_de[cal], fonte = feriados_do_app(cal), 'Holidays %s do app' % cal
+        feriados = feriados_de[cal]
+        n_linhas = sum(1 for p in planos if p[5] == cal)
+        print('\nFeriados %s: %s — %d datas · %d linhas' % (cal, fonte, len(feriados), n_linhas))
+        precisa = sorted({p[4][0] for p in planos if p[2] == 'janela' and p[5] == cal})
+        sem = [a for a in precisa if not any(f.year == a for f in feriados)]
+        if precisa and sem:
+            sys.exit('PARADO: o calendário %s não tem nenhum feriado em %s. Cadastre-o na tela '
+                     'de Holidays (ou passe --feriados %s=<arquivo>) antes de ajustar as janelas.'
+                     % (cal, ', '.join(map(str, sem)), cal))
+        for a in precisa:
+            print('   %d: %s' % (a, ', '.join(f.strftime('%d/%m') for f in sorted(feriados) if f.year == a)))
 
     # 3. as novas datas de cada linha
     resultado = {}          # linha → (novas datas, texto do log, acao)
     cont = Counter()
-    for r, datas, acao, meses, alvo in planos:
+    for r, datas, acao, meses, alvo, cal in planos:
+        if cal is None:
+            ativo = _ativo(origem.cell(r, col_ativo).value) or '(vazio)'
+            resultado[r] = (datas, 'Ativo %s sem calendário (%s): NÃO AJUSTADA' % (
+                ativo, ', '.join(CALENDARIO_DO_ATIVO)), 'sem_calendario')
+            cont['sem_calendario'] += 1
+            continue
+        feriados = feriados_de[cal]
         if acao == 'reordenar':
             novas = sorted(datas)
             nota = 'Mesmo mês %02d/%d: reordenadas' % (alvo[1], alvo[0])
@@ -239,12 +298,17 @@ def main(argv=None):
                 nota += ' · DATA REPETIDA: ' + ', '.join(d.strftime('%d/%m/%Y') for d in sorted(dup))
         elif acao == 'janela':
             novas = dias_uteis_do_mes(alvo[0], alvo[1], feriados)
-            nota = 'Janela em %s → %02d/%d inteiro' % (_fmt_meses(meses), alvo[1], alvo[0])
+            nota = 'Janela em %s → %02d/%d inteiro (%s)' % (_fmt_meses(meses), alvo[1], alvo[0], cal)
             if len(novas) != len(datas):
                 nota += ' · QUANTIDADE %d → %d' % (len(datas), len(novas))
         else:
             novas = datas
             nota = 'EMPATE entre %s: não ajustada' % _fmt_meses(meses)
+        if acao in ('reordenar', 'ok', 'empate'):
+            nao_uteis = sorted({d for d in novas if d.weekday() >= 5 or d in feriados})
+            if nao_uteis:
+                nota += ' · DIA NÃO ÚTIL no %s: %s' % (
+                    cal, ', '.join(d.strftime('%d/%m/%Y') for d in nao_uteis))
         if len(novas) > len(bloco):
             nota += ' · %d dias úteis e só %d colunas: NÃO AJUSTADA' % (len(novas), len(bloco))
             novas, acao = datas, 'estouro'
@@ -254,14 +318,18 @@ def main(argv=None):
     print('\nLinhas com data: %d' % len(planos))
     for k, rot in (('reordenar', 'reordenadas'), ('janela', 'janela ajustada'),
                    ('ok', 'já estavam certas'), ('empate', 'EMPATE (não ajustadas)'),
-                   ('estouro', 'mais dias úteis que colunas (não ajustadas)')):
+                   ('estouro', 'mais dias úteis que colunas (não ajustadas)'),
+                   ('sem_calendario', 'ativo sem calendário (não ajustadas)')):
         if cont[k]:
             print('   %-45s %d' % (rot, cont[k]))
     mudou_qtd = [r for r, (n, nota, a) in resultado.items() if 'QUANTIDADE' in nota]
     if mudou_qtd:
         print('   %-45s %d' % ('com quantidade de datas diferente', len(mudou_qtd)))
+    nao_uteis = [r for r, (n, nota, a) in resultado.items() if 'DIA NÃO ÚTIL' in nota]
+    if nao_uteis:
+        print('   %-45s %d' % ('com DIA NÃO ÚTIL (não mexidas)', len(nao_uteis)))
     for r, (n, nota, a) in resultado.items():
-        if a in ('empate', 'estouro'):
+        if a in ('empate', 'estouro', 'sem_calendario') or 'DIA NÃO ÚTIL' in nota:
             print('   linha %d: %s' % (r, nota))
 
     if args.dry_run:
@@ -295,7 +363,7 @@ def main(argv=None):
                     igual = para_data(antes) == depois
                 except ValueError:
                     igual = False
-                if not igual and acao not in ('empate', 'estouro'):
+                if not igual and acao not in ('empate', 'estouro', 'sem_calendario'):
                     cel.fill = AMARELO
             else:
                 try:                               # linha sem ajuste: a data vira DATA
@@ -311,17 +379,19 @@ def main(argv=None):
 
     log = wb.create_sheet('Log Ajuste Datas', index=wb.sheetnames.index(args.aba) + 1)
     cab = (['Linha'] + [str(origem.cell(linha_cab, c).value) for c in ids]
-           + ['Ação', 'Datas antes', 'Datas depois', 'Detalhe'])
+           + ['Ativo', 'Calendário', 'Ação', 'Datas antes', 'Datas depois', 'Detalhe'])
     log.append(cab)
     for c in log[1]:
         c.font = Font(bold=True)
     rotulo = {'reordenar': 'Reordenada', 'janela': 'Janela ajustada', 'ok': 'Sem alteração',
-              'empate': 'Não ajustada (empate)', 'estouro': 'Não ajustada'}
-    for r, datas, acao, meses, alvo in planos:
+              'empate': 'Não ajustada (empate)', 'estouro': 'Não ajustada',
+              'sem_calendario': 'Não ajustada (ativo)'}
+    for r, datas, acao, meses, alvo, cal in planos:
         novas, nota, acao = resultado[r]
+        ativo = _ativo(origem.cell(r, col_ativo).value) if col_ativo else ''
         log.append([r] + [origem.cell(r, c).value for c in ids]
-                   + [rotulo[acao], len(datas), len(novas), nota])
-    for i, w in enumerate([8] + [22] * len(ids) + [22, 12, 12, 70], start=1):
+                   + [ativo, cal or '', rotulo[acao], len(datas), len(novas), nota])
+    for i, w in enumerate([8] + [22] * len(ids) + [12, 12, 22, 12, 12, 70], start=1):
         log.column_dimensions[get_column_letter(i)].width = w
     log.freeze_panes = 'A2'
 
