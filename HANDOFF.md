@@ -25022,3 +25022,53 @@ uma busca). Numa amostra de 1.200 linhas: 1 filtro = contagem crua, 2 colunas
 combinam, "Adicionar seleção" soma (172 + 172 = 344), Clear limpa. (Vazias)
 aparece em toda coluna com célula vazia (47 colunas em 4 páginas com dados).
 
+## §592 — Filtro "de Excel": varredura de cobertura e o funil que ficava atrás do título (2026-09-29)
+
+**Varredura (pedido da mesa: nenhuma tabela de fora).** Código: toda chamada
+`.DataTable(`/`.dataTable(`/`new DataTable(` do repositório — 45 arquivos, e o
+`datatables-rendering.js` do tema, que usa `new DataTable(`, não é carregado
+por página nenhuma. Navegador: 183 URLs (as rotas GET sem argumento, os
+templates do catch-all e os links do menu; fora as que executam ação),
+176 páginas únicas, 62 com DataTable, **73 DataTables** — inclusive as
+escondidas em aba/modal. Nenhuma sem funil, nenhuma com linha de filtro
+visível, nenhum erro de JS. As três que montam a tabela só depois de uma
+busca (Index B3 Results, Quotes, Tickets) passam pelo `init.dt`, provado com
+uma tabela criada 3 s depois do load, com linha de filtro e `orderCellsTop`.
+Ficam de fora, de propósito: o `/mapping` (grade própria, não DataTable, com
+filtro e Clear Filters próprios), as tabelas de campos do `/file-interpreter`
+(editor de layout), o FullCalendar do Holidays/Calendar e as prévias de
+e-mail. **E as `searching: false`**: o DataTables desliga ali TODA filtragem,
+e o menu abriria sem efeito — eram só as tabelas ocultas do Export (Tickets,
+Advanced Export), e o helper passou a pulá-las.
+
+**O funil atrás do texto (Intrag, Reference Data).** Ele era absoluto no canto
+do th, contando com um `padding-right` reservado; essas páginas fixam largura
+e padding do th no próprio CSS, e o recuo sumia. Três tentativas até fechar:
+1. *Inline dentro do `.dt-column-title`* — o título do DataTables 2 é um bloco
+   ao lado do ícone de ordenação: o funil caía numa linha própria (New Deals)
+   ou era cortado pelo `overflow: hidden` do th (Intrag). Piorou (7 → 26
+   páginas).
+2. *Peça do flex `.dt-column-header`* (título · funil · ordenação), o título
+   com `min-width: 0` — fim da sobreposição, mas o título das Intrag passou a
+   sair com "…": a largura da coluna tinha sido medida para o texto.
+3. *`widenTruncated`* — alarga a coluna cujo título (ou o cabeçalho inteiro)
+   transborda. `min-width` no th não vale em `table-layout: fixed`; a largura
+   vai para `sWidthOrig`/`sWidth` da coluna e o `adjust` a aplica. Uma passada
+   não fecha (o DataTables mede numa tabela oculta): 27 → 17 → 0 na Intrag
+   NDF, daí até três.
+
+**Dois efeitos colaterais achados no caminho:** o `adjust` redesenha o
+cabeçalho a partir do layout da init e a linha de filtro voltava (reescondida
+no `column-sizing`); e a reescrita do CSS do funil tinha levado junto as
+regras que escondem a linha de filtro e o funil da cópia de medição do
+`scrollX` — a Intrag mostrou a linha de novo. Essa cópia agora usa
+`visibility: hidden` (ocupa o espaço, para a medida bater), não `display`.
+Palavra não se parte mais no título (`FUNCTIONALIT/Y`): sem caber, o th
+transborda e a coluna alarga.
+
+**Conferido:** sonda de cabeçalho nas 62 páginas, em 1500 e 1280 px —
+sobreposição, funil fora do th, título/cabeçalho cortado (tolerância de 4 px,
+a margem do ícone de ordenação) e palavra partida: zero, salvo `Quote Date
+D-n` quebrando no hífen. Guia do Usuário §4.3 reescrito para o funil; Guia e
+SOP regerados.
+

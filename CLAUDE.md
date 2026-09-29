@@ -743,7 +743,17 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   célula DESENHA (`render('display')`, sem HTML) — nunca `data()[col]`, que
   numa tabela de objetos é `undefined`. Página nova não escreve nada; coluna
   sem funil = cabeçalho vazio, checkbox, Actions ou `searchable: false`;
-  tabela fora com `data-excel-filter="off"`; `serverSide` fica de fora.
+  tabela fora com `data-excel-filter="off"`; `serverSide` e `searching:
+  false` ficam de fora (a segunda desliga TODA filtragem — são as tabelas
+  ocultas do Export). **O funil é uma PEÇA do flex do cabeçalho** do
+  DataTables 2 (`.dt-column-header`: título · funil · ícone de ordenação),
+  nunca absoluto no canto do th: nas telas que fixam a largura da coluna
+  no CSS (as Intrag, o Reference Data) ele ficava POR CIMA do texto. O
+  título é que cede (quebra, ou "…"), palavra não se parte, e o helper
+  ALARGA a coluna cujo título ficou cortado (`widenTruncated`: `sWidthOrig`
+  + `adjust`, até três passadas — tabela `table-layout: fixed` ignora
+  `min-width` no th). O `adjust` redesenha o cabeçalho e traz a linha de
+  filtro de volta: ela é reescondida no `column-sizing`.
   **A antiga linha de filtro por coluna (2ª linha do `<thead>`) é ESCONDIDA
   pelo helper** (`tr.oxf-filter-row`), não apagada: o DataTables redesenha o
   cabeçalho a partir do layout da init e recolocaria o que foi removido; o que
@@ -752,8 +762,8 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   funis** (o helper reconhece o botão pelo id/`data-lang`); página com uma
   tabela por card dá ao botão `data-oxf-table="#id"` e ele limpa só aquela
   (os dois Summaries). Com `scrollX` o DataTables deixa uma CÓPIA do
-  cabeçalho no corpo (altura zero): o funil dela é escondido por CSS, senão
-  aparecia solto no meio das linhas. O `sf-multi.js` e o §462 (delegação no
+  cabeçalho no corpo (altura zero): o funil dela fica `visibility: hidden`
+  (some da vista mas OCUPA o espaço, para a medida das colunas bater). O `sf-multi.js` e o §462 (delegação no
   container) continuam valendo para o que ainda filtra por campo.
 - **Botões de ação: squircle 32×32** travado nos DOIS eixos, `padding:0`,
   `border-radius:10px !important`, ícone Tabler `1rem` (nunca `.fs-13`),
