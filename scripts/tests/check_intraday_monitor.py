@@ -261,6 +261,32 @@ for _arq, _tid in (('apps/pages/features/cetip/entrypoint.py', 'save-cetip'),
     _src = _io.open(os.path.join(ROOT, _arq), encoding='utf-8').read()
     check('a rotina %s grava task_runs.record' % _tid, "task_runs.record('%s'" % _tid in _src, True)
 
+print('\n== 4d2. Save CETIP Files sem registro: o aviso do sino é o plano B ==')
+# Quem salvou por uma instância sem o `task_runs.record` (outra pessoa, pull
+# atrasado) só deixa o aviso "CETIP Files Saved" — a tarefa tem de fechar.
+from apps.pages.features.deals_monitor import queries as _DQ0                # noqa: E402
+_dia_cetip = date(2026, 9, 29)
+_nc = R.get_notif_connection()
+try:
+    _nc.execute("INSERT INTO notifications (actor_sid, actor_name, action, page, detail, created_at) "
+                "VALUES ('X1', 'Outro', 'CETIP Files Saved', 'Control Panel', "
+                "'0 file(s) saved (2026-09-28)', TIMESTAMP '2026-09-29 08:05:00')")
+    _nc.commit()
+finally:
+    _nc.close()
+check('aviso com 0 arquivo não conclui', _DQ0._recon_fallback('save-cetip', _dia_cetip)[0], False)
+_nc = R.get_notif_connection()
+try:
+    _nc.execute("INSERT INTO notifications (actor_sid, actor_name, action, page, detail, created_at) "
+                "VALUES ('X1', 'Outro', 'CETIP Files Saved', 'Control Panel', "
+                "'12 file(s) saved (2026-09-28)', TIMESTAMP '2026-09-29 08:31:00')")
+    _nc.commit()
+finally:
+    _nc.close()
+check('aviso com arquivo salvo conclui, na hora do aviso',
+      _DQ0._recon_fallback('save-cetip', _dia_cetip)[:2], (True, '08:31'))
+check('   e só no dia do aviso', _DQ0._recon_fallback('save-cetip', date(2026, 9, 30))[0], False)
+
 print('\n== 4e. a Intrag Unwind: a recompra do fundo conta desde o IMPORT (§582) ==')
 from apps.pages.features.unwinds import commands as _UC                     # noqa: E402
 from apps.pages.features.deals_monitor import queries as _DQ                # noqa: E402

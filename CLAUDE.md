@@ -1121,7 +1121,9 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `run`** (regra da mesa; o §4d do teste varre o `url_map` e reprova recon de
   fora). O Pay/Rec só conclui no End process (`done_on: 'end'`); a Branch
   Reversal é tarefa condicional. **As rotinas do Control Panel também são tarefas** (tipo
-  `routine`, §577): Save CETIP Files (diária, grava no Save com arquivo salvo) e
+  `routine`, §577): Save CETIP Files (diária, grava no Save com arquivo salvo;
+  sem registro — instância de outra pessoa com código velho — fecha pelo aviso
+  `CETIP Files Saved` do dia no sino, `_cetip_saved_notif`) e
   Confirmations Escalation (segunda e quinta, grava quando o PACOTE da rotina
   sai sem erro, pelo Run do card ou pelo automático como `Automatic`). O aviso das 19h é DAQUI (`_intraday_pending`)
   e se configura no card `intradaytasks` (o `dealsmonitor` saiu). O card de D-1

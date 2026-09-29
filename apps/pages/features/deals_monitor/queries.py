@@ -400,11 +400,35 @@ def _recon_fallback(task_id, dia):
                     d = _store.read(path) or {}
                     return True, quando.strftime('%H:%M'), (
                         len(d.get('pending_payment') or []) + len(d.get('pending_receivement') or []))
+        elif task_id == 'save-cetip':
+            hora = _cetip_saved_notif(dia)
+            if hora:
+                return True, hora, None
     except FileNotFoundError:
         pass
     except Exception:                                       # noqa: BLE001
         _R().log.warning('[intraday-monitor] plano B de %s falhou', task_id, exc_info=True)
     return False, '', None
+
+
+def _cetip_saved_notif(dia):
+    """'HH:MM' do primeiro aviso "CETIP Files Saved" do dia com ao menos um
+    arquivo salvo, ou None — o plano B do Save CETIP Files. Cada pessoa roda a
+    PRÓPRIA instância: quem salva por uma instância sem o `task_runs.record`
+    (pull/restart atrasado) ou com o registro perdido (banco ocupado) deixava a
+    tarefa aberta no Monitor com os arquivos salvos. O aviso do sino sai de
+    toda versão da rotina, na mesma hora, e diz o que foi salvo."""
+    from datetime import timedelta
+    conn = _R().get_notif_connection(readonly=True)
+    try:
+        row = conn.execute(
+            "SELECT MIN(created_at) FROM notifications "
+            "WHERE action = 'CETIP Files Saved' AND created_at >= ? AND created_at < ? "
+            "AND detail NOT LIKE '0 file%'",
+            [dia, dia + timedelta(days=1)]).fetchone()
+    finally:
+        conn.close()
+    return row[0].strftime('%H:%M') if row and row[0] else None
 
 
 def _branch_state(dia, runs):
