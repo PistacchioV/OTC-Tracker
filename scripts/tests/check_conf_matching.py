@@ -8,7 +8,7 @@ O que este teste protege é o que erra em SILÊNCIO quando quebra:
    o `Cancelado`, só o trade date pedido, e o contrato repetido vira UMA linha
    `Duplicated` — não duas operações casadas.
 2. **O lado Athena**: fora o `isCancelled`, fora as pernas internas (book com
-   `NDF` no nome, interbook, accronym de entidade, ECONOMIC GROUP INTERNAL) e
+   `NDF` no nome, interbook, acronym de entidade, ECONOMIC GROUP INTERNAL) e
    fora o que veio com outro Trade Date — tudo por cadastro, nada por lista.
 3. **A chave do batimento** é cega a caixa e a `_` × `-`.
 4. **Cliente por CHAVE**: CPF/CNPJ (a planilha entrega NÚMERO, sem o zero à
@@ -115,7 +115,7 @@ ATHENA = [
     ath('D8', 'DIGITALBR', '1001', instr='FX Forward Start'),       # manual
     ath('D9', 'DIGITALBR', '1001', trade=REF - timedelta(days=1)),  # outro trade date
     ath('D_10', 'SEMCADBR', '7777'),                                # `_` × `-`, sem cadastro
-    ath('D11', 'BANCJPBR', '1001'),                                 # accronym de entidade
+    ath('D11', 'BANCJPBR', '1001'),                                 # acronym de entidade
     ath('D12', 'DIGITALBR', '1001', **{'Other Book': 'INTERBOOK'}), # interbook
     ath('D1', 'DIGITALBR', '1001'),                                 # a API repete o trade
 ]

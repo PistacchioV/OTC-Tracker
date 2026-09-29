@@ -791,15 +791,15 @@ initComplete: function() {
 
 ---
 
-## 15. Sessão 2026-06-19 — Coluna Accronym (NDF/Opt) + insert de coluna em DataTable
+## 15. Sessão 2026-06-19 — Coluna Acronym (NDF/Opt) + insert de coluna em DataTable
 
 ### O que foi feito
 
-#### Rename `Acronym` → `Accronym` (commodities NDF + Opt)
-- Trocado **apenas o texto exibido** (th, placeholder, labels do modal, export headers, `<option>` do seletor de colunas, label do smart-filter, mass-edit, comentário CSS) + valor de tradução **EN** (`nd-col-acronym`, `col-acronym` → "Accronym"). br/es seguem "Sigla".
+#### Rename `Acronym` → `Acronym` (commodities NDF + Opt)
+- Trocado **apenas o texto exibido** (th, placeholder, labels do modal, export headers, `<option>` do seletor de colunas, label do smart-filter, mass-edit, comentário CSS) + valor de tradução **EN** (`nd-col-acronym`, `col-acronym` → "Acronym"). br/es seguem "Sigla".
 - **Mantidas as chaves de dados JSON** (`Acronym` em `COL_TO_JSON_FIELD`, `deal.Acronym`, lado direito de `SF_LABEL_TO_FIELD`, payload do cache) — renomear quebraria a releitura de deals já cacheados.
 
-#### Coluna Accronym entre SPN e Client (fwdstart + otherpublisher)
+#### Coluna Acronym entre SPN e Client (fwdstart + otherpublisher)
 - Comportamento espelhado de commodities: campo `#ar-acronym` no modal com autocomplete (`arBuildDrop`) que auto-preenche `#ar-spn`/`#ar-client`/`#ar-taxid` (agora `disabled`) via RefData.
 - **Fonte do autocomplete = `FX CASH ACCRONYM`** (não COMMODITIES) — são páginas FX NDF. Commodities usa `COMMODITIES ACCRONYM`.
 - Layouts: fwdstart passou de 27→28 colunas (Maker 26→27); otherpublisher de 25→26 (Maker 24→25). otherpublisher **não tem** Strike Set Date/Offset.
@@ -829,18 +829,18 @@ Inserir 1 coluna desloca **todos** os índices ≥ ponto de inserção. Pontos a
 
 **Armadilhas confirmadas nesta sessão:**
 - Há **código morto copiado de commodities** nestas páginas FX: `buildDropdown` (in-cell autocomplete) **nunca é chamado**; bloco `type==='acronym'`/`'underlying'` e `refreshRowMissingBadge` (cols 14/15/28) são no-op (`_ASSET_NDF` sempre vazio). Constantes `MARKET_COL_INDEX`/`UNDERLYING_COL_INDEX`/etc. definidas mas não usadas. Não confiar nelas; ajustar só o que é LIVE.
-- `_sh(d[10])` aparecia tanto como Client (chaves de seleção) quanto, após o insert, como Accronym (extratores/modal) — **não** dá pra `replace_all` cego; editar por contexto.
+- `_sh(d[10])` aparecia tanto como Client (chaves de seleção) quanto, após o insert, como Acronym (extratores/modal) — **não** dá pra `replace_all` cego; editar por contexto.
 
 ### Pendente / bloqueado
-- **Import fwdstart `Brazil_NDF_Blotter_Extended*.xlsx`**: contraparte resolvida por **Accronym OU SPN (o que achar primeiro)** no RefData. NÃO existe parser de Excel ainda (`otc-fileupload.js` só lê `.msg`/`.eml`; `buildRow` é layout commodities). SheetJS já adicionado. **Aguardando o mapeamento das colunas do blotter** (usuário enviará) para construir o parser. Nota: `loadRefData` em `otc-fileupload.js` indexa só por acrônimo → para resolver por SPN será preciso um índice por SPN também.
+- **Import fwdstart `Brazil_NDF_Blotter_Extended*.xlsx`**: contraparte resolvida por **Acronym OU SPN (o que achar primeiro)** no RefData. NÃO existe parser de Excel ainda (`otc-fileupload.js` só lê `.msg`/`.eml`; `buildRow` é layout commodities). SheetJS já adicionado. **Aguardando o mapeamento das colunas do blotter** (usuário enviará) para construir o parser. Nota: `loadRefData` em `otc-fileupload.js` indexa só por acrônimo → para resolver por SPN será preciso um índice por SPN também.
 
 ### Arquivos modificados nesta sessão
 ```
-apps/templates/pages/new_deals-ndf-commodities.html      ← Acronym→Accronym (display)
-apps/templates/pages/new_deals-opt-commodities.html      ← Acronym→Accronym (display)
-apps/static/data/translations/en.json                    ← nd-col-acronym/col-acronym → "Accronym"
-apps/templates/pages/new_deals-ndf-fwdstart.html         ← coluna Accronym + modal + SheetJS
-apps/templates/pages/new_deals-ndf-otherpublisher.html   ← coluna Accronym + modal + SheetJS
+apps/templates/pages/new_deals-ndf-commodities.html      ← Acronym→Acronym (display)
+apps/templates/pages/new_deals-opt-commodities.html      ← Acronym→Acronym (display)
+apps/static/data/translations/en.json                    ← nd-col-acronym/col-acronym → "Acronym"
+apps/templates/pages/new_deals-ndf-fwdstart.html         ← coluna Acronym + modal + SheetJS
+apps/templates/pages/new_deals-ndf-otherpublisher.html   ← coluna Acronym + modal + SheetJS
 apps/templates/partials/sidenav.html                     ← removidos ícones dos subitens Live Position
 apps/static/plugins/xlsx/xlsx.full.min.js                ← ADICIONADO (SheetJS 0.20.3)
 ```
@@ -1474,7 +1474,7 @@ Criado o produto **Option FXO** de ponta a ponta, replicando o fluxo de **Option
 - Endpoint `api_fxo_import_xlsx` (com `dry_run`) + `api_fxo_cache_batch`. Parser openpyxl.
 - **Filtros de linha** (descarta se vazio): coluna **O (SPN)**, **P (End Counterparty)**, **Q (End Counterparty Description)**.
 - Mapeamentos-chave: `UnderlyingAsset = Strike Currency`; `SpotDate = Premium Date (col M)` (dd/mm/yyyy); `TradeType` = VANILLA/ASIAN conforme datas de fixing; `FXHolidaySchedule = ANBIMA`; Put/Call → `Option (Put)/(Call)`.
-- **Add/Edit modal**: referência agora é o **SPN** (não mais Accronym). SPN é autocomplete; preenche FX CASH Accronym/Counterparty/Tax ID via `_fxoFillFromSpn`. Subjacente filtrado por `Classe === 'TAXAS DE CAMBIO'`.
+- **Add/Edit modal**: referência agora é o **SPN** (não mais Acronym). SPN é autocomplete; preenche FX CASH Acronym/Counterparty/Tax ID via `_fxoFillFromSpn`. Subjacente filtrado por `Classe === 'TAXAS DE CAMBIO'`.
 - **Dedup no import** (Deal+Client): se já existem na tabela, SweetAlert lista os duplicados → **Replace** (substitui com `Status=Amend`), **No** (descarta os dup, importa o resto), **Cancel** (não importa nada).
 
 #### Geração Conecta (B3) — `api_fxo_send_conecta`
@@ -1856,18 +1856,18 @@ páginas: **opt-commodities, ndf-commodities, opt-fxo, ndf-fwdstart, ndf-otherpu
 
 - **Módulo compartilhado** `apps/static/js/missing-counterparty.js` (`window.MissingCounterparty.init(cfg)`),
   incluído via `<script>` em cada página. Evita duplicar ~120 linhas com índices diferentes ×5.
-- **Match:** contraparte registrada sse **SPN** (normalizado, zeros à esquerda) **ou Accronym** (COMMODITIES ou
+- **Match:** contraparte registrada sse **SPN** (normalizado, zeros à esquerda) **ou Acronym** (COMMODITIES ou
   FX CASH) casar com algum registro de RefData. Se nenhum casar e houver identificador → **missing**. (comm/ndf
-  enriquecem por Accronym; FXO por SPN — quando não casa, as colunas de contraparte ficam vazias.)
+  enriquecem por Acronym; FXO por SPN — quando não casa, as colunas de contraparte ficam vazias.)
 - **Badge** (`bg-danger rounded-pill`, `data-lang="badge-missing-cp"`) é **DOM-only** (nunca toca `cell.data()`),
   então **coexiste** com o Missing Index B3 (que faz swap do `data()` do Status). Regra: chamar `_cpRefresh()`
   **sempre depois** de `refreshAllMissingBadges()` em todos os call sites (drawCallback, data-load, load do RefData).
 - **Onde aparece:** Status (col 2, append) + colunas de contraparte **enriquecidas/vazias** (não a coluna-chave):
-  - opt-comm / ndf-comm: info `[8,10,11]` (SPN, Client, TaxID); chave = Accronym(9).
-  - opt-fxo: info `[9,10,11]` (Accronym, Client, TaxID); chave = SPN(8).
-  - ndf-fwdstart / ndf-otherpublisher: info `[9,11,12]` (SPN, Client, TaxID); chave = Accronym(10).
+  - opt-comm / ndf-comm: info `[8,10,11]` (SPN, Client, TaxID); chave = Acronym(9).
+  - opt-fxo: info `[9,10,11]` (Acronym, Client, TaxID); chave = SPN(8).
+  - ndf-fwdstart / ndf-otherpublisher: info `[9,11,12]` (SPN, Client, TaxID); chave = Acronym(10).
 - **Registrar + reload:** edit/approve em linha *missing* abre Swal → **Reload Data** (`reloadAndEnrich`: refetch
-  RefData, **re-enriquece** SPN/Client/TaxID/Accronym de cada linha e remove o badge) ou **Go to Reference Data**
+  RefData, **re-enriquece** SPN/Client/TaxID/Acronym de cada linha e remove o badge) ou **Go to Reference Data**
   (`/reference-data`). Guards adicionados no `.btn-row-edit` e no branch `currentStatus==='Pending'` do approve.
 - **i18n:** `badge-missing-cp`, `swal-missing-cp-title`, `swal-missing-cp-html`, `swal-reload-data`,
   `swal-goto-refdata` em en/br/es.
@@ -5279,7 +5279,7 @@ apps/static/data/translations/{en,br,es}.json ← chaves vr-cfg-*, dash-hero-*
   **`GLOBAL_HOLDING_BOOK`** (book interno, não é operação de cliente — `216ae52`).
 - **Contraparte pelo End Counterparty** (`c14d0e5`): código estilo FX Cash Acronym (ex. `CMBB-LAW`)
   contra o `FX CASH ACCRONYM` do RefData, **sem** fallback pelo SPN do payload. Sem cadastro →
-  SPN/Client/Tax ID vazios + badge Missing Counterparty, e o Accronym mostra o código da API.
+  SPN/Client/Tax ID vazios + badge Missing Counterparty, e o Acronym mostra o código da API.
 - **ASIAN só com janela de fixing real** (first preenchido e ≠ last): sem isso o fallback do last
   fixing para a Expiration Date tornava toda vanilla ASIAN.
 - **MXB→MXN** no mapa de moedas e **Rate gravado como 1/rate** quando a perna cotada é moeda fraca
@@ -5319,7 +5319,7 @@ Os pulls deixaram de ser insert-only — cada deal da API é batido com o cache 
   Other Quantity Units da API convertida para ISO (BRR→BRL); FX Pair idem (USB/BRR → USD/BRL). Todos os
   índices posteriores (toggle, exports, hidden targets, modal, `ND_COL_KEYS`) deslocados e auditados.
 - **`ND_COL_KEYS` = colunas VISÍVEIS** (`c14d0e5`): a lista pulava `nd-col-acronym`, então do SPN em
-  diante cada cabeçalho recebia a chave da coluna seguinte (Accronym exibia "Client", Client exibia
+  diante cada cabeçalho recebia a chave da coluna seguinte (Acronym exibia "Client", Client exibia
   "Tax ID"…). O `each()` percorre só o DOM do scroll-head — colunas ocultas (Rate no FWD Start,
   Is BRR Fixed no Other Publisher, Maker em todas) **não** aparecem lá.
 - Ordenação padrão **Client A→Z** (`order [[11,'asc']]`) nas três (`d8ba4b1`); Vanilla com pageLength
@@ -5729,7 +5729,7 @@ mappings via tela"**. Nasceu em `bc5aea4` e cresceu em `2b168a9`, `f579d26`, `2f
 | `currency-base` | Currency Base | `BaseMoeda.json`: código B3 da moeda + **Athena Code**, **Weak Ccy** e **Inverse Decimals** (absorveu o antigo `currency-codes`) |
 | `interbook-ndf` | Interbook API (NDF) | pares que marcam perna interbook no import da API |
 | `publisher-ndf` | Publisher × B3 (NDF) | feeder → Fonte de Informação / Fonte de Consulta / Tela ou Função de Consulta |
-| `le-accronym` | Legal Entity × Accronym | LE por accronym e por Settlement Location |
+| `le-accronym` | Legal Entity × Acronym | LE por acronym e por Settlement Location |
 | `commodities-b3` | Commodities × B3 Code | market Athena → código B3, Holiday Calendar e **Fixed Quote** (absorveu `fixed-underlyings`) |
 | `bank-name` | Bank Name | bancos do editor de contraparte (ID COMPE, nome, ISPB, Tax ID) |
 | `fxo-conv-rate` | FXO Conversion Rate | as duas colunas de Taxa de Conversão do Anexo I da confirmação **Asian** de FX Options (Moeda Base → nome da taxa + Venda/Compra). Seed só com `USD → USD PTAX / Venda`; moeda sem cadastro vira aviso no painel (§139) |
@@ -5786,7 +5786,7 @@ Deals importados antes disso ficam com a coluna vazia até o próximo pull.
   filtro era descartado antes do POST e a tela não reagia. Ao adicionar coluna ao smart filter, as
   **duas** listas precisam da entrada.
 
-## 133. Sessão 2026-07-29 — Publisher × B3 e Legal Entity × Accronym (`4e4992c`, `f789d02`, `88dc43d`)
+## 133. Sessão 2026-07-29 — Publisher × B3 e Legal Entity × Acronym (`4e4992c`, `f789d02`, `88dc43d`)
 
 ### Publisher (feeder) × B3
 
@@ -5806,11 +5806,11 @@ dicionário hardcoded — um no servidor (send-conecta genérico) e outro **repe
 - **Corrigiu divergência preview × arquivo**: o FWD Start decidia por `indexOf('PTAX')` e o servidor por
   igualdade, então feeder composto aparecia como Fonte 0 / Boletim 3 na tela e saía 1 / 1 no arquivo.
 
-### Legal Entity × Accronym (grafia com dois C, no nome e no header)
+### Legal Entity × Acronym (grafia com dois C, no nome e no header)
 
 - Colunas: `LE` (**dropdown** — / JPM / MGT / LAWTON, com `autofill` da Settlement Location) ·
   `ACCRONYM` · `SETTLEMENT LOCATION`.
-- Resolução da LE em `_ndf_deal_from_api`: **linha do accronym vence** (é a específica), senão a da
+- Resolução da LE em `_ndf_deal_from_api`: **linha do acronym vence** (é a específica), senão a da
   Settlement Location, senão a location crua. O de-para `BRAZIL→JPM / JPMCBB→MGT` que estava no código
   virou as três linhas do seed.
 - **O "não quero criar 200 linhas de Lawton/Banco/MGT no Reference Data" foi resolvido sem coluna de
@@ -5823,14 +5823,14 @@ dicionário hardcoded — um no servidor (send-conecta genérico) e outro **repe
 
 ### O caso das pernas internas (End Counterparty = nome de book) — `7e4a7f8`
 
-Sintoma que motivou o ajuste: nas três páginas de NDF, operações com accronym `LM-FXECOMBRR FXC` e
+Sintoma que motivou o ajuste: nas três páginas de NDF, operações com acronym `LM-FXECOMBRR FXC` e
 `LM-FXECOMBRR JPMCBB FXC` apareciam com **LE JPM** (vinha da Settlement Location `BRAZIL`, que para essas
 pernas está errada) e **Missing Counterparty** em SPN/Client/Tax ID — a contraparte é a própria entidade,
-não um cliente, e o accronym que a API manda é nome de book.
+não um cliente, e o acronym que a API manda é nome de book.
 
 - **`_ndf_le_accronyms(le)`** resolve isso sem coluna nova: cadastre para a LE **tanto os códigos que a
-  API manda** (os nomes de book) **quanto o accronym da entidade no Reference Data**. O
-  `_ndf_ref_by_accronym` tenta, em ordem: código exato → accronym base → **qualquer código cadastrado
+  API manda** (os nomes de book) **quanto o acronym da entidade no Reference Data**. O
+  `_ndf_ref_by_accronym` tenta, em ordem: código exato → acronym base → **qualquer código cadastrado
   para aquela LE** (o nome da LE entra como último candidato). Assim uma linha de cadastro por entidade
   atende todos os books dela, e cliente normal nunca é sequestrado pela entidade, porque o exato vem
   primeiro.
@@ -5840,7 +5840,7 @@ não um cliente, e o accronym que a API manda é nome de book.
   já sai certa). É **uma** linha, não 200.
 - O `Acronym` da tabela passa a mostrar o código do Reference Data (ex. `JPMORGANBM`) quando a linha é
   encontrada. O nome do book segue visível nas colunas **Trading Book / Other Book**.
-- No re-enriquecimento, quando o accronym gravado identifica a LE pelo mapping, **a LE é corrigida** —
+- No re-enriquecimento, quando o acronym gravado identifica a LE pelo mapping, **a LE é corrigida** —
   as linhas que já estão no cache se acertam na próxima visita à página. Só mexe em linha sem SPN, então
   operação já enriquecida não é tocada.
 
@@ -6310,7 +6310,7 @@ página de Vanilla como negócio novo.
 **Como o par é reconhecido** (`_ndf_rebook_key`): **contraparte + notional + data de vencimento**, com a
 **Trade Date do vanilla igual à Strike Set Date do FWD Start**. Strike e trade date **não** entram:
 o strike é justamente o que a fixação define (o FWD Start nem chega a ter `Rate` gravado) e a data de
-negociação do re-booking é outra por construção. A contraparte casa por SPN, com o accronym de reserva;
+negociação do re-booking é outra por construção. A contraparte casa por SPN, com o acronym de reserva;
 o notional entra em valor absoluto (a direção viaja no `Direction`, não no sinal).
 
 **De onde saem os FWD Start comparados — duas fontes, unidas:**
@@ -6347,7 +6347,7 @@ novo à toa. Agora:
 **O que é cosmético** — lista curta de propósito, em `_ND_AMEND_COSMETIC`:
 - **`OtherBook` e `TradingBook`** — os dois books são onde a operação está pendurada dentro do banco;
   contraparte, valor e prazo do negócio não mudam quando ela troca de book;
-- **troca de accronym dentro da MESMA entidade** (JPM→JPM, MGT→MGT, LAWTON→LAWTON).
+- **troca de acronym dentro da MESMA entidade** (JPM→JPM, MGT→MGT, LAWTON→LAWTON).
 
 Todo o resto é econômico **por default** — vencimento, notional, strike/`Rate`, `Direction` (compra ×
 venda), `Instrument` (put × call), `Premium`, `SpotDate` (pagamento do prêmio) e qualquer campo que
@@ -6355,9 +6355,9 @@ ninguém previu. É a direção segura: um campo esquecido aparecendo como Amend
 contrário custa uma operação registrada errada.
 
 **Como a "mesma entidade" é decidida** (`_nd_amend_same_entity`), em duas fontes:
-1. **a coluna `LE` do deal** quando o produto tem uma (os três NDFs) — ela já é derivada do accronym e da
+1. **a coluna `LE` do deal** quando o produto tem uma (os três NDFs) — ela já é derivada do acronym e da
    settlement location, ou seja, *é* a entidade;
-2. **o accronym**, quando não há coluna LE (é o caso do **FXO**): LE cadastrada no mapping `le-accronym`
+2. **o acronym**, quando não há coluna LE (é o caso do **FXO**): LE cadastrada no mapping `le-accronym`
    e, se o código não estiver cadastrado, o **sufixo depois do último hífen** (`CMBB-LAW` → `LAW`) — o
    mesmo corte de `_ndf_accronym_variants`. Entidade desconhecida **nunca empata**: dois códigos que
    ninguém sabe de onde vêm podem ser de entidades diferentes.
@@ -6501,29 +6501,29 @@ fora da tela e as três condições de desistência do handler global.
 
 ---
 
-## §143 — FXO marcava "Missing Counterparty" com o accronym cadastrado no mapping
+## §143 — FXO marcava "Missing Counterparty" com o acronym cadastrado no mapping
 
 **Sintoma** (30/07/2026): linhas de perna interna em New Deals FXO com o badge vermelho
-"Missing Counterparty" nas colunas Accronym / Client / Tax ID, mesmo com `CMBB` e `CMBB-LAW`
-cadastrados no mapping **Legal Entity × Accronym**. O NDF resolvia as mesmas contrapartes.
+"Missing Counterparty" nas colunas Acronym / Client / Tax ID, mesmo com `CMBB` e `CMBB-LAW`
+cadastrados no mapping **Legal Entity × Acronym**. O NDF resolvia as mesmas contrapartes.
 
 **Causa-raiz — enriquecimento por SPN, e só.** `_fxo_deal_from_row` procurava a contraparte
 **exclusivamente pelo SPN** (`refmap.get(_norm_spn(spn))`, índice do Reference Data) e gravava
 `'Acronym': ref.get('FX CASH ACCRONYM') or ''`. Na perna interna o SPN que a API manda é de
 **book** (`5068198`) — nunca esteve nem estará no Reference Data —, então `ref` vinha `{}` e a
-coluna Accronym ficava **vazia**.
+coluna Acronym ficava **vazia**.
 
 O resgate existe no front (`missing-counterparty.js`): `isMissing()` consulta o mapping
-le-accronym antes de marcar. Mas ele procura **o valor da célula Accronym** no mapping — e com a
+le-accronym antes de marcar. Mas ele procura **o valor da célula Acronym** no mapping — e com a
 célula vazia não há o que procurar. O cadastro estava certo; o código nunca chegava a consultá-lo.
 
 O NDF não tinha o problema porque `_ndf_deal_from_api` já fazia as duas coisas:
-enriquecia por accronym (`_ndf_ref_by_accronym`) e gravava `'Acronym': ... or end_cp`.
+enriquecia por acronym (`_ndf_ref_by_accronym`) e gravava `'Acronym': ... or end_cp`.
 
 **Correção** (`_fxo_deal_from_row`, vale para o pull da API **e** para o import de XLSX, que
 compartilham o builder):
 
-1. SPN sem registro → tenta pelo **End Counterparty**, que é o accronym da contraparte
+1. SPN sem registro → tenta pelo **End Counterparty**, que é o acronym da contraparte
    (`_ndf_ref_by_accronym(refmap_acr, end_cp, _ndf_le_from_accronym(end_cp))`).
 2. `'Acronym'` cai para `end_cp` quando o Reference Data não tem nada — a coluna deixa de mentir
    que não há informação, e o badge passa a ter o que consultar no mapping.
@@ -6537,21 +6537,21 @@ FX CASH ACCRONYM → registro; substituiu **três** cópias inline do mesmo laç
 **Armadilha resolvida junto — o backfill não pode devolver o deal para a fila.** Os deals já
 gravados têm `Acronym: ''`; no primeiro pull depois do deploy o campo vira `CMBB`. Como `Acronym`
 é campo comparado no amend (§140), *todo* deal interno que já estava Success voltaria a Amend de
-uma vez. `_nd_amend_is_economic` ganhou a exceção: **accronym aparecendo onde a célula estava
+uma vez. `_nd_amend_is_economic` ganhou a exceção: **acronym aparecendo onde a célula estava
 vazia, com o SPN intacto, é enriquecimento nosso que melhorou, não troca de contraparte** — a
 célula é destacada, o status não regride. SPN diferente junto = é outra contraparte, continua
 Amend.
 
-**Front alinhado**: `missing-counterparty.js` comparava o accronym como string exata enquanto o
+**Front alinhado**: `missing-counterparty.js` comparava o acronym como string exata enquanto o
 backend compara achatado (`_ndf_flat`: só letras e números). Agora usa o mesmo achatamento, então
 espaço/hífen/caixa a mais no cadastro não fazem o badge reaparecer. Cache-buster `?v=20260730b`
 nas 6 páginas que carregam o arquivo.
 
 **Testes** (scratchpad): `check_fxo_cp.py` monta o deal a partir do **record real** da API que o
-usuário mandou e verifica a premissa (SPN ausente do RefData), o match no mapping, o Accronym
+usuário mandou e verifica a premissa (SPN ausente do RefData), o match no mapping, o Acronym
 preenchido, o badge antes/depois e que a contraparte de cliente normal continua vindo do SPN.
 `check_fxo_amend.py` cobre os cinco casos do amend: backfill fica Success, troca de entidade vira
-Amend, JPM→JPM continua Success, Strike vira Amend, SPN+accronym juntos viram Amend.
+Amend, JPM→JPM continua Success, Strike vira Amend, SPN+acronym juntos viram Amend.
 
 **Depende de restart** (`routes.py`) na instância do time. Os deals já importados são corrigidos
 sozinhos no próximo pull da API (horário no FXO) ou clicando Import.
@@ -6564,37 +6564,37 @@ sozinhos no próximo pull da API (horário no FXO) ou clicando Import.
 **Premium** respondia "Nothing to Generate — No operations with premium payment (Spot Date) due today".
 
 **A Spot Date não era a culpada.** O filtro `_date_br(d['SpotDate']) == _today_br()` passava. O que
-derrubava tudo vinha depois: `build_premium_emails` resolvia a contraparte **só pelo accronym**
+derrubava tudo vinha depois: `build_premium_emails` resolvia a contraparte **só pelo acronym**
 (`ref = _build_refdata_index(ref_key)`, `rec = ref.get(acronym)`). A conta B3 sai desse registro, e o
 e-mail só é gerado para o bucket `73760.10-2` — com `rec = {}` a conta vem vazia, nunca bate, e o deal
 é descartado **em silêncio**.
 
-E o accronym é **opcional** no Reference Data: há contraparte cadastrada com a coluna em branco. A
-própria tela provava isso — Client e Tax ID preenchidos (achados pelo **SPN**) e a coluna Accronym
+E o acronym é **opcional** no Reference Data: há contraparte cadastrada com a coluna em branco. A
+própria tela provava isso — Client e Tax ID preenchidos (achados pelo **SPN**) e a coluna Acronym
 vazia na mesma linha.
 
 **Segundo defeito, achado junto.** `_group_by_acronym_commodity` agrupava por `(Acronym, Commodities)`.
-Com o accronym vazio, **contrapartes diferentes caíam no mesmo grupo** — um e-mail só, com os deals de
-todo mundo, endereçado a quem calhasse de estar em primeiro. Nunca apareceu porque o grupo de accronym
+Com o acronym vazio, **contrapartes diferentes caíam no mesmo grupo** — um e-mail só, com os deals de
+todo mundo, endereçado a quem calhasse de estar em primeiro. Nunca apareceu porque o grupo de acronym
 vazio morria no filtro da conta B3 logo em seguida; consertar o primeiro defeito sem este teria
 transformado um e-mail que não saía num e-mail errado que sai.
 
 **Correção** (`otc_emails.py`):
 
-- `_build_refdata_spn_index()` + `_ref_for_deal(by_acronym, by_spn, deal)`: resolve pelo accronym e,
+- `_build_refdata_spn_index()` + `_ref_for_deal(by_acronym, by_spn, deal)`: resolve pelo acronym e,
   quando ele não resolve, **pelo SPN** — que é obrigatório e é a chave usada no resto do projeto.
-- `_group_by_acronym_commodity` cai para `'SPN:<normalizado>'` na chave quando não há accronym.
+- `_group_by_acronym_commodity` cai para `'SPN:<normalizado>'` na chave quando não há acronym.
 - `build_premium_emails` e `build_economic_affirmation_emails` passam a usar `_ref_for_deal`; nome e
   Tax ID caem para os do próprio deal quando o Reference Data não tem.
 
 **Efeito colateral corrigido de propósito na Econ. Affirmation**: a afirmação é para instituição
-financeira, e exclui quem está em `EXCLUDED_B3_AFFIRMATION`. Com o accronym vazio a conta B3 vinha em
+financeira, e exclui quem está em `EXCLUDED_B3_AFFIRMATION`. Com o acronym vazio a conta B3 vinha em
 branco, não batia com nenhuma da lista de exclusão, e **um cliente passava por instituição financeira
 e recebia uma afirmação que não é dele**. Resolvendo pelo SPN, ele volta a ser excluído.
 
 **Testes**: `check_premium.py` (scratchpad) reproduz o caso da tela — mesmo deal, mesma Spot Date, com
-e sem accronym —, isola o filtro de Spot Date para provar que não era ele, cobre o agrupamento de duas
-contrapartes sem accronym e as regressões (Lawton fora, bucket errado fora, cliente sem afirmação de
+e sem acronym —, isola o filtro de Spot Date para provar que não era ele, cobre o agrupamento de duas
+contrapartes sem acronym e as regressões (Lawton fora, bucket errado fora, cliente sem afirmação de
 IF, IF continua recebendo).
 
 ---
@@ -6673,13 +6673,13 @@ le = _ndf_le_from_accronym(end_cp) or _ndf_le_from_location(loc) or loc
 ref = _ndf_ref_by_accronym(refmap_acr, end_cp, le)     # <- le vinha da location
 ```
 
-`SOMICHEL` não está cadastrado como accronym, então a LE caía para a da **Settlement Location**
-(`BRAZIL` → `JPM`). E o último passo de `_ndf_ref_by_accronym` varre os accronyms daquela LE no
+`SOMICHEL` não está cadastrado como acronym, então a LE caía para a da **Settlement Location**
+(`BRAZIL` → `JPM`). E o último passo de `_ndf_ref_by_accronym` varre os acronyms daquela LE no
 Reference Data: achou `GN NDF BJPM` e devolveu o **Banco J.P. Morgan**. Silenciosamente, numa operação
 que segue para registro na B3 e para confirmação.
 
 A Settlement Location é a **nossa** perna, não a da contraparte. Esse passo existe para perna interna
-(End Counterparty que é nome de book JPM) e só pode ser alcançado quando o **próprio accronym da
+(End Counterparty que é nome de book JPM) e só pode ser alcançado quando o **próprio acronym da
 contraparte** identifica uma entidade.
 
 **Correção**:
@@ -6689,9 +6689,9 @@ contraparte** identifica uma entidade.
   deixou de usá-la.
 - `_ndf_ref_by_accronym(..., le, refmap_spn=, spn=)` ganhou um passo intermediário: **o SPN que a
   própria API manda**. Ele identifica a contraparte sozinho, então vem antes do passo da LE, que é
-  palpite. É por ele que a Michelin (cadastrada com accronym `MICHBRA`, diferente do `SOMICHEL` da
+  palpite. É por ele que a Michelin (cadastrada com acronym `MICHBRA`, diferente do `SOMICHEL` da
   API) é resolvida corretamente.
-- Ordem final: accronym exato → accronym sem sufixo de entidade → **SPN da API** → accronyms da LE
+- Ordem final: acronym exato → acronym sem sufixo de entidade → **SPN da API** → acronyms da LE
   (só se a contraparte for perna interna).
 - `_generic_nd_reenrich` tinha o mesmo defeito aplicado a quem já está no arquivo (caía para
   `deal['LE']`, que veio da location). Passa `le_map` apenas.
@@ -6700,9 +6700,9 @@ Nada casando, SPN/Client/TaxID ficam vazios e a página marca "Missing Counterpa
 certo: pede cadastro em vez de inventar contraparte.
 
 **Teste**: `check_ndf_cp.py` (scratchpad) usa o record real da API e um Reference Data montado para o
-cenário (Banco J.P. Morgan com `GN NDF BJPM`, Michelin com accronym diferente): a operação resolve
+cenário (Banco J.P. Morgan com `GN NDF BJPM`, Michelin com acronym diferente): a operação resolve
 para a Michelin pelo SPN, contraparte desconhecida fica vazia em vez de virar JPMorgan, perna interna
-continua resolvendo pela LE do próprio accronym, e o re-enriquecimento não reintroduz o erro.
+continua resolvendo pela LE do próprio acronym, e o re-enriquecimento não reintroduz o erro.
 
 **Depende de restart** e de novo pull. As operações já gravadas com a contraparte errada **não são
 corrigidas sozinhas**: o `_generic_nd_reenrich` só mexe em deal com SPN vazio, e essas têm o SPN
@@ -6721,11 +6721,11 @@ vez do cliente.
 
 **Onde isso mudou**:
 
-- `_ndf_ref_by_accronym` voltou à assinatura `(refmap_acr, acr, le=None)`. Ordem: accronym exato →
-  accronym sem sufixo de entidade → accronyms da LE (só quando a contraparte é perna interna).
-  Quando a API for corrigida, o SPN volta como passo **entre** o accronym e a LE — está anotado no
+- `_ndf_ref_by_accronym` voltou à assinatura `(refmap_acr, acr, le=None)`. Ordem: acronym exato →
+  acronym sem sufixo de entidade → acronyms da LE (só quando a contraparte é perna interna).
+  Quando a API for corrigida, o SPN volta como passo **entre** o acronym e a LE — está anotado no
   docstring.
-- `_fxo_deal_from_row` **inverteu a ordem**: agora procura primeiro pelo accronym da contraparte
+- `_fxo_deal_from_row` **inverteu a ordem**: agora procura primeiro pelo acronym da contraparte
   (End Counterparty) e só usa o SPN da API como último recurso, para não perder o que já resolvia por
   ele. Antes o SPN era a chave primária — o FXO enriquecia toda linha pelo campo que traz a LE.
 - O `SPN` mostrado na tela do FXO passa a ser o do **Reference Data** quando a contraparte foi
@@ -6735,7 +6735,7 @@ Sem cadastro, a linha fica vazia e a página marca "Missing Counterparty" — qu
 desejado: pedir cadastro em vez de inventar contraparte.
 
 **Teste**: `check_ndf_cp.py` foi atualizado para a regra nova — a operação da Michelin fica vazia
-enquanto o accronym não estiver no Reference Data, resolve certo assim que estiver, e em nenhum dos
+enquanto o acronym não estiver no Reference Data, resolve certo assim que estiver, e em nenhum dos
 casos vira o Banco J.P. Morgan.
 
 ---
@@ -6916,7 +6916,7 @@ Metrics, Live Position Cashflow/Premium, Intrag Swap e os módulos de Swap.
 2. **Com dados fictícios, toda linha vira "Missing Counterparty".** As contrapartes inventadas não
    estão no Reference Data, e o guia mostraria o sistema como se estivesse quebrado. Foi preciso
    cadastrar **temporariamente** 6 contrapartes fictícias no `RefData.json` (com `B3 ACCOUNT`
-   `73760.10-2` e o mesmo accronym usado nos deals), capturar, e **restaurar o arquivo**. Conferir a
+   `73760.10-2` e o mesmo acronym usado nos deals), capturar, e **restaurar o arquivo**. Conferir a
    restauração por `md5` **e** por `git status` — o arquivo é versionado.
 
 Depois da captura: apagar os arquivos de cache de demonstração e restaurar o `RefData.json`. Nenhum
@@ -7451,14 +7451,14 @@ Dois mappings novos na tela `/mapping`, pela regra de sempre: nada mapeável fic
 ### Legal Entity × SPN (`le-spn`)
 
 Colunas **Legal Entity** (dropdown), **SPN** e **Notes**. É o SPN da **nossa** ponta — coisa diferente
-do SPN da contraparte, que continua vindo do Reference Data pelo accronym (§147/§148). Nasce **vazio**:
+do SPN da contraparte, que continua vindo do Reference Data pelo acronym (§147/§148). Nasce **vazio**:
 não havia de-para hardcoded para semear, e SPN inventado no seed sairia em arquivo para a B3 com cara
 de cadastro real. Mesmo critério do `swap-curves`.
 
 A lista de LEs virou `_MAP_LE_OPTIONS`, compartilhada com o `le-accronym` para as duas não divergirem.
 A **ATACAMA** entrou depois em `_MAP_LE_SPN_OPTIONS` (`_MAP_LE_OPTIONS + ['ATACAMA']`), só no `le-spn`:
-o `le-accronym` segue com as três entidades que de fato têm accronym e settlement location. Se a
-ATACAMA passar a ter accronym, mova o valor para `_MAP_LE_OPTIONS` e apague a lista extra.
+o `le-accronym` segue com as três entidades que de fato têm acronym e settlement location. Se a
+ATACAMA passar a ter acronym, mova o valor para `_MAP_LE_OPTIONS` e apague a lista extra.
 
 > A lista de LEs é **código, não cadastro**: cada entidade nova custa commit + restart, que é justo o
 > atrito que a tela existe para evitar. Se aparecerem mais, o certo é o LE virar texto livre ou puxar as
@@ -7492,7 +7492,7 @@ Duas semânticas que precisavam ficar separadas — e é aqui que se erra:
 
 O nome casa pelo **normalizado** (`_ndf_pdf_norm`: sem acento, caixa alta, espaços colapsados, travessão
 vira hífen), então grafia diferente entre a tela e o Reference Data não quebra o match. O que precisa
-bater é a **razão social**, não o accronym.
+bater é a **razão social**, não o acronym.
 
 Verificado com `scripts/tests/check_ndf_pdf_cpty.py` — 24 asserções, incluindo a **paridade entre o seed
 em `routes.py` e a tupla de fallback em `otc_emails.py`**: editar um e esquecer o outro faz a instância
@@ -7711,19 +7711,19 @@ O primeiro foi testado ao contrário: com o `product` deixando de ser reescrito,
 levantado foi `LM-FWDECOMBRR FXC`) vinham com **SPN, Client e Tax ID em branco — e sem badge nenhum**.
 Pior que o Missing Counterparty: a linha parecia normal.
 
-**Por que.** A busca da contraparte tentava, nesta ordem, o accronym no Reference Data e depois os
-accronyms cadastrados para a Legal Entity no mapping `le-accronym`. Só que **book não tem accronym no
+**Por que.** A busca da contraparte tentava, nesta ordem, o acronym no Reference Data e depois os
+acronyms cadastrados para a Legal Entity no mapping `le-accronym`. Só que **book não tem acronym no
 Reference Data** — a entidade tem (`JPMORGANBM`), o book não. Nenhum dos dois passos casava. E o badge
-não aparecia porque o `missing-counterparty.js` isentava do aviso qualquer accronym cadastrado no
+não aparecia porque o `missing-counterparty.js` isentava do aviso qualquer acronym cadastrado no
 `le-accronym`: "é perna interna, está tudo bem" — sem checar se a resolução tinha voltado com alguma
 coisa.
 
 **A ordem agora** (`_ndf_ref_by_accronym`), ditada pela mesa:
 
-1. accronym exato do End Counterparty no Reference Data, e o accronym sem o sufixo de entidade;
-2. **sendo perna interna** — o accronym está no `le-accronym` —, a *identidade da entidade*
+1. acronym exato do End Counterparty no Reference Data, e o acronym sem o sufixo de entidade;
+2. **sendo perna interna** — o acronym está no `le-accronym` —, a *identidade da entidade*
    (`_ndf_le_refdata`): **razão social** cadastrada em `le-spn` procurada no Reference Data pelo nome
-   normalizado → accronyms da LE → **SPN** cadastrado em `le-spn` (a linha inteira do Reference Data se
+   normalizado → acronyms da LE → **SPN** cadastrado em `le-spn` (a linha inteira do Reference Data se
    o SPN existir lá; só o SPN, se não);
 3. **não sendo**, o **SPN que veio da API** — que passou a trazer o SPN da contraparte, e não mais o da
    Legal Entity (era a correção pendente citada em §147/§148);
@@ -7744,7 +7744,7 @@ lá: um `upgrade` (`_le_spn_upgrade`) cria a linha que falta e preenche o nome *
 existe**. Nome apagado pela tela continua apagado — senão o cadastro brigaria com o usuário a cada
 leitura.
 
-**O accronym da API é preservado.** Resolvendo pela identidade da entidade, a coluna Accronym continua
+**O acronym da API é preservado.** Resolvendo pela identidade da entidade, a coluna Acronym continua
 mostrando `LM-FWDECOMBRR FXC` e não `JPMORGANBM`: trocar apagaria da tela o book que a operação
 realmente tem. Vale nos três lugares — builder do NDF, builder do FXO e o re-enriquecimento dos deals
 já gravados (`_generic_nd_reenrich`, que é o que conserta as linhas que já estão no arquivo do dia, sem
@@ -7836,10 +7836,10 @@ Comparar os três campos, sozinho, teria um efeito colateral feio: no primeiro p
 quando a perna interna passou a resolver SPN/Client/Tax ID que vinham vazios — **todo deal interno já
 registrado cairia de Success para Amend**, de uma vez.
 
-A régua é o **accronym**, que é quem identifica a contraparte (nunca o SPN nem a settlement location,
+A régua é o **acronym**, que é quem identifica a contraparte (nunca o SPN nem a settlement location,
 §147/§148). Em `_nd_amend_is_economic`:
 
-| mudou | accronym | resultado |
+| mudou | acronym | resultado |
 |---|---|---|
 | SPN / Client / Tax ID | **igual** | célula destacada, **Status preservado** — mudou a nossa resolução, não o negócio |
 | SPN / Client / Tax ID | mudou, mesma entidade | idem (mesma régua do `Acronym`) |
@@ -9802,7 +9802,7 @@ alcança ali.
   **SPN** apontando para o mesmo CNPJ (só dígitos dos dois lados, porque CETIP e Athena pontuam
   diferente). Cliente cadastrado uma vez serve as duas telas; cliente novo entra no Reference Data como
   sempre entrou. Se aparecer uma grafia que o Reference Data não conhece, o conserto é registrar o
-  accronym lá — não abrir uma tabela nova.
+  acronym lá — não abrir uma tabela nova.
 - **`fxo-internal-cpty`** — a perna interna, que chega à Athena com o nome da mesa (o book) enquanto a
   CETIP registra o código do fundo. A coluna **`INVERT DIRECTION`** separa dois casos que não podem ser
   tratados juntos: `No` só troca o nome, e vale **sempre**; `Yes` é a perna **espelhada** (o Buy/Sell
@@ -12415,7 +12415,7 @@ importou nada. Fim antes do começo (`20:00-08:00`) atravessa a meia-noite, em v
 
 A regra do amend da API já poupava quem estava **`Success`**: só um dado **econômico** derruba uma
 operação registrada de volta para a fila (§176), e trocar o Other Book ou passar a resolver o
-accronym de uma perna interna destaca a célula e mantém o status.
+acronym de uma perna interna destaca a célula e mantém o status.
 
 O **`Sent` estava de fora**, e era um buraco por onde passava exatamente o que a regra existe para
 evitar. `Sent` é o arquivo de registro **já enviado à B3**, e vem **antes** do `Success` — então a
@@ -13882,7 +13882,7 @@ Repoints: `check_pc_mass_update` (fonte + platform/pending_confirmation.py) e `c
 O décimo motor, o maior da fase (~2.450 linhas, 82 nomes): os caches de deal das quatro páginas
 (`_find_*`, `_deal_matches`, `_fxo_deal_from_row`, `_ndf_deal_from_api`), os dois pulls da
 Athena com schedulers (estado `*_scheduler_started` rebindado mora lá), a regra de Amend
-(`_ND_AMEND_*`, `_nd_api_amend`, `_nd_cancel_in_file`), a resolução de contraparte por accronym
+(`_ND_AMEND_*`, `_nd_api_amend`, `_nd_cancel_in_file`), a resolução de contraparte por acronym
 (§7), a perna fraca (`_ndf_weak_leg`), o espelho Lawton e a geração TER
 (`_generic_ndf_ter_line`, `_ndf_comm_ter_lines`).
 
@@ -17057,7 +17057,7 @@ Dois pedidos da mesa, os dois no par Overview × Track Docs:
     dinheiro, 0,125 é 0,13), sem separador de milhar — o `_ndfc_num` lê vírgula
     como decimal;
   - LEGAL sai da Settlement Location → LE (`le-accronym`) → razão social
-    (`le-spn`), e NM_COUNTERPARTY do Reference Data pelo accronym do End
+    (`le-spn`), e NM_COUNTERPARTY do Reference Data pelo acronym do End
     Counterparty (e pelo SPN) — a MESMA resolução do New Deals, então o nome
     que o NDF Summary agrupa e o SPN que ele procura são os do cadastro. Sem
     cadastro fica a descrição da API / a location crua, visíveis;
@@ -18106,7 +18106,7 @@ nome igual ao do Reference Data + `current` no slot certo → `BCO: 341 | AG:
 0910 | CC: 967`. O que deixa em branco, cada um visível no script: (1) o
 NOME da linha do Cockpit não bate com o `COUNTERPARTY` do Reference Data —
 a busca é pelo nome normalizado, e `BETA SA` ≠ `BETA S.A.`; a linha da API
-só recebe o nome do Reference Data quando o accronym/SPN resolve, senão fica
+só recebe o nome do Reference Data quando o acronym/SPN resolve, senão fica
 a descrição da Athena; (2) o SPN resolvido não tem registro no Counterparty
 Details; (3) o slot da DIREÇÃO está só `pending` (o checker não aprovou o
 default, só a conta) — banco RECEIVE lê `DEFAULT_PAY`, banco PAY lê

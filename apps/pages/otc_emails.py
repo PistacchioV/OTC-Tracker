@@ -271,7 +271,7 @@ def _refdata():
 
 
 def _build_refdata_index(key='COMMODITIES ACCRONYM'):
-    """acronym → ref record. `key` selects which RefData accronym column to index
+    """acronym → ref record. `key` selects which RefData acronym column to index
     by: 'COMMODITIES ACCRONYM' (commodities) or 'FX CASH ACCRONYM' (FXO)."""
     idx = {}
     for r in _refdata():
@@ -282,7 +282,7 @@ def _build_refdata_index(key='COMMODITIES ACCRONYM'):
 
 
 def _build_refdata_spn_index():
-    """SPN normalizado → ref record. O accronym é opcional no Reference Data (há
+    """SPN normalizado → ref record. O acronym é opcional no Reference Data (há
     contraparte cadastrada com a coluna em branco), o SPN não é — por isso ele é
     a chave confiável para achar a conta B3 e o nome da contraparte."""
     idx = {}
@@ -294,9 +294,9 @@ def _build_refdata_spn_index():
 
 
 def _ref_for_deal(by_acronym, by_spn, deal):
-    """Registro do Reference Data de um deal: pelo accronym e, quando ele não
-    resolve, pelo SPN. Só o accronym não basta — uma contraparte cadastrada sem
-    accronym some do e-mail sem erro nenhum, que é como as operações de prêmio
+    """Registro do Reference Data de um deal: pelo acronym e, quando ele não
+    resolve, pelo SPN. Só o acronym não basta — uma contraparte cadastrada sem
+    acronym some do e-mail sem erro nenhum, que é como as operações de prêmio
     D0 deixaram de ser geradas mesmo com a Spot Date de hoje."""
     acr = str((deal or {}).get('Acronym', '') or '').strip().upper()
     rec = by_acronym.get(acr) if acr else None
@@ -503,8 +503,8 @@ def _asset_label(deal):
 # Grouping
 # ──────────────────────────────────────────────────────────────────────────
 def _group_by_acronym_commodity(deals):
-    """Um grupo por contraparte (× commodity) = um e-mail. Sem accronym a chave
-    cai para o SPN: agrupar por accronym vazio juntaria contrapartes diferentes
+    """Um grupo por contraparte (× commodity) = um e-mail. Sem acronym a chave
+    cai para o SPN: agrupar por acronym vazio juntaria contrapartes diferentes
     num grupo só, e sairia um único e-mail com os deals de todo mundo, endereçado
     a quem calhasse de estar em primeiro."""
     groups = {}
@@ -528,9 +528,9 @@ def build_premium_emails(deals, asset_label='Commodities', ref_key='COMMODITIES 
 
     `asset_label` is the asset-class token shown in the subject line
     (e.g. 'Commodities' for opt-commodities, 'Taxas de Câmbio' for opt-fxo).
-    `ref_key` selects the RefData accronym column used to resolve each deal's
+    `ref_key` selects the RefData acronym column used to resolve each deal's
     Acronym → ref record: 'COMMODITIES ACCRONYM' (default) or 'FX CASH ACCRONYM'
-    (FXO deals carry the FX cash accronym, not the commodities one).
+    (FXO deals carry the FX cash acronym, not the commodities one).
     `cc_comm_sales` copies the Brazil Comm Sales desk — they own the commodities
     flow, so the FXO page turns it off and copies Liquidação only.
     """
@@ -1647,7 +1647,7 @@ def build_economic_affirmation_emails(deals, asset_label='Termo de Mercadoria'):
         if _date_br(d.get('TradeDate')) != today:
             return False
         acronym = str(d.get('Acronym', '') or '').strip().upper()
-        # Pelo SPN também: cadastro sem accronym deixava a conta B3 em branco, e
+        # Pelo SPN também: cadastro sem acronym deixava a conta B3 em branco, e
         # com ela em branco a contraparte não caía em EXCLUDED_B3_AFFIRMATION —
         # ou seja, um cliente passava por instituição financeira e recebia uma
         # afirmação que não é para ele.

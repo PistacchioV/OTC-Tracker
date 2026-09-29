@@ -919,8 +919,8 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 
 ### New Deals
 
-- **Contraparte vem do accronym do End Counterparty, nunca do Settlement
-  Location** (que é a NOSSA perna). Ordem em `_ndf_ref_by_accronym`: accronym
+- **Contraparte vem do acronym do End Counterparty, nunca do Settlement
+  Location** (que é a NOSSA perna). Ordem em `_ndf_ref_by_accronym`: acronym
   exato → sem sufixo → se perna interna, identidade da entidade
   (`_ndf_le_refdata`) → senão o SPN da API → nada (badge *Missing
   Counterparty*, que é a falha desejada). Amend recheca; linha achada por

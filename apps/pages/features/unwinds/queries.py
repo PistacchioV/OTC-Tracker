@@ -194,7 +194,7 @@ def _rotulo_do_caminho(raiz, fp):
 # ── O Termo de Resilição ─────────────────────────────────────────────────────
 
 def _acr_da_linha(linha):
-    """Como a recompra se chama no agrupamento: o accronym do e-mail quando ele
+    """Como a recompra se chama no agrupamento: o acronym do e-mail quando ele
     veio, senão o nome da contraparte da posição. É o mesmo valor que a grade
     mostra, e é o que vai na URL do documento."""
     return (str((linha or {}).get('ClientAcronym') or '').strip()

@@ -11,7 +11,7 @@ Duas coisas travavam a contraparte na PRIMEIRA importacao:
 
 O contrapeso e o status: um deal ja **Success** nao pode voltar para a fila so
 porque a NOSSA resolucao melhorou (§174, quando a perna interna passou a achar
-SPN/Client/Tax ID que vinham vazios). A regra e o ACCRONYM — accronym igual,
+SPN/Client/Tax ID que vinham vazios). A regra e o ACCRONYM — acronym igual,
 mudou a resolucao, nao o negocio.
 
 O que este script protege:
@@ -86,11 +86,11 @@ try:
     check('o Success e mantido', st.get('Status'), 'Success')
     check('a celula e destacada mesmo assim', st.get('AmendChanged'), ['Client', 'SPN', 'TaxID'])
 
-    # Mesmo accronym, contraparte recadastrada com outro nome: continua sendo a
+    # Mesmo acronym, contraparte recadastrada com outro nome: continua sendo a
     # nossa resolucao, nao o negocio.
     st = deal(Status='Success', Client='ACME BRASIL S/A')
     R._nd_api_amend(st, deal())
-    check('nome novo no mesmo accronym mantem Success', st.get('Status'), 'Success')
+    check('nome novo no mesmo acronym mantem Success', st.get('Status'), 'Success')
 
     print('\n== 2b. Sent tem a MESMA protecao do Success ==')
     # `Sent` e o arquivo de registro ja enviado a B3, e vem ANTES do `Success`:

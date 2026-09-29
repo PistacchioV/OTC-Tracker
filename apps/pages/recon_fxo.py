@@ -306,7 +306,7 @@ def lookup_cnpj():
     casar, sem ninguém saber por quê.
 
     O índice aceita três chaves para a mesma linha, porque a Athena escreve a
-    contraparte de três jeitos conforme o campo: a razão social, o accronym de FX
+    contraparte de três jeitos conforme o campo: a razão social, o acronym de FX
     Cash e o SPN. As três levam ao mesmo Tax ID.
     """
     mapa = {}

@@ -3,7 +3,7 @@
 Commodities, Opt FXO, NDF Commodities e as genéricas FWD Start/Other
 Publisher), os dois pulls da Athena com seus schedulers, a regra de Amend
 (§7: econômico vs cosmético, `Sent`/`Success` protegidos), a resolução de
-contraparte por accronym (§7), a perna fraca (§7), o espelho Lawton (§7) e a
+contraparte por acronym (§7), a perna fraca (§7), o espelho Lawton (§7) e a
 geração TER (`_generic_ndf_ter_line`/`_ndf_comm_ter_lines`).
 
 Movido VERBATIM do `routes.py` (fase platform/ — CLAUDE.md §10). É horizontal:
@@ -454,10 +454,10 @@ def _fxo_deal_from_row(get, sid, refmap, refmap_acr=None):
         # Sem cadastro no Reference Data a coluna fica com o código cru da API
         # (mesma regra do NDF). Além de não esconder a informação, é o que dá ao
         # badge "Missing Counterparty" da tela o que consultar: ele só limpa a
-        # marcação de perna interna quando há um accronym na célula para procurar
-        # no mapping Legal Entity × Accronym.
+        # marcação de perna interna quando há um acronym na célula para procurar
+        # no mapping Legal Entity × Acronym.
         #
-        # PERNA INTERNA mantém o accronym que veio da API: a contraparte foi
+        # PERNA INTERNA mantém o acronym que veio da API: a contraparte foi
         # resolvida pela razão social da entidade, e trocar 'LM-FWDECOMBRR FXC'
         # por 'JPMORGANBM' apagaria da tela o book que a operação realmente tem
         # (§174).
@@ -572,7 +572,7 @@ _ND_AMEND_COSMETIC_BY_PRODUCT = {'fwd-start': {'Strike'}}
 #
 # O `Sent` estava de fora, e era um buraco por onde passava exatamente o que a
 # regra do `Success` existe para evitar: a Athena troca o Other Book, ou o
-# Reference Data passa a resolver o accronym de uma perna interna, e a operação
+# Reference Data passa a resolver o acronym de uma perna interna, e a operação
 # que a mesa acabou de mandar para a B3 voltava sozinha para `Amend` — sem
 # Checker, fora da lista de enviadas, e reconferida à toa. E o `Sent` vem ANTES
 # do `Success`, então a janela em que isso acontecia era justamente a de espera
@@ -585,7 +585,7 @@ _ND_AMEND_KEEP_STATUS = {'Success', 'Sent'}
 
 
 def _nd_amend_entity(acr):
-    """Entidade de um accronym FX Cash. Duas fontes, nessa ordem: a LE cadastrada
+    """Entidade de um acronym FX Cash. Duas fontes, nessa ordem: a LE cadastrada
     no mapping le-accronym e, quando o código não está cadastrado, o sufixo
     depois do último hífen — é assim que a API sufixa o End Counterparty
     ('CMBB-LAW' → 'LAW'), o mesmo corte que _ndf_accronym_variants usa. Sem
@@ -598,14 +598,14 @@ def _nd_amend_entity(acr):
 
 
 def _nd_amend_same_entity(old, new, stored, incoming):
-    """Dois accronyms são da MESMA entidade (JPM→JPM, MGT→MGT, LAW→LAW)?
+    """Dois acronyms são da MESMA entidade (JPM→JPM, MGT→MGT, LAW→LAW)?
     Trocar o código dentro da entidade é registro; trocar de entidade muda a
     ponta do negócio.
 
-    A resposta sai sempre do PRÓPRIO accronym (`_nd_amend_entity`: cadastro
+    A resposta sai sempre do PRÓPRIO acronym (`_nd_amend_entity`: cadastro
     le-accronym, depois o sufixo '-LAW'), nunca da coluna LE do deal: a LE é
-    SÓ a Settlement Location — a NOSSA perna —, e o accronym é a contraparte;
-    comparar LE responderia "mesma entidade" para qualquer troca de accronym
+    SÓ a Settlement Location — a NOSSA perna —, e o acronym é a contraparte;
+    comparar LE responderia "mesma entidade" para qualquer troca de acronym
     de cliente, porque a nossa perna não muda. Entidade desconhecida nunca
     empata — dois códigos que ninguém sabe de onde vêm podem ser de entidades
     diferentes, e o seguro é tratar como econômico."""
@@ -631,11 +631,11 @@ def _nd_amend_is_economic(field, old, new, stored, incoming, product=''):
     if field in _ND_AMEND_COSMETIC_BY_PRODUCT.get(product, ()):
         return False
     if field in ('SPN', 'Client', 'TaxID'):
-        # Os três são DERIVADOS da contraparte, e a contraparte é o accronym
-        # (nunca o SPN nem a settlement location — §147/§148). Com o accronym
+        # Os três são DERIVADOS da contraparte, e a contraparte é o acronym
+        # (nunca o SPN nem a settlement location — §147/§148). Com o acronym
         # igual, mudou a nossa resolução e não o negócio: é o caso de §174, em
         # que a perna interna passou a achar SPN/Client/Tax ID que antes vinham
-        # vazios. Destaca a célula, mantém o Success. Mudando o accronym, vale a
+        # vazios. Destaca a célula, mantém o Success. Mudando o acronym, vale a
         # mesma régua dele: só é econômico se trocou de entidade.
         acr_old = _nd_amend_flat(stored.get('Acronym')).upper()
         acr_new = _nd_amend_flat(incoming.get('Acronym')).upper()
@@ -643,10 +643,10 @@ def _nd_amend_is_economic(field, old, new, stored, incoming, product=''):
             return False
         return not _nd_amend_same_entity(acr_old, acr_new, stored, incoming)
     if field == 'Acronym':
-        # Accronym aparecendo onde a célula estava VAZIA, com o SPN da operação
+        # Acronym aparecendo onde a célula estava VAZIA, com o SPN da operação
         # intacto, é enriquecimento nosso que melhorou — a contraparte sempre foi
         # a mesma, ninguém rebookou nada. Sem esta exceção, passar a preencher o
-        # accronym das pernas internas no FXO devolveria para a fila, de uma vez,
+        # acronym das pernas internas no FXO devolveria para a fila, de uma vez,
         # todo deal interno que já estava Success. A célula ainda é destacada;
         # só o status é que não regride.
         if not old and _nd_amend_flat(stored.get('SPN')) == _nd_amend_flat(incoming.get('SPN')):
@@ -665,7 +665,7 @@ def _nd_api_amend(stored, incoming, product=''):
     saiu da mesa — **Sent** e **Success** (`_ND_AMEND_KEEP_STATUS`) —, que só cai
     para Amend quando alguma informação **econômica** mudou (contraparte/
     entidade, vencimento, notional, strike, compra × venda, put × call, prêmio,
-    data de pagamento do prêmio…). Mexer só no Other Book, ou trocar o accronym
+    data de pagamento do prêmio…). Mexer só no Other Book, ou trocar o acronym
     dentro da mesma entidade, destaca a célula e mantém o status: são detalhes de
     booking, e devolver para a fila uma operação já enviada à B3 gera retrabalho
     à toa."""
@@ -1064,7 +1064,7 @@ def _ndf_le_from_location(loc):
 
 def _ndf_le_from_accronym(acr):
     """LE cadastrada para esse End Counterparty na coluna ACCRONYM do mapping
-    le-accronym. Casa o código exato e também o accronym base (o mesmo corte de
+    le-accronym. Casa o código exato e também o acronym base (o mesmo corte de
     _ndf_accronym_variants); a comparação é achatada por _ndf_flat, então espaço
     e hífen a mais no cadastro não impedem o match ('LM-FXECOMBRR JPMCBB FXC' ≡
     'LM FXECOMBRR JPMCBB FXC'). None quando não há linha."""
@@ -1084,7 +1084,7 @@ def _ndf_le_accronyms(le):
     """Códigos cadastrados para essa LE no mapping le-accronym (na ordem da
     tabela), mais o nome da própria LE no fim. É por aqui que a contraparte de
     uma perna interna é resolvida: cadastre para a LE tanto os códigos que a API
-    manda (nomes de book, ex. 'LM-FXECOMBRR JPMCBB FXC') quanto o accronym da
+    manda (nomes de book, ex. 'LM-FXECOMBRR JPMCBB FXC') quanto o acronym da
     entidade no Reference Data (ex. 'JPMORGANBM', 'LAWTON') — o que existir no
     cadastro traz SPN/Client/Tax ID, e uma linha por entidade resolve todos os
     books dela."""
@@ -1106,7 +1106,7 @@ def _ndf_le_accronyms(le):
 
 def _ndf_accronym_variants(acr):
     """Códigos a tentar no Reference Data para um End Counterparty da API: o
-    próprio e, quando ele vem sufixado por entidade, o accronym sem o último
+    próprio e, quando ele vem sufixado por entidade, o acronym sem o último
     trecho depois do hífen ('CMBB-LAW' → 'CMBB'). É o que dispensa cadastrar a
     mesma contraparte uma vez por LE, sem precisar configurar sufixo nenhum."""
     a = str(acr or '').strip().upper()
@@ -1137,9 +1137,9 @@ def _ndf_le_refdata(le, refmap_acr, refmap_spn=None):
 
       1. **razão social** cadastrada para a LE em le-spn, procurada no Reference
          Data pelo nome normalizado — é o passo que faltava: book interno não tem
-         accronym no Reference Data, então antes disto a linha ficava com SPN,
+         acronym no Reference Data, então antes disto a linha ficava com SPN,
          Client e Tax ID vazios (§174);
-      2. accronyms cadastrados para a LE em le-accronym (o que já funcionava);
+      2. acronyms cadastrados para a LE em le-accronym (o que já funcionava);
       3. **SPN** cadastrado para a LE em le-spn: se ele existir no Reference Data
          devolve a linha inteira; se não, devolve só o SPN, para a coluna não
          ficar vazia quando é a única informação registrada.
@@ -1168,21 +1168,21 @@ def _ndf_le_refdata(le, refmap_acr, refmap_spn=None):
 def _ndf_ref_by_accronym(refmap_acr, acr, le=None, refmap_spn=None, api_spn=''):
     """Linha do Reference Data do End Counterparty, nesta ordem:
 
-      1. código exato e accronym sem o sufixo da entidade;
+      1. código exato e acronym sem o sufixo da entidade;
       2. sendo perna interna (`le`), a identidade da entidade — razão social,
-         accronyms cadastrados e SPN (ver `_ndf_le_refdata`);
+         acronyms cadastrados e SPN (ver `_ndf_le_refdata`);
       3. não sendo, o **SPN que veio da API**.
 
     {} quando nada casa.
 
-    `le` tem de ser a entidade DA CONTRAPARTE (a que sai do accronym dela), nunca
+    `le` tem de ser a entidade DA CONTRAPARTE (a que sai do acronym dela), nunca
     a que sai da Settlement Location, que é a nossa perna: com a location, um
-    cliente sem accronym cadastrado era resolvido como a própria JPMorgan.
+    cliente sem acronym cadastrado era resolvido como a própria JPMorgan.
 
     O passo 3 é novo (§174): o campo SPN da API passou a trazer o SPN da
     contraparte — antes vinha o da Legal Entity, e usá-lo como chave era o mesmo
     erro do parágrafo acima por outro caminho. Ele fica por último de propósito,
-    depois do accronym, que é a chave que a mesa cadastra."""
+    depois do acronym, que é a chave que a mesa cadastra."""
     from apps.pages import routes
     for cand in _ndf_accronym_variants(acr):
         rec = refmap_acr.get(cand)
@@ -1251,7 +1251,7 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn=None):
         return None, None
 
     # LE da CONTRAPARTE: só quando o próprio End Counterparty está cadastrado no
-    # mapping Legal Entity × Accronym, ou seja, quando a contraparte é uma perna
+    # mapping Legal Entity × Acronym, ou seja, quando a contraparte é uma perna
     # interna (outra entidade JPM). Fora esse caso ela é None — e tem de ser.
     loc = str(get('SETTLEMENT LOCATION') or '').strip().upper()
     le_cp = _ndf_le_from_accronym(end_cp)
@@ -1263,20 +1263,20 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn=None):
     le = _ndf_le_from_location(loc) or loc
 
     # Contraparte, nesta ordem:
-    #   1. accronym exato do End Counterparty no Reference Data (e o accronym
+    #   1. acronym exato do End Counterparty no Reference Data (e o acronym
     #      sem o sufixo de entidade — evita cadastrar a mesma contraparte uma
     #      vez por LE);
     #   2. só então, e SOMENTE se a contraparte for perna interna (le_cp), os
-    #      demais accronyms daquela entidade.
+    #      demais acronyms daquela entidade.
     #
     # O passo 2 recebe `le_cp`, NUNCA a LE da Settlement Location: a location é
     # a nossa perna, e usá-la aqui fazia um cliente virar a própria JPMorgan.
-    # Foi o que aconteceu com SOMICHEL (Michelin): accronym não cadastrado +
+    # Foi o que aconteceu com SOMICHEL (Michelin): acronym não cadastrado +
     # Settlement Location BRAZIL → LE JPM → a linha veio com SPN, nome e CNPJ do
     # Banco J.P. Morgan, em silêncio, numa operação que vai para registro.
     #
     # Sendo perna interna, o passo 2 é a IDENTIDADE DA ENTIDADE (razão social
-    # cadastrada em le-spn → Reference Data; depois accronyms; depois o SPN da
+    # cadastrada em le-spn → Reference Data; depois acronyms; depois o SPN da
     # LE). Não sendo, entra o SPN que veio da API — que passou a trazer o SPN da
     # contraparte, e não mais o da Legal Entity (§174). Ele fica por último, e
     # nunca é consultado para perna interna, para não reintroduzir por outro
@@ -1383,7 +1383,7 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn=None):
         'Month':             month,
         'SettlementDate':    _fxo_date_dmy(get('SETTLEMENT DATE')),
         'SPN':               spn,
-        # Perna interna mantém o accronym da API (o nome do book), §174.
+        # Perna interna mantém o acronym da API (o nome do book), §174.
         'Acronym':           end_cp if le_cp else ((ref.get('FX CASH ACCRONYM', '') or '') or end_cp),
         'Client':            ref.get('COUNTERPARTY', '') or '',
         'TaxID':             ref.get('TAX ID', '') or '',
@@ -2182,7 +2182,7 @@ def _generic_nd_reenrich(deals, refmap_cache):
         if 'map' not in refmap_cache:
             refmap_cache['spn'] = routes._fxo_refdata_by_spn()
             refmap_cache['map'] = _fxo_refdata_by_accronym(refmap_cache['spn'])
-        # Mapping Legal Entity × Accronym: o accronym gravado pode identificar a
+        # Mapping Legal Entity × Acronym: o acronym gravado pode identificar a
         # CONTRAPARTE como perna interna (End Counterparty que é nome de book
         # interno). `le_map` alimenta SÓ a busca da contraparte — a coluna LE
         # do deal NÃO é tocada: ela é a NOSSA perna (Settlement Location), e a
@@ -2190,7 +2190,7 @@ def _generic_nd_reenrich(deals, refmap_cache):
         #
         # Só `le_map` entra na busca da contraparte. Caindo para a LE gravada no
         # deal (que veio da Settlement Location, a NOSSA perna) um cliente sem
-        # accronym cadastrado era re-enriquecido como a própria JPMorgan — o
+        # acronym cadastrado era re-enriquecido como a própria JPMorgan — o
         # mesmo erro de _ndf_deal_from_api, aqui aplicado a quem já está no
         # arquivo.
         le_map = _ndf_le_from_accronym(acr)
@@ -2202,7 +2202,7 @@ def _generic_nd_reenrich(deals, refmap_cache):
         deal['SPN'] = str(rec.get('SPN', '') or '')
         deal['Client'] = rec.get('COUNTERPARTY', '') or ''
         deal['TaxID'] = rec.get('TAX ID', '') or ''
-        # Perna interna mantém o accronym da API (o nome do book) — §174.
+        # Perna interna mantém o acronym da API (o nome do book) — §174.
         ref_acr = '' if le_map else str(rec.get('FX CASH ACCRONYM', '') or '').strip()
         if ref_acr:
             deal['Acronym'] = ref_acr

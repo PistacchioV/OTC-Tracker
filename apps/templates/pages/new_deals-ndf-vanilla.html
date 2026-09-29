@@ -393,7 +393,7 @@
   #deals-processing-table td:nth-child(10) { min-width: 90px;  width: 90px;   } /* SPN */
 
   #deals-processing-table th:nth-child(11),
-  #deals-processing-table td:nth-child(11) { min-width: 90px;  width: 90px;   } /* Accronym */
+  #deals-processing-table td:nth-child(11) { min-width: 90px;  width: 90px;   } /* Acronym */
 
   #deals-processing-table th:nth-child(12),
   #deals-processing-table td:nth-child(12) { min-width: 220px; width: 220px;  } /* Client */
@@ -883,7 +883,7 @@
                                     <th data-table-sort="" data-format="month-name" data-lang="nd-col-month">Month</th>
                                     <th data-table-sort="" data-format="date-dmy" data-lang="nd-col-settle-date">Settlement Date</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-spn">SPN</th>
-                                    <th data-table-sort="" data-format="text" data-lang="nd-col-acronym">Accronym</th>
+                                    <th data-table-sort="" data-format="text" data-lang="nd-col-acronym">Acronym</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-client">Client</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-tax-id">Tax ID</th>
                                     <th data-table-sort="" data-format="date-dmy" data-lang="nd-col-first-fix">First Fixing Date</th>
@@ -916,7 +916,7 @@
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Month" data-lang-placeholder="b3-col-month"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Settlement Date" data-lang-placeholder="col-settlement-date"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="SPN" data-lang-placeholder="col-spn"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Accronym" data-lang-placeholder="col-acronym"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Acronym" data-lang-placeholder="col-acronym"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Client" data-lang-placeholder="col-client"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Tax ID" data-lang-placeholder="col-tax-id"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="First Fixing Date" data-lang-placeholder="col-first-fix"></th>
@@ -988,23 +988,23 @@
             <input type="text" class="form-control form-control-sm" id="ar-settledate" placeholder="dd/mm/yyyy" autocomplete="off">
           </div>
           <div class="col-md-4">
-            <label class="form-label form-label-sm mb-1">Accronym</label>
+            <label class="form-label form-label-sm mb-1">Acronym</label>
             <div class="position-relative">
               <input type="text" class="form-control form-control-sm" id="ar-acronym" autocomplete="off" placeholder="Type to search…">
               <div id="ar-acronym-drop" class="ar-ac-drop" style="display:none;position:absolute;top:100%;left:0;width:100%;z-index:9200;max-height:180px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-radius:4px;box-shadow:0 4px 6px rgba(0,0,0,.12)"></div>
             </div>
           </div>
           <div class="col-md-4">
-            <label class="form-label form-label-sm mb-1">SPN <small class="text-muted">(auto from Accronym)</small></label>
+            <label class="form-label form-label-sm mb-1">SPN <small class="text-muted">(auto from Acronym)</small></label>
             <input type="text" class="form-control form-control-sm bg-light" id="ar-spn" disabled>
           </div>
 
           <div class="col-md-6">
-            <label class="form-label form-label-sm mb-1">Client <small class="text-muted">(auto from Accronym)</small></label>
+            <label class="form-label form-label-sm mb-1">Client <small class="text-muted">(auto from Acronym)</small></label>
             <input type="text" class="form-control form-control-sm bg-light" id="ar-client" disabled>
           </div>
           <div class="col-md-6">
-            <label class="form-label form-label-sm mb-1">Tax ID <small class="text-muted">(auto from Accronym)</small></label>
+            <label class="form-label form-label-sm mb-1">Tax ID <small class="text-muted">(auto from Acronym)</small></label>
             <input type="text" class="form-control form-control-sm bg-light" id="ar-taxid" disabled>
           </div>
 
@@ -2030,7 +2030,7 @@ $(document).ready(function() {
             // ==============================================================
             var columnLabels = [
                 "Status", "LE", "Deal", "B3 ID", "Trade Date", "Month",
-                "Settlement Date", "SPN", "Accronym", "Client", "Tax ID",
+                "Settlement Date", "SPN", "Acronym", "Client", "Tax ID",
                 "First Fixing Date", "Last Fixing Date",
                 "Intrument", "Trade Type", "Direction", "FX Pair", "Quantity Currency",
                 "Other Quantity Currency",
@@ -2110,7 +2110,7 @@ $(document).ready(function() {
                     '<option value="7">Month</option>' +
                     '<option value="8">Settlement Date</option>' +
                     '<option value="9">SPN</option>' +
-                    '<option value="10">Accronym</option>' +
+                    '<option value="10">Acronym</option>' +
                     '<option value="11">Client</option>' +
                     '<option value="12">Tax ID</option>' +
                     '<option value="13">First Fixing Date</option>' +
@@ -2190,7 +2190,7 @@ $(document).ready(function() {
         { label: 'B3 ID',             type: 'text',   dtCol: 5  },
         { label: 'Month',             type: 'text',   dtCol: 7  },
         { label: 'SPN',               type: 'text',   dtCol: 9  },
-        { label: 'Accronym',          type: 'text',   dtCol: 10 },
+        { label: 'Acronym',          type: 'text',   dtCol: 10 },
         { label: 'Client',            type: 'text',   dtCol: 11 },
         { label: 'Tax ID',            type: 'text',   dtCol: 12 },
         { label: 'Intrument',         type: 'text',   dtCol: 15 },
@@ -2377,7 +2377,7 @@ $(document).ready(function() {
         'B3 ID':             'B3_ID',
         'Month':             'Month',
         'SPN':               'SPN',
-        'Accronym':          'Acronym',
+        'Acronym':          'Acronym',
         'Client':            'Client',
         'Tax ID':            'TaxID',
         'Intrument':         'Instrument',
@@ -4826,7 +4826,7 @@ $(document).ready(function() {
             }
         });
 
-        // ── Accronym autocomplete (fills SPN / Client / Tax ID from RefData) ──
+        // ── Acronym autocomplete (fills SPN / Client / Tax ID from RefData) ──
         function arBuildDrop($drop, items, filter) {
             var f = (filter || '').toLowerCase();
             $drop.empty();

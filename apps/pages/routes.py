@@ -8052,7 +8052,7 @@ def _ndfc_rec_from_api(rec, refmap_acr, refmap_spn, stl=None):
     O de-para, coluna a coluna (§421):
       LEGAL            ← Settlement Location → LE (le-accronym) → razão social (le-spn),
                          a mesma resolução do New Deals; sem cadastro fica a location;
-      NM_COUNTERPARTY  ← Reference Data pelo accronym do End Counterparty (e SPN),
+      NM_COUNTERPARTY  ← Reference Data pelo acronym do End Counterparty (e SPN),
                          como o New Deals; sem cadastro, a descrição da API;
       ID_SOURCE_DEAL   ← Deal Name;   ID_DEAL ← Event Name do bloco `settlement`;
       DT_DEAL / DT_SETTLEMENT ← Trade Date / Settlement Date (ISO no JSON);
@@ -11459,8 +11459,8 @@ _MAPPINGS_DIR = data_write('mappings')
 _MAP_LE_OPTIONS = ['', 'JPM', 'MGT', 'LAWTON']
 
 # A ATACAMA entra só no le-spn: o le-accronym continua com as três entidades que
-# já tinham cadastro de accronym/settlement location. Se ela também passar a ter
-# accronym, o caminho é mover 'ATACAMA' para _MAP_LE_OPTIONS e apagar esta lista.
+# já tinham cadastro de acronym/settlement location. Se ela também passar a ter
+# acronym, o caminho é mover 'ATACAMA' para _MAP_LE_OPTIONS e apagar esta lista.
 _MAP_LE_SPN_OPTIONS = _MAP_LE_OPTIONS + ['ATACAMA']
 
 # Campos da API getTrades que podem formar o par do filtro interbook. Os nomes
@@ -12269,16 +12269,16 @@ _MAPPING_DEFS = {
     # BRAZIL→JPM / JPMCBB→MGT no código). Linha só com LE + ACCRONYM é o uso
     # normal: 'autofill' faz a tela copiar a Settlement Location da linha que já
     # existe para aquela LE quando você escolhe a LE no dropdown.
-    # O accronym sufixado por entidade ('CMBB-LAW') NÃO precisa de linha aqui nem
+    # O acronym sufixado por entidade ('CMBB-LAW') NÃO precisa de linha aqui nem
     # no Reference Data: o lookup de contraparte tenta o código exato e depois o
-    # accronym sem o último trecho depois do hífen, então uma linha de cadastro
+    # acronym sem o último trecho depois do hífen, então uma linha de cadastro
     # atende Banco, Lawton e MGT.
     'le-accronym': {
-        'label': 'Legal Entity × Accronym',
+        'label': 'Legal Entity × Acronym',
         'columns': [
             {'key': 'LE', 'label': 'Legal Entity', 'type': 'select',
              'options': _MAP_LE_OPTIONS, 'autofill': 'SETTLEMENT LOCATION'},
-            {'key': 'ACCRONYM', 'label': 'Accronym'},
+            {'key': 'ACCRONYM', 'label': 'Acronym'},
             {'key': 'SETTLEMENT LOCATION', 'label': 'Settlement Location'},
         ],
         'seed': [
@@ -12289,17 +12289,17 @@ _MAPPING_DEFS = {
     },
     # Identidade de cada Legal Entity: a RAZÃO SOCIAL como está no Reference Data
     # e o SPN da NOSSA ponta — coisa diferente do SPN da contraparte, que vem do
-    # Reference Data pelo accronym (§147/§148).
+    # Reference Data pelo acronym (§147/§148).
     #
     # É por este cadastro que uma **perna interna** ganha SPN, Client e Tax ID:
     # quando o End Counterparty da API é nome de book (ex. 'LM-FWDECOMBRR FXC'),
-    # o mapping Legal Entity × Accronym diz de qual entidade ele é, e a RAZÃO
+    # o mapping Legal Entity × Acronym diz de qual entidade ele é, e a RAZÃO
     # SOCIAL daqui acha a linha da entidade no Reference Data. Antes só se tentava
-    # o accronym, e como book não está no Reference Data a linha ficava com os
+    # o acronym, e como book não está no Reference Data a linha ficava com os
     # três campos vazios (§174).
     #
     # O SPN continua servindo de última tentativa: sem razão social e sem
-    # accronym, ele preenche ao menos a coluna SPN. As linhas nascem com a razão
+    # acronym, ele preenche ao menos a coluna SPN. As linhas nascem com a razão
     # social ditada pela mesa e SEM SPN — SPN inventado sairia num arquivo para a
     # B3 como se fosse cadastro.
     'le-spn': {
@@ -12370,7 +12370,7 @@ _MAPPING_DEFS = {
     # O nome casa pelo NORMALIZADO (sem acento, caixa alta, espaços colapsados,
     # travessão vira hífen — `_ndf_pdf_norm`), então diferença de grafia entre o
     # que se digita aqui e o Reference Data não quebra o match. O que precisa
-    # bater é a razão social, não o accronym.
+    # bater é a razão social, não o acronym.
     #
     # Cadastro VAZIO significa "ninguém leva PDF" e é respeitado. O consumidor só
     # volta para a lista histórica quando o arquivo não existe (instância que
