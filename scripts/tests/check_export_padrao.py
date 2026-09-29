@@ -56,10 +56,12 @@ def fontes():
 
 # ── 1. Export escrito a mao ─────────────────────────────────────────────────
 # Pagina que monta o proprio CSV E tem DataTable: o Buttons estava ali do lado.
-# `mapping.html` nao entra porque nao tem DataTable nenhuma (pagina com paginacao
-# propria, sem Buttons para chamar) — o teste isenta sozinho, sem lista.
 CSV_NA_MAO = {
     'reconciliation-fxo.html',   # Csv/Copy proprios convivendo com o Advanced Export
+    # A grade virou DataTable (o funil de Excel), e o Export segue o do §556:
+    # cadastro exporta toda celula como TEXTO e SEM trim ('C ' e codigo B3), o
+    # que o Buttons nao faz. Cadastro nao tem dia, entao nao ha Advanced Export.
+    'mapping.html',
 }
 
 print('=== 1. Export escrito a mao (§461) ===')

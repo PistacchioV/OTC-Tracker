@@ -802,10 +802,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   própria página consulta>' })`, `exact=1` + confere `source_date`, dia sem
   arquivo é pulado, teto 60 s/dia — §304). **Export próprio não existe**: um
   CSV escrito à mão diverge do resto do app no primeiro acento (§461). A
-  exceção é o `/mapping`, que não é DataTable (paginação própria): o menu dele
-  é o da casa sem o Advanced (cadastro não tem dia), Excel pelo SheetJS com
-  toda célula como TEXTO e PDF pelo pdfmake, as duas bibliotecas carregadas só
-  no clique (§556). Célula
+  exceção é o `/mapping`: a grade é DataTable (o funil vem sozinho; cada
+  cadastro tem colunas próprias, então trocar de cadastro RECONSTRÓI a tabela e
+  salvar só troca as linhas, mantendo filtro e página), mas o Export segue o
+  próprio — o da casa sem o Advanced (cadastro não tem dia), sobre as linhas
+  que a grade mostra, Excel pelo SheetJS com toda célula como TEXTO e sem trim
+  e PDF pelo pdfmake, carregados só no clique (§556). Célula
   editável sai pelo VALUE do campo, num `format.body` (o texto de um `<input>`
   é vazio, e a coluna sairia em branco) — modelo em `formatExportData`.
   **O nome do arquivo é o do DOCUMENTO** — tela, card quando há mais de um, e a
