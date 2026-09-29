@@ -25146,3 +25146,10 @@ que ficou no mesmo mês é conferida contra o calendário do ativo: data em fim 
 semana ou feriado sai como `DIA NÃO ÚTIL` (não é mexida — a janela certa não se
 deduz de uma data errada). Na dev o `ipe.json` segue vazio e o ANBIMA tem 1263
 datas. `check_fix_asian_dates.py`.
+
+**O IPE não tem arquivo padrão no app** (`calendario._ARQUIVO_PADRAO` só
+conhece ANBIMA, SOFR e EURIBOR): ele só é achado pelo registro do Holidays, e
+sem registro saía vazio — e a trava PARAVA o script. O script agora cai em
+`<calendário>.json` do `DATA_DIR` (`apps/static/data/ipe.json`,
+`anbima.json`), lido pelo armazém, quando o registro não diz o arquivo. A
+queda é só do script; o app segue igual.
