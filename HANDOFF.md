@@ -25206,3 +25206,20 @@ De passagem: o `json.load` do `--feriados` no `fix_asian_dates_xlsx.py` (§537)
 reprovava o `check_duck_writers` desde que nasceu; virou `data_store.read`, que
 lê o disco fora do DATA_DIR.
 
+**Correção do mesmo dia (mesa):** "os dados têm que puxar do db de pending
+confirmation pending, e tem que ser live, sem clicar no refresh" e "o export
+excel não está no padrão". A primeira versão lia pelo `_pc_latest_snapshot_rows`
+(que cai numa FOTO quando o banco não responde) e só se refazia no botão. Agora
+lê o banco `pending` a cada chamada, ESTRITO — a leitura tolerante devolveria
+`[]` num banco ocupado, e numa tela que se atualiza sozinha isso trocaria a
+tabela por uma vazia sem aviso; assim a tela mantém o último dado bom e diz
+"Update failed — showing HH:MM:SS". Ela pergunta a cada 30 s com a aba visível
+e na volta à aba; com as mesmas colunas só troca as linhas (`clear/rows.add/
+draw(false)`), e o funil, a ordem e a página ficam onde a pessoa deixou; com o
+mesmo dado não redesenha nada. O botão Refresh FICA (a mesa pediu de volta), no desenho do Intraday Monitor — o quadrado só com o ícone ao lado da bolinha "Updated HH:MM:SS", girando em toda leitura, automática ou não: lê o banco na hora, sem esperar o ciclo, e também não refaz a tabela. O Export virou o menu da
+casa (Copy · CSV · Excel · Print · PDF + Advanced, `export-advanced.js` depois
+do Buttons): o Buttons 3.2.6 exporta o cabeçalho composto (`headerStructure`),
+e era por isso que a primeira versão montava o Excel à mão. A tabela é refeita
+quando as colunas mudam, e o `data-otc-expadv` é tirado antes para o Advanced
+voltar ao menu novo.
+

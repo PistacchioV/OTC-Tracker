@@ -2152,11 +2152,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   dinâmica**: linhas Economic Group × Owner × Signature Type, colunas trimestre
   da Trade Date (`2026 T1`) × Pending Status. O filtro é a FAIXA de pendência — a
   coluna Status do Main —, e a lista de faixas sai do `_pc_aging_band_label`
-  (nunca uma cópia dos rótulos). A fonte é a MESMA do Daily Metric
-  (`_pc_latest_snapshot_rows`): duas leituras da fila cobrariam números
-  diferentes da mesma mesa. O Export é o Excel da tela, montado no navegador
-  (SheetJS, cabeçalho de dois níveis mesclado e as faixas numa aba `Filters`):
-  o Buttons exporta só a última linha de um cabeçalho composto.
+  (nunca uma cópia dos rótulos). A fonte é o banco `pending` lido AO VIVO e
+  ESTRITO (`_pc_load_rows('pending', strict=True)`: ocupado sobe, nunca vira
+  tabela vazia), e a tela se ATUALIZA SOZINHA (a cada 30 s com a aba visível e
+  ao voltar para ela; o Refresh lê na hora), trocando só as linhas quando as
+  colunas não mudam — funil, ordem e página ficam. Export é o menu da casa
+  (Buttons + Advanced): o Buttons 3.2 exporta o cabeçalho de duas linhas.
 - **O card Daily Metric tem DOIS relatórios para a mesma lista**: o Run
   (confirmações) e o **Pending CGD** (`/api/control-panel/daily-metric/cgd-run`,
   §596) — os clientes com CGD pendente no Track Docs (`cgd_docs.outcome ==
