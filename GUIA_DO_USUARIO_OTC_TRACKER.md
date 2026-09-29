@@ -1856,7 +1856,7 @@ Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de pa
 
 | Termo | O que é |
 |---|---|
-| **Accronym** | O apelido curto da contraparte no Reference Data. Há um para mercadoria e outro para câmbio |
+| **Acronym** | O apelido curto da contraparte no Reference Data. Há um para mercadoria e outro para câmbio |
 | **Aging** | Há quantos **dias úteis** algo espera. Sempre calculado, nunca digitado |
 | **B3 ID** | O número do registro da operação na B3. Sua presença é o que prova que a operação foi registrada |
 | **Callback** | A conferência da operação por telefone com o cliente |

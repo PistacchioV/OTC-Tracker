@@ -139,7 +139,7 @@ try:
     row, why = R._ndfc_rec_from_api(REC, REF, {})
     check('registro entra', why, None)
     check('LEGAL = razao social da LE da Settlement Location', row['LEGAL'], 'BANCO J.P MORGAN S.A')
-    check('NM_COUNTERPARTY = Reference Data pelo accronym', row['NM_COUNTERPARTY'], 'FMC QUIMICA DO BRASIL LTDA')
+    check('NM_COUNTERPARTY = Reference Data pelo acronym', row['NM_COUNTERPARTY'], 'FMC QUIMICA DO BRASIL LTDA')
     check('ID_SOURCE_DEAL = Deal Name', row['ID_SOURCE_DEAL'], 'STP-4T6-3BBUB26-0-0')
     check('ID_DEAL = Event Name da liquidacao', row['ID_DEAL'], 'E5VL-3HW92EE')
     check('CD_CETIP_RETURN = Cetip ID', row['CD_CETIP_RETURN'], '26F02602138')

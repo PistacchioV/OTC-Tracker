@@ -3,10 +3,10 @@
  * ----------------------------------------------------------------------------
  * Mirrors the "Missing Index B3" pattern, but for counterparties that are not
  * registered in RefData.json. A deal's counterparty is considered registered
- * when its SPN (leading-zeros stripped) OR its Accronym (Commodities / FX Cash)
+ * when its SPN (leading-zeros stripped) OR its Acronym (Commodities / FX Cash)
  * matches a RefData record. When it does not, a red rounded-pill badge
  * "Missing Counterparty" is stamped onto the Status cell and every column that
- * pulls counterparty info (SPN / Client / Tax ID / Accronym — whichever are the
+ * pulls counterparty info (SPN / Client / Tax ID / Acronym — whichever are the
  * enriched columns for the page).
  *
  * The badge work is DOM-only (it never touches DataTables `cell.data()`), so it
@@ -21,7 +21,7 @@
  *     getRefData: function () { return _REFDATA; },
  *     setRefData: function (d) { _REFDATA = d; },
  *     cols:       { status:2, spn:8, acr:9, client:10, taxid:11, info:[8,10,11] },
- *     acrField:   'COMMODITIES ACCRONYM',        // field used to enrich Accronym
+ *     acrField:   'COMMODITIES ACCRONYM',        // field used to enrich Acronym
  *     t:          (typeof t === 'function' ? t : null)
  *   });
  *   window._cpInst = inst;
@@ -48,7 +48,7 @@ window.MissingCounterparty = (function () {
         this.cfg   = cfg || {};
         this.spnSet = {};
         this.acrSet = {};
-        this.leAcrSet = null;      // accronyms de perna interna (mapping le-accronym)
+        this.leAcrSet = null;      // acronyms de perna interna (mapping le-accronym)
         this.built  = false;
         var self = this;
         // Carrega o mapping já na criação: quando ele chega, redesenha os badges
@@ -88,7 +88,7 @@ window.MissingCounterparty = (function () {
 
     // Pernas internas (JPM / MGT / LAWTON) NÃO são contrapartes: elas não estão
     // — nem devem estar — no RefData, mas são cadastradas no mapping Legal
-    // Entity × Accronym. Sem consultar esse mapping, toda linha de book interno
+    // Entity × Acronym. Sem consultar esse mapping, toda linha de book interno
     // aparecia como "Missing Counterparty" mesmo com SPN, cliente e CNPJ
     // preenchidos, e o badge bloqueava edit/approve.
     Inst.prototype.loadLeAcr = function (cb) {
@@ -253,7 +253,7 @@ window.MissingCounterparty = (function () {
     Inst.prototype.reloadAndEnrich = function (cb) {
         var self = this, cfg = this.cfg, t = cfg.table;
         // O "Reload Data" do aviso serve para os dois cadastros: quem acabou de
-        // registrar o accronym da perna interna no /mapping precisa ver o badge
+        // registrar o acronym da perna interna no /mapping precisa ver o badge
         // sair sem recarregar a página inteira.
         this.loadLeAcr();
         // `?_=` porque este fetch É o Reload: sem ele o navegador pode servir o
@@ -297,7 +297,7 @@ window.MissingCounterparty = (function () {
         if (!S) { self.reloadAndEnrich(); return; }
         S.fire({
             title:            self.t('swal-missing-cp-title', 'Counterparty Not Registered'),
-            html:             self.t('swal-missing-cp-html', 'This counterparty is not registered in Reference Data (nor as an internal leg in the Legal Entity \u00d7 Accronym mapping). Please register it, then reload.'),
+            html:             self.t('swal-missing-cp-html', 'This counterparty is not registered in Reference Data (nor as an internal leg in the Legal Entity \u00d7 Acronym mapping). Please register it, then reload.'),
             icon:             'warning',
             showConfirmButton: true,
             confirmButtonText: self.t('swal-reload-data', 'Reload Data'),

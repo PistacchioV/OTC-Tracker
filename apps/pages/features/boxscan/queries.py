@@ -20,7 +20,7 @@ def _routes():
 
 
 def refdata_by_accronym():
-    """{accronym → {spn, counterparty, taxId}} — o `loadRefData` do JS: indexa
+    """{acronym → {spn, counterparty, taxId}} — o `loadRefData` do JS: indexa
     por COMMODITIES ACCRONYM e, quando a chave ainda está livre, por FX CASH
     ACCRONYM (o primeiro a chegar vence, como no `if (fxAcr && !map[fxAcr])`)."""
     out = {}

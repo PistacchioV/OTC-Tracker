@@ -3,11 +3,11 @@
 A ordem importa e ja shipou contraparte errada duas vezes (§147/§148). Hoje ela
 e:
 
-  1. accronym do End Counterparty no Reference Data (exato e sem o sufixo de
+  1. acronym do End Counterparty no Reference Data (exato e sem o sufixo de
      entidade);
-  2. sendo PERNA INTERNA (o accronym esta no mapping Legal Entity x Accronym), a
+  2. sendo PERNA INTERNA (o acronym esta no mapping Legal Entity x Acronym), a
      identidade da entidade: razao social cadastrada em le-spn -> Reference Data,
-     depois os accronyms da LE, depois o SPN da LE;
+     depois os acronyms da LE, depois o SPN da LE;
   3. nao sendo perna interna, o SPN que veio da API.
 
 As armadilhas que este script protege:
@@ -16,7 +16,7 @@ As armadilhas que este script protege:
     perna, e usa-la fazia um cliente virar o proprio Banco J.P. Morgan;
   * o SPN da API nao entra no caminho da perna interna (seria o mesmo erro por
     outro caminho);
-  * perna interna MANTEM o accronym da API (o nome do book) em vez do accronym da
+  * perna interna MANTEM o acronym da API (o nome do book) em vez do acronym da
     entidade no Reference Data;
   * o upgrade do le-spn nao pode brigar com quem editou a tela: linha ausente ele
     cria, nome apagado ele respeita.
@@ -74,7 +74,7 @@ _orig_rows = R._mapping_rows
 R._mapping_rows = lambda key: MAPS.get(key, _orig_rows(key))
 
 try:
-    print('\n== 1. de qual Legal Entity o accronym e ==')
+    print('\n== 1. de qual Legal Entity o acronym e ==')
     check('book da JPM',        R._ndf_le_from_accronym('LM-FWDECOMBRR FXC'), 'JPM')
     check('caixa/espaco/hifen', R._ndf_le_from_accronym('lm fwdecombrr fxc'), 'JPM')
     check('book da MGT',        R._ndf_le_from_accronym('LM-FXECOMBRR JPMCBB FXC'), 'MGT')
@@ -85,8 +85,8 @@ try:
     # depois de normalizadas — e e o unico caminho que resolve um nome de book.
     check('JPM pela razao social',
           R._ndf_le_refdata('JPM', BY_ACR, BY_SPN), JPM)
-    # LAWTON nao tem NAME cadastrado: cai no accronym da propria LE.
-    check('LAWTON pelo accronym da LE',
+    # LAWTON nao tem NAME cadastrado: cai no acronym da propria LE.
+    check('LAWTON pelo acronym da LE',
           R._ndf_le_refdata('LAWTON', BY_ACR, BY_SPN), LAWTON)
     # MGT nao esta no Reference Data: sobra o SPN cadastrado, sozinho.
     check('MGT so com o SPN cadastrado',
@@ -96,13 +96,13 @@ try:
           R._ndf_le_refdata('ATACAMA', BY_ACR, BY_SPN), {})
 
     print('\n== 3. a ordem completa da busca ==')
-    check('accronym exato ganha de tudo',
+    check('acronym exato ganha de tudo',
           R._ndf_ref_by_accronym(BY_ACR, 'ACMEBRA', None, BY_SPN, ''), ACME)
-    check('accronym sem o sufixo de entidade',
+    check('acronym sem o sufixo de entidade',
           R._ndf_ref_by_accronym(BY_ACR, 'ACMEBRA-LAW', None, BY_SPN, ''), ACME)
     check('book interno -> identidade da LE',
           R._ndf_ref_by_accronym(BY_ACR, 'LM-FWDECOMBRR FXC', 'JPM', BY_SPN, ''), JPM)
-    check('cliente sem accronym -> SPN da API',
+    check('cliente sem acronym -> SPN da API',
           R._ndf_ref_by_accronym(BY_ACR, 'NAOCADASTRADO', None, BY_SPN, '135742'), ACME)
     check('nada casando -> {}',
           R._ndf_ref_by_accronym(BY_ACR, 'NAOCADASTRADO', None, BY_SPN, '000'), {})
@@ -113,7 +113,7 @@ try:
     check('perna interna ignora o SPN da API',
           R._ndf_ref_by_accronym(BY_ACR, 'LM-FXECOMBRR JPMCBB FXC', 'MGT', BY_SPN, '135742'),
           {'SPN': '99999'})
-    # E a Settlement Location nunca vira LE aqui: quem passa `le` e o accronym da
+    # E a Settlement Location nunca vira LE aqui: quem passa `le` e o acronym da
     # contraparte. Um cliente nao cadastrado, com location BRAZIL, nao pode virar
     # o Banco J.P. Morgan (§147/§148).
     check('cliente nao cadastrado nao vira JPM',
@@ -136,7 +136,7 @@ try:
 finally:
     R._mapping_rows = _orig_rows
 
-print('\n== 6. o accronym da API sobrevive na perna interna ==')
+print('\n== 6. o acronym da API sobrevive na perna interna ==')
 src = (io.open('apps/pages/routes.py', encoding='utf-8').read()
        + io.open('apps/pages/platform/new_deals.py', encoding='utf-8').read())
 check('builder do NDF',
