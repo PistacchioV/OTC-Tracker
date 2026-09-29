@@ -605,7 +605,10 @@ def api_conf_optfxo_save():
             numero_contrato, xml_str, xml_warns = _R()._conf_ndf_xml(
                 # MAIÚSCULO, pela mesma razão do Opt Comm.
                 picked, merc, ref, tipo='OPTION', prefixo='Opt_FXO',
-                ccy_field='UnderlyingAsset', warn_no_spot=False)
+                ccy_field='UnderlyingAsset', warn_no_spot=False,
+                # valor = Total Notional × Strike, valorEstrangeiro = Total
+                # Notional (mesa, 29/09/2026; _conf_fxo_legs).
+                legs_fn=_R()._conf_fxo_legs)
             # Mesmo nome-base do .doc/.pdf: os três arquivos da confirmação
             # ficam juntos na listagem da pasta.
             xbase = candidate
