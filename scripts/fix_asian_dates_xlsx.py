@@ -24,8 +24,9 @@ base`, `CALENDARIO_DO_ATIVO`): `CO1-2` (Brent) conta no IPE e `USD` no ANBIMA.
 Ativo fora dessa lista NÃO é ajustado (fica como está e sai no relatório):
 contar a janela de um ativo no calendário de outro põe dia de bolsa fechada
 dentro dela sem erro nenhum. Planilha SEM a coluna usa `--calendario` para
-todas as linhas, avisando. Data de uma linha que cai em fim de semana ou
-feriado do calendário do ativo sai no log como DIA NÃO ÚTIL (não é mexida).
+todas as linhas, avisando. Data que cai em fim de semana ou feriado do
+calendário do ativo é REMOVIDA da linha antes de tudo (e o log diz qual); a
+decisão de mês/janela é tomada com as que sobram.
 
 As datas saem como DATA de verdade (`dd/mm/aaaa`), não como texto. Célula
 mexida ganha fundo amarelo, e a aba `Log Ajuste Datas` diz, por linha, o que foi
@@ -283,11 +284,12 @@ def main(argv=None):
         feriados = feriados_de[cal]
         n_linhas = sum(1 for p in planos if p[5] == cal)
         print('\nFeriados %s: %s — %d datas · %d linhas' % (cal, fonte, len(feriados), n_linhas))
-        precisa = sorted({p[4][0] for p in planos if p[2] == 'janela' and p[5] == cal})
+        # todo ano que a linha usa: é por ele que se decide o que é dia útil
+        precisa = sorted({d.year for p in planos if p[5] == cal for d in p[1]})
         sem = [a for a in precisa if not any(f.year == a for f in feriados)]
         if precisa and sem:
             sys.exit('PARADO: o calendário %s não tem nenhum feriado em %s. Cadastre-o na tela '
-                     'de Holidays (ou passe --feriados %s=<arquivo>) antes de ajustar as janelas.'
+                     'de Holidays (ou passe --feriados %s=<arquivo>) antes de ajustar as datas.'
                      % (cal, ', '.join(map(str, sem)), cal))
         for a in precisa:
             print('   %d: %s' % (a, ', '.join(f.strftime('%d/%m') for f in sorted(feriados) if f.year == a)))
@@ -303,27 +305,35 @@ def main(argv=None):
             cont['sem_calendario'] += 1
             continue
         feriados = feriados_de[cal]
+        # data que não é dia útil no calendário do ativo SAI da linha antes
+        # de decidir o resto (mesa, 29/09/2026)
+        removidas = sorted({d for d in datas if d.weekday() >= 5 or d in feriados})
+        validas = [d for d in datas if d not in removidas]
+        tira = (' · DIA NÃO ÚTIL no %s REMOVIDO: %s' % (
+            cal, ', '.join(d.strftime('%d/%m/%Y') for d in removidas))) if removidas else ''
+        if not validas:
+            resultado[r] = ([], 'Nenhuma data útil no %s' % cal + tira, 'sem_uteis')
+            cont['sem_uteis'] += 1
+            continue
+        acao, meses, alvo = decidir(validas)
         if acao == 'reordenar':
-            novas = sorted(datas)
-            nota = 'Mesmo mês %02d/%d: reordenadas' % (alvo[1], alvo[0])
+            novas = sorted(validas)
+            nota = 'Mesmo mês %02d/%d: %s' % (alvo[1], alvo[0],
+                                              'reordenadas' if novas != validas else 'em ordem')
             if novas == datas:
                 acao, nota = 'ok', 'Já em ordem, mesmo mês %02d/%d' % (alvo[1], alvo[0])
-            dup = [d for d, n in Counter(datas).items() if n > 1]
+            dup = [d for d, n in Counter(validas).items() if n > 1]
             if dup:
                 nota += ' · DATA REPETIDA: ' + ', '.join(d.strftime('%d/%m/%Y') for d in sorted(dup))
         elif acao == 'janela':
             novas = dias_uteis_do_mes(alvo[0], alvo[1], feriados)
             nota = 'Janela em %s → %02d/%d inteiro (%s)' % (_fmt_meses(meses), alvo[1], alvo[0], cal)
-            if len(novas) != len(datas):
-                nota += ' · QUANTIDADE %d → %d' % (len(datas), len(novas))
         else:
-            novas = datas
+            novas = validas
             nota = 'EMPATE entre %s: não ajustada' % _fmt_meses(meses)
-        if acao in ('reordenar', 'ok', 'empate'):
-            nao_uteis = sorted({d for d in novas if d.weekday() >= 5 or d in feriados})
-            if nao_uteis:
-                nota += ' · DIA NÃO ÚTIL no %s: %s' % (
-                    cal, ', '.join(d.strftime('%d/%m/%Y') for d in nao_uteis))
+        nota += tira
+        if len(novas) != len(datas):
+            nota += ' · QUANTIDADE %d → %d' % (len(datas), len(novas))
         if len(novas) > len(bloco):
             nota += ' · %d dias úteis e só %d colunas: NÃO AJUSTADA' % (len(novas), len(bloco))
             novas, acao = datas, 'estouro'
@@ -334,7 +344,8 @@ def main(argv=None):
     for k, rot in (('reordenar', 'reordenadas'), ('janela', 'janela ajustada'),
                    ('ok', 'já estavam certas'), ('empate', 'EMPATE (não ajustadas)'),
                    ('estouro', 'mais dias úteis que colunas (não ajustadas)'),
-                   ('sem_calendario', 'ativo sem calendário (não ajustadas)')):
+                   ('sem_calendario', 'ativo sem calendário (não ajustadas)'),
+                   ('sem_uteis', 'nenhuma data útil (todas removidas)')):
         if cont[k]:
             print('   %-45s %d' % (rot, cont[k]))
     mudou_qtd = [r for r, (n, nota, a) in resultado.items() if 'QUANTIDADE' in nota]
@@ -342,9 +353,9 @@ def main(argv=None):
         print('   %-45s %d' % ('com quantidade de datas diferente', len(mudou_qtd)))
     nao_uteis = [r for r, (n, nota, a) in resultado.items() if 'DIA NÃO ÚTIL' in nota]
     if nao_uteis:
-        print('   %-45s %d' % ('com DIA NÃO ÚTIL (não mexidas)', len(nao_uteis)))
+        print('   %-45s %d' % ('com DIA NÃO ÚTIL removido', len(nao_uteis)))
     for r, (n, nota, a) in resultado.items():
-        if a in ('empate', 'estouro', 'sem_calendario') or 'DIA NÃO ÚTIL' in nota:
+        if a in ('empate', 'estouro', 'sem_calendario', 'sem_uteis') or 'DIA NÃO ÚTIL' in nota:
             print('   linha %d: %s' % (r, nota))
 
     if args.dry_run:
@@ -378,7 +389,8 @@ def main(argv=None):
                     igual = para_data(antes) == depois
                 except ValueError:
                     igual = False
-                if not igual and acao not in ('empate', 'estouro', 'sem_calendario'):
+                if not igual and acao not in ('estouro', 'sem_calendario') and (
+                        acao != 'empate' or 'REMOVIDO' in nota):
                     cel.fill = AMARELO
             else:
                 try:                               # linha sem ajuste: a data vira DATA
@@ -400,7 +412,8 @@ def main(argv=None):
         c.font = Font(bold=True)
     rotulo = {'reordenar': 'Reordenada', 'janela': 'Janela ajustada', 'ok': 'Sem alteração',
               'empate': 'Não ajustada (empate)', 'estouro': 'Não ajustada',
-              'sem_calendario': 'Não ajustada (ativo)'}
+              'sem_calendario': 'Não ajustada (ativo)',
+              'sem_uteis': 'Datas removidas (nenhuma útil)'}
     for r, datas, acao, meses, alvo, cal in planos:
         novas, nota, acao = resultado[r]
         ativo = _ativo(origem.cell(r, col_ativo).value) if col_ativo else ''

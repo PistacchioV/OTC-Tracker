@@ -25153,3 +25153,11 @@ sem registro saía vazio — e a trava PARAVA o script. O script agora cai em
 `<calendário>.json` do `DATA_DIR` (`apps/static/data/ipe.json`,
 `anbima.json`), lido pelo armazém, quando o registro não diz o arquivo. A
 queda é só do script; o app segue igual.
+
+**Dia não útil SAI da linha** (mesa, 29/09/2026). A primeira versão só
+apontava no log a data em fim de semana ou feriado do calendário do ativo e a
+deixava lá. Agora ela é removida ANTES de decidir mês e janela (a decisão usa
+as que sobram), também no empate; o log diz quais saíram e a quantidade nova, e
+linha sem nenhuma data útil fica vazia. A trava de "calendário sem feriado"
+passou a cobrir o ano de TODA data da linha, não só o da janela: é por ele que
+se decide o que sai.

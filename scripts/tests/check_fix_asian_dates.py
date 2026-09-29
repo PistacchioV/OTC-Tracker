@@ -127,8 +127,12 @@ ws.append(['Código Identificador', 'Ativo subjacente / Moeda base'] + ['Col %d'
           + ['Média Asiática (data) %d' % i for i in range(1, 24)])
 cruza = [date(2026, 3, 30), date(2026, 3, 31)] + [date(2026, 4, d) for d in (1, 2, 6, 7, 8)]
 usd_fora = [date(2026, 4, 22), date(2026, 4, 20), date(2026, 4, 21)]
+fds = [date(2026, 5, 5), date(2026, 5, 9), date(2026, 5, 4)]          # 09/05 é sábado
+emp = [date(2026, 5, 28), date(2026, 5, 30), date(2026, 5, 29), date(2026, 6, 1), date(2026, 6, 2)]
+so_feriado = [date(2026, 4, 20), date(2026, 4, 19)]                      # feriado ANBIMA + domingo
 for idt, ativo, dd in (('B-1', 'CO1-2', cruza), ('U-1', 'USD', cruza), ('U-2', ' usd ', usd_fora),
-                       ('X-1', 'WTI', cruza)):
+                       ('X-1', 'WTI', cruza), ('U-3', 'USD', fds), ('B-2', 'CO1-2', emp),
+                       ('U-4', 'USD', so_feriado)):
     ws.append([idt, ativo] + ['x'] * 58 + [dmy(d) for d in dd])
 wb.save(arq2)
 ok(F.main([arq2, '--feriados', 'IPE=' + f_ipe, '--feriados', 'ANBIMA=' + f_anb]) == 0, 'roda com dois calendários')
@@ -144,12 +148,19 @@ abr_ipe = F.dias_uteis_do_mes(2026, 4, set(IPE))
 abr_anb = F.dias_uteis_do_mes(2026, 4, set(ANB))
 ok(datas2(2) == abr_ipe and date(2026, 4, 20) in datas2(2), 'CO1-2: abril inteiro no IPE (20/04 é útil)')
 ok(datas2(3) == abr_anb and date(2026, 4, 20) not in datas2(3), 'USD: abril inteiro no ANBIMA (sem o 20/04)')
-ok(datas2(4) == sorted(usd_fora), 'USD mesmo mês: reordenada')
+ok(datas2(4) == [date(2026, 4, 21), date(2026, 4, 22)], 'USD mesmo mês: feriado ANBIMA (20/04) removido, resto reordenado')
+ok(datas2(6) == [date(2026, 5, 4), date(2026, 5, 5)], 'fim de semana removido')
+ok(datas2(7) == [date(2026, 5, 28), date(2026, 5, 29), date(2026, 6, 1), date(2026, 6, 2)],
+   'empate: o sábado sai mesmo sem decidir o mês (ordem original do resto)')
+ok(datas2(8) == [] and aj2.cell(8, 61).value is None, 'todas não úteis: a linha fica sem datas')
+ok(aj2.cell(7, 62).fill.fgColor.rgb.endswith('FFF2CC'), 'empate com remoção: célula mexida em amarelo')
 ok(datas2(5) == cruza, 'ativo sem calendário: fica como está')
 log2 = {r[0]: r for r in wb3['Log Ajuste Datas'].iter_rows(min_row=2, values_only=True)}
 ok(log2[2][2:4] == ('CO1-2', 'IPE') and log2[3][2:4] == ('USD', 'ANBIMA') and log2[4][3] == 'ANBIMA',
    'log diz o ativo e o calendário (caixa e espaço normalizados)')
-ok('DIA NÃO ÚTIL no ANBIMA: 20/04/2026' in log2[4][7], 'data em feriado do calendário do ativo sai no log')
+ok('DIA NÃO ÚTIL no ANBIMA REMOVIDO: 20/04/2026' in log2[4][7] and 'QUANTIDADE 3 → 2' in log2[4][7],
+   'log diz a data removida e a quantidade')
+ok(log2[8][4] == 'Datas removidas (nenhuma útil)', 'log da linha sem nenhuma data útil')
 ok(log2[5][4] == 'Não ajustada (ativo)' and log2[5][3] in ('', None) and 'WTI' in log2[5][7],
    'ativo fora da lista: não ajustada, e o log diz qual')
 try:
