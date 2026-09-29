@@ -101,15 +101,62 @@ ok(aj.cell(2, 61).fill.fgColor.rgb.endswith('FFF2CC') and not aj.cell(5, 61).fil
    'célula mexida em amarelo, intocada sem cor')
 ok(date(2026, 4, 3) not in datas(2) and date(2026, 4, 6) not in datas(2), 'fora de ordem não inventa feriado')
 log = {r[0]: r for r in wb2['Log Ajuste Datas'].iter_rows(min_row=2, values_only=True)}
-ok(log[2][2] == 'Reordenada' and log[3][2] == 'Janela ajustada' and log[4][2].startswith('Não ajustada')
-   and log[5][2] == 'Sem alteração', 'log diz a ação de cada linha')
-ok(log[3][1] == 'OPC-2' and 'QUANTIDADE %d → 20' % len(jan_fev) in log[3][5], 'log identifica o trade e a mudança de quantidade')
+ok(log[2][4] == 'Reordenada' and log[3][4] == 'Janela ajustada' and log[4][4].startswith('Não ajustada')
+   and log[5][4] == 'Sem alteração', 'log diz a ação de cada linha')
+ok(log[3][1] == 'OPC-2' and 'QUANTIDADE %d → 20' % len(jan_fev) in log[3][7], 'log identifica o trade e a mudança de quantidade')
+ok(log[2][3] == 'IPE', 'sem a coluna do ativo, toda linha no --calendario')
 ok(6 not in log, 'linha sem datas fica fora do log')
 ok(os.path.exists(arq.replace('.xlsx', ' - original.xlsx')), 'cópia do original ao lado')
 
 # rodar de novo: substitui a aba, lê sempre a origem
 ok(F.main([arq, '--feriados', fer]) == 0 and load_workbook(arq).sheetnames.count('Ajustado') == 1,
    'rodar de novo substitui a aba')
+
+# ── o calendário é o do ATIVO: CO1-2 no IPE, USD no ANBIMA ──────────────
+# 20/04 é feriado só no ANBIMA (Tiradentes no dia 21 fica fora de propósito:
+# o que se prova é que cada linha usa o SEU calendário).
+IPE = [date(2026, 1, 1), date(2026, 4, 3), date(2026, 12, 25)]
+ANB = [date(2026, 1, 1), date(2026, 4, 3), date(2026, 4, 20), date(2026, 12, 25)]
+f_ipe, f_anb = os.path.join(tmp, 'ipe2.json'), os.path.join(tmp, 'anb2.json')
+json.dump([{'date': d.isoformat()} for d in IPE], open(f_ipe, 'w'))
+json.dump([{'date': d.isoformat()} for d in ANB], open(f_anb, 'w'))
+arq2 = os.path.join(tmp, 'ativos.xlsx')
+wb = Workbook()
+ws = wb.active
+ws.append(['Código Identificador', 'Ativo subjacente / Moeda base'] + ['Col %d' % i for i in range(3, 61)]
+          + ['Média Asiática (data) %d' % i for i in range(1, 24)])
+cruza = [date(2026, 3, 30), date(2026, 3, 31)] + [date(2026, 4, d) for d in (1, 2, 6, 7, 8)]
+usd_fora = [date(2026, 4, 22), date(2026, 4, 20), date(2026, 4, 21)]
+for idt, ativo, dd in (('B-1', 'CO1-2', cruza), ('U-1', 'USD', cruza), ('U-2', ' usd ', usd_fora),
+                       ('X-1', 'WTI', cruza)):
+    ws.append([idt, ativo] + ['x'] * 58 + [dmy(d) for d in dd])
+wb.save(arq2)
+ok(F.main([arq2, '--feriados', 'IPE=' + f_ipe, '--feriados', 'ANBIMA=' + f_anb]) == 0, 'roda com dois calendários')
+wb3 = load_workbook(arq2)
+aj2 = wb3['Ajustado']
+
+
+def datas2(r):
+    return [v.date() for v in (aj2.cell(r, c).value for c in range(61, 84)) if v is not None]
+
+
+abr_ipe = F.dias_uteis_do_mes(2026, 4, set(IPE))
+abr_anb = F.dias_uteis_do_mes(2026, 4, set(ANB))
+ok(datas2(2) == abr_ipe and date(2026, 4, 20) in datas2(2), 'CO1-2: abril inteiro no IPE (20/04 é útil)')
+ok(datas2(3) == abr_anb and date(2026, 4, 20) not in datas2(3), 'USD: abril inteiro no ANBIMA (sem o 20/04)')
+ok(datas2(4) == sorted(usd_fora), 'USD mesmo mês: reordenada')
+ok(datas2(5) == cruza, 'ativo sem calendário: fica como está')
+log2 = {r[0]: r for r in wb3['Log Ajuste Datas'].iter_rows(min_row=2, values_only=True)}
+ok(log2[2][2:4] == ('CO1-2', 'IPE') and log2[3][2:4] == ('USD', 'ANBIMA') and log2[4][3] == 'ANBIMA',
+   'log diz o ativo e o calendário (caixa e espaço normalizados)')
+ok('DIA NÃO ÚTIL no ANBIMA: 20/04/2026' in log2[4][7], 'data em feriado do calendário do ativo sai no log')
+ok(log2[5][4] == 'Não ajustada (ativo)' and log2[5][3] in ('', None) and 'WTI' in log2[5][7],
+   'ativo fora da lista: não ajustada, e o log diz qual')
+try:
+    F.main([arq2, '--feriados', 'IPE=' + f_ipe, '--feriados', 'ANBIMA=' + vazio])
+    ok(False, 'ANBIMA sem 2026 deveria parar')
+except SystemExit as e:
+    ok('PARADO' in str(e) and 'ANBIMA' in str(e), 'calendário do ativo sem feriado no ano PARA, dizendo qual')
 
 print('\nall ok' if not falhas else '\nFALHAS: %d' % falhas)
 sys.exit(1 if falhas else 0)
