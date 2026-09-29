@@ -25223,3 +25223,12 @@ e era por isso que a primeira versão montava o Excel à mão. A tabela é refei
 quando as colunas mudam, e o `data-otc-expadv` é tirado antes para o Advanced
 voltar ao menu novo.
 
+
+**Segunda correção do mesmo dia — o e-mail de CGD não é diário.** O relatório
+de CGD pendente nasceu com a estrutura do Daily Metric e herdou o "Daily" no
+assunto, no cabeçalho e no corpo ("daily analysis"), mas a mesa o roda só às
+sextas. O assunto virou `Metric - Pending CGD Brazil OTC - <data>`
+(`daily_metric/domain.cgd_subject`), o cabeçalho do template
+`email-template-daily-metric-cgd.html` acompanha e o corpo fala em *weekly
+analysis*. O `check_daily_metric_api.py` §5b confere a linha INTEIRA do
+`Subject:` — um `in` sobre o texto do assunto passaria com o "Daily" na frente.
