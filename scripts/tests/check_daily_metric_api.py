@@ -236,7 +236,7 @@ try:
     eml = base64.b64decode(d['b64']).decode('utf-8', 'replace')
     check('   rascunho editavel', 'X-Unsent: 1' in eml, True)
     check('   assunto proprio com a data',
-          'Daily Metric - Pending CGD Brazil OTC - 26/08/2026' in eml, True)
+          'Subject: Metric - Pending CGD Brazil OTC - 26/08/2026' in eml, True)
     import email as _email                                  # noqa: E402
     html = ''
     for part in _email.message_from_string(eml).walk():
