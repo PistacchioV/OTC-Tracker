@@ -212,6 +212,9 @@
     if (sel) sel.value = String(dt.page.len());
     if (window.lucide && lucide.createIcons) lucide.createIcons();
     applyTranslationsIfAny();
+    // Filtro "de Excel" no cabeçalho (static/js/excel-filter.js; piloto aqui).
+    // Depois da tradução: ela reescreve o th e levaria o funil junto.
+    if (window.otcExcelFilter) window.otcExcelFilter('#opb3-table', { skip: [0, 1] });
 
     // Seleção fora da tabela: guarda o id no change e repõe o `checked` a cada
     // draw (o DataTables recria a célula a partir do HTML original).
@@ -275,6 +278,7 @@
     var clr = document.getElementById('obClearFilters');
     if (clr) clr.addEventListener('click', function () {
       document.querySelectorAll('#opb3-table .ob-col-filter').forEach(function (i) { i.value = ''; i.classList.remove('ob-has-val'); });
+      if (window.otcExcelFilter) window.otcExcelFilter.clear('#opb3-table');
       if (dt) { dt.columns().every(function () { this.search(''); }); dt.draw(); }
     });
   }
