@@ -355,9 +355,55 @@
                 if (cur) openMenu(cur, idx, b);
             });
             th.classList.add('oxf-th');
-            th.appendChild(b);
+            // No DataTables 2 o cabeçalho é um flex (`.dt-column-header`): o
+            // título e o ícone de ordenação. O funil entra como TERCEIRA peça,
+            // entre os dois, de tamanho fixo — quem encolhe é o título (quebra,
+            // ou "…" onde a página não deixa quebrar). Absoluto no canto ele
+            // ficava por cima do texto nas páginas que fixam a largura do th;
+            // dentro do título, caía sozinho numa linha ou era cortado.
+            var hdr = th.querySelector('.dt-column-header');
+            if (hdr) hdr.insertBefore(b, hdr.querySelector('.dt-column-order'));
+            else th.appendChild(b);
         });
         paint(st);
+    }
+
+    // Título cortado ("CETIP CONTRAC…"): páginas que fixam a largura de cada
+    // coluna no CSS (as Intrag, o Reference Data) mediram o th para o TEXTO,
+    // e o funil tirou ~20px dali. Essas tabelas são `table-layout: fixed` —
+    // min-width no th não vale nada —, então a largura nova vai para o
+    // PRÓPRIO DataTables (`sWidthOrig`/`sWidth` da coluna) e o `adjust` a
+    // aplica no cabeçalho e no corpo. Ele mede de novo numa tabela oculta, e
+    // uma passada só não fecha (27 → 17 → 0 na Intrag NDF): até três.
+    // Idempotente: sem título cortado, não mexe em nada.
+    function widenTruncated(dt) {
+        var s0 = dt.settings()[0];
+        for (var pass = 0; pass < 3; pass++) {
+            var mudou = false;
+            dt.columns().every(function (i) {
+                var th = this.header();
+                var title = th && th.querySelector('.oxf-btn') && th.querySelector('.dt-column-title');
+                if (!title || !th.offsetWidth) return;
+                // o que falta: o título cortado ("…" nele) OU o cabeçalho inteiro
+                // (título + funil + ícone de ordenação) passando do th — aí
+                // quem corta é o th, e o título sozinho parece caber
+                var hdr = th.querySelector('.dt-column-header') || title;
+                var falta = Math.max(title.scrollWidth - title.clientWidth,
+                                     hdr.scrollWidth - hdr.clientWidth,
+                                     th.scrollWidth - th.clientWidth);
+                if (falta <= 1) return;
+                var w = (th.offsetWidth + falta + 2) + 'px';
+                s0.aoColumns[i].sWidthOrig = w;
+                s0.aoColumns[i].sWidth = w;
+                th.style.width = w;
+                th.style.minWidth = w;
+                mudou = true;
+            });
+            if (!mudou) return;
+            try { dt.columns.adjust(); } catch (e) { return; }
+            // o adjust redesenha o cabeçalho e traz de volta a linha de filtro
+            hideFilterRows(dt);
+        }
     }
 
     // A linha de filtro por coluna (a 2ª linha do <thead>, com um campo por
@@ -399,6 +445,10 @@
         if (node.getAttribute('data-excel-filter') === 'off') return null;
         var s0 = dt.settings()[0];
         if (s0 && s0.oFeatures && s0.oFeatures.bServerSide) return null;   // filtra no servidor
+        // `searching: false` desliga TODA filtragem do DataTables, a do funil
+        // inclusive: o menu abriria e marcar valores não mudaria nada. São as
+        // tabelas escondidas que só servem ao Export (Tickets, Advanced Export).
+        if (s0 && s0.oFeatures && s0.oFeatures.bFilter === false) return null;
         var prev = STATE.get(node);
         // Reconstruir a tabela (destroy + DataTable) é dado novo: filtro velho
         // não vale mais, como o SELECTED da página. Religar a MESMA instância
@@ -417,11 +467,18 @@
         // funil junto: ele volta a cada draw (addButtons é idempotente).
         dt.off('draw.oxf').on('draw.oxf', function () {
             var cur = STATE.get(node);
-            if (cur) { hideFilterRows(cur.dt); addButtons(cur); }
+            if (cur) { hideFilterRows(cur.dt); addButtons(cur); widenTruncated(cur.dt); }
+        });
+        // O `columns.adjust()` (da página ou o nosso) redesenha o cabeçalho a
+        // partir do layout da init e traz a linha de filtro de volta.
+        dt.off('column-sizing.oxf').on('column-sizing.oxf', function () {
+            var cur = STATE.get(node);
+            if (cur) hideFilterRows(cur.dt);
         });
         dt.off('destroy.oxf').on('destroy.oxf', function () { closeMenu(); STATE.delete(node); });
         if (changed) dt.draw(false);
         try { dt.columns.adjust(); } catch (e) {}
+        widenTruncated(dt);
         return dt;
     }
 
@@ -518,16 +575,22 @@
 
     // ── estilo (uma vez) — menu pende do <body>: fundo SÓLIDO (§7) ──────────
     var css =
-        '.oxf-th{position:relative;padding-right:22px!important}' +
+        // A linha de filtro por coluna, escondida (ver hideFilterRows).
         'tr.oxf-filter-row{display:none!important}' +
         // Com scrollX o DataTables deixa uma CÓPIA do cabeçalho dentro do corpo
-        // (altura zero, só para medir as larguras); o funil absoluto escapava
-        // dela e aparecia solto no meio das linhas.
-        '.dt-scroll-body thead .oxf-btn,.dataTables_scrollBody thead .oxf-btn{display:none!important}' +
-        '.oxf-btn{position:absolute;right:3px;top:50%;translate:0 -50%;width:18px;height:18px;padding:0;border:0;' +
+        // (altura zero, só para medir as larguras): o funil dela some da vista
+        // mas OCUPA o espaço (visibility, não display), para a medida bater.
+        '.dt-scroll-body thead .oxf-btn,.dataTables_scrollBody thead .oxf-btn{visibility:hidden!important}' +
+        // O funil é uma peça do flex do cabeçalho (ver addButtons), nunca
+        // absoluto; o título é que cede espaço.
+        '.oxf-btn{position:static!important;display:inline-flex;vertical-align:middle;margin:0 0 0 2px;width:18px;height:18px;padding:0;border:0;' +
             'border-radius:5px;background:transparent;color:var(--ins-secondary-color,#6c757d);opacity:.55;' +
-            'display:inline-flex;align-items:center;justify-content:center;font-size:.8rem;cursor:pointer;' +
+            'align-items:center;justify-content:center;font-size:.8rem;line-height:1;cursor:pointer;flex:none;' +
             'transition:opacity var(--sf-dur-fast,140ms) var(--sf-ease-out,ease-out),background-color var(--sf-dur-fast,140ms) var(--sf-ease-out,ease-out)}' +
+        '.oxf-th .dt-column-header{display:flex;align-items:center}' +
+        // Palavra não se parte ("FUNCTIONALIT/Y" numa coluna estreita): sem
+        // caber, o th transborda e o widenTruncated alarga a coluna.
+        '.oxf-th .dt-column-title{min-width:0;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;word-break:normal;hyphens:none}' +
         '.oxf-th:hover .oxf-btn,.oxf-btn:focus-visible{opacity:1}' +
         '.oxf-btn:hover{background:rgba(0,102,204,.10)}' +
         '.oxf-btn.is-active{opacity:1;color:#0066cc;background:rgba(0,102,204,.12)}' +

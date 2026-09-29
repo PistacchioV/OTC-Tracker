@@ -142,8 +142,8 @@ Hub das rotinas operacionais diárias, dividido em **cinco seções** — e o qu
 | Seção | Rotinas |
 |---|---|
 | **Intraday Routines** | Save CETIP Files (lê os arquivos brutos da B3, renomeia no padrão e salva nas pastas de liquidação; o `INDEXADORESSWAP_VCP` e o `CADASTROCURVASMOEDASFEEDERDOMINIOS` também atualizam as bases de indexadores e de domínios, e o de domínios vai anexo no e-mail) · Intraday Monitor — Tasks & Pending Action · Confirmations Escalation (Save CETIP Files e Confirmations Escalation também são tarefas do Intraday Monitor) |
-| **Settlement Reporting** | Save Daily Settlement Files (dropzone que processa todos os arquivos do dia em JSON) · Settlement Forecast (projeta as liquidações dos próximos dias úteis e envia por e-mail) |
-| **Pending Confirmation Routines** | Daily Metric — Outstanding Confirmation Brazil OTC · Pending Confirmations Spreadsheet Metrics · Pending Confirmation — Weekly Escalation (CEM/EDG) · Pending Signature Confirmations — Collection |
+| **Settlement Reporting** | Save Daily Settlement Files (dropzone que processa todos os arquivos do dia em JSON; o arquivo de Operações da B3 vira JPM ou MGT pelo *Participante* da célula A3, sem renomear) · Settlement Forecast (projeta as liquidações dos próximos dias úteis e envia por e-mail) |
+| **Pending Confirmation Routines** | Daily Metric — Outstanding Confirmation Brazil OTC · Pending Confirmations Spreadsheet Metrics · Pending Confirmation — Weekly Escalation (CEM/EDG; o CEM inclui a LOB COMMODITY) · Pending Signature Confirmations — Collection |
 | **Economic Affirmation Routines** | Manual Deals EA · BACC EA Metrics · MT300 |
 | **Reference Data Routines** | Update Contacts |
 
@@ -175,7 +175,7 @@ de período aceitam digitação direta da data. **Fixed Income**, **SOFR Index**
 
 #### NDF — Summary
 
-Batch de liquidação de NDF do dia. Os cards Vanilla / Other Publisher / T+0 / Total classificam a posição. As grades editáveis "Settlement Summary" e "Trade Level" permitem adicionar, editar, remover e confirmar linhas antes de gerar o batch. No **Trade Level**, a coluna **Settlement Type** (à direita da contraparte) diz que liquidação é aquela — `MATURITY`, `PREMIUM` ou `UNWIND` (a recompra) —, inclusive nas linhas em *Check*.
+Batch de liquidação de NDF do dia. Os cards Vanilla / Other Publisher / T+0 / Total classificam a posição. As grades editáveis "Settlement Summary" e "Trade Level" permitem adicionar, editar, remover e confirmar linhas antes de gerar o batch. No **Trade Level**, a coluna **Settlement Type** (à direita da contraparte) diz que liquidação é aquela — `MATURITY`, `PREMIUM` ou `UNWIND` (a recompra) —, inclusive nas linhas em *Check*. Cada grade tem o seu **Clear Filters**, que limpa os funis só dela.
 
 ![NDF — Summary](docs/sop-screenshots/ndf-summary.png)
 
@@ -187,7 +187,7 @@ Cockpit operacional do NDF. Importa o arquivo do dia e permite adicionar, editar
 
 #### Other Products — Summary
 
-Resumo consolidado dos demais produtos (COE, NDF, Option, Swap) com widgets de total, vencimentos (maturity), prêmio e fluxo por produto. No **Trade Level**, a coluna **Settlement Type** diz que liquidação é aquela — swap: `CASHFLOW`, `MATURITY`, `PREMIUM`, `UNWIND`; opção: `PREMIUM`, `EXERCISE`, `UNWIND`; termo: `PREMIUM`, `MATURITY`, `UNWIND` —, decidida pela posição (o contrato vence hoje, o prêmio liquida hoje, há fluxo hoje). Célula vazia pede o cadastro do evento em **Mapping › `opb3-events`**, coluna *Settlement Type*.
+Resumo consolidado dos demais produtos (COE, NDF, Option, Swap) com widgets de total, vencimentos (maturity), prêmio e fluxo por produto. No **Trade Level**, a coluna **Settlement Type** diz que liquidação é aquela — swap: `CASHFLOW`, `MATURITY`, `PREMIUM`, `UNWIND`; opção: `PREMIUM`, `EXERCISE`, `UNWIND`; termo: `PREMIUM`, `MATURITY`, `UNWIND` —, decidida pela posição (o contrato vence hoje, o prêmio liquida hoje, há fluxo hoje). Célula vazia pede o cadastro do evento em **Mapping › `opb3-events`**, coluna *Settlement Type*. Cada grade tem o seu **Clear Filters**, que limpa os funis só dela.
 
 ![Other Products — Summary](docs/sop-screenshots/other-products-summary.png)
 
@@ -281,9 +281,9 @@ As duas pontas não são de validação: **Pending Legal** é hold manual (o car
 
 #### Manual Confirmation — Track Confirmations
 
-Base completa das confirmações manuais, com filtro por coluna, atualização em massa por coluna, inclusão manual de linha e exportação do que está na tela. Os cards do topo filtram por etapa da esteira, e a tabela abre ordenada pelo *Aging*, do menor para o maior.
+Base completa das confirmações manuais, com o filtro do cabeçalho (o funil de cada coluna, como no Excel), atualização em massa por coluna, inclusão manual de linha e exportação do que está na tela. Os cards do topo filtram por etapa da esteira, e a tabela abre ordenada pelo *Aging*, do menor para o maior.
 
-Os títulos das colunas seguem o idioma da aplicação (*Settlement Date*, *Trade Date*, *Underlying Asset*, *Notional/Qty*, *Counterparty*). A coluna **Notional Amount CCY** traz a moeda do notional junto com o valor e é preenchida sozinha no mapeamento — ela é diferente do *Underlying Asset* ao lado, que em mercadoria guarda a commodity. Nos campos de filtro, **`blank`** lista as linhas em que aquela coluna está vazia.
+Os títulos das colunas seguem o idioma da aplicação (*Settlement Date*, *Trade Date*, *Underlying Asset*, *Notional/Qty*, *Counterparty*). A coluna **Notional Amount CCY** traz a moeda do notional junto com o valor e é preenchida sozinha no mapeamento — ela é diferente do *Underlying Asset* ao lado, que em mercadoria guarda a commodity. No funil de cada coluna, **(Vazias)** lista as linhas em que aquela coluna está vazia.
 
 ![Manual Confirmation — Track Confirmations](docs/sop-screenshots/manual-confirmation_track.png)
 

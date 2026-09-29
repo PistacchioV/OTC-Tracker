@@ -15,7 +15,7 @@
 O guia está organizado do jeito que o trabalho acontece, e não em ordem alfabética de tela.
 
 - O **capítulo 3** cobre o que você faz uma vez: entrar, reconhecer a barra superior e achar as coisas no menu.
-- O **capítulo 4** é o mais importante e o mais curto: ele explica o que se repete em **toda** tela do sistema — a barra de ferramentas, o filtro por coluna, o Export, a cópia de células, os campos de data. Os capítulos seguintes **não repetem** essas instruções; eles dizem apenas o que é próprio de cada tela.
+- O **capítulo 4** é o mais importante e o mais curto: ele explica o que se repete em **toda** tela do sistema — a barra de ferramentas, o filtro do cabeçalho (o funil), o Export, a cópia de células, os campos de data. Os capítulos seguintes **não repetem** essas instruções; eles dizem apenas o que é próprio de cada tela.
 - Os **capítulos 5 a 17** têm uma seção por tela, sempre no mesmo formato: a imagem da tela, *para que ela serve*, e o *passo a passo* de cada ação — que botão clicar, onde ele fica e o que acontece depois.
 - O **capítulo 18** reúne os anexos: significado de cada status, glossário, o que ainda não está disponível e os problemas mais comuns.
 
@@ -190,8 +190,7 @@ De cima para baixo:
 | **Área de upload** *(só em algumas)* | O retângulo pontilhado "Drop files here or click to upload" |
 | **Barra de busca** *(New Deals)* | O campo de fichas de filtro (ver 4.4) |
 | **Barra de ferramentas** | Columns · Add Row · Export · Reference Date · Import · Clear Filters, e o *Show N entries* à direita |
-| **Cabeçalho da tabela** | Os nomes das colunas — clique num nome para ordenar |
-| **Linha de filtro** | A 2ª linha do cabeçalho, uma caixinha por coluna (ver 4.3) |
+| **Cabeçalho da tabela** | Os nomes das colunas — clique num nome para ordenar — e, ao lado de cada nome, o **funil** do filtro (ver 4.3) |
 | **Linhas** | Os dados. A 1ª coluna costuma ser a caixa de seleção e a 2ª os botões de ação |
 | **Rodapé** | *Showing 1 to N of M entries* à esquerda e a paginação à direita |
 
@@ -206,20 +205,34 @@ Os botões são sempre os mesmos, com as mesmas cores, em todas as telas que os 
 | **Export** | Azul-esverdeado | Baixa o que está na tela (4.6) |
 | **Import** | Verde-azulado | Busca os dados na fonte (API, arquivo do share) |
 | **Mapping / atualizar** | Verde | Reprocessa o de-para daquela tela |
-| **Clear Filters** | Contorno cinza | Limpa **todos** os filtros de coluna de uma vez |
+| **Clear Filters** | Contorno cinza | Limpa **todos** os filtros (os funis) de uma vez. Em tela com uma tabela por cartão, cada cartão tem o seu e limpa só aquela tabela |
 | **Show [N] entries** | À direita | Quantas linhas por página |
 
-### 4.3. Filtrar por coluna
+### 4.3. Filtrar por coluna — o funil
 
-A linha de caixinhas logo abaixo do cabeçalho é o filtro. Cada caixinha filtra **a sua** coluna, e o texto dentro dela (cinza claro) diz qual é.
+Ao lado do nome de cada coluna há um **funil**. Ele funciona como o filtro do Excel: em vez de digitar, você marca os valores que quer ver.
 
-1. Clique na caixinha da coluna que você quer filtrar.
-2. Digite o que procura — não precisa ser o valor inteiro, ele casa por **pedaço** do texto.
-3. A tabela filtra enquanto você digita.
-4. Para combinar critérios, preencha **mais de uma** caixinha: elas se somam (E, não OU).
+1. Clique no **funil** da coluna. Abre um menu com:
+   - **Classificar de A a Z / de Z a A** — ordena a tabela por aquela coluna;
+   - **Limpar filtro de "…"** — desfaz o filtro só daquela coluna;
+   - um campo de **pesquisa**;
+   - a **lista dos valores** que existem na coluna, cada um com uma caixinha, e **(Selecionar Tudo)** no topo.
+2. Desmarque o que você **não** quer ver (ou clique em **(Selecionar Tudo)** para desmarcar tudo e marque só o que quer).
+3. Clique em **OK**. A tabela mostra só as linhas com os valores marcados, e o funil daquela coluna fica **azul e preenchido** — é assim que se sabe que ela está filtrada.
+4. Para combinar critérios, use o funil de **mais de uma** coluna: eles se somam (E, não OU). A lista de cada coluna já mostra só os valores que sobraram depois dos filtros das outras, como no Excel.
 5. Para desfazer tudo, clique em **Clear Filters** na barra de ferramentas.
 
-> **Para achar o que está VAZIO, digite `blank`.** É o único jeito de procurar a ausência de um valor — a caixinha casa por conteúdo, e "nada" não se digita. A palavra só vale quando é a única coisa no campo; `blank trading` continua procurando o texto.
+**A pesquisa do menu:**
+
+- Digite um pedaço do valor: a lista encolhe para o que casa, e os resultados já vêm marcados. **OK** filtra por eles.
+- **Adicionar seleção atual ao filtro** — aparece quando a coluna **já está filtrada** e você pesquisa outro valor. Marcada, o **OK soma** o que você achou ao que já estava filtrado, em vez de trocar. Exemplo: filtrou `ANTECIPACAO`, quer ver também `RESGATE` → pesquise `RESGATE`, marque a caixa, **OK**: ficam os dois.
+- A pesquisa aceita uma **lista colada**: copie uma coluna de Trade IDs do Excel e cole no campo — cada linha vira um item (`123; 456; 789`), e a lista mostra todos os que casam.
+
+> **Para achar o que está VAZIO**, marque **(Vazias)** — ela aparece no fim da lista sempre que a coluna tem alguma célula em branco.
+
+> **Coluna com muitos valores** (mais de 500, como um cadastro de contrapartes): a lista mostra os primeiros e pede que você use a pesquisa para chegar ao resto.
+
+As colunas de **caixa de seleção** e de **Actions** não têm funil — não há dado para filtrar nelas.
 
 **Para ordenar:** clique no **nome** da coluna, no cabeçalho. Clique de novo para inverter. Números ordenam como número (`9,00` antes de `1.000,00`), não como texto.
 
@@ -628,6 +641,8 @@ A tela tem, de cima para baixo: as **abas de produto** (Vanilla · Other Publish
 4. Se um valor estiver errado, clique em **Edit** na linha, corrija e salve; ou use **Add row** para incluir uma liquidação que não veio automaticamente.
 5. Role até o **Trade Level** para ver de que operações aquele total é feito.
 
+Cada cartão (**Settlement Summary** e **Trade Level**) tem o seu **Clear Filters**, ao lado do **Columns**: ele limpa os funis só da tabela daquele cartão.
+
 **Para emitir os avisos de liquidação:**
 
 1. Marque as contrapartes que devem receber o aviso (a caixa de seleção de cada linha do Settlement Summary). A **caixa do cabeçalho marca todas** — todas as linhas do filtro atual, em **todas as páginas da tabela**, não só a que está na tela; desmarcar uma linha depois desfaz o "todas". É preciso ao menos uma marcada.
@@ -691,7 +706,7 @@ Três coisas próprias desta tela:
 
 **Para que serve:** é o gêmeo do NDF Summary para swap, opção, termo de mercadoria e COE. As abas do alto são **Swap · Option · NDF Commodities · COE · Total**, e os dois cartões são os mesmos — **Settlement Summary** e **Trade Level**.
 
-**Passo a passo:** idêntico ao 6.1 — abas, conferência, **Print Advice**, **TEDs**, e o **Confirm** da linha para marcar como enviado.
+**Passo a passo:** idêntico ao 6.1 — abas, conferência, **Print Advice**, **TEDs**, e o **Confirm** da linha para marcar como enviado. Aqui também cada cartão tem o seu **Clear Filters**.
 
 Duas coisas próprias desta tela:
 
@@ -821,7 +836,7 @@ São quatro telas de **consulta**, cada uma mostrando uma fonte do swap. Nenhuma
 
 **Menu › APPS › Live Position**
 
-São cinco telas de **consulta** da posição viva registrada na B3. Nenhuma tem Import nem edição: você escolhe a data, filtra, confere e exporta. Todas trazem o campo **Filter by column…** acima da tabela, além da linha de filtro por coluna.
+São cinco telas de **consulta** da posição viva registrada na B3. Nenhuma tem Import nem edição: você escolhe a data, filtra, confere e exporta. Todas trazem o campo **Filter by column…** acima da tabela, além do funil em cada coluna (4.3).
 
 | Tela | O que mostra |
 |---|---|
@@ -837,7 +852,7 @@ São cinco telas de **consulta** da posição viva registrada na B3. Nenhuma tem
 
 1. Confira a **data** no alto — por padrão, o último dia útil com arquivo.
 2. Os números do alto (VANILLA · OTHER PUBLISHER · T+0 · COMMODITIES · TOTAL) contam a posição por tipo. **Clique num deles para filtrar a tabela** por aquele tipo.
-3. Filtre pelas caixinhas do cabeçalho ou pelo **Filter by column…**.
+3. Filtre pelos funis do cabeçalho (4.3) ou pelo **Filter by column…**.
 4. Exporte com **Export** (4.6).
 
 > **A coluna de CPF/CNPJ da contraparte mostra o NOME do cliente**, não o documento — o sistema resolve o documento no Reference Data. Quando o documento **não** está cadastrado, a célula mostra o número mascarado em vez de ficar vazia: é assim que se vê quem falta cadastrar. A coluna da **Parte** não muda — aquela é a nossa perna.
@@ -1016,7 +1031,7 @@ O relatório do FepWeb chega **na noite do próprio dia** e cobre os últimos di
 2. Clique em **Run** (botão azul). O sistema busca o e-mail, consulta a Athena e grava o resultado do dia; ao reabrir a tela, ele já está lá.
 3. Comece pelos cartões **Missing FepWeb** e **Missing Athena**.
 4. Para anotar o que foi feito com uma linha, clique em **Edit** (o lápis): **só o campo Comments abre para edição**. *Enter* ou o disquete salva; *Esc* ou o X cancela. O comentário é da **operação**, não do dia: rodar de novo não apaga.
-5. **Columns** esconde e mostra colunas; os campos do cabeçalho filtram por coluna (digite `blank` para achar as vazias); **Clear Filters** limpa tudo.
+5. **Columns** esconde e mostra colunas; o funil de cada coluna filtra por valor (marque **(Vazias)** para achar as vazias — 4.3); **Clear Filters** limpa tudo.
 6. **Export** baixa o que está na tela (4.6). Com linhas **marcadas** na caixa de seleção, sai **só o que está marcado**.
 
 > **Se o Run falhar dizendo que não achou o relatório**, a própria mensagem lista o motivo: a pasta não existe, nenhum e-mail com aquele assunto, ou o e-mail não tem anexo de planilha. **Se aparecer o aviso "Sem cadastro no Reference Data"**, cadastre o CNPJ/SPN indicado: sem ele o sistema não sabe o Signature Type, e uma contraparte *Internal* sairia como *Missing FepWeb*.
@@ -1296,7 +1311,7 @@ A página são **três cartões verticais**, um por mesa da esteira:
 
 Os cinco fecham: **Documents = Pending + Active + Inactive + Cancelled**.
 
-**Clique num chip para filtrar a tabela** por aquele grupo — o mesmo gesto dos cards do Track Confirmations. O chip ativo ganha uma moldura azul; clicar nele de novo desliga o filtro, e **Documents** volta à lista inteira. O filtro do chip soma com as caixinhas do cabeçalho, e **Clear Filters** limpa os dois. O que cada chip mostra é exatamente o que ele conta: a regra que classifica a linha (Active é o `Status` exato; Inactive e Cancelado são os encerrados) é a mesma do contador.
+**Clique num chip para filtrar a tabela** por aquele grupo — o mesmo gesto dos cards do Track Confirmations. O chip ativo ganha uma moldura azul; clicar nele de novo desliga o filtro, e **Documents** volta à lista inteira. O filtro do chip soma com os funis do cabeçalho, e **Clear Filters** limpa os dois. O que cada chip mostra é exatamente o que ele conta: a regra que classifica a linha (Active é o `Status` exato; Inactive e Cancelado são os encerrados) é a mesma do contador.
 
 **A faixa cinza acima da barra de ferramentas** mostra **de onde os dados vieram** — o caminho do banco e quantas linhas ele tem. Se o banco ainda não foi criado, essa faixa fica **vermelha** dizendo isso e o comando que resolve.
 
@@ -1313,7 +1328,7 @@ Os cinco fecham: **Documents = Pending + Active + Inactive + Cancelled**.
 
 **Passo a passo:**
 
-1. Filtre pelas caixinhas do cabeçalho — por **Status**, por **Razão Social**, por **Pending with** — ou clique num **chip** do alto para ver só aquele grupo.
+1. Filtre pelos funis do cabeçalho — por **Status**, por **Razão Social**, por **Pending with** — ou clique num **chip** do alto para ver só aquele grupo.
 2. Para corrigir um dado, clique em **Edit** na linha, altere e salve (4.9). O *Aging* não é editável: ele é calculado.
 3. **New Request** abre o formulário de abertura de solicitação (o mesmo do Overview — ver 10.1).
 4. **Delete** apaga uma linha.
@@ -1689,11 +1704,11 @@ Os cartões estão em **cinco seções**, e o que agrupa não é o que a rotina 
 | **Save CETIP Files** | Salva os arquivos da CETIP na pasta do dia e manda o e-mail para o OTC. Dois deles não são posição e atualizam uma base: o `INDEXADORESSWAP_VCP` atualiza os indexadores de swap e o `CADASTROCURVASMOEDASFEEDERDOMINIOS` atualiza o cadastro de domínios — este último vai **anexo** no e-mail | Ao longo do pregão |
 | **Intraday Monitor — Tasks & Pending Action** | Define os dias e o horário limite de cada tarefa do Intraday Monitor (5.1) e manda o e-mail *Pending Action - Intraday Monitor* com as tarefas e os produtos em aberto. Recon nova aparece aqui sozinha | 19:00 e 19:30 (horário de Brasília) |
 | **Confirmations Escalation** | Cobra por e-mail o que está parado na esteira de confirmação — sete listas, uma por destinatário | Segundas e quintas; feriado **rola** para o próximo dia útil |
-| **Save Daily Settlement Files** | Salva os arquivos de liquidação do dia | Fim do dia |
+| **Save Daily Settlement Files** | Salva os arquivos de liquidação do dia. O arquivo de **Operações** da B3 é reconhecido pelo **Participante** da linha 3 (célula A3): `JPMORGANBM` entra como **Operações JPM** e `MORGANBC` como **Operações MGT** — não é preciso renomear o arquivo da MGT. O aviso do fim da rotina diz, em cada arquivo de operações, o Participante lido | Fim do dia |
 | **Settlement Forecast** | Monta e envia a projeção de liquidações | Diário |
 | **Daily Metric — Outstanding Confirmation Brazil OTC** | A métrica diária de confirmações em aberto | Diário |
 | **Pending Confirmations Spreadsheet Metrics** | Grava a planilha `PENDING - Outstanding Confirmation OTC.xlsx` que o time global lê | 10:45 |
-| **Pending Confirmation — Weekly Escalation (CEM/EDG)** | A escalação semanal das pendências | Semanal |
+| **Pending Confirmation — Weekly Escalation (CEM/EDG)** | A escalação semanal das pendências com mais de 30 dias, por LOB. O bloco **CEM** inclui as confirmações de LOB **COMMODITY** | Semanal |
 | **Pending Signature Confirmations — Collection** | O e-mail de coleta de assinatura, com o banker em cópia | Diário |
 | **Manual Deals EA** | A afirmação econômica das operações manuais | Diário |
 | **BACC EA Metrics** | A planilha das operações manuais sem callback, para o time de métricas | Todo dia útil, **16:00** |
