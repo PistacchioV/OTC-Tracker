@@ -4,6 +4,7 @@
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <style>
 /* Pending Confirmation › Dashboard. Painel próprio (não .card: o extra_css
    carrega antes do tema e perderia), estados com prefixo de id (§7). */
@@ -18,7 +19,24 @@
 #pcd-page .pcd-kpi { display: flex; gap: 2.5rem; flex-wrap: wrap; align-items: flex-end; }
 #pcd-page .pcd-kpi__v { font-size: 2.1rem; font-weight: 700; letter-spacing: -1px; line-height: 1; }
 #pcd-page .pcd-kpi__l { font-size: .7rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #6e6e73; margin-top: .3rem; }
-#pcd-page .pcd-note { font-size: .74rem; color: #6e6e73; }
+#pcd-page .pcd-note { font-size: .74rem; color: #6e6e73; text-align: right; }
+/* Leitura ao vivo + Refresh — o MESMO desenho do Intraday Monitor
+   (.im-live / .im-refresh): bolinha pulsante, hora com segundos e o botão
+   quadrado só com o ícone, que gira enquanto lê. */
+#pcd-page .pcd-bar { display: inline-flex; align-items: center; gap: .6rem; }
+#pcd-page .pcd-live { display: inline-flex; align-items: center; gap: .4rem; font-size: .74rem;
+    color: var(--ins-secondary-color); font-variant-numeric: tabular-nums; }
+#pcd-page .pcd-live i { width: 8px; height: 8px; border-radius: 99px; background: #16a34a;
+    box-shadow: 0 0 0 0 color-mix(in oklab, #16a34a 55%, transparent); }
+@media (prefers-reduced-motion: no-preference) {
+    #pcd-page .pcd-live i { animation: sf-pulse 2.4s ease-out infinite; }
+}
+#pcd-page .pcd-live.is-fail { color: #d63939; font-weight: 600; }
+#pcd-page .pcd-live.is-fail i { background: #d63939; }
+#pcd-page .pcd-refresh { width: 34px; height: 34px; padding: 0; border-radius: 10px !important;
+    display: inline-flex; align-items: center; justify-content: center; }
+#pcd-page .pcd-refresh.is-busy i { animation: pcd-spin .6s linear infinite; }
+@keyframes pcd-spin { to { transform: rotate(360deg); } }
 
 /* Faixas de pendência: chips que ligam e desligam */
 #pcd-page .pcd-bands { display: flex; flex-wrap: wrap; gap: .45rem; }
@@ -35,6 +53,29 @@
 }
 #pcd-page .pcd-band.is-on { border-color: var(--pcd-heat); background: color-mix(in srgb, var(--pcd-heat) 16%, transparent); }
 #pcd-page .pcd-band.is-on .pcd-band__n { background: var(--pcd-heat); color: #fff; }
+
+/* Toolbar (§7): o DataTables come a margem do irmão, por isso o mb-3 */
+#pcd-page .btn-toolbar-all { transition: transform 100ms ease-out; }
+#pcd-page .btn-toolbar-all:active { transform: scale(.96) !important; }
+#pcd-toolbar .dt-buttons { display: inline-flex; margin: 0; }
+
+/* Menu do Export — fundo sólido e texto legível (o mesmo do New Deals) */
+.dt-button-collection {
+    background: #fff !important; border: 1px solid rgba(0,0,0,.15) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18) !important; border-radius: .375rem !important;
+    padding: .25rem 0 !important; opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection { background: #2b2f3a !important; border-color: rgba(255,255,255,.15) !important; }
+.dt-button-collection .dt-button {
+    background: transparent !important; color: #212529 !important; border: none !important;
+    width: 100% !important; text-align: left !important; padding: .4rem 1rem !important;
+    font-size: .82rem !important; opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button { color: #dee2e6 !important; }
+.dt-button-collection .dt-button:hover, .dt-button-collection .dt-button:focus {
+    background: rgba(13,110,253,.08) !important; color: #0d6efd !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button:hover { background: rgba(255,255,255,.08) !important; color: #6ea8fe !important; }
 
 /* Tabela — padrão da casa (§7): centralizada, th .7rem, td .8rem nowrap */
 #pcd-table th { font-size: .7rem; text-align: center; vertical-align: middle; }
@@ -60,7 +101,16 @@
                 <div><div class="pcd-kpi__v" id="pcd-kpi-total">—</div><div class="pcd-kpi__l" data-lang="pcd-kpi-total">Pending confirmations</div></div>
                 <div><div class="pcd-kpi__v" id="pcd-kpi-groups">—</div><div class="pcd-kpi__l" data-lang="pcd-kpi-groups">Economic groups</div></div>
             </div>
-            <div class="pcd-note" id="pcd-source"></div>
+            <div class="pcd-note">
+                <div data-lang="pcd-source-live">Live reading of the Pending Confirmation Main (pending base)</div>
+                <div class="pcd-bar mt-1">
+                    <span class="pcd-live" id="pcd-live"><i></i><span id="pcd-updated">—</span></span>
+                    <button type="button" class="btn btn-sm btn-soft-primary pcd-refresh" id="pcdRefresh"
+                            data-bs-toggle="tooltip" title="Refresh now">
+                        <i class="ti ti-refresh"></i>
+                    </button>
+                </div>
+            </div>
         </div>
         <div class="mt-3">
             <div class="pcd-kpi__l mb-2" data-lang="pcd-bands">Pending range</div>
@@ -68,11 +118,8 @@
         </div>
     </div>
 
-    <div class="d-flex flex-wrap gap-2 mb-3">
-        <button type="button" class="btn btn-sm btn-success btn-toolbar-all" id="pcdRefresh">
-            <i class="ti ti-refresh me-1"></i><span data-lang="pcd-refresh">Refresh</span></button>
-        <button type="button" class="btn btn-sm btn-info btn-toolbar-all" id="pcdExport">
-            <i class="ti ti-file-spreadsheet me-1"></i><span data-lang="pcd-export">Export Excel</span></button>
+    <div class="d-flex flex-wrap gap-2 mb-3" id="pcd-toolbar">
+        <span id="pcd-export-slot"></span>
         <button type="button" class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="pcdClearFilters">
             <i class="ti ti-filter-off me-1"></i><span data-lang="btn-clear-filters">Clear Filters</span></button>
     </div>
@@ -83,6 +130,11 @@
         </div>
     </div>
 
+    <!-- Textos que o JS escreve depois do load (o I18nManager traduz uma vez). -->
+    <span class="d-none" data-lang="pcd-updated">Updated</span>
+    <span class="d-none" data-lang="im-refresh">Refresh now</span>
+    <span class="d-none" data-lang="pcd-update-failed">Update failed — showing</span>
+
 </div>
 {% endblock page_content %}
 
@@ -91,10 +143,32 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script>
+// Registro SÍNCRONO do JSZip (§7): sem ele o Excel do Buttons não sai.
+(function () {
+    var jz = (typeof JSZip !== 'undefined') ? JSZip : undefined;
+    if (!jz) return;
+    window.JSZip = jz;
+    if ($.fn.dataTable && $.fn.dataTable.Buttons && typeof $.fn.dataTable.Buttons.jszip === 'function') {
+        $.fn.dataTable.Buttons.jszip(jz);
+    }
+})();
+</script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script>
 (function () {
     var API = '/api/dashboard-pending-confirmation/data';
+    // A tela se atualiza SOZINHA: pergunta ao banco a cada POLL_MS enquanto a
+    // aba está visível, e de novo assim que ela volta a ficar visível.
+    var POLL_MS = 30000;
     var LANG = (localStorage.getItem('__OTC_TRACKER_LANG__') || 'en');
     var _TRANS = {};
     function t(k, fb) { return _TRANS[k] || fb || k; }
@@ -106,35 +180,58 @@
                 var k = el.getAttribute('data-lang');
                 if (_TRANS[k]) el.innerHTML = _TRANS[k];
             });
-            if (DATA) render(DATA);
+            if (DATA) render(DATA, true);
+            showStamp();
         })
         .catch(function () {});
 
     var DATA = null, DT = null, SELECTED = null;   // null = todas as faixas
-    var pedido = 0;
+    var COLS_SIG = null, DATA_SIG = null, MAX = 0;
+    var pedido = 0, emVoo = null, lastOk = null, lastFail = false;
 
     function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
     }
+    function hhmmss(d) {
+        return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
+    }
+    function showStamp() {
+        var el = document.getElementById('pcd-updated');
+        document.getElementById('pcdRefresh').setAttribute('title', t('im-refresh', 'Refresh now'));
+        if (!lastOk) { el.textContent = '—'; return; }
+        document.getElementById('pcd-live').classList.toggle('is-fail', lastFail);
+        el.textContent = (lastFail ? t('pcd-update-failed', 'Update failed — showing') : t('pcd-updated', 'Updated')) +
+                         ' ' + hhmmss(lastOk);
+    }
 
-    function load() {
+    // `force`: refaz a tabela mesmo com o dado igual (troca de faixa, idioma).
+    function load(force) {
+        if (emVoo && !force) return emVoo;           // um pedido por vez
         var meu = ++pedido;
+        var rb = document.getElementById('pcdRefresh');
+        rb.classList.add('is-busy');
         var url = API + (SELECTED === null ? '' : '?bands=' + encodeURIComponent(JSON.stringify(SELECTED)));
-        return fetch(url, { credentials: 'same-origin' })
+        emVoo = fetch(url, { credentials: 'same-origin' })
             .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
             .then(function (res) {
                 if (meu !== pedido) return;          // resposta de um filtro antigo
                 if (!res.ok || !res.body || res.body.success === false) throw new Error((res.body && res.body.error) || 'HTTP');
-                DATA = res.body;
-                render(DATA);
+                lastOk = new Date(); lastFail = false;
+                var sig = JSON.stringify([res.body.columns, res.body.rows, res.body.bands]);
+                if (force || sig !== DATA_SIG) { DATA = res.body; DATA_SIG = sig; render(DATA, false); }
+                showStamp();
             })
             .catch(function (e) {
                 if (meu !== pedido) return;
-                if (window.Swal) Swal.fire({ icon: 'error', title: t('pcd-load-failed', 'Could not load the dashboard'),
-                                             text: e && e.message || '' });
-            });
+                // Mantém o último dado bom na tela e DIZ que a atualização falhou.
+                lastFail = true; showStamp();
+                if (!DATA && window.Swal) Swal.fire({ icon: 'error', title: t('pcd-load-failed', 'Could not load the dashboard'),
+                                                      text: e && e.message || '' });
+            })
+            .finally(function () { if (meu === pedido) { emVoo = null; rb.classList.remove('is-busy'); } });
+        return emVoo;
     }
 
     function renderBands(d) {
@@ -146,11 +243,12 @@
         }).join('');
     }
 
-    function heat(v, max) {
-        if (!v || !max) return '';
-        var r = v / max;
-        return { style: 'background:color-mix(in srgb, var(--pcd-heat) ' + Math.round(14 + 76 * r) + '%, transparent)',
-                 hot: r > .55 };
+    function paint(td, v) {
+        td.removeAttribute('style'); td.classList.remove('pcd-hot');
+        if (!v || !MAX) return;
+        var r = v / MAX;
+        td.setAttribute('style', 'background:color-mix(in srgb, var(--pcd-heat) ' + Math.round(14 + 76 * r) + '%, transparent)');
+        if (r > .55) td.classList.add('pcd-hot');
     }
 
     function headerHtml(d) {
@@ -160,23 +258,75 @@
         d.quarters.forEach(function (q) { top += '<th colspan="' + q.span + '">' + esc(q.label) + '</th>'; });
         top += '<th rowspan="2">' + esc(t('pcd-col-total', 'Grand Total')) + '</th></tr>';
         var sub = '<tr>' + d.columns.map(function (c) { return '<th>' + esc(c.status) + '</th>'; }).join('') + '</tr>';
-        var foot = '<tr><th class="pcd-txt" colspan="3">' + esc(t('pcd-col-total', 'Grand Total')) + '</th>' +
+        var foot = '<tr><th class="pcd-txt">' + esc(t('pcd-col-total', 'Grand Total')) + '</th><th></th><th></th>' +
                    d.columns.map(function () { return '<th></th>'; }).join('') + '<th></th></tr>';
         return '<thead>' + top + sub + '</thead><tfoot>' + foot + '</tfoot>';
     }
 
-    function render(d) {
+    function hoje() {
+        var d = new Date();
+        return d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2);
+    }
+    // O nome do DOCUMENTO com a data em AAAAMMDD (§7), nunca o id da tabela.
+    function expName() { return 'Pending Confirmation Dashboard ' + hoje(); }
+    function exportOpts() {
+        // `export`: o número cru (a tela desenha 0 como vazio) e o rodapé junto.
+        return { columns: ':visible', orthogonal: 'export', modifier: { page: 'all' } };
+    }
+    function exportButtons() {
+        function item(ext, icon, label) {
+            return { extend: ext, text: '<i class="ti ' + icon + ' me-1 fs-lg align-middle"></i> ' + label,
+                     className: 'dropdown-item', footer: true, title: 'Pending Confirmation Dashboard',
+                     filename: expName, exportOptions: exportOpts() };
+        }
+        return [{
+            extend: 'collection',
+            text: '<i class="ti ti-download me-1"></i> Export',
+            className: 'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all btn-toolbar-export',
+            autoClose: true,
+            buttons: [
+                item('copy', 'ti-copy', 'Copy'),
+                item('csv', 'ti-file-type-csv', 'CSV'),
+                item('excel', 'ti-file-spreadsheet', 'Excel'),
+                item('print', 'ti-printer', 'Print'),
+                item('pdf', 'ti-file-text', 'PDF')
+            ]
+        }];
+    }
+
+    function footerSums(api, n) {
+        var rows = api.rows({ search: 'applied' }).data().toArray();
+        var ths = $(api.table().footer()).find('th');
+        var total = 0;
+        for (var ix = 0; ix < n; ix++) {
+            var s = rows.reduce(function (acc, r) { return acc + (r.values[ix] || 0); }, 0);
+            total += s;
+            ths.eq(ix + 3).text(s || '');
+        }
+        ths.eq(n + 3).text(total);
+    }
+
+    function render(d, rebuild) {
         renderBands(d);
         document.getElementById('pcd-kpi-total').textContent = d.totals.total;
         var grupos = {};
         d.rows.forEach(function (r) { grupos[r.group] = 1; });
         document.getElementById('pcd-kpi-groups').textContent = Object.keys(grupos).length;
-        document.getElementById('pcd-source').textContent = d.source === 'live'
-            ? t('pcd-source-live', 'Live reading of the Pending Confirmation Main (pending base)')
-            : t('pcd-source-snapshot', 'Snapshot of') + ' ' + d.source;
+        MAX = d.max;
 
+        // Mesmas colunas: só troca as linhas — o filtro do funil, a ordem e a
+        // página ficam onde a pessoa deixou enquanto a tela se atualiza.
+        var sig = JSON.stringify(d.columns);
+        if (DT && !rebuild && sig === COLS_SIG) {
+            DT.clear().rows.add(d.rows).draw(false);
+            return;
+        }
+        COLS_SIG = sig;
         if (DT) { DT.destroy(); DT = null; }
         var $t = $('#pcd-table');
+        // O Advanced Export marca a tabela para não se ligar duas vezes; a
+        // tabela é refeita, e o item tem de voltar ao menu novo.
+        $t[0].removeAttribute('data-otc-expadv');
         $t.empty().html(headerHtml(d));
         var n = d.columns.length;
         var cols = [
@@ -188,12 +338,11 @@
             cols.push({ data: null, type: 'num',
                         render: (function (ix) { return function (row, type) {
                             var v = row.values[ix];
-                            return type === 'display' ? (v || '') : v;
+                            if (type === 'display') return v || '';
+                            if (type === 'export') return v || '';
+                            return v;
                         }; })(i),
-                        createdCell: (function (ix) { return function (td, _c, row) {
-                            var h = heat(row.values[ix], d.max);
-                            if (h) { td.setAttribute('style', h.style); if (h.hot) td.classList.add('pcd-hot'); }
-                        }; })(i) });
+                        createdCell: (function (ix) { return function (td, _c, row) { paint(td, row.values[ix]); }; })(i) });
         }
         cols.push({ data: 'total', className: 'pcd-total', type: 'num' });
         DT = $t.DataTable({
@@ -204,6 +353,7 @@
             lengthChange: false,
             autoWidth: true,
             dom: "rt<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+            buttons: exportButtons(),
             language: {
                 emptyTable: t('pcd-empty', 'No pending confirmations in the selected range.'),
                 paginate: {
@@ -214,19 +364,11 @@
                 }
             },
             // O Grand Total do rodapé soma o que a grade MOSTRA (funil incluído).
-            footerCallback: function () {
-                var api = this.api();
-                var rows = api.rows({ search: 'applied' }).data().toArray();
-                var ths = $(api.table().footer()).find('th');
-                var total = 0;
-                for (var ix = 0; ix < n; ix++) {
-                    var s = rows.reduce(function (acc, r) { return acc + (r.values[ix] || 0); }, 0);
-                    total += s;
-                    ths.eq(ix + 1).text(s || '');
-                }
-                ths.eq(n + 1).text(total);
-            }
+            footerCallback: function () { footerSums(this.api(), n); }
         });
+        $('#pcd-export-slot').empty().append(DT.buttons().container());
+        // Advanced no fim do menu; o cadastro de pendências não tem arquivo-dia.
+        if (window.otcExportAdvanced) otcExportAdvanced('#pcd-table', { name: expName() });
         if (window.otcCellCopy) otcCellCopy('#pcd-table');
     }
 
@@ -239,78 +381,20 @@
         var i = atual.indexOf(label);
         if (i >= 0) atual.splice(i, 1); else atual.push(label);
         SELECTED = atual.length === todas.length ? null : todas.filter(function (x) { return atual.indexOf(x) >= 0; });
-        load();
+        load(true);
     });
-    document.getElementById('pcdRefresh').addEventListener('click', load);
     document.getElementById('pcdClearFilters').addEventListener('click', function () {
         // O helper do funil limpa as colunas; aqui voltam todas as faixas.
-        if (SELECTED !== null) { SELECTED = null; load(); }
+        if (SELECTED !== null) { SELECTED = null; load(true); }
     });
 
-    // ── Export: o Excel da tabela como está na tela (faixas + funil) ─────────
-    var LIBS = {};
-    function loadLib(src) {
-        if (!LIBS[src]) LIBS[src] = new Promise(function (ok, ko) {
-            var el = document.createElement('script');
-            el.src = '{{ config.ASSETS_ROOT }}/plugins/' + src;
-            el.onload = ok; el.onerror = function () { delete LIBS[src]; ko(new Error(src)); };
-            document.head.appendChild(el);
-        });
-        return LIBS[src];
-    }
-    function hoje() {
-        var d = new Date();
-        return d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2);
-    }
-    document.getElementById('pcdExport').addEventListener('click', function () {
-        if (!DATA || !DT) return;
-        loadLib('xlsx/xlsx.full.min.js').then(function () {
-            var d = DATA, n = d.columns.length;
-            var h1 = [t('pcd-col-group', 'Economic Group'), t('pcd-col-owner', 'Owner'), t('pcd-col-signature', 'Signature Type')];
-            var h2 = ['', '', ''];
-            var merges = [0, 1, 2].map(function (c) { return { s: { r: 0, c: c }, e: { r: 1, c: c } }; });
-            var c0 = 3;
-            d.quarters.forEach(function (q) {
-                for (var k = 0; k < q.span; k++) h1.push(k === 0 ? q.label : '');
-                if (q.span > 1) merges.push({ s: { r: 0, c: c0 }, e: { r: 0, c: c0 + q.span - 1 } });
-                c0 += q.span;
-            });
-            d.columns.forEach(function (c) { h2.push(c.status); });
-            h1.push(t('pcd-col-total', 'Grand Total')); h2.push('');
-            merges.push({ s: { r: 0, c: n + 3 }, e: { r: 1, c: n + 3 } });
-            var rows = DT.rows({ search: 'applied', order: 'applied' }).data().toArray();
-            var body = rows.map(function (r) {
-                return [r.group, r.owner, r.signature].concat(r.values.map(function (v) { return v || null; })).concat([r.total]);
-            });
-            var soma = [];
-            for (var i = 0; i < n; i++) soma.push(rows.reduce(function (a, r) { return a + (r.values[i] || 0); }, 0) || null);
-            var tot = [t('pcd-col-total', 'Grand Total'), '', ''].concat(soma)
-                .concat([rows.reduce(function (a, r) { return a + r.total; }, 0)]);
-            var m = [h1, h2].concat(body).concat([tot]);
-            var ws = XLSX.utils.aoa_to_sheet(m);
-            // Nome de grupo/owner é TEXTO (um "26E04" viraria número, §477).
-            Object.keys(ws).forEach(function (k) {
-                if (k.charAt(0) === '!') return;
-                var cell = XLSX.utils.decode_cell(k);
-                if (cell.c < 3 || cell.r < 2) { ws[k].t = 's'; ws[k].v = String(ws[k].v); }
-            });
-            ws['!merges'] = merges;
-            ws['!cols'] = m[0].map(function (_, ci) {
-                var w = m.reduce(function (mx, r) { return Math.max(mx, String(r[ci] == null ? '' : r[ci]).length); }, 8);
-                return { wch: Math.min(w + 2, 45) };
-            });
-            var faixas = SELECTED === null ? d.bands.map(function (b) { return b.label; }) : SELECTED;
-            var ws2 = XLSX.utils.aoa_to_sheet([[t('pcd-bands', 'Pending range')]].concat(faixas.map(function (f) { return [f]; })));
-            var wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, 'Dashboard');
-            XLSX.utils.book_append_sheet(wb, ws2, 'Filters');
-            XLSX.writeFile(wb, 'Pending Confirmation Dashboard ' + hoje() + '.xlsx');
-        }).catch(function () {
-            if (window.Swal) Swal.fire({ icon: 'error', title: t('pcd-export-failed', 'Export failed') });
-        });
-    });
+    // Refresh: lê o banco NA HORA, sem esperar o próximo ciclo. Não refaz a
+    // tabela — filtro, ordem e página ficam; o ícone gira enquanto lê.
+    document.getElementById('pcdRefresh').addEventListener('click', function () { load(true); });
 
-    load();
+    setInterval(function () { if (!document.hidden) load(false); }, POLL_MS);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) load(false); });
+    load(true);
 })();
 </script>
 {% endblock extra_javascript %}

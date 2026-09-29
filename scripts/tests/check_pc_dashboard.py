@@ -9,7 +9,9 @@ O que ele prende:
   2. o filtro e a FAIXA de pendencia (a coluna Status do Main), e a lista de
      faixas sai da mesma funcao que grava o Status (`_pc_aging_band_label`);
      a contagem de cada faixa e da fila INTEIRA;
-  3. a fonte e a MESMA do Daily Metric (`_pc_latest_snapshot_rows`);
+  3. a fonte e o banco `pending` lido AO VIVO e ESTRITO (`_pc_load_rows(
+     'pending', strict=True)`): banco ocupado sobe, nunca vira tabela vazia;
+     a tela le ao abrir, se atualiza sozinha e o Refresh le na hora;
   4. a rota, o menu e a pagina existem; sem sessao e 401.
 
 A fila e stubada em `routes` (plataforma); nada toca dado real.
@@ -77,12 +79,12 @@ FILA = [
 LIDAS = []
 
 
-def _fila():
-    LIDAS.append(1)
-    return [dict(r) for r in FILA], 'live'
+def _fila(category, strict=False):
+    LIDAS.append((category, strict))
+    return [dict(r) for r in FILA]
 
 
-R._pc_latest_snapshot_rows = _fila
+R._pc_load_rows = _fila
 
 print('== 1. a tabela dinamica ==')
 d = Q.data()
@@ -99,7 +101,7 @@ check('   Owner e Signature Type na linha', (d['rows'][0]['owner'], d['rows'][0]
 check('   o total geral fecha com a fila', d['totals']['total'], len(FILA))
 check('   e cada coluna soma o que as linhas somam',
       d['totals']['values'], [sum(r['values'][i] for r in d['rows']) for i in range(len(d['columns']))])
-check('   a mesma fonte do Daily Metric', bool(LIDAS), True)
+check('   le o banco pending, ESTRITO, a cada chamada', LIDAS[-1], ('pending', True))
 
 print('\n== 2. o filtro por faixa de pendencia ==')
 check('as faixas saem da funcao que grava o Status, na ordem',
@@ -122,6 +124,12 @@ r = c.get('/api/dashboard-pending-confirmation/data?bands=' + json.dumps([B30]))
 check('API filtra pela lista JSON', (r.status_code, r.get_json()['totals']['total']), (200, 2))
 check('   lista malformada e 400', c.get('/api/dashboard-pending-confirmation/data?bands=x').status_code, 400)
 check('a pagina abre', c.get('/dashboard-pending-confirmation').status_code, 200)
+pag = open(os.path.join(ROOT, 'apps/templates/pages/dashboard-pending-confirmation.html'), encoding='utf-8').read()
+check('a tela le ao abrir, se atualiza sozinha (poll + volta da aba) e tem Refresh manual',
+      ('load(true);\n})();' in pag, 'setInterval(' in pag, 'visibilitychange' in pag, 'id="pcdRefresh"' in pag),
+      (True, True, True, True))
+check('   Export no padrao da casa: Buttons + Advanced, sem Excel montado a mao',
+      ('extend: \'collection\'' in pag, 'otcExportAdvanced(' in pag, 'XLSX.' in pag), (True, True, False))
 menu = open(os.path.join(ROOT, 'apps/templates/partials/sidenav.html'), encoding='utf-8').read()
 check('o menu do Pending Confirmation tem o Dashboard', 'href="/dashboard-pending-confirmation"' in menu, True)
 

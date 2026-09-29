@@ -38,8 +38,15 @@ def _item(row):
 
 def data(selected=None):
     """A tabela para as faixas `selected` (None = todas) e a contagem de cada
-    faixa — a contagem é da fila INTEIRA, para o chip dizer o que ele traz."""
-    rows, source = _R()._pc_latest_snapshot_rows()
+    faixa — a contagem é da fila INTEIRA, para o chip dizer o que ele traz.
+
+    Lê o banco `pending` do Pending Confirmation AO VIVO, a cada chamada (a tela
+    pergunta sozinha de tempos em tempos): é a mesma base que o Main mostra no
+    chip Pending, com o Aging e o Status refeitos na leitura. `strict=True`: a
+    leitura tolerante devolveria `[]` num banco ocupado, e a tela, que se
+    atualiza sozinha, trocaria a tabela cheia por uma vazia sem aviso — assim
+    a falha sobe (503 no banco ocupado) e a tela mantém o último dado bom."""
+    rows, source = _R()._pc_load_rows('pending', strict=True), 'live'
     items = [_item(r) for r in rows]
     todas = bands()
     contagem = {b: 0 for b in todas}

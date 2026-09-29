@@ -2841,17 +2841,15 @@
   "pcd-kpi-total": "Confirmaciones pendientes",
   "pcd-kpi-groups": "Grupos económicos",
   "pcd-bands": "Rango de pendencia",
-  "pcd-refresh": "Actualizar",
-  "pcd-export": "Exportar Excel",
   "pcd-col-group": "Grupo Económico",
   "pcd-col-owner": "Owner",
   "pcd-col-signature": "Tipo de Firma",
   "pcd-col-total": "Total General",
   "pcd-empty": "Ninguna confirmación pendiente en el rango elegido.",
   "pcd-source-live": "Lectura en vivo del Pending Confirmation Main (base pending)",
-  "pcd-source-snapshot": "Foto de",
   "pcd-load-failed": "No fue posible cargar el dashboard",
-  "pcd-export-failed": "Falló la exportación",
   "cp-dm-cgd-run": "CGD pendiente",
-  "cp-r-dm-cgd-desc": "<strong>CGD pendiente</strong> arma el mismo informe para los clientes con CGD pendiente en el Track Docs (Onboarding) — por grupo económico, aging en días hábiles y la mesa con la que está cada CGD — como un segundo borrador para los mismos destinatarios."
+  "cp-r-dm-cgd-desc": "<strong>CGD pendiente</strong> arma el mismo informe para los clientes con CGD pendiente en el Track Docs (Onboarding) — por grupo económico, aging en días hábiles y la mesa con la que está cada CGD — como un segundo borrador para los mismos destinatarios.",
+  "pcd-updated": "Actualizado",
+  "pcd-update-failed": "Falló la actualización — mostrando"
 }
