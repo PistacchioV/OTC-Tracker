@@ -439,13 +439,21 @@ def _is_jpmorgan(name):
     return 'JPMORGAN' in n or 'BJPM' in n
 
 
-def _first_bank(cp, prefer='PAY'):
-    """Return (bank, agency, account) from a CounterpartyDetails record.
+def _client_account_for_bank_paying(cp):
+    """(bank, agency, account) em que o CLIENTE recebe quando o BANCO paga.
 
-    Uses the ACCOUNTS model: the account flagged as the approved default for the
-    `prefer` side (DEFAULT_PAY/RECEIVE.current). Falls back to the other side's
-    default, then the first active (else any) account, then the legacy
-    PAY/RECEIVE lists, then the flat BANK/AGENCY/ACCOUNT fields.
+    O aviso é escrito na visão do BANCO, e os defaults do Reference Data estão
+    na visão do CLIENTE: `DEFAULT_PAY` é a conta de onde ELE paga e
+    `DEFAULT_RECEIVE` a conta em que ELE recebe. Resultado final negativo é o
+    banco pagando — o cliente recebe —, então vale o `DEFAULT_RECEIVE` (mesa,
+    29/09/2026; o mesmo cruzamento da coluna Account do Settlement Summary,
+    `_ndfsum_account_fmt`). O aviso imprimia o `DEFAULT_PAY`: com PAY na conta
+    interna e RECEIVE externa, o dinheiro ia para a conta errada.
+
+    Sem o default de RECEIVE aprovado NÃO se cai para a conta de PAY nem para
+    "a primeira ativa" (seria a mesma troca, calada): volta vazio e o aviso
+    mostra '—', que é a lacuna do cadastro à vista. Só o formato legado (listas
+    PAY/RECEIVE, campos planos) responde quando não há o modelo ACCOUNTS.
     """
     def _tuple(a):
         return a.get('bank', ''), a.get('agency', ''), a.get('account', '')
@@ -454,20 +462,13 @@ def _first_bank(cp, prefer='PAY'):
     accounts = bk.get('ACCOUNTS')
     if isinstance(accounts, list) and accounts:
         by_id = {a.get('id'): a for a in accounts if isinstance(a, dict)}
-        for kind in (prefer, 'RECEIVE' if prefer == 'PAY' else 'PAY'):
-            slot = bk.get('DEFAULT_' + kind) or {}
-            acc = by_id.get(slot.get('current'))
-            if acc:
-                return _tuple(acc)
-        active = [a for a in accounts if str(a.get('status', '')).lower() == 'active']
-        return _tuple((active or accounts)[0])
+        acc = by_id.get((bk.get('DEFAULT_RECEIVE') or {}).get('current'))
+        return _tuple(acc) if acc else ('', '', '')
 
-    # legacy shapes
-    for key in (prefer, 'RECEIVE' if prefer == 'PAY' else 'PAY'):
-        lst = bk.get(key) or []
-        if lst:
-            b = lst[0] or {}
-            return b.get('bank', ''), b.get('agency', ''), b.get('account', '')
+    lst = bk.get('RECEIVE') or []                # formato legado
+    if lst:
+        b = lst[0] or {}
+        return b.get('bank', ''), b.get('agency', ''), b.get('account', '')
     return cp.get('BANK', ''), cp.get('AGENCY', ''), cp.get('ACCOUNT', '')
 
 
@@ -606,7 +607,7 @@ def _premium_cliente_email(items, contraparte, spn, taxid, cpd, asset_label='Com
                     'transferência financeira do montante correspondente ao Resultado Final Apurado em vosso favor, '
                     'conforme os dados a seguir, transmitidos por meio da Autorização Permanente para Liquidação '
                     'Financeira e/ou confirmados por ligação telefônica:')
-        bank_name, agency, account = _first_bank(cp, 'PAY')   # JPM pays → PAY details
+        bank_name, agency, account = _client_account_for_bank_paying(cp)   # banco paga → cliente RECEBE
         bank = _email_kv('Dados para pagamento', [
             ('Nome e nº do banco', bank_name or '—'),
             ('Nº e nome da agência', agency or '—'),
@@ -1187,7 +1188,7 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd, unwind=Fa
 
     # Same settlement-instruction / banking logic as the premium notice: the
     # sign of the final result decides who transfers (negative → JPMorgan pays
-    # into the client's default PAY account; positive → debit / TED-only note
+    # into the account where the client RECEIVES — DEFAULT_RECEIVE; positive → debit / TED-only note
     # with JPMorgan's own details; zero → nobody transfers). Which JPMorgan
     # details depends on the legal entity: the Chase entity (MGT) collects in
     # its own Brasil account, not the Banco's.
@@ -1208,7 +1209,7 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd, unwind=Fa
                       'transferência financeira do montante correspondente ao Resultado Final Apurado em vosso favor, '
                       'conforme os dados a seguir, transmitidos por meio da Autorização Permanente para Liquidação '
                       'Financeira e/ou confirmados por ligação telefônica:')
-        bank_name, agency, account = _first_bank(cp, 'PAY')   # JPM pays → PAY details
+        bank_name, agency, account = _client_account_for_bank_paying(cp)   # banco paga → cliente RECEBE
         bank_title = 'Dados para pagamento'
         bank_pairs = [
             ('Nome e nº do banco', bank_name or '—'),
@@ -1362,7 +1363,7 @@ def _swap_settlement_email(items, contraparte, le_class, premium, ref_date, cpd,
                       'transferência financeira do montante correspondente ao Resultado Final Apurado em vosso favor, '
                       'conforme os dados a seguir, transmitidos por meio da Autorização Permanente para Liquidação '
                       'Financeira e/ou confirmados por ligação telefônica:')
-        bank_name, agency, account = _first_bank(cp, 'PAY')   # JPM paga → dados de PAY
+        bank_name, agency, account = _client_account_for_bank_paying(cp)   # banco paga → cliente RECEBE
         bank_title = 'Dados para pagamento'
         bank_pairs = [
             ('Nome e nº do banco', bank_name or '—'),
@@ -1552,7 +1553,7 @@ def _ndfc_settlement_email(items, contraparte, le_class, ref_date, cpd, headers,
                       'transferência financeira do montante correspondente ao Resultado Final Apurado em vosso favor, '
                       'conforme os dados a seguir, transmitidos por meio da Autorização Permanente para Liquidação '
                       'Financeira e/ou confirmados por ligação telefônica:')
-        bank_name, agency, account = _first_bank(cp, 'PAY')
+        bank_name, agency, account = _client_account_for_bank_paying(cp)   # banco paga → cliente RECEBE
         bank_title = 'Dados para pagamento'
         bank_pairs = [
             ('Nome e nº do banco', bank_name or '—'),
