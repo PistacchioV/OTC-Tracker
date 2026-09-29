@@ -159,7 +159,7 @@ try:
     check('   e o editor rotula a coluna como B3 ID', _conf_f.get('num_label'), 'B3 ID')
     _n, _x, _w = R._conf_ndf_xml(
         [(dict(FWD_MGT, _conf_src='fwd-start'), None)], 'USD', REF, prefixo='NDF_FwdStart',
-        legs_fn=R._conf_fx_legs, ccy='USD', warn_no_spot=False,
+        legs_fn=R._conf_mgt_fx_legs, ccy='USD', warn_no_spot=False,
         num_field=R._conf_mgt_num_field([(dict(FWD_MGT, _conf_src='fwd-start'), None)]))
     check('   e o numeroContrato do XML tambem', _n, FWD_MGT.get('B3_ID'))
     check('   o Vanilla MGT segue no Athena ID',
@@ -169,7 +169,7 @@ try:
     # Start), e o `continue` da perna recusada levava a data junto.
     _n, xv, _w = R._conf_ndf_xml(
         [(dict(VAN_MGT, _conf_src='vanilla'), None)], 'USD', REF, prefixo='NDF_Vanilla',
-        ccy_field='QuantityCurrency', legs_fn=R._conf_fx_legs, ccy='USD', warn_no_spot=False,
+        ccy_field='QuantityCurrency', legs_fn=R._conf_mgt_fx_legs, ccy='USD', warn_no_spot=False,
         num_field='Deal')
     tag = lambda x, t: (re.search(r'<%s>(.*?)</%s>' % (t, t), x) or [None, None])[1]
     check('#OTC-0042 Vanilla MGT: valor estrangeiro = notional', tag(xv, 'valorEstrangeiro'), '1000000.00')
@@ -177,9 +177,21 @@ try:
     check('#OTC-0042 Vanilla MGT: vencimento preenchido', tag(xv, 'dataVencimento'), '20261105')
     _n, xf, _w = R._conf_ndf_xml(
         [(dict(FWD_MGT, _conf_src='fwd-start'), None)], 'USD', REF, prefixo='NDF_FwdStart',
-        ccy_field='QuantityCurrency', legs_fn=R._conf_fx_legs, ccy='USD', warn_no_spot=False,
+        ccy_field='QuantityCurrency', legs_fn=R._conf_mgt_fx_legs, ccy='USD', warn_no_spot=False,
         num_field='B3_ID')
     check('#OTC-0042 FWD Start sem taxa: o vencimento sai mesmo assim', tag(xf, 'dataVencimento'), '20260828')
+    # Regra da mesa (29/09/2026), só MGT x cliente: estrangeiro = Notional e
+    # valor = Notional x Rate, mesmo com a Quantity Currency em BRL.
+    _n, xb, _w = R._conf_ndf_xml(
+        [(dict(VAN_MGT, _conf_src='vanilla', QuantityCurrency='BRL'), None)], 'USD', REF,
+        prefixo='NDF_Vanilla', ccy_field='QuantityCurrency', legs_fn=R._conf_mgt_fx_legs,
+        ccy='USD', warn_no_spot=False, num_field='Deal')
+    check('MGT: Quantity Currency BRL nao divide pela taxa',
+          (tag(xb, 'valorEstrangeiro'), tag(xb, 'valor')), ('1000000.00', '5432100.00'))
+    _src_ep = open(os.path.join(ROOT, 'apps', 'pages', 'features', 'confirmation', 'entrypoint.py'),
+                   encoding='utf-8').read()
+    check('o Save do MGT usa o _conf_mgt_fx_legs', 'legs_fn=_R()._conf_mgt_fx_legs' in _src_ep, True)
+    check('e o FWD Start do Banco segue no _conf_fx_legs', 'legs_fn=_R()._conf_fx_legs' in _src_ep, True)
     r404 = cl.get('/confirmation/ndf-mgt/strike-me?date=2026-08-05&acronym=SUZANO&mercadoria=USD')
     check('familia desconhecida e 404', r404.status_code, 404)
 

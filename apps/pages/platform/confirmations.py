@@ -693,6 +693,21 @@ def _conf_fx_legs(deal, subj):
     return qty, qty * strike
 
 
+def _conf_mgt_fx_legs(deal, subj):
+    """(valorEstrangeiro, valor em BRL) do NDF de MOEDA de MGT × cliente
+    (Vanilla e FWD Start do documento MGT; mesa, 29/09/2026): `valorEstrangeiro`
+    = Notional e `valor` = Notional × Rate, SEMPRE — a Quantity Currency não muda
+    a conta. É só do MGT: o FWD Start do Banco segue o `_conf_fx_legs`, que
+    converte pelo lado em que o notional veio. A taxa é o `Rate` (Vanilla); no
+    FWD Start, que grava em `Strike` e zera o `Rate`, vale o `Strike`. Sem taxa
+    a perna fica de fora, com aviso."""
+    qty = _conf_to_float(str(deal.get('Notional') or '').replace('-', ''))
+    rate = _conf_to_float(deal.get('Rate')) or _conf_to_float(deal.get('Strike'))
+    if qty is None or not rate:
+        return None
+    return qty, qty * rate
+
+
 def _conf_fxo_legs(deal, subj):
     """(valorEstrangeiro, valor em BRL) de uma Opção de Câmbio (mesa, 29/09/2026).
 
