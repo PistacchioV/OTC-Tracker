@@ -11,7 +11,7 @@
  * `column().search()` nem com a busca global que a página ainda use.
  *
  * Carregado pelo layout base, liga-se SOZINHO a toda DataTable do app (as
- * que existem e as que nascem depois, pelo `init.dt`), esconde a linha de
+ * que existem e as que nascem depois, pelo `init.dt`), REMOVE a linha de
  * filtro por coluna (que ele substitui) e pula as colunas sem dado (checkbox,
  * Actions, `searchable: false`). O "Clear Filters" de cada tela limpa os
  * funis também. Uma tabela fica de fora com `data-excel-filter="off"`.
@@ -401,37 +401,65 @@
             });
             if (!mudou) return;
             try { dt.columns.adjust(); } catch (e) { return; }
-            // o adjust redesenha o cabeçalho e traz de volta a linha de filtro
-            hideFilterRows(dt);
+            // linha montada pela página depois da init (initComplete)
+            removeFilterRows(dt);
         }
     }
 
     // A linha de filtro por coluna (a 2ª linha do <thead>, com um campo por
-    // coluna) saiu: o funil a substitui em todas as tabelas (mesa, 29/09/2026).
-    // Ela é ESCONDIDA, não apagada — o DataTables redesenha o cabeçalho a partir
-    // do layout que montou na init (mostrar/ocultar coluna), e recolocaria as
-    // células apagadas; a classe fica no <tr>, que ele reaproveita. O que
-    // estava digitado nela é limpo, senão a tabela seguiria filtrada por um
-    // campo que ninguém vê.
+    // coluna) saiu: o funil a substitui em todas as tabelas (mesa, 29/09/2026),
+    // e ela é REMOVIDA, não escondida (mesa, 29/09/2026). O DataTables redesenha
+    // o cabeçalho a partir do layout que leu na init (`aoHeader`, uma entrada
+    // por <tr> com o `.row` dele) e recolocaria a linha apagada só do DOM; por
+    // isso ela sai em dois tempos:
+    //   1. no `options.dt`, que o DataTables dispara ANTES de ler o cabeçalho —
+    //      a linha nem entra no layout (é o caminho de quase toda tela, que
+    //      monta a tabela depois deste arquivo carregar);
+    //   2. depois da init, para a tabela que nasceu antes deste arquivo ou a
+    //      linha que a página montou no `initComplete`: sai do `aoHeader` E do
+    //      DOM.
+    // O que estava digitado nela é limpo, senão a tabela seguiria filtrada por
+    // um campo que ninguém vê.
     var FIELD_SEL = 'input:not([type=checkbox]):not([type=radio]):not([type=hidden]), select, textarea';
-    function hideFilterRows(dt) {
+    function isFilterRow(tr) {
+        if (!tr.querySelector(FIELD_SEL)) return false;
+        // A linha de TÍTULOS nunca: é a que tem o texto das colunas.
+        return !Array.prototype.some.call(tr.children, function (c) {
+            return !c.querySelector(FIELD_SEL) && norm(c.textContent) !== '';
+        });
+    }
+    function filterRowsIn(root) {
+        return $(root).find('thead tr').addBack('tr').filter(function () {
+            return isFilterRow(this);
+        }).get();
+    }
+    // Quem fica de fora do funil (`data-excel-filter="off"`, `serverSide`,
+    // `searching: false`) fica também com a linha: ali ela pode ser o único
+    // filtro que a tela tem.
+    function keepsOwnFilters(node, opts) {
+        if (node.getAttribute('data-excel-filter') === 'off') return true;
+        opts = opts || {};
+        return opts.serverSide === true || opts.bServerSide === true ||
+               opts.searching === false || opts.bFilter === false;
+    }
+    $(document).on('options.dt.oxf', function (e, opts) {
+        if (e.namespace !== 'dt' || !e.target || e.target.nodeName !== 'TABLE') return;
+        if (keepsOwnFilters(e.target, opts)) return;
+        filterRowsIn(e.target.tHead).forEach(function (tr) { tr.parentNode.removeChild(tr); });
+    });
+    function removeFilterRows(dt) {
         var changed = false;
-        var roots = [dt.table().header(), dt.table().container()];
-        roots.forEach(function (root) {
-            $(root).find('thead tr').addBack('tr').each(function () {
-                var tr = this;
-                if (tr.classList.contains('oxf-filter-row')) return;
-                if (!tr.querySelector(FIELD_SEL)) return;
-                // A linha de TÍTULOS nunca: é a que tem o texto das colunas.
-                var titled = Array.prototype.some.call(tr.children, function (c) {
-                    return !c.querySelector(FIELD_SEL) && norm(c.textContent) !== '';
-                });
-                if (titled) return;
-                tr.classList.add('oxf-filter-row');
-                $(tr).find(FIELD_SEL).each(function () {
-                    if (this.value) { this.value = ''; changed = true; }
-                });
-            });
+        var s0 = dt.settings()[0];
+        var rows = [];
+        [dt.table().header(), dt.table().container()].forEach(function (root) {
+            filterRowsIn(root).forEach(function (tr) { if (rows.indexOf(tr) < 0) rows.push(tr); });
+        });
+        rows.forEach(function (tr) {
+            $(tr).find(FIELD_SEL).each(function () { if (this.value) changed = true; });
+            if (s0 && Array.isArray(s0.aoHeader)) {
+                s0.aoHeader = s0.aoHeader.filter(function (layoutRow) { return layoutRow.row !== tr; });
+            }
+            if (tr.parentNode) tr.parentNode.removeChild(tr);
         });
         dt.columns().every(function () {
             if (this.search()) { this.search(''); changed = true; }
@@ -461,19 +489,19 @@
             // a página escolheu as colunas: refaz os funis por esse critério
             $(dt.table().container()).find('.oxf-btn').remove();
         }
-        var changed = hideFilterRows(dt);
+        var changed = removeFilterRows(dt);
         addButtons(st);
         // A tradução da página (data-lang no th) reescreve o cabeçalho e leva o
         // funil junto: ele volta a cada draw (addButtons é idempotente).
         dt.off('draw.oxf').on('draw.oxf', function () {
             var cur = STATE.get(node);
-            if (cur) { hideFilterRows(cur.dt); addButtons(cur); widenTruncated(cur.dt); }
+            if (cur) { removeFilterRows(cur.dt); addButtons(cur); widenTruncated(cur.dt); }
         });
-        // O `columns.adjust()` (da página ou o nosso) redesenha o cabeçalho a
-        // partir do layout da init e traz a linha de filtro de volta.
+        // Linha montada pela página DEPOIS da init (initComplete, dado que
+        // chegou): sai no primeiro redesenho do cabeçalho.
         dt.off('column-sizing.oxf').on('column-sizing.oxf', function () {
             var cur = STATE.get(node);
-            if (cur) hideFilterRows(cur.dt);
+            if (cur) removeFilterRows(cur.dt);
         });
         dt.off('destroy.oxf').on('destroy.oxf', function () { closeMenu(); STATE.delete(node); });
         if (changed) dt.draw(false);
@@ -575,8 +603,6 @@
 
     // ── estilo (uma vez) — menu pende do <body>: fundo SÓLIDO (§7) ──────────
     var css =
-        // A linha de filtro por coluna, escondida (ver hideFilterRows).
-        'tr.oxf-filter-row{display:none!important}' +
         // Com scrollX o DataTables deixa uma CÓPIA do cabeçalho dentro do corpo
         // (altura zero, só para medir as larguras): o funil dela some da vista
         // mas OCUPA o espaço (visibility, não display), para a medida bater.
