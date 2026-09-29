@@ -25103,3 +25103,26 @@ O Vanilla do BANCO e o Other Publisher não geram XML de confirmação: a regra 
 **Conferido:** `check_mgt_conf.py` prova o MGT com Quantity Currency BRL (valorEstrangeiro
 1000000.00, valor 5432100.00) e que o `entrypoint` passa `_conf_mgt_fx_legs` no MGT e `_conf_fx_legs`
 no FWD Start do Banco; `check_fwdstart_conf.py` segue provando a divisão do Banco.
+
+## §594 — /mapping vira DataTable: o funil de Excel chega ao cadastro (2026-09-29)
+
+O filtro "de Excel" (§591) não alcançava o `/mapping`: a grade era escrita à
+mão (paginação, ordenação e a linha de filtro por coluna próprias), e o
+`excel-filter.js` se liga a DataTables. Não havia motivo técnico para a
+grade própria — ela nasceu assim, e o §556 só completou o Export em cima dela.
+
+- A grade é uma DataTable no padrão do §7 (`dom` da casa, paginação `ip`). O
+  funil se liga sozinho no `init.dt`; o Clear filters limpa os funis pelo id
+  (`mapClearFilters`), sem JS na página; a linha de filtro por coluna saiu.
+- Cada cadastro tem colunas próprias: trocar de cadastro destrói e remonta a
+  tabela; salvar no MESMO cadastro faz `clear` + `rows.add` + `draw(false)`,
+  e o filtro, a ordem e a página ficam (a remontagem os perderia a cada Save).
+- A linha é `[idx, valores…]`: `idx` é a posição no arquivo, e é por ela que
+  Edit/Delete acham a linha com a grade ordenada ou filtrada. A ordem padrão
+  do cadastro (Commodities × B3 por MARKET, Operations B3 Events por TIPO
+  TÍTULO) virou o `order` da init; o realce de padrão (`map-var`) é o
+  `render` de exibição, então o funil compara o texto que a célula mostra.
+- O Export continua o do §556 (texto, sem trim — o Buttons não faz isso),
+  agora sobre `rows({search:'applied', order:'applied'})`; o
+  `check_export_padrao` §1 passa a listar o `mapping.html` entre as telas com
+  CSV próprio.

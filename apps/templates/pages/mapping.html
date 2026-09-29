@@ -38,12 +38,7 @@
 
     /* Tabela do mapping selecionado — alinhamento centralizado, padrão New Deals */
     #mapping-page #mapTable tbody td { font-size: 0.8rem; text-align: center; vertical-align: middle; }
-    #mapping-page #mapTable thead th { white-space: nowrap; text-align: center !important; vertical-align: middle !important; }
-    /* Header ordenável: clique alterna asc/desc; a seta mostra o estado. */
-    #mapping-page #mapTable thead th.map-sort { cursor: pointer; user-select: none; }
-    #mapping-page #mapTable thead th.map-sort:hover { color: var(--vr-accent-1, #0066cc); }
-    #mapping-page #mapTable thead th.map-sort-asc::after  { content: ' ▲'; font-size: .6rem; opacity: .7; }
-    #mapping-page #mapTable thead th.map-sort-desc::after { content: ' ▼'; font-size: .6rem; opacity: .7; }
+    #mapping-page #mapTable thead th { font-size: .7rem; text-align: center !important; vertical-align: middle !important; }
     /* Botões da toolbar — mesmo dimensionamento do New Deals */
     #mapping-page .btn-toolbar-all {
         font-size: .75rem !important; padding: .25rem .6rem !important;
@@ -83,7 +78,6 @@
         background: rgba(255, 170, 40, .14);
     }
 
-    #mapping-page .map-filter-row input { height: 30px; font-size: .72rem; font-weight: 400; }
     #mapping-page .mapExportWrapper .dropdown-menu { min-width: 9rem; }
 
     /* Dropdown de sugestões do modal — o padrão da casa para domínio aberto:
@@ -184,24 +178,11 @@
                     </div>
                 </div>
                 <div class="card-body">
-                    <div class="table-responsive" style="max-height:60vh">
+                    <div class="table-responsive">
                         <table class="table table-sm table-striped table-hover mb-0 align-middle" id="mapTable">
                             <thead class="thead-sm text-uppercase fs-xxs" id="mapHead"></thead>
                             <tbody id="mapBody"></tbody>
                         </table>
-                    </div>
-                    <!-- Paginação: intervalo exibido + navegação de páginas -->
-                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-2">
-                        <span class="text-muted fs-xs">
-                            <span data-lang="map-showing">Showing</span> <span id="mapShown">0</span> <span data-lang="map-rows">rows</span>
-                        </span>
-                        <nav class="d-flex align-items-center gap-1" id="mapPager">
-                            <button class="btn btn-sm btn-outline-secondary" id="mapPgFirst" title="First"><i class="ti ti-chevrons-left"></i></button>
-                            <button class="btn btn-sm btn-outline-secondary" id="mapPgPrev" title="Previous"><i class="ti ti-chevron-left"></i></button>
-                            <span class="fs-xs text-muted px-2" id="mapPgInfo">1/1</span>
-                            <button class="btn btn-sm btn-outline-secondary" id="mapPgNext" title="Next"><i class="ti ti-chevron-right"></i></button>
-                            <button class="btn btn-sm btn-outline-secondary" id="mapPgLast" title="Last"><i class="ti ti-chevrons-right"></i></button>
-                        </nav>
                     </div>
                 </div>
             </div>
@@ -231,6 +212,9 @@
 
 {% block extra_javascript %}
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script>
 (function () {
@@ -343,14 +327,6 @@
     var COUNTS = {};         // contagens do rail (endpoint /api/mappings)
     var EDIT = null;         // índice em edição (null = Add)
     var PAGE_LEN = 50;
-    var PAGE = 0;            // página atual (0-based); volta a 0 em filtro/troca/salvar
-    // Ordenação por coluna: clique no header alterna asc/desc. null = a ordem
-    // padrão do mapping — que para o Commodities × B3 é MARKET A→Z e para o
-    // Operations B3 Events é TIPO TÍTULO A→Z, sempre (defaultSort); nos demais é
-    // a ordem do arquivo, como sempre foi. Só a EXIBIÇÃO ordena: o arquivo
-    // mantém a ordem de cadastro, e o data-idx das ações continua apontando para
-    // a linha certa.
-    var SORT = null;         // {col, dir} — escolha explícita do usuário
 
     // mapping → coluna que abre ordenada A→Z. Um mapa e não um `if` encadeado:
     // o próximo cadastro que quiser ordem própria entra com uma linha.
@@ -484,120 +460,92 @@
     // o label inglês, e por último a própria key.
     function colLabel(c) { return t(c.lang, c.label || c.key); }
 
+    // A grade é uma DataTable (padrão §7): o funil "de Excel" do cabeçalho
+    // (`excel-filter.js`, que se liga sozinho no `init.dt`), a ordenação e a
+    // paginação vêm dela. Cada cadastro tem colunas próprias, então trocar de
+    // cadastro RECONSTRÓI a tabela; salvar no MESMO cadastro só troca as
+    // linhas (`clear` + `rows.add`), e o filtro, a ordem e a página ficam.
+    //
+    // A linha da tabela é `[idx, valores…]`: `idx` é a posição no arquivo, e é
+    // por ela que Edit/Delete acham a linha certa com a grade ordenada ou
+    // filtrada — só a EXIBIÇÃO ordena, o arquivo mantém a ordem de cadastro.
+    var DT = null;
+    var DT_KEY = null;
+
+    function tableData(st) {
+        return st.rows.map(function (row, idx) {
+            return [idx].concat(st.columns.map(function (c) {
+                return String(row[c.key] == null ? '' : row[c.key]);
+            }));
+        });
+    }
+
+    function actionsCell(idx) {
+        return '<div class="d-inline-flex gap-1">' +
+            '<button class="btn btn-info btn-sm rounded-circle btn-row-edit map-edit" data-idx="' + idx + '" title="' + esc(t('map-edit', 'Edit')) + '"><i class="ti ti-edit"></i></button>' +
+            '<button class="btn btn-danger btn-sm rounded-circle btn-row-delete map-del" data-idx="' + idx + '" title="' + esc(t('map-del', 'Delete')) + '"><i class="ti ti-trash"></i></button>' +
+            '</div>';
+    }
+
     function render() {
         var st = STATE[CUR];
         renderHeader();
         if (!st) return;
-        var head = document.getElementById('mapHead');
-        head.innerHTML =
+        if (DT && DT_KEY === CUR) {
+            DT.clear().rows.add(tableData(st)).draw(false);
+            return;
+        }
+        if (DT) { DT.destroy(); DT = null; }
+        var key = CUR;
+        document.getElementById('mapHead').innerHTML =
             '<tr><th style="width:76px" data-lang="map-actions">' + esc(t('map-actions', 'Actions')) + '</th>' +
-            st.columns.map(function (c, i) {
-                return '<th class="map-sort" data-col="' + i + '">' + esc(colLabel(c)) + '</th>';
-            }).join('') + '</tr>' +
-            '<tr class="map-filter-row"><th></th>' +
-            st.columns.map(function (c, i) {
-                return '<th><input type="text" class="form-control form-control-sm map-col-filter" data-col="' + i + '" placeholder="' + esc(colLabel(c)) + '" autocomplete="off"></th>';
-            }).join('') + '</tr>';
-        head.querySelectorAll('.map-col-filter').forEach(function (inp) {
-            inp.addEventListener('input', function () { PAGE = 0; drawBody(); });
-        });
-        // Clique no header ordena; segundo clique inverte. O header NÃO é
-        // remontado no clique (os filtros digitados vivem nele) — só o
-        // indicador e o corpo mudam.
-        head.querySelectorAll('th.map-sort').forEach(function (th) {
-            th.addEventListener('click', function () {
-                var col = +th.getAttribute('data-col');
-                var cur = SORT || defaultSort();
-                SORT = (cur && cur.col === col) ? { col: col, dir: -cur.dir } : { col: col, dir: 1 };
-                PAGE = 0;
-                updateSortIndicators();
-                drawBody();
-            });
-        });
-        updateSortIndicators();
-        drawBody();
-        if (window.vrSyncStickyTables) window.vrSyncStickyTables();
-    }
-
-    function updateSortIndicators() {
-        var s = SORT || defaultSort();
-        document.querySelectorAll('#mapHead th.map-sort').forEach(function (th) {
-            th.classList.remove('map-sort-asc', 'map-sort-desc');
-            if (s && +th.getAttribute('data-col') === s.col) {
-                th.classList.add(s.dir === 1 ? 'map-sort-asc' : 'map-sort-desc');
+            st.columns.map(function (c) { return '<th>' + esc(colLabel(c)) + '</th>'; }).join('') + '</tr>';
+        document.getElementById('mapBody').innerHTML = '';
+        var ds = defaultSort();
+        DT = $('#mapTable').DataTable({
+            data: tableData(st),
+            columns: [{ orderable: false, searchable: false, className: 'text-nowrap',
+                        render: function (v, type) { return type === 'display' ? actionsCell(v) : v; } }]
+                .concat(st.columns.map(function (c) {
+                    return {
+                        className: 'map-code',
+                        // O destaque de padrão depende de outra coluna da MESMA
+                        // linha (o B3 CODE é padrão pelo marcador): a linha
+                        // original vai junto, pelo idx.
+                        render: function (v, type, r) {
+                            if (type !== 'display') return v;
+                            var html = patternCell(key, c.key, v, STATE[key].rows[r[0]]);
+                            return html === null ? esc(v) : html;
+                        }
+                    };
+                })),
+            // A ordem padrão do cadastro (Commodities × B3 por MARKET, Operations
+            // B3 Events por TIPO TÍTULO); nos demais, a ordem do arquivo.
+            order: ds ? [[ds.col + 1, 'asc']] : [],
+            pageLength: PAGE_LEN,
+            lengthChange: false,
+            autoWidth: true,
+            dom: "rt<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+            language: {
+                paginate: {
+                    first: '<i class="ti ti-chevrons-left"></i>',
+                    previous: '<i class="ti ti-chevron-left"></i>',
+                    next: '<i class="ti ti-chevron-right"></i>',
+                    last: '<i class="ti ti-chevrons-right"></i>'
+                }
             }
         });
+        DT_KEY = key;
+        if (window.vrSyncStickyTables) window.vrSyncStickyTables();
     }
-
-    function filteredRows() {
-        var st = STATE[CUR];
-        var filters = [];
-        document.querySelectorAll('#mapHead .map-col-filter').forEach(function (inp) {
-            var v = inp.value.trim().toUpperCase();
-            if (v) filters.push({ col: +inp.getAttribute('data-col'), v: v });
-        });
-        var out = [];
-        st.rows.forEach(function (row, idx) {
-            var cells = st.columns.map(function (c) { return String(row[c.key] == null ? '' : row[c.key]); });
-            var ok = filters.every(function (f) { return cells[f.col].toUpperCase().indexOf(f.v) !== -1; });
-            // `row` vai junto: o destaque de padrão depende de outra coluna da
-            // MESMA linha (o B3 CODE só é padrão quando o TYPE é PREFIX).
-            if (ok) out.push({ idx: idx, cells: cells, row: row });
-        });
-        // Só a exibição: `idx` continua sendo a posição no arquivo, então
-        // editar/excluir acha a linha certa com a tabela ordenada.
-        var s = SORT || defaultSort();
-        if (s) {
-            out.sort(function (a, b) {
-                return a.cells[s.col].localeCompare(b.cells[s.col], undefined,
-                    { numeric: true, sensitivity: 'base' }) * s.dir;
-            });
-        }
-        return out;
-    }
-
-    function drawBody() {
-        var st = STATE[CUR];
-        var rows = filteredRows();
-        var pages = PAGE_LEN === -1 ? 1 : Math.max(1, Math.ceil(rows.length / PAGE_LEN));
-        if (PAGE > pages - 1) PAGE = pages - 1;        // filtro encolheu a lista
-        if (PAGE < 0) PAGE = 0;
-        var start = PAGE_LEN === -1 ? 0 : PAGE * PAGE_LEN;
-        var shown = PAGE_LEN === -1 ? rows : rows.slice(start, start + PAGE_LEN);
-        document.getElementById('mapBody').innerHTML = shown.map(function (r) {
-            return '<tr>' +
-                '<td><div class="d-inline-flex gap-1">' +
-                '<button class="btn btn-info btn-sm rounded-circle btn-row-edit map-edit" data-idx="' + r.idx + '" title="' + esc(t('map-edit', 'Edit')) + '"><i class="ti ti-edit"></i></button>' +
-                '<button class="btn btn-danger btn-sm rounded-circle btn-row-delete map-del" data-idx="' + r.idx + '" title="' + esc(t('map-del', 'Delete')) + '"><i class="ti ti-trash"></i></button>' +
-                '</div></td>' +
-                r.cells.map(function (v, ci) {
-                    var col = st.columns[ci] || {};
-                    var html = patternCell(CUR, col.key, v, r.row);
-                    return '<td class="map-code">' + (html === null ? esc(v) : html) + '</td>';
-                }).join('') + '</tr>';
-        }).join('');
-        document.getElementById('mapShown').textContent = rows.length
-            ? (start + 1) + '–' + (start + shown.length) + ' / ' + rows.length
-            : '0';
-        document.getElementById('mapCurCount').textContent = st.rows.length;
-        document.getElementById('mapPgInfo').textContent = (PAGE + 1) + '/' + pages;
-        document.getElementById('mapPgFirst').disabled = PAGE === 0;
-        document.getElementById('mapPgPrev').disabled = PAGE === 0;
-        document.getElementById('mapPgNext').disabled = PAGE >= pages - 1;
-        document.getElementById('mapPgLast').disabled = PAGE >= pages - 1;
-    }
-
-    function goPage(p) { PAGE = p; drawBody(); }
-    document.getElementById('mapPgFirst').addEventListener('click', function () { goPage(0); });
-    document.getElementById('mapPgPrev').addEventListener('click', function () { goPage(PAGE - 1); });
-    document.getElementById('mapPgNext').addEventListener('click', function () { goPage(PAGE + 1); });
-    document.getElementById('mapPgLast').addEventListener('click', function () { goPage(1e9); });
 
     // ── Export (client-side, sobre as linhas filtradas) ──────────────────────
     function exportMatrix() {
         var st = STATE[CUR];
         var head = st.columns.map(colLabel);
-        return [head].concat(filteredRows().map(function (r) { return r.cells; }));
+        if (!DT) return [head];
+        return [head].concat(DT.rows({ search: 'applied', order: 'applied' }).data().toArray()
+            .map(function (r) { return r.slice(1); }));
     }
     function toCsv(matrix) {
         return matrix.map(function (row) {
@@ -992,8 +940,6 @@
         var item = e.target.closest('.map-type-item');
         if (item) {
             CUR = item.getAttribute('data-key');
-            PAGE = 0;
-            SORT = null;   // volta à ordem padrão do mapping (defaultSort)
             buildRail();
             if (STATE[CUR] && STATE[CUR].loaded) render(); else { renderHeader(); load(CUR); }
             return;
@@ -1016,14 +962,10 @@
     document.getElementById('mapAddBtn').addEventListener('click', function () { openModal(null); });
     document.getElementById('mapPageLen').addEventListener('change', function () {
         PAGE_LEN = parseInt(this.value, 10);
-        PAGE = 0;
-        drawBody();
+        if (DT) DT.page.len(PAGE_LEN).draw();
     });
-    document.getElementById('mapClearFilters').addEventListener('click', function () {
-        document.querySelectorAll('#mapHead .map-col-filter').forEach(function (i) { i.value = ''; });
-        PAGE = 0;
-        drawBody();
-    });
+    // O Clear filters limpa os funis pelo próprio excel-filter.js (ele
+    // reconhece o botão pelo id) — a página não escreve nada.
 
     document.addEventListener('DOMContentLoaded', function () {
         buildRail();
