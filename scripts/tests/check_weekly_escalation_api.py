@@ -95,6 +95,18 @@ check('EDG: so a linha da LOB', (blocos[1]['total'], blocos[1]['bankers'][0]['ba
 check('LOB fora de CEM/EDG e aging < 30 ficam de fora',
       sum(b['total'] for b in blocos), 4)
 
+# O report de CEM cobra tambem a LOB COMMODITY (mesa, 29/09/2026): a
+# mercadoria e da mesa da CEM, e o Pending Confirmation a grava com LOB propria.
+blocos_c = WE_blocks([dict(r) for r in LINHAS] + [
+    {'Client': 'SOJA SA',  'SPN': '100', 'Aging': '50', 'LOB': 'COMMODITY'},
+    {'Client': 'MILHO SA', 'SPN': '100', 'Aging': '60', 'LOB': 'Commodities'},
+])
+check('COMMODITY entra no bloco CEM (e a grafia no plural tambem)',
+      (blocos_c[0]['total'], blocos_c[1]['total']), (5, 1))
+check('   com o banqueiro e a empresa de sempre',
+      sorted(c['name'] for c in blocos_c[0]['bankers'][0]['companies']),
+      ['ACME SA', 'MILHO SA', 'SOJA SA'])
+
 print('\n== 3. destinatarios e o rascunho ==')
 c.post('/api/control-panel/weekly-escalation/recipients',
        json={'to': 'banker@jpmorgan.com', 'cc': 'mesa@jpmorgan.com'})
