@@ -415,7 +415,8 @@ def _opb3_import(ref=None):
     ref = ref or datetime.now()
     if not _store.isdir(routes.OPB3_SOURCE_ROOT):
         return {'success': False, 'error': 'Source folder not found: {}'.format(routes.OPB3_SOURCE_ROOT)}
-    # Pick up every source that feeds this page (operacoes* → JPM, mgt.* → MGT). Each
+    # Pick up every source that feeds this page (operacoes*/mgt.*; JPM × MGT pelo
+    # `Participante:` da célula A3, o nome só na falta dele). Each
     # is filtered by its own spec (house account + operation-type) and MERGED into the
     # day's json so the two counterparties coexist instead of overwriting each other.
     files = sorted(f for f in _store.listdir(routes.OPB3_SOURCE_ROOT)
@@ -432,6 +433,7 @@ def _opb3_import(ref=None):
         except Exception:
             log.warning("[opb3] read failed for %s:\n%s", src_path, traceback.format_exc())
             continue
+        spec = routes._ds_match_spec(name, raw)    # o Participante da A3 decide JPM × MGT
         filtered, _tot = routes._ds_process(raw, spec)
         _opb3_side_write(filtered, raw, ref, spec['key'])
         handled.append(name)

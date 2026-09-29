@@ -70,7 +70,7 @@ def main():
     print('\narquivo : %s  (%.2f MB)' % (nome, len(raw) / 1048576.0))
     print('reference date: %s' % ref.strftime('%d/%m/%Y'))
 
-    spec = R._ds_match_spec(nome)
+    spec = R._ds_match_spec(nome, raw)
     if not spec:
         print('\n>> NENHUM spec casou com este nome — o card o conta como IGNORADO.')
         print('   O casamento é pelo INÍCIO do nome, em minúsculas:')

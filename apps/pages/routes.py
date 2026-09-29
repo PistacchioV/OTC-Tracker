@@ -3328,10 +3328,44 @@ def _ds_cell(row, i):
     return '' if (i < 0 or i >= len(row) or row[i] is None) else str(row[i]).strip()
 
 
-def _ds_match_spec(name):
+# O arquivo de operações da B3 diz de quem é na linha 3, coluna A
+# (`Participante: JPMORGANBM` / `Participante: MORGANBC`). Com o conteúdo em
+# mãos é ELE que escolhe o spec — a mesa não precisa renomear o da MGT para
+# `mgt.*`; sem a linha (ou com outro participante) vale o nome, como antes.
+_DS_PARTICIPANTE_SPEC = {'JPMORGANBM': 'operacoes-jpm', 'MORGANBC': 'operacoes-mgt'}
+
+
+def _ds_participante(raw):
+    """O participante da célula A3 do arquivo de operações, em maiúsculas, ou ''."""
+    try:
+        if raw[:2] == b'PK':
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+            try:
+                rows = list(wb[wb.sheetnames[0]].iter_rows(min_row=3, max_row=3, values_only=True))
+            finally:
+                wb.close()
+            cell = _ds_cell(rows[0], 0) if rows else ''
+        else:
+            linhas = raw[:4096].decode('latin-1').splitlines()
+            cell = linhas[2].split('\t')[0].strip() if len(linhas) >= 3 else ''
+    except Exception:
+        log.warning('[ds] não deu para ler o participante (A3):\n%s', traceback.format_exc())
+        return ''
+    rotulo, sep, valor = cell.partition(':')
+    if not sep or rotulo.strip().lower() != 'participante':
+        return ''
+    return valor.strip().strip('"').upper()
+
+
+def _ds_match_spec(name, raw=None):
     n = (name or '').lower()
     for spec in _DS_IMPORTS:
         if spec['match'](n):
+            if raw is not None and spec['key'] in ('operacoes-jpm', 'operacoes-mgt'):
+                key = _DS_PARTICIPANTE_SPEC.get(_ds_participante(raw))
+                if key and key != spec['key']:
+                    return next(s for s in _DS_IMPORTS if s['key'] == key)
             return spec
     return None
 
@@ -3393,7 +3427,7 @@ def _ds_process(raw, spec):
 
 
 def _ds_handle(name, raw, delete_path, ref, processed, skipped):
-    spec = _ds_match_spec(name)
+    spec = _ds_match_spec(name, raw)
     if not spec:
         skipped.append(name)
         return

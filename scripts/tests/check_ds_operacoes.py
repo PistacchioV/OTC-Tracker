@@ -104,6 +104,28 @@ recs_mgt, _ = R._ds_process(arquivo([linha('04880.00-6', 'SWAP'),
                                      linha('73760.20-5', 'SWAP')]), mgt)
 check('o arquivo da MGT não leva conta do Banco', len(recs_mgt), 1)
 
+print('\n== 3b. o Participante da A3 escolhe JPM x MGT, nao o nome ==')
+def _com_part(part):
+    rows = [['c1'], ['c2'], ['Participante: ' + part], ['c4'], HEADER, linha('04880.00-6', 'SWAP')]
+    return '\n'.join('\t'.join(r) for r in rows).encode('latin-1')
+check('Operacoes*.txt com MORGANBC vira MGT',
+      R._ds_match_spec('Operacoes_20260929.txt', _com_part('MORGANBC'))['key'], 'operacoes-mgt')
+check('Operacoes*.txt com JPMORGANBM segue JPM',
+      R._ds_match_spec('Operacoes_20260929.txt', _com_part('JPMORGANBM'))['key'], 'operacoes-jpm')
+check('mgt.* com JPMORGANBM vira JPM (o conteudo vence)',
+      R._ds_match_spec('mgt.txt', _com_part('JPMORGANBM'))['key'], 'operacoes-jpm')
+check('sem a linha do Participante vale o nome',
+      R._ds_match_spec('mgt.txt', arquivo([]))['key'], 'operacoes-mgt')
+check('e sem o conteudo tambem',
+      R._ds_match_spec('Operacoes.txt')['key'], 'operacoes-jpm')
+import io as _io0, openpyxl as _ox                                      # noqa: E402
+_wb = _ox.Workbook(); _ws = _wb.active
+for _r in [['c1'], ['c2'], ['Participante: MORGANBC'], ['c4'], HEADER]:
+    _ws.append(_r)
+_b = _io0.BytesIO(); _wb.save(_b)
+check('xlsx com MORGANBC na A3 vira MGT',
+      R._ds_match_spec('Operacoes.xlsx', _b.getvalue())['key'], 'operacoes-mgt')
+
 # ── 4. a Reference date do card decide o DIA em que os JSONs sao gravados ────
 #  O dia era o relogio do servidor, e um arquivo de ontem processado hoje ia
 #  parar na pasta de hoje — onde as cinco telas que leem esses JSONs nunca o
