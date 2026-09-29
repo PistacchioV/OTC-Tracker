@@ -25232,3 +25232,38 @@ sextas. O assunto virou `Metric - Pending CGD Brazil OTC - <data>`
 `email-template-daily-metric-cgd.html` acompanha e o corpo fala em *weekly
 analysis*. O `check_daily_metric_api.py` §5b confere a linha INTEIRA do
 `Subject:` — um `in` sobre o texto do assunto passaria com o "Daily" na frente.
+
+## §597 — Avisos de liquidação com a conta de RECEIVE; a linha de filtro por coluna é REMOVIDA (2026-09-29)
+
+**A conta do aviso.** Os defaults de conta do Reference Data (Counterparty
+Details, `DEFAULT_PAY`/`DEFAULT_RECEIVE`) são a visão do CLIENTE: PAY é a conta
+de onde ele paga, RECEIVE a conta em que ele recebe. O aviso de liquidação é a
+visão do BANCO. Resultado Final negativo = o banco paga e o cliente recebe, e a
+conta impressa em "Dados para pagamento" tem de ser a de RECEIVE. Os quatro
+avisos do `otc_emails` (prêmio de commodities, NDF, swap, termo/opção de
+commodities) chamavam `_first_bank(cp, 'PAY')` com o comentário "JPM pays →
+PAY details": liam "PAY" como a direção do banco, quando o slot é a direção do
+cliente. Com PAY na conta interna e RECEIVE na externa, o documento dizia ao
+cliente que o dinheiro ia para a conta errada — e nada acusava, porque a conta
+existe e está aprovada. A Settlement Summary e o e-mail de TED já cruzavam
+certo (`_ndfsum_account_fmt`); só os avisos não. O `_first_bank` virou
+`_client_account_for_bank_paying`, que lê só o `DEFAULT_RECEIVE`: sem ele o
+aviso sai com `—` em vez de cair para a conta de PAY ou para "a primeira ativa"
+(que seriam a mesma troca, calada). `check_advice_account.py`.
+
+**A linha de filtro por coluna.** A mesa pediu que a linha saísse das tabelas,
+não que ficasse escondida (§591). Escondê-la era o que o helper fazia porque o
+DataTables redesenha o cabeçalho a partir do layout que leu na init
+(`settings.aoHeader`, uma entrada por `<tr>` com a propriedade `.row`) e
+recolocaria a linha apagada só do DOM. O DataTables 2.3.8 dispara `options.dt`
+no começo da construção, ANTES de ler o cabeçalho: o `excel-filter.js` tira a
+linha ali, e ela nunca entra no layout. Para a tabela que nasceu antes do helper
+carregar, ou a linha que a página monta no `initComplete`, ela sai do
+`aoHeader` e do DOM depois da init. Conferido no navegador em 43 páginas: um
+`<tr>` no thead, uma entrada no layout, nenhum campo — e continua assim depois
+de ocultar e mostrar coluna, que era o caso em que a escondida voltava. O
+Dashboard do Pending Confirmation (duas linhas de TÍTULO) fica intacto. Fica
+com a linha quem está fora do funil (`data-excel-filter="off"`, `serverSide`,
+`searching: false`) e a grade do File Interpreter, que não é DataTable: nas
+duas ela é o único filtro.
+

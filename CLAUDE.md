@@ -752,13 +752,19 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   título é que cede (quebra, ou "…"), palavra não se parte, e o helper
   ALARGA a coluna cujo título ficou cortado (`widenTruncated`: `sWidthOrig`
   + `adjust`, até três passadas — tabela `table-layout: fixed` ignora
-  `min-width` no th). O `adjust` redesenha o cabeçalho e traz a linha de
-  filtro de volta: ela é reescondida no `column-sizing`.
-  **A antiga linha de filtro por coluna (2ª linha do `<thead>`) é ESCONDIDA
-  pelo helper** (`tr.oxf-filter-row`), não apagada: o DataTables redesenha o
-  cabeçalho a partir do layout da init e recolocaria o que foi removido; o que
-  estava digitado nela é limpo. O código dela nas páginas é dívida morta — não
-  escreva linha de filtro em página nova. **Todo "Clear Filters" limpa os
+  `min-width` no th).
+  **A antiga linha de filtro por coluna (2ª linha do `<thead>`) é REMOVIDA
+  pelo helper** (mesa, 29/09/2026, §597 — escondida não bastava). O DataTables
+  redesenha o cabeçalho a partir do layout que leu na init (`aoHeader`, uma
+  entrada por `<tr>` com o `.row`), então apagar só do DOM não segura: ela sai
+  no `options.dt`, que ele dispara ANTES de ler o cabeçalho, e — para a tabela
+  que nasceu antes do helper ou a linha montada no `initComplete` — do
+  `aoHeader` E do DOM depois da init. Linha de filtro é a que tem campo e
+  nenhuma célula com texto: cabeçalho de duas linhas de TÍTULO (o Dashboard do
+  Pending Confirmation) fica. Tabela fora do funil (`data-excel-filter="off"`,
+  `serverSide`, `searching: false`) e a grade própria do File Interpreter (não
+  é DataTable) ficam com a linha: ali ela é o único filtro. O código dela nas
+  páginas é dívida morta — não escreva linha de filtro em página nova. **Todo "Clear Filters" limpa os
   funis** (o helper reconhece o botão pelo id/`data-lang`); página com uma
   tabela por card dá ao botão `data-oxf-table="#id"` e ele limpa só aquela
   (os dois Summaries). Com `scrollX` o DataTables deixa uma CÓPIA do
@@ -2035,6 +2041,16 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   Other Publisher só sabe espelhar o Lawton: outro fundo vai sem anexo e volta
   em `warnings` (`fund_without_file`). Sai de `otc.tracker@jpmorgan.com` para
   `brazil.otc.ops@jpmorgan.com`, sem Cc. `check_email_validation.py`.
+- **A conta do cliente no aviso, com o BANCO pagando, é o `DEFAULT_RECEIVE`**
+  (mesa, 29/09/2026, §597; `otc_emails._client_account_for_bank_paying`). Os
+  defaults do Reference Data são a visão do CLIENTE (PAY = de onde ele paga,
+  RECEIVE = onde ele recebe) e o aviso é a visão do BANCO: Resultado Final
+  negativo é o banco pagando, o cliente recebendo. Os quatro avisos (prêmio,
+  NDF, swap, termo/opção de commodities) imprimiam o `DEFAULT_PAY` — com PAY
+  interna e RECEIVE externa, o documento mandava o dinheiro para a conta errada.
+  Sem RECEIVE aprovado o aviso mostra `—`, nunca a conta de PAY. É o mesmo
+  cruzamento da coluna Account do Settlement Summary (`_ndfsum_account_fmt`).
+  `check_advice_account.py`.
 - **Perna interna não gera aviso** (`_ops_is_internal_cpty` pelo `le-spn` +
   `_pc_is_internal_counterparty`, nunca "começa com BANCO"): fica no Trade
   Level e no Summary, sai do Advice e do TED — o e-mail de TED do NDF faz a
@@ -2573,7 +2589,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (175 scripts)
+### `scripts/tests/` (176 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
