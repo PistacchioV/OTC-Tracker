@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""As duas rotas do card Daily Metric."""
+"""As rotas do card Daily Metric: destinatários, o relatório de confirmações e o
+de CGDs pendentes (Track Docs) — os dois para a MESMA lista salva."""
 import base64
 import traceback
 from datetime import datetime
@@ -67,6 +68,42 @@ def api_cp_daily_metric_run():
     return jsonify({'success': True,
                     'filename': 'Daily_Metric_Outstanding_Confirmation_{}.eml'.format(
                         ref.strftime('%d%m%Y')),
+                    'b64': base64.b64encode(raw).decode('ascii'),
+                    'message': 'Draft gerado com {} destinatário(s). Abra o arquivo baixado '
+                               'no Outlook para revisar e enviar.'.format(n)})
+
+
+@blueprint.route('/api/control-panel/daily-metric/cgd-run', methods=['POST'])
+def api_cp_daily_metric_cgd_run():
+    """O segundo relatório do card: os clientes com CGD PENDENTE no Track Docs,
+    na estrutura do Daily Metric, como rascunho .eml para a mesma lista salva."""
+    R = _routes()
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    date_str = (payload.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(date_str, '%Y-%m-%d') if date_str else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    rec = queries.recipients()
+    to_list, cc_list, bcc_list = (R._parse_emails(rec['to']),
+                                  R._parse_emails(rec['cc']),
+                                  R._parse_emails(rec['bcc']))
+    if not (to_list or cc_list or bcc_list):
+        return jsonify({'success': False, 'code': 'no_recipients',
+                        'error': 'Nenhum destinatário salvo. Preencha TO/CC/BCC antes de rodar.'}), 400
+    raw, err = commands.build_cgd_draft(ref, to_list, cc_list, bcc_list)
+    if err:
+        return jsonify({'success': False, 'code': 'draft_failed',
+                        'error': 'Draft failed: {}'.format(err)}), 500
+    R._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                           'Daily Metric Draft', 'Control Panel',
+                           'Pending CGD Brazil OTC draft generated ({})'.format(
+                               ref.strftime('%Y-%m-%d')))
+    n = len(to_list) + len(cc_list) + len(bcc_list)
+    return jsonify({'success': True,
+                    'filename': 'Daily_Metric_Pending_CGD_{}.eml'.format(ref.strftime('%d%m%Y')),
                     'b64': base64.b64encode(raw).decode('ascii'),
                     'message': 'Draft gerado com {} destinatário(s). Abra o arquivo baixado '
                                'no Outlook para revisar e enviar.'.format(n)})

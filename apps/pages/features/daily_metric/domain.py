@@ -62,3 +62,47 @@ def stamp_now(series, key, periodo, total):
     out[-1]['pct'] = (None if anterior in (None, 0)
                       else int(round((total - anterior) * 100.0 / anterior)))
     return out
+
+
+# ── Pending CGD (Track Docs) — o segundo relatório do mesmo card ────────────
+
+# Assinatura que dispensa o papel — o grupo sai em verde, como no relatório de
+# confirmações. Os valores são os do domínio fechado do Track Docs
+# (`cgd_docs.SIGNATURE_TYPES`: FepWeb, DocuSign, Manual).
+CGD_DIGITAL = ('fepweb', 'docusign')
+
+# As faixas do aging do CGD, em dias ÚTEIS (o aging do Track Docs é útil).
+CGD_BUCKETS = (('b0', None, 30), ('b1', 30, 60), ('b2', 60, 90), ('b3', 90, None))
+
+
+def cgd_subject(ref_fmt):
+    return 'Daily Metric - Pending CGD Brazil OTC - {}'.format(ref_fmt)
+
+
+def cgd_bucket(aging):
+    """A faixa de um aging (int) ou `nd` sem data de solicitação."""
+    if not isinstance(aging, int):
+        return 'nd'
+    for key, lo, hi in CGD_BUCKETS:
+        if (lo is None or aging >= lo) and (hi is None or aging < hi):
+            return key
+    return 'nd'
+
+
+def month_series(periods, ref_period, n=12):
+    """`[{period, volume}]` dos `n` meses até `ref_period` (inclusive), a
+    partir da lista de `AAAA-MM` de cada documento — mês sem documento é 0,
+    para a barra dizer que não entrou nada (e não sumir)."""
+    y, m = (int(x) for x in ref_period.split('-'))
+    meses = []
+    for _ in range(n):
+        meses.append('{:04d}-{:02d}'.format(y, m))
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+    meses.reverse()
+    conta = {p: 0 for p in meses}
+    for p in periods:
+        if p in conta:
+            conta[p] += 1
+    return [{'period': p, 'volume': conta[p]} for p in meses]

@@ -62,3 +62,43 @@ def build_draft(ref, to_list, cc_list, bcc_list):
         R.log.info('[daily-metric] draft built — to=%s cc=%s bcc=%d (%d clients, source=%s)',
                    to_list, cc_list, len(bcc_list), len(pivot), source)
     return raw, err
+
+
+def build_cgd_draft(ref, to_list, cc_list, bcc_list):
+    """(bytes, None) ou (None, erro): o relatório dos CGDs PENDENTES do Track
+    Docs, na mesma estrutura do Daily Metric (cabeçalho, números, barras e a
+    tabela por grupo econômico), para os mesmos destinatários do card."""
+    from apps.pages import cgd_docs
+    R = _routes()
+    try:
+        rows = queries.cgd_rows()
+        pivot, totals, stats = queries.cgd_pivot(rows)
+        # Barras: os pendentes pelo MÊS DA SOLICITAÇÃO, 12 meses até o `ref` —
+        # é de quando vem o estoque. Solicitação mais antiga que a janela conta
+        # no total e não aparece em barra nenhuma.
+        periodos = []
+        for r in rows:
+            d = cgd_docs.parse_date(r.get(cgd_docs.AGING_FROM))
+            if d:
+                periodos.append(d.strftime('%Y-%m'))
+        meses = domain.month_series(periodos, ref.strftime('%Y-%m'))
+        ctx = {'current_total': totals['total'], 'totals': totals, 'pivot': pivot,
+               'clients': stats['clients'], 'avg_aging': stats['avg_aging'],
+               'oldest': stats['oldest'],
+               'month_bars': domain.bar_series(meses, 'period', domain.fmt_month_lbl),
+               'stage_bars': domain.bar_series(
+                   [{'stage': s['label'], 'volume': s['value']} for s in stats['stages']],
+                   'stage', lambda x: x),
+               'older': totals['total'] - sum(m['volume'] for m in meses)}
+    except Exception as e:                                  # noqa: BLE001
+        import traceback
+        R.log.error('[daily-metric-cgd] draft FAILED:\n%s', traceback.format_exc())
+        return None, '{}: {}'.format(type(e).__name__, e)
+    ref_fmt = ref.strftime('%d/%m/%Y')
+    raw, err = mail.build(ref_fmt, ctx, to_list, cc_list, bcc_list,
+                          template='pages/email-template-daily-metric-cgd.html',
+                          subject=domain.cgd_subject(ref_fmt))
+    if raw is not None:
+        R.log.info('[daily-metric-cgd] draft built — to=%s cc=%s bcc=%d (%d groups, %d CGDs)',
+                   to_list, cc_list, len(bcc_list), len(pivot), totals['total'])
+    return raw, err

@@ -97,6 +97,7 @@ _CP_ENDPOINT_CARD = {
     '/api/control-panel/branch-settlement/recipients': 'branchsettlement',
     '/api/control-panel/daily-metric/recipients': 'dailymetric',
     '/api/control-panel/daily-metric/run': 'dailymetric',
+    '/api/control-panel/daily-metric/cgd-run': 'dailymetric',
     '/api/control-panel/weekly-escalation/recipients': 'weeklyescalation',
     '/api/control-panel/weekly-escalation/run': 'weeklyescalation',
     '/api/control-panel/signature-collection/preview': 'signaturecollection',

@@ -2836,5 +2836,22 @@
   "im-end-pending": "End process pending",
   "cp-it-mail-title": "Pending Action e-mail",
   "cp-it-mail-sub": "Daily at 19:00, 19:30 and 20:00 with every task still open and the operations pending by product. Nothing pending, no e-mail.",
-  "cp-it-mail-run": "Send e-mail now"
+  "cp-it-mail-run": "Send e-mail now",
+  "nav-pcd-dashboard": "Dashboard",
+  "pcd-kpi-total": "Pending confirmations",
+  "pcd-kpi-groups": "Economic groups",
+  "pcd-bands": "Pending range",
+  "pcd-refresh": "Refresh",
+  "pcd-export": "Export Excel",
+  "pcd-col-group": "Economic Group",
+  "pcd-col-owner": "Owner",
+  "pcd-col-signature": "Signature Type",
+  "pcd-col-total": "Grand Total",
+  "pcd-empty": "No pending confirmations in the selected range.",
+  "pcd-source-live": "Live reading of the Pending Confirmation Main (pending base)",
+  "pcd-source-snapshot": "Snapshot of",
+  "pcd-load-failed": "Could not load the dashboard",
+  "pcd-export-failed": "Export failed",
+  "cp-dm-cgd-run": "Pending CGD",
+  "cp-r-dm-cgd-desc": "<strong>Pending CGD</strong> builds the same report for the clients with a pending CGD in the Track Docs (Onboarding) — by economic group, aging in business days and the desk each CGD is with — as a second draft to the same recipients."
 }

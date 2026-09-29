@@ -830,6 +830,11 @@
                         and send it yourself. Set the recipients (TO) once — they are saved and reused
                         on every run. The reference date is always today.
                     </p>
+                    <p class="cp-card__desc" data-lang="cp-r-dm-cgd-desc">
+                        <strong>Pending CGD</strong> builds the same report for the clients with a pending
+                        CGD in the Track Docs (Onboarding) — by economic group, aging in business days and
+                        the desk each CGD is with — as a second draft to the same recipients.
+                    </p>
                     <div class="cp-field">
                         <label data-lang="cp-dm-to">TO</label>
                         <input type="text" id="cp-dm-to" class="form-control form-control-sm"
@@ -846,10 +851,18 @@
                         <span class="cp-card__meta">
                             <i class="ti ti-mail"></i><span data-lang="cp-dm-meta">Saved recipients → .eml draft</span>
                         </span>
-                        <button type="button" class="cp-run-btn" data-metric-run data-date-input="cp-dm-date">
-                            <i class="ti ti-player-play"></i>
-                            <span data-lang="cp-run">Run</span>
-                        </button>
+                        <div class="cp-btn-row">
+                            <button type="button" class="cp-run-btn" data-metric-run
+                                    data-run-url="/api/control-panel/daily-metric/run" data-date-input="cp-dm-date">
+                                <i class="ti ti-player-play"></i>
+                                <span data-lang="cp-run">Run</span>
+                            </button>
+                            <button type="button" class="cp-run-btn cp-run-btn--alt" data-metric-run
+                                    data-run-url="/api/control-panel/daily-metric/cgd-run" data-date-input="cp-dm-date">
+                                <i class="ti ti-file-certificate"></i>
+                                <span data-lang="cp-dm-cgd-run">Pending CGD</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1577,10 +1590,9 @@ document.addEventListener('click', function (e) {
 (function () {
     var toEl   = document.getElementById('cp-dm-to');
     var dateEl = document.getElementById('cp-dm-date');
-    var runBtn = document.querySelector('[data-metric-run]');
-    if (!toEl || !runBtn) return;
+    var runBtns = document.querySelectorAll('[data-metric-run]');
+    if (!toEl || !runBtns.length) return;
     var REC_URL = '/api/control-panel/daily-metric/recipients';
-    var RUN_URL = '/api/control-panel/daily-metric/run';
 
     // Load the saved recipients on page open.
     fetch(REC_URL, { credentials: 'same-origin' })
@@ -1602,8 +1614,11 @@ document.addEventListener('click', function (e) {
     // Persist on blur so the addresses survive even without running.
     toEl.addEventListener('blur', saveRecipients);
 
-    runBtn.addEventListener('click', function () {
+    // Dois relatórios, a mesma lista: o Run (confirmações) e o Pending CGD
+    // (Track Docs). Cada botão diz a sua rota em data-run-url.
+    Array.prototype.forEach.call(runBtns, function (runBtn) { runBtn.addEventListener('click', function () {
         if (runBtn.disabled) return;
+        var RUN_URL = runBtn.getAttribute('data-run-url');
         var label = runBtn.querySelector('span'); var orig = label ? label.textContent : '';
         var icon = runBtn.querySelector('i'); var origIcon = icon ? icon.className : '';
         runBtn.disabled = true;
@@ -1653,7 +1668,7 @@ document.addEventListener('click', function (e) {
             if (label) label.textContent = orig;
             if (icon) icon.className = origIcon || 'ti ti-player-play';
         });
-    });
+    }); });
 })();
 
 // ── Save CETIP Files card: persisted TO per distribution e-mail ──────────────

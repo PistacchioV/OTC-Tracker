@@ -16,19 +16,21 @@ def _routes():
     return routes
 
 
-def build(ref_fmt, ctx, to_list, cc_list, bcc_list):
+def build(ref_fmt, ctx, to_list, cc_list, bcc_list,
+          template='pages/email-template-daily-metric.html', subject=None):
     """O .eml em bytes, ou (None, erro). `ctx` é o contexto já computado pelo
-    comando — este módulo só renderiza e monta o MIME."""
+    comando — este módulo só renderiza e monta o MIME. `template`/`subject`
+    servem o segundo relatório do card (Pending CGD)."""
     from email.mime.image import MIMEImage
     R = _routes()
     try:
         # Header gradient: always the inline cid: attachment
         # (_attach_email_gradient below), never a remote URL.
-        html = render_template('pages/email-template-daily-metric.html',
+        html = render_template(template,
                                ref_date_fmt=ref_fmt, grad_url='cid:otc_gradient',
                                current_year=datetime.now().year, **ctx)
         msg = MIMEMultipart('related')
-        msg['Subject'] = domain.subject(ref_fmt)
+        msg['Subject'] = subject or domain.subject(ref_fmt)
         msg['From'] = R.SHARED_MAILBOX
         if to_list:
             msg['To'] = ', '.join(to_list)

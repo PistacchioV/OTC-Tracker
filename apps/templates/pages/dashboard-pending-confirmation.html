@@ -1,0 +1,316 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Dashboard — Pending Confirmation{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
+<style>
+/* Pending Confirmation › Dashboard. Painel próprio (não .card: o extra_css
+   carrega antes do tema e perderia), estados com prefixo de id (§7). */
+#pcd-page { --pcd-heat: #7b3f7a; }
+[data-bs-theme="dark"] #pcd-page { --pcd-heat: #b07ab0; }
+
+#pcd-page .pcd-panel {
+    background: var(--vr-card-bg); border: 1px solid var(--vr-card-border);
+    box-shadow: var(--vr-card-shadow); border-radius: var(--vr-card-radius, 16px);
+    padding: 1.1rem 1.25rem;
+}
+#pcd-page .pcd-kpi { display: flex; gap: 2.5rem; flex-wrap: wrap; align-items: flex-end; }
+#pcd-page .pcd-kpi__v { font-size: 2.1rem; font-weight: 700; letter-spacing: -1px; line-height: 1; }
+#pcd-page .pcd-kpi__l { font-size: .7rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #6e6e73; margin-top: .3rem; }
+#pcd-page .pcd-note { font-size: .74rem; color: #6e6e73; }
+
+/* Faixas de pendência: chips que ligam e desligam */
+#pcd-page .pcd-bands { display: flex; flex-wrap: wrap; gap: .45rem; }
+#pcd-page .pcd-band {
+    display: inline-flex; align-items: center; gap: .45rem; border-radius: 999px;
+    padding: .3rem .8rem; font-size: .76rem; font-weight: 600; cursor: pointer;
+    border: 1px solid var(--vr-card-border); background: transparent; color: inherit;
+    transition: background .15s ease, border-color .15s ease, transform .12s ease;
+}
+#pcd-page .pcd-band:active { transform: scale(.97); }
+#pcd-page .pcd-band .pcd-band__n {
+    font-variant-numeric: tabular-nums; font-size: .7rem; padding: .05rem .45rem; border-radius: 999px;
+    background: color-mix(in srgb, var(--pcd-heat) 14%, transparent);
+}
+#pcd-page .pcd-band.is-on { border-color: var(--pcd-heat); background: color-mix(in srgb, var(--pcd-heat) 16%, transparent); }
+#pcd-page .pcd-band.is-on .pcd-band__n { background: var(--pcd-heat); color: #fff; }
+
+/* Tabela — padrão da casa (§7): centralizada, th .7rem, td .8rem nowrap */
+#pcd-table th { font-size: .7rem; text-align: center; vertical-align: middle; }
+#pcd-table td { font-size: .8rem; text-align: center; vertical-align: middle; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#pcd-table td.pcd-txt { text-align: left; }
+#pcd-table td.pcd-owner { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+#pcd-table td.pcd-total, #pcd-table tfoot th { font-weight: 700; }
+#pcd-table tfoot th { font-size: .8rem; text-align: center; }
+#pcd-table tfoot th.pcd-txt { text-align: left; }
+#pcd-table td.pcd-hot { color: #fff; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="pcd-page" class="container-fluid" data-content="">
+
+    {% set title='Dashboard — Pending Confirmation' %}
+    {% include 'partials/page-title.html' %}
+
+    <div class="pcd-panel mb-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-3">
+            <div class="pcd-kpi">
+                <div><div class="pcd-kpi__v" id="pcd-kpi-total">—</div><div class="pcd-kpi__l" data-lang="pcd-kpi-total">Pending confirmations</div></div>
+                <div><div class="pcd-kpi__v" id="pcd-kpi-groups">—</div><div class="pcd-kpi__l" data-lang="pcd-kpi-groups">Economic groups</div></div>
+            </div>
+            <div class="pcd-note" id="pcd-source"></div>
+        </div>
+        <div class="mt-3">
+            <div class="pcd-kpi__l mb-2" data-lang="pcd-bands">Pending range</div>
+            <div class="pcd-bands" id="pcd-bands"></div>
+        </div>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <button type="button" class="btn btn-sm btn-success btn-toolbar-all" id="pcdRefresh">
+            <i class="ti ti-refresh me-1"></i><span data-lang="pcd-refresh">Refresh</span></button>
+        <button type="button" class="btn btn-sm btn-info btn-toolbar-all" id="pcdExport">
+            <i class="ti ti-file-spreadsheet me-1"></i><span data-lang="pcd-export">Export Excel</span></button>
+        <button type="button" class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="pcdClearFilters">
+            <i class="ti ti-filter-off me-1"></i><span data-lang="btn-clear-filters">Clear Filters</span></button>
+    </div>
+
+    <div class="pcd-panel">
+        <div class="table-responsive">
+            <table id="pcd-table" class="table table-sm table-bordered w-100 mb-0"></table>
+        </div>
+    </div>
+
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
+<script>
+(function () {
+    var API = '/api/dashboard-pending-confirmation/data';
+    var LANG = (localStorage.getItem('__OTC_TRACKER_LANG__') || 'en');
+    var _TRANS = {};
+    function t(k, fb) { return _TRANS[k] || fb || k; }
+    fetch('/static/data/translations/' + LANG + '.json')
+        .then(function (r) { return r.json(); })
+        .then(function (tr) {
+            _TRANS = tr || {};
+            document.querySelectorAll('#pcd-page [data-lang]').forEach(function (el) {
+                var k = el.getAttribute('data-lang');
+                if (_TRANS[k]) el.innerHTML = _TRANS[k];
+            });
+            if (DATA) render(DATA);
+        })
+        .catch(function () {});
+
+    var DATA = null, DT = null, SELECTED = null;   // null = todas as faixas
+    var pedido = 0;
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function load() {
+        var meu = ++pedido;
+        var url = API + (SELECTED === null ? '' : '?bands=' + encodeURIComponent(JSON.stringify(SELECTED)));
+        return fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+            .then(function (res) {
+                if (meu !== pedido) return;          // resposta de um filtro antigo
+                if (!res.ok || !res.body || res.body.success === false) throw new Error((res.body && res.body.error) || 'HTTP');
+                DATA = res.body;
+                render(DATA);
+            })
+            .catch(function (e) {
+                if (meu !== pedido) return;
+                if (window.Swal) Swal.fire({ icon: 'error', title: t('pcd-load-failed', 'Could not load the dashboard'),
+                                             text: e && e.message || '' });
+            });
+    }
+
+    function renderBands(d) {
+        var box = document.getElementById('pcd-bands');
+        box.innerHTML = d.bands.map(function (b) {
+            var on = SELECTED === null || SELECTED.indexOf(b.label) >= 0;
+            return '<button type="button" class="pcd-band' + (on ? ' is-on' : '') + '" data-band="' + esc(b.label) + '">' +
+                esc(b.label) + '<span class="pcd-band__n">' + b.count + '</span></button>';
+        }).join('');
+    }
+
+    function heat(v, max) {
+        if (!v || !max) return '';
+        var r = v / max;
+        return { style: 'background:color-mix(in srgb, var(--pcd-heat) ' + Math.round(14 + 76 * r) + '%, transparent)',
+                 hot: r > .55 };
+    }
+
+    function headerHtml(d) {
+        var top = '<tr><th rowspan="2">' + esc(t('pcd-col-group', 'Economic Group')) + '</th>' +
+                  '<th rowspan="2">' + esc(t('pcd-col-owner', 'Owner')) + '</th>' +
+                  '<th rowspan="2">' + esc(t('pcd-col-signature', 'Signature Type')) + '</th>';
+        d.quarters.forEach(function (q) { top += '<th colspan="' + q.span + '">' + esc(q.label) + '</th>'; });
+        top += '<th rowspan="2">' + esc(t('pcd-col-total', 'Grand Total')) + '</th></tr>';
+        var sub = '<tr>' + d.columns.map(function (c) { return '<th>' + esc(c.status) + '</th>'; }).join('') + '</tr>';
+        var foot = '<tr><th class="pcd-txt" colspan="3">' + esc(t('pcd-col-total', 'Grand Total')) + '</th>' +
+                   d.columns.map(function () { return '<th></th>'; }).join('') + '<th></th></tr>';
+        return '<thead>' + top + sub + '</thead><tfoot>' + foot + '</tfoot>';
+    }
+
+    function render(d) {
+        renderBands(d);
+        document.getElementById('pcd-kpi-total').textContent = d.totals.total;
+        var grupos = {};
+        d.rows.forEach(function (r) { grupos[r.group] = 1; });
+        document.getElementById('pcd-kpi-groups').textContent = Object.keys(grupos).length;
+        document.getElementById('pcd-source').textContent = d.source === 'live'
+            ? t('pcd-source-live', 'Live reading of the Pending Confirmation Main (pending base)')
+            : t('pcd-source-snapshot', 'Snapshot of') + ' ' + d.source;
+
+        if (DT) { DT.destroy(); DT = null; }
+        var $t = $('#pcd-table');
+        $t.empty().html(headerHtml(d));
+        var n = d.columns.length;
+        var cols = [
+            { data: 'group', className: 'pcd-txt' },
+            { data: 'owner', className: 'pcd-txt pcd-owner' },
+            { data: 'signature' }
+        ];
+        for (var i = 0; i < n; i++) {
+            cols.push({ data: null, type: 'num',
+                        render: (function (ix) { return function (row, type) {
+                            var v = row.values[ix];
+                            return type === 'display' ? (v || '') : v;
+                        }; })(i),
+                        createdCell: (function (ix) { return function (td, _c, row) {
+                            var h = heat(row.values[ix], d.max);
+                            if (h) { td.setAttribute('style', h.style); if (h.hot) td.classList.add('pcd-hot'); }
+                        }; })(i) });
+        }
+        cols.push({ data: 'total', className: 'pcd-total', type: 'num' });
+        DT = $t.DataTable({
+            data: d.rows,
+            columns: cols,
+            order: [[n + 3, 'desc']],
+            pageLength: 50,
+            lengthChange: false,
+            autoWidth: true,
+            dom: "rt<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+            language: {
+                emptyTable: t('pcd-empty', 'No pending confirmations in the selected range.'),
+                paginate: {
+                    first: '<i class="ti ti-chevrons-left"></i>',
+                    previous: '<i class="ti ti-chevron-left"></i>',
+                    next: '<i class="ti ti-chevron-right"></i>',
+                    last: '<i class="ti ti-chevrons-right"></i>'
+                }
+            },
+            // O Grand Total do rodapé soma o que a grade MOSTRA (funil incluído).
+            footerCallback: function () {
+                var api = this.api();
+                var rows = api.rows({ search: 'applied' }).data().toArray();
+                var ths = $(api.table().footer()).find('th');
+                var total = 0;
+                for (var ix = 0; ix < n; ix++) {
+                    var s = rows.reduce(function (acc, r) { return acc + (r.values[ix] || 0); }, 0);
+                    total += s;
+                    ths.eq(ix + 1).text(s || '');
+                }
+                ths.eq(n + 1).text(total);
+            }
+        });
+        if (window.otcCellCopy) otcCellCopy('#pcd-table');
+    }
+
+    document.getElementById('pcd-bands').addEventListener('click', function (e) {
+        var b = e.target.closest('[data-band]');
+        if (!b || !DATA) return;
+        var todas = DATA.bands.map(function (x) { return x.label; });
+        var atual = SELECTED === null ? todas.slice() : SELECTED.slice();
+        var label = b.getAttribute('data-band');
+        var i = atual.indexOf(label);
+        if (i >= 0) atual.splice(i, 1); else atual.push(label);
+        SELECTED = atual.length === todas.length ? null : todas.filter(function (x) { return atual.indexOf(x) >= 0; });
+        load();
+    });
+    document.getElementById('pcdRefresh').addEventListener('click', load);
+    document.getElementById('pcdClearFilters').addEventListener('click', function () {
+        // O helper do funil limpa as colunas; aqui voltam todas as faixas.
+        if (SELECTED !== null) { SELECTED = null; load(); }
+    });
+
+    // ── Export: o Excel da tabela como está na tela (faixas + funil) ─────────
+    var LIBS = {};
+    function loadLib(src) {
+        if (!LIBS[src]) LIBS[src] = new Promise(function (ok, ko) {
+            var el = document.createElement('script');
+            el.src = '{{ config.ASSETS_ROOT }}/plugins/' + src;
+            el.onload = ok; el.onerror = function () { delete LIBS[src]; ko(new Error(src)); };
+            document.head.appendChild(el);
+        });
+        return LIBS[src];
+    }
+    function hoje() {
+        var d = new Date();
+        return d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2);
+    }
+    document.getElementById('pcdExport').addEventListener('click', function () {
+        if (!DATA || !DT) return;
+        loadLib('xlsx/xlsx.full.min.js').then(function () {
+            var d = DATA, n = d.columns.length;
+            var h1 = [t('pcd-col-group', 'Economic Group'), t('pcd-col-owner', 'Owner'), t('pcd-col-signature', 'Signature Type')];
+            var h2 = ['', '', ''];
+            var merges = [0, 1, 2].map(function (c) { return { s: { r: 0, c: c }, e: { r: 1, c: c } }; });
+            var c0 = 3;
+            d.quarters.forEach(function (q) {
+                for (var k = 0; k < q.span; k++) h1.push(k === 0 ? q.label : '');
+                if (q.span > 1) merges.push({ s: { r: 0, c: c0 }, e: { r: 0, c: c0 + q.span - 1 } });
+                c0 += q.span;
+            });
+            d.columns.forEach(function (c) { h2.push(c.status); });
+            h1.push(t('pcd-col-total', 'Grand Total')); h2.push('');
+            merges.push({ s: { r: 0, c: n + 3 }, e: { r: 1, c: n + 3 } });
+            var rows = DT.rows({ search: 'applied', order: 'applied' }).data().toArray();
+            var body = rows.map(function (r) {
+                return [r.group, r.owner, r.signature].concat(r.values.map(function (v) { return v || null; })).concat([r.total]);
+            });
+            var soma = [];
+            for (var i = 0; i < n; i++) soma.push(rows.reduce(function (a, r) { return a + (r.values[i] || 0); }, 0) || null);
+            var tot = [t('pcd-col-total', 'Grand Total'), '', ''].concat(soma)
+                .concat([rows.reduce(function (a, r) { return a + r.total; }, 0)]);
+            var m = [h1, h2].concat(body).concat([tot]);
+            var ws = XLSX.utils.aoa_to_sheet(m);
+            // Nome de grupo/owner é TEXTO (um "26E04" viraria número, §477).
+            Object.keys(ws).forEach(function (k) {
+                if (k.charAt(0) === '!') return;
+                var cell = XLSX.utils.decode_cell(k);
+                if (cell.c < 3 || cell.r < 2) { ws[k].t = 's'; ws[k].v = String(ws[k].v); }
+            });
+            ws['!merges'] = merges;
+            ws['!cols'] = m[0].map(function (_, ci) {
+                var w = m.reduce(function (mx, r) { return Math.max(mx, String(r[ci] == null ? '' : r[ci]).length); }, 8);
+                return { wch: Math.min(w + 2, 45) };
+            });
+            var faixas = SELECTED === null ? d.bands.map(function (b) { return b.label; }) : SELECTED;
+            var ws2 = XLSX.utils.aoa_to_sheet([[t('pcd-bands', 'Pending range')]].concat(faixas.map(function (f) { return [f]; })));
+            var wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Dashboard');
+            XLSX.utils.book_append_sheet(wb, ws2, 'Filters');
+            XLSX.writeFile(wb, 'Pending Confirmation Dashboard ' + hoje() + '.xlsx');
+        }).catch(function () {
+            if (window.Swal) Swal.fire({ icon: 'error', title: t('pcd-export-failed', 'Export failed') });
+        });
+    });
+
+    load();
+})();
+</script>
+{% endblock extra_javascript %}
