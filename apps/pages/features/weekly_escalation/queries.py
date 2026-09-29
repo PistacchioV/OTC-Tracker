@@ -12,7 +12,7 @@ def _routes():
 
 
 def blocks(rows):
-    """Rows pending >= 30 days, split by LOB (CEM, EDG). Per LOB: bankers sorted
+    """Rows pending >= 30 days, split by LOB (CEM — with COMMODITY —, EDG). Per LOB: bankers sorted
     by total desc, each with a total and a company (client name) breakdown sorted
     by count desc. Banker = RefData BANKER (by SPN, then name), falling back to
     Owner."""
@@ -24,8 +24,7 @@ def blocks(rows):
         a = R._pc_metrics_int(r.get('Aging'))
         if a is None or a < 30:
             continue
-        lob_n = R._pc_norm(r.get('LOB', ''))
-        lob = 'CEM' if lob_n == 'cem' else ('EDG' if lob_n == 'edg' else None)
+        lob = domain.lob_block(R._pc_norm(r.get('LOB', '')))
         if lob is None:
             continue
         rec = R._pc_refdata_lookup(r, by_spn, by_name)
