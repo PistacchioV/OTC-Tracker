@@ -106,7 +106,9 @@ check('o arquivo da MGT não leva conta do Banco', len(recs_mgt), 1)
 
 print('\n== 3b. o Participante da A3 escolhe JPM x MGT, nao o nome ==')
 def _com_part(part):
-    rows = [['c1'], ['c2'], ['Participante: ' + part], ['c4'], HEADER, linha('04880.00-6', 'SWAP')]
+    # A A3 real traz o usuario depois do codigo: `Participante: X - Usuário: E93017`.
+    rows = [['c1'], ['c2'], ['Participante: ' + part + ' - Usuário: E93017'], ['c4'], HEADER,
+            linha('04880.00-6', 'SWAP')]
     return '\n'.join('\t'.join(r) for r in rows).encode('latin-1')
 check('Operacoes*.txt com MORGANBC vira MGT',
       R._ds_match_spec('Operacoes_20260929.txt', _com_part('MORGANBC'))['key'], 'operacoes-mgt')
@@ -125,6 +127,45 @@ for _r in [['c1'], ['c2'], ['Participante: MORGANBC'], ['c4'], HEADER]:
 _b = _io0.BytesIO(); _wb.save(_b)
 check('xlsx com MORGANBC na A3 vira MGT',
       R._ds_match_spec('Operacoes.xlsx', _b.getvalue())['key'], 'operacoes-mgt')
+
+# O export da B3 grava um <dimension> MENOR que a planilha, e o openpyxl em
+# read_only confia nele: o card lia 5 linhas e dizia "0 de 5" em arquivo de
+# centenas. Aqui o carimbo diz A1:E5 e a planilha tem 5 + 40 linhas.
+import re as _re0, zipfile as _zf0                                       # noqa: E402
+_wb = _ox.Workbook(); _ws = _wb.active
+for _r in ([['B3'], ['Op'], ['Participante: MORGANBC - Usuário: E93017'], [], HEADER]
+           + [linha('04880.00-6', 'SWAP')] * 30 + [linha('73760.00-9', 'SWAP')] * 10):
+    _ws.append(_r)
+_b = _io0.BytesIO(); _wb.save(_b)
+_zi = _zf0.ZipFile(_b); _o = _io0.BytesIO(); _zo = _zf0.ZipFile(_o, 'w')
+for _i in _zi.infolist():
+    _d = _zi.read(_i.filename)
+    if _i.filename == 'xl/worksheets/sheet1.xml':
+        _d = _re0.sub(rb'<dimension ref="[^"]*"/>', b'<dimension ref="A1:E5"/>', _d)
+    _zo.writestr(_i, _d)
+_zo.close()
+_raw = _o.getvalue()
+_sp = R._ds_match_spec('Operacoes_20260928.xlsx', _raw)
+check('xlsx da B3 (dimension errado) com MORGANBC vira MGT', _sp['key'], 'operacoes-mgt')
+check('e le a planilha INTEIRA, nao so o que o dimension diz',
+      tuple(len(x) if isinstance(x, list) else x for x in R._ds_process(_raw, _sp)), (30, 40))
+
+# O aviso do card diz o Participante lido: vai no `processed` da resposta.
+_w_real, _side_real = R._ds_write, R._opb3_side_write
+R._ds_write = lambda jp, recs, name, spec, total, processed, dp: processed.append(
+    {'file': name, 'type': spec['label'], 'kept': len(recs), 'total': total})
+R._opb3_side_write = lambda *a, **k: None
+try:
+    _proc, _skip = [], []
+    R._ds_handle('Operacoes.txt', _com_part('MORGANBC'), None,
+                 R.datetime(2026, 9, 29), _proc, _skip)
+    check('o processed diz o Participante e o tipo',
+          (_proc[0]['participant'], _proc[0]['type']), ('MORGANBC', 'Operações MGT'))
+    _proc = []
+    R._ds_handle('mgt.txt', arquivo([]), None, R.datetime(2026, 9, 29), _proc, _skip)
+    check('sem A3 o participant vem vazio (decidiu o nome)', _proc[0]['participant'], '')
+finally:
+    R._ds_write, R._opb3_side_write = _w_real, _side_real
 
 # ── 4. a Reference date do card decide o DIA em que os JSONs sao gravados ────
 #  O dia era o relogio do servidor, e um arquivo de ontem processado hoje ia

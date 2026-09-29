@@ -387,6 +387,8 @@
   "cp-src-folder": "carpeta",
   "cp-of": "de",
   "cp-lines": "línea(s)",
+  "cp-ds-participant": "Participante",
+  "cp-ds-by-name": "sin Participante en A3 — identificado por el nombre del archivo",
   "cp-ignored": "ignorado(s) (no reconocido)",
   "cp-err-title": "Error en la rutina",
   "cp-err-msg": "Ocurrió un error al ejecutar la rutina.",

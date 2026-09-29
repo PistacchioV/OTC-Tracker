@@ -388,6 +388,8 @@
   "cp-src-folder": "folder",
   "cp-of": "of",
   "cp-lines": "line(s)",
+  "cp-ds-participant": "Participant",
+  "cp-ds-by-name": "no Participant in A3 — identified by file name",
   "cp-ignored": "ignored (unrecognized)",
   "cp-err-title": "Routine failed",
   "cp-err-msg": "An error occurred while running the routine.",

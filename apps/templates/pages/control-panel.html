@@ -1256,8 +1256,18 @@ function buildDsMessage(body) {
                (dt.length === 3 ? ' — ' + t('cp-ds-savedto', 'saved to') + ' ' +
                                   dt[2] + '/' + dt[1] + '/' + dt[0] : '') + ':<br>';
         out += processed.map(function (p) {
-            return '<b>' + _cpEsc(p.type) + '</b>: ' + p.kept + ' ' + t('cp-of', 'of') +
-                   ' ' + p.total + ' ' + t('cp-lines', 'line(s)');
+            var linha = '<b>' + _cpEsc(p.type) + '</b>: ' + p.kept + ' ' + t('cp-of', 'of') +
+                        ' ' + p.total + ' ' + t('cp-lines', 'line(s)');
+            // Operações JPM × MGT: quem decide é o Participante da A3 do
+            // arquivo; sem ele, o nome. O aviso diz qual dos dois decidiu.
+            if (p.participant !== undefined) {
+                linha += '<br><span class="text-muted small">' + _cpEsc(p.file || '') + ' — ' +
+                         (p.participant
+                             ? t('cp-ds-participant', 'Participant') + ': ' + _cpEsc(p.participant)
+                             : t('cp-ds-by-name', 'no Participant in A3 — identified by file name')) +
+                         '</span>';
+            }
+            return linha;
         }).join('<br>');
     }
     if (skipped.length) {

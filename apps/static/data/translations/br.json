@@ -388,6 +388,8 @@
   "cp-src-folder": "pasta",
   "cp-of": "de",
   "cp-lines": "linha(s)",
+  "cp-ds-participant": "Participante",
+  "cp-ds-by-name": "sem Participante na A3 — identificado pelo nome do arquivo",
   "cp-ignored": "ignorado(s) (não reconhecido)",
   "cp-err-title": "Falha na rotina",
   "cp-err-msg": "Ocorreu um erro ao executar a rotina.",

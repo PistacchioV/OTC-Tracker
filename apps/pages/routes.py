@@ -3320,6 +3320,10 @@ def _ds_read_rows(raw):
         import openpyxl
         wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
         ws = wb[wb.sheetnames[0]]
+        # O export da B3 grava no .xlsx um <dimension> MENOR que a planilha, e o
+        # modo read_only confia nele: lia só as primeiras linhas e o card dizia
+        # "0 de 5" para arquivos de centenas. Sem o carimbo, lê até a última.
+        ws.reset_dimensions()
         return [list(r) for r in ws.iter_rows(values_only=True)]
     return [ln.split('\t') for ln in raw.decode('latin-1').splitlines()]
 
@@ -3342,7 +3346,9 @@ def _ds_participante(raw):
             import openpyxl
             wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
             try:
-                rows = list(wb[wb.sheetnames[0]].iter_rows(min_row=3, max_row=3, values_only=True))
+                ws = wb[wb.sheetnames[0]]
+                ws.reset_dimensions()                  # o <dimension> da B3 mente (ver _ds_read_rows)
+                rows = list(ws.iter_rows(min_row=3, max_row=3, values_only=True))
             finally:
                 wb.close()
             cell = _ds_cell(rows[0], 0) if rows else ''
@@ -3352,10 +3358,10 @@ def _ds_participante(raw):
     except Exception:
         log.warning('[ds] não deu para ler o participante (A3):\n%s', traceback.format_exc())
         return ''
-    rotulo, sep, valor = cell.partition(':')
-    if not sep or rotulo.strip().lower() != 'participante':
-        return ''
-    return valor.strip().strip('"').upper()
+    # `Participante: JPMORGANBM - Usuário: E93017` — vale só o código, a
+    # primeira palavra depois dos dois-pontos.
+    m = re.match(r'\s*"?\s*participante\s*:\s*([A-Za-z0-9_.]+)', cell, re.IGNORECASE)
+    return m.group(1).upper() if m else ''
 
 
 def _ds_match_spec(name, raw=None):
@@ -3480,6 +3486,10 @@ def _ds_handle(name, raw, delete_path, ref, processed, skipped):
                     'rode scripts/diag_daily_settlement.py para ver qual filtro/coluna '
                     'derrubou tudo', name, spec['key'], total, ref.strftime('%d/%m/%Y'))
     _ds_write(jp, recs, name, spec, total, processed, delete_path)
+    if spec['key'] in ('operacoes-jpm', 'operacoes-mgt'):
+        # O aviso do card diz o Participante lido na A3 — é ele que decidiu JPM
+        # × MGT, e vazio quer dizer que quem decidiu foi o NOME do arquivo.
+        processed[-1]['participant'] = _ds_participante(raw)
     if spec.get('latam'):                              # guarda também o arquivo de origem
         _latam_write_meta(jp, ref.strftime('%H:%M:%S'), name)
         # O Daily Settlement grava o Latam SEM passar pelo `_latam_save`, que é
