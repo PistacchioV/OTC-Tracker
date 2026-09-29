@@ -1186,7 +1186,9 @@ def api_conf_mgt_save():
                 picked, merc, ref, tipo='NDF',
                 prefixo='NDF_FwdStart' if family == 'fwd-start' else 'NDF_Vanilla',
                 ccy_field='QuantityCurrency', warn_no_spot=False,
-                legs_fn=_R()._conf_fx_legs, ccy=merc,
+                # MGT × cliente: valor = Notional × Rate, valorEstrangeiro =
+                # Notional (mesa, 29/09/2026). O FWD Start do Banco não muda.
+                legs_fn=_R()._conf_mgt_fx_legs, ccy=merc,
                 # FWD Start = B3 ID em qualquer LE; Vanilla segue o Athena ID.
                 num_field=_R()._conf_mgt_num_field(picked))
             xcand, xn = candidate, 0
