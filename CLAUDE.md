@@ -2163,7 +2163,10 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   §596) — os clientes com CGD pendente no Track Docs (`cgd_docs.outcome ==
   'pending'`), na mesma estrutura do e-mail: por grupo econômico, aging em dias
   ÚTEIS, as mesas com que o CGD está e o banker pela SPN no RefData. A rota
-  nova entra no `_CP_ENDPOINT_CARD` como `dailymetric`.
+  nova entra no `_CP_ENDPOINT_CARD` como `dailymetric`. **Ele roda só às
+  sextas, e por isso NÃO se diz diário**: o assunto é `Metric - Pending CGD
+  Brazil OTC - <data>` (`domain.cgd_subject`), o cabeçalho acompanha e o corpo
+  fala em *weekly analysis* — o card continua sendo o do Daily Metric.
 - **Pending Status tem TRÊS donos**: NDF Vanilla/Other Publisher pela regra de
   prazo e assinatura (`_pc_signature_pending_status`: ≤ 60 dias → `Exception
   FepWeb`, senão pelo SIGNATURE TYPE); todo o resto pela ETAPA da esteira
