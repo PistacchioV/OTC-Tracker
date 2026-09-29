@@ -76,7 +76,7 @@ CGD_BUCKETS = (('b0', None, 30), ('b1', 30, 60), ('b2', 60, 90), ('b3', 90, None
 
 
 def cgd_subject(ref_fmt):
-    return 'Daily Metric - Pending CGD Brazil OTC - {}'.format(ref_fmt)
+    return 'Metric - Pending CGD Brazil OTC - {}'.format(ref_fmt)
 
 
 def cgd_bucket(aging):
