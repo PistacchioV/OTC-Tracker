@@ -170,6 +170,11 @@
    
            {# Scripts adicionais específicos de cada página #}
            {% block extra_javascript %}{% endblock extra_javascript %}
+
+           {# Filtro "de Excel" (funil no cabeçalho) em TODA DataTable do app —
+              depois dos scripts da página, que é onde o jQuery e o DataTables
+              são carregados. Página sem DataTable: não faz nada. #}
+           <script src="{{ config.ASSETS_ROOT }}/js/excel-filter.js?v={{ asset_v('js/excel-filter.js') }}"></script>
    
        {% endblock javascript %}
    

@@ -24977,3 +24977,48 @@ de commodity já sai sem o código (§589).
 `MsoNormal` — "Parte A/B" saía visivelmente menor. Igualada ao molde das outras
 células (dado em span sem tamanho, o 11pt só no `<o:p>`). As linhas do painel
 são CLONES da primeira, então a correção vale para elas também.
+
+## §591 — Filtro "de Excel" em todas as tabelas; a linha de filtro por coluna saiu (2026-09-29)
+
+**Pedido da mesa:** filtrar como no Excel — a lista de valores da coluna com
+caixinhas (marcar ANTECIPACAO, desmarcar o resto) —, com o "Adicionar seleção
+atual ao filtro" do Excel, e sem a linha de filtro por coluna.
+
+**O que é:** `static/js/excel-filter.js`, um `DataTable.ext.search` próprio,
+carregado pelo `base.html` depois dos scripts da página e ligado sozinho a
+toda DataTable (`init.dt` + as que já existem). Piloto no Operations B3
+(`29eaf8be`), depois o app inteiro.
+
+**Os três defeitos que o piloto escondia:**
+- **Tabela de objetos lia `undefined`.** O valor saía de `data()[col]`; nas
+  tabelas `columns: [{data: 'campo'}]` a linha não tem posição, e a lista
+  inteira virava "(Vazias)" (ou nada). Hoje é `cell().render('display')` sem
+  HTML — o que a pessoa lê.
+- **O clique no funil ordenava a coluna.** O th é o botão de sort do
+  DataTables; o evento para no próprio botão (delegação no container chega
+  tarde).
+- **Funil solto no meio das linhas** (NDF/Other Products Summary): com
+  `scrollX` o DataTables deixa uma cópia do cabeçalho de altura zero no corpo,
+  e o botão absoluto escapava dela. CSS esconde o funil dessa cópia.
+
+**Por que a linha de filtro é ESCONDIDA e não apagada:** o DataTables guarda o
+layout do cabeçalho da init e o redesenha ao mostrar/ocultar coluna —
+recolocaria as células apagadas. A classe `oxf-filter-row` fica no `<tr>`, que
+ele reaproveita. O que estava digitado é limpo (senão a tabela ficaria
+filtrada por um campo invisível). O código das linhas nas ~33 páginas é
+dívida morta; a colagem de lista (`123; 456`) do `sf-multi.js` passou para a
+busca do menu.
+
+**Clear Filters:** o helper reconhece o botão de cada tela pelo id/`data-lang`
+(`…clear-filters`, `…-btn-clear`; o `b3-btn-clear` é "Clear Fields" e fica de
+fora) e limpa os funis. Os dois Summaries (NDF e Other Products) não tinham o
+botão — nunca tiveram linha de filtro — e ganharam um por card, com
+`data-oxf-table`, que limpa só a tabela daquele card.
+
+**Conferido:** varredura Playwright das 51 páginas com DataTable, com e sem o
+script: nenhum erro de JS novo, nenhuma linha de filtro visível, funil em toda
+tabela visível e o menu abrindo em 48 (as outras 3 montam a tabela depois de
+uma busca). Numa amostra de 1.200 linhas: 1 filtro = contagem crua, 2 colunas
+combinam, "Adicionar seleção" soma (172 + 172 = 344), Clear limpa. (Vazias)
+aparece em toda coluna com célula vazia (47 colunas em 4 páginas com dados).
+

@@ -732,26 +732,29 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   regras **com `!important`** (o DataTables remove o id da tabela clonada e a
   regra da página perde para `table.dataTable thead th`). `table-centered` não
   existe em CSS nenhum. `check_table_center.py`.
-- **Linha de filtro por coluna** como 2ª linha do `<thead>`, montada ANTES do
-  `.DataTable()` com `orderCellsTop: true` (no `initComplete` ela fica no
-  `<thead>` escondido do corpo rolável). Centralização dos inputs vem do
-  `visual-refresh.css`. `blank` sozinho no campo casa célula vazia.
-  **Com `scrollX` a delegação é no CONTAINER da tabela**
-  (`dt.table().container()`), nunca em `#tabela thead` (§462): o `scrollX`
-  CLONA o cabeçalho para o topo rolante e esconde o original, e é no clone que
-  a pessoa digita — `#tabela thead` alcança só o original escondido (o clone
-  perde o id, como na regra de centralização acima). O evento não chega e
-  digitar não faz nada, sem erro nenhum. Tabela `scrollX: false` não tem clone
-  e funciona dos dois jeitos — o container cobre os dois casos. E **quem tem
-  linha de filtro tem Clear Filters** alcançando as DUAS cópias do cabeçalho.
-  **Filtro aceita LISTA** (`123; 456`, `,`/`;`/quebra de linha — os Trade IDs
-  colados de uma coluna do Excel): a linha passa se QUALQUER valor casar. No
-  navegador é o `sf-multi.js` (`otcSfMulti.columnSearch`, regex OR — a busca
-  padrão do DataTables faria E entre as palavras; e o colar troca as quebras
-  por `; `, que o `<input>` comeria), no servidor o `_filter_tokens` do
-  `_deal_matches`. Milhar (`1,250,000`) é UM valor. `check_sf_multi.py`.
-  `check_export_padrao.py` recusa `#tabela thead` em página `scrollX` **sem
-  lista de exceção**: é bug silencioso, não dívida de estilo.
+- **Filtro é o FUNIL "de Excel" no cabeçalho** (mesa, 29/09/2026; §591):
+  `static/js/excel-filter.js`, carregado pelo `base.html` DEPOIS dos scripts
+  da página, liga-se SOZINHO a toda DataTable (as que existem e as que nascem
+  depois, pelo `init.dt`). Menu: ordenar A→Z/Z→A, limpar a coluna, busca
+  (aceita LISTA colada, `123; 456`), valores distintos com caixinhas e
+  **(Vazias)**, **Adicionar seleção atual ao filtro** (pesquisando numa coluna
+  já filtrada, SOMA em vez de trocar), OK/Cancelar. A lista de cada coluna sai
+  das linhas que passam nos filtros das OUTRAS. O valor comparado é o que a
+  célula DESENHA (`render('display')`, sem HTML) — nunca `data()[col]`, que
+  numa tabela de objetos é `undefined`. Página nova não escreve nada; coluna
+  sem funil = cabeçalho vazio, checkbox, Actions ou `searchable: false`;
+  tabela fora com `data-excel-filter="off"`; `serverSide` fica de fora.
+  **A antiga linha de filtro por coluna (2ª linha do `<thead>`) é ESCONDIDA
+  pelo helper** (`tr.oxf-filter-row`), não apagada: o DataTables redesenha o
+  cabeçalho a partir do layout da init e recolocaria o que foi removido; o que
+  estava digitado nela é limpo. O código dela nas páginas é dívida morta — não
+  escreva linha de filtro em página nova. **Todo "Clear Filters" limpa os
+  funis** (o helper reconhece o botão pelo id/`data-lang`); página com uma
+  tabela por card dá ao botão `data-oxf-table="#id"` e ele limpa só aquela
+  (os dois Summaries). Com `scrollX` o DataTables deixa uma CÓPIA do
+  cabeçalho no corpo (altura zero): o funil dela é escondido por CSS, senão
+  aparecia solto no meio das linhas. O `sf-multi.js` e o §462 (delegação no
+  container) continuam valendo para o que ainda filtra por campo.
 - **Botões de ação: squircle 32×32** travado nos DOIS eixos, `padding:0`,
   `border-radius:10px !important`, ícone Tabler `1rem` (nunca `.fs-13`),
   tooltip colorido delegado no primeiro hover (os `<td>` são reescritos a cada
