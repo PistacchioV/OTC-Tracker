@@ -2751,6 +2751,8 @@
   "im-sub": "Todas as tarefas do dia e até onde cada uma já foi — registro, confirmações, Intrag e as reconciliações.",
   "im-refresh": "Atualizar agora",
   "im-updated": "Atualizado",
+  "im-update-failed": "Não atualizado — a atualização falhou",
+  "im-update-busy": "Não atualizado — banco ocupado, tente de novo",
   "im-k-due": "Previstas",
   "im-k-done": "Concluídas",
   "im-k-in_progress": "Em andamento",

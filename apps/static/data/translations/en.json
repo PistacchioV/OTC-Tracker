@@ -2751,6 +2751,8 @@
   "im-sub": "Every task due today and how far it has gone — registration, confirmations, Intrag and the reconciliations.",
   "im-refresh": "Refresh now",
   "im-updated": "Updated",
+  "im-update-failed": "Not updated — the refresh failed",
+  "im-update-busy": "Not updated — database busy, try again",
   "im-k-due": "Due today",
   "im-k-done": "Completed",
   "im-k-in_progress": "In progress",
