@@ -14109,6 +14109,7 @@ _conf_ccy_num = _pf_conf._conf_ccy_num
 _conf_ccy_is_brl = _pf_conf._conf_ccy_is_brl
 _conf_strike_adj = _pf_conf._conf_strike_adj
 _conf_fx_legs = _pf_conf._conf_fx_legs
+_conf_fxo_legs = _pf_conf._conf_fxo_legs
 _conf_ndf_xml = _pf_conf._conf_ndf_xml
 _conf_xml_doc = _pf_conf._conf_xml_doc
 _conf_pc_set_fepweb = _pf_conf._conf_pc_set_fepweb

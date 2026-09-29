@@ -693,6 +693,20 @@ def _conf_fx_legs(deal, subj):
     return qty, qty * strike
 
 
+def _conf_fxo_legs(deal, subj):
+    """(valorEstrangeiro, valor em BRL) de uma Opção de Câmbio (mesa, 29/09/2026).
+
+    O `Total Notional` da página New Deals FXO já é o valor na moeda base, e o
+    `Strike` é a taxa em reais: `valorEstrangeiro` = Total Notional e `valor` =
+    Total Notional × Strike. A regra da mercadoria (`quantidade × preço` como
+    valor estrangeiro) punha em `valorEstrangeiro` um número em REAIS."""
+    qty = _conf_to_float(str(deal.get('TotalNotional') or '').replace('-', ''))
+    strike = _conf_to_float(deal.get('Strike'))
+    if qty is None or strike is None:
+        return None
+    return qty, qty * strike
+
+
 def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
                   ccy_field='StrikeCurrency', warn_no_spot=True, legs_fn=None, ccy=None,
                   evento='N', num_field='Deal'):
@@ -712,10 +726,9 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
     prefixo='Opt_Comm' — o resto do padrão é idêntico ao NDF. O tipo vai em
     MAIÚSCULO como o `NDF`: é o que o FepWeb lê, e o `Option` com inicial
     maiúscula era a única saída do app fora desse padrão.
-    Opções de Câmbio (FXO) usam prefixo='Opt_FXO' e leem a moeda do
-    ccy_field='UnderlyingAsset'; nelas o strike já é a cotação em BRL, então
-    não há Spot FXRate para buscar e warn_no_spot=False cala o aviso que só
-    faria sentido em commodities."""
+    Opções de Câmbio (FXO) usam prefixo='Opt_FXO', leem a moeda do
+    ccy_field='UnderlyingAsset' e trocam a aritmética por `_conf_fxo_legs`
+    (valor = Total Notional × Strike, valorEstrangeiro = Total Notional)."""
     from apps.pages import routes
     warnings = []
     first = picked[0][0]
