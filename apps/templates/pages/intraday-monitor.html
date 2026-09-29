@@ -332,6 +332,7 @@
 #ndm-page .im-refresh { width: 34px; height: 34px; padding: 0; border-radius: 10px !important;
     display: inline-flex; align-items: center; justify-content: center; }
 #ndm-page .im-refresh.is-busy i { animation: im-spin .6s linear infinite; }
+#ndm-page #im-updated.is-fail { color: var(--im-late, #d63939); font-weight: 600; }
 @keyframes im-spin { to { transform: rotate(360deg); } }
 
 /* ── KPIs ── */
@@ -984,6 +985,7 @@
     var ESTADO_TXT = { todo: 'To do', in_progress: 'In progress', late: 'Late', done: 'Completed' };
     var DIAS_TXT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     var refAtual = '{{ today }}', primeira = true, anel = null, timer = null;
+    var pedido = 0, emVoo = null;
 
     function cor(nome) {
         return getComputedStyle(document.getElementById('ndm-page')).getPropertyValue('--im-' + nome).trim();
@@ -1214,8 +1216,12 @@
         desenhaAtividade(snap.activity || []);
         desenhaLinha(snap);
         render(snap.cards || [], snap.conf_cards || []);
-        document.getElementById('im-updated').textContent =
-            t('im-updated', 'Updated') + ' ' + new Date().toTimeString().slice(0, 5);
+        var upd = document.getElementById('im-updated');
+        upd.classList.remove('is-fail');
+        upd.removeAttribute('title');
+        // Com os SEGUNDOS: um refresh no mesmo minuto não mudava nada na tela,
+        // e o botão parecia não responder.
+        upd.textContent = t('im-updated', 'Updated') + ' ' + new Date().toTimeString().slice(0, 8);
         if (primeira) {
             primeira = false;
             // tira a classe da entrada depois dela: a atualização de 60 s não
@@ -1224,15 +1230,49 @@
         }
     }
 
+    // A falha DIZ que falhou: sem isto o 503 (banco ocupado no share) ou o
+    // 500 só paravam o ícone, e a tela seguia igual — o botão "não respondia".
+    // O que estava na tela fica (é a última leitura boa), marcado como velho.
+    function falhou(codigo, motivo) {
+        var upd = document.getElementById('im-updated');
+        upd.classList.add('is-fail');
+        upd.textContent = codigo === 'busy'
+            ? t('im-update-busy', 'Not updated — database busy, try again')
+            : t('im-update-failed', 'Not updated — the refresh failed');
+        if (motivo) upd.setAttribute('title', motivo);
+    }
+
     function load(ymd) {
+        // Mesma data já em voo: o clique não empilha outra consulta (no share
+        // cada uma leva segundos). Troca de data sempre consulta, e só a
+        // resposta do ÚLTIMO pedido desenha — a lenta de antes não sobrescreve.
+        if (emVoo && (!ymd || ymd === refAtual)) return emVoo;
         if (ymd) refAtual = ymd;
+        var meu = ++pedido;
         var btn = document.getElementById('im-refresh');
         btn.classList.add('is-busy');
-        return fetch('/api/intraday-monitor?date=' + encodeURIComponent(refAtual), { credentials: 'same-origin' })
-            .then(function (r) { return r.json(); })
-            .then(function (j) { if (j && j.success) desenha(j); })
-            .catch(function (e) { console.error('intraday monitor load error', e); })
-            .then(function () { btn.classList.remove('is-busy'); });
+        emVoo = fetch('/api/intraday-monitor?date=' + encodeURIComponent(refAtual), { credentials: 'same-origin' })
+            .then(function (r) {
+                return r.json().catch(function () { return { success: false, error: 'HTTP ' + r.status }; })
+                    .then(function (j) { if (!r.ok && j) j.status = r.status; return j; });
+            })
+            .then(function (j) {
+                if (meu !== pedido) return;
+                if (j && j.success) { desenha(j); return; }
+                var busy = j && (j.status === 503 || /database_(busy|unreadable)/.test(j.error || ''));
+                falhou(busy ? 'busy' : 'failed', j && (j.message || j.error));
+            })
+            .catch(function (e) {
+                if (meu !== pedido) return;
+                console.error('intraday monitor load error', e);
+                falhou('failed', e && e.message);
+            })
+            .then(function () {
+                if (meu !== pedido) return;
+                emVoo = null;
+                btn.classList.remove('is-busy');
+            });
+        return emVoo;
     }
 
     // Atualiza sozinho a cada minuto — o que a mesa roda em outra aba aparece
@@ -1297,6 +1337,8 @@
     <!-- Intraday Monitor (§567) -->
     <span data-lang="im-refresh">Refresh now</span>
     <span data-lang="im-updated">Updated</span>
+    <span data-lang="im-update-failed">Not updated — the refresh failed</span>
+    <span data-lang="im-update-busy">Not updated — database busy, try again</span>
     <span data-lang="im-k-due-sub">tasks scheduled for the date</span>
     <span data-lang="im-k-done-sub">of the day</span>
     <span data-lang="im-k-prog-sub">started, still open</span>
