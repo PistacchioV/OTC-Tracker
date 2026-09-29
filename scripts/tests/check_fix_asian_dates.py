@@ -158,5 +158,20 @@ try:
 except SystemExit as e:
     ok('PARADO' in str(e) and 'ANBIMA' in str(e), 'calendário do ativo sem feriado no ano PARA, dizendo qual')
 
+# ── sem registro no Holidays, o calendário cai em <nome>.json do DATA_DIR ──
+from apps.pages.precificador import calendario as _cal   # noqa: E402
+from apps.pages import data_paths as _dp                  # noqa: E402
+_orig_cal, _orig_dp = _cal._feriados_do_arquivo, _dp.data_path
+ipe_dir = os.path.join(tmp, 'data')
+os.makedirs(ipe_dir)
+json.dump([{'date': '2026-04-03', 'description': 'Good Friday'}], open(os.path.join(ipe_dir, 'ipe.json'), 'w'))
+try:
+    _cal._feriados_do_arquivo = lambda nome: frozenset()
+    _dp.data_path = lambda nome: os.path.join(ipe_dir, nome)
+    ok(F.feriados_do_app('IPE') == {date(2026, 4, 3)}, 'IPE sem registro: lê ipe.json do DATA_DIR')
+    ok(F.feriados_do_app('XPTO') == set(), 'calendário sem arquivo nenhum: vazio (e a trava PARA)')
+finally:
+    _cal._feriados_do_arquivo, _dp.data_path = _orig_cal, _orig_dp
+
 print('\nall ok' if not falhas else '\nFALHAS: %d' % falhas)
 sys.exit(1 if falhas else 0)

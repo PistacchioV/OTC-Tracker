@@ -33,7 +33,8 @@ feito e por quê.
 
 **Os feriados são os do Holidays Calendar do app** (o mesmo arquivo que a tela
 de feriados grava), lidos pelo armazém — rode de dentro do checkout da
-instância. Fora dele, `--feriados CAL=arquivo` (repetível) aponta para uma
+instância. Calendário sem registro no Holidays cai em `<calendário>.json` do
+`DATA_DIR` (`apps/static/data/ipe.json`, `anbima.json`). Fora dele, `--feriados CAL=arquivo` (repetível) aponta para uma
 planilha (datas na coluna A) ou um `.json` do Holidays; sem o `CAL=`, o
 arquivo vale para o `--calendario`. Calendário VAZIO, ou sem nenhum feriado num ano que
 a planilha usa, PARA o script: sem feriado, "dia útil" vira "dia de semana", e
@@ -101,18 +102,24 @@ def para_data(valor):
 # ── feriados ────────────────────────────────────────────────────────────────
 
 def feriados_do_app(nome):
+    """Os feriados do Holidays do app: o arquivo que o registro dá ao
+    calendário e, sem registro, `<calendário>.json` do DATA_DIR
+    (`apps/static/data/ipe.json`, `anbima.json`) — o IPE não tem arquivo
+    padrão no app, e sem esta queda ele sairia vazio."""
     from apps.pages.precificador import calendario
-    return set(calendario._feriados_do_arquivo(nome))
+    datas = set(calendario._feriados_do_arquivo(nome))
+    if datas:
+        return datas
+    from apps.pages import data_store
+    from apps.pages.data_paths import data_path
+    fp = data_path(nome.strip().lower() + '.json')
+    if not data_store.isfile(fp):
+        return datas
+    return _datas_de(data_store.read(fp) or [])
 
 
-def feriados_do_arquivo(caminho):
-    if caminho.lower().endswith('.json'):
-        with open(caminho, encoding='utf-8') as fh:
-            itens = json.load(fh)
-        brutos = [i.get('date') if isinstance(i, dict) else i for i in itens]
-    else:
-        wb = load_workbook(caminho, read_only=True, data_only=True)
-        brutos = [linha[0] for linha in wb.active.iter_rows(values_only=True) if linha]
+def _datas_de(itens):
+    brutos = [i.get('date') if isinstance(i, dict) else i for i in itens]
     datas = set()
     for b in brutos:
         try:
@@ -122,6 +129,14 @@ def feriados_do_arquivo(caminho):
         if d:
             datas.add(d)
     return datas
+
+
+def feriados_do_arquivo(caminho):
+    if caminho.lower().endswith('.json'):
+        with open(caminho, encoding='utf-8') as fh:
+            return _datas_de(json.load(fh))
+    wb = load_workbook(caminho, read_only=True, data_only=True)
+    return _datas_de([linha[0] for linha in wb.active.iter_rows(values_only=True) if linha])
 
 
 def dias_uteis_do_mes(ano, mes, feriados):
