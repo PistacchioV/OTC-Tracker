@@ -6270,6 +6270,9 @@ número** — no teste, `101400000.00` — ou seja, a perna "estrangeira" carreg
 FepWeb esperar a perna estrangeira em dólar, o certo é `valorEstrangeiro = TotalNotional` puro. Está do
 jeito que foi pedido; confirmar com a mesa antes de mudar.
 
+> **Resolvido em §593** (29/09/2026): a mesa confirmou `valorEstrangeiro = TotalNotional` puro e
+> `valor = TotalNotional × Strike` (`_conf_fxo_legs`).
+
 ### Taxa de Conversão é cadastro, não constante — mapping `fxo-conv-rate`
 
 As duas colunas novas do Asian **não** foram hardcoded: o Anexo II define **uma taxa por moeda** e há moeda
@@ -9236,6 +9239,10 @@ existir (§203 registrava isso como limitação; deixa de ser).
 
 A moeda do XML passa a ser a **Moeda Base do grupo** (parâmetro `ccy` explícito), não a Quantity
 Currency, que pode ser o próprio BRL.
+
+> **§593** (29/09/2026): o documento MGT × cliente deixou o `_conf_fx_legs` — lá é sempre
+> `valorEstrangeiro = Notional`, `valor = Notional × Rate` (`_conf_mgt_fx_legs`). A tabela acima segue
+> valendo só para o FWD Start do BANCO.
 
 ### Verificação
 
@@ -25072,3 +25079,27 @@ a margem do ícone de ordenação) e palavra partida: zero, salvo `Quote Date
 D-n` quebrando no hífen. Guia do Usuário §4.3 reescrito para o funil; Guia e
 SOP regerados.
 
+---
+
+## §593 — XML do FepWeb: valor/valorEstrangeiro da Opção de Câmbio e do NDF MGT × cliente (2026-09-29)
+
+**Opção de Câmbio (FXO).** O ponto em aberto do §139 fechou pelo lado que ele mesmo apontava: a
+fórmula da mercadoria (`Σ notional × strike` nos dois campos) punha reais na perna estrangeira. A
+mesa definiu, pelas colunas do New Deals › FXO: **`valorEstrangeiro = Total Notional`** e **`valor =
+Total Notional × Strike`**. Entrou o `_conf_fxo_legs` (platform/confirmations.py, alias no
+`routes.py`), passado como `legs_fn` na chamada de FXO do `entrypoint`. Sem Strike, a perna fica de
+fora com aviso, como no termo de moeda. `check_conf_fxo_xml.py` (novo).
+
+**NDF de moeda do documento MGT × cliente (Vanilla e FWD Start de MGT).** Aqui a regra é
+**`valorEstrangeiro = Notional`** e **`valor = Notional × Rate`**, SEM olhar a Quantity Currency: é o
+`_conf_mgt_fx_legs`, com a taxa `Rate` e o `Strike` como plano B (o FWD Start de MGT grava o Strike, e
+o Rate fica zerado — o §563 pelo outro lado). **O FWD Start do BANCO NÃO mudou** (mesa: "fwd start é
+diferente"): continua no `_conf_fx_legs` do §204, que divide pela taxa quando o notional vem em BRL. Por
+isso são duas funções, e não uma regra no `_conf_fx_legs` compartilhado — a primeira versão desta
+mudança mexia nele e levava o FWD Start do Banco junto.
+
+O Vanilla do BANCO e o Other Publisher não geram XML de confirmação: a regra não tem onde valer neles.
+
+**Conferido:** `check_mgt_conf.py` prova o MGT com Quantity Currency BRL (valorEstrangeiro
+1000000.00, valor 5432100.00) e que o `entrypoint` passa `_conf_mgt_fx_legs` no MGT e `_conf_fx_legs`
+no FWD Start do Banco; `check_fwdstart_conf.py` segue provando a divisão do Banco.

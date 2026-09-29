@@ -1046,6 +1046,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   o FWD Start grava `Strike`, o Vanilla só `Rate`; lendo só o `Strike`, o XML da
   MGT saía zerado. E o vencimento do XML é lido antes de qualquer perna ser
   recusada.
+- **`valor`/`valorEstrangeiro` do XML têm TRÊS regras, uma por documento**
+  (§593, `legs_fn` do `_conf_ndf_xml`): **FXO** → `TotalNotional` e
+  `TotalNotional × Strike` (`_conf_fxo_legs`); **MGT × cliente** (Vanilla e FWD
+  Start de MGT) → `Notional` e `Notional × Rate`, sempre (`_conf_mgt_fx_legs`);
+  **FWD Start do BANCO** → o `_conf_fx_legs`, que DIVIDE pela taxa quando o
+  notional vem em BRL (mesa: "fwd start é diferente"). Não unifique: mexer no
+  `_conf_fx_legs` leva o Banco junto.
 - **O prêmio D0 das páginas de opção é uma FAIXA, não um Swal** (§565,
   `premium-d0.js`): contada da grade a cada draw, por qualquer caminho de
   entrada; o box scan também toca o sino.
