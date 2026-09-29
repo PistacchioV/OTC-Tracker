@@ -2836,5 +2836,22 @@
   "im-end-pending": "End process pendente",
   "cp-it-mail-title": "E-mail de Pending Action",
   "cp-it-mail-sub": "Diário às 19:00, 19:30 e 20:00 com todas as tarefas ainda em aberto e as operações pendentes por produto. Nada pendente, sem e-mail.",
-  "cp-it-mail-run": "Enviar e-mail agora"
+  "cp-it-mail-run": "Enviar e-mail agora",
+  "nav-pcd-dashboard": "Dashboard",
+  "pcd-kpi-total": "Confirmações pendentes",
+  "pcd-kpi-groups": "Grupos econômicos",
+  "pcd-bands": "Faixa de pendência",
+  "pcd-refresh": "Atualizar",
+  "pcd-export": "Exportar Excel",
+  "pcd-col-group": "Grupo Econômico",
+  "pcd-col-owner": "Owner",
+  "pcd-col-signature": "Tipo de Assinatura",
+  "pcd-col-total": "Total Geral",
+  "pcd-empty": "Nenhuma confirmação pendente na faixa escolhida.",
+  "pcd-source-live": "Leitura ao vivo do Pending Confirmation Main (base pending)",
+  "pcd-source-snapshot": "Foto de",
+  "pcd-load-failed": "Não foi possível carregar o dashboard",
+  "pcd-export-failed": "Falha no export",
+  "cp-dm-cgd-run": "CGD pendente",
+  "cp-r-dm-cgd-desc": "<strong>CGD pendente</strong> monta o mesmo relatório para os clientes com CGD pendente no Track Docs (Onboarding) — por grupo econômico, aging em dias úteis e a mesa com que cada CGD está — como um segundo rascunho para os mesmos destinatários."
 }

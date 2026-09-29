@@ -14840,6 +14840,7 @@ _schedule_on_start('manual-deals-ea', _f_mdea.start_scheduler)
 from apps.pages.features.conf_escalation import entrypoint as _f_confesc  # noqa: E402,F401
 _schedule_on_start('conf-escalation', _f_confesc.start_scheduler)
 from apps.pages.features.daily_metric import entrypoint as _f_daily_metric      # noqa: E402,F401
+from apps.pages.features.pc_dashboard import entrypoint as _f_pc_dashboard    # noqa: E402,F401
 from apps.pages.features.weekly_escalation import entrypoint as _f_weekly_esc   # noqa: E402,F401
 from apps.pages.features.recon_comitente import entrypoint as _f_recon_comitente  # noqa: E402,F401
 from apps.pages.features.recon_payrec import entrypoint as _f_recon_payrec        # noqa: E402,F401

@@ -183,6 +183,73 @@ check('   o assunto leva a data',
       'Daily Metric - Outstanding Confirmation Brazil OTC - 26/08/2026' in eml, True)
 check('   e avisa no sino', NOTIFS[-1], ('Daily Metric Draft', 'Control Panel'))
 
+print('\n== 5b. o relatorio de CGD PENDENTE (Track Docs), no mesmo card ==')
+# O Track Docs stubado: o load_all ja devolve o Aging refeito (int, dias
+# uteis) e o cadastro cgd-stage vazio deixa a etapa ser DERIVADA dos carimbos.
+from apps.pages import cgd_docs as CG                       # noqa: E402
+from apps.pages.features.daily_metric import domain as _DMD  # noqa: E402
+_load_orig, _stage_orig = CG.load_all, CG._stage_map
+CGD = [
+    # ACME: dois pendentes — um so com a Legal e a OTC (nada carimbado), outro
+    # ja com Taxonomy (pendencia passa ao CEM MO) e OTC carimbada.
+    {'Status': 'Em analise', 'Grupo Economico': 'GRUPO ACME', 'Razão Social': 'ACME SA', 'SPN': '100',
+     'Aging': 12, 'Data Solicitação': '10/08/2026', 'Signature Type': 'FepWeb'},
+    {'Status': 'Em analise', 'Grupo Economico': 'GRUPO ACME', 'Razão Social': 'ACME SA', 'SPN': '100',
+     'Aging': 95, 'Data Solicitação': '02/03/2026', 'Signature Type': 'Manual',
+     'Taxonomy': '01/04/2026 · A1', 'OTC - STAMP': '05/04/2026'},
+    # BETA sem grupo no Track Docs: cai no ECONOMIC GROUP do RefData.
+    {'Status': '', 'Grupo Economico': '', 'Razão Social': 'BETA LTD', 'SPN': '200',
+     'Aging': 40, 'Data Solicitação': '01/07/2026', 'Signature Type': 'Manual'},
+    # Sem data de solicitacao: conta no total, na coluna No date.
+    {'Status': '', 'Grupo Economico': 'SEM DATA', 'Razão Social': 'X', 'SPN': '',
+     'Aging': '', 'Data Solicitação': '', 'Signature Type': ''},
+    # Concluido e cancelado NAO sao pendentes.
+    {'Status': 'Active', 'Grupo Economico': 'FORA', 'Aging': 3, 'Data Solicitação': '01/08/2026'},
+    {'Status': 'Cancelado', 'Grupo Economico': 'FORA', 'Aging': 3, 'Data Solicitação': '01/08/2026'},
+]
+CG.load_all = lambda path=None: [dict(r) for r in CGD]
+CG._stage_map = lambda: {}
+try:
+    from apps.pages.features.daily_metric import queries as _DMQ  # noqa: E402
+    linhas = _DMQ.cgd_rows()
+    check('so os PENDENTES entram (Active e Cancelado ficam fora)', len(linhas), 4)
+    piv, tot, st = _DMQ.cgd_pivot(linhas)
+    check('   por grupo, do maior total; grupo vazio cai no RefData',
+          [(p['group'], p['total']) for p in piv],
+          [('GRUPO ACME', 2), ('GRUPO BETA', 1), ('SEM DATA', 1)])
+    check('   faixas em dias uteis (<30, 30-59, 60-89, >=90, sem data)',
+          (tot['b0'], tot['b1'], tot['b2'], tot['b3'], tot['nd'], tot['total']), (1, 1, 0, 1, 1, 4))
+    check('   as mesas de cada grupo, na ordem da esteira',
+          piv[0]['stages'], 'Legal, OTC, CEM MO')
+    check('   verde quando algum CGD do grupo assina por FepWeb/DocuSign',
+          [p['digital'] for p in piv], [True, False, False])
+    check('   banker do RefData pela SPN', piv[0]['banker'], 'Fulano')
+    check('   estatisticas: clientes e o mais velho', (st['clients'], st['oldest']), (3, 95))
+    check('   meses sem documento aparecem com zero',
+          [m['volume'] for m in _DMD.month_series(['2026-08', '2026-08', '2025-01'], '2026-08', n=3)],
+          [0, 0, 2])
+    c.post('/api/control-panel/daily-metric/recipients', json={'to': 'chefe@jpmorgan.com'})
+    r = c.post('/api/control-panel/daily-metric/cgd-run', json={'date': '2026-08-26'})
+    d = r.get_json()
+    check('o Run de CGD devolve o rascunho', (r.status_code, d.get('filename')),
+          (200, 'Daily_Metric_Pending_CGD_26082026.eml'))
+    eml = base64.b64decode(d['b64']).decode('utf-8', 'replace')
+    check('   rascunho editavel', 'X-Unsent: 1' in eml, True)
+    check('   assunto proprio com a data',
+          'Daily Metric - Pending CGD Brazil OTC - 26/08/2026' in eml, True)
+    import email as _email                                  # noqa: E402
+    html = ''
+    for part in _email.message_from_string(eml).walk():
+        if part.get_content_type() == 'text/html':
+            html = part.get_payload(decode=True).decode('utf-8')
+    check('   o corpo cita os clientes', all(g in html for g in ('GRUPO ACME', 'GRUPO BETA')), True)
+    check('   e nao cita o que nao esta pendente', 'FORA' in html, False)
+    check('   sem sessao e 401', anon.post('/api/control-panel/daily-metric/cgd-run').status_code, 401)
+    check('   a rota pertence ao card dailymetric',
+          R._CP_ENDPOINT_CARD.get('/api/control-panel/daily-metric/cgd-run'), 'dailymetric')
+finally:
+    CG.load_all, CG._stage_map = _load_orig, _stage_orig
+
 print('\n== 6. sem destinatario nenhum e 400 ==')
 c.post('/api/control-panel/daily-metric/recipients', json={'to': '', 'cc': '', 'bcc': ''})
 r = c.post('/api/control-panel/daily-metric/run')

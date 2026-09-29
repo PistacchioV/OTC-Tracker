@@ -25161,3 +25161,48 @@ as que sobram), também no empate; o log diz quais saíram e a quantidade nova, 
 linha sem nenhuma data útil fica vazia. A trava de "calendário sem feriado"
 passou a cobrir o ano de TODA data da linha, não só o da janela: é por ele que
 se decide o que sai.
+
+## §596 — Pending Confirmation › Dashboard e o Daily Metric de CGD pendente (2026-09-29)
+
+**Dashboard.** A mesa mandou a tabela dinâmica que monta à mão no Tableau (Economic
+Group · Owner · Signature Type × trimestre da Trade Date / Pending Status, com o
+Grand Total) e pediu a mesma coisa no app, filtrável pela faixa de pendência do
+Main e com Export. Virou `/dashboard-pending-confirmation` (vertical
+`features/pc_dashboard`, item Dashboard no menu do Pending Confirmation).
+
+- A **faixa** é a coluna Status do Main, que o app grava pelo aging
+  (`< 10 dias de pendência` … `>= 90 dias de pendência`). A lista sai do
+  `_pc_aging_band_label` sondado com um dia de cada faixa, nunca de uma cópia dos
+  rótulos: mudou lá, muda aqui. O chip mostra a contagem da fila INTEIRA, para
+  dizer o que ele traz antes de ser ligado.
+- A **fonte** é a do Daily Metric (`_pc_latest_snapshot_rows`: o banco `pending`
+  ao vivo, sem o que já conta como resolvido). Ler o banco por outro caminho faria
+  a tela e o e-mail cobrarem números diferentes no mesmo dia.
+- A grade é **DataTable** (funil de Excel, centralizada) com cabeçalho de dois
+  níveis; trocar de faixa RECONSTRÓI a tabela, porque os trimestres e os status
+  mudam. O Grand Total do rodapé soma o que a grade mostra, funil incluído.
+- **O Export é o Excel da tela, montado no navegador** (SheetJS, local, carregado
+  no clique como no /mapping): o Buttons exporta só a última linha de um cabeçalho
+  composto, e o trimestre sumiria. Grupo e owner vão como TEXTO (§477), as faixas
+  escolhidas numa aba `Filters`, nome `Pending Confirmation Dashboard AAAAMMDD`.
+- A ordem dos status dentro do trimestre é alfabética **sem caixa** — é a da
+  imagem da mesa (Original antes de OTC).
+
+**Daily Metric de CGD.** "E-mail com a mesma estrutura do daily metric citando os
+clientes que possuem CGD pendente", fonte Track Docs, no mesmo card. É o segundo
+botão do card (**Pending CGD**), mesma lista de destinatários, mesmo rascunho
+`.eml` (`/api/control-panel/daily-metric/cgd-run`, no `_CP_ENDPOINT_CARD` como
+`dailymetric`). Pendente é o `cgd_docs.outcome == 'pending'` — a MESMA regra do
+card Pending do Track Docs. Estrutura: o número de CGDs e clientes com barras
+pelo mês da solicitação (12 meses; o que é mais antigo ou sem data é contado à
+parte, para o total fechar), o aging médio com barras por mesa (Legal/OTC/CEM MO
+— um CGD pode dever a duas, então as barras não somam o total), e a tabela por
+grupo econômico (o `Grupo Economico` do Track Docs; vazio cai no RefData pela
+SPN) com faixas em dias ÚTEIS (<30, 30-59, 60-89, ≥90 e *No date* só quando
+existe), as mesas, o banker e Operations. Verde quando algum CGD do grupo assina
+por FepWeb/DocuSign. `check_daily_metric_api.py` §5b e `check_pc_dashboard.py`.
+
+De passagem: o `json.load` do `--feriados` no `fix_asian_dates_xlsx.py` (§537)
+reprovava o `check_duck_writers` desde que nasceu; virou `data_store.read`, que
+lê o disco fora do DATA_DIR.
+
