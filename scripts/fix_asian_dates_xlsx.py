@@ -46,7 +46,6 @@ Antes de gravar, o original é copiado ao lado como `<nome> - original.xlsx`
 original que se lê.
 """
 import argparse
-import json
 import os
 import re
 import shutil
@@ -134,8 +133,10 @@ def _datas_de(itens):
 
 def feriados_do_arquivo(caminho):
     if caminho.lower().endswith('.json'):
-        with open(caminho, encoding='utf-8') as fh:
-            return _datas_de(json.load(fh))
+        # Pelo armazém: fora do DATA_DIR ele lê o disco; dentro, o banco — um
+        # json.load num caminho do DATA_DIR devolveria a seed do repositório.
+        from apps.pages import data_store
+        return _datas_de(data_store.read(caminho) or [])
     wb = load_workbook(caminho, read_only=True, data_only=True)
     return _datas_de([linha[0] for linha in wb.active.iter_rows(values_only=True) if linha])
 
