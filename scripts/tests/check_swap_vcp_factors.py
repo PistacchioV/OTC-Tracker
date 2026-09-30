@@ -115,6 +115,29 @@ _cash = domain.calcular(dict(_bullet, pct='0'))
 check('   cashflow no mesmo tipo nao amortiza (a regra nao vaza)',
       (_cash['amortizado'], round(_cash['fator_p'], 8)), (0.0, 2.36993189))
 
+# EQUITY (EDG): o OTM traz so a PERFORMANCE, sem o principal. O bullet de
+# equity no vencimento (22I01597022, mesa 30/09/2026: VBR 2.068.350,00, OTM
+# 2.297.174,29, S&P 3.640,47 -> 7.683,69) tem fator 2,1106 -- o do Swap
+# Calculator. Descontar os 100% da curva dava 1,1106, e a prova real somava o
+# mesmo principal de volta, entao a Diferenca saia zerada e ninguem via.
+_eq = {'vbr': 2068350.00, 'original': 2068350.00, 'tipo': 'Na Data de Vencimento', 'pct': '0',
+       'bullet_vencimento': True, 'curva_p': 2297174.29, 'curva_c': 0.0,
+       'b3_juros_p': '', 'b3_juros_c': '', 'b3_fator_p': '', 'b3_fator_c': '',
+       'idx_p': 'VCP', 'idx_c': 'PREFIXADO'}
+_eq_errado = domain.calcular(_eq)
+_eq_certo = domain.calcular(dict(_eq, principal_fora_da_curva=True))
+check('EDG bullet: sem a marca, o principal sai da curva (o defeito)',
+      round(_eq_errado['fator_p'], 8), 1.11063132)
+check('   com a marca, o fator e o do Swap Calculator (2,1106)',
+      round(_eq_certo['fator_p'], 8), round(2297174.29 / 2068350.00 + 1, 8))
+check('   o amortizado segue na tela (100%), so nao esta na curva',
+      (round(_eq_certo['amortizado'], 2), _eq_certo['amort_na_curva']), (2068350.00, 0.0))
+_eq_liq = domain.liquidacao_vcp(True, False, _eq_certo['fator_p'], None, _eq_certo['vbr'],
+                                _eq_certo['juros_p'], _eq_certo['juros_c'], None,
+                                _eq_certo['diff_c'], _eq_certo['amort_na_curva'])
+check('   e a prova real volta ao caixa do OTM (sem somar principal)',
+      abs(_eq_liq - 2297174.29) < 1.0, True)
+
 # O de-para do Tipo de Contrato da posicao (02 = bullet, 01 = cashflow), que e
 # o mesmo codigo que o Swap Characteristics traduz na coluna Tipo de Contrato.
 check('tipo de contrato: o codigo e o texto',
