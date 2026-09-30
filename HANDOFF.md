@@ -25475,3 +25475,31 @@ calendário sem o `.json`. De quebra, deixou de oferecer o que não é agenda
 (`CounterpartyDetails`, `SwapIndex`, `mapping_swap-hyb`…). **Regra:** nunca
 `listdir`/`walk` da raiz de dados num request — é abrir o armazém inteiro.
 `check_holiday_calendars.py` §7 prende.
+
+## §608 — A busca do New Deals abria VAZIA quando o banco falhava (2026-09-30)
+
+Commodities Options na prod, logo depois do §607: a tabela carregou, a operação
+apareceu como `New`, uma gravação mudou o carimbo do dia — e dali em diante a
+busca respondia `success: true` sem nenhuma operação, sem erro no console e sem
+uma linha no log. O `_day_json` (`platform/json_cache.py`) engolia QUALQUER
+exceção da leitura (`except Exception: return []`): enquanto o dia estava no
+memo a tela funcionava; com o carimbo novo ele ia ao banco, e ocupado sem cópia,
+ilegível ou sem canal viravam "dia vazio". A listagem pelo manifest
+(`data_store._entries_under`) fazia o mesmo com o banco ruim. Era a regra do §4
+("ocupado nunca é 'não existe'") quebrada no leitor mais usado do app.
+
+Agora: toda falha do `_day_json` vai para o log (`[daycache]`, uma por arquivo
+por minuto) e serve a ÚLTIMA cópia em memória do arquivo quando há (de um
+carimbo anterior; não grava o memo). Sem cópia, os 30+ chamadores de sempre
+seguem com `[]`; as quatro buscas do New Deals (`opt-commodities`, `opt-fxo`,
+`ndf-commodities` e a genérica) pedem `strict=True` na listagem E na leitura, e
+a falha SOBE — 503 `database_busy`/`database_unreadable` ou 500 com o motivo — e
+as oito telas mostram um aviso traduzido (`nd-search-*`) em vez da tabela vazia.
+`FileNotFoundError` (dia que sumiu entre a listagem e a leitura) continua sendo
+ausência. O próximo relato da instância vai dizer, no log, QUAL banco e por quê.
+De quebra: as chaves `nd-col-b3-id`/`nd-col-ativo-subjacente`, que faltavam.
+
+Visto no mesmo log e NÃO mexido: o `GET /api/file-interpreter/page-spec` lê
+TODOS os templates do File Interpreter (um banco cada, ~40) a cada abertura das
+páginas de New Deals; frio, no share, são minutos, e cada F5 empilha outro sem
+single-flight (três presos de 66 s a 301 s). `check_nd_search_strict.py`.

@@ -633,12 +633,17 @@ def _dbs_under(rel_dir):
     return sorted(set(out))
 
 
-def _entries_under(rel_dir):
-    """`{rel: (mtime, fsize)}` de todos os caminhos sob `rel_dir`."""
+def _entries_under(rel_dir, strict=False):
+    """`{rel: (mtime, fsize)}` de todos os caminhos sob `rel_dir`.
+
+    `strict`: banco OCUPADO sem manifest conhecido, ou ILEGÍVEL, levanta em vez
+    de sumir da listagem — para quem MOSTRA a lista como "tudo o que há" (a
+    busca das telas de New Deals): lido como vazio, o dia inteiro some da
+    tabela sem erro nenhum."""
     prefixo = (rel_dir + '/') if rel_dir else ''
     out = {}
     for db in _dbs_under(rel_dir):
-        for rel, (mt, fs, _tg) in _manifest(db).items():
+        for rel, (mt, fs, _tg) in _manifest(db, strict=strict).items():
             if rel.startswith(prefixo):
                 out[rel] = (mt, fs)
     return out
@@ -1136,17 +1141,17 @@ def walk(root):
         fila[0:0] = [(atual + '/' + f) if atual else f for f in subs]
 
 
-def day_files(raiz, sufixo='', desde=None, ate=None):
+def day_files(raiz, sufixo='', desde=None, ate=None, strict=False):
     """`(caminho, nome, mtime, tamanho)` dos arquivos-dia de uma árvore, pelo
     banco, na ordem do caminho — o contrato do `_day_files` do daycache.
     `desde`/`ate` podam pela DATA do caminho (`dia_do_rel`); caminho sem
-    data fica de fora quando há poda."""
+    data fica de fora quando há poda. `strict`: ver `_entries_under`."""
     rel_root = _managed_dir(raiz)
     if rel_root is None:
         yield from _day_files_disk(raiz, sufixo, desde, ate)
         return
     base = data_root()
-    entradas = _entries_under(rel_root)
+    entradas = _entries_under(rel_root, strict=strict)
     for r in sorted(entradas):
         nome = r.rsplit('/', 1)[-1]
         if sufixo and not nome.endswith(sufixo):

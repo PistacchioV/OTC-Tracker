@@ -2869,5 +2869,10 @@
   "cp-dm-cgd-run": "CGD pendiente",
   "cp-r-dm-cgd-desc": "<strong>CGD pendiente</strong> arma el mismo informe para los clientes con CGD pendiente en el Track Docs (Onboarding) — por grupo económico, aging en días hábiles y la mesa con la que está cada CGD — como un segundo borrador para los mismos destinatarios.",
   "pcd-updated": "Actualizado",
-  "pcd-update-failed": "Falló la actualización — mostrando"
+  "pcd-update-failed": "Falló la actualización — mostrando",
+  "nd-col-b3-id": "B3 ID",
+  "nd-col-ativo-subjacente": "Activo Subyacente",
+  "nd-search-failed-title": "Operaciones no cargadas",
+  "nd-search-database_busy": "La base de datos de esta página está ocupada (otra instancia está grabando). No se perdió nada — intente de nuevo en un minuto.",
+  "nd-search-database_unreadable": "Un archivo de base de datos de esta página no se pudo abrir (no es un bloqueo). Los datos no se perdieron — el log de la aplicación indica cuál ([db-unreadable]); abra un ticket."
 }

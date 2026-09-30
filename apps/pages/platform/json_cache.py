@@ -243,15 +243,17 @@ def _daycache_dir_ok(nome, pai, desde, ate):
     return True
 
 
-def _day_files(raiz, sufixo='', desde=None, ate=None):
+def _day_files(raiz, sufixo='', desde=None, ate=None, strict=False):
     """Gera `(caminho, nome, mtime, tamanho)` dos arquivos-dia da árvore —
     pelo BANCO (`data_store.day_files`): o manifest de cada banco da árvore
     guarda caminho, mtime e tamanho, e nenhuma pasta é listada.
 
     `desde`/`ate` são `date`/`datetime` e podam pela data do CAMINHO; o
-    chamador continua filtrando pela data do nome, que é a que vale."""
+    chamador continua filtrando pela data do nome, que é a que vale.
+    `strict`: banco ocupado sem manifest ou ilegível LEVANTA (ver
+    `data_store._entries_under`)."""
     from apps.pages import data_store
-    yield from data_store.day_files(raiz, sufixo=sufixo, desde=desde, ate=ate)
+    yield from data_store.day_files(raiz, sufixo=sufixo, desde=desde, ate=ate, strict=strict)
 
 
 def _day_prefetch(dias):
@@ -312,7 +314,26 @@ def _day_prefetch(dias):
     return len(prontos)
 
 
-def _day_json(fp, mtime, size, mutavel=False):
+# Um aviso por arquivo por minuto: a mesma leitura falha em todo request
+# enquanto o banco não voltar, e o log viraria só isso.
+_DAYJSON_AVISO_JANELA = 60.0
+_dayjson_aviso = {}
+
+
+def _dayjson_avisa(fp, exc, servindo_antiga):
+    import time
+    agora = time.monotonic()
+    with _daycache_lock:
+        if agora < _dayjson_aviso.get(fp, 0.0):
+            return
+        _dayjson_aviso[fp] = agora + _DAYJSON_AVISO_JANELA
+    log.warning('[daycache] leitura de %s falhou (%s: %s) — %s', fp, type(exc).__name__,
+                str(exc).split('\n', 1)[0][:300],
+                'servindo a última cópia em memória' if servindo_antiga
+                else 'sem cópia em memória')
+
+
+def _day_json(fp, mtime, size, mutavel=False, strict=False):
     """O conteúdo de um arquivo-dia como LISTA, memoizado por (mtime, tamanho).
 
     `mutavel=True` devolve uma cópia rasa dos registros. É para quem ALTERA os
@@ -321,9 +342,14 @@ def _day_json(fp, mtime, size, mutavel=False):
     contra a dezena de milissegundos de uma leitura no share, então ela é barata
     exatamente onde importa.
 
-    Arquivo ilegível devolve lista vazia e NÃO entra no memo: um JSON quebrado
-    costuma ser um arquivo sendo escrito naquele instante, e memoizar o vazio
-    esconderia o dia até o processo reiniciar.
+    Leitura que FALHA (banco ocupado, ilegível, sem canal) não entra no memo e
+    é LOGADA: serve a última cópia em memória do arquivo (de um carimbo
+    anterior) quando há; sem ela, lista vazia — ou, com `strict=True`, a
+    exceção sobe (503 pelo tratador global, 500 com o motivo nas outras).
+    `strict` é de quem MOSTRA o dia como "tudo o que há": a busca do New
+    Deals engolia a falha e a tabela abria vazia, com `success: true`, logo
+    depois de uma gravação ter mudado o carimbo do dia (30/09/2026). Antes
+    disto a falha não deixava rastro nenhum no log.
     """
     with _daycache_lock:
         item = _daycache_memo.get(fp)
@@ -339,7 +365,15 @@ def _day_json(fp, mtime, size, mutavel=False):
         try:
             from apps.pages import data_store
             dados = data_store.read(fp)
-        except Exception:                                   # noqa: BLE001
+        except FileNotFoundError:
+            return []           # sumiu entre a listagem e a leitura: ausência, não falha
+        except Exception as exc:                            # noqa: BLE001
+            _dayjson_avisa(fp, exc, bool(item))
+            if item:
+                dados = item[2]
+                return [dict(d) if isinstance(d, dict) else d for d in dados] if mutavel else dados
+            if strict:
+                raise
             return []
         if not isinstance(dados, list):
             dados = [dados] if isinstance(dados, dict) else []
