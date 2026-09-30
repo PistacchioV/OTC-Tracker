@@ -6868,7 +6868,8 @@ def _swaphyb_collect(ref):
     """Read the cached JSON and collapse per-leg rows into one row per trade
     (Kapital ID). Owner curve = Σ positive Amounts, Counterparty curve = Σ negative
     Amounts (kept negative), BRL Net Amount = Owner + Counterparty (net cashflow).
-    Cetip ID from the mapping."""
+    Cetip ID from the mapping. Counterparty Name from the SPN (`_otm_cpty_name`:
+    `le-spn`, then the Reference Data), the file's own text as the fallback."""
     jp = _ds_display_json_path(ref, _SWAPHYB_JSON)
     rows_out = []
     if _store.isfile(jp):
@@ -6899,7 +6900,12 @@ def _swaphyb_collect(ref):
                 r.get('Trade Date', ''), r.get('Settlement Date', ''),
                 r.get('Stream Notional', ''), r.get('Stream Notional Currency', ''),
                 r.get('Coupon Rate', ''), r.get('Currency', ''), r.get('DCF', ''),
-                r.get('Counterparty SPN', ''), r.get('Counterparty Name', ''),
+                r.get('Counterparty SPN', ''),
+                # O nome sai da SPN (mesa, 30/09/2026): `le-spn` para entidade
+                # nossa, depois o Reference Data — a MESMA regra do OTM
+                # (`_otm_cpty_name`). O texto do CSV é o plano B: escrito pelo
+                # sistema do banco, divergia do cadastro em pontuação e sufixo.
+                _otm_cpty_name(r.get('Counterparty SPN', '')) or r.get('Counterparty Name', ''),
                 '{:,.2f}'.format(owner), '{:,.2f}'.format(cpty), '{:,.2f}'.format(net),
             ])
     # Sort by Kapital ID A→Z (accent-insensitive); blank goes last.
