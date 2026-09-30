@@ -21,6 +21,7 @@ import logging
 import traceback
 import os
 import re
+import threading
 
 from apps.pages.data_paths import data_dir
 from apps.pages import data_store as _store  # noqa: E402
@@ -177,6 +178,63 @@ def _fi_tpl_cached(key):
     return data
 
 
+# ── Todos os templates, uma leitura por vez ─────────────────────────────────
+#  O preview das páginas de New Deals (`/api/file-interpreter/page-spec`) e a
+#  escolha de variante (`_fi_variant_key`) varrem TODOS os templates — um
+#  banco cada no armazém (~40). Quente, cada um custa só o `stat` do `.db`;
+#  FRIO, no share, uma abertura de 4-10 s cada: minutos. E cada aba/F5 que
+#  chegava durante a leitura fria começava OUTRA, disputando as mesmas travas
+#  (30/09/2026: três `page-spec` presos de 66 s a 301 s, 70+ aberturas cada,
+#  cada um segurando uma thread do waitress). SINGLE-FLIGHT por pasta: quem
+#  chega com uma leitura em voo espera por ela e leva o MESMO resultado; depois
+#  dela, o caminho quente de sempre — sem TTL, então template editado (aqui ou
+#  na instância vizinha) vale no request seguinte, como antes.
+
+_fi_all_lock = threading.Lock()
+_fi_all_voo = {}     # pasta -> {'ev': Event, 'out': [...] | 'exc': Exception}
+
+
+def _fi_all_templates_ler(pasta):
+    try:
+        names = sorted(_store.listdir(pasta))
+    except OSError:
+        return []
+    out = []
+    for fn in names:
+        if not fn.endswith('.json'):
+            continue
+        t = _fi_tpl_cached(fn[:-5])
+        if t:
+            out.append(t)
+    return out
+
+
+def _fi_all_templates():
+    """Todos os templates cadastrados, na ordem do nome do arquivo."""
+    from apps.pages import routes
+    pasta = routes._FILE_INTERPRETER_DIR
+    with _fi_all_lock:
+        voo = _fi_all_voo.get(pasta)
+        dono = voo is None
+        if dono:
+            voo = _fi_all_voo[pasta] = {'ev': threading.Event()}
+    if not dono:
+        voo['ev'].wait()
+        if 'exc' in voo:
+            raise voo['exc']
+        return voo['out']
+    try:
+        voo['out'] = _fi_all_templates_ler(pasta)
+        return voo['out']
+    except BaseException as exc:                            # noqa: BLE001
+        voo['exc'] = exc
+        raise
+    finally:
+        with _fi_all_lock:
+            _fi_all_voo.pop(pasta, None)
+        voo['ev'].set()
+
+
 # ── Variantes por par de pernas (LE pair) ───────────────────────────────────
 #  Um template pode ser VARIANTE de outro: `base_key` aponta o template-mãe e
 #  `le_pair` diz para qual par de pernas ele vale ('MGT x JPM'). O gerador
@@ -207,15 +265,8 @@ def _fi_variant_key(base_key, page_url=None, le_pair=None):
     if not want:
         return base_key
     wildcard = None
-    try:
-        names = sorted(_store.listdir(routes._FILE_INTERPRETER_DIR))
-    except OSError:
-        return base_key
-    for fn in names:
-        if not fn.endswith('.json'):
-            continue
-        t = _fi_tpl_cached(fn[:-5])
-        if not t or str(t.get('base_key', '') or '') != base_key:
+    for t in _fi_all_templates():
+        if str(t.get('base_key', '') or '') != base_key:
             continue
         if _fi_le_pair_norm(t.get('le_pair')) != want:
             continue
