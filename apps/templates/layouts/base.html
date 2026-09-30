@@ -175,6 +175,9 @@
               depois dos scripts da página, que é onde o jQuery e o DataTables
               são carregados. Página sem DataTable: não faz nada. #}
            <script src="{{ config.ASSETS_ROOT }}/js/excel-filter.js?v={{ asset_v('js/excel-filter.js') }}"></script>
+           {# Seleção de célula + Ctrl+C em TODA DataTable (table-std.js, modo
+              automático) — mesma posição e mesmo motivo do filtro acima. #}
+           <script src="{{ config.ASSETS_ROOT }}/js/table-std.js?v={{ asset_v('js/table-std.js') }}"></script>
    
        {% endblock javascript %}
    

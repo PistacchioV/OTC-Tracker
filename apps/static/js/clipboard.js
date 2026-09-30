@@ -103,14 +103,19 @@
         var dt = window.jQuery && window.jQuery.fn && window.jQuery.fn.dataTable;
         if (!dt || !dt.tables) return '';
         var out = [];
-        var tables;
+        // Uma API POR TABELA, pelo nó: no DataTables 2 o `tables({api:true})`
+        // não tem `.every()` — o handler estourava um TypeError ali e o Ctrl+C
+        // das páginas com a extensão `select` e sem handler próprio (Intrag,
+        // Swap Bullet/Cashflow, recompras) não copiava nada (mesa, 30/09/2026).
+        var nodes;
         try {
-            tables = dt.tables({ api: true });
+            nodes = dt.tables();
         } catch (e) {
             return '';
         }
-        tables.every(function () {
-            var api = this;
+        Array.prototype.forEach.call(nodes || [], function (node) {
+            var api;
+            try { api = window.jQuery(node).DataTable(); } catch (e) { return; }
             var cells;
             try {
                 cells = api.cells({ selected: true });
@@ -149,7 +154,6 @@
                     return true;
                 });
             }
-            return true;
         });
         return out.join('\n');
     }
