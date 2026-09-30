@@ -102,6 +102,7 @@ def api_onboarding_docs_save():
         except Exception as exc:                              # pragma: no cover
             return _falhou(exc, 'falha na gravação em massa')
     rid = str(payload.get('id') or '').strip()
+    novo = not rid
     try:
         rid = (commands.save_one(rid, valores, gen=_gen(payload)) if rid
                else commands.create(valores))
@@ -109,7 +110,32 @@ def api_onboarding_docs_save():
         return _recusa_gen(exc)
     except Exception as exc:                                  # pragma: no cover
         return _falhou(exc, 'falha ao gravar a linha')
+    if novo:
+        _avisar_novo_request(valores)
     return jsonify({'success': True, 'id': rid})
+
+
+# O sino do New Request (#OTC-0045): o cliente entrou na lista para o CGD (ou
+# outro documento) ser emitido, e quem emite fica sabendo sem abrir a tela. Vai
+# para as mesas das etapas que têm PAPEL no app — OTC (BO) e CEM MO (MO); o
+# Legal não é papel de usuário. MASTER recebe tudo, como sempre.
+NOTIF_PAGE = 'Onboarding'
+NOTIF_ROLES = 'BO,MO'
+
+
+def _avisar_novo_request(valores):
+    from apps.pages import cgd_docs, routes
+    try:
+        doc = str(valores.get(cgd_docs.DOC_TYPE_COLUMN) or '').strip()
+        le = str(valores.get(cgd_docs.LEGAL_ENTITY_COLUMN) or '').strip()
+        nome = str(valores.get('Grupo Economico') or '').strip() or \
+            str(valores.get('Razão Social') or '').split(';')[0].strip()
+        detalhe = ' · '.join(x for x in (doc, nome.upper(), le) if x)
+        routes._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                                    'New Request', NOTIF_PAGE, detalhe, target_role=NOTIF_ROLES)
+    except Exception:                                         # noqa: BLE001
+        # o sino é melhor esforço: a linha já foi gravada
+        routes.log.warning('[onboarding] aviso do New Request falhou', exc_info=True)
 
 
 @blueprint.route('/api/onboarding/docs/stamp', methods=['POST'])
