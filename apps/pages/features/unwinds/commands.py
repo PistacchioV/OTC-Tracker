@@ -635,7 +635,6 @@ def termo_conf(ref, acr, moeda, linhas, sid=''):
     if not cgd_txt:
         avisos.append('CGD não cadastrado no Reference Data — preencha a data do Contrato '
                       'no painel.')
-    hoje = _hoje()
     conf = {
         'ref_date':     ref.strftime('%Y-%m-%d'),
         'acronym':      acr or queries._acr_da_linha(first),
@@ -647,9 +646,10 @@ def termo_conf(ref, acr, moeda, linhas, sid=''):
         'parteb_nome':  str(first.get('Counterparty') or '').strip(),
         'parteb_cnpj':  _R()._conf_fmt_cnpj(first.get('TaxID')),
         'data_neg':     _R()._conf_fmt_date(ref),
-        # A data do Termo é a da ASSINATURA, que é hoje — a recompra se resolve
-        # no dia. A data da operação original está no Anexo I, pelo contrato.
-        'data_extenso': _R()._conf_date_extenso(hoje),
+        # A data do Termo é a da OPERAÇÃO — a recompra (`ref`, a mesma do
+        # `data_neg`) —, nunca a do dia em que o documento é gerado (mesa,
+        # 30/09/2026): gerado em D+n, ele diria uma data em que nada aconteceu.
+        'data_extenso': _R()._conf_date_extenso(ref),
         'rows':         rows,
         'warnings':     avisos,
     }
