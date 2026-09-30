@@ -690,6 +690,16 @@ REQUEST_FORM = (
 APPENDIX_EI_TYPE = 'Transactional'
 APPENDIX_EI_SUBTYPE = 'CGD TEMPLATE'
 
+
+def appendix_subtypes():
+    """`{Doc Type: prefixo do anexo no Electronic Inventory}`.
+
+    O prefixo sai do DOCUMENTO pedido (#OTC-0046): era o `CGD TEMPLATE` fixo,
+    e um pedido de CSA gravava o anexo como CGD — na pasta da contraparte os
+    dois papéis ficavam com o mesmo nome e ninguém sabia qual era qual. A
+    convenção `<TIPO> TEMPLATE` é a do CGD, que continua igual."""
+    return {t: '{} TEMPLATE'.format(t.upper()) for t in DOC_TYPES}
+
 # Os obrigatórios do formulário QUE VIRAM COLUNA, na ordem dele. Derivado do
 # `REQUEST_FORM` e não escrito à mão: duas listas divergiriam no dia em que um
 # campo deixasse de ser obrigatório, e a validação do Save continuaria cobrando
