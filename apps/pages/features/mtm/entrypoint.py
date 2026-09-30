@@ -11,6 +11,7 @@ from apps.pages.features.mtm import commands, domain, queries
 from apps.pages.features.mtm.infra import mail, mappers, persistence
 from apps.pages import data_store as _store  # noqa: E402
 from apps.pages.platform import authz as _authz
+from apps.pages.platform import task_runs
 
 
 def _R():
@@ -489,6 +490,8 @@ def api_mtm_end_process():
     except Exception:
         _R().log.error('[mtm] end-process e-mail prep failed:\n%s', traceback.format_exc())
 
+    task_runs.record('swap-mtm', session.get('user_sid', ''), session.get('user_name', ''), ymd,
+                     event='end')
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'MTM Sent', 'MtM',
                          'End Process · {} check row(s)'.format(len(checks)) + _R()._nd_token(ymd))
@@ -545,6 +548,8 @@ def api_mtm_recon():
     if blob is not None:
         _sp, src_err = persistence._mtm_store_source(ymd, f.filename, blob)
 
+    task_runs.record('swap-mtm', session.get('user_sid', ''), session.get('user_name', ''), ymd,
+                     summary={'open': summary['check_rows']})
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'MTM Mapped', 'MtM',
                          'Recon · {} ok, {} check'.format(summary['success_rows'], summary['check_rows']) + _R()._nd_token(ymd))

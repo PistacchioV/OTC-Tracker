@@ -2874,5 +2874,10 @@
   "nd-col-ativo-subjacente": "Activo Subyacente",
   "nd-search-failed-title": "Operaciones no cargadas",
   "nd-search-database_busy": "La base de datos de esta página está ocupada (otra instancia está grabando). No se perdió nada — intente de nuevo en un minuto.",
-  "nd-search-database_unreadable": "Un archivo de base de datos de esta página no se pudo abrir (no es un bloqueo). Los datos no se perdieron — el log de la aplicación indica cuál ([db-unreadable]); abra un ticket."
+  "nd-search-database_unreadable": "Un archivo de base de datos de esta página no se pudo abrir (no es un bloqueo). Los datos no se perdieron — el log de la aplicación indica cuál ([db-unreadable]); abra un ticket.",
+  "im-task-swap-accrual": "Swap Accrual",
+  "im-task-swap-mtm": "Swap MtM",
+  "im-ended-on": "End process el",
+  "im-month-last": "último día hábil del mes",
+  "im-month-first": "hasta el 4º día hábil del mes"
 }

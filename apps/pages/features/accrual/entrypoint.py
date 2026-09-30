@@ -11,6 +11,7 @@ from apps.pages.features.accrual import commands, domain, queries
 from apps.pages.features.accrual.infra import mappers, persistence
 from apps.pages import data_store as _store  # noqa: E402
 from apps.pages.platform import authz as _authz
+from apps.pages.platform import task_runs
 
 
 def _R():
@@ -473,6 +474,8 @@ def api_accrual_recon():
     if blob is not None:
         _sp, src_err = persistence._accrual_store_source(ymd, f.filename, blob)
 
+    task_runs.record('swap-accrual', session.get('user_sid', ''), session.get('user_name', ''), ymd,
+                     summary={'open': summary['check_rows']})
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Accrual Mapped', 'Accrual',
                          'Recon · {} ok, {} check'.format(summary['success_rows'], summary['check_rows']) + _R()._nd_token(ymd))
@@ -540,6 +543,8 @@ def api_accrual_end_process():
     except Exception:
         _R().log.error('[accrual] end-process e-mail prep failed:\n%s', traceback.format_exc())
 
+    task_runs.record('swap-accrual', session.get('user_sid', ''), session.get('user_name', ''), ymd,
+                     event='end')
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Accrual Sent', 'Accrual',
                          'End Process · {} check row(s)'.format(len(checks)) + _R()._nd_token(ymd))

@@ -2874,5 +2874,10 @@
   "nd-col-ativo-subjacente": "Underlying Asset",
   "nd-search-failed-title": "Operations not loaded",
   "nd-search-database_busy": "The database of this page is busy (another instance is writing). Nothing was lost — try again in a minute.",
-  "nd-search-database_unreadable": "A database file of this page could not be opened (it is not a lock). The data is not gone — the application log says which file ([db-unreadable]); open a ticket."
+  "nd-search-database_unreadable": "A database file of this page could not be opened (it is not a lock). The data is not gone — the application log says which file ([db-unreadable]); open a ticket.",
+  "im-task-swap-accrual": "Swap Accrual",
+  "im-task-swap-mtm": "Swap MtM",
+  "im-ended-on": "End process on",
+  "im-month-last": "last business day of the month",
+  "im-month-first": "first 4 business days of the month"
 }
