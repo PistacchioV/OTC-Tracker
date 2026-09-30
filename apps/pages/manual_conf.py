@@ -183,7 +183,7 @@ COLUMN_LABELS = {
     'Data de envio validação Registro': 'Registration Validation Sent',
     'Data validação Registro': 'Registration Validated',
     'Data EA enviado p/ cliente': 'EA Sent to Client',
-    'Data Callback': 'Callback Date',
+    'Data Callback': 'EA Response Date',
     'Data envio validação OTC': 'OTC Validation Sent',
     'Conferido OTC': 'Validated by OTC',
     # Os três carimbos aparecem com o rótulo curto, encostados no VALIDADO
