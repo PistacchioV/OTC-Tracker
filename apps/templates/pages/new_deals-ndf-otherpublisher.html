@@ -3331,6 +3331,16 @@ $(document).ready(function() {
     }
 
     function refreshAllMissingBadges() {
+
+        // O drawCallback da PRIMEIRA pintura roda DENTRO do `DataTable({...})`,
+
+        // antes de `table` ser atribuída: com o Subjacente já carregado, o
+
+        // `table.rows` estourava ali e derrubava o resto da inicialização da
+
+        // página (toolbar pela metade, linha de filtro sem remover).
+
+        if (typeof table === 'undefined' || !table || typeof table.rows !== 'function') return;
         if (_ASSET_NDF.length === 0) return;
         // Pass 1: update DataTables filter cache for EVERY row (visible + off-page).
         // cell().data() rebuilds the internal _aFilterData so column search works across all pages.

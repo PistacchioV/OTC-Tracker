@@ -46,7 +46,18 @@ def api_file_interpreter_page_spec():
     # Leitura de TODOS os templates com single-flight (§609): a aba que abre
     # durante uma leitura fria espera por ela em vez de começar outra.
     from apps.pages.platform import file_interpreter as _pf_fi
-    for tpl in _pf_fi._fi_all_templates():
+    try:
+        todos = _pf_fi._fi_all_templates(espera=False)
+    except _pf_fi.FiLendo:
+        # Outra aba já está lendo os templates (frio, no share, é demorado):
+        # responde já, sem segurar uma thread do waitress. A página mantém o
+        # spec que tem e o recarrega na próxima abertura do preview.
+        resp = jsonify({'success': False, 'error': 'fi_templates_loading',
+                        'message': 'File Interpreter templates are still loading.'})
+        resp.status_code = 503
+        resp.headers['Retry-After'] = '15'
+        return resp
+    for tpl in todos:
         if not any(p.get('url') == url for p in tpl.get('linked_pages', [])):
             continue
         blocks = []

@@ -25519,3 +25519,32 @@ ele). Sem TTL — terminada a leitura, a seguinte volta ao caminho quente de
 sempre, então template editado (aqui ou na instância vizinha) vale no request
 seguinte, como antes. O `_fi_variant_key` (a escolha de variante na geração
 dos arquivos) passa pela mesma função. `check_fi_page_spec_flight.py`.
+
+## §610 — Commodities Options sem toolbar: `table.rows` antes de `table` existir; e a linha de filtro na carga (2026-09-30)
+
+Depois do §609 a página ainda abria na instância com só o Export e a linha de
+filtro por coluna, e o console dizia `TypeError: Cannot read properties of
+undefined (reading 'rows') at refreshAllMissingBadges ← drawCallback`. O
+`drawCallback` da PRIMEIRA pintura roda DENTRO do `$(…).DataTable({…})`, antes
+de `table` ser atribuída; o `refreshAllMissingBadges` só saía cedo enquanto o
+`Subjacente.json` não tinha chegado — com ele já carregado (a ordem muda com o
+share lento), o `table.rows` estourava e a exceção derrubava o resto da
+inicialização: toolbar pela metade e o `excel-filter.js` sem rodar. As seis
+páginas de New Deals ganharam a guarda no começo da função.
+
+A linha de filtro também aparecia "enquanto carrega" nas telas sãs: o helper a
+remove na init (§597), mas o `<thead>` de 21 páginas ainda a traz no HTML, e na
+instância a init demora. Tirá-la do HTML quebraria seis páginas que a procuram
+por `getElementById` para escrever nela; como TODAS essas tabelas passam pelo
+funil (a linha sai de qualquer jeito), o `streamflow.css` §53 a esconde desde a
+primeira pintura (`#column-search-inputs`, `.column-search-input-bar`,
+`.col-search-row`, `.dces-filter-row`, `.ops-filter`, `.cgd-filters`), menos em
+`data-excel-filter="off"`. Conferido com o JavaScript DESLIGADO.
+
+E o §609 não bastou: o single-flight funcionava (quem esperava, "nenhuma
+abertura de banco"), mas a leitura fria em série levava 395 s (112 aberturas
+de 5-10 s) e cada espera segurava uma thread. Agora a leitura é PARALELA (8 por
+vez, `OTC_FI_READ_WORKERS`; bancos diferentes não disputam trava) e o
+`page-spec` NÃO espera: com leitura em voo responde 503 `fi_templates_loading`
+na hora — a página mantém o spec que tem e o recarrega a cada abertura do
+preview. O `_fi_variant_key` (geração de arquivo) continua esperando.

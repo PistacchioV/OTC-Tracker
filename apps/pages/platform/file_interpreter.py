@@ -194,23 +194,43 @@ _fi_all_lock = threading.Lock()
 _fi_all_voo = {}     # pasta -> {'ev': Event, 'out': [...] | 'exc': Exception}
 
 
+# Leitura PARALELA: são bancos diferentes (um por template), então as
+# aberturas não disputam permit nem trava entre si — e frias, no share, cada
+# uma custa 5-10 s. Em série eram 112 aberturas em 395 s (log da instância,
+# 30/09/2026).
+try:
+    _FI_READ_WORKERS = max(1, int(os.getenv('OTC_FI_READ_WORKERS', '8') or 8))
+except ValueError:
+    _FI_READ_WORKERS = 8
+
+
+class FiLendo(IOError):
+    """Há uma leitura de todos os templates em voo e o chamador pediu para não
+    esperar (`espera=False`)."""
+
+
 def _fi_all_templates_ler(pasta):
     try:
         names = sorted(_store.listdir(pasta))
     except OSError:
         return []
-    out = []
-    for fn in names:
-        if not fn.endswith('.json'):
-            continue
-        t = _fi_tpl_cached(fn[:-5])
-        if t:
-            out.append(t)
-    return out
+    keys = [fn[:-5] for fn in names if fn.endswith('.json')]
+    if len(keys) <= 1 or _FI_READ_WORKERS <= 1:
+        tpls = [_fi_tpl_cached(k) for k in keys]
+    else:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(_FI_READ_WORKERS, len(keys)),
+                                thread_name_prefix='fi-read') as ex:
+            tpls = list(ex.map(_fi_tpl_cached, keys))   # na ordem das chaves; a 1ª falha SOBE
+    return [t for t in tpls if t]
 
 
-def _fi_all_templates():
-    """Todos os templates cadastrados, na ordem do nome do arquivo."""
+def _fi_all_templates(espera=True):
+    """Todos os templates cadastrados, na ordem do nome do arquivo.
+
+    `espera=False`: com uma leitura em voo, levanta `FiLendo` NA HORA em vez
+    de segurar a thread até ela acabar — é o `page-spec`, que a página só usa
+    no preview e recarrega a cada abertura dele. Quem GERA arquivo espera."""
     from apps.pages import routes
     pasta = routes._FILE_INTERPRETER_DIR
     with _fi_all_lock:
@@ -219,6 +239,8 @@ def _fi_all_templates():
         if dono:
             voo = _fi_all_voo[pasta] = {'ev': threading.Event()}
     if not dono:
+        if not espera:
+            raise FiLendo(pasta)
         voo['ev'].wait()
         if 'exc' in voo:
             raise voo['exc']
