@@ -14887,5 +14887,6 @@ from apps.pages.features.tools import entrypoint as _f_tools                    
 from apps.pages.features.new_deals import entrypoint as _f_new_deals              # noqa: E402,F401
 from apps.pages.features.swap_bullet import entrypoint as _f_swap_bullet          # noqa: E402,F401
 from apps.pages.features.swap_cashflow import entrypoint as _f_swap_cashflow      # noqa: E402,F401
+from apps.pages.features.swap_strategy import entrypoint as _f_swap_strategy    # noqa: E402,F401
 from apps.pages.features.unwinds import entrypoint as _f_unwinds                # noqa: E402,F401
 _schedule_on_start('unwind-boxscan', _f_unwinds.start_scheduler)
