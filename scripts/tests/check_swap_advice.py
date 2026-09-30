@@ -595,10 +595,9 @@ tmp = tempfile.mkdtemp(prefix='swadv-hyb-')
 ds, b3 = os.path.join(tmp, 'ds'), os.path.join(tmp, 'b3')
 day = os.path.join(ds, '2026', '07', '27')
 write_json(os.path.join(day, 'operations-b3_20260727.json'), [
-    opb3('H7', 'PAGAMENTO DE DIF. DE JUROS'), opb3('E7', 'PAGAMENTO DE DIF. DE JUROS'),
+    opb3('H7', 'PAGAMENTO DE DIF. DE JUROS', cpty='INTRAGLAWTONFDO'), opb3('E7', 'PAGAMENTO DE DIF. DE JUROS'),
     opb3('C8', 'PAGAMENTO DE DIF. DE JUROS')])
 write_json(os.path.join(day, 'br-onshore-settlements_20260727.json'), [
-    _ath16('H7', 'LAWTON', '9.00', '-1.00', '8.00', 'Counterparty receives'),
     _ath16('E7', 'SUZANO SA', '10.00', '-4.00', '6.00', 'Counterparty receives'),
     _ath16('C8', 'SUZANO SA', '10.00', '-4.00', '6.00', 'Counterparty receives')])
 write_json(os.path.join(b3, 'Swap', R._b3_date_subpath(DREF),
@@ -607,7 +606,8 @@ write_json(os.path.join(b3, 'Swap', R._b3_date_subpath(DREF),
     pos_rec('E7', 'CEM-2026-0007', '20240301', '20260805', '', 'C00', 'C00', 'VCP', 'VCP', '100.00'),
     pos_rec('C8', 'CEM-2026-0008', '20240301', '20260805', '', 'PRE', 'PRE', 'x', 'y', '100.00')])
 _hyb_real, _ss_real = R._swaphyb_curvas, _SS.read_all
-R._swaphyb_curvas = lambda ref: ({'H7': {'pos': 500.0, 'neg': -200.0}}, {})
+R._swaphyb_curvas = lambda ref: ({'H7': {'pos': 500.0, 'neg': -200.0, 'spn': '99',
+                                              'cpty': 'LAWTON MULTIMERCADO EXCLUSIVO'}}, {})
 _SS.read_all = lambda: [{'Contract': '#E7', 'Details': [['Indicador_1', 'USD'],
                                                         ['Indicador_2', 'SOFR Overnight']]},
                         {'Contract': 'C8', 'Details': None}]
@@ -620,14 +620,19 @@ finally:
     shutil.rmtree(tmp, ignore_errors=True)
 h = itens.get('H7') or {'cells': [''] * 15}
 check('H7 e CEMHYB', h.get('lob'), 'CEMHYB')
+check('   o cliente e o do Kapital Hybrids pela SPN (nao o apelido da B3)',
+      h['cells'][COL['Cliente']], 'LAWTON MULTIMERCADO EXCLUSIVO')
 check('   curvas e bruto do Kapital Hybrids (nao do Athena)',
       (h.get('curva_banco'), h.get('curva_cliente'), h.get('bruto')), (500.0, -200.0, 300.0))
 e = itens.get('E7') or {'cells': [''] * 15}
 check('E7 de estrategia: Indexador Banco = Indicador_1',
       e['cells'][COL['Indexador Banco']], 'USD')
-check('   Indexador Cliente = Indicador_2', e['cells'][COL['Indexador Cliente']], 'SOFR Overnight')
+check('   Indexador Cliente = Indicador_2', e['cells'][COL['Indexador Cliente']], 'SOFR OVERNIGHT')
 check('   e os valores continuam os do Athena (CEM nao e CEMHYB)',
       (e.get('curva_banco'), e.get('bruto')), (10.0, 6.0))
+check('   indexadores sempre em MAIUSCULAS',
+      all(r['cells'][COL[c]] == r['cells'][COL[c]].upper() for r in itens.values()
+          for c in ('Indexador Banco', 'Indexador Cliente')), True)
 c8 = itens.get('C8') or {'cells': [''] * 15}
 check('C8 (lista sem dados): indexadores da posicao',
       c8['cells'][COL['Indexador Banco']] not in ('', 'USD'), True)

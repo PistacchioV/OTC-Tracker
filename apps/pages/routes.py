@@ -5109,7 +5109,17 @@ def _swadv_collect(ref):
         arow = by_cetip.get(key)
         eq = eqlink.get(key) or {}
         pos = terms.get(_fcst_norm_contract(titulo).upper()) or {}
-        cliente = (_cell(arow, ai, 'CounterParty')
+        internal_id = (_cell(arow, ai, 'Kapital ID') if arow else '') or eq.get('internal_id', '')
+        lob = _fcst_lob(_opb3_tipo_for(rec, tipo_maps)) or ''
+        hyb_val = None
+        if lob == 'CEMHYB':
+            hyb_val = hyb_por_cetip.get(key) or (
+                hyb_por_kap.get(internal_id.strip().upper()) if internal_id else None)
+        # CEMHYB não está no Swap Athena: sem o nome do Kapital Hybrids a linha
+        # caía no nome CURTO da B3 (`INTRAGLAWTONFDO`, `JPMORGANBM`) — apelido
+        # de conta, que não é o cliente e não casa com cadastro nenhum.
+        cliente = ((hyb_val or {}).get('cpty')
+                   or _cell(arow, ai, 'CounterParty')
                    or eq.get('counterparty', '')
                    or str(rec.get('Contraparte (Nome Simpl.)', '') or '').strip())
         # Perna interna não recebe aviso — o documento é endereçado ao cliente, e
@@ -5138,14 +5148,9 @@ def _swadv_collect(ref):
         # As três colunas de valor, pela regra da mesa sobre os fluxos do OTM:
         # **Curva Banco = os positivos, Curva Cliente = os negativos, Resultado
         # Bruto = a soma dos dois** (ver o `otm_por_trade`, acima).
-        internal_id = (_cell(arow, ai, 'Kapital ID') if arow else '') or eq.get('internal_id', '')
         otm_val = otm_por_trade.get(internal_id.strip().upper()) if internal_id else None
-        lob = _fcst_lob(_opb3_tipo_for(rec, tipo_maps)) or ''
-        if lob == 'CEMHYB':
-            hyb_val = hyb_por_cetip.get(key) or (
-                hyb_por_kap.get(internal_id.strip().upper()) if internal_id else None)
-            if hyb_val:
-                otm_val = hyb_val
+        if hyb_val:
+            otm_val = hyb_val
         if otm_val:
             curva_banco_n, curva_cliente_n = otm_val['pos'], otm_val['neg']
             bruto = curva_banco_n + curva_cliente_n
@@ -5184,6 +5189,9 @@ def _swadv_collect(ref):
         if det:
             idx_banco = _ss.leg(det, 1)['indicador'] or idx_banco
             idx_cliente = _ss.leg(det, 2)['indicador'] or idx_cliente
+        # Indexador sempre em MAIÚSCULAS: a posição escreve `DOLAR DOS EUA`, a
+        # estratégia `SOFR Overnight` — na mesma coluna, as duas grafias.
+        idx_banco, idx_cliente = str(idx_banco or '').upper(), str(idx_cliente or '').upper()
         out.append({
             'cells': [
                 cliente,
@@ -5206,7 +5214,7 @@ def _swadv_collect(ref):
             'no_advice': no_advice,
             'lob': lob,
             'legal': _cell(arow, ai, 'Owner Legal Entity'),
-            'spn': ref_rec.get('spn', '') or _cell(arow, ai, 'SPN'),
+            'spn': ref_rec.get('spn', '') or (hyb_val or {}).get('spn', '') or _cell(arow, ai, 'SPN'),
             'taxid': ref_rec.get('taxid', ''),
             'premium': bool(evs) and evs == {premio},
             'bruto': bruto, 'ir': ir, 'liquido': liq, 'rate': rate,
@@ -6937,7 +6945,13 @@ def _swaphyb_curvas(ref):
     for kap, g in groups.items():
         if not kap or not g.get('n'):
             continue
-        val = {'pos': g['owner'], 'neg': g['cpty']}
+        first = g.get('first') or {}
+        spn = str(first.get('Counterparty SPN', '') or '').strip()
+        val = {'pos': g['owner'], 'neg': g['cpty'], 'spn': spn,
+               # o nome pela SPN — a MESMA regra da página do Hybrids
+               # (`le-spn`, depois o Reference Data); o texto do arquivo é o
+               # plano B
+               'cpty': _otm_cpty_name(spn) or str(first.get('Counterparty Name', '') or '').strip()}
         por_kap[kap.upper()] = val
         c = str(cet.get(kap, '') or '').strip().upper()
         if c:
