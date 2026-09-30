@@ -171,18 +171,22 @@ def write_holidays(filename, holidays):
 
 
 def fx_schedule_names():
-    """Os nomes de agenda que o FX holiday schedule oferece.
+    """Os nomes de agenda que o FX holiday schedule oferece: o ARQUIVO de cada
+    calendário do registro, sem o `.json` (a tela busca `/data/<agenda>.json`).
 
-    O REGISTRO mora na mesma pasta e **não é uma agenda de feriados** — sem a
-    exclusão ele apareceria como opção de schedule.
+    Saem do REGISTRO — um banco só —, nunca de um `listdir` da raiz de dados.
+    No armazém, listar a raiz abre o manifesto de TODOS os bancos de `db/`
+    (`_dbs_under('')`), inclusive os de posição da B3; no share, um deles preso
+    (o `73760_dposicao-ter.db`, 30/09/2026) pendurava este GET por quase meia
+    hora, uma thread do waitress por aba, e as páginas de New Deals que o
+    chamam na abertura (FXO, Commodities…) ficavam sem a toolbar até ele
+    voltar. A listagem também devolvia o que não é agenda (`CounterpartyDetails`,
+    `SwapIndex`, `mapping_swap-hyb`…) e deixava de fora calendário do registro
+    que o armazém ainda não tinha visto.
     """
-    sistema = {
-        'Subjacente.json', 'VCP.json', 'Dominio.json', 'RefData.json',
-        'datatables-rendering.json', 'datatables.json',
-        'treeview-data.json', 'typeahead-data-2.json', 'typeahead.json',
-        domain.CAL_FILE,
-    }
-    nomes = [f[:-5] for f in _store.listdir(data_dir())
-             if f.endswith('.json') and f not in sistema]
-    nomes.sort()
-    return nomes
+    nomes = set()
+    for row in calendars():
+        fn = str((row or {}).get('file', '') or '').strip()
+        if fn.lower().endswith('.json') and fn != domain.CAL_FILE:
+            nomes.add(fn[:-5])
+    return sorted(nomes)

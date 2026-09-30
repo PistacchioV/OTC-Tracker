@@ -212,10 +212,13 @@ check('cego a caixa e espaco', HP.file_for(' sofr '), 'sofr.json')
 check('calendario que nao existe devolve None', HP.file_for('XPTO'), None)
 check('nome vazio devolve None', HP.file_for(''), None)
 # O registro mora na pasta dos dados e NAO e uma agenda de feriados.
-bloco_sys = SRC.split('def fx_schedule_names', 1)[1] \
-               .split('sistema = {', 1)[1].split('}', 1)[0]
+bloco_fx = SRC.split('def fx_schedule_names', 1)[1].split('\ndef ', 1)[0]
 check('o registro nao vira FX holiday schedule',
-      'domain.CAL_FILE' in bloco_sys, True)
+      'domain.CAL_FILE' in bloco_fx, True)
+# As agendas saem do REGISTRO, nunca de um listdir da raiz: no armazem ele abre
+# TODOS os bancos, e um banco de posicao preso no share pendurava o GET (§607).
+check('   e a lista vem do registro, sem listdir da raiz',
+      ('calendars()' in bloco_fx, '_store.listdir' in bloco_fx), (True, False))
 
 print('\n== 8. o aviso do sino tem destino nos TRES mapas ==')
 check('routes', R._NOTIF_PAGE_URL.get('Holidays Calendar'), '/holidays-calendar')

@@ -25460,3 +25460,18 @@ principal de volta: tudo coerente, fator errado. Agora a linha EDG leva
 juros e na prova real; o `amortizado` segue na tela. Efeito colateral dito: com
 a perna calculada de curva zero e sem principal a tirar, `juros_c` passa a 0,0
 (não `None`) e a Diff B3 dessa perna é calculada. `check_swap_vcp_factors.py`.
+
+## §607 — FX holiday schedules pelo registro, não por `listdir` da raiz (2026-09-30)
+
+Na prod a FXO e a Commodities abriam sem a toolbar e com a linha de filtro por
+coluna — a página esperava o `GET /api/fx-holiday-schedules`, que ficava
+pendurado de 12 a 27 minutos (uma thread do waitress por aba; nove presas no
+log). O `fx_schedule_names` listava a RAIZ de dados (`_store.listdir`), e no
+armazém isso abre o manifesto de TODOS os bancos de `db/` (`_dbs_under('')`),
+inclusive os de posição: o `ndf/73760_dposicao-ter.db` estava preso "abrindo"
+no share. Na dev os bancos são locais e o custo não aparecia. A lista passou a
+sair do registro de calendários (`calendars()`, um banco só): o arquivo de cada
+calendário sem o `.json`. De quebra, deixou de oferecer o que não é agenda
+(`CounterpartyDetails`, `SwapIndex`, `mapping_swap-hyb`…). **Regra:** nunca
+`listdir`/`walk` da raiz de dados num request — é abrir o armazém inteiro.
+`check_holiday_calendars.py` §7 prende.

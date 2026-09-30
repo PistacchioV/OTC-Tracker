@@ -2509,6 +2509,11 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   de planilha (coluna A data, B descrição; cabeçalho descartado por não ser
   data); cor da paleta; slug `[a-z0-9_-]` (vira caminho e classe); CSS gerado
   no navegador. `HC_CAL_FALLBACK` = os onze; `check_holiday_calendars.py`.
+- **As agendas do FX Holiday Schedule saem do REGISTRO**
+  (`fx_schedule_names`, §607), nunca de `listdir` da raiz de dados: no armazém
+  isso abre TODOS os bancos de `db/`, e um banco de posição preso no share
+  pendurava o GET — e as páginas de New Deals que o chamam na abertura ficavam
+  sem toolbar. Vale para qualquer request: nada de `listdir`/`walk` da raiz.
 - `_anbima_holidays` é horizontal (SLA, aging, schedulers, D-1) e mora na
   platform, não na vertical.
 
