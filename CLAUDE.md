@@ -2537,6 +2537,11 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `_fi_calc_value` e espelho `FiTer.calc` (`check_fi_calc.py`); precedência
   `force_values` > Fixed > fórmula > gerador; spec relido a cada preview;
   Cotação para o Vencimento efetiva desloca as linhas tipo 2.
+- **Varredura de TODOS os templates é `_fi_all_templates()`** (§609),
+  single-flight por pasta: o `page-spec` (chamado por toda página de New Deals
+  ao abrir) e o `_fi_variant_key` passam por ela. Frio, no share, são ~40
+  aberturas; em paralelo, cada F5 começava outra. Não escreva outro laço de
+  `listdir` + `_fi_tpl_cached` na pasta.
 - **Template corrigido no repositório NÃO alcança o motor** (§488): o `.json`
   versionado é a SEED e a semeadura da subida não sobrescreve o que o banco
   tem (§434). O motor segue lendo o layout velho, sem erro nenhum, e o arquivo
@@ -2693,7 +2698,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (182 scripts)
+### `scripts/tests/` (183 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

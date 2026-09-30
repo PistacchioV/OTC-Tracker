@@ -43,15 +43,11 @@ def api_file_interpreter_page_spec():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     url = (request.args.get('url') or '').strip()
     out = []
-    try:
-        names = sorted(_store.listdir(_R()._FILE_INTERPRETER_DIR))
-    except OSError:
-        names = []
-    for fn in names:
-        if not fn.endswith('.json'):
-            continue
-        tpl = _R()._fi_tpl_cached(fn[:-5])
-        if not tpl or not any(p.get('url') == url for p in tpl.get('linked_pages', [])):
+    # Leitura de TODOS os templates com single-flight (§609): a aba que abre
+    # durante uma leitura fria espera por ela em vez de começar outra.
+    from apps.pages.platform import file_interpreter as _pf_fi
+    for tpl in _pf_fi._fi_all_templates():
+        if not any(p.get('url') == url for p in tpl.get('linked_pages', [])):
             continue
         blocks = []
         for b in tpl.get('blocks', []):

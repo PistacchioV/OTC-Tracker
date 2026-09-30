@@ -25503,3 +25503,19 @@ Visto no mesmo log e NÃO mexido: o `GET /api/file-interpreter/page-spec` lê
 TODOS os templates do File Interpreter (um banco cada, ~40) a cada abertura das
 páginas de New Deals; frio, no share, são minutos, e cada F5 empilha outro sem
 single-flight (três presos de 66 s a 301 s). `check_nd_search_strict.py`.
+
+## §609 — `page-spec` do File Interpreter: uma leitura fria por vez (2026-09-30)
+
+O que ficou de fora do §608: toda página de New Deals chama, ao abrir, o `GET
+/api/file-interpreter/page-spec`, que varre TODOS os templates (~40, um banco
+cada no armazém). Quente, cada um custa o `stat` do `.db`; frio, no share
+(depois de um restart), 4-10 s por abertura — minutos. E cada aba/F5 que
+chegava durante a varredura fria começava OUTRA, disputando as mesmas travas:
+no log, três presos de 66 s a 301 s com 70+ aberturas cada, cada um segurando
+uma thread do waitress. A varredura virou uma função só da platform
+(`_fi_all_templates`), SINGLE-FLIGHT por pasta: quem chega com uma leitura em
+voo espera por ela e leva o mesmo resultado (a falha do dono também chega a
+ele). Sem TTL — terminada a leitura, a seguinte volta ao caminho quente de
+sempre, então template editado (aqui ou na instância vizinha) vale no request
+seguinte, como antes. O `_fi_variant_key` (a escolha de variante na geração
+dos arquivos) passa pela mesma função. `check_fi_page_spec_flight.py`.
