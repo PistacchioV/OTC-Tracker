@@ -393,7 +393,7 @@ $(document).ready(function () {
             if (importWrap && !document.getElementById('importBtn')) {
                 var ib = document.createElement('button');
                 ib.id = 'importBtn'; ib.type = 'button';
-                ib.className = 'btn btn-sm bg-gradient btn-toolbar-all btn-toolbar-import';
+                ib.className = 'btn btn-sm btn-warning bg-gradient btn-toolbar-all btn-toolbar-import';
                 ib.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
                 importWrap.appendChild(ib);
                 ib.addEventListener('click', runImport);
