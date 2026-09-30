@@ -605,6 +605,18 @@ def _ops_swap_trade_rows(settle_ref):
     otm_by_trade = {tid: g['pos'] + g['neg'] for tid, g in porta.items()}
     otm_spn_by_trade = {tid: g['spn'] for tid, g in porta.items() if g['spn']}
 
+    # CEMHYB: o swap híbrido liquida pelo KAPITAL HYBRIDS, não pelo OTM, e não
+    # está no Swap Athena — sem isto a linha saía sem Internal ID, com o nome
+    # curto da B3 (`INTRAGLAWTONFDO`) e sem valor interno, sempre em Check. É a
+    # MESMA leitura do Settlement Advice (`_swaphyb_curvas`: por CETIP ID, pelo
+    # `mapping_swap-hyb`, ou pelo Kapital ID do Athena), para a tela e o aviso
+    # não divergirem.
+    try:
+        hyb_por_cetip, hyb_por_kap = routes._swaphyb_curvas(ref_dt)
+    except Exception:                                       # noqa: BLE001
+        log.warning('[ops-trade] Kapital Hybrids ilegível', exc_info=True)
+        hyb_por_cetip, hyb_por_kap = {}, {}
+
     def _cell(row, idx_map, name):
         i = idx_map.get(name)
         return '' if i is None or i >= len(row) else str(row[i] or '').strip()
@@ -618,6 +630,13 @@ def _ops_swap_trade_rows(settle_ref):
         # CEM — Internal ID, contraparte, valor e curvas.
         eq = eqlink.get(key) or {}
         internal_id = (_cell(arow, ai, 'Kapital ID') if arow else '') or eq.get('internal_id', '')
+        lob = routes._fcst_lob(routes._opb3_tipo_for(rec, tipo_maps)) or ('EQUITIES' if eq else '')
+        hyb = None
+        if lob == 'CEMHYB':
+            hyb = hyb_por_cetip.get(key) or (
+                hyb_por_kap.get(internal_id.strip().upper()) if internal_id else None)
+            if hyb:
+                internal_id = internal_id or hyb.get('kap', '')
         # Counterparty: o **Cpty SPN** do OTM resolvido pelo `le-spn` e pelo
         # Reference Data (`_otm_cpty_name`) — um identificador, não um texto
         # livre. O nome do Athena vem depois, porque é a razão social que o
@@ -628,7 +647,8 @@ def _ops_swap_trade_rows(settle_ref):
         # É o MESMO nome que vai para o cadastro de IR logo abaixo: mostrar um
         # nome e casar a alíquota por outro deixaria quem edita o `swap-ir-client`
         # cadastrando o texto que vê e sem efeito nenhum.
-        counterparty = (routes._otm_cpty_name(otm_spn_by_trade.get(internal_id.strip().upper(), '')) or
+        counterparty = ((hyb or {}).get('cpty') or
+                        routes._otm_cpty_name(otm_spn_by_trade.get(internal_id.strip().upper(), '')) or
                         (_cell(arow, ai, 'CounterParty') if arow else '') or
                         eq.get('counterparty', '') or
                         str(rec.get('Contraparte (Nome Simpl.)', '') or '').strip())
@@ -647,6 +667,8 @@ def _ops_swap_trade_rows(settle_ref):
         stype = eq.get('underlying', '') if eq else ('VCP' if vcp else 'Calculado')
 
         settlement = otm_by_trade.get(internal_id.strip().upper()) if internal_id else None
+        if hyb:
+            settlement = hyb['pos'] + hyb['neg']
         # Settlement B3: soma das linhas do Título que ENTRAM no universo — os
         # linhas aprovadas pelo `opb3-events`. O mesmo Título costuma
         # trazer outros eventos no arquivo; somá-los dava um total que nenhuma
@@ -706,7 +728,7 @@ def _ops_swap_trade_rows(settle_ref):
             # Equity não tem token de LOB no Código Identificador: sem o
             # fallback a coluna ficaria vazia e nada na tela diria que aquela
             # linha é de equity — o cadastro continua vencendo quando responde.
-            'lob': routes._fcst_lob(routes._opb3_tipo_for(rec, tipo_maps)) or ('EQUITIES' if eq else ''),
+            'lob': lob,
             'counterparty': counterparty,
             'settle_type': settle_type,
             'internal_id': internal_id,

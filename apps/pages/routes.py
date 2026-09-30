@@ -6947,7 +6947,7 @@ def _swaphyb_curvas(ref):
             continue
         first = g.get('first') or {}
         spn = str(first.get('Counterparty SPN', '') or '').strip()
-        val = {'pos': g['owner'], 'neg': g['cpty'], 'spn': spn,
+        val = {'pos': g['owner'], 'neg': g['cpty'], 'spn': spn, 'kap': kap,
                # o nome pela SPN — a MESMA regra da página do Hybrids
                # (`le-spn`, depois o Reference Data); o texto do arquivo é o
                # plano B

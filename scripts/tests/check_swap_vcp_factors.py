@@ -455,6 +455,42 @@ try:
           'if (!veredito) return esc(txt);' in html, True)
     check('e o duplo clique da tabela de cima abre o preview',
           "on('dblclick', '#swapchar-table tbody tr'" in html, True)
+
+    # ── 2c. CEMHYB pelo Kapital Hybrids (mesa, 30/09/2026) ────────────────
+    # O swap hibrido nao esta no Athena nem no OTM: Internal ID, curvas, o
+    # Internal Settlement e a Contraparte saem do Hybrids (a MESMA leitura do
+    # Settlement Advice e do Trade Level).
+    _pos_real, _hyb_real = _sf.posicoes_swap, R._swaphyb_curvas
+
+    def _pos_com_hyb(ref):
+        pos, d = _pos_real(ref)
+        pos = dict(pos)
+        _k = lambda c: _sf.norm(c).replace(' ', '')             # a chave do indice de posicoes
+        pos[_k('23F02369705')] = dict(pos.get(_k('21C00035804')) or {},
+                                      identificador='CEMHYB-2026-0003')
+        return pos, d
+    _sf.posicoes_swap = _pos_com_hyb
+    R._swaphyb_curvas = lambda ref: ({'23F02369705': {'pos': 3761254.43, 'neg': -3700000.0, 'spn': '9',
+                                                     'kap': 'KH-705', 'cpty': 'LAWTON MULTIMERCADO EXCLUSIVO'}}, {})
+    OPS.append({'Tipo Operação': 'AVISO DE INEXISTENCIA DE PU', 'Título': '23F02369705',
+                'Conta': '73760.00-9'})
+    try:
+        pay_h = queries.vcp_payload(REF)
+    finally:
+        _sf.posicoes_swap, R._swaphyb_curvas = _pos_real, _hyb_real
+        OPS.pop()
+    fh = {f['contrato']: f for f in pay_h['factors']}.get('23F02369705') or {}
+    lh = {r[2]: r for r in pay_h['rows']}.get('23F02369705') or []
+    check('CEMHYB: LOB Hybrids e Internal ID = Kapital ID do Hybrids',
+          (fh.get('lob'), fh.get('internal_id')), ('Hybrids', 'KH-705'))
+    check('   curvas do Hybrids (em modulo, a convencao do OTM)',
+          (fh.get('curva_p'), fh.get('curva_c')), (3761254.43, 3700000.0))
+    check('   Internal Settlement = a soma das curvas', round(fh.get('interno') or 0, 2), 61254.43)
+    check('   Contraparte pela SPN do Hybrids, nas DUAS tabelas',
+          (fh.get('contraparte'), lh[0] if lh else None, lh[1] if lh else None),
+          ('LAWTON MULTIMERCADO EXCLUSIVO', 'LAWTON MULTIMERCADO EXCLUSIVO', 'KH-705'))
+    check('   e a linha CEM segue no OTM',
+          {f['contrato']: f for f in pay_h['factors']}['21C00035804']['internal_id'], 'K-001')
 finally:
     (R.OTM_JSON_ROOT, R.B3_JSON_ROOT, R._opb3_load, R._vcp_refdata_maps, R.CONECTA_NEW_PATH,
      PF.ACCRUAL_SOURCE_ROOT, _s) = real
