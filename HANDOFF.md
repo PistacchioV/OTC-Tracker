@@ -25363,3 +25363,86 @@ do OTM (`_otm_cpty_name`: `le-spn` para entidade nossa, depois o Reference Data
 por SPN, zero à esquerda ignorado); o texto do arquivo é o plano B, para a linha
 não sair anônima. `check_swaphyb_cpty_name.py`.
 
+
+## §602 — Live Position › Swap › Strategy, e o Swap Calculator pelas pontas da estratégia (2026-09-30)
+
+Na posição da B3 o swap de estratégia vem com as DUAS curvas `VCP`: o índice e
+a taxa de verdade só existem nas consultas do MID de Swap. Tela nova
+(`features/swap_strategy`) que as importa pelo dropzone: a
+ConsultaEstrategiaContratos (lista contrato → estratégia) e a
+ConsultaDadosEstrategia (os dados de UMA estratégia, com colunas próprias de
+cada uma). O nome do arquivo não diz qual é, e o formato varia (tsv, csv, xls,
+xlsx, tabela HTML): lê-se pelo CONTEÚDO, a partir da linha que traz "Código do
+Contrato". O separador do texto sai DESSA linha — escolhido pela primeira, o
+título "B3 S.A. - BRASIL, BOLSA, BALCÃO" partiria tudo por vírgula. Número
+pt-BR pelo `repr` (o `%.10f` punha `…,700000003`). Os dois se fundem por
+contrato: a lista não apaga dados, os dados não apagam o nome. Contraparte e
+LOB saem do Swap Characteristics na LEITURA (a posição de amanhã manda). O
+cadastro é lido pela platform (`swap_strategies.py`) — o Swap Calculator e o
+Settlement Advice também perguntam, e feature não importa feature.
+
+**Swap Calculator.** O prefill pelo B3 ID aplica a estratégia por cima da
+posição e da Denominação. Três armadilhas, todas vistas na USD × SOFR
+23F02369705:
+
+- **A Parte é o `Indicador_2`.** A primeira versão supôs `_1` = Parte (a
+  ordem de `Curva - Parte`/`Curva - Contraparte`), e o resultado saiu com o
+  valor da planilha da mesa e o SINAL trocado (+189 mil × −189 mil). Na
+  `Aporte SOFR Flex x ME` (Parte = Banco) vem `_1 = USD`, `_2 = SOFR`, e o banco
+  recebe o SOFR — o que o nome da estratégia diz (ativo × passivo da Parte); o
+  mesmo na `SOFR Flex x BRL` (DI no `_1`). `PONTA_PARTE`/`PONTA_CONTRAPARTE`
+  são constantes da platform, usadas pelo Calculator e pelo Advice.
+- **Campos numerados são do INDICADOR n.** `Fixing 2` é o fixing do SOFR (D-1);
+  lido como o da moeda, a PTAX saía D-1 onde o contrato diz D-2. Só a ponta
+  cujo indicador É a moeda usa `Valor Inicial n`/`Fixing n`; as outras usam os
+  sem número (`Cotação Inicial Moeda`, `Data Cotação Moeda Final`).
+- **O `_n` do lookback numera a TAXA flutuante**, não a ponta (na USD × SOFR o
+  `Lookback da Taxa_1` é da ponta do SOFR): vale o da ponta, senão o único.
+  O valor da estratégia é capturado ANTES do `aplicar_descricao`.
+
+Spinner no Calculate das quatro calculadoras (o `pageshow` o desfaz na volta
+pelo histórico). `check_swap_strategy.py`.
+
+## §603 — Título do cabeçalho centrado sobre a coluna (2026-09-30)
+
+No DataTables 2 o cabeçalho é um flex `título · funil · ordenação`, e o título
+centrava no espaço que SOBRAVA: ~20px à esquerda do corpo em toda tabela
+centralizada. Duas tentativas falharam: alargar só o th (`widenTruncated`)
+deixava cabeçalho e corpo com larguras diferentes, e o desalinho acumulava
+coluna a coluna; `transform` não centra coluna estreita de largura automática.
+O que ficou (`excel-filter.js`, `centerTitles` + `centerAndAdjust`): padding à
+esquerda do título igual à largura MEDIDA do que está à direita (coluna sem
+funil ou sem ordenação não tem os ícones), depois `columns.adjust`, que alarga
+os dois juntos; se o th ainda passar da célula, o respiro desce ao que cabe
+(`data-oxf-cap`). Medido ~0px em Strategy, /mapping, Reference Data, Intrag
+NDF, NDF Cockpit e Other Products Summary; o Aging do Pending Confirmation
+(th travado) fica a 3px.
+
+## §604 — Onboarding: sino do New Request e prefixo do anexo (#OTC-0045, #OTC-0046) (2026-09-30)
+
+#OTC-0045: incluir um cliente para emissão não avisava ninguém. O New Request
+(só ele) publica "New Request · Doc Type · cliente · entidade" para BO e MO;
+rótulo `Onboarding` → Tracking Docs nos três mapas. Melhor esforço: a linha já
+está gravada quando o sino falha.
+
+#OTC-0046: pedidos de CSA gravavam o anexo como CGD — o subtype do upload ao
+EI, que vira o prefixo do arquivo, era `CGD TEMPLATE` fixo no JS. Agora sai do
+Doc Type pelo mapa do servidor (`cgd_docs.appendix_subtypes`). Arquivos já
+gravados não são renomeados. `check_onboarding_api.py`.
+
+## §605 — CEMHYB pelo Kapital Hybrids no Advice, no Other Products e na VCP (2026-09-30)
+
+O swap híbrido não está no Swap Athena nem no OTM: no Settlement Advice os
+valores saíam do Athena (outra coisa) e o cliente era o Nome Simplificado da B3
+(`INTRAGLAWTONFDO`); no Trade Level do Other Products a linha ficava sem
+Internal ID e sem valor interno (Check para sempre, Summary somando vazio); na
+Swap VCP sem curvas. As três leem agora o Kapital Hybrids por UMA função
+(`_swaphyb_curvas` sobre `_swaphyb_groups`, a mesma da página do Hybrids),
+achando o trade pelo CETIP ID (`mapping_swap-hyb`) ou pelo Kapital ID do
+Athena: Internal ID = Kapital ID, contraparte pela SPN (§601), Curva Banco = Σ
+positivos, Curva Cliente = Σ negativos, Bruto = a soma. A fonte é da LINHA
+inteira. O casamento com o Hybrids vem ANTES do nome, para o mesmo trade dar
+cliente e valores. Indexadores do aviso sempre em MAIÚSCULAS (a posição
+escreve `DOLAR DOS EUA`, a estratégia `SOFR Overnight`), e no contrato de
+estratégia vêm do Strategy (§602). `check_swap_advice.py` §16,
+`check_ops_trade_swap.py` §7, `check_swap_vcp_factors.py` §2c.
