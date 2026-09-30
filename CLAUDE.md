@@ -767,7 +767,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   páginas é dívida morta — não escreva linha de filtro em página nova. **Todo "Clear Filters" limpa os
   funis** (o helper reconhece o botão pelo id/`data-lang`); página com uma
   tabela por card dá ao botão `data-oxf-table="#id"` e ele limpa só aquela
-  (os dois Summaries). Com `scrollX` o DataTables deixa uma CÓPIA do
+  (os dois Summaries). **A linha nasce ESCONDIDA pelo CSS** (§610,
+  `streamflow.css` §53, pelas classes/ids que as páginas usam): o helper só a
+  tira na init, e na instância a init demora — a linha ficava na tela o tempo
+  todo da carga. E **callback do DataTables não usa a variável `table`**: o
+  `drawCallback` da primeira pintura roda antes da atribuição — use
+  `this.api()` ou guarde (`if (!table) return`); estourar ali derruba a
+  inicialização inteira da página. Com `scrollX` o DataTables deixa uma CÓPIA do
   cabeçalho no corpo (altura zero): o funil dela fica `visibility: hidden`
   (some da vista mas OCUPA o espaço, para a medida das colunas bater). O `sf-multi.js` e o §462 (delegação no
   container) continuam valendo para o que ainda filtra por campo.
@@ -2538,10 +2544,11 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `force_values` > Fixed > fórmula > gerador; spec relido a cada preview;
   Cotação para o Vencimento efetiva desloca as linhas tipo 2.
 - **Varredura de TODOS os templates é `_fi_all_templates()`** (§609),
-  single-flight por pasta: o `page-spec` (chamado por toda página de New Deals
-  ao abrir) e o `_fi_variant_key` passam por ela. Frio, no share, são ~40
-  aberturas; em paralelo, cada F5 começava outra. Não escreva outro laço de
-  `listdir` + `_fi_tpl_cached` na pasta.
+  single-flight por pasta e leitura PARALELA (`OTC_FI_READ_WORKERS`, 8): o
+  `page-spec` (chamado por toda página de New Deals ao abrir) passa com
+  `espera=False` — leitura em voo é 503 na hora, sem segurar thread — e o
+  `_fi_variant_key` espera. Frio, no share, são ~40 aberturas de 5-10 s
+  (§610). Não escreva outro laço de `listdir` + `_fi_tpl_cached` na pasta.
 - **Template corrigido no repositório NÃO alcança o motor** (§488): o `.json`
   versionado é a SEED e a semeadura da subida não sobrescreve o que o banco
   tem (§434). O motor segue lendo o layout velho, sem erro nenhum, e o arquivo

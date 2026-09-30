@@ -3411,3 +3411,14 @@ input#apiRefDate {
   .modal.show .modal-dialog { animation: sf-fade var(--sf-dur-base) var(--sf-ease-out); }
   .otc-premium-d0 { translate: none; }
 }
+
+/* 53. A antiga LINHA DE FILTRO POR COLUNA (2ª linha do <thead>) não aparece
+   nem durante a carga (§610). O excel-filter.js a REMOVE na init da tabela
+   (§597), mas o <thead> das páginas ainda a traz no HTML, e ela ficava na tela
+   todo o tempo antes da init — que na instância, com o share frio, são
+   segundos a minutos. Aqui ela nasce escondida; o helper a tira depois, como
+   sempre. Tabela fora do funil (`data-excel-filter="off"`) mantém a linha: ali
+   ela é o único filtro. Linha de filtro nova não se escreve (§7). */
+table:not([data-excel-filter="off"]) > thead > tr:is(#column-search-inputs,
+    .column-search-input-bar, .col-search-row, .dces-filter-row, .ops-filter,
+    .cgd-filters) { display: none !important; }

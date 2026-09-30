@@ -88,14 +88,53 @@ try:
         t.join(5)
     ok(erros == ['banco preso'] * 3, 'a falha do dono SOBE para quem esperava (não vira lista vazia)')
     ok(not FI._fi_all_voo, 'voo limpo também depois da falha')
+    # ── 3b. espera=False: com leitura em voo, FiLendo NA HORA ────────────────
+    FI._fi_all_templates_ler = _lenta
+    dono = threading.Thread(target=FI._fi_all_templates)
+    dono.start()
+    time.sleep(0.05)
+    t0 = time.monotonic()
+    try:
+        FI._fi_all_templates(espera=False)
+        ok(False, 'espera=False com leitura em voo → FiLendo')
+    except FI.FiLendo:
+        ok(time.monotonic() - t0 < 0.1, 'espera=False com leitura em voo → FiLendo na hora (não segura a thread)')
+    dono.join(5)
 finally:
     FI._fi_all_templates_ler = _ler_real
+
+# ── 3c. a leitura PARALELA devolve na ordem das chaves ───────────────────────
+_ld, _tc, _w = FI._store.listdir, FI._fi_tpl_cached, FI._FI_READ_WORKERS
+try:
+    import random
+    nomes = ['t%02d.json' % i for i in range(20)] + ['leia-me.txt']
+    FI._store.listdir = lambda pasta: list(reversed(nomes))
+    ativas, pico = [0], [0]
+    trava = threading.Lock()
+
+    def _tpl(k):
+        with trava:
+            ativas[0] += 1
+            pico[0] = max(pico[0], ativas[0])
+        time.sleep(random.uniform(0.01, 0.05))
+        with trava:
+            ativas[0] -= 1
+        return None if k == 't07' else {'key': k}
+    FI._fi_tpl_cached = _tpl
+    FI._FI_READ_WORKERS = 8
+    out = FI._fi_all_templates_ler('/x')
+    ok([t['key'] for t in out] == ['t%02d' % i for i in range(20) if i != 7],
+       'leitura paralela: na ordem do nome, sem o template que não abriu, sem o que não é .json')
+    ok(pico[0] > 1, 'as aberturas correm em paralelo (pico %d)' % pico[0])
+finally:
+    FI._store.listdir, FI._fi_tpl_cached, FI._FI_READ_WORKERS = _ld, _tc, _w
 
 # ── 4. os dois varredores passam por ele ─────────────────────────────────────
 ep = open(os.path.join(ROOT, 'apps/pages/features/file_interpreter/entrypoint.py'), encoding='utf-8').read()
 m = re.search(r"def api_file_interpreter_page_spec\(\):.*?\n(?=@blueprint\.route)", ep, re.S)
 corpo = m.group(0) if m else ''
-ok('_fi_all_templates()' in corpo and 'listdir' not in corpo, 'page-spec lê pelo single-flight (sem listdir próprio)')
+ok('_fi_all_templates(espera=False)' in corpo and 'listdir' not in corpo, 'page-spec lê pelo single-flight SEM esperar (sem listdir próprio)')
+ok('FiLendo' in corpo and '503' in corpo, 'page-spec responde 503 na hora com leitura em voo')
 pf = open(os.path.join(ROOT, 'apps/pages/platform/file_interpreter.py'), encoding='utf-8').read()
 m = re.search(r"def _fi_variant_key\(.*?\n(?=\ndef )", pf, re.S)
 corpo = m.group(0) if m else ''
