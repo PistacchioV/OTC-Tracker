@@ -142,11 +142,11 @@
                                 <th class="ps-3" style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" id="selectAll"></th>
                                 <th data-lang="nd-col-actions">Actions</th>
                                 <th data-lang="sst-col-status">Status</th>
+                                <th data-lang="sst-col-lob">LOB</th>
                                 <th data-lang="sst-col-contract">Contract Code</th>
                                 <th data-lang="sst-col-code">Strategy Code</th>
                                 <th data-lang="sst-col-name">Strategy Name</th>
                                 <th data-lang="sst-col-counterparty">Counterparty</th>
-                                <th data-lang="sst-col-lob">LOB</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -223,8 +223,8 @@
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
 <script>
 var API = '/api/live-position-swap-strategy';
-// [0]=checkbox [1]=actions [2]=Status [3]=Contract (a CHAVE) [4]=Code [5]=Name [6]=Counterparty [7]=LOB
-var C_KEY = 3;
+// [0]=checkbox [1]=actions [2]=Status [3]=LOB [4]=Contract (a CHAVE) [5]=Code [6]=Name [7]=Counterparty
+var C_KEY = 4;
 var ENTRIES = [], ROWS = {}, selected = new Set();
 
 // Os avisos e erros do servidor chegam por CÓDIGO (§486): a tela é que diz a frase.
@@ -346,11 +346,11 @@ $(document).ready(function () {
     var PAGINATE = { paginate: { first:'<i class="ti ti-chevrons-left"></i>', previous:'<i class="ti ti-chevron-left"></i>', next:'<i class="ti ti-chevron-right"></i>', last:'<i class="ti ti-chevrons-right"></i>' } };
 
     var table = window.sstTable = $('#sst-table').DataTable({
-        scrollX: true, scrollY: '55vh', scrollCollapse: true, autoWidth: true, pageLength: 50, order: [[4, 'asc'], [3, 'asc']],
+        scrollX: true, scrollY: '55vh', scrollCollapse: true, autoWidth: true, pageLength: 50, order: [[7, 'asc'], [4, 'asc']],
         columnDefs: [
             { orderable: false, targets: [0, 1] },
             { targets: 2, render: function (d, type) { return type === 'display' ? statusBadge(d) : (d || ''); } },
-            { targets: 6, render: function (d, type, row) {
+            { targets: 7, render: function (d, type, row) {
                 if (type !== 'display') return d || '';
                 var e = ROWS[row[C_KEY]] || {};
                 return d ? esc(d) : (e.InPosition ? '' : '<span class="text-muted fs-xs">' + esc(t('sst_not_in_position', 'Not in the Live Position')) + '</span>');
@@ -420,6 +420,7 @@ $(document).ready(function () {
     });
     $(window).on('resize', function () { table.columns.adjust(); });
 
+
     // Edit e Delete (§7: cor semântica, squircle). Não há Confirm nem Send:
     // a estratégia é consulta da B3, não se aprova nem se envia a lugar nenhum.
     function _actionsCell() {
@@ -433,8 +434,8 @@ $(document).ready(function () {
 
     function rowOf(e) {
         return ['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">', _actionsCell(),
-                e.Status || '', e.Contract || '', e.StrategyCode || '', e.StrategyName || '',
-                e.Counterparty || '', e.LOB || ''];
+                e.Status || '', e.LOB || '', e.Contract || '', e.StrategyCode || '', e.StrategyName || '',
+                e.Counterparty || ''];
     }
     function renderAll() {
         table.clear(); ROWS = {};

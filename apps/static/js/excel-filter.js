@@ -406,6 +406,70 @@
         }
     }
 
+    // Título CENTRADO de verdade. O cabeçalho é um flex "título · funil ·
+    // ordenação", e o título centrava só no espaço que SOBRA: ficava à esquerda
+    // do texto do corpo pela largura dos ícones (~20px), em toda tabela
+    // centralizada (§7). A largura do que está à direita do título vira o mesmo
+    // respiro à ESQUERDA (medida: coluna sem funil ou sem ordenação não tem os
+    // ícones), e o DataTables REMEDE as colunas com ele (`columns.adjust`), que
+    // é o que alarga cabeçalho e corpo JUNTOS. Alargar só o th (o caminho do
+    // `widenTruncated`) deixava as duas larguras diferentes e o desalinho
+    // acumulava coluna a coluna. Devolve se algum respiro mudou.
+    // Só no th centralizado.
+    function centerTitles(dt) {
+        var mudou = false;
+        $(dt.table().container()).find('thead th').each(function () {
+            var h = this.querySelector('.dt-column-header');
+            var ti = h && h.querySelector('.dt-column-title');
+            if (!ti) return;
+            var antes = h.style.paddingLeft;
+            var pad = '';
+            if (getComputedStyle(this).textAlign === 'center') {
+                h.classList.add('oxf-ctr');
+                var gap = parseFloat(getComputedStyle(h).columnGap) || 0, w = 0;
+                for (var el = ti.nextElementSibling; el; el = el.nextElementSibling) {
+                    var es = getComputedStyle(el);
+                    if (es.display === 'none' || es.position === 'absolute') continue;
+                    w += el.offsetWidth + (parseFloat(es.marginLeft) || 0) + (parseFloat(es.marginRight) || 0) + gap;
+                }
+                // `oxfCap`: o teto que a coluna aguenta (ver centerAndAdjust)
+                var cap = parseFloat(h.dataset.oxfCap);
+                if (!isNaN(cap)) w = Math.min(w, cap);
+                pad = w >= 1 ? (Math.round(w) + 'px') : '';
+            } else {
+                h.classList.remove('oxf-ctr');
+            }
+            if (pad !== antes) { h.style.paddingLeft = pad; mudou = true; }
+        });
+        return mudou;
+    }
+    // Página que trava o cabeçalho (`white-space: nowrap`, `min-width` no th —
+    // o Pending Confirmation) não deixa o DataTables encaixar o respiro: o th
+    // estica sozinho e o corpo não acompanha. Depois do adjust, a coluna cujo
+    // cabeçalho passou do corpo perde do respiro exatamente o excesso (teto
+    // guardado em `data-oxf-cap`), e o adjust roda de novo.
+    function centerAndAdjust(dt) {
+        if (!centerTitles(dt)) return;
+        try { dt.columns.adjust(); } catch (e) { return; }
+        var box = dt.table().container();
+        var head = box.querySelector('.dt-scroll-head thead') || dt.table().header();
+        var tr = box.querySelector('.dt-scroll-body tbody tr') || dt.table().body().querySelector('tr');
+        if (!head || !tr || tr.querySelector('.dt-empty')) return;
+        var ths = head.querySelectorAll('tr:last-child > th'), tds = tr.children, corrigiu = false;
+        for (var i = 0; i < ths.length && i < tds.length; i++) {
+            var excesso = ths[i].offsetWidth - tds[i].offsetWidth;
+            var h = ths[i].querySelector('.dt-column-header');
+            if (excesso < 1 || !h || !h.style.paddingLeft) continue;
+            var cap = Math.max(0, (parseFloat(h.style.paddingLeft) || 0) - excesso);
+            // as DUAS cópias do cabeçalho (a visível e a que mede no corpo)
+            $(box).find('thead tr:last-child > th:nth-child(' + (i + 1) + ') .dt-column-header').each(function () {
+                this.dataset.oxfCap = String(cap);
+            });
+            corrigiu = true;
+        }
+        if (corrigiu && centerTitles(dt)) { try { dt.columns.adjust(); } catch (e) {} }
+    }
+
     // A linha de filtro por coluna (a 2ª linha do <thead>, com um campo por
     // coluna) saiu: o funil a substitui em todas as tabelas (mesa, 29/09/2026),
     // e ela é REMOVIDA, não escondida (mesa, 29/09/2026). O DataTables redesenha
@@ -495,17 +559,18 @@
         // funil junto: ele volta a cada draw (addButtons é idempotente).
         dt.off('draw.oxf').on('draw.oxf', function () {
             var cur = STATE.get(node);
-            if (cur) { removeFilterRows(cur.dt); addButtons(cur); widenTruncated(cur.dt); }
+            if (cur) { removeFilterRows(cur.dt); addButtons(cur); centerAndAdjust(cur.dt); widenTruncated(cur.dt); }
         });
         // Linha montada pela página DEPOIS da init (initComplete, dado que
         // chegou): sai no primeiro redesenho do cabeçalho.
         dt.off('column-sizing.oxf').on('column-sizing.oxf', function () {
             var cur = STATE.get(node);
-            if (cur) removeFilterRows(cur.dt);
+            if (cur) { removeFilterRows(cur.dt); centerTitles(cur.dt); }
         });
         dt.off('destroy.oxf').on('destroy.oxf', function () { closeMenu(); STATE.delete(node); });
         if (changed) dt.draw(false);
         try { dt.columns.adjust(); } catch (e) {}
+        centerAndAdjust(dt);
         widenTruncated(dt);
         return dt;
     }
@@ -614,6 +679,7 @@
             'align-items:center;justify-content:center;font-size:.8rem;line-height:1;cursor:pointer;flex:none;' +
             'transition:opacity var(--sf-dur-fast,140ms) var(--sf-ease-out,ease-out),background-color var(--sf-dur-fast,140ms) var(--sf-ease-out,ease-out)}' +
         '.oxf-th .dt-column-header{display:flex;align-items:center}' +
+        '.dt-column-header.oxf-ctr>.dt-column-title{flex:1 1 auto;text-align:center}' +
         // Palavra não se parte ("FUNCTIONALIT/Y" numa coluna estreita): sem
         // caber, o th transborda e o widenTruncated alarga a coluna.
         '.oxf-th .dt-column-title{min-width:0;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;word-break:normal;hyphens:none}' +
