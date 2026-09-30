@@ -575,5 +575,62 @@ finally:
 check('o coletor e quem avisa',
       '_swadv_avisa_orfas(ref, by_cetip, titulos)' in SRC, True)
 
+
+# ── CEMHYB pelo Kapital Hybrids; indexadores da estrategia (mesa, 30/09/2026) ──
+#  H7 e CEMHYB: os tres valores saem do Kapital Hybrids do dia (e nao do
+#  Athena, que diz outra coisa). E7 e contrato de ESTRATEGIA: a posicao traz as
+#  duas curvas VCP, e os indexadores saem do Live Position › Swap › Strategy
+#  (Indicador_1 = banco, Indicador_2 = cliente). C8 e CEM comum: nada muda.
+print('\n== 16. CEMHYB pelo Kapital Hybrids; indexadores da estrategia ==')
+
+
+def _ath16(cetip, cpty, owner_curve, cpty_curve, bruto, direction):
+    return {'CETIP ID': cetip, 'Kapital ID': 'K-' + cetip, 'Owner Legal Entity': 'BANCO J.P. MORGAN',
+            'CounterParty': cpty, 'SPN': '1', 'Owner curve': owner_curve,
+            'Counterparty curve': cpty_curve, 'BRL Net Amount': bruto, 'Direction': direction}
+
+
+from apps.pages.platform import swap_strategies as _SS  # noqa: E402
+tmp = tempfile.mkdtemp(prefix='swadv-hyb-')
+ds, b3 = os.path.join(tmp, 'ds'), os.path.join(tmp, 'b3')
+day = os.path.join(ds, '2026', '07', '27')
+write_json(os.path.join(day, 'operations-b3_20260727.json'), [
+    opb3('H7', 'PAGAMENTO DE DIF. DE JUROS'), opb3('E7', 'PAGAMENTO DE DIF. DE JUROS'),
+    opb3('C8', 'PAGAMENTO DE DIF. DE JUROS')])
+write_json(os.path.join(day, 'br-onshore-settlements_20260727.json'), [
+    _ath16('H7', 'LAWTON', '9.00', '-1.00', '8.00', 'Counterparty receives'),
+    _ath16('E7', 'SUZANO SA', '10.00', '-4.00', '6.00', 'Counterparty receives'),
+    _ath16('C8', 'SUZANO SA', '10.00', '-4.00', '6.00', 'Counterparty receives')])
+write_json(os.path.join(b3, 'Swap', R._b3_date_subpath(DREF),
+                        '73760_{}_DPOSICAO-SWAP.json'.format(DREF)), [
+    pos_rec('H7', 'CEMHYB-2026-0007', '20240301', '20260805', '', 'C00', 'C00', 'VCP', 'VCP', '100.00'),
+    pos_rec('E7', 'CEM-2026-0007', '20240301', '20260805', '', 'C00', 'C00', 'VCP', 'VCP', '100.00'),
+    pos_rec('C8', 'CEM-2026-0008', '20240301', '20260805', '', 'PRE', 'PRE', 'x', 'y', '100.00')])
+_hyb_real, _ss_real = R._swaphyb_curvas, _SS.read_all
+R._swaphyb_curvas = lambda ref: ({'H7': {'pos': 500.0, 'neg': -200.0}}, {})
+_SS.read_all = lambda: [{'Contract': '#E7', 'Details': [['Indicador_1', 'USD'],
+                                                        ['Indicador_2', 'SOFR Overnight']]},
+                        {'Contract': 'C8', 'Details': None}]
+try:
+    R.OTM_JSON_ROOT, R.B3_JSON_ROOT = ds, b3
+    itens = {r['cells'][2]: r for r in R._swadv_collect(REF)}
+finally:
+    R.OTM_JSON_ROOT, R.B3_JSON_ROOT = _ds_root, _b3_root
+    R._swaphyb_curvas, _SS.read_all = _hyb_real, _ss_real
+    shutil.rmtree(tmp, ignore_errors=True)
+h = itens.get('H7') or {'cells': [''] * 15}
+check('H7 e CEMHYB', h.get('lob'), 'CEMHYB')
+check('   curvas e bruto do Kapital Hybrids (nao do Athena)',
+      (h.get('curva_banco'), h.get('curva_cliente'), h.get('bruto')), (500.0, -200.0, 300.0))
+e = itens.get('E7') or {'cells': [''] * 15}
+check('E7 de estrategia: Indexador Banco = Indicador_1',
+      e['cells'][COL['Indexador Banco']], 'USD')
+check('   Indexador Cliente = Indicador_2', e['cells'][COL['Indexador Cliente']], 'SOFR Overnight')
+check('   e os valores continuam os do Athena (CEM nao e CEMHYB)',
+      (e.get('curva_banco'), e.get('bruto')), (10.0, 6.0))
+c8 = itens.get('C8') or {'cells': [''] * 15}
+check('C8 (lista sem dados): indexadores da posicao',
+      c8['cells'][COL['Indexador Banco']] not in ('', 'USD'), True)
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

@@ -5067,6 +5067,29 @@ def _swadv_collect(ref):
     # fecha, que é o primeiro lugar onde o cliente olha.
     otm_por_trade = _ops_otm_por_trade(ref)
 
+    # CEMHYB (mesa, 30/09/2026): o swap híbrido liquida pelo KAPITAL HYBRIDS, não
+    # pelo OTM — os três valores da linha saem de lá, pelo CETIP ID (cadastro
+    # `mapping_swap-hyb`) ou pelo Kapital ID do Athena. Mesma regra de sinal e
+    # a mesma escolha pela LINHA INTEIRA; sem o trade no Hybrids, vale o de
+    # sempre (OTM, depois Athena).
+    try:
+        hyb_por_cetip, hyb_por_kap = _swaphyb_curvas(ref)
+    except Exception:                                       # noqa: BLE001
+        log.warning('[swap-advice] Kapital Hybrids ilegível', exc_info=True)
+        hyb_por_cetip, hyb_por_kap = {}, {}
+
+    # Contrato de ESTRATÉGIA: na posição as duas curvas são `VCP`, e o índice de
+    # verdade está na consulta da B3 gravada em Live Position › Swap › Strategy
+    # (`Indicador_1` = Parte = banco, `Indicador_2` = Contraparte = cliente — a
+    # mesma ordem das pernas da posição). Cadastro ilegível não derruba o aviso.
+    try:
+        from apps.pages.platform import swap_strategies as _ss
+        estrategias = {_ss.norm_contract(e.get('Contract')): _ss.details(e)
+                       for e in _ss.read_all() if e.get('Details')}
+    except Exception:                                       # noqa: BLE001
+        log.warning('[swap-advice] cadastro de estratégias ilegível', exc_info=True)
+        estrategias, _ss = {}, None
+
     # O arquivo de EVENTOS deixou de ser lido aqui: Valor Base e os indexadores
     # passaram a sair da posição, que já é lida para as datas. Uma fonte a menos
     # é um join a menos para falhar em silêncio.
@@ -5117,6 +5140,12 @@ def _swadv_collect(ref):
         # Bruto = a soma dos dois** (ver o `otm_por_trade`, acima).
         internal_id = (_cell(arow, ai, 'Kapital ID') if arow else '') or eq.get('internal_id', '')
         otm_val = otm_por_trade.get(internal_id.strip().upper()) if internal_id else None
+        lob = _fcst_lob(_opb3_tipo_for(rec, tipo_maps)) or ''
+        if lob == 'CEMHYB':
+            hyb_val = hyb_por_cetip.get(key) or (
+                hyb_por_kap.get(internal_id.strip().upper()) if internal_id else None)
+            if hyb_val:
+                otm_val = hyb_val
         if otm_val:
             curva_banco_n, curva_cliente_n = otm_val['pos'], otm_val['neg']
             bruto = curva_banco_n + curva_cliente_n
@@ -5150,18 +5179,23 @@ def _swadv_collect(ref):
         # senão fica parecendo que a coleção traz eventos de fora.
         evs = {_ops_norm_event(r.get('Tipo Operação', '')) for r in by_titulo.get(key, [])}
         ref_rec = spn_by_name.get(_fcst_norm(cliente), {})
+        idx_banco, idx_cliente = pos.get('idx_banco', ''), pos.get('idx_cliente', '')
+        det = estrategias.get(_ss.norm_contract(titulo)) if _ss else None
+        if det:
+            idx_banco = _ss.leg(det, 1)['indicador'] or idx_banco
+            idx_cliente = _ss.leg(det, 2)['indicador'] or idx_cliente
         out.append({
             'cells': [
                 cliente,
-                _fcst_lob(_opb3_tipo_for(rec, tipo_maps)) or '',
+                lob,
                 titulo,
                 _dt(op_dt),
                 _dt(venc_dt),
                 '' if prazo is None else '{:,}'.format(prazo).replace(',', '.'),
                 _swapchar_fmt_value(pos.get('valor_base', '')),
-                pos.get('idx_banco', ''),
+                idx_banco,
                 cb_txt,
-                pos.get('idx_cliente', ''),
+                idx_cliente,
                 cc_txt,
                 bruto_txt,
                 _swadv_pct(rate),
@@ -5170,7 +5204,7 @@ def _swadv_collect(ref):
             ],
             'counterparty': cliente,
             'no_advice': no_advice,
-            'lob': _fcst_lob(_opb3_tipo_for(rec, tipo_maps)) or '',
+            'lob': lob,
             'legal': _cell(arow, ai, 'Owner Legal Entity'),
             'spn': ref_rec.get('spn', '') or _cell(arow, ai, 'SPN'),
             'taxid': ref_rec.get('taxid', ''),
@@ -6864,6 +6898,53 @@ def _swaphyb_kap_to_cetip():
     return out
 
 
+def _swaphyb_groups(ref):
+    """`({Kapital ID: {'first', 'owner', 'cpty'}}, ordem)` do Kapital Hybrids do
+    dia: as pernas somadas por trade — Owner = Σ positivos, Counterparty = Σ
+    negativos. UMA leitura para a página do Hybrids e para o Settlement Advice
+    de swap, que imprime as mesmas curvas nas operações CEMHYB."""
+    jp = _ds_display_json_path(ref, _SWAPHYB_JSON)
+    groups, order = {}, []
+    if not _store.isfile(jp):
+        return groups, order
+    try:
+        data = _db_day_records(jp) or []
+    except Exception:
+        log.warning('[swap-hyb] arquivo do dia ilegível (%s)', jp, exc_info=True)
+        data = []
+    for rec in data:
+        kap = str(rec.get('Kapital ID', '') or '').strip()
+        if kap not in groups:
+            groups[kap] = {'first': rec, 'owner': 0.0, 'cpty': 0.0, 'n': 0}
+            order.append(kap)
+        amt = _swaphyb_num(rec.get('Amount', ''))
+        if amt is not None:
+            groups[kap]['n'] += 1
+            if amt > 0:
+                groups[kap]['owner'] += amt
+            elif amt < 0:
+                groups[kap]['cpty'] += amt
+    return groups, order
+
+
+def _swaphyb_curvas(ref):
+    """`(por CETIP ID, por Kapital ID)` → `{'pos', 'neg'}` do Kapital Hybrids do
+    dia, para o Settlement Advice. Trade sem NENHUM Amount legível fica de fora:
+    a ausência tem de poder ser distinguida do zero (a regra do OTM)."""
+    groups, _order = _swaphyb_groups(ref)
+    cet = _swaphyb_kap_to_cetip()
+    por_cetip, por_kap = {}, {}
+    for kap, g in groups.items():
+        if not kap or not g.get('n'):
+            continue
+        val = {'pos': g['owner'], 'neg': g['cpty']}
+        por_kap[kap.upper()] = val
+        c = str(cet.get(kap, '') or '').strip().upper()
+        if c:
+            por_cetip[c] = val
+    return por_cetip, por_kap
+
+
 def _swaphyb_collect(ref):
     """Read the cached JSON and collapse per-leg rows into one row per trade
     (Kapital ID). Owner curve = Σ positive Amounts, Counterparty curve = Σ negative
@@ -6873,23 +6954,8 @@ def _swaphyb_collect(ref):
     jp = _ds_display_json_path(ref, _SWAPHYB_JSON)
     rows_out = []
     if _store.isfile(jp):
-        try:
-            data = _db_day_records(jp) or []
-        except Exception:
-            data = []
         cet = _swaphyb_kap_to_cetip()
-        groups, order = {}, []
-        for rec in data:
-            kap = str(rec.get('Kapital ID', '') or '').strip()
-            if kap not in groups:
-                groups[kap] = {'first': rec, 'owner': 0.0, 'cpty': 0.0}
-                order.append(kap)
-            amt = _swaphyb_num(rec.get('Amount', ''))
-            if amt is not None:
-                if amt > 0:
-                    groups[kap]['owner'] += amt
-                elif amt < 0:
-                    groups[kap]['cpty'] += amt
+        groups, order = _swaphyb_groups(ref)
         for kap in order:
             g = groups[kap]
             r = g['first']
