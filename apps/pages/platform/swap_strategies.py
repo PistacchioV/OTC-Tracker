@@ -63,13 +63,39 @@ def details(entry):
     return out
 
 
+def _unico(det, prefixo):
+    """O único valor não vazio entre os rótulos que começam com `prefixo`;
+    '' quando não há nenhum ou há mais de um diferente (não se chuta)."""
+    vals = {v for k, v in det.items() if k.startswith(prefixo) and v}
+    return vals.pop() if len(vals) == 1 else ''
+
+
 def leg(det, n):
     """O que a estratégia diz da ponta `n` (1 = Parte, 2 = Contraparte — a
     mesma ordem de `Curva - Parte` / `Curva - Contraparte` da consulta):
     `{indicador, taxa, percentual, base}`, cada um '' quando a estratégia não
     tem a coluna. Os rótulos são os da B3 (`Indicador_1`, `taxa Cupom_1`,
     `Percentual Indicador_2`, `Base taxa Cupom_2`)."""
-    def g(nome):
-        return det.get(norm_label(nome.format(n)), '')
+    def g(*nomes):
+        for nome in nomes:
+            v = det.get(norm_label(nome.format(n)), '')
+            if v:
+                return v
+        return ''
     return {'indicador': g('Indicador_{}'), 'taxa': g('taxa Cupom_{}'),
-            'percentual': g('Percentual Indicador_{}'), 'base': g('Base taxa Cupom_{}')}
+            'percentual': g('Percentual Indicador_{}'), 'base': g('Base taxa Cupom_{}'),
+            'contagem': g('Contagem de Dias_{}'),
+            # A cotação INICIAL da moeda e o D-n da cotação final vêm de DUAS
+            # formas. Numeradas (`Valor Inicial 1`, `Fixing 1`) são do
+            # INDICADOR de mesmo número — só servem à ponta cujo indicador é a
+            # própria moeda; na ponta de SOFR o `Fixing 2` seria o do índice.
+            # Sem número (`Cotação Inicial Moeda`, `Data Cotação Moeda Final`)
+            # valem para toda ponta convertida em moeda.
+            'cotacao_indicador': g('Valor Inicial {}'),
+            'deslocamento_indicador': g('Fixing {}'),
+            'cotacao_moeda': g('Cotação Inicial Moeda'),
+            'deslocamento_moeda': g('Data Cotação Moeda Final'),
+            # O `_n` do lookback é o da TAXA flutuante, não o da ponta: na
+            # USD × SOFR o `Lookback da Taxa_1` é da ponta 2. Vale o da ponta
+            # quando existe; senão o ÚNICO que a estratégia traz.
+            'lookback': g('Lookback da Taxa_{}') or _unico(det, 'lookback da taxa')}

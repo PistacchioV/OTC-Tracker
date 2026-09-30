@@ -184,6 +184,30 @@ def main():
     check('ponta 2 = Indicador_2 (Term SOFR) com taxa Cupom_2', p_['indexador'] == 'term_sofr' and float(p_['taxa']) == 1.4, p_)
     check('Base taxa Cupom 360 -> act_360', p_['convencao'] == 'act_360', p_['convencao'])
     check('fonte marca a estrategia', p_.get('fonte', {}).get('estrategia', {}).get('indicador') == 'Term SOFR')
+    # A imagem da mesa (23F02369705): USD x SOFR Overnight — a cotacao inicial
+    # e o D-2 da moeda vem da estrategia, nao da Denominacao (que diz T-1).
+    vals[P['denominacao'][0]] = 'TERM SOFR 3M - Fixings PTAX-Ask T-1 - (3M SOFR + 0.75%)*1.1765 A/360'
+    SS.find = lambda c: {'Contract': '23F02430278', 'StrategyCode': 'SWP00001153',
+                         'Details': [['Indicador_1', 'USD'], ['Indicador_2', 'SOFR Overnight'],
+                                     ['taxa Cupom_1', '3,8500'], ['Cotação Inicial Moeda', '4,77500000'],
+                                     ['Data Cotação Moeda Final', 'D-2'], ['Valor Inicial 1', '4,77500000'],
+                                     ['Fixing 1', 'D-2'], ['Contagem de Dias_1', 'ACT/360'],
+                                     ['Contagem de Dias_2', 'ACT/360'], ['Fixing 2', 'D-1'],
+                                     ['Valor Inicial 2', '1,00000000'], ['Lookback da Taxa_1', 'D-5']]}
+    with app.test_request_context():
+        d = TQ.swap_prefill('23F02430278')
+    a_, p_ = d['ativa'], d['passiva']
+    check('USD: cambio com a cotacao inicial da estrategia', a_['indexador'] == 'cambio'
+          and float(a_['ptax_inicial']) == 4.775, a_)
+    check('USD: D-2 da estrategia vence o T-1 da Denominacao', a_['ptax_offset'] == '2', a_.get('ptax_offset'))
+    check('USD: cotacao inicial fora das lacunas', 'ativa.ptax_inicial' not in d['missing'], d['missing'])
+    check('SOFR: a cotacao sem numero vale na ponta em moeda', p_['indexador'] == 'sofr'
+          and float(p_['ptax_inicial']) == 4.775 and p_['ptax_offset'] == '2', p_)
+    check('SOFR: o Fixing 2/Valor Inicial 2 do indice nao viram a moeda', p_['ptax_offset'] == '2'
+          and float(p_['ptax_inicial']) == 4.775, p_)
+    check('SOFR: Lookback da Taxa_1 (o unico) vai para a ponta de SOFR', p_.get('lookback') == '5'
+          and not a_.get('lookback'), (p_.get('lookback'), a_.get('lookback')))
+    check('Contagem de Dias ACT/360', a_['convencao'] == 'act_360' and p_['convencao'] == 'act_360')
     SS.find = lambda c: {'Contract': '23F02430278', 'StrategyCode': 'SWP00001229', 'Details': None}
     with app.test_request_context():
         d = TQ.swap_prefill('23F02430278')

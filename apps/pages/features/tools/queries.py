@@ -841,7 +841,7 @@ def swap_prefill(b3_id):
         antes = {'taxa': campos.get('taxa'), 'percentual': campos.get('percentual')}
         domain.aplicar_descricao(campos, _celula(vals, _POS['denominacao'][k]), faltando)
         if perna:
-            _aplicar_estrategia(campos, perna, out['estrategia']['codigo'], antes)
+            _aplicar_estrategia(campos, perna, out['estrategia']['codigo'], antes, faltando)
         # A tela só mostra descrição e multiplicador na perna cuja curva É
         # VCP (pelo `swap-index`) ou que traz Denominação — na perna comum os
         # dois campos só poluiriam.
@@ -907,7 +907,13 @@ def swap_prefill(b3_id):
     return out
 
 
-def _aplicar_estrategia(campos, perna, codigo, antes):
+def _dias_do_deslocamento(texto):
+    """`D-2` → 2; `2` → 2; '' → None."""
+    dig = ''.join(ch for ch in str(texto or '') if ch.isdigit())
+    return int(dig) if dig else None
+
+
+def _aplicar_estrategia(campos, perna, codigo, antes, faltando=None):
     """Depois da Denominação: o que a ESTRATÉGIA diz vence o texto da curva.
     O achado da Denominação que falava do mesmo campo continua na tela, mas
     como `info` (mostrado, não aplicado), com o valor da estratégia no campo."""
@@ -919,6 +925,40 @@ def _aplicar_estrategia(campos, perna, codigo, antes):
     base = _BASE_DA_ESTRATEGIA.get(str(perna.get('base') or '').strip().split(',')[0].split('.')[0])
     if base:
         campos['convencao'] = base
+    # `Contagem de Dias_n` (ACT/360, 30/360…) diz a convenção por extenso e
+    # vence a base numérica; grafia que o motor não conhece fica de fora.
+    conv = str(perna.get('contagem') or '').strip().lower().replace('/', '_').replace(' ', '')
+    if conv in (contagem.ACT_360, contagem.ACT_365, contagem.DU_252, contagem.T30_360,
+                contagem.T30E_360, contagem.ACT_ACT):
+        campos['convencao'] = conv
+    # A ponta convertida em moeda: a cotação INICIAL e o D-n da cotação final
+    # vêm da estratégia — na posição o Cupom Limpo da curva VCP de estratégia
+    # vem vazio, e a Denominação fala do fixing do índice, não da moeda. A
+    # ponta cujo indicador É a moeda lê os campos numerados do indicador; as
+    # outras (SOFR, Term SOFR em USD) só os sem número.
+    idx = campos.get('indexador')
+    if idx in liquidacao.COM_MOEDA:
+        e_moeda = idx in (liquidacao.CAMBIO, liquidacao.MOEDA)
+        cot_txt = (perna.get('cotacao_indicador') if e_moeda else '') or perna.get('cotacao_moeda')
+        des_txt = (perna.get('deslocamento_indicador') if e_moeda else '') or perna.get('deslocamento_moeda')
+        cot = domain.numero_da_posicao(cot_txt)
+        if cot is not None:
+            campos['ptax_inicial'] = domain.fx8(cot)
+            fixados['ptax_inicial'] = campos['ptax_inicial']
+            if faltando is not None and 'ptax_inicial' in faltando:
+                faltando.remove('ptax_inicial')
+        dias = _dias_do_deslocamento(des_txt)
+        if dias is not None:
+            campos['ptax_offset'] = str(dias)
+            fixados['ptax_offset'] = campos['ptax_offset']
+            if faltando is not None and 'ptax_offset' in faltando:
+                faltando.remove('ptax_offset')
+    # O lookback do SOFR composto (`Lookback da Taxa_n`: D-5 → 5).
+    if idx == liquidacao.SOFR:
+        dias = _dias_do_deslocamento(perna.get('lookback'))
+        if dias is not None:
+            campos['lookback'] = str(dias)
+            fixados['lookback'] = campos['lookback']
     for item in campos.get('leitura') or []:
         if item.get('campo') in fixados and item.get('estado') in ('aplicado', 'divergente'):
             item['estado'] = 'info'
