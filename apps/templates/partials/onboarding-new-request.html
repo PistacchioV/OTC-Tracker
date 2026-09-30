@@ -439,7 +439,10 @@
         var fd = new FormData();
         fd.append('client', contraparte(vals));
         fd.append('type', 'Transactional');
-        fd.append('subtype', 'CGD TEMPLATE');
+        // O prefixo do arquivo é o do DOCUMENTO pedido (#OTC-0046): CSA sai
+        // `CSA TEMPLATE`, não `CGD TEMPLATE`. O mapa vem do servidor.
+        var tipo = String(vals[{{ cgd_doc_type_column|tojson }}] || '').trim();
+        fd.append('subtype', ({{ cgd_appendix_subtypes|tojson }})[tipo] || {{ cgd_appendix_default|tojson }});
         fd.append('date', String(vals['Data Solicitação'] || ''));
         fd.append('file', arq);
         return fetch('/api/electronic-inventory/upload', {

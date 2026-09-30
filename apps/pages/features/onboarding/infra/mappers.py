@@ -12,7 +12,10 @@ def form_context():
     modal pararia de pedi-lo e a fila continuaria cobrando.
     """
     return {'cgd_form': cgd_docs.REQUEST_FORM,
-            'cgd_signature_types': cgd_docs.SIGNATURE_TYPES}
+            'cgd_signature_types': cgd_docs.SIGNATURE_TYPES,
+            'cgd_appendix_subtypes': cgd_docs.appendix_subtypes(),
+            'cgd_appendix_default': cgd_docs.APPENDIX_EI_SUBTYPE,
+            'cgd_doc_type_column': cgd_docs.DOC_TYPE_COLUMN}
 
 
 def field_domains():

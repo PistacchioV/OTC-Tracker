@@ -146,13 +146,29 @@ check('   os dois batem com o modulo',
       [cgd_docs.outcome(linha_a), cgd_docs.outcome(linha_b)])
 
 print('\n== 5. save: cria, edita e o LOTE ==')
-st, d = jpost(c, '/api/onboarding/docs/save', {'values': {'Razão Social': 'NOVA LTDA'}})
+# O New Request toca o sino das mesas que emitem (#OTC-0045); a edicao nao.
+from apps.pages import routes as _R                        # noqa: E402
+_sino = []
+_sino_real = _R._create_notification
+_R._create_notification = lambda *a, **k: _sino.append((a, k))
+st, d = jpost(c, '/api/onboarding/docs/save',
+              {'values': {'Razão Social': 'NOVA LTDA; NOVA 2 LTDA', 'Doc Type': 'CGD',
+                          'Legal Entity': cgd_docs.LEGAL_ENTITIES[0]}})
 check('sem id -> cria', st, 200)
 novo = str(d['id'])
 check('   devolve o id novo', novo not in ('', 'None'), True)
+check('   o New Request toca o sino UMA vez', len(_sino), 1)
+if _sino:
+    (a, k) = _sino[0]
+    check('   pagina Onboarding, acao New Request', (a[3], a[2]), ('Onboarding', 'New Request'))
+    check('   para as mesas BO e MO', k.get('target_role'), 'BO,MO')
+    check('   o detalhe diz documento, cliente e entidade',
+          a[4], 'CGD · NOVA LTDA · ' + cgd_docs.LEGAL_ENTITIES[0])
 st, d = jpost(c, '/api/onboarding/docs/save',
               {'id': novo, 'values': {'Razão Social': 'NOVA LTDA EDITADA'}})
 check('com id -> edita', (st, d['success']), (200, True))
+check('   a edicao nao toca o sino', len(_sino), 1)
+_R._create_notification = _sino_real
 linhas = {r[cgd_docs.ID_COLUMN]: r for r in cgd_docs.load_all()}
 check('   e a gravacao chegou ao banco',
       linhas[novo]['Razão Social'], 'NOVA LTDA EDITADA')
@@ -238,6 +254,10 @@ for url in ('/onboarding', '/onboarding/tracking-docs'):
     corpo = r.get_data(as_text=True)
     rotulo = cgd_docs.REQUEST_FORM[0]['label']
     check('   o formulario veio do modulo (%s)' % rotulo, rotulo in corpo, True)
+    # #OTC-0046: o prefixo do anexo sai do Doc Type (CSA nao vira CGD)
+    check('   o anexo de CSA sai como CSA TEMPLATE', '"CSA": "CSA TEMPLATE"' in corpo, True)
+    check('   e o de CGD continua CGD TEMPLATE', '"CGD": "CGD TEMPLATE"' in corpo, True)
+    check('   o prefixo nao esta mais fixo no JS', "fd.append('subtype', 'CGD TEMPLATE')" in corpo, False)
 r = c.get('/cgd')
 check('/cgd redireciona para o Overview', r.status_code, 302)
 check('   para /onboarding', r.headers.get('Location', '').endswith('/onboarding'), True)
