@@ -1222,20 +1222,31 @@
                         </a>
                     </li>
 
+                    <!-- Users: o cadastro de papéis (Roles) e o Page Access, só de admin -->
                     <li class="side-nav-item">
-                        <a href="/users-roles" class="side-nav-link">
+                        <a data-bs-toggle="collapse" href="#sidebarUsers" aria-expanded="false" aria-controls="sidebarUsers"
+                           class="side-nav-link">
                             <span class="menu-icon"><i data-lucide="users"></i></span>
                             <span class="menu-text" data-lang="users">Users</span>
+                            <span class="menu-arrow"></span>
                         </a>
+                        <div class="collapse" id="sidebarUsers">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/users-roles" class="side-nav-link">
+                                        <span class="menu-text" data-lang="roles">Roles</span>
+                                    </a>
+                                </li>
+                                {% if (session.get('user_role') or '')|upper in ['ADMIN', 'MASTER'] %}
+                                <li class="side-nav-item" id="nav-item-page-access">
+                                    <a href="/page-access" class="side-nav-link">
+                                        <span class="menu-text" data-lang="page-access">Page Access</span>
+                                    </a>
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </div>
                     </li>
-                    {% if (session.get('user_role') or '')|upper in ['ADMIN', 'MASTER'] %}
-                    <li class="side-nav-item" id="nav-item-page-access">
-                        <a href="/page-access" class="side-nav-link">
-                            <span class="menu-icon"><i data-lucide="lock"></i></span>
-                            <span class="menu-text" data-lang="page-access">Page Access</span>
-                        </a>
-                    </li>
-                    {% endif %}
 
                     <li class="side-nav-item">
                         <a data-bs-toggle="collapse" href="#sidebarTickets" aria-expanded="false" aria-controls="sidebarTickets"
