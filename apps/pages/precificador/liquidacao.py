@@ -227,6 +227,14 @@ class Ponta:
     # guardado para a memória de cálculo.
     multiplicador: float = 1.0
     descricao_curva: str = ''
+    # O PISO da taxa do índice (`Max(0%, Term SOFR)` = 0,0): o fixing abaixo
+    # dele conta como o piso. None = sem piso. Vale nas pontas com fixing
+    # (Term SOFR, EURIBOR).
+    piso: Optional[float] = None
+    # Onde o multiplicador incide (mesa, 30/09/2026): False = na SOMA índice +
+    # spread, `[índice + 0,90%] × 1,17647` (o que sempre foi); True = só no
+    # ÍNDICE, `índice × 1,17647 + 1,12%`. Vale no SOFR e nas pontas com fixing.
+    mult_no_indice: bool = False
 
 
 @dataclass(frozen=True)
@@ -278,6 +286,8 @@ class PontaLiquidada:
     # 2,4 milhões a mais num fluxo de 1 bilhão.
     fator_correcao: float = 1.0
     multiplicador: float = 1.0               # o da denominação da curva (§479)
+    piso: Optional[float] = None
+    mult_no_indice: bool = False
     ptax_inicial: Optional[float] = None
     ptax_final: Optional[float] = None
     data_ptax_inicial: Optional[date] = None
@@ -438,17 +448,32 @@ def liquidar_ponta(ponta, nocional, inicio, fim, calendario=None, arredondar_di=
         fator_cambial=fx, ptax_inicial=p0, ptax_final=p1,
         data_ptax_inicial=data_p0, data_ptax_final=data_p1)
 
-    def capitalizar(taxa):
+    def capitalizar(taxa, ja_multiplicada=False):
         # O multiplicador da denominação incide na taxa ANUAL que capitaliza —
         # `(fixing + spread) × 1,1765` —, nunca no fator: (1 + r·k)^τ, não
         # ((1 + r)^τ)·k. É o gross-up de IR escrito no contrato (§479).
-        return contagem.fator(taxa * mult, ponta.convencao, ponta.regime, d0, d1, cal)
+        return contagem.fator(taxa if ja_multiplicada else taxa * mult,
+                              ponta.convencao, ponta.regime, d0, d1, cal)
+
+    def indice_mais_spread(taxa_do_indice, com_piso):
+        """O fator de "índice + spread" pelo que a denominação diz: o PISO
+        no índice e o multiplicador na soma ou só no índice (§599).
+        -> (fator, índice depois do piso)."""
+        base = taxa_do_indice
+        if com_piso and ponta.piso is not None:
+            base = max(float(ponta.piso), base)
+        if ponta.mult_no_indice:
+            return capitalizar(base * mult + ponta.taxa, ja_multiplicada=True), base
+        return capitalizar(base + ponta.taxa), base
 
     def montar(indice, descricao, **extra):
         fator = fx * extra.get('fator_correcao', 1.0) * indice
         if mult != 1.0 and not sem_taxa:
             molde, valores = descricao
-            descricao = (molde + ', the rate × {mult}', dict(valores, mult=_numero(mult, 6)))
+            if extra.get('mult_no_indice'):
+                descricao = (molde + ', the index × {mult}', dict(valores, mult=_numero(mult, 6)))
+            else:
+                descricao = (molde + ', the rate × {mult}', dict(valores, mult=_numero(mult, 6)))
         return PontaLiquidada(fator=fator, valor=nocional * fator, fator_do_indice=indice,
                               descricao=descricao, **comum, **extra)
 
@@ -511,7 +536,7 @@ def liquidar_ponta(ponta, nocional, inicio, fim, calendario=None, arredondar_di=
         # o caso diferente e continua multiplicativo de propósito (ver acima): lá
         # o percentual incide na taxa DIÁRIA e o spread é uma capitalização à
         # parte, que é como a B3 apura.
-        indice = capitalizar(composto.taxa_composta + ponta.taxa)
+        indice, _base = indice_mais_spread(composto.taxa_composta, com_piso=False)
         return montar(
             indice,
             ('compounded SOFR of {sofr}% plus a {taxa}% spread over {dc} calendar days',
@@ -519,7 +544,8 @@ def liquidar_ponta(ponta, nocional, inicio, fim, calendario=None, arredondar_di=
               'dc': composto.dias_corridos}),
             fixings=_dias_do_sofr(composto), taxa_do_fixing=composto.taxa_composta,
             defasagem=sofr.convencao(ponta.lookback, ponta.shift),
-            obs_inicio=composto.obs_inicio, obs_fim=composto.obs_fim)
+            obs_inicio=composto.obs_inicio, obs_fim=composto.obs_fim,
+            mult_no_indice=bool(ponta.mult_no_indice) and mult != 1.0)
 
     if ponta.indexador in (TERM_SOFR, EURIBOR):
         # o calendário do ÍNDICE, não o `cal` do formulário (que é o da contagem
@@ -539,14 +565,20 @@ def liquidar_ponta(ponta, nocional, inicio, fim, calendario=None, arredondar_di=
             quando = importada.em(quando)[0] or quando
         else:
             taxa_indice = ponta.taxa_indice
-        indice = capitalizar(taxa_indice + ponta.taxa)
+        indice, base = indice_mais_spread(taxa_indice, com_piso=True)
         nome = 'Term SOFR' if ponta.indexador == TERM_SOFR else 'EURIBOR'
+        molde = '{nome} {tenor} of {indice}% plus a {taxa}% spread, fixed on {quando}'
+        valores = {'nome': nome, 'tenor': ponta.tenor, 'indice': _numero(taxa_indice * 100, 5),
+                   'taxa': _numero(ponta.taxa * 100), 'quando': '{:%d/%m/%Y}'.format(quando)}
+        if ponta.piso is not None:
+            # o piso DIZ se mordeu: um fixing de −0,1% que virou 0% muda o número
+            molde = molde.replace('of {indice}%', 'of {indice}% (floored at {piso}%{mordeu})')
+            valores.update(piso=_numero(ponta.piso * 100),
+                           mordeu=': the floor applies' if base != taxa_indice else '')
         return montar(
-            indice,
-            ('{nome} {tenor} of {indice}% plus a {taxa}% spread, fixed on {quando}',
-             {'nome': nome, 'tenor': ponta.tenor, 'indice': _numero(taxa_indice * 100, 5),
-              'taxa': _numero(ponta.taxa * 100), 'quando': '{:%d/%m/%Y}'.format(quando)}),
-            data_fixing=quando, taxa_do_fixing=taxa_indice, tenor=ponta.tenor)
+            indice, (molde, valores),
+            data_fixing=quando, taxa_do_fixing=taxa_indice, tenor=ponta.tenor,
+            piso=ponta.piso, mult_no_indice=bool(ponta.mult_no_indice) and mult != 1.0)
 
     if ponta.indexador == EQUITY:
         if not ponta.preco_inicial or ponta.preco_final is None:

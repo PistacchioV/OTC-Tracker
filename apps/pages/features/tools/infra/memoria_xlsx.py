@@ -346,9 +346,17 @@ def _bloco_ponta(f, p, entrada, vbr, diaria, titulo, so_juros):
     # índice que as fórmulas já referenciam — então as fórmulas nascem com um
     # marcador e a célula é resolvida na hora de escrever o fator.
     tem_mult = taxa is not None and abs(float(entrada.multiplicador or 1.0) - 1.0) > 1e-12
+    # Onde o multiplicador incide (§599): na SOMA índice + spread (o de sempre)
+    # ou só no ÍNDICE, com o spread somado depois — `índice × k + spread`.
+    no_indice = tem_mult and bool(getattr(entrada, 'mult_no_indice', False))
 
     def _x(expr):
         return '(' + expr + ')*{MULT}' if tem_mult else expr
+
+    def _indice_mais_spread(indice):
+        if no_indice:
+            return '{}*{{MULT}}+{}'.format(indice, taxa)
+        return _x('{}+{}'.format(indice, taxa))
 
     tau = None
     if p.convencao:
@@ -384,12 +392,22 @@ def _bloco_ponta(f, p, entrada, vbr, diaria, titulo, so_juros):
         composta = f.campo('SOFR composto (% a.a.)',
                            '=({}-1)*360/{}'.format(acumulado, ref_janela), PCT_FMT,
                            nota='(fator − 1) × 360 ÷ dias corridos da janela')
-        formula = '=' + _cap(_x('{}+{}'.format(composta, taxa)), p.regime, tau)
+        formula = '=' + _cap(_indice_mais_spread(composta), p.regime, tau)
     elif idx in liquidacao.COM_FIXING:
         fix = f.campo('Taxa do fixing (% a.a.)', p.taxa_do_fixing, PCT_FMT,
                       complemento=('fixada em {:%d/%m/%Y}'.format(p.data_fixing)
                                    if p.data_fixing else None))
-        formula = '=' + _cap(_x('{}+{}'.format(fix, taxa)), p.regime, tau)
+        indice = fix
+        piso = getattr(entrada, 'piso', None)
+        if piso is not None:
+            # o piso do índice (`Max(0%, Term SOFR)`, §599) é FÓRMULA: MAX(piso;
+            # fixing) — mexer no fixing refaz a conta, e o piso mordendo se vê
+            ref_piso = f.campo('Piso do índice (% a.a.)', float(piso), PCT_FMT,
+                               nota='o fixing abaixo do piso conta como o piso')
+            indice = f.campo('Taxa do índice com o piso (% a.a.)',
+                             '=MAX({},{})'.format(ref_piso, fix), PCT_FMT,
+                             nota='o maior entre o piso e o fixing')
+        formula = '=' + _cap(_indice_mais_spread(indice), p.regime, tau)
     elif idx == liquidacao.EQUITY:
         p0 = f.campo('Preço inicial', p.preco_inicial, '#,##0.0000')
         p1 = f.campo('Preço final', p.preco_final, '#,##0.0000')
@@ -403,7 +421,9 @@ def _bloco_ponta(f, p, entrada, vbr, diaria, titulo, so_juros):
 
     if tem_mult:
         mult = f.campo('Multiplicador da taxa', float(entrada.multiplicador), FATOR_FMT,
-                       nota='da denominação da curva: multiplica a taxa anual antes de capitalizar')
+                       nota=('da denominação da curva: multiplica a taxa do ÍNDICE; o spread '
+                             'soma depois, e a soma capitaliza' if no_indice else
+                             'da denominação da curva: multiplica a taxa anual antes de capitalizar'))
         if formula:
             formula = formula.replace('{MULT}', mult)
     fator_idx = f.campo(

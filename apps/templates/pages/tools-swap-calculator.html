@@ -64,6 +64,21 @@
             <label for="{{ lado }}_multiplicador" data-lang="tl-rate-mult">Rate multiplier (blank = none)</label>
             <input class="form-control form-control-sm" id="{{ lado }}_multiplicador" name="{{ lado }}_multiplicador" value="{{ f[lado ~ '_multiplicador'] }}" inputmode="decimal" data-format="mult" placeholder="1">
             <p class="tl-help" data-lang="tl-rate-mult-help">Multiplies the annual rate before it compounds — (3M SOFR + 0.75%) × 1.1765 is 1.1765 here. In CDI it multiplies the spread; the % of CDI has its own field.</p>
+            {# Onde ele incide (mesa, 30/09/2026, §599): `[índice + 0,90%] × k` ou
+               `índice × k + 1,12%` — a denominação diz, pela estrutura do texto. #}
+            <label for="{{ lado }}_mult_base" class="mt-1" data-lang="tl-mult-base">The multiplier applies to</label>
+            <select class="form-select form-select-sm" id="{{ lado }}_mult_base" name="{{ lado }}_mult_base">
+                <option value="index+spread" {{ 'selected' if f[lado ~ '_mult_base'] != 'index' }} data-lang="tl-mult-base-sum">Index + spread — (index + spread) × multiplier</option>
+                <option value="index" {{ 'selected' if f[lado ~ '_mult_base'] == 'index' }} data-lang="tl-mult-base-index">Index only — index × multiplier + spread</option>
+            </select>
+        </div>
+        {# O PISO do índice só aparece quando existe um: `Max(0%, Term SOFR)` —
+           o fixing abaixo dele conta como o piso (§599). #}
+        {% set tem_piso = f[lado ~ '_piso'] not in (None, '') %}
+        <div class="col-12 tl-field" id="{{ lado }}_piso_box" {{ '' if tem_piso else 'hidden' }}>
+            <label for="{{ lado }}_piso" data-lang="tl-index-floor">Index floor (% p.a., blank = none)</label>
+            <input class="form-control form-control-sm" id="{{ lado }}_piso" name="{{ lado }}_piso" value="{{ f[lado ~ '_piso'] }}" inputmode="decimal" data-format="pct">
+            <p class="tl-help" data-lang="tl-index-floor-help">A fixing below this rate counts as the floor — Max(0%, Term SOFR) is 0 here: a negative fixing enters as zero.</p>
         </div>
         {# Equity cujo preço inicial é um PERCENTUAL DE UM FECHAMENTO — `Preco in
            ativo - 100.00% Close 20-Sep-24`. O Cupom Limpo da posição é esse

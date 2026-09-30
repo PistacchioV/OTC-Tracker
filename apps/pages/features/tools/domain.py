@@ -189,7 +189,12 @@ def ponta_do_form(form, prefixo):
         multiplicador=(numero_do_form(form, campo('multiplicador'),
                                       '{} leg rate multiplier'.format(lado))
                        if texto('multiplicador') else 1.0),
-        descricao_curva=texto('descricao'))
+        descricao_curva=texto('descricao'),
+        # o piso do índice e onde o multiplicador incide (§599): em branco,
+        # sem piso e na soma índice + spread — o que sempre foi
+        piso=(taxa_do_form(form, campo('piso'), '{} leg index floor'.format(lado))
+              if texto('piso') else None),
+        mult_no_indice=texto('mult_base') == descricao_curva.MULT_INDICE)
 
 
 # ── o pré-preenchimento pela posição de swap ────────────────────────────────
@@ -318,6 +323,7 @@ def montar_ponta(regra, pct, taxa, sinal, nome_classe, cotacao_inicial,
               'moeda': '', 'tenor': '', 'taxa_indice': '', 'ptax_inicial': '',
               'ptax_final': '', 'ptax_offset': '', 'ni_inicial': '', 'preco_inicial': '',
               'preco_final': '', 'ativo': '', 'ipca_fixing': '', 'multiplicador': '',
+              'piso': '', 'mult_base': '',
               'descricao': '', 'cupom_limpo': '', 'cupom_data': '', 'preco_close': ''}
     faltando = []
     if not regra:
@@ -445,6 +451,10 @@ _SO_EM = {
     descricao_curva.PTAX_OFFSET: set(liquidacao.COM_MOEDA),
     descricao_curva.CUPOM_LIMPO: {liquidacao.EQUITY},
     descricao_curva.CUPOM_DATA: {liquidacao.EQUITY},
+    # o piso é do FIXING (Term SOFR, EURIBOR); o lugar do multiplicador vale
+    # também no SOFR composto (§599). Fora delas, só informação.
+    descricao_curva.PISO: set(liquidacao.COM_FIXING),
+    descricao_curva.MULT_BASE: {liquidacao.SOFR} | set(liquidacao.COM_FIXING),
 }
 
 
