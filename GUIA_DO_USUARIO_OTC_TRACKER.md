@@ -2,7 +2,7 @@
 
 **Brazil OTC Operations · JPMorgan Chase & Co.**
 
-**Versão:** 2.0 · **Data:** 24/08/2026
+**Versão:** 2.1 · **Data:** 30/09/2026
 
 ---
 
@@ -134,27 +134,25 @@ O menu é em **níveis**: um item com **›** à direita tem submenu. Clicar nel
 
 | Grupo | Itens |
 |---|---|
-| **NAVIGATION** | Dashboards › KPI · Intraday Monitor — About |
-| **APPS** | Holidays Calendar · Electronic Inventory · Control Panel · File Interpreter · Tools |
+| **NAVIGATION** | Dashboards (KPI · Intraday Monitor) · About |
+| **APPS** | Holidays Calendar · Electronic Inventory · Control Panel · File Interpreter · Tools · Daily Settlement · Live Position |
 | **APPS › Tools** | **Calculators** (NDF Calculator · Option Calculator · Swap Calculator · Unwind NDF Calculator) · Euribor · Fixed Income · Quotes · SOFR Index · Term SOFR |
-| **APPS › Daily Settlement › NDF** | NDF Summary · NDF Cockpit · Other Publisher |
-| **APPS › Daily Settlement › Other Products** | Other Products Summary · OTM Settlements · Latam Desk Position · **Swap** (Settlement Advice · Athena · VCP · Events · Kapital Hybrids) · **NDF** (Settlement Advice) · **Option** (Settlement Advice · Cognos) |
+| **APPS › Daily Settlement › NDF** | Summary · Cockpit · Other Publisher |
+| **APPS › Daily Settlement › Other Products** | Summary · OTM · Latam Desk Position · **Swap** (Settlement Advice · Athena · VCP · Events · Kapital Hybrids) · **NDF** (Settlement Advice) · **Option** (Settlement Advice · Cognos) |
 | **APPS › Daily Settlement** | Operations B3 |
-| **APPS › Live Position** | Live Position NDF · **Swap** (Characteristics · Cashflow · Premium) · Live Position Option |
+| **APPS › Live Position** | NDF · **Swap** (Characteristics · Cashflow · Premium · Strategy) · Option |
 | **RECONCILIATIONS** | Comitente · Pay/Rec · FXO · CGD · Conf. Matching |
-| **DOCUMENTATION › Pending Confirmation** | Pending Confirmation · Metrics |
+| **DOCUMENTATION › Pending Confirmation** | Main · Dashboard · Metrics |
 | **DOCUMENTATION › Manual Confirmation** | Confirmations Monitor · Track Confirmations |
-| **DOCUMENTATION › Onboarding** | Overview · Tracking Docs |
-| **PRODUCTS › New Deals › Swap** | Bullet · Cashflow *(tela pronta; importação em construção)* |
+| **DOCUMENTATION › Onboarding** | Overview · Track Docs |
+| **PRODUCTS › New Deals › Swap** | Bullet · Cashflow |
 | **PRODUCTS › New Deals › NDF** | FWD Start · Other Publisher · Vanilla · Commodities |
 | **PRODUCTS › New Deals › Options** | FXO · Commodities · EDG *(tela pronta; importação em construção)* |
-| **PRODUCTS › New Deals › DCE** | Deliverable Forward · NDF · Option · Swap *(em construção)* |
-| **PRODUCTS › Unwinds** | **NDF › FX** · Swap (CEM · EDG) · NDF Commodities · Options (FXO · Commodities · EDG) · COE · DCE *(NDF › FX e NDF Commodities com o ciclo completo; as demais importam, conferem e enviam à B3 — ver 5.11)* |
-| **PRODUCTS › Intrag** | NDF · Option · Swap |
-| **PRODUCTS › Regulatory** | e-Financeira · WHT *(em construção)* |
-| **PRODUCTS** | Accrual Swap · MtM Swap |
-| **SETTINGS** | Reference Data · Index B3 · Mapping · Manage Roles · Page Access |
-| **SUPPORT** | Tickets · Ticket Details |
+| **PRODUCTS › New Deals** | COE *(em construção)* · **DCE** (Deliverable Forward · Option · Swap — abrem as telas da Intrag › DCE, capítulo 11) |
+| **PRODUCTS › Unwinds** | **Swap** (CEM · EDG) · **NDF** (FX · Commodities) · **Options** (FXO · Commodities · EDG) · COE · **DCE** (Deliverable Forward · NDF · Option · Swap) *(NDF › FX e NDF › Commodities com o ciclo completo; as demais importam, conferem e enviam à B3 — ver 5.11)* |
+| **PRODUCTS › Intrag** | NDF · Option · Swap · Unwind · **DCE** (Option · Swap · NDF · DFW) |
+| **REGULATORY** | e-Financeira (KAPITAL · ATHENA-NDF · ATHENA-FXO · PYRAMID) *(em construção)* · Accrual · MtM · WHT *(em construção)* |
+| **DATA BASE** | Reference Data · Index B3 · Mapping · **Users** (Roles · Page Access) · **Support Center** (Tickets List · Ticket Details) |
 
 > Os itens marcados **(em construção)** aparecem no menu mas ainda não têm tela: clicar neles devolve uma página de "não encontrado". Os marcados **(tela pronta; importação em construção)** abrem normalmente, com a grade e as colunas do produto, mas ainda não importam nem enviam — a tela avisa isso em vez de falhar. A lista completa está no anexo 18.3.
 
@@ -172,7 +170,7 @@ O acesso é **por página**. Um administrador monta a sua lista de páginas em *
 
 ![O cadastro de usuários (Manage Roles)](docs/sop-screenshots/users-roles.png)
 
-O seu cadastro vive em **Manage Roles** (Menu › Settings › Manage Roles — capítulo 15.1): é lá que estão o que o phonebook devolveu sobre você (nome, e-mail, cargo) e o **papel** que você tem no sistema — `ADMIN`, `BO` (Back Office), `MO` (Middle Office), `FO` (Front Office), `INSTITUTIONAL` ou `HUB`. O papel não se edita por você mesmo: ele define o que você pode **assinar** (por exemplo, validar uma etapa da esteira de confirmação — capítulo 9.4) e é alterado em *Manage Roles* por um administrador.
+O seu cadastro vive em **Manage Roles** (Menu › Data Base › Users › Roles — capítulo 15.1): é lá que estão o que o phonebook devolveu sobre você (nome, e-mail, cargo) e o **papel** que você tem no sistema — `ADMIN`, `BO` (Back Office), `MO` (Middle Office), `FO` (Front Office), `INSTITUTIONAL` ou `HUB`. O papel não se edita por você mesmo: ele define o que você pode **assinar** (por exemplo, validar uma etapa da esteira de confirmação — capítulo 9.5) e é alterado em *Manage Roles* por um administrador.
 
 ---
 
@@ -381,7 +379,7 @@ O **sino** da barra superior mostra em vermelho quantos avisos você tem. O sist
 
 ### 5.1. Intraday Monitor — por onde começar o dia
 
-**Menu › Dashboards › Intraday Monitor** (logo abaixo do KPI). O endereço antigo, `/new-deals-monitor`, leva para cá.
+**Menu › Navigation › Dashboards › Intraday Monitor** (logo abaixo do KPI). O endereço antigo, `/new-deals-monitor`, leva para cá.
 
 ![Intraday Monitor](docs/sop-screenshots/intraday-monitor.png)
 
@@ -431,7 +429,7 @@ A tela se atualiza sozinha a cada minuto.
 
 > **O Termo de Resilição tem linha própria na zona Confirmations** (bloco Unwinds): conta os termos das recompras contra cliente pela etapa da esteira, agrupados como no Confirmations Monitor (contraparte × moeda ou mercadoria). A recompra com fundo nosso não aparece ali — ela vai para a Intrag › Unwind.
 
-> **Aqui não se gera nem se valida documento.** **Generate** e **Validate** vivem no **Confirmations Monitor** (capítulo 9.3). A zona de Confirmations acompanha o ciclo só até a validação do OTC; MO e FO são acompanhados lá.
+> **Aqui não se gera nem se valida documento.** **Generate** e **Validate** vivem no **Confirmations Monitor** (capítulo 9.4). A zona de Confirmations acompanha o ciclo só até a validação do OTC; MO e FO são acompanhados lá.
 
 > **O e-mail das 19h sai daqui.** O aviso *Pending Action - Intraday Monitor* lista as tarefas em aberto e os produtos com pendência (14.2).
 
@@ -564,7 +562,7 @@ Depois que a B3 devolve o arquivo de retorno:
 
 ### 5.9. Gerar a confirmação
 
-**A geração e a validação da confirmação acontecem no Confirmations Monitor**, e não aqui. As telas de New Deals não têm mais botão de confirmação: o ciclo inteiro do documento mora num lugar só. Ver o capítulo 9.3.
+**A geração e a validação da confirmação acontecem no Confirmations Monitor**, e não aqui. As telas de New Deals não têm mais botão de confirmação: o ciclo inteiro do documento mora num lugar só. Ver o capítulo 9.4.
 
 ### 5.10. Recompra (unwind) de NDF de moeda
 
@@ -700,7 +698,7 @@ Três coisas próprias desta tela:
 
 ### 6.4. Other Products Summary
 
-**Menu › Daily Settlement › Other Products › Other Products Summary**
+**Menu › Daily Settlement › Other Products › Summary**
 
 ![Other Products Summary](docs/sop-screenshots/other-products-summary.png)
 
@@ -716,7 +714,7 @@ Duas coisas próprias desta tela:
 
 ### 6.5. OTM Settlements
 
-**Menu › Daily Settlement › Other Products › OTM Settlements**
+**Menu › Daily Settlement › Other Products › OTM**
 
 ![OTM Settlements](docs/sop-screenshots/otm-settlements.png)
 
@@ -836,7 +834,7 @@ São quatro telas de **consulta**, cada uma mostrando uma fonte do swap. Nenhuma
 
 **Menu › APPS › Live Position**
 
-São cinco telas de **consulta** da posição viva registrada na B3. Nenhuma tem Import nem edição: você escolhe a data, filtra, confere e exporta. Todas trazem o campo **Filter by column…** acima da tabela, além do funil em cada coluna (4.3).
+São cinco telas de **consulta** da posição viva registrada na B3, mais o cadastro das **estratégias** de swap (7.4). As cinco de consulta não têm Import nem edição: você escolhe a data, filtra, confere e exporta. Todas trazem o campo **Filter by column…** acima da tabela, além do funil em cada coluna (4.3).
 
 | Tela | O que mostra |
 |---|---|
@@ -845,6 +843,7 @@ São cinco telas de **consulta** da posição viva registrada na B3. Nenhuma tem
 | **Swap › Cashflow** | As agendas de pagamento de juros e amortização de cada contrato |
 | **Swap › Premium** | Os eventos de prêmio dos swaps |
 | **Live Position Option** | As opções em aberto — tipo, combinação de operações, partes, strike, barreiras, quantidades e a situação |
+| **Swap › Strategy** | As estratégias de swap da B3 por contrato, importadas dos relatórios do MID (7.4) |
 
 ### 7.1. Live Position NDF
 
@@ -878,6 +877,25 @@ Mesmo uso da anterior. A coluna **Combinação de operações** é a chave que l
 ![Swap Premium](docs/sop-screenshots/live-position-swap-premium.png)
 
 Nas três: escolha a data, filtre, confira, exporte. Os números do alto da *Characteristics* resumem a posição por *Contract Type*, *LOB*, *Indexers* e *Features* — clique num deles para filtrar.
+
+### 7.4. Swap — Strategy
+
+**Menu › APPS › Live Position › Swap › Strategy**
+
+![Swap Strategy](docs/sop-screenshots/live-position-swap-strategy.png)
+
+**Para que serve:** guarda as **estratégias** de swap da B3 (os contratos de *Aporte*, *Flex x ME* etc.). Na posição da B3 esses contratos aparecem com as duas curvas como `VCP`; o índice, a taxa, o percentual e a cotação de cada ponta só existem na consulta da estratégia. É daqui que o **Swap Calculator** (13.4.2) e o **Settlement Advice** de swap (6.7) tiram as pontas desses contratos.
+
+Ao contrário das outras telas de Live Position, esta **tem Import**: os dados vêm de dois relatórios do MID de Swap da B3.
+
+**Passo a passo:**
+
+1. Arraste para o dropzone os dois relatórios da B3 — **ConsultaEstrategiaContratos** (a lista de contratos com estratégia) e **ConsultaDadosEstrategia** (os dados de uma estratégia) — em qualquer formato (tsv, csv, xls, xlsx), e clique em **Import**. Os dois se juntam pelo contrato: importar um não apaga o que veio do outro.
+2. Confira a coluna **Status**: `Complete` quando o contrato já tem os dados da estratégia, `Pending` quando só veio da lista — falta importar a consulta de dados dele.
+3. **Dê um duplo clique na linha** para ver os dados da estratégia (indicadores, taxas, cotações de cada ponta).
+4. **Edit** corrige o código e o nome da estratégia; **Delete** remove o contrato do cadastro.
+
+> **Contraparte e LOB não vêm do arquivo da B3**: saem do *Swap Characteristics* do dia (a data aparece acima da tabela). Contrato que não está na posição fica com as duas colunas em branco.
 
 ---
 
@@ -1046,7 +1064,7 @@ Este bloco acompanha a confirmação depois que a operação já está registrad
 
 ### 9.1. Pending Confirmation
 
-**Menu › Documentation › Pending Confirmation › Pending Confirmation**
+**Menu › Documentation › Pending Confirmation › Main**
 
 ![Pending Confirmation](docs/sop-screenshots/pending-confirmation.png)
 
@@ -1067,11 +1085,27 @@ Este bloco acompanha a confirmação depois que a operação já está registrad
 | `Pending Original` | Espera o documento original assinado |
 | `Pending Digital Signature` | Espera a assinatura digital |
 | `Exception FepWeb` / `Exception Digital Fep Web` | Trata-se pelo FepWeb |
-| `Pending OTC` · `Pending MO` · `Pending FO` · `Pending FepWeb` | A confirmação está na esteira de validação (9.3) |
+| `Pending OTC` · `Pending MO` · `Pending FO` · `Pending FepWeb` | A confirmação está na esteira de validação (9.4) |
 
 > **Operação vencida sai da fila sozinha.** Quando a data de vencimento chega, o sistema marca a linha como `Exception FepWeb` / `Ok` e ela deixa de envelhecer: não faz sentido cobrar a confirmação de uma operação que já liquidou.
 
-### 9.2. Metrics — Pending Confirmation
+### 9.2. Dashboard — Pending Confirmation
+
+**Menu › Documentation › Pending Confirmation › Dashboard**
+
+![Dashboard — Pending Confirmation](docs/sop-screenshots/dashboard-pending-confirmation.png)
+
+**Para que serve:** é a fila de pendências (9.1) numa **tabela dinâmica**: as linhas são **Economic Group × Owner × Signature Type** e as colunas são o **trimestre** da Trade Date (`2026 T1`, `2026 T2`…) aberto por **Pending Status**. Responde de relance *quem* está devendo confirmação, *desde quando* e *por quê*.
+
+**Passo a passo:**
+
+1. Confira os números do alto — o total de confirmações pendentes e quantos grupos econômicos elas envolvem.
+2. Use as pílulas de **Pending range** (as mesmas faixas de atraso da coluna Status da tela principal: *< 10 dias*, *10 a 20*…) para escolher o que entra na conta: todas começam ligadas, e um clique tira (ou devolve) a faixa. **Clear Filters** volta todas as faixas e limpa os funis.
+3. Filtre as linhas pelos funis do cabeçalho (4.3) e exporte com **Export** (4.6).
+
+> **A tela se atualiza sozinha.** Ela lê a fila ao vivo a cada 30 segundos enquanto a aba está visível (e ao voltar para ela); a hora da última leitura aparece ao lado do botão **Refresh**, que lê na hora. Na atualização só as linhas mudam — os seus filtros, a ordenação e a página continuam onde estavam. Se uma leitura falhar, o indicador fica vermelho e a tabela continua mostrando a última leitura boa.
+
+### 9.3. Metrics — Pending Confirmation
 
 **Menu › Documentation › Pending Confirmation › Metrics**
 
@@ -1085,7 +1119,7 @@ Este bloco acompanha a confirmação depois que a operação já está registrad
 2. Use o segundo seletor (*Current Year* · *Last 24 Months* · *Daily (current month)*) para mudar o eixo do gráfico de história.
 3. Percorra os quadros **Top 5 Offenders**, **Top 5 Bankers**, **Top 5 Clients** e **Top 5 Economic Groups**.
 
-### 9.3. Confirmations Monitor
+### 9.4. Confirmations Monitor
 
 **Menu › Documentation › Manual Confirmation › Confirmations Monitor**
 
@@ -1130,7 +1164,7 @@ Este bloco acompanha a confirmação depois que a operação já está registrad
 
 1. Clique em **Validate** (o botão verde do item). A tela de validação abre numa aba nova.
 2. Se aparecer **View** (contorno cinza) em vez de Validate, é porque aquela etapa é de **outra mesa**: você pode abrir e ler, mas não assinar.
-3. Ver 9.4.
+3. Ver 9.5.
 
 **Passo a passo — soltar do Legal:**
 
@@ -1146,17 +1180,18 @@ Este bloco acompanha a confirmação depois que a operação já está registrad
 
 > **Item com `no callback` não fecha.** O callback — a conferência por telefone
 > com o cliente — precisa ter acontecido **antes** do envio, e o item com a marca
-> vermelha é justamente o que ainda não tem a *Callback Date*. O clique em
+> vermelha é justamente o que ainda não tem a data do callback. O clique em
 > **Mark as sent** abre um **aviso** em vez da confirmação, dizendo quantas
-> operações estão sem callback. Preencha a **Callback Date** na grade do Track
-> Confirmations (9.5) e volte — o botão passa a funcionar. O grupo é
+> operações estão sem callback. Preencha a coluna **EA Response Date** (a data do
+> callback) na grade do Track
+> Confirmations (9.6) e volte — o botão passa a funcionar. O grupo é
 > tudo-ou-nada: basta **uma** operação sem callback para o envio inteiro ficar
 > retido.
 >
 > **Confirmação de MGT contra cliente não tem callback**: ela não recebe a marca
 > `no callback` e o **Mark as sent** não a retém.
 
-### 9.4. A tela de validação
+### 9.5. A tela de validação
 
 **Como se chega:** pelo botão **Validate** (ou **View**) de um item do Confirmations Monitor. Ela abre com o **PDF do documento de um lado** e o **checklist da etapa do outro**.
 
@@ -1184,7 +1219,7 @@ Este bloco acompanha a confirmação depois que a operação já está registrad
 >
 > **Cada etapa é assinada pela sua mesa.** Quem não é da mesa vê a tela sem os botões de assinar — e, se tentar pelo endereço direto, o sistema recusa. Administrar acessos não dá esse direito: ser `ADMIN` não é passe livre para assinar por uma mesa.
 
-### 9.5. Track Confirmations
+### 9.6. Track Confirmations
 
 **Menu › Documentation › Manual Confirmation › Track Confirmations**
 
@@ -1199,7 +1234,7 @@ Este bloco acompanha a confirmação depois que a operação já está registrad
 | **Pending** | Em que etapa a operação está |
 | **Aging** | Há quantos dias úteis ela espera |
 | **E-mail Subject** | O assunto do e-mail de recap interno — **preenchido pelo sistema** a partir do arquivo na pasta, não digitado |
-| **Callback Date** | A conferência por telefone com o cliente |
+| **EA Response Date** | A data do callback — a conferência por telefone com o cliente |
 | **Validated by OTC / MO / FO** + **Time Stamp** | Quem assinou cada etapa e quando |
 | **OTC / MO / FO Comments** | A justificativa de atraso daquela mesa |
 | **Sent to Client (FepWeb Released)** | A data do envio ao cliente |
@@ -1293,7 +1328,7 @@ A página são **três cartões verticais**, um por mesa da esteira:
 
 ### 10.2. Tracking Docs
 
-**Menu › Documentation › Onboarding › Tracking Docs**
+**Menu › Documentation › Onboarding › Track Docs**
 
 ![Tracking Docs](docs/sop-screenshots/onboarding_tracking-docs.png)
 
@@ -1354,7 +1389,7 @@ Os cinco fecham: **Documents = Pending + Active + Inactive + Cancelled**.
 
 **Menu › PRODUCTS › Intrag**
 
-Três telas — **NDF**, **Option** e **Swap** — com as operações no leiaute que a Intrag recebe. Todas funcionam igual: busca por fichas, filtros por coluna, **Columns**, **Export**, **Add Row +** e **Clear Filters**.
+As telas **NDF**, **Option** e **Swap** trazem as operações no leiaute que a Intrag recebe e funcionam igual: busca por fichas, filtros por coluna, **Columns**, **Export**, **Add Row +** e **Clear Filters**. Ao lado delas ficam a **Unwind** (as recompras com fundo nosso) e as telas de **DCE** — as duas descritas no fim do capítulo.
 
 **Intrag — NDF**
 
@@ -1386,11 +1421,40 @@ Três telas — **NDF**, **Option** e **Swap** — com as operações no leiaute
 
 > Nestas três tabelas a seleção de célula usa a extensão nativa da tabela: clique numa célula, arraste para pegar um bloco e **Ctrl+C** para copiar (4.8).
 
+### Intrag — Unwind
+
+**Menu › PRODUCTS › Intrag › Unwind**
+
+![Intrag Unwind](docs/sop-screenshots/intrag-unwind.png)
+
+**Para que serve:** é a instrução à Intrag das **recompras que têm um fundo nosso numa das pontas** (o B2B Banco × Lawton ou Atacama). Essas recompras não geram Termo de Resilição nem entram no Pending Confirmation (5.10) — vêm para cá.
+
+- **A linha nasce no IMPORT da recompra**, na tela de Unwinds, e não no Send: nem toda recompra é registrada na B3 pelo OTC Tracker, e a instrução da Intrag não depende disso. Editar a recompra atualiza a linha; apagá-la tira a linha daqui enquanto ela ainda está `New`.
+- O ciclo é o das outras telas da Intrag: **Edit** leva a `Pending`, um **segundo usuário** aprova (✓), **Send** envia e marca `Sent`, e o **Intrag ID** fecha em `Success`.
+- O **Intrag ID** se digita no **Edit** ou vem pelo **Mapping Intrag ID**, que lê o CSV de Boletas do retorno — mas só das boletas que se dizem **recompra** (Situação `Recomprado Totalmente/Parcialmente`). A operação original tem boleta própria com o mesmo B3 ID, e o Intrag ID dela não pode vir parar na recompra.
+
+### Intrag — DCE
+
+**Menu › PRODUCTS › Intrag › DCE** (também pelo **Menu › PRODUCTS › New Deals › DCE**)
+
+![Intrag DCE Swap](docs/sop-screenshots/intrag-dce-swap.png)
+
+As operações do **DCE** no leiaute da Intrag, uma tela por produto:
+
+| Tela | De onde vêm as operações |
+|---|---|
+| **NDF** | **Import bob-report**: os relatórios da Athena de cada carteira, todos numa clicada. Um relatório que falha não impede os outros — a tela avisa qual falhou e por quê |
+| **Option** | **Import bob-report**, pela data escolhida no campo ao lado |
+| **Swap** | A planilha da Athena (**NewDealsAndCashflowDetails.xlsx**) arrastada para o dropzone: as pernas e os fluxos, ligados pelo *Deal Name*. O arquivo para a Intrag sai com **uma linha por operação**, montada da perna Pay com a Rec — operação sem as duas pernas recusa o lote |
+| **DFW** (Deliverable Forward) | *Em construção* |
+
+Nas três telas prontas o ciclo é o de sempre: conferir, **Send**, e o **Mapping Intrag ID** fecha a linha em `Success`.
+
 ---
 
 ## 12. Accrual e MtM de Swap
 
-**Menu › PRODUCTS › Accrual Swap** e **MtM Swap**
+**Menu › REGULATORY › Accrual** e **MtM**
 
 ![Accrual Swap](docs/sop-screenshots/accrual-swap.png)
 
@@ -1416,11 +1480,11 @@ No **MtM** há ainda o botão **New Mapping**, para cadastrar um de-para novo se
 
 ## 13. Cadastros e ferramentas
 
-**Menu › SETTINGS** e **Menu › APPS**
+**Menu › DATA BASE** e **Menu › APPS**
 
 ### 13.1. Reference Data
 
-**Menu › Settings › Reference Data**
+**Menu › Data Base › Reference Data**
 
 ![Reference Data](docs/sop-screenshots/reference-data.png)
 
@@ -1441,7 +1505,7 @@ No **MtM** há ainda o botão **New Mapping**, para cadastrar um de-para novo se
 
 ### 13.2. Index B3
 
-**Menu › Settings › Index B3**
+**Menu › Data Base › Index B3**
 
 ![Index B3](docs/sop-screenshots/index-b3.png)
 
@@ -1458,7 +1522,7 @@ No **MtM** há ainda o botão **New Mapping**, para cadastrar um de-para novo se
 
 ### 13.3. Mapping — os de-para
 
-**Menu › Settings › Mapping**
+**Menu › Data Base › Mapping**
 
 ![Mapping](docs/sop-screenshots/mapping.png)
 
@@ -1733,7 +1797,7 @@ Este merece um passo a passo próprio, porque tem uma opção que os outros não
 
 ### 15.1. Manage Roles
 
-**Menu › Settings › Manage Roles**
+**Menu › Data Base › Users › Roles**
 
 ![Manage Roles](docs/sop-screenshots/users-roles.png)
 
@@ -1754,7 +1818,7 @@ Este merece um passo a passo próprio, porque tem uma opção que os outros não
 
 ### 15.2. Page Access
 
-**Menu › Settings › Page Access**
+**Menu › Data Base › Users › Page Access**
 
 ![Page Access](docs/sop-screenshots/page-access.png)
 
@@ -1776,7 +1840,7 @@ Este merece um passo a passo próprio, porque tem uma opção que os outros não
 
 ## 16. Support Center — chamados
 
-**Menu › SUPPORT › Tickets**
+**Menu › Data Base › Support Center › Tickets List**
 
 ![Lista de chamados](docs/sop-screenshots/tickets-list.png)
 
@@ -1806,7 +1870,7 @@ Este merece um passo a passo próprio, porque tem uma opção que os outros não
 
 ### 17.1. Dashboard
 
-**Menu › Navigation › Dashboards**
+**Menu › Navigation › Dashboards › KPI**
 
 ![Dashboard](docs/sop-screenshots/dashboard.png)
 
@@ -1894,7 +1958,8 @@ Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de pa
 
 Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devolve "página não encontrada". Não é defeito do seu acesso:
 
-- **New Deals › DCE** — Deliverable Forward · NDF · Option · Swap
+- **New Deals › COE**
+- **Intrag › DCE › DFW** (e **New Deals › DCE › Deliverable Forward**, que abre a mesma tela) — a tela abre e diz que está em construção
 - **New Deals › Options › EDG** — *a tela já abre*, mas ainda **não importa nem envia** (capítulo 5.11)
 - **Regulatory › e-Financeira** — Kapital · Athena NDF · Athena FXO · Pyramid
 - **Regulatory › WHT**
@@ -1921,7 +1986,7 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 
 | Tela | Menu | Capítulo |
 |---|---|---|
-| Dashboard | Navigation › Dashboards | 17.1 |
+| Dashboard (KPI) | Navigation › Dashboards | 17.1 |
 | About | Navigation › About | 17.2 |
 | Holidays Calendar | Apps | 13.5 |
 | Electronic Inventory | Apps | 13.7 |
@@ -1932,8 +1997,8 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 | NDF Summary | Daily Settlement › NDF | 6.1 |
 | NDF Cockpit | Daily Settlement › NDF | 6.2 |
 | Other Publisher | Daily Settlement › NDF | 6.3 |
-| Other Products Summary | Daily Settlement › Other Products | 6.4 |
-| OTM Settlements | Daily Settlement › Other Products | 6.5 |
+| Other Products Summary | Daily Settlement › Other Products › Summary | 6.4 |
+| OTM Settlements | Daily Settlement › Other Products › OTM | 6.5 |
 | Latam Desk Position | Daily Settlement › Other Products | 6.6 |
 | Swap Settlement Advice | Daily Settlement › Other Products › Swap | 6.7 |
 | Swap Athena · VCP · Events · Kapital Hybrids | Daily Settlement › Other Products › Swap | 6.8 |
@@ -1944,28 +2009,32 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 | Live Position NDF | Live Position | 7.1 |
 | Live Position Option | Live Position | 7.2 |
 | Swap Characteristics · Cashflow · Premium | Live Position › Swap | 7.3 |
+| Swap Strategy | Live Position › Swap | 7.4 |
 | Comitente | Reconciliations | 8.1 |
 | Pay/Rec | Reconciliations | 8.2 |
 | FXO | Reconciliations | 8.3 |
 | CGD | Reconciliations | 8.4 |
-| Pending Confirmation | Documentation › Pending Confirmation | 9.1 |
-| Metrics | Documentation › Pending Confirmation | 9.2 |
-| Confirmations Monitor | Documentation › Manual Confirmation | 9.3 |
-| Tela de validação | (aberta pelo Monitor) | 9.4 |
-| Track Confirmations | Documentation › Manual Confirmation | 9.5 |
+| Conf. Matching | Reconciliations | 8.5 |
+| Pending Confirmation | Documentation › Pending Confirmation › Main | 9.1 |
+| Dashboard — Pending Confirmation | Documentation › Pending Confirmation | 9.2 |
+| Metrics | Documentation › Pending Confirmation | 9.3 |
+| Confirmations Monitor | Documentation › Manual Confirmation | 9.4 |
+| Tela de validação | (aberta pelo Monitor) | 9.5 |
+| Track Confirmations | Documentation › Manual Confirmation | 9.6 |
 | Onboarding Overview | Documentation › Onboarding | 10.1 |
-| Tracking Docs | Documentation › Onboarding | 10.2 |
-| Intraday Monitor | Dashboards | 5.1 |
+| Tracking Docs | Documentation › Onboarding › Track Docs | 10.2 |
+| Intraday Monitor | Navigation › Dashboards | 5.1 |
 | New Deals (6 telas de produto) | Products › New Deals | 5.2 |
-| Intrag NDF · Option · Swap | Products › Intrag | 11 |
-| Accrual Swap · MtM Swap | Products | 12 |
-| Reference Data | Settings | 13.1 |
-| Index B3 | Settings | 13.2 |
-| Mapping | Settings | 13.3 |
-| Manage Roles | Settings | 15.1 |
-| Page Access | Settings | 15.2 |
-| Tickets · Ticket Details | Support | 16 |
+| Intrag NDF · Option · Swap · Unwind | Products › Intrag | 11 |
+| Intrag DCE (Option · Swap · NDF) | Products › Intrag › DCE | 11 |
+| Accrual Swap · MtM Swap | Regulatory | 12 |
+| Reference Data | Data Base | 13.1 |
+| Index B3 | Data Base | 13.2 |
+| Mapping | Data Base | 13.3 |
+| Manage Roles | Data Base › Users › Roles | 15.1 |
+| Page Access | Data Base › Users | 15.2 |
+| Tickets · Ticket Details | Data Base › Support Center | 16 |
 
 ---
 
-*OTC Tracker · Brazil OTC Operations · JPMorgan Chase & Co. · Guia do Usuário v2.0 — 24/08/2026*
+*OTC Tracker · Brazil OTC Operations · JPMorgan Chase & Co. · Guia do Usuário v2.1 — 30/09/2026*

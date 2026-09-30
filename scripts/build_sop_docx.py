@@ -69,6 +69,30 @@ def shade(cell, hexc):
 # do repositório NÃO é tocado. Sem Pillow, embute o original (o documento sai
 # gordo, mas sai).
 IMG_MAX_PX = int(os.environ.get('SOP_IMG_MAX_PX') or 1400)
+
+# Captura ESTREITA (um recorte: o menu lateral, um menu aberto) não vai na
+# largura da página. Esticada a 6,6", a de 480 px do menu saía com 36" de
+# altura no Word — uma página inteira de menu. Abaixo de NARROW_PX ela fica
+# proporcional à tela cheia do guia (1920 px = 6,6").
+NARROW_PX = 1200
+FULL_PX = 1920
+
+
+# E nenhuma passa da altura útil da página: o painel inicial inteiro saía com
+# 12,5" e o Word o cortava no pé da folha.
+IMG_MAX_H = Inches(9.0)
+
+
+def img_width(path):
+    try:
+        from PIL import Image
+        w, h = Image.open(path).size
+    except Exception:                                          # noqa: BLE001
+        return IMG_W
+    largura = IMG_W if w >= NARROW_PX else int(IMG_W * w / float(FULL_PX))
+    if largura * h / float(w) > IMG_MAX_H:
+        largura = int(IMG_MAX_H * w / float(h))
+    return largura
 _shrunk = {}
 
 
@@ -167,8 +191,8 @@ def build():
             fp = path if os.path.isabs(path) else os.path.join(ROOT, path)
             if os.path.exists(fp):
                 try:
-                    doc.add_picture(shrink(fp), width=IMG_W)
-                    doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    doc.add_picture(shrink(fp), width=img_width(fp))
+                    doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.LEFT
                 except Exception as e:
                     doc.add_paragraph('[imagem: %s — %s]' % (path, e))
             else:

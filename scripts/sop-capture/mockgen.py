@@ -269,3 +269,67 @@ def transform(obj, nrows=12):
         o['success'] = True
         return True, o
     return False, obj
+
+
+# ─── Painel inicial: Settlement Forecast e Live Position ─────────────────────
+# Os dois leem os arquivos B3 do dia, que a dev não tem: o forecast responde
+# ERRO ("No B3 JSON files…") e o live position zeros — não há coluna nenhuma
+# para o `transform` aproveitar. Os payloads são montados do zero, no formato
+# de `platform/forecast._forecast_payload` e de `/api/dashboard-live-position`.
+FC_PRODUCTS = ['NDF Moeda', 'NDF Commodities', 'Option FXO', 'Option Commodities',
+               'Option EDG', 'SWAP CEM', 'SWAP EDG', 'SWAP CEMHYB']
+FC_ENTITIES = ['BANCO', 'LAWTON', 'MGT', 'ATACAMA']
+
+
+def _business_days(n, start=None):
+    from datetime import date, timedelta
+    d = start or date(2026, 9, 30)
+    out = []
+    while len(out) < n:
+        d += timedelta(days=1)
+        if d.weekday() < 5 and (d.month, d.day) not in ((10, 12), (11, 2), (11, 20)):
+            out.append(d)
+    return out
+
+
+def forecast_mock(days=15):
+    rnd = random.Random(7)
+    spine = _business_days(days)
+    base = {'NDF Moeda': 9, 'NDF Commodities': 5, 'Option FXO': 3, 'Option Commodities': 3,
+            'Option EDG': 1, 'SWAP CEM': 2, 'SWAP EDG': 2, 'SWAP CEMHYB': 1}
+    prods = []
+    for k in FC_PRODUCTS:
+        vals = [max(0, base[k] + rnd.randint(-base[k], base[k])) for _ in spine]
+        prods.append({'label': k, 'values': vals, 'total': sum(vals)})
+    col = [sum(p['values'][i] for p in prods) for i in range(len(spine))]
+    ents = []
+    for i, k in enumerate(FC_ENTITIES):
+        share = (0.55, 0.2, 0.15, 0.1)[i]
+        vals = [int(round(c * share)) for c in col]
+        ents.append({'label': k, 'values': vals, 'total': sum(vals)})
+    return {'success': True, 'ref_date': '2026-09-29', 'ref_date_fmt': '29/09/2026',
+            'days': len(spine),
+            'date_labels': [d.strftime('%d/%m') for d in spine],
+            'date_full': [d.strftime('%d/%m/%Y') for d in spine],
+            'products': prods, 'entities': ents, 'col_totals': col,
+            'grand_total': sum(col), 'sources': []}
+
+
+def live_position_mock():
+    prods = [('NDF Moeda', 412), ('NDF Commodities', 238), ('Option FXO', 164),
+             ('Option Commodities', 121), ('SWAP CEM', 96), ('SWAP EDG', 73),
+             ('Option EDG', 41), ('SWAP CEMHYB', 18)]
+    total = sum(c for _, c in prods)
+    ents = [('BANCO', 742), ('LAWTON', 214), ('MGT', 147), ('ATACAMA', 60)]
+    return {'success': True, 'ref_date': '2026-09-29', 'ref_date_fmt': '29/09/2026',
+            'total': total,
+            'by_product': [{'label': l, 'count': c} for l, c in prods],
+            'by_entity': [{'label': l, 'count': c} for l, c in ents],
+            'sources': []}
+
+
+# Endpoints cujo payload fictício NÃO depende da resposta real.
+STATIC = {
+    '/api/control-panel/settlement-forecast/data': forecast_mock,
+    '/api/dashboard-live-position': live_position_mock,
+}

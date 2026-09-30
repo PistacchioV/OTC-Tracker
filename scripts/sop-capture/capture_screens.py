@@ -76,6 +76,10 @@ DATA_EPS = [
 # do localStorage no load e escreve o data-bs-theme — não há parâmetro de URL.
 THEME = os.environ.get('SOP_THEME', 'dark')
 
+# Teto da altura do print (px de CSS). O painel inicial passa dos 2600 e o
+# último gráfico (Settlements by Entity) saía cortado: SOP_MAX_H=3200 para ele.
+MAX_H = int(os.environ.get('SOP_MAX_H') or 2600)
+
 # Refazer UMA tela (uma rota redesenhada) não pode custar as outras 60: a
 # rodada inteira reescreve o diretório todo, e uma captura ruim no meio dela
 # apaga uma boa. SOP_ONLY é a lista (vírgula) de rotas a percorrer.
@@ -117,7 +121,7 @@ def prefetch_mocks():
     op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj),
                                      urllib.request.ProxyHandler({}))
     op.open(BASE + LOGIN).read()
-    payloads = {}
+    payloads = {ep: json.dumps(fn()) for ep, fn in mockgen.STATIC.items()}
     for ep in DATA_EPS:
         try:
             obj = json.loads(op.open(BASE + ep, timeout=20).read())
@@ -180,7 +184,7 @@ def main():
                     # medir o documento, esticar o viewport até lá (com teto)
                     # e fotografar a janela.
                     h = pg.evaluate('document.body.scrollHeight') or 1000
-                    h = max(1000, min(int(h), 2600))
+                    h = max(1000, min(int(h), MAX_H))
                     pg.set_viewport_size({'width': 1600, 'height': h})
                     pg.wait_for_timeout(600)
                     pg.screenshot(path=os.path.join(OUT, name + '.png'))

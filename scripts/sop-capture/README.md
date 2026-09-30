@@ -16,6 +16,7 @@ módulo novo ficar pronto e você precisar atualizar o SOP.
 |---|---|
 | `mockgen.py` | Gera linhas/valores fictícios reaproveitando as **colunas reais** de cada endpoint. |
 | `capture_screens.py` | Percorre o sidebar, renderiza cada rota no Chromium headless, intercepta `/api/**` e salva os PNGs em `docs/sop-screenshots/`. |
+| `capture_extras.py` | As capturas que pedem um clique antes do print: o **menu lateral** aberto (recortado no alto — o mapa completo é a tabela do 3.5 do Guia), os menus **Columns**/**Export** abertos e a **edição em massa** do Tracking Docs. Mesmas variáveis (`SOP_BASE_URL`, `SOP_OUT_DIR`, `SOP_ONLY` com os nomes dos PNGs). |
 | `devrun.example.py` | **Template** do launcher local (stub de `awmpy` + rota `/dev-login`). Copie para `devrun.py` (gitignored). |
 | `.gitignore` | Impede o commit de `devrun.py`, caches e artefatos. |
 
@@ -79,6 +80,14 @@ fictício; as demais chamadas seguem normalmente (retornando vazio/real).
   `SOP_THEME` (o guia é **dark**), `SOP_ONLY`, `SOP_OUT_DIR` — este último grava os
   PNGs num diretório à parte, para conferir a rodada antes de sobrescrever as
   telas do guia (uma captura ruim não pode apagar a boa).
+- **Painel inicial sem dado na dev**: o Settlement Forecast e o Live Position
+  leem os arquivos B3 do dia, que a dev não tem. O `mockgen.STATIC` monta os
+  dois payloads do zero (não há coluna para aproveitar), e o painel inteiro
+  passa da altura padrão — refaça-o com `SOP_MAX_H=3200` para o último gráfico
+  (*Settlements by Entity*) não sair cortado.
+- **No Word** (`build_sop_docx.py`) as imagens vão alinhadas à ESQUERDA; recorte
+  estreito (< 1200 px, como o menu lateral) fica proporcional à tela cheia em
+  vez de esticado a 6,6", e nenhuma passa de 9" de altura.
 - **Refazer UMA tela** (uma rota redesenhada) não custa as outras 60: `SOP_ONLY`
   é a lista de rotas, por vírgula. Ex.:
 
