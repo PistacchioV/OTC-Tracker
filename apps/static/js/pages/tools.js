@@ -26,6 +26,7 @@
           synced: 'History updated', syncFail: 'Could not update the history',
           days: 'days in the base', lookingUp: 'Looking up the swap position…',
           notFound: 'Not found', prefilled: 'Filled from the swap position of',
+          fromStrategy: 'Legs from strategy', calculating: 'Calculating…',
           missing: 'Could not pull from the position (left blank):',
           assumed: 'Assumed: with no Data operação termo, the trade date is the swap start date.',
           noIndexRule: 'No line in the tools-swap-index mapping for this curve — register it in Mapping. The position had:',
@@ -75,7 +76,7 @@
           descUnread: 'Not understood in the description — check by hand:',
           fields: { counterparty: 'Counterparty', data_operacao: 'Trade date', inicio: 'Flow start',
                     fim: 'Flow end', vencimento: 'Swap maturity', nocional: 'Remaining notional',
-                    nocional_original: 'Original notional', amortizacao: 'Amortisation',
+                    nocional_original: 'Original notional', amortizacao: 'Amortisation', estrategia: 'strategy data (import the Swap-MID-ConsultaDadosEstrategia file in Live Position › Swap › Strategy)',
                     base_amortizacao: 'Amortisation base', indexador: 'index', taxa: 'rate',
                     moeda: 'currency', tenor: 'tenor', percentual: '% of CDI',
                     base_ajuste: 'What settles', ptax_inicial: 'initial fixing',
@@ -92,6 +93,7 @@
           synced: 'Histórico atualizado', syncFail: 'Não foi possível atualizar o histórico',
           days: 'dias na base', lookingUp: 'Consultando a posição de swap…',
           notFound: 'Não encontrado', prefilled: 'Preenchido pela posição de swap de',
+          fromStrategy: 'Pontas da estratégia', calculating: 'Calculando…',
           missing: 'Não foi possível puxar da posição (ficou em branco):',
           assumed: 'Assumido: sem Data operação termo, a data da operação é a data de início do swap.',
           noIndexRule: 'Nenhuma linha no cadastro tools-swap-index para esta curva — cadastre em Mapping. A posição trazia:',
@@ -141,7 +143,7 @@
           descUnread: 'Não entendido na descrição — confira à mão:',
           fields: { counterparty: 'Contraparte', data_operacao: 'Data da operação', inicio: 'Início do fluxo',
                     fim: 'Fim do fluxo', vencimento: 'Vencimento do swap', nocional: 'Notional remanescente',
-                    nocional_original: 'Notional original', amortizacao: 'Amortização',
+                    nocional_original: 'Notional original', amortizacao: 'Amortização', estrategia: 'dados da estratégia (importe o arquivo Swap-MID-ConsultaDadosEstrategia em Live Position › Swap › Strategy)',
                     base_amortizacao: 'Base da amortização', indexador: 'índice', taxa: 'taxa',
                     moeda: 'moeda', tenor: 'prazo', percentual: '% do CDI',
                     base_ajuste: 'O que liquida', ptax_inicial: 'fixing inicial',
@@ -158,6 +160,7 @@
           synced: 'Historial actualizado', syncFail: 'No se pudo actualizar el historial',
           days: 'días en la base', lookingUp: 'Consultando la posición de swap…',
           notFound: 'No encontrado', prefilled: 'Completado desde la posición de swap de',
+          fromStrategy: 'Patas de la estrategia', calculating: 'Calculando…',
           missing: 'No se pudo traer de la posición (quedó en blanco):',
           assumed: 'Asumido: sin Data operação termo, la fecha de la operación es la de inicio del swap.',
           noIndexRule: 'Ninguna línea en el registro tools-swap-index para esta curva — regístrela en Mapping. La posición traía:',
@@ -207,7 +210,7 @@
           descUnread: 'No entendido en la descripción — revise a mano:',
           fields: { counterparty: 'Contraparte', data_operacao: 'Fecha de la operación', inicio: 'Inicio del flujo',
                     fim: 'Fin del flujo', vencimento: 'Vencimiento del swap', nocional: 'Nocional remanente',
-                    nocional_original: 'Nocional original', amortizacao: 'Amortización',
+                    nocional_original: 'Nocional original', amortizacao: 'Amortización', estrategia: 'datos de la estrategia (importe el archivo Swap-MID-ConsultaDadosEstrategia en Live Position › Swap › Strategy)',
                     base_amortizacao: 'Base de la amortización', indexador: 'índice', taxa: 'tasa',
                     moeda: 'moneda', tenor: 'plazo', percentual: '% del CDI',
                     base_ajuste: 'Qué liquida', ptax_inicial: 'fixing inicial',
@@ -849,6 +852,10 @@
       ['ativa', 'passiva'].forEach(function (l) { var p = d[l] || {}; if (p.data_fixing) setVal(l + '_data_fixing', p.data_fixing); else fixingPadrao(l, true); });
       var txt = '<strong>' + t('prefilled') + ' ' + (d.source_date ? d.source_date.split('-').reverse().join('/') : '—') + '</strong>';
       if (d.identificador || d.contrato) txt += ' — ' + [d.contrato, d.identificador].filter(Boolean).join(' · ');
+      // Contrato de estratégia: as pontas vieram da consulta da B3 gravada em
+      // Live Position › Swap › Strategy, não das curvas VCP da posição.
+      if (d.estrategia && d.estrategia.dados) txt += '<br>' + t('fromStrategy') + ' <strong>' +
+        esc([d.estrategia.codigo, d.estrategia.nome].filter(Boolean).join(' · ')) + '</strong>';
       var miss = (d.missing || []).map(label);
       if (miss.length) txt += '<br>' + t('missing') + ' <em>' + miss.join(', ') + '</em>';
       if ((d.assumed || []).length) txt += '<br>' + t('assumed');
@@ -1078,6 +1085,34 @@
         .then(function () { b.disabled = false; });
     });
   });
+  // ── Calculate: spinner enquanto a página recalcula ──────────────────────
+  // O Calculate é um `submit` de verdade (a página volta com o resultado), e
+  // o recálculo busca PTAX/fixings na rede — segundos em que o botão parecia
+  // não ter sido clicado. O spinner some sozinho quando a página nova chega;
+  // o `pageshow` cobre a volta pelo histórico (bfcache), que restauraria o
+  // botão girando. O Export não passa aqui: ele intercepta o clique e tem o
+  // spinner dele.
+  (function () {
+    var exp = document.getElementById('tl-export');
+    var form = exp ? exp.form : document.querySelector('.tl-page form[method="post"]');
+    if (!form) return;
+    var ligado = null;
+    form.addEventListener('submit', function (ev) {
+      var btn = ev.submitter || form.querySelector('button[type="submit"]:not(#tl-export)');
+      if (!btn || btn.id === 'tl-export' || btn.disabled) return;
+      ligado = { btn: btn, html: btn.innerHTML };
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>'
+        + t('calculating');
+      // desabilitar NA MESMA volta tiraria o botão do envio do formulário
+      setTimeout(function () { btn.disabled = true; }, 0);
+    });
+    window.addEventListener('pageshow', function () {
+      if (!ligado) return;
+      ligado.btn.disabled = false;
+      ligado.btn.innerHTML = ligado.html;
+      ligado = null;
+    });
+  })();
   // ── Export: a memória de cálculo em Excel ────────────────────────────────
   // O botão é um `submit` de verdade, com `formaction`: sem este bloco ele
   // baixa do mesmo jeito. O fetch existe por UM motivo — haver um fim. Uma

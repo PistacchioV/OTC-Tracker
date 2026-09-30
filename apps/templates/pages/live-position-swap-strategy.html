@@ -1,0 +1,610 @@
+{% extends "layouts/vertical.html" %}
+
+{# Live Position › Swap › Strategy. A grade é o CADASTRO por contrato (Código
+   da Estratégia · Nome · Código do Contrato, das consultas do MID de Swap da
+   B3) mais Contraparte e LOB do Live Position Swap Characteristics — calculadas
+   na leitura, nunca gravadas. Os DADOS de cada estratégia têm colunas próprias
+   e abrem num modal, no duplo clique da linha. #}
+{% block title %}Swap Strategy{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/dropzone/dropzone.css" rel="stylesheet" type="text/css"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
+<style>
+  @keyframes ti-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+  i.ti-spin, .ti-spin, i.ti-loader-2 { display: inline-block !important; animation: ti-spin 0.8s linear infinite !important; }
+
+  /* ── Dropzone — o MESMO bloco das páginas de New Deals ─────────────────── */
+  #myAwesomeDropzone.dropzone { max-width: 100% !important; margin-left: 0 !important; margin-right: 0 !important; }
+  #myAwesomeDropzone.dropzone { min-height: 0 !important; height: auto !important; padding: 4px 12px !important; }
+  #myAwesomeDropzone.dropzone .dz-message { margin: 0 !important; padding: 4px 0 !important; }
+  #myAwesomeDropzone.dropzone .dz-message .avatar-lg { height: 24px !important; width: 24px !important; margin-bottom: 2px !important; }
+  #myAwesomeDropzone.dropzone .dz-message .avatar-title { height: 24px !important; width: 24px !important; }
+  #myAwesomeDropzone.dropzone .dz-message .avatar-title i { font-size: 14px !important; }
+  #myAwesomeDropzone.dropzone .dz-message h4 { font-size: .82rem !important; margin-bottom: 1px !important; }
+  #myAwesomeDropzone.dropzone .dz-message p { font-size: .72rem !important; margin-bottom: 3px !important; }
+  #myAwesomeDropzone.dropzone .dz-message .btn { padding: 3px 10px !important; font-size: .74rem !important; }
+  #myAwesomeDropzone.dropzone { transition: border-color 180ms ease-out, background 180ms ease-out; }
+  #myAwesomeDropzone.dropzone:hover, #myAwesomeDropzone.dropzone.dz-drag-hover { border-color: #0066cc !important; background: rgba(0, 102, 204, 0.025) !important; }
+  .nd-upload-icon { background: rgba(0, 102, 204, 0.12) !important; color: #0066cc !important; }
+  .nd-deal-card { border-left: 3px solid #0066cc !important; }
+
+  div.dt-button-collection { opacity: 1 !important; background-color: var(--ins-dropdown-bg, var(--ins-secondary-bg, #fff)) !important; border: var(--ins-border-width, 1px) solid var(--ins-border-color, rgba(0,0,0,.1)) !important; border-radius: var(--ins-dropdown-border-radius, 0.6875rem) !important; box-shadow: 0 8px 24px rgba(0,0,0,.12) !important; }
+  div.dt-button-collection .dropdown-item { opacity: 1 !important; color: var(--ins-dropdown-link-color, var(--ins-body-color)) !important; }
+
+  .card-body { padding: 5px; }
+  .dt-scroll-head, .dataTables_scrollHead { padding-top: 8px; }
+  .dt-scroll-body thead, .dataTables_scrollBody thead { display: none !important; }
+  /* Centralizada (§7): th .7rem, td .8rem; o clone do header do scrollX perde
+     o id da tabela, por isso as mesmas regras com !important nos clones. */
+  #sst-table th { white-space: normal; padding: 8px 10px; text-align: center !important; vertical-align: middle !important; font-size: 0.7rem; }
+  .dt-scroll-head thead th, .dt-scroll-headInner thead th,
+  .dataTables_scrollHead thead th, .dataTables_scrollHeadInner thead th { white-space: normal !important; text-align: center !important; vertical-align: middle !important; font-size: 0.7rem !important; }
+  #sst-table td { white-space: nowrap; font-size: 0.8rem; text-align: center; vertical-align: middle; font-variant-numeric: tabular-nums; }
+  #sst-table tbody tr { cursor: pointer; }
+
+  /* O modal dos dados: um cartão por campo, porque cada estratégia tem os seus. */
+  #sstDetailFields .sst-field { border: 1px solid var(--ins-border-color, rgba(0,0,0,.1)); border-radius: 10px; padding: .45rem .65rem; height: 100%; background: var(--ins-secondary-bg, transparent); }
+  #sstDetailFields .sst-field__label { font-size: .68rem; color: var(--ins-secondary-color, #6e6e73); text-transform: uppercase; letter-spacing: .02em; }
+  #sstDetailFields .sst-field__value { font-size: .86rem; font-weight: 600; font-variant-numeric: tabular-nums; word-break: break-word; }
+  #sstDetailMeta { font-size: .74rem; color: var(--ins-secondary-color, #6e6e73); }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" data-content="">
+    <div class="page-title-head d-flex align-items-center">
+        <div class="flex-grow-1">
+            <h4 class="fs-xl fw-bold m-0 d-flex align-items-center gap-2">
+                <i class="ti ti-chess-knight" style="color:#0066cc;font-size:22px;flex-shrink:0;"></i>
+                <span data-lang="sst-title">Swap Strategy</span>
+            </h4>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="javascript: void(0);" data-lang="live-position">Live Position</a></li>
+                <li class="breadcrumb-item"><a href="javascript: void(0);" data-lang="nav-swap">Swap</a></li>
+                <li class="breadcrumb-item active" data-lang="nav-strategy">Strategy</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card nd-deal-card">
+
+                <!-- ── Dropzone: as consultas da B3 (o servidor lê pelo conteúdo) ── -->
+                <div class="card-body" style="padding: 10px;">
+                    <form action="/" class="dropzone" data-plugin="dropzone"
+                          data-previews-container="#file-previews"
+                          data-upload-preview-template="#uploadPreviewTemplate"
+                          id="myAwesomeDropzone" method="post">
+                        <div class="fallback"><input name="file" type="file" multiple/></div>
+                        <div class="dz-message needsclick">
+                            <div class="avatar-lg mx-auto mb-3">
+                                <span class="avatar-title nd-upload-icon rounded-circle">
+                                    <i class="fs-24 ti ti-cloud-upload"></i>
+                                </span>
+                            </div>
+                            <h4 class="mb-2" data-lang="sst-dropzone-title">Drop the B3 strategy files here, or click to upload.</h4>
+                            <p class="text-muted fst-italic mb-3" data-lang="sst-dropzone-hint">Swap-MID-ConsultaEstrategiaContratos and Swap-MID-ConsultaDadosEstrategia (tsv, csv, xls, xlsx) — then click Import.</p>
+                            <button class="btn btn-sm shadow btn-default" type="button" data-lang="nd-browse">Browse</button>
+                        </div>
+                    </form>
+                    <div class="dropzone-previews mt-3" id="file-previews"></div>
+                    <div class="d-none" id="uploadPreviewTemplate">
+                        <div class="card mt-1 mb-0 border-dashed border">
+                            <div class="p-2">
+                                <div class="row align-items-center">
+                                    <div class="col-auto">
+                                        <div class="avatar-sm rounded bg-light d-flex align-items-center justify-content-center">
+                                            <i class="file-icon fs-24 text-muted ti ti-file"></i>
+                                        </div>
+                                    </div>
+                                    <div class="col ps-0">
+                                        <a class="fw-semibold" data-dz-name="" href="javascript:void(0);"></a>
+                                        <p class="mb-0 text-muted" data-dz-size=""></p>
+                                    </div>
+                                    <div class="col-auto">
+                                        <a class="btn btn-link btn-lg text-danger" data-dz-remove="" href="">
+                                            <i class="ti ti-x"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-header">
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <label class="form-label mb-0" data-lang="b3-show">Show</label>
+                        <select class="form-select form-select-sm" style="width: 80px;" data-table-set-rows-per-page>
+                            <option value="50" selected>50</option>
+                            <option value="100">100</option>
+                            <option value="150">150</option>
+                            <option value="200">200</option>
+                        </select>
+                        <label class="form-label mb-0" data-lang="b3-entries">entries</label>
+                        <span class="text-muted fs-xs ms-auto d-none d-lg-inline">
+                            <span data-lang="sst-dblclick-hint">Double-click a row to see the strategy data</span>
+                            · <span data-lang="sst-position-asof">Live Position as of</span> <b id="sstAsOf">—</b>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="card-body" style="padding-top: 10px;">
+                    <table class="table table-striped align-middle mb-0" id="sst-table" style="width:100%">
+                        <thead class="thead-sm text-uppercase fs-xxs">
+                            <tr class="text-uppercase fs-xxs">
+                                <th class="ps-3" style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" id="selectAll"></th>
+                                <th data-lang="nd-col-actions">Actions</th>
+                                <th data-lang="sst-col-status">Status</th>
+                                <th data-lang="sst-col-contract">Contract Code</th>
+                                <th data-lang="sst-col-code">Strategy Code</th>
+                                <th data-lang="sst-col-name">Strategy Name</th>
+                                <th data-lang="sst-col-counterparty">Counterparty</th>
+                                <th data-lang="sst-col-lob">LOB</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit da linha: SEMPRE em modal (regra da mesa, 28/09/2026). -->
+<div class="modal fade" id="sstEditModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content liquid-glass">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6"><i class="ti ti-edit me-1"></i><span id="sstEditTitle">Edit Row</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label fs-xs text-muted mb-1" data-lang="sst-col-code">Strategy Code</label>
+            <input type="text" class="form-control form-control-sm sst-edit" data-f="StrategyCode">
+          </div>
+          <div class="col-md-8">
+            <label class="form-label fs-xs text-muted mb-1" data-lang="sst-col-name">Strategy Name</label>
+            <input type="text" class="form-control form-control-sm sst-edit" data-f="StrategyName">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success" id="sstEditSave" title="Save"><i class="ti ti-device-floppy"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Os DADOS da estratégia (duplo clique): colunas próprias de cada uma. -->
+<div class="modal fade" id="sstDetailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content liquid-glass">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6"><i class="ti ti-chess-knight me-1"></i><span data-lang="sst-details-title">Strategy Data</span> — <span id="sstDetailTitle"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="sstDetailMeta" class="mb-2"></div>
+        <div class="row g-2" id="sstDetailFields"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal" title="Close"><i class="ti ti-x"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/dropzone/dropzone-min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/otc-fileupload.js?v={{ asset_v('js/pages/otc-fileupload.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
+<script>
+var API = '/api/live-position-swap-strategy';
+// [0]=checkbox [1]=actions [2]=Status [3]=Contract (a CHAVE) [4]=Code [5]=Name [6]=Counterparty [7]=LOB
+var C_KEY = 3;
+var ENTRIES = [], ROWS = {}, selected = new Set();
+
+// Os avisos e erros do servidor chegam por CÓDIGO (§486): a tela é que diz a frase.
+var _TRANS = {
+    en: {
+        'sst_imported': 'Imported',
+        'sst_nothing_imported': 'Nothing imported',
+        'sst_nothing_to_import': 'Nothing to import',
+        'sst_drop_first': 'Drop the B3 strategy files in the box above first.',
+        'sst_import_summary': '{files} file(s): {new} new contract(s), {updated} updated.',
+        'sst_edit_row': 'Edit Row',
+        'sst_not_saved': 'Not saved',
+        'sst_delete_title': 'Delete?',
+        'sst_delete_text': '{n} contract(s) will be removed from the strategy list.',
+        'sst_delete_btn': 'Delete',
+        'sst_no_details': 'No strategy data yet — drop the Swap-MID-ConsultaDadosEstrategia file of this strategy.',
+        'sst_meta_file': 'File',
+        'sst_meta_query': 'B3 query',
+        'sst_not_in_position': 'Not in the Live Position',
+        'e_strategy_header_unknown': 'No "Código do Contrato" column was found — this is not a B3 strategy query',
+        'e_strategy_file_empty': 'The file has no contracts',
+        'e_strategy_file_empty_upload': 'The file is empty',
+        'e_strategy_file_too_large': 'The file is too large',
+        'e_strategy_file_unreadable': 'The file could not be read: {motivo}',
+        'e_strategy_no_file': 'No file received',
+        'e_strategy_not_found': 'Contract not found',
+        'e_strategy_no_rows': 'No rows selected'
+    },
+    br: {
+        'sst_imported': 'Importado',
+        'sst_nothing_imported': 'Nada foi importado',
+        'sst_nothing_to_import': 'Nada para importar',
+        'sst_drop_first': 'Solte primeiro os arquivos de estratégia da B3 na caixa acima.',
+        'sst_import_summary': '{files} arquivo(s): {new} contrato(s) novo(s), {updated} atualizado(s).',
+        'sst_edit_row': 'Editar Linha',
+        'sst_not_saved': 'Não foi salvo',
+        'sst_delete_title': 'Excluir?',
+        'sst_delete_text': '{n} contrato(s) sairão da lista de estratégias.',
+        'sst_delete_btn': 'Excluir',
+        'sst_no_details': 'Ainda sem dados da estratégia — solte o arquivo Swap-MID-ConsultaDadosEstrategia desta estratégia.',
+        'sst_meta_file': 'Arquivo',
+        'sst_meta_query': 'Consulta da B3',
+        'sst_not_in_position': 'Fora do Live Position',
+        'e_strategy_header_unknown': 'Nenhuma coluna "Código do Contrato" foi encontrada — isto não é uma consulta de estratégia da B3',
+        'e_strategy_file_empty': 'O arquivo não tem contratos',
+        'e_strategy_file_empty_upload': 'O arquivo está vazio',
+        'e_strategy_file_too_large': 'O arquivo é grande demais',
+        'e_strategy_file_unreadable': 'Não foi possível ler o arquivo: {motivo}',
+        'e_strategy_no_file': 'Nenhum arquivo recebido',
+        'e_strategy_not_found': 'Contrato não encontrado',
+        'e_strategy_no_rows': 'Nenhuma linha selecionada'
+    },
+    es: {
+        'sst_imported': 'Importado',
+        'sst_nothing_imported': 'No se importó nada',
+        'sst_nothing_to_import': 'Nada para importar',
+        'sst_drop_first': 'Suelte primero los archivos de estrategia de la B3 en el cuadro de arriba.',
+        'sst_import_summary': '{files} archivo(s): {new} contrato(s) nuevo(s), {updated} actualizado(s).',
+        'sst_edit_row': 'Editar Fila',
+        'sst_not_saved': 'No se guardó',
+        'sst_delete_title': '¿Eliminar?',
+        'sst_delete_text': '{n} contrato(s) saldrán de la lista de estrategias.',
+        'sst_delete_btn': 'Eliminar',
+        'sst_no_details': 'Todavía sin datos de la estrategia — suelte el archivo Swap-MID-ConsultaDadosEstrategia de esta estrategia.',
+        'sst_meta_file': 'Archivo',
+        'sst_meta_query': 'Consulta de la B3',
+        'sst_not_in_position': 'Fuera del Live Position',
+        'e_strategy_header_unknown': 'No se encontró la columna "Código do Contrato" — esto no es una consulta de estrategia de la B3',
+        'e_strategy_file_empty': 'El archivo no tiene contratos',
+        'e_strategy_file_empty_upload': 'El archivo está vacío',
+        'e_strategy_file_too_large': 'El archivo es demasiado grande',
+        'e_strategy_file_unreadable': 'No se pudo leer el archivo: {motivo}',
+        'e_strategy_no_file': 'No se recibió ningún archivo',
+        'e_strategy_not_found': 'Contrato no encontrado',
+        'e_strategy_no_rows': 'Ninguna fila seleccionada'
+    }
+};
+function _lang() { try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) { return 'en'; } }
+function t(key, fallback) {
+    var l = _lang();
+    if (_TRANS[l] && _TRANS[l][key]) return _TRANS[l][key];
+    try {
+        var d = window.__OTC_TRANSLATIONS__ && window.__OTC_TRANSLATIONS__[l];
+        if (d && d[key]) return d[key];
+    } catch (e) {}
+    return fallback;
+}
+function fmtParams(s, params) {
+    return String(s == null ? '' : s).replace(/\{(\w+)\}/g, function (_m, k) {
+        var v = params && params[k];
+        return v == null ? '' : String(v);
+    });
+}
+function erroTexto(res, padrao) {
+    if (!res) return padrao || '';
+    var tr = t('e_' + (res.code || ''), null);
+    return tr ? fmtParams(tr, res.params) : (res.message || res.error || padrao || '');
+}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function _isoToDmy(s){var m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?(m[3]+'/'+m[2]+'/'+m[1]):String(s||'');}
+function _todayYmd(){var d=new Date();return d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2);}
+
+// `Complete` = a consulta de dados da estratégia já veio; `Pending` = só a lista.
+var STATUS_META = { 'Complete': 'bg-success text-white', 'Pending': 'bg-warning text-dark' };
+function statusBadge(s) {
+    var txt = String(s || 'Pending');
+    return '<span class="badge rounded-pill ' + (STATUS_META[txt] || 'bg-secondary') + ' bg-gradient">' + esc(txt) + '</span>';
+}
+
+$(document).ready(function () {
+    if (typeof JSZip !== 'undefined') {
+        window.JSZip = JSZip;
+        if ($.fn.dataTable && $.fn.dataTable.Buttons && typeof $.fn.dataTable.Buttons.jszip === 'function') $.fn.dataTable.Buttons.jszip(JSZip);
+    }
+    function fmtExport(data) { return (data == null ? '' : String(data)).replace(/<[^>]*>/g, '').trim(); }
+    var EXPORT_COLS = [2, 3, 4, 5, 6, 7];
+    // O nome do arquivo é o do DOCUMENTO (§7): a tela e o dia em que se exportou.
+    function exportName() { return 'Swap-Strategy-' + _todayYmd(); }
+    var PAGINATE = { paginate: { first:'<i class="ti ti-chevrons-left"></i>', previous:'<i class="ti ti-chevron-left"></i>', next:'<i class="ti ti-chevron-right"></i>', last:'<i class="ti ti-chevrons-right"></i>' } };
+
+    var table = window.sstTable = $('#sst-table').DataTable({
+        scrollX: true, scrollY: '55vh', scrollCollapse: true, autoWidth: true, pageLength: 50, order: [[4, 'asc'], [3, 'asc']],
+        columnDefs: [
+            { orderable: false, targets: [0, 1] },
+            { targets: 2, render: function (d, type) { return type === 'display' ? statusBadge(d) : (d || ''); } },
+            { targets: 6, render: function (d, type, row) {
+                if (type !== 'display') return d || '';
+                var e = ROWS[row[C_KEY]] || {};
+                return d ? esc(d) : (e.InPosition ? '' : '<span class="text-muted fs-xs">' + esc(t('sst_not_in_position', 'Not in the Live Position')) + '</span>');
+            } }
+        ],
+        dom: "<'d-md-flex justify-content-between align-items-center my-2'" +
+            "<'btn-toolbar d-flex flex-wrap align-items-center'" +
+            "B" +
+            "<'importBtn ms-2 me-2'>" +
+            "<'clearFiltersBtn me-2'>" +
+            "<'conditionalActions ms-2 d-flex align-items-center gap-2'>" +
+            ">" +
+            ">" +
+            "rt<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+        buttons: [{
+            extend: 'collection', text: '<i class="ti ti-download me-1"></i> Export',
+            className: 'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all', autoClose: true, fade: 0,
+            buttons: [
+                { extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', title: exportName, exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
+                { extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV', className:'dropdown-item', bom:true, fieldSeparator:';', title: exportName, exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
+                { extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', title: exportName, exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
+                { extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', title: exportName, exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
+                { extend:'pdf',   text:'<i class="ti ti-file-text me-1"></i> PDF', className:'dropdown-item', title: exportName, orientation:'landscape', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} }
+            ]
+        }],
+        language: PAGINATE,
+        drawCallback: function () {
+            var api = this.api();
+            api.rows().every(function () {
+                var d = this.data(), node = this.node();
+                if (d && node) $(node).find('input[type="checkbox"]').prop('checked', selected.has(d[C_KEY]));
+            });
+            syncSelectAll();
+            setTimeout(function () { api.columns.adjust(); }, 0);
+        },
+        initComplete: function () {
+            var api = this.api();
+
+            var importWrap = document.querySelector('.importBtn');
+            if (importWrap && !document.getElementById('importBtn')) {
+                var ib = document.createElement('button');
+                ib.id = 'importBtn'; ib.type = 'button';
+                ib.className = 'btn btn-sm bg-gradient btn-toolbar-all btn-toolbar-import';
+                ib.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
+                importWrap.appendChild(ib);
+                ib.addEventListener('click', runImport);
+            }
+
+            var clearWrap = document.querySelector('.clearFiltersBtn');
+            if (clearWrap && !document.getElementById('clearFiltersBtn')) {
+                var cb = document.createElement('button');
+                cb.id = 'clearFiltersBtn'; cb.type = 'button';
+                cb.className = 'btn btn-sm btn-outline-secondary btn-toolbar-all';
+                cb.innerHTML = '<i class="ti ti-filter-off me-1"></i><span data-lang="btn-clear-filters">Clear Filters</span>';
+                clearWrap.appendChild(cb);
+                cb.addEventListener('click', function () { api.columns().search('').search('').draw(); });
+            }
+
+            var actions = document.querySelector('.conditionalActions');
+            if (actions) {
+                actions.innerHTML = '<button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="btnDel" type="button" data-table-delete-selected><i class="ti ti-trash me-1"></i> Delete</button>';
+                document.getElementById('btnDel').addEventListener('click', function () { deleteRows(Array.from(selected)); });
+            }
+            setTimeout(function () { api.columns.adjust(); }, 150);
+            load();
+        }
+    });
+    $(window).on('resize', function () { table.columns.adjust(); });
+
+    // Edit e Delete (§7: cor semântica, squircle). Não há Confirm nem Send:
+    // a estratégia é consulta da B3, não se aprova nem se envia a lugar nenhum.
+    function _actionsCell() {
+        return '<div class="d-flex justify-content-center gap-1">' +
+            '<a class="btn btn-info btn-sm rounded-circle btn-row-edit" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Edit" data-bs-custom-class="tooltip-info"><i class="ti ti-edit"></i></a>' +
+            '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Delete" data-bs-custom-class="tooltip-danger"><i class="ti ti-trash"></i></a></div>';
+    }
+    $('#sst-table tbody').on('mouseenter', '[data-bs-toggle="tooltip"]', function () {
+        if (window.bootstrap && !bootstrap.Tooltip.getInstance(this)) new bootstrap.Tooltip(this).show();
+    });
+
+    function rowOf(e) {
+        return ['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">', _actionsCell(),
+                e.Status || '', e.Contract || '', e.StrategyCode || '', e.StrategyName || '',
+                e.Counterparty || '', e.LOB || ''];
+    }
+    function renderAll() {
+        table.clear(); ROWS = {};
+        ENTRIES.forEach(function (e) {
+            if (!e || !e.Contract) return;
+            ROWS[e.Contract] = e;
+            table.row.add(rowOf(e));
+        });
+        table.draw(false);
+        setTimeout(function () { table.columns.adjust(); }, 100);
+    }
+    function load() {
+        selected.clear();
+        fetch(API + '/data', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                ENTRIES = (res && res.success) ? (res.entries || []) : [];
+                document.getElementById('sstAsOf').textContent = (res && res.source_date) ? _isoToDmy(res.source_date) : '—';
+                renderAll();
+            })
+            .catch(function () { ENTRIES = []; renderAll(); });
+    }
+
+    // ── Import: os arquivos da fila, um por vez, em série ─────────────────
+    // A LISTA (ConsultaEstrategiaContratos) e os DADOS (ConsultaDadosEstrategia)
+    // entram pela mesma porta: quem diz qual é qual é o conteúdo, no servidor.
+    function runImport() {
+        var btn = document.getElementById('importBtn');
+        var dz = window.myDropzone || ((typeof Dropzone !== 'undefined') ? Dropzone.forElement('#myAwesomeDropzone') : null);
+        var files = (dz && dz.files) ? dz.files.slice() : [];
+        if (!files.length) {
+            Swal.fire({ icon: 'info', title: t('sst_nothing_to_import', 'Nothing to import'),
+                        text: t('sst_drop_first', 'Drop the B3 strategy files in the box above first.'), confirmButtonColor: '#0066cc' });
+            return;
+        }
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i> Importing...';
+        var ok = 0, novos = 0, atualizados = 0, errors = [], chain = Promise.resolve();
+        files.forEach(function (f) {
+            chain = chain.then(function () {
+                var fd = new FormData();
+                fd.append('file', f);
+                return fetch(API + '/import-file', { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (res) {
+                        if (!res || !res.success) { errors.push(f.name + ': ' + erroTexto(res, 'Import failed')); return; }
+                        ok++; novos += res.new || 0; atualizados += res.updated || 0;
+                        try { dz.removeFile(f); } catch (e) {}
+                    })
+                    .catch(function (e) { errors.push(f.name + ': ' + String(e)); });
+            });
+        });
+        chain.then(function () {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
+            load();
+            var html = ok ? esc(fmtParams(t('sst_import_summary', '{files} file(s): {new} new contract(s), {updated} updated.'),
+                                          { files: ok, 'new': novos, updated: atualizados })) : '';
+            if (errors.length) html += '<div class="text-start mt-2 fs-xs text-danger">' + errors.map(esc).join('<br>') + '</div>';
+            Swal.fire({ icon: errors.length ? (ok ? 'warning' : 'error') : 'success',
+                        title: ok ? t('sst_imported', 'Imported') : t('sst_nothing_imported', 'Nothing imported'),
+                        html: html, width: 640, showConfirmButton: !!errors.length, timer: errors.length ? undefined : 2400 });
+        });
+    }
+
+    // ── Dados da estratégia: duplo clique na linha ────────────────────────
+    function showDetails(id) {
+        var e = ROWS[id]; if (!e) return;
+        document.getElementById('sstDetailTitle').textContent =
+            [e.Contract, e.StrategyCode, e.StrategyName].filter(Boolean).join(' · ');
+        var meta = [];
+        if (e.Counterparty) meta.push('<b>' + esc(t('sst-col-counterparty', 'Counterparty')) + ':</b> ' + esc(e.Counterparty));
+        if (e.LOB) meta.push('<b>LOB:</b> ' + esc(e.LOB));
+        if (e.DetailsQueriedAt) meta.push('<b>' + esc(t('sst_meta_query', 'B3 query')) + ':</b> ' + esc(e.DetailsQueriedAt));
+        if (e.DetailsFile) meta.push('<b>' + esc(t('sst_meta_file', 'File')) + ':</b> ' + esc(e.DetailsFile));
+        document.getElementById('sstDetailMeta').innerHTML = meta.join(' &nbsp;·&nbsp; ');
+        var box = document.getElementById('sstDetailFields');
+        var det = e.Details || [];
+        box.innerHTML = det.length ? det.map(function (p) {
+            return '<div class="col-6 col-md-4 col-xl-3"><div class="sst-field"><div class="sst-field__label">' + esc(p[0]) +
+                '</div><div class="sst-field__value">' + (p[1] === '' || p[1] == null ? '<span class="text-muted">—</span>' : esc(p[1])) + '</div></div></div>';
+        }).join('') : '<div class="col-12"><div class="alert alert-warning mb-0 fs-xs">' + esc(t('sst_no_details', 'No strategy data yet.')) + '</div></div>';
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('sstDetailModal')).show();
+    }
+    $('#sst-table tbody').on('dblclick', 'tr', function (ev) {
+        if ($(ev.target).closest('td').index() <= 1) return;
+        var d = table.row(this).data(); if (d) showDetails(d[C_KEY]);
+    });
+
+    // ── Edit: SEMPRE em modal; manda só o que MUDOU ───────────────────────
+    var _editId = null, _editOrig = {};
+    $('#sst-table tbody').on('click', '.btn-row-edit', function (ev) {
+        ev.preventDefault();
+        var d = table.row($(this).closest('tr')).data(); if (!d) return;
+        var e = ROWS[d[C_KEY]] || {};
+        _editId = d[C_KEY]; _editOrig = {};
+        $('#sstEditModal input.sst-edit').each(function () {
+            var f = $(this).data('f'); var v = e[f] == null ? '' : String(e[f]);
+            _editOrig[f] = v; this.value = v;
+        });
+        document.getElementById('sstEditTitle').textContent = t('sst_edit_row', 'Edit Row') + ' — ' + _editId;
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('sstEditModal')).show();
+    });
+    $('#sstEditSave').on('click', function () {
+        if (!_editId) return;
+        var fields = {}, n = 0;
+        $('#sstEditModal input.sst-edit').each(function () {
+            var f = $(this).data('f'), v = String(this.value || '').trim();
+            if (v !== String(_editOrig[f] || '').trim()) { fields[f] = v; n++; }
+        });
+        var modal = bootstrap.Modal.getInstance(document.getElementById('sstEditModal'));
+        if (!n) { if (modal) modal.hide(); return; }
+        var btn = this; btn.disabled = true;
+        fetch(API + '/edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+                               body: JSON.stringify({ id: _editId, fields: fields }) })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                btn.disabled = false;
+                if (!res || !res.success) {
+                    Swal.fire({ icon: 'error', title: t('sst_not_saved', 'Not saved'), text: erroTexto(res, 'Edit failed'), confirmButtonColor: '#0066cc' });
+                    return;
+                }
+                if (modal) modal.hide();
+                load();
+            })
+            .catch(function (err) { btn.disabled = false; Swal.fire({ icon: 'error', title: 'Error', text: String(err) }); });
+    });
+
+    function deleteRows(ids) {
+        if (!ids.length) return;
+        Swal.fire({ icon: 'warning', title: t('sst_delete_title', 'Delete?'),
+                    text: fmtParams(t('sst_delete_text', '{n} contract(s) will be removed.'), { n: ids.length }),
+                    showCancelButton: true, confirmButtonText: t('sst_delete_btn', 'Delete'), confirmButtonColor: '#dc3545' })
+            .then(function (r) {
+                if (!r.isConfirmed) return;
+                // A tela remove DEPOIS do sucesso do servidor (§430).
+                fetch(API + '/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+                                         body: JSON.stringify({ ids: ids }) })
+                    .then(function (rr) { return rr.json(); })
+                    .then(function (res) {
+                        if (!res || !res.success) { Swal.fire({ icon: 'error', title: 'Error', text: erroTexto(res, 'Delete failed') }); return; }
+                        load();
+                    })
+                    .catch(function (e) { Swal.fire({ icon: 'error', title: 'Error', text: String(e) }); });
+            });
+    }
+    $('#sst-table tbody').on('click', '.btn-row-delete', function (ev) {
+        ev.preventDefault(); var d = table.row($(this).closest('tr')).data(); if (d) deleteRows([d[C_KEY]]);
+    });
+
+    // ── Seleção ────────────────────────────────────────────────────────────
+    function syncSelectAll() {
+        var total = Object.keys(ROWS).length, sel = selected.size;
+        $('#selectAll').each(function () {
+            this.checked = total > 0 && sel >= total;
+            this.indeterminate = sel > 0 && sel < total;
+        });
+        $('[data-table-delete-selected]').toggleClass('d-none', sel < 1);
+    }
+    $('[data-table-set-rows-per-page]').on('change', function () { table.page.len(parseInt(this.value, 10)).draw(); });
+    $(table.table().container()).on('change', '#selectAll', function () {
+        selected.clear();
+        if (this.checked) Object.keys(ROWS).forEach(function (k) { selected.add(k); });
+        table.draw(false);
+    });
+    $('#sst-table tbody').on('change', 'input[type="checkbox"]', function () {
+        var d = table.row($(this).closest('tr')).data(); if (!d) return;
+        if (this.checked) selected.add(d[C_KEY]); else selected.delete(d[C_KEY]);
+        syncSelectAll();
+    });
+});
+</script>
+{% endblock extra_javascript %}

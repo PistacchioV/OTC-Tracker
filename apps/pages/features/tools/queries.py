@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta
 from apps.pages.features.tools import domain
 from apps.pages.features.tools.infra import memoria_xlsx
 from apps.pages.platform import swap_flows as _sf
+from apps.pages.platform import swap_strategies as _ss
 from apps.pages.platform import settlement as _st
 from apps.pages.precificador import (calendario, cdi, contagem, euribor, liquidacao,
                                      renda_fixa, sofr, term_sofr)
@@ -578,6 +579,55 @@ def aplicar_cupom_limpo(campos, faltando=None):
     return campos
 
 
+# ── contrato de ESTRATÉGIA (Live Position › Swap › Strategy) ─────────────────
+# Na posição da B3 o swap de estratégia vem com as DUAS curvas `VCP`: o índice
+# e a taxa de verdade só estão na consulta da estratégia (`Indicador_1/_2`,
+# `taxa Cupom_1/_2`, `Percentual Indicador_2`, `Base taxa Cupom_2`), que a tela
+# Strategy grava. A ponta `_1` é a da Parte e a `_2` a da Contraparte — a
+# mesma ordem de `Curva - Parte`/`Curva - Contraparte` da consulta, e a mesma
+# das pontas ativa/passiva do formulário.
+_BASE_DA_ESTRATEGIA = {'360': contagem.ACT_360, '365': contagem.ACT_365, '252': contagem.DU_252}
+
+
+def _estrategia_do_contrato(contrato):
+    """A estratégia gravada do contrato, ou `None`. Cadastro ilegível NÃO
+    derruba o prefill: a posição ainda responde, e o log diz o motivo."""
+    try:
+        return _ss.find(contrato)
+    except Exception as exc:                                  # noqa: BLE001
+        _R().log.warning('[tools] estratégia do contrato %s ilegível: %s: %s',
+                         contrato, type(exc).__name__, exc)
+        return None
+
+
+def _nome_da_moeda(iso):
+    """`USD` → a `DESCRICAO DO CAMPO` do `currency-base` (`DOLAR DOS EUA`): o
+    nome é o que o `tools-swap-index` conhece. '' sem cadastro."""
+    alvo = str(iso or '').strip().upper()
+    try:
+        linhas = _R()._mapping_rows('currency-base') or []
+    except Exception:                                         # noqa: BLE001
+        linhas = []
+    for row in linhas:
+        if str(row.get('SIMBOLO') or '').strip().upper() == alvo:
+            return str(row.get('DESCRICAO DO CAMPO') or '').strip()
+    return ''
+
+
+def regra_da_estrategia(regras, indicador):
+    """A regra do `tools-swap-index` para o `Indicador_n` da estratégia. O
+    indicador pode ser o nome do índice (`DI`, `SOFR Overnight`, `Term SOFR`)
+    ou o CÓDIGO da moeda (`USD`) — aí a pergunta é repetida com o nome da moeda
+    pelo `currency-base`. Nenhum dos dois é de-para no código: os dois são
+    cadastro."""
+    regra = domain.classificar_indice(regras, indicador)
+    if regra is None:
+        nome = _nome_da_moeda(indicador)
+        if nome:
+            regra = domain.classificar_indice(regras, nome)
+    return regra
+
+
 def swap_prefill(b3_id):
     """Tudo que o Swap Calculator consegue puxar da posição para um B3 ID.
 
@@ -725,6 +775,16 @@ def swap_prefill(b3_id):
 
     # as duas pontas — a classificação do índice é do cadastro `tools-swap-index`
     regras = R._mapping_rows('tools-swap-index')
+    estrategia = _estrategia_do_contrato(contrato)
+    det_estrategia = _ss.details(estrategia)
+    if estrategia:
+        out['estrategia'] = {'codigo': estrategia.get('StrategyCode', ''),
+                             'nome': estrategia.get('StrategyName', ''),
+                             'dados': bool(det_estrategia)}
+        if not det_estrategia:
+            # Só a LISTA foi importada: sem a consulta de dados as pontas
+            # seguem a posição (VCP), e a tela diz o que falta.
+            missing.append('estrategia')
     for k, lado in enumerate(('ativa', 'passiva')):
         codigo = _celula(vals, _POS['indice'][k])
         nome_curva = R._swapindex_name(codigo) if codigo else ''
@@ -733,6 +793,25 @@ def swap_prefill(b3_id):
         pct = domain.numero_da_posicao(_celula(vals, _POS['pct'][k]))
         taxa = domain.numero_da_posicao(_celula(vals, _POS['taxa'][k]))
         sinal = domain.sinal_da_posicao(_celula(vals, _POS['sinal'][k]))
+        # Contrato de ESTRATÉGIA: a consulta da B3 VENCE a posição no índice,
+        # na taxa e no percentual — ali as duas curvas são `VCP` e a taxa
+        # registrada não é a da estratégia. O que ela não traz fica com a
+        # posição (cotação inicial, D-n da PTAX, Denominação).
+        perna = _ss.leg(det_estrategia, k + 1) if det_estrategia else None
+        if perna and not perna['indicador']:
+            perna = None
+        if perna:
+            regra = regra_da_estrategia(regras, perna['indicador'])
+            if not regra:
+                R.log.warning('[tools] estratégia %s ponta %s: indicador %r sem regra em '
+                              'tools-swap-index', out['estrategia']['codigo'], lado,
+                              perna['indicador'])
+            p_pct = domain.numero_da_posicao(perna['percentual'])
+            if p_pct is not None:
+                pct = p_pct
+            p_taxa = domain.numero_da_posicao(perna['taxa'])
+            if p_taxa is not None:
+                taxa, sinal = abs(p_taxa), (-1.0 if p_taxa < 0 else 1.0)
         # Plano B da taxa (mesa, 22/09/2026): com a célula da posição VAZIA, a
         # taxa contratada sai do DFLUXO — `Taxa de Juros Parte/Contraparte` do
         # FLUXO que está sendo calculado, já com o sinal
@@ -759,7 +838,10 @@ def swap_prefill(b3_id):
         # A `Denominação` da curva (VCP) diz o que as colunas não dizem — o
         # multiplicador da taxa, o spread, a contagem, o D-n da PTAX (§479).
         # Lida ANTES das buscas de fixing abaixo, que dependem do que ela diz.
+        antes = {'taxa': campos.get('taxa'), 'percentual': campos.get('percentual')}
         domain.aplicar_descricao(campos, _celula(vals, _POS['denominacao'][k]), faltando)
+        if perna:
+            _aplicar_estrategia(campos, perna, out['estrategia']['codigo'], antes)
         # A tela só mostra descrição e multiplicador na perna cuja curva É
         # VCP (pelo `swap-index`) ou que traz Denominação — na perna comum os
         # dois campos só poluiriam.
@@ -823,6 +905,29 @@ def swap_prefill(b3_id):
         out[lado] = campos
         missing.extend('{}.{}'.format(lado, c) for c in faltando)
     return out
+
+
+def _aplicar_estrategia(campos, perna, codigo, antes):
+    """Depois da Denominação: o que a ESTRATÉGIA diz vence o texto da curva.
+    O achado da Denominação que falava do mesmo campo continua na tela, mas
+    como `info` (mostrado, não aplicado), com o valor da estratégia no campo."""
+    fixados = {}
+    if perna.get('taxa') and domain.numero_da_posicao(perna['taxa']) is not None:
+        fixados['taxa'] = antes.get('taxa')
+    if perna.get('percentual') and domain.numero_da_posicao(perna['percentual']) is not None:
+        fixados['percentual'] = antes.get('percentual')
+    base = _BASE_DA_ESTRATEGIA.get(str(perna.get('base') or '').strip().split(',')[0].split('.')[0])
+    if base:
+        campos['convencao'] = base
+    for item in campos.get('leitura') or []:
+        if item.get('campo') in fixados and item.get('estado') in ('aplicado', 'divergente'):
+            item['estado'] = 'info'
+    for campo, valor in fixados.items():
+        if valor not in (None, ''):
+            campos[campo] = valor
+    campos.setdefault('fonte', {})['estrategia'] = {'codigo': codigo,
+                                                   'indicador': perna.get('indicador', '')}
+    return campos
 
 
 # ── NDF Calculator · Unwind NDF Calculator · Option Calculator ───────────────
