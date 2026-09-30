@@ -964,6 +964,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   (`_ndf_le_refdata`) → senão o SPN da API → nada (badge *Missing
   Counterparty*, que é a falha desejada). Amend recheca; linha achada por
   `(Deal, Client)`, e só pelo Deal se ele for único no arquivo-dia.
+- **A busca (`cache/search`) das telas lê o dia ESTRITO** (§608):
+  `_day_files(..., strict=True)` e `_day_json(..., strict=True)` — banco
+  ocupado sem cópia em memória ou ilegível SOBE (503 com o motivo, aviso
+  `nd-search-*` na tela). O `_day_json` sem `strict` devolvia `[]` calado, e
+  a tabela abria vazia com `success: true` logo depois de uma gravação mudar
+  o carimbo do dia. Toda falha dele vai para o log (`[daycache]`) e serve a
+  última cópia em memória quando há. Busca nova nasce estrita.
 - **`table.rows({search:'none'})` NÃO é "tudo do dia"** — é a última busca. O
   servidor monta a lista pela Reference Date (`_generic_nd_mapping_candidates`).
 - **Coluna nova nas páginas de NDF mexe em 14 lugares** (`COL_TO_JSON_FIELD`,
@@ -2686,7 +2693,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (181 scripts)
+### `scripts/tests/` (182 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

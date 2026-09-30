@@ -2422,7 +2422,7 @@ $(document).ready(function() {
         .then(function(r) { return r.json(); })
         .then(function(result) {
             if (!result.success) {
-                console.warn('Search failed:', result.message);
+                console.warn('Search failed:', result.message); Swal.fire({ icon: 'warning', title: t('nd-search-failed-title', 'Operations not loaded'), text: (result.error === 'database_busy' || result.error === 'database_unreadable') ? t('nd-search-' + result.error, result.message || '') : (result.message || result.error || '') });
                 return;
             }
             selectedRowIds.clear();

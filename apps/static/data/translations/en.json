@@ -2869,5 +2869,10 @@
   "cp-dm-cgd-run": "Pending CGD",
   "cp-r-dm-cgd-desc": "<strong>Pending CGD</strong> builds the same report for the clients with a pending CGD in the Track Docs (Onboarding) — by economic group, aging in business days and the desk each CGD is with — as a second draft to the same recipients.",
   "pcd-updated": "Updated",
-  "pcd-update-failed": "Update failed — showing"
+  "pcd-update-failed": "Update failed — showing",
+  "nd-col-b3-id": "B3 ID",
+  "nd-col-ativo-subjacente": "Underlying Asset",
+  "nd-search-failed-title": "Operations not loaded",
+  "nd-search-database_busy": "The database of this page is busy (another instance is writing). Nothing was lost — try again in a minute.",
+  "nd-search-database_unreadable": "A database file of this page could not be opened (it is not a lock). The data is not gone — the application log says which file ([db-unreadable]); open a ticket."
 }

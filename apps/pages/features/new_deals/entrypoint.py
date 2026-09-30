@@ -205,13 +205,17 @@ def api_search_deal_cache():
     # `_day_files` + `_day_json`: `os.scandir` (a listagem já traz mtime e
     # tamanho) e memo por arquivo, então a segunda busca não reabre o que não
     # mudou. A busca não tem intervalo de datas, então não há o que podar.
+    # `strict`: dia que o banco não entrega (ocupado sem cópia em memória,
+    # ilegível) SOBE — 503/500 com o motivo — em vez de sumir da tabela. Lida
+    # como vazia, a busca respondia `success: true` sem as operações logo
+    # depois de uma gravação mudar o carimbo do dia (30/09/2026).
     matched = []
-    _dias = list(_R()._day_files(_R().CACHE_BASE_DIR, '_optcomm.json'))
+    _dias = list(_R()._day_files(_R().CACHE_BASE_DIR, '_optcomm.json', strict=True))
     # UMA abertura de banco para todos os dias enumerados, em vez de
     # uma por dia: eles são tabelas do MESMO banco do produto (§4).
     _R()._day_prefetch(_dias)
     for fpath, _fname, mtime, size in _dias:
-        for deal in _R()._day_json(fpath, mtime, size):
+        for deal in _R()._day_json(fpath, mtime, size, strict=True):
             if _R()._deal_matches(deal, filters):
                 matched.append(deal)
 
@@ -462,12 +466,12 @@ def api_search_fxo_cache():
     # tamanho) e memo por arquivo, então a segunda busca não reabre o que não
     # mudou. A busca não tem intervalo de datas, então não há o que podar.
     matched = []
-    _dias = list(_R()._day_files(_R().OPT_FXO_CACHE_DIR, '_optfxo.json'))
+    _dias = list(_R()._day_files(_R().OPT_FXO_CACHE_DIR, '_optfxo.json', strict=True))
     # UMA abertura de banco para todos os dias enumerados, em vez de
     # uma por dia: eles são tabelas do MESMO banco do produto (§4).
     _R()._day_prefetch(_dias)
     for fpath, _fname, mtime, size in _dias:
-        for deal in _R()._day_json(fpath, mtime, size):
+        for deal in _R()._day_json(fpath, mtime, size, strict=True):
             if _R()._deal_matches(deal, filters):
                 matched.append(deal)
     return jsonify({"success": True, "deals": matched})
@@ -1166,12 +1170,12 @@ def api_ndf_search_deal_cache():
     # tamanho) e memo por arquivo, então a segunda busca não reabre o que não
     # mudou. A busca não tem intervalo de datas, então não há o que podar.
     matched = []
-    _dias = list(_R()._day_files(_R().NDF_COMM_CACHE_DIR, '_ndfcomm.json'))
+    _dias = list(_R()._day_files(_R().NDF_COMM_CACHE_DIR, '_ndfcomm.json', strict=True))
     # UMA abertura de banco para todos os dias enumerados, em vez de
     # uma por dia: eles são tabelas do MESMO banco do produto (§4).
     _R()._day_prefetch(_dias)
     for fpath, _fname, mtime, size in _dias:
-        for deal in _R()._day_json(fpath, mtime, size):
+        for deal in _R()._day_json(fpath, mtime, size, strict=True):
             if _R()._deal_matches(deal, filters):
                 matched.append(deal)
 
@@ -2196,12 +2200,12 @@ def api_generic_nd_search_cache(product):
     # cópia a alteração ficaria gravada no memo — o próximo leitor veria o dado
     # de outro request. Ela custa microssegundos contra a dezena de
     # milissegundos de uma leitura no share.
-    _dias = list(_R()._day_files(cfg['dir'], cfg['suffix']))
+    _dias = list(_R()._day_files(cfg['dir'], cfg['suffix'], strict=True))
     # UMA abertura de banco para todos os dias enumerados, em vez de
     # uma por dia: eles são tabelas do MESMO banco do produto (§4).
     _R()._day_prefetch(_dias)
     for fpath, _fname, mtime, size in _dias:
-        deals = _R()._day_json(fpath, mtime, size, mutavel=True)
+        deals = _R()._day_json(fpath, mtime, size, mutavel=True, strict=True)
         try:
             # Contraparte cadastrada depois do import → persiste o
             # enriquecimento, senão a linha volta vazia a cada visita.

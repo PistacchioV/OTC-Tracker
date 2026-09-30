@@ -2869,5 +2869,10 @@
   "cp-dm-cgd-run": "CGD pendente",
   "cp-r-dm-cgd-desc": "<strong>CGD pendente</strong> monta o mesmo relatório para os clientes com CGD pendente no Track Docs (Onboarding) — por grupo econômico, aging em dias úteis e a mesa com que cada CGD está — como um segundo rascunho para os mesmos destinatários.",
   "pcd-updated": "Atualizado",
-  "pcd-update-failed": "Falha ao atualizar — exibindo"
+  "pcd-update-failed": "Falha ao atualizar — exibindo",
+  "nd-col-b3-id": "B3 ID",
+  "nd-col-ativo-subjacente": "Ativo Subjacente",
+  "nd-search-failed-title": "Operações não carregadas",
+  "nd-search-database_busy": "O banco desta tela está ocupado (outra instância está gravando). Nada foi perdido — tente de novo em um minuto.",
+  "nd-search-database_unreadable": "Um arquivo de banco desta tela não abriu (não é trava). O dado não se perdeu — o log da aplicação diz qual arquivo ([db-unreadable]); abra um chamado."
 }
