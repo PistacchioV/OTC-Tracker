@@ -47,6 +47,17 @@ SHIFT = 'shift'
 # cujo fechamento ele multiplica.
 CUPOM_LIMPO = 'cupom_limpo'   # % (100.0000 = 100%)
 CUPOM_DATA = 'cupom_data'     # ISO — o pregão do fechamento
+# O piso da taxa do ÍNDICE — `Max(0%, USD 3m Term SOFR)` é 0: o fixing negativo
+# conta como zero. % a.a., no formato do formulário.
+PISO = 'piso'
+# Onde o multiplicador incide (mesa, 30/09/2026). Os dois contratos que
+# motivaram isto usam o MESMO 1,17647 de jeitos diferentes:
+#   [Max(0%, Term SOFR) + 0,90%]*1.17647   → a SOMA índice + spread
+#   Max 0%, Term SOFR * 1,17647 + 1,12%    → só o ÍNDICE; o spread soma depois
+# Quem diz é a estrutura do texto (o que o `*` multiplica), nunca um padrão.
+MULT_BASE = 'mult_base'
+MULT_SOMA = 'index+spread'
+MULT_INDICE = 'index'
 
 
 @dataclass(frozen=True)
@@ -152,6 +163,14 @@ def _data_do_close(m):
         return None
 
 
+def _piso(m):
+    return _fmt(_num(m.group(1)), 4)
+
+
+# os índices em que o multiplicador pode vir COLADO (`Term SOFR * 1,17647`)
+_INDICES_FIX = r'(?:TERM\s+SOFR|SOFR|EURIBOR|LIBOR)'
+
+
 def _cupom_pct(m):
     return _fmt(_num(m.group(1)), 4)
 
@@ -162,11 +181,18 @@ def _cupom_fator(m):
 
 
 _REGRAS = [
+    # O PISO do índice vem PRIMEIRO: o `0` dele não pode virar valor de outra
+    # regra. `Max(0%, …)`, `Max 0%, …`, `Máximo(0%; …)`, `floor 0%`, `piso de 0%`.
+    (PISO, r'\bMAX(?:IMO)?\s*[(\[]?\s*(' + _NUM + r')\s*%\s*[,;]', _piso, 'index floor'),
+    (PISO, r'\b(?:FLOOR|PISO)\s*(?:OF|DE|AT|EM)?\s*(' + _NUM + r')\s*%', _piso, 'index floor'),
     # o multiplicador da taxa: `(… + 0.75%)*1.1765`, `(…) x 1,1765`, `1.1765*(…)`
-    (MULTIPLICADOR, r'\)\s*[*X×]\s*(' + _NUM + r')', lambda m: _fmt(_num(m.group(1)), 8),
+    (MULTIPLICADOR, r'[)\]]\s*[*X×]\s*(' + _NUM + r')', lambda m: _fmt(_num(m.group(1)), 8),
      'rate multiplier'),
-    (MULTIPLICADOR, r'(' + _NUM + r')\s*[*X×]\s*\(', lambda m: _fmt(_num(m.group(1)), 8),
+    (MULTIPLICADOR, r'(' + _NUM + r')\s*[*X×]\s*[(\[]', lambda m: _fmt(_num(m.group(1)), 8),
      'rate multiplier'),
+    # colado no ÍNDICE: `Term SOFR * 1,17647` — o multiplicador é só dele
+    (MULTIPLICADOR, _INDICES_FIX + r'\s*(?:\d+\s*M\b)?\s*[*X×]\s*(' + _NUM + r')(?!\s*%)',
+     lambda m: _fmt(_num(m.group(1)), 8), 'rate multiplier'),
     (MULTIPLICADOR, r'%\s*[*X×]\s*(' + _NUM + r')(?![\d.,]*\s*%)',
      lambda m: _fmt(_num(m.group(1)), 8), 'rate multiplier'),
     # `(…)/0.85` é o mesmo gross-up escrito como divisão
@@ -180,9 +206,18 @@ _REGRAS = [
      lambda m: _fmt(_num(m.group(1)), 4), '% of CDI'),
     # o spread: `SOFR + 0.75%`, `3M SOFR - 0.5%`, `CDI + 1.07%`
     (TAXA, _INDICES + r'\s*(?:\d+\s*M\b)?\s*([+\-−–])\s*(' + _NUM + r')\s*%', _spread, 'spread'),
+    # depois de fechar o piso: `Max(0%, Term SOFR) + 0,90%`
+    (TAXA, _INDICES + r'\s*(?:\d+\s*M\b)?\s*[)\]]\s*([+\-−–])\s*(' + _NUM + r')\s*%', _spread,
+     'spread'),
+    # depois do multiplicador: `Term SOFR * 1,17647 + 1,12%`, `(…)*1.1765 + 1%`
+    (TAXA, r'(?:' + _INDICES + r'\s*(?:\d+\s*M\b)?|[)\]])\s*[*X×]\s*' + _NUM +
+     r'\s*([+\-−–])\s*(' + _NUM + r')\s*%', _spread, 'spread'),
     # a contagem de dias
     (CONVENCAO, r'\b(?:A|ACT|ACTUAL)\s*/\s*360\b', _dc(contagem.ACT_360), 'day count'),
     (CONVENCAO, r'\b(?:A|ACT|ACTUAL)\s*/\s*365\b', _dc(contagem.ACT_365), 'day count'),
+    # sem a barra, como a mesa também escreve: `act360`
+    (CONVENCAO, r'\b(?:ACT|ACTUAL)\s*360\b', _dc(contagem.ACT_360), 'day count'),
+    (CONVENCAO, r'\b(?:ACT|ACTUAL)\s*365\b', _dc(contagem.ACT_365), 'day count'),
     (CONVENCAO, r'\b30E\s*/\s*360\b', _dc(contagem.T30E_360), 'day count'),
     (CONVENCAO, r'\b30\s*/\s*360\b', _dc(contagem.T30_360), 'day count'),
     (CONVENCAO, r'\b(?:DU|BUS|BD|B)\s*/\s*252\b', _dc(contagem.DU_252), 'day count'),
@@ -228,6 +263,18 @@ _REGRAS = [
     (None, r'INITIAL\s+FX\s+PTAX[\s-]*(?:ASK|BID|VENDA|COMPRA|V|C)?\s*(\d{1,2}/[A-Z]{3}/\d{2,4})',
      lambda m: m.group(1), 'initial FX fixing date'),
     (None, r'PTAX[\s-]*(ASK|BID|VENDA|COMPRA)\b', lambda m: m.group(1).lower(), 'PTAX side'),
+    # Só informação, e lidos para não voltarem como "não entendido": o D-n do
+    # fixing do índice (o motor já o conta no calendário do índice, §509), a
+    # frequência dos pagamentos e a convenção de dia útil.
+    (None, r'(?:TERM\s+)?SOFR\s*[TD]\s*-\s*(\d)(?:\s*FROM\s+EACH\s+ACCRUAL\s+START\s+DATE)?',
+     lambda m: 'D-' + m.group(1), 'index fixing (business days before the accrual start)'),
+    (None, r'\bFROM\s+EACH\s+PAYMENT\s+DATE\b', lambda m: 'payment date', 'PTAX fixing reference'),
+    (None, r'\b(QUARTERLY|MONTHLY|SEMI[\s-]?ANNUAL(?:LY)?|ANNUAL(?:LY)?|TRIMESTRAL|MENSAL|SEMESTRAL)\b',
+     lambda m: m.group(1).lower(), 'payment frequency'),
+    (None, r'\b((?:MODIFIED\s+)?(?:FOLLOWING|PRECEDING))\b', lambda m: m.group(1).lower(),
+     'business day convention'),
+    (None, r'\bCALENDARIO\s*:?\s*([A-Z]{3}(?:\s*(?:E|AND|&|/|,)\s*[A-Z]{3})*)',
+     lambda m: m.group(1), 'calendars'),
 ]
 
 class _Grupos(object):
@@ -238,6 +285,77 @@ class _Grupos(object):
 
     def group(self, n):
         return self._m.group(n + 1)
+
+
+_SPREAD_NO_GRUPO = re.compile(r'[+\-−–]\s*' + _NUM + r'\s*%')
+_ABRE, _FECHA = '([', ')]'
+
+
+def _grupo_antes(alvo, fim):
+    """O conteúdo do grupo `(…)`/`[…]` que FECHA logo antes de `fim` (só
+    espaço entre eles), ou None."""
+    i = fim - 1
+    while i >= 0 and alvo[i] == ' ':
+        i -= 1
+    if i < 0 or alvo[i] not in _FECHA:
+        return None
+    nivel, j = 0, i
+    while j >= 0:
+        if alvo[j] in _FECHA:
+            nivel += 1
+        elif alvo[j] in _ABRE:
+            nivel -= 1
+            if nivel == 0:
+                return alvo[j + 1:i]
+        j -= 1
+    return None
+
+
+def _grupo_depois(alvo, inicio):
+    """O conteúdo do grupo que ABRE logo depois de `inicio`, ou None."""
+    i = inicio
+    while i < len(alvo) and alvo[i] == ' ':
+        i += 1
+    if i >= len(alvo) or alvo[i] not in _ABRE:
+        return None
+    nivel, j = 0, i
+    while j < len(alvo):
+        if alvo[j] in _ABRE:
+            nivel += 1
+        elif alvo[j] in _FECHA:
+            nivel -= 1
+            if nivel == 0:
+                return alvo[i + 1:j]
+        j += 1
+    return None
+
+
+def _base_do_multiplicador(alvo, leitura):
+    """Sobre o que o multiplicador incide — lido da ESTRUTURA do texto.
+
+    `[Max(0%, Term SOFR) + 0,90%]*1.17647`: o `*` multiplica um grupo, e o
+    grupo tem o spread → a SOMA. `Term SOFR * 1,17647 + 1,12%`: o `*` está
+    colado no índice → só o ÍNDICE, e o spread soma depois. `(…)*k` sem spread
+    dentro do grupo (`Max(0%, SOFR)*1.1 + 1%`) também é só o índice. O `%*k`
+    solto (`SOFR + 0.75% * 1.1765`) segue como sempre foi lido: a soma."""
+    mult = next((a for a in leitura.achados if a.campo == MULTIPLICADOR), None)
+    if mult is None:
+        return None
+    op = re.search(r'[*X×]', alvo[mult.inicio:mult.fim])
+    if not op:
+        return None
+    pos = mult.inicio + op.start()
+    grupo = _grupo_antes(alvo, pos)
+    if grupo is None:
+        grupo = _grupo_depois(alvo, pos + 1)
+    if grupo is not None:
+        base = MULT_SOMA if _SPREAD_NO_GRUPO.search(grupo) else MULT_INDICE
+    elif re.search(_INDICES_FIX + r'\s*(?:\d+\s*M\b)?\s*$', alvo[:pos]):
+        base = MULT_INDICE
+    else:
+        base = MULT_SOMA
+    return Achado(campo=MULT_BASE, valor=base, trecho=mult.trecho,
+                  rotulo='multiplier applies to', inicio=mult.inicio, fim=mult.fim)
 
 
 # o que, sobrando no texto, merece conferência: um número com operador ou %
@@ -283,6 +401,9 @@ def interpretar(texto):
             leitura.achados.append(Achado(campo=campo, valor=v,
                                           trecho=original[m.start():m.end()],
                                           rotulo=rotulo, inicio=m.start(), fim=m.end()))
+    base = _base_do_multiplicador(alvo, leitura)
+    if base:
+        leitura.achados.append(base)
     leitura.achados.sort(key=lambda a: a.inicio)
     # o residual: os pedaços entre os trechos lidos, por cláusula (` - `)
     residual = ' '.join(''.join(c if not consumido[i] else ' '

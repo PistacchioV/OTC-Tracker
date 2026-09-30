@@ -118,7 +118,7 @@ def avaliar(wb, aba, expressao, pilha=()):
     py = REF.sub(troca, expressao).replace('^', '**')
     return eval(py, {'__builtins__': {}},                              # noqa: S307
                 {'IF': lambda c, a, b: a if c else b, 'AND': lambda *a: all(a),
-                 'MIN': min, 'ABS': abs, 'ROUND': round, 'TRUE': True, 'FALSE': False})
+                 'MIN': min, 'MAX': max, 'ABS': abs, 'ROUND': round, 'TRUE': True, 'FALSE': False})
 
 
 def por_rotulo(ws, rotulo):
@@ -662,6 +662,28 @@ try:
     check('   sem multiplicador nao ha linha dele',
           any(ws11.cell(row=ln, column=1).value == 'Multiplicador da taxa' for ln in range(1, ws11.max_row + 1)),
           False)
+    # §599: o PISO do indice e o multiplicador SO no indice — `Max 0%, Term SOFR
+    # * 1,17647 + 1,12%` — tambem sao formula, e a planilha da o fator do motor
+    for apelido, fix, spread, base in (('so o indice, o piso mordendo', '-0.10 %', '1.12 %', 'index'),
+                                       ('a soma, o piso sem morder', '4.30 %', '0.90 %', 'index+spread')):
+        FORM12 = dict(FORM, ativa_indexador=liquidacao.TERM_SOFR, ativa_taxa=spread,
+                      ativa_taxa_indice=fix, ativa_data_fixing='2025-08-28',
+                      ativa_tenor='3 month', ativa_convencao=contagem.ACT_360,
+                      ativa_regime=contagem.SIMPLES, ativa_moeda=liquidacao.SEM_CONVERSAO,
+                      ativa_multiplicador='1.17647', ativa_mult_base=base, ativa_piso='0 %',
+                      counterparty='YAZAKI DO BRASIL LTDA')
+        conteudo12, _ = queries.memoria_de_calculo(FORM12)
+        r12 = queries.liquidar(FORM12)['r']
+        wb12 = openpyxl.load_workbook(io.BytesIO(conteudo12))
+        ws12 = wb12[mx.ABA]
+        check('§599 %s: o piso e uma linha e o indice com piso e MAX' % apelido,
+              ws12[por_rotulo(ws12, 'Taxa do índice com o piso (% a.a.)')].value.startswith('=MAX('),
+              True)
+        perto('   o fator recalculado e o do motor',
+              avaliar(wb12, mx.ABA, por_rotulo(ws12, 'Fator do índice')),
+              r12.ativa.fator_do_indice, 1e-12)
+        perto('   e o ajuste liquido tambem',
+              avaliar(wb12, mx.ABA, por_rotulo(ws12, 'Ajuste líquido')), r12.ajuste_liquido, 1e-6)
 finally:
     R._mapping_rows = _map_rows
 

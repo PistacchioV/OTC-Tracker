@@ -80,7 +80,7 @@
                     moeda: 'currency', tenor: 'tenor', percentual: '% of CDI',
                     base_ajuste: 'What settles', ptax_inicial: 'initial fixing',
                     ni_inicial: 'initial index number', preco_inicial: 'initial price',
-                    ativa: 'Receiving leg', passiva: 'Paying leg', multiplicador: 'rate multiplier',
+                    ativa: 'Receiving leg', passiva: 'Paying leg', multiplicador: 'rate multiplier', piso: 'index floor', mult_base: 'multiplier applies to',
                     convencao: 'day count', regime: 'compounding', ptax_offset: 'fixing offset',
                     lookback: 'lookback', shift: 'observation shift' } },
     br: { show: 'Mostrar', entries: 'linhas', all: 'Todas', columns: 'Colunas', export: 'Exportar',
@@ -146,7 +146,7 @@
                     moeda: 'moeda', tenor: 'prazo', percentual: '% do CDI',
                     base_ajuste: 'O que liquida', ptax_inicial: 'fixing inicial',
                     ni_inicial: 'número-índice inicial', preco_inicial: 'preço inicial',
-                    ativa: 'Ponta ativa', passiva: 'Ponta passiva', multiplicador: 'multiplicador da taxa',
+                    ativa: 'Ponta ativa', passiva: 'Ponta passiva', multiplicador: 'multiplicador da taxa', piso: 'piso do índice', mult_base: 'o multiplicador incide sobre',
                     convencao: 'contagem de dias', regime: 'capitalização', ptax_offset: 'deslocamento do fixing',
                     lookback: 'lookback', shift: 'observation shift' } },
     es: { show: 'Mostrar', entries: 'filas', all: 'Todas', columns: 'Columnas', export: 'Exportar',
@@ -212,7 +212,7 @@
                     moeda: 'moneda', tenor: 'plazo', percentual: '% del CDI',
                     base_ajuste: 'Qué liquida', ptax_inicial: 'fixing inicial',
                     ni_inicial: 'número índice inicial', preco_inicial: 'precio inicial',
-                    ativa: 'Pata activa', passiva: 'Pata pasiva', multiplicador: 'multiplicador de la tasa',
+                    ativa: 'Pata activa', passiva: 'Pata pasiva', multiplicador: 'multiplicador de la tasa', piso: 'piso del índice', mult_base: 'el multiplicador se aplica a',
                     convencao: 'conteo de días', regime: 'capitalización', ptax_offset: 'desplazamiento del fixing',
                     lookback: 'lookback', shift: 'observation shift' } }
   };
@@ -440,6 +440,9 @@
     var sel = document.getElementById(lado + '_indexador');
     var mult = document.getElementById(lado + '_multiplicador'), mbox = document.getElementById(lado + '_mult_box');
     if (mbox && mult) { var mv = ler(mult.value); mbox.hidden = (mv === null || mv === 1); }
+    // o piso do índice, idem: só com um piso (§599)
+    var piso = document.getElementById(lado + '_piso'), pbox = document.getElementById(lado + '_piso_box');
+    if (pbox && piso) pbox.hidden = !(piso.value || '').trim();
     var cup = document.getElementById(lado + '_cupom_limpo'), cbox = document.getElementById(lado + '_cupom_box');
     if (cbox && cup) cbox.hidden = !(sel && sel.value === 'equity' && (cup.value || '').trim());
   }
@@ -467,6 +470,8 @@
     });
     var m = document.getElementById(lado + '_multiplicador');
     if (m) m.addEventListener('change', function () { mostrarExtras(lado); });
+    var pz = document.getElementById(lado + '_piso');
+    if (pz) pz.addEventListener('change', function () { mostrarExtras(lado); });
     // Tela que volta do Calculate: o trio já vem preenchido pelo formulário.
     refazerCupom(lado, false);
   });
@@ -647,7 +652,7 @@
     // O texto colado ou corrigido na tela passa pela MESMA leitura do servidor
     // que o pré-preenchimento usa — os campos atuais vão junto para a resposta
     // dizer se cada achado preenche, confirma ou diverge do que está na tela.
-    var CAMPOS_DESC = ['indexador', 'taxa', 'percentual', 'convencao', 'regime', 'tenor', 'ptax_offset', 'multiplicador', 'lookback', 'shift',
+    var CAMPOS_DESC = ['indexador', 'taxa', 'percentual', 'convencao', 'regime', 'tenor', 'ptax_offset', 'multiplicador', 'piso', 'mult_base', 'lookback', 'shift',
                        'ativo', 'cupom_limpo', 'cupom_data'];
     // De que pregão é o fechamento que multiplica o cupom — ou por que não veio.
     function notaClose(lado, p) {
@@ -674,7 +679,11 @@
       CAMPOS_DESC.forEach(function (k) {
         var el = document.getElementById(lado + '_' + k);
         if (k === 'taxa' && sel && sel.value === 'cdi') el = document.getElementById(lado + '_taxa_cdi') || el;
-        q.push(k + '=' + encodeURIComponent(el ? (el.value || '') : ''));
+        var v = el ? (el.value || '') : '';
+        // Sem multiplicador na tela, o seletor de onde ele incide está só no
+        // padrão: não é um valor da ponta, e a leitura o diria "divergente".
+        if (k === 'mult_base') { var mu = document.getElementById(lado + '_multiplicador'); if (!mu || !(mu.value || '').trim()) v = ''; }
+        q.push(k + '=' + encodeURIComponent(v));
       });
       fetch('/api/tools/swap-calculator/curve?' + q.join('&'), { credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
@@ -761,7 +770,7 @@
         }
         ['taxa', 'percentual', 'convencao', 'regime', 'moeda', 'tenor', 'taxa_indice',
          'ptax_inicial', 'ptax_final', 'ptax_offset', 'ni_inicial', 'preco_inicial',
-         'preco_final', 'ativo', 'multiplicador', 'descricao', 'lookback', 'shift',
+         'preco_final', 'ativo', 'multiplicador', 'piso', 'mult_base', 'descricao', 'lookback', 'shift',
          'cupom_limpo', 'cupom_data', 'preco_close']
           .forEach(function (k) { if (p[k] !== undefined && (p[k] !== '' || k === 'taxa')) setVal(lado + '_' + k, p[k]); });
         // O spread do CDI tem input PRÓPRIO (mesmo `name`, id diferente): sem
@@ -786,9 +795,11 @@
         if (mo && p.moeda) mo.value = p.moeda;
         // os campos que a ponta não usa voltam ao vazio
         ['ptax_inicial', 'ptax_final', 'ni_inicial', 'preco_inicial', 'preco_final', 'ativo',
-         'multiplicador', 'descricao', 'cupom_limpo', 'cupom_data', 'preco_close'].forEach(function (k) {
+         'multiplicador', 'piso', 'descricao', 'cupom_limpo', 'cupom_data', 'preco_close'].forEach(function (k) {
           if (!p[k]) setVal(lado + '_' + k, '');
         });
+        // sem a denominação dizer, o multiplicador incide na soma (o de sempre)
+        if (!p.mult_base) setVal(lado + '_mult_base', 'index+spread');
         notaDescricao(lado, p);
         mostrarVcp(lado, !!(p.vcp || p.descricao || p.multiplicador));
         aplicarCupom(lado, p);

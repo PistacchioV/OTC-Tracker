@@ -830,7 +830,9 @@ try:
           ('1.17650000', '(PRE + 0.14%)*1.1765 DU/252'))
     check('   o spread 0,14% CONFIRMA a coluna e a contagem tambem',
           {it['campo']: it['estado'] for it in _den['ativa']['leitura']},
-          {'taxa': 'confirma', 'multiplicador': 'aplicado', 'convencao': 'confirma'})
+          {'taxa': 'confirma', 'multiplicador': 'aplicado', 'convencao': 'confirma',
+           # onde ele incide (§599) numa ponta PRE: so informacao
+           'mult_base': 'info'})
     check('na passiva o 110% confirma o 1,10 da coluna e o spread e aplicado',
           ({it['campo']: it['estado'] for it in _den['passiva']['leitura']},
            _den['passiva']['taxa']),

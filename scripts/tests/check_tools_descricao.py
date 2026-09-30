@@ -189,6 +189,54 @@ except liquidacao.ErroLiquidacao as exc:
     check('multiplicador zero e erro', 'positive' in str(exc), True)
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# §599 (mesa, 30/09/2026): o PISO do indice e ONDE o multiplicador incide. Os
+# dois contratos usam o MESMO 1,17647 de jeitos diferentes — so a estrutura do
+# texto (o que o `*` multiplica) diz qual.
+print('\n== 2b. o piso do indice e a base do multiplicador (§599) ==')
+DEN_SOMA = ('TERM SOFR 3M - Calendario: USD e BRL - Fixing PTAX D-1 from each payment date/ '
+            'SOFR D-2 from each accrual start date - [Max(0%, USD 3m Term SOFR) + 0,90%]*1.17647, '
+            'quarterly act/360, following')
+DEN_INDICE = ('TERM SOFR 3M Calendario: USD e BRL Fixing PTAX D-1 from each payment date SOFR D-2 '
+              'from each accrual start date Max 0%, USD 3m Term SOFR * 1,17647 + 1,12%, quarterly '
+              'act360 following.')
+for rotulo, den, spread, base in (('[Max(0%, SOFR) + 0,90%]*k', DEN_SOMA, '0.9000', dc.MULT_SOMA),
+                                  ('Max 0%, SOFR * k + 1,12%', DEN_INDICE, '1.1200', dc.MULT_INDICE)):
+    L = dc.interpretar(den)
+    check(rotulo + ': piso 0, spread, multiplicador, base, contagem, D-1 da PTAX',
+          (L.valor(dc.PISO), L.valor(dc.TAXA), L.valor(dc.MULTIPLICADOR), L.valor(dc.MULT_BASE),
+           L.valor(dc.CONVENCAO), L.valor(dc.PTAX_OFFSET), L.valor(dc.TENOR)),
+          ('0.0000', spread, '1.17647000', base, contagem.ACT_360, '1', '3 month'))
+    check('   e nada fica "nao entendido"', L.nao_lido, [])
+check('`(…)*k` sem spread dentro do grupo: so o indice',
+      dc.interpretar('Max(0%, 3M SOFR)*1.1765 + 1%').valor(dc.MULT_BASE), dc.MULT_INDICE)
+check('o exemplo antigo `(3M SOFR + 0.75%)*1.1765` segue na soma',
+      dc.interpretar(EXEMPLO).valor(dc.MULT_BASE), dc.MULT_SOMA)
+check('sem multiplicador nao ha base', dc.interpretar('3M SOFR + 0.75% A/360').valor(dc.MULT_BASE), None)
+
+
+def ts_liq(fix, spread, **kw):
+    return ponta_liq(liquidacao.Ponta(indexador=liquidacao.TERM_SOFR, taxa=spread, taxa_indice=fix,
+                                      convencao=contagem.ACT_360, regime=contagem.SIMPLES,
+                                      moeda=liquidacao.SEM_CONVERSAO, **kw))
+
+
+perto('soma: 1 + (max(0; 4,30%) + 0,90%) x 1,17647 x tau',
+      ts_liq(0.0430, 0.0090, multiplicador=1.17647, piso=0.0).fator_do_indice,
+      1 + (0.0430 + 0.0090) * 1.17647 * tau360, 1e-12)
+perto('so o indice: 1 + (max(0; 4,30%) x 1,17647 + 1,12%) x tau',
+      ts_liq(0.0430, 0.0112, multiplicador=1.17647, piso=0.0, mult_no_indice=True).fator_do_indice,
+      1 + (0.0430 * 1.17647 + 0.0112) * tau360, 1e-12)
+_mordeu = ts_liq(-0.0010, 0.0112, multiplicador=1.17647, piso=0.0, mult_no_indice=True)
+perto('o piso MORDE: fixing de -0,10% entra como 0 — so o spread rende',
+      _mordeu.fator_do_indice, 1 + 0.0112 * tau360, 1e-12)
+check('   e a descricao diz que o piso agiu', 'the floor applies' in _mordeu.descricao_texto, True)
+perto('sem piso o fixing negativo entra como veio',
+      ts_liq(-0.0010, 0.0112, multiplicador=1.17647, mult_no_indice=True).fator_do_indice,
+      1 + (-0.0010 * 1.17647 + 0.0112) * tau360, 1e-12)
+check('   e a descricao diz onde o multiplicador incide',
+      'index × 1.176470' in _mordeu.descricao_texto, True)
+
 print('\n== 3. aplicar_descricao: o que ela diz sobre os campos da ponta ==')
 # o cadastro manda DU/252 de proposito: a denominacao diz A/360, e a
 # divergencia e o que se quer ver (o padrao do Term SOFR ja e A/360)
@@ -245,7 +293,8 @@ check('denominacao vazia: leitura vazia e nada muda',
 c6 = queries.ler_descricao('(SOFR + 1%)*1.2 - tranche 3 x 0.5', {'indexador': 'sofr', 'taxa': '1.0000'})
 check('`ler_descricao` (o endpoint) e a mesma funcao: confirma o spread e aplica o resto',
       ({it['campo']: it['estado'] for it in c6['leitura']}, c6['nao_lido']),
-      ({dc.TAXA: 'confirma', dc.MULTIPLICADOR: 'aplicado'}, ['tranche 3 x 0.5']))
+      ({dc.TAXA: 'confirma', dc.MULTIPLICADOR: 'aplicado', dc.MULT_BASE: 'aplicado'},
+       ['tranche 3 x 0.5']))
 
 # ─────────────────────────────────────────────────────────────────────────────
 print('\n== 4. o formulario ==')
@@ -355,7 +404,7 @@ try:
            {it['campo']: it['estado'] for it in d['leitura'] if it['campo']}),
           (200, True, '1.17650000',
            {dc.PTAX_OFFSET: 'aplicado', dc.TENOR: 'confirma', dc.TAXA: 'confirma',
-            dc.MULTIPLICADOR: 'aplicado', dc.CONVENCAO: 'confirma'}))
+            dc.MULTIPLICADOR: 'aplicado', dc.MULT_BASE: 'aplicado', dc.CONVENCAO: 'confirma'}))
     check('   sem sessao e 401', app.test_client().get('/api/tools/swap-calculator/curve?text=x').status_code, 401)
 
     FORM = {'counterparty': 'J.P. MORGAN OVERSEAS CAPITAL LLC',

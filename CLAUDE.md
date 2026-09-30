@@ -828,9 +828,19 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 - **Alinhamento com `scrollX` são TRÊS coisas**: `columns.adjust()` depois de
   todo draw (+ passe atrasado 150 ms + `resize`); `autoWidth: true`; regras de
   `th` repetidas nos clones com `white-space: normal`.
-- **Seleção de célula em TODA tabela**: extensão `select` (New Deals, Intrag)
-  ou `table-std.js` + `otcCellCopy('#id', { skip: [...] })` DEPOIS do
-  `.DataTable()` (por tabela quando há uma por card).
+- **Seleção de célula em TODA tabela, SOZINHA** (mesa, 30/09/2026, §600): o
+  `table-std.js` é carregado pelo `base.html` depois dos scripts da página e se
+  liga a toda DataTable pelo `init.dt`, como o funil — página nova não escreve
+  nada. Fica de fora a tabela com a extensão `select` por célula (New Deals,
+  Intrag, recompras: seleção e Ctrl+C próprios) e a marcada
+  `data-cell-copy="off"`; o `otcCellCopy('#id', { skip: [...] })` da página
+  segue valendo para excluir colunas. O visual é UM: contorno azul de 2px (a
+  célula da extensão `select` também, pelo mesmo `<style>`). O Ctrl+C é um
+  listener só e copia a tabela do ÚLTIMO clique; com o foco num campo, o
+  Ctrl+C/Ctrl+V é do campo. **O Ctrl+C das páginas com `select` e sem handler
+  próprio é o do `clipboard.js`**, e ele percorre as tabelas pelo NÓ: no
+  DataTables 2 o `tables({api:true})` não tem `.every()`, e era um `TypeError`
+  que deixava Intrag, Swap Bullet/Cashflow e as recompras sem copiar nada.
 - **Números** `#,##0.00` com `tabular-nums`; taxa NÃO é valor (Strike fica com
   as casas que tem); formatação só no `display`, sort pelo cru. **Status** é
   badge pill `bg-gradient`.
@@ -1286,6 +1296,19 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   do FX Start; a **Data de Cotação D-n** (48/50) é a coluna `Curve X Quote` e,
   como o recap não a diz, é lacuna (`swc_fx_quote`) — nunca D-1 presumido. A
   LOB também fica em branco (o recap não diz).
+- **Swap Calculator: a Denominação diz o PISO do índice e ONDE o
+  multiplicador incide** (mesa, 30/09/2026, §599). `[Max(0%, Term SOFR) +
+  0,90%]*1.17647` é `(max(0; SOFR) + 0,90%) × k`; `Max 0%, Term SOFR * 1,17647
+  + 1,12%` é `max(0; SOFR) × k + 1,12%` — o MESMO k em lugares diferentes, e
+  quem diz é a ESTRUTURA do texto (`descricao_curva._base_do_multiplicador`: o
+  `*` multiplica um grupo com spread dentro → a soma; colado no índice, ou num
+  grupo sem spread → só o índice), nunca um padrão por contrato. Na ponta:
+  `Ponta.piso` (só nas com fixing — Term SOFR, EURIBOR) e
+  `Ponta.mult_no_indice` (também no SOFR composto); na tela, o campo do piso e
+  o seletor "The multiplier applies to", que só aparecem quando existem; na
+  memória xlsx, o piso é `MAX(piso; fixing)` como fórmula. O intérprete lê
+  também `act360` sem barra e, como informação, frequência, convenção de dia
+  útil, calendários e o D-2 do SOFR — para não voltarem como "não entendido".
 - **Swap Calculator: a `Denominação` da curva VCP é CONTRATO, e o IR sai do
   CADASTRO** (§479). A posição traz nas colunas 70/75 o texto livre da curva
   (`(3M SOFR + 0.75%)*1.1765 A/360`), e o `*1.1765` só existe ali. Quem o lê é
@@ -2063,7 +2086,9 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   segunda passada nos dias que falharam; o Operations B3 declara 180 s, e o
   mapa da coluna Type fica em memória pelo carimbo de cada posição.
 - **Nome da contraparte sai do SPN** (`_athena_settlements` → `_otm_cpty_name`;
-  OTM pelo `Cpty SPN`, na leitura).
+  OTM pelo `Cpty SPN`, na leitura; o **Kapital Hybrids** pela coluna
+  `Counterparty SPN` — mesa, 30/09/2026, §601): `le-spn` para entidade nossa,
+  depois o Reference Data; o texto do arquivo é só o plano B.
 - **IR do termo de moeda é CALCULADO** (`_ndfsum_ir_apply`, §423): 0,005%,
   isento pelo `ndfc-ir-exempt`, piso de R$ 1,00 acumulado no mês no ledger
   `ndf-ir-ledger_AAAAMM.json`; o import do Cockpit reusa as mesmas funções
@@ -2091,6 +2116,14 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 
 ### Esteira de confirmação manual
 
+- **A data do documento ("São Paulo, <data>") é a da OPERAÇÃO, nunca a do dia
+  em que a confirmação é gerada** (mesa, 30/09/2026, §598), em TODO template:
+  gerado em D+n, o documento diria uma data em que nada aconteceu. Quem a dá é
+  o `data_extenso` do `conf`, pela `TradeDate` do deal (sem ela, a `Data
+  Operação` da esteira, que o Generate do Monitor manda como `?date=`); no
+  Termo de Resilição é a data da RECOMPRA. Template novo imprime
+  `{{ conf.data_extenso }}` no fecho e põe `data_extenso` na lista de campos do
+  painel — o Swap EDG tinha a data do Word de exemplo fixa no HTML.
 - Ciclo: `(Pending Legal) → Pending OTC → Pending MO e/ou FO → Pending FepWeb
   → Ok`. Legal é hold manual; FepWeb é derivado; Ok exige `Enviado p/
   cliente`; `Pending OTC` digitado REABRE (limpa validações). Toda gravação
@@ -2589,7 +2622,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (176 scripts)
+### `scripts/tests/` (177 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

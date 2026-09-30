@@ -25267,3 +25267,99 @@ com a linha quem está fora do funil (`data-excel-filter="off"`, `serverSide`,
 `searching: false`) e a grade do File Interpreter, que não é DataTable: nas
 duas ela é o único filtro.
 
+## §598 — A data das confirmações é a da operação, não a da geração (2026-09-30)
+
+A mesa pediu que toda confirmação, mesmo gerada em D+n, traga no fecho
+("São Paulo, <data>") a data da operação original. A varredura dos templates
+de `apps/templates/confirmations/`:
+
+- **NDF e opções de commodities, FXO (vanilla e asiática), FWD Start e os de
+  MGT** já estavam certos: o `data_extenso` sai da `TradeDate` do deal e, sem
+  ela, do `ref` — o `?date=` que o Generate do Monitor monta com a `Data
+  Operação` da linha da esteira (`_mc_generate_url`). A data de HOJE só entra
+  quando a página é aberta à mão, sem `?date=`, e o deal não tem TradeDate.
+- **Swap EDG (Opção de Arrependimento)**: o fecho era o TEXTO FIXO "São Paulo,
+  10 de Setembro de 2026", sobra do Word de exemplo. O `_conf_swap_conf` já
+  calculava o `data_extenso` e o `_CONF_SWAP_FIELDS` do servidor já o
+  aceitava; faltava o template imprimi-lo, o campo no painel e a chave na lista
+  `FIELDS` do `_swap-edg-script.html` — sem ela o Save não mandaria a data e o
+  documento salvo sairia em branco.
+- **Termo de Resilição**: usava `_hoje()` de propósito ("a data do Termo é a da
+  assinatura, que é hoje"). A regra da mesa inverte: vale a data da RECOMPRA
+  (o `ref` do grupo, o mesmo do `data_neg`).
+
+O `mgt-fwd-vanilla.html` (não versionado, com o literal `DATA`) não é servido
+por rota nenhuma: é o Word de origem do `ndf-mgt-strike-me`.
+
+## §599 — Swap Calculator: o piso do índice e onde o multiplicador incide (2026-09-30)
+
+Dois contratos de Term SOFR com o MESMO multiplicador de 1,17647 em lugares
+diferentes, e a tela não lia nenhum dos dois:
+
+- `[Max(0%, USD 3m Term SOFR) + 0,90%]*1.17647` → `(max(0; SOFR) + 0,90%) × k`;
+- `Max 0%, USD 3m Term SOFR * 1,17647 + 1,12%` → `max(0; SOFR) × k + 1,12%`.
+
+O intérprete (`precificador/descricao_curva.py`) só conhecia o multiplicador
+depois de `)`, o spread colado no índice e a contagem com barra: o primeiro
+texto perdia multiplicador e spread (o `]` e o `)` do Max no meio), o segundo
+perdia os dois e a contagem (`act360`). E nenhuma regra conhecia o `Max`. O
+motor, por sua vez, só sabia `(índice + spread) × k`.
+
+- **Intérprete**: regra `PISO` (`Max(0%,`, `Max 0%,`, `floor`, `piso`) PRIMEIRO,
+  para o `0` não virar valor de outra; multiplicador depois de `)` ou `]` e
+  colado no índice; spread depois de `)`/`]` e depois do multiplicador;
+  `act360`/`act365` sem barra; informação (frequência, convenção de dia útil,
+  calendários, o D-2 do SOFR, "from each payment date") lida para não sobrar
+  como "não entendido". **A base do multiplicador sai da ESTRUTURA**
+  (`_base_do_multiplicador`): o `*` multiplica um grupo `(…)`/`[…]` com spread
+  dentro → a soma; colado no índice ou num grupo sem spread → só o índice; o
+  `%*k` solto segue na soma, como sempre foi lido.
+- **Motor** (`liquidacao.py`): `Ponta.piso` (nas pontas com fixing) e
+  `Ponta.mult_no_indice` (também no SOFR composto), pelo `indice_mais_spread`.
+  A descrição da ponta diz quando o piso MORDEU.
+- **Tela**: campo do piso e o seletor "The multiplier applies to", que só
+  aparecem quando existem (a regra do §479 para o multiplicador); o seletor no
+  padrão não é mandado como valor atual à leitura, senão ela o diria
+  "divergente".
+- **Memória xlsx**: o piso é linha própria e o índice com piso é
+  `=MAX(piso;fixing)`; no "só o índice" a fórmula é `índice*k+spread`. O teste
+  recalcula a planilha e cobra o fator e o ajuste do motor nos dois casos (o
+  avaliador do teste ganhou o `MAX`, que o do módulo já tinha).
+
+## §600 — Seleção de célula e Ctrl+C em toda tabela (2026-09-30)
+
+A mesa pediu o contorno azul de célula selecionada em todas as tabelas e o
+Ctrl+C/Ctrl+V copiando a célula selecionada. Sondando as ~70 tabelas do menu
+(com uma linha injetada nas vazias):
+
+- **O Ctrl+C genérico do `clipboard.js` estourava** em
+  `$.fn.dataTable.tables({api:true}).every(...)`: no DataTables 2.3.8 esse
+  objeto não tem `.every`. As páginas com a extensão `select` e SEM handler
+  próprio (Intrag ×6, Swap Bullet/Cashflow, Opt EDG, recompras) marcavam a
+  célula e não copiavam nada. Hoje ele percorre as tabelas pelo nó. O `?v=` do
+  `clipboard.js` era fixo (`20260730a`); virou `asset_v`.
+- **Três páginas chamavam `otcCellCopy` sem carregar o `table-std.js`**
+  (`unwinds-ndf-fx`, `unwinds-product`, `intrag-unwind`), protegidas por
+  `if (window.otcCellCopy)` — o pulo era calado. O `table-std.js` agora vem do
+  `base.html` e se liga SOZINHO a toda DataTable (`init.dt`), menos a que usa a
+  extensão `select` por célula e a `data-cell-copy="off"`; duas travas (núcleo e
+  modo automático) porque a página pode carregá-lo antes do jQuery.
+- **Ctrl+C**: um listener só, que copia a tabela do ÚLTIMO clique (um por
+  tabela copiava duas seleções); aceita `C` maiúsculo; com o foco num campo o
+  Ctrl+C/Ctrl+V é do campo (antes o handler o engolia). Célula de controle
+  (checkbox, botões) não se seleciona, com ou sem `skip`.
+- **Visual**: a célula da extensão `select` pintava o preenchimento padrão do
+  DataTables; ganhou o mesmo contorno azul de 2px do `otc-sel`.
+- Os 38 `<script src=".../table-std.js">` das páginas ganharam `asset_v`: sem
+  versão, a cópia velha em cache carregaria primeiro e a trava faria a do base
+  desistir.
+
+## §601 — Kapital Hybrids: o Counterparty Name pela SPN (2026-09-30)
+
+A coluna Counterparty Name repetia o texto do `BANCO_UPCOMING_PAYMENTS.csv`,
+escrito pelo sistema do banco e cortado/grafado diferente do cadastro. O
+`_swaphyb_collect` passou a resolver pela `Counterparty SPN` com a MESMA regra
+do OTM (`_otm_cpty_name`: `le-spn` para entidade nossa, depois o Reference Data
+por SPN, zero à esquerda ignorado); o texto do arquivo é o plano B, para a linha
+não sair anônima. `check_swaphyb_cpty_name.py`.
+

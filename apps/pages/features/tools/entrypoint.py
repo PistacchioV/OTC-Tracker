@@ -284,6 +284,7 @@ def _form_padrao_swap(hoje):
             lado + '_data_fixing': '', lado + '_taxa_indice': '', lado + '_lookback': '0',
             lado + '_shift': '0', lado + '_ativo': '', lado + '_preco_inicial': '',
             lado + '_preco_final': '', lado + '_multiplicador': '', lado + '_descricao': '',
+            lado + '_piso': '', lado + '_mult_base': '',
         })
     return form
 
@@ -401,7 +402,7 @@ def api_tools_swap_curve():
     if r:
         return r
     chaves = ('indexador', 'taxa', 'percentual', 'convencao', 'regime', 'tenor',
-              'ptax_offset', 'multiplicador', 'lookback', 'shift',
+              'ptax_offset', 'multiplicador', 'piso', 'mult_base', 'lookback', 'shift',
               # equity: o ativo vai junto porque é dele que sai o fechamento
               'ativo', 'cupom_limpo', 'cupom_data')
     atuais = {k: str(request.args.get(k) or '') for k in chaves}
