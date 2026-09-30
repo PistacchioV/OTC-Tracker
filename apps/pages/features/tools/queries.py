@@ -583,9 +583,9 @@ def aplicar_cupom_limpo(campos, faltando=None):
 # Na posição da B3 o swap de estratégia vem com as DUAS curvas `VCP`: o índice
 # e a taxa de verdade só estão na consulta da estratégia (`Indicador_1/_2`,
 # `taxa Cupom_1/_2`, `Percentual Indicador_2`, `Base taxa Cupom_2`), que a tela
-# Strategy grava. A ponta `_1` é a da Parte e a `_2` a da Contraparte — a
-# mesma ordem de `Curva - Parte`/`Curva - Contraparte` da consulta, e a mesma
-# das pontas ativa/passiva do formulário.
+# Strategy grava. A ponta ATIVA do formulário (a da Parte) é a
+# `_ss.PONTA_PARTE` (`_2`) e a passiva a `_ss.PONTA_CONTRAPARTE` (`_1`) — a
+# numeração da consulta NÃO segue a de `Curva - Parte`/`Curva - Contraparte`.
 _BASE_DA_ESTRATEGIA = {'360': contagem.ACT_360, '365': contagem.ACT_365, '252': contagem.DU_252}
 
 
@@ -797,7 +797,8 @@ def swap_prefill(b3_id):
         # na taxa e no percentual — ali as duas curvas são `VCP` e a taxa
         # registrada não é a da estratégia. O que ela não traz fica com a
         # posição (cotação inicial, D-n da PTAX, Denominação).
-        perna = _ss.leg(det_estrategia, k + 1) if det_estrategia else None
+        perna = (_ss.leg(det_estrategia, (_ss.PONTA_PARTE, _ss.PONTA_CONTRAPARTE)[k])
+                 if det_estrategia else None)
         if perna and not perna['indicador']:
             perna = None
         if perna:

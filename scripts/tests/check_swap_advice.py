@@ -580,7 +580,7 @@ check('o coletor e quem avisa',
 #  H7 e CEMHYB: os tres valores saem do Kapital Hybrids do dia (e nao do
 #  Athena, que diz outra coisa). E7 e contrato de ESTRATEGIA: a posicao traz as
 #  duas curvas VCP, e os indexadores saem do Live Position › Swap › Strategy
-#  (Indicador_1 = banco, Indicador_2 = cliente). C8 e CEM comum: nada muda.
+#  (Indicador_2 = Parte = banco, Indicador_1 = cliente — mesa, 30/09/2026). C8 e CEM comum: nada muda.
 print('\n== 16. CEMHYB pelo Kapital Hybrids; indexadores da estrategia ==')
 
 
@@ -625,9 +625,9 @@ check('   o cliente e o do Kapital Hybrids pela SPN (nao o apelido da B3)',
 check('   curvas e bruto do Kapital Hybrids (nao do Athena)',
       (h.get('curva_banco'), h.get('curva_cliente'), h.get('bruto')), (500.0, -200.0, 300.0))
 e = itens.get('E7') or {'cells': [''] * 15}
-check('E7 de estrategia: Indexador Banco = Indicador_1',
-      e['cells'][COL['Indexador Banco']], 'USD')
-check('   Indexador Cliente = Indicador_2', e['cells'][COL['Indexador Cliente']], 'SOFR OVERNIGHT')
+check('E7 de estrategia: Indexador Banco = Indicador_2 (a Parte)',
+      e['cells'][COL['Indexador Banco']], 'SOFR OVERNIGHT')
+check('   Indexador Cliente = Indicador_1', e['cells'][COL['Indexador Cliente']], 'USD')
 check('   e os valores continuam os do Athena (CEM nao e CEMHYB)',
       (e.get('curva_banco'), e.get('bruto')), (10.0, 6.0))
 check('   indexadores sempre em MAIUSCULAS',

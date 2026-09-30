@@ -5080,8 +5080,8 @@ def _swadv_collect(ref):
 
     # Contrato de ESTRATÉGIA: na posição as duas curvas são `VCP`, e o índice de
     # verdade está na consulta da B3 gravada em Live Position › Swap › Strategy
-    # (`Indicador_1` = Parte = banco, `Indicador_2` = Contraparte = cliente — a
-    # mesma ordem das pernas da posição). Cadastro ilegível não derruba o aviso.
+    # (`_ss.PONTA_PARTE` = `_2` = banco, `_ss.PONTA_CONTRAPARTE` = `_1` =
+    # cliente — a numeração da consulta não é a das curvas da posição). Cadastro ilegível não derruba o aviso.
     try:
         from apps.pages.platform import swap_strategies as _ss
         estrategias = {_ss.norm_contract(e.get('Contract')): _ss.details(e)
@@ -5187,8 +5187,8 @@ def _swadv_collect(ref):
         idx_banco, idx_cliente = pos.get('idx_banco', ''), pos.get('idx_cliente', '')
         det = estrategias.get(_ss.norm_contract(titulo)) if _ss else None
         if det:
-            idx_banco = _ss.leg(det, 1)['indicador'] or idx_banco
-            idx_cliente = _ss.leg(det, 2)['indicador'] or idx_cliente
+            idx_banco = _ss.leg(det, _ss.PONTA_PARTE)['indicador'] or idx_banco
+            idx_cliente = _ss.leg(det, _ss.PONTA_CONTRAPARTE)['indicador'] or idx_cliente
         # Indexador sempre em MAIÚSCULAS: a posição escreve `DOLAR DOS EUA`, a
         # estratégia `SOFR Overnight` — na mesma coluna, as duas grafias.
         idx_banco, idx_cliente = str(idx_banco or '').upper(), str(idx_cliente or '').upper()

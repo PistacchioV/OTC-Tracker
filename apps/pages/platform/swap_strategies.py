@@ -70,9 +70,21 @@ def _unico(det, prefixo):
     return vals.pop() if len(vals) == 1 else ''
 
 
+# A ponta de cada lado na consulta da B3. O `_1` é a da CONTRAPARTE e o `_2` a
+# da PARTE — NÃO a ordem de `Curva - Parte`/`Curva - Contraparte` (mesa,
+# 30/09/2026): na `Aporte SOFR Flex x ME` (23F02369705, Parte = Banco) vem
+# `Indicador_1 = USD` e `Indicador_2 = SOFR Overnight`, e o banco RECEBE o
+# SOFR — é o que o nome da estratégia diz (ativo × passivo da Parte) e o que a
+# planilha da mesa calcula. Lido ao contrário, o Swap Calculator trocava a
+# ponta ativa pela passiva e o resultado saía com o SINAL invertido, com o
+# mesmo valor. As duas leituras (Swap Calculator e Settlement Advice) usam
+# estas constantes, nunca o número solto.
+PONTA_PARTE = 2
+PONTA_CONTRAPARTE = 1
+
+
 def leg(det, n):
-    """O que a estratégia diz da ponta `n` (1 = Parte, 2 = Contraparte — a
-    mesma ordem de `Curva - Parte` / `Curva - Contraparte` da consulta):
+    """O que a estratégia diz da ponta `n` (`PONTA_PARTE`/`PONTA_CONTRAPARTE`):
     `{indicador, taxa, percentual, base}`, cada um '' quando a estratégia não
     tem a coluna. Os rótulos são os da B3 (`Indicador_1`, `taxa Cupom_1`,
     `Percentual Indicador_2`, `Base taxa Cupom_2`)."""

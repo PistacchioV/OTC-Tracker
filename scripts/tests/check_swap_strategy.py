@@ -180,10 +180,11 @@ def main():
         d = TQ.swap_prefill('23F02430278')
     a_, p_ = d['ativa'], d['passiva']
     check('estrategia na resposta', d.get('estrategia', {}).get('codigo') == 'SWP00001229' and d['estrategia']['dados'], d.get('estrategia'))
-    check('ponta 1 = Indicador_1 (DI) com taxa Cupom_1', a_['indexador'] == 'cdi' and float(a_['taxa']) == 0.6, a_)
-    check('ponta 2 = Indicador_2 (Term SOFR) com taxa Cupom_2', p_['indexador'] == 'term_sofr' and float(p_['taxa']) == 1.4, p_)
-    check('Base taxa Cupom 360 -> act_360', p_['convencao'] == 'act_360', p_['convencao'])
-    check('fonte marca a estrategia', p_.get('fonte', {}).get('estrategia', {}).get('indicador') == 'Term SOFR')
+    # A Parte (banco) e o `_2`: na 'SOFR Flex x BRL' ela RECEBE o SOFR (mesa, 30/09/2026).
+    check('ativa (Parte) = Indicador_2 (Term SOFR) com taxa Cupom_2', a_['indexador'] == 'term_sofr' and float(a_['taxa']) == 1.4, a_)
+    check('passiva (Contraparte) = Indicador_1 (DI) com taxa Cupom_1', p_['indexador'] == 'cdi' and float(p_['taxa']) == 0.6, p_)
+    check('Base taxa Cupom 360 -> act_360', a_['convencao'] == 'act_360', a_['convencao'])
+    check('fonte marca a estrategia', a_.get('fonte', {}).get('estrategia', {}).get('indicador') == 'Term SOFR')
     # A imagem da mesa (23F02369705): USD x SOFR Overnight — a cotacao inicial
     # e o D-2 da moeda vem da estrategia, nao da Denominacao (que diz T-1).
     vals[P['denominacao'][0]] = 'TERM SOFR 3M - Fixings PTAX-Ask T-1 - (3M SOFR + 0.75%)*1.1765 A/360'
@@ -196,11 +197,14 @@ def main():
                                      ['Valor Inicial 2', '1,00000000'], ['Lookback da Taxa_1', 'D-5']]}
     with app.test_request_context():
         d = TQ.swap_prefill('23F02430278')
-    a_, p_ = d['ativa'], d['passiva']
+    # 23F02369705 (Aporte SOFR Flex x ME): o banco RECEBE o SOFR — ativa = `_2`.
+    p_, a_ = d['ativa'], d['passiva']
     check('USD: cambio com a cotacao inicial da estrategia', a_['indexador'] == 'cambio'
           and float(a_['ptax_inicial']) == 4.775, a_)
     check('USD: D-2 da estrategia vence o T-1 da Denominacao', a_['ptax_offset'] == '2', a_.get('ptax_offset'))
-    check('USD: cotacao inicial fora das lacunas', 'ativa.ptax_inicial' not in d['missing'], d['missing'])
+    check('USD: cotacao inicial fora das lacunas', 'passiva.ptax_inicial' not in d['missing'], d['missing'])
+    check('23F02369705: SOFR na ponta ATIVA (o banco recebe), USD na passiva',
+          d['ativa']['indexador'] == 'sofr' and d['passiva']['indexador'] == 'cambio', (d['ativa']['indexador'], d['passiva']['indexador']))
     check('SOFR: a cotacao sem numero vale na ponta em moeda', p_['indexador'] == 'sofr'
           and float(p_['ptax_inicial']) == 4.775 and p_['ptax_offset'] == '2', p_)
     check('SOFR: o Fixing 2/Valor Inicial 2 do indice nao viram a moeda', p_['ptax_offset'] == '2'
