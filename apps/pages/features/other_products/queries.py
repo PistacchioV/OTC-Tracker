@@ -142,6 +142,10 @@ def vcp_payload(ref):
         f = by_ct.get(str(r[ci['Código do Contrato']] or '').strip().upper())
         if f:
             r[ci['Internal ID']] = f['internal_id']
+            # a Contraparte da tabela de cima é a MESMA da de fatores (no CEMHYB,
+            # o nome pela SPN do Kapital Hybrids, não o apelido da conta)
+            if 'Contraparte' in ci and f.get('contraparte'):
+                r[ci['Contraparte']] = f['contraparte']
             # "-" onde não há fator: a perna calculada e a VCP que ainda não
             # resolveu. Célula vazia parecia um valor que faltou digitar.
             r[ci['PARTE / Fator']] = (_f8(f['fator_p'])
@@ -243,6 +247,15 @@ def vcp_factor_rows(ref, rows=None, ci=None):
     dia_pos = datetime.strptime(dref_iso, '%Y-%m-%d').date() if dref_iso else None
     salvos = persistence._vcp_factors_load(ref)
     ref_iso = ref.strftime('%Y-%m-%d')
+    # CEMHYB (`Hybrids` no `_accrual_lob`): o swap híbrido liquida pelo KAPITAL
+    # HYBRIDS, não pelo OTM, e não está no Swap Athena — Internal ID, curvas e
+    # contraparte saem de lá, pela MESMA leitura do Settlement Advice e do
+    # Trade Level (`_swaphyb_curvas`), para as três telas não divergirem.
+    try:
+        hyb_por_cetip, hyb_por_kap = R._swaphyb_curvas(ref)
+    except Exception:                                       # noqa: BLE001
+        R.log.warning('[swap-vcp] Kapital Hybrids ilegível', exc_info=True)
+        hyb_por_cetip, hyb_por_kap = {}, {}
 
     def cel(r, nome):
         i = ci.get(nome)
@@ -286,6 +299,12 @@ def vcp_factor_rows(ref, rows=None, ci=None):
             internal_id = str((_eqlink().get(key) or {}).get('internal_id', '') or '').strip()
         else:
             internal_id = str(arow[ai['Kapital ID']] if arow and 'Kapital ID' in ai else '').strip()
+        hyb = None
+        if lob == 'Hybrids':
+            hyb = hyb_por_cetip.get(key) or (
+                hyb_por_kap.get(internal_id.upper()) if internal_id else None)
+            if hyb:
+                internal_id = internal_id or hyb.get('kap', '')
         athena_id = internal_id            # nome antigo do campo, preservado
         faltam = []
         if not internal_id:
@@ -297,6 +316,9 @@ def vcp_factor_rows(ref, rows=None, ci=None):
         elif arow:
             curva_p = domain.num(arow[ai['Owner curve']] if 'Owner curve' in ai else None)
             curva_c = domain.num(arow[ai['Counterparty curve']] if 'Counterparty curve' in ai else None)
+        if hyb:
+            # a mesma convenção do `_curvas_otm`: recebimentos e pagamentos em módulo
+            curva_p, curva_c = hyb['pos'], -hyb['neg']
         if curva_p is None and curva_c is None:
             faltam.append('curva')
         vbr = pos.get('remanescente')
@@ -345,7 +367,7 @@ def vcp_factor_rows(ref, rows=None, ci=None):
             'idx_p': cel(r, 'PARTE / Indexador'), 'idx_c': cel(r, 'CONTRAPARTE / Indexador'),
         }, salvo.get('overrides'))
         item = {'contrato': contrato, 'internal_id': internal_id, 'athena_id': athena_id,
-                'contraparte': cel(r, 'Contraparte'),
+                'contraparte': (hyb or {}).get('cpty') or cel(r, 'Contraparte'),
                 'conta_p': cel(r, 'PARTE / Conta'), 'conta_c': cel(r, 'CONTRAPARTE / Conta'),
                 'idx_p': cel(r, 'PARTE / Indexador'), 'idx_c': cel(r, 'CONTRAPARTE / Indexador'),
                 'lob': lob, 'curva_p': curva_p, 'curva_c': curva_c,
@@ -359,6 +381,8 @@ def vcp_factor_rows(ref, rows=None, ci=None):
         # a B3 liquidaria com os fatores desta linha. Sem Internal ID não há
         # SUMIF — e `None` é diferente de zero, que seria "não liquidou nada".
         par = curvas.get(internal_id.upper()) if internal_id else None
+        if hyb:
+            par = (hyb['pos'], -hyb['neg'])
         interno = (par[0] - par[1]) if par else None
         vcp_liq = domain.liquidacao_vcp(
             calc.get('vcp_p'), calc.get('vcp_c'), calc.get('fator_p'), calc.get('fator_c'),

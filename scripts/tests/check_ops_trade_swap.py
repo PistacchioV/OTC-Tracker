@@ -404,5 +404,55 @@ blk = SRC.split('def _otm_collect', 1)[1].split('\ndef ', 1)[0]
 check('o OTM resolve o Cpty Name pelo Cpty SPN',
       "_otm_cpty_name(rec.get('Cpty SPN'" in blk, True)
 
+
+# ── CEMHYB pelo Kapital Hybrids (mesa, 30/09/2026) ───────────────────────────
+#  O swap hibrido nao esta no Swap Athena nem no OTM: sem o Hybrids a linha saia
+#  sem Internal ID, com o apelido da B3 (INTRAGLAWTONFDO) e sem valor — Check
+#  para sempre. Com ele: Internal ID = Kapital ID, contraparte pela SPN,
+#  Settlement = curvas do Hybrids, e o status volta a ser a conferencia com a B3.
+print('\n== 7. CEMHYB: Internal ID, contraparte e Settlement do Kapital Hybrids ==')
+tmp = tempfile.mkdtemp(prefix='ops-trade-hyb-')
+ds, b3 = os.path.join(tmp, 'ds'), os.path.join(tmp, 'b3')
+write_json(os.path.join(ds, '2026', '07', '27', 'operations-b3_20260727.json'), [
+    opb3('H9', 'PAGAMENTO DE DIF. DE JUROS', '300,00', cpty='INTRAGLAWTONFDO'),
+    opb3('Q9', 'PAGAMENTO DE DIF. DE JUROS', '40,00', cpty='INTRAGLAWTONFDO'),
+])
+
+
+def _pos_ident(contrato, ident):
+    vals = [''] * 146
+    vals[2], vals[4], vals[11], vals[12] = contrato, ident, '20240301', '20260805'
+    names = ['f%03d' % i for i in range(146)]
+    names[2], names[4] = 'Contrato', 'Código Identificador'
+    return dict(zip(names, vals))
+
+
+write_json(os.path.join(b3, 'Swap', R._b3_date_subpath(DREF),
+                        '73760_{}_DPOSICAO-SWAP.json'.format(DREF)), [
+    _pos_ident('H9', 'CEMHYB-2026-0009'), _pos_ident('Q9', 'CEMHYB-2026-0010')])
+_hyb_real = R._swaphyb_curvas
+R._swaphyb_curvas = lambda ref: ({'H9': {'pos': 500.0, 'neg': -200.0, 'spn': '99', 'kap': 'KH9',
+                                         'cpty': 'LAWTON MULTIMERCADO EXCLUSIVO'}}, {})
+from apps.pages import request_cache as _RC  # noqa: E402
+_RC._shared_cache.clear()     # o mesmo dia da secao 1 viria do cache curto
+try:
+    R.OTM_JSON_ROOT, R.B3_JSON_ROOT = ds, b3
+    hrows = {r['id_b3']: r for r in R._ops_swap_trade_rows(REF)}
+finally:
+    R.OTM_JSON_ROOT, R.B3_JSON_ROOT = _ds_root, _b3_root
+    R._swaphyb_curvas = _hyb_real
+    shutil.rmtree(tmp, ignore_errors=True)
+h = hrows.get('H9', {})
+check('H9 · LOB CEMHYB', h.get('lob'), 'CEMHYB')
+check('H9 · Internal ID = Kapital ID do Hybrids', h.get('internal_id'), 'KH9')
+check('H9 · Counterparty pela SPN do Hybrids (nao o apelido da B3)',
+      h.get('counterparty'), 'LAWTON MULTIMERCADO EXCLUSIVO')
+check('H9 · Settlement = curvas do Hybrids', h.get('settlement'), '300.00')
+check('H9 · status OK quando bate com a B3', h.get('status'), 'OK')
+check('H9 · o Summary soma o numero cru', h.get('_settle_n'), 300.0)
+q = hrows.get('Q9', {})
+check('Q9 (fora do Hybrids) · segue sem valor e em Check',
+      (q.get('settlement'), q.get('status'), q.get('counterparty')), ('', 'Check', 'INTRAGLAWTONFDO'))
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)
