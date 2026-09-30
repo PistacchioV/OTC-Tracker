@@ -492,7 +492,8 @@ def _intraday_snapshot(ref):
     from apps.pages.platform import task_runs
     dia = ref.date() if hasattr(ref, 'date') else ref
     agora = _R()._br_now().replace(tzinfo=None)
-    feriado = dia.strftime('%Y-%m-%d') in (_R()._anbima_holidays() or ())
+    feriados = set(_R()._anbima_holidays() or ())
+    feriado = dia.strftime('%Y-%m-%d') in feriados
     cfg = domain.task_config(persistence._load_intraday_tasks())
 
     cards, conf_cards = _ndm_monitor_snapshot(ref)
@@ -522,6 +523,8 @@ def _intraday_snapshot(ref):
                          'progress': 100 if not total else int(round(100.0 * fechado / total))})
             est = domain.avalia(c, dia, agora, feriado, feito, fechado > 0)
         else:
+            janela = (domain.janela_mensal(t['month'], dia, feriados)
+                      if t.get('month') else None)
             meus = [r for r in runs if r.get('task') == t['id']]
             execs = [r for r in meus if r.get('event', 'run') == 'run']
             if execs:
@@ -537,6 +540,17 @@ def _intraday_snapshot(ref):
                     item.update({'ran_at': hora, 'last_at': hora, 'open': pend, 'runs': 1})
                 feito_em = _parse_hora(dia, hora) if rodou else None
             fins = [r for r in meus if r.get('event') == 'end']
+            if janela:
+                # O End process vale em qualquer dia da janela até `dia`: os
+                # dias anteriores são lidos do registro deles.
+                item['month'] = t['month'][0]
+                for d in janela:
+                    if d >= dia or fins:
+                        break
+                    fins = [r for r in task_runs.runs_of(d)
+                            if r.get('task') == t['id'] and r.get('event') == 'end']
+                    if fins:
+                        item['ended_on'] = d.strftime('%d/%m')
             if fins:
                 item['ended'], item['ended_at'] = True, fins[-1].get('time')
             else:
@@ -546,8 +560,13 @@ def _intraday_snapshot(ref):
                 # Conclui no End process: rodar é o meio do caminho.
                 feito = bool(item['ended'])
                 item['progress'] = 100 if feito else (50 if rodou else 0)
-                est = domain.avalia(c, dia, agora, feriado, feito, rodou,
-                                    _parse_hora(dia, item['ended_at']) if feito else None)
+                prazo_dia = janela[-1] if janela else None
+                fim_em = None
+                if feito and not item.get('ended_on'):
+                    fim_em = _parse_hora(dia, item['ended_at'])
+                est = domain.avalia(c, dia, agora, feriado, feito, rodou, fim_em, prazo_dia)
+                if t.get('month'):
+                    est['due'] = est['due'] and dia in (janela or ())
             else:
                 feito = rodou
                 item['progress'] = 100 if feito else 0
@@ -606,6 +625,8 @@ def task_detail(t):
             return valor + ' — VP approval draft at {}; reversal not settled in Pay/Rec yet.'.format(
                 t['draft_at'])
         return valor + ' — VP approval draft not generated yet.'
+    if t.get('ended_on'):
+        return 'End process on {}.'.format(t['ended_on'])
     if not t.get('runs'):
         return 'Not run yet.'
     txt = 'Ran at {}'.format(t.get('last_at') or t.get('ran_at'))

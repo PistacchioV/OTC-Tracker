@@ -24,6 +24,9 @@ O que prende:
       destino abrindo nessa data;
   4d. TODA `/reconciliation-*/run` do `url_map` é uma tarefa do catálogo e
       grava `task_runs.record` — recon nova sem isso reprova aqui;
+  4g. as tarefas MENSAIS: Swap Accrual no último dia útil, Swap MtM do 1º ao
+      4º dia útil — concluem no End process, que no MtM vale em qualquer dia
+      da janela; fora da janela não são devidas;
   5. o endereço antigo redireciona e as allowlists antigas (a página e o card
      do aviso) continuam valendo.
 """
@@ -333,6 +336,43 @@ with app.test_request_context():
           [('Unwind', 'Termo de Resilição', 1)])
 _html = open(os.path.join(ROOT, 'apps/templates/pages/intraday-monitor.html'), encoding='utf-8').read()
 check('   a tela o desenha no bloco Unwinds', "conf: ['conf-unwind-termo']" in _html, True)
+
+print('\n== 4g. as tarefas mensais (Swap Accrual e Swap MtM) ==')
+fer = {'2026-10-12'}
+check('último dia útil de setembro/2026', D.janela_mensal(('last', 1), date(2026, 9, 3), fer), [date(2026, 9, 30)])
+check('1º ao 4º dia útil de outubro/2026 (pula o fim de semana)',
+      D.janela_mensal(('first', 4), date(2026, 10, 20), fer),
+      [date(2026, 10, 1), date(2026, 10, 2), date(2026, 10, 5), date(2026, 10, 6)])
+cm = {'days': [0, 1, 2, 3, 4], 'deadline': '20:00'}
+check('prazo no fim da janela: no 1º dia útil, à noite, ainda não atrasou',
+      D.avalia(cm, date(2026, 10, 1), datetime(2026, 10, 1, 21, 0), False, False, False,
+               prazo_dia=date(2026, 10, 6))['state'], 'todo')
+
+def _tk(dia):
+    return {t['id']: t for t in cl.get('/api/intraday-monitor?date=' + dia).get_json()['tasks']}
+
+tk = _tk('2026-09-29')
+check('Accrual fora do último dia útil não é devido', tk['swap-accrual']['due'], False)
+check('MtM fora da janela não é devido', tk['swap-mtm']['due'], False)
+task_runs.record('swap-accrual', 'T000000', 'Tester', '20260930', {'open': 2},
+                 now=datetime(2026, 9, 30, 10, 0))
+tk = _tk('2026-09-30')
+check('Accrual devido no último dia útil', tk['swap-accrual']['due'], True)
+check('... rodado (recon) mas sem End process: 50%, não concluído',
+      (tk['swap-accrual']['progress'], tk['swap-accrual']['state'] != 'done'), (50, True))
+task_runs.record('swap-accrual', 'T000000', 'Tester', '20260930', event='end',
+                 now=datetime(2026, 9, 30, 17, 0))
+check('... com o End process: concluído', _tk('2026-09-30')['swap-accrual']['state'], 'done')
+tk = _tk('2026-10-01')
+check('MtM devido no 1º dia útil', tk['swap-mtm']['due'], True)
+check('... com o prazo no 4º dia útil', tk['swap-mtm']['deadline_at'][:10], '2026-10-06')
+task_runs.record('swap-mtm', 'T000000', 'Tester', '20260930', event='end',
+                 now=datetime(2026, 10, 2, 16, 0))
+check('MtM ainda em aberto no 1º dia útil', _tk('2026-10-01')['swap-mtm']['state'] != 'done', True)
+tk = _tk('2026-10-05')
+check('End process no 2º dia útil conclui o MtM no 3º', tk['swap-mtm']['state'], 'done')
+check('... dizendo o dia', tk['swap-mtm']['ended_on'], '02/10')
+check('MtM depois da janela não é devido', _tk('2026-10-07')['swap-mtm']['due'], False)
 
 print('\n== 5. o endereço antigo ==')
 r = cl.get('/new-deals-monitor')

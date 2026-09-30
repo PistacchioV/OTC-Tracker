@@ -997,7 +997,10 @@
         return h ? h + 'h' + (m ? (m < 10 ? '0' : '') + m : '') : m + 'min';
     }
     function prazoTxt(tk) {
-        var base = '<i class="ti ti-clock"></i>' + esc(t('im-until', 'until')) + ' ' + esc(tk.deadline);
+        // Tarefa mensal: o prazo é o fim da janela, não o dia visto.
+        var dPrazo = (tk.deadline_at || '').slice(0, 10), dia = '';
+        if (tk.month && dPrazo && dPrazo !== refAtual) dia = dPrazo.slice(8, 10) + '/' + dPrazo.slice(5, 7) + ' ';
+        var base = '<i class="ti ti-clock"></i>' + esc(t('im-until', 'until')) + ' ' + esc(dia + tk.deadline);
         if (tk.state === 'done') {
             return base + (tk.late_done ? ' · <span class="is-late">' + esc(t('im-done-late', 'done after the deadline')) + '</span>' : '');
         }
@@ -1023,6 +1026,9 @@
                                     ' · ' + esc(t('im-br-wait', 'awaiting settlement'));
             return valor + ' · ' + esc(t('im-br-nodraft', 'approval draft not generated'));
         }
+        if (tk.ended_on) return '<span class="im-tag is-done"><i class="ti ti-check"></i>' +
+                                esc(t('im-ended-on', 'End process on')) + ' ' + esc(tk.ended_on) +
+                                (tk.ended_at ? ' ' + esc(tk.ended_at) : '') + '</span>';
         if (!tk.runs) return esc(t('im-not-run', 'Not run yet.'));
         var partes = [esc(t('im-ran-at', 'Ran at')) + ' <b>' + esc(tk.last_at || tk.ran_at) + '</b>' +
                       (tk.by ? ' ' + esc(t('im-by', 'by')) + ' ' + esc(tk.by) : '')];
@@ -1089,6 +1095,9 @@
         var fora = tarefas.filter(function (x) { return !x.due && !x.conditional && x.days && x.days.length; });
         document.getElementById('im-offday').innerHTML = !fora.length ? '' :
             esc(t('im-offday', 'Not scheduled for this date:')) + ' ' + fora.map(function (x) {
+                if (x.month) return '<b>' + esc(nomeTarefa(x)) + '</b> (' + esc(x.month === 'last'
+                    ? t('im-month-last', 'last business day of the month')
+                    : t('im-month-first', 'first 4 business days of the month')) + ')';
                 return '<b>' + esc(nomeTarefa(x)) + '</b> (' + x.days.map(function (d) {
                     return esc(t('cp-it-d' + d, DIAS_TXT[d]));
                 }).join(', ') + ')';
@@ -1376,6 +1385,11 @@
     <span data-lang="im-task-branch-reversal">Branch Reversal</span>
     <span data-lang="im-task-save-cetip">Save CETIP Files</span>
     <span data-lang="im-task-conf-escalation">Confirmations Escalation</span>
+    <span data-lang="im-task-swap-accrual">Swap Accrual</span>
+    <span data-lang="im-task-swap-mtm">Swap MtM</span>
+    <span data-lang="im-ended-on">End process on</span>
+    <span data-lang="im-month-last">last business day of the month</span>
+    <span data-lang="im-month-first">first 4 business days of the month</span>
     <span data-lang="im-br-pays">Bank pays</span>
     <span data-lang="im-br-receives">Bank receives</span>
     <span data-lang="im-br-settled">settled in Pay/Rec</span>

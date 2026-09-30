@@ -330,6 +330,14 @@ def intrag_destino_le(balde):
 #               Branch Settl.), a linha da reversão casada no Pay/Rec — e só o
 #               último conclui: o rascunho é o pedido, o dinheiro é o fato.
 #
+# `month` — tarefa MENSAL (mesa, 30/09/2026): só é devida numa JANELA de dias
+# úteis ANBIMA do mês, e o prazo é o fim da janela. `('last', 1)` = o último
+# dia útil (Swap Accrual, EOM); `('first', 4)` = do 1º ao 4º dia útil (Swap
+# MtM). Conclui com o End process registrado em QUALQUER dia da janela até a
+# data vista — o MtM finalizado no 2º dia útil não volta a cobrar no 3º. Os
+# dias da semana do Control Panel seguem valendo como filtro (tirar todos
+# desliga a tarefa).
+#
 # Dia da semana no padrão do Python: 0 = segunda … 6 = domingo. "Diário" é
 # segunda a sexta, e feriado ANBIMA não tem tarefa.
 # ══════════════════════════════════════════════════════════════════════════
@@ -365,6 +373,11 @@ TASKS = (
      'icon': 'ti-file-download', 'url': '/control-panel', 'days': DIAS_UTEIS},
     {'id': 'conf-escalation', 'kind': 'routine', 'label': 'Confirmations Escalation',
      'icon': 'ti-mail-exclamation', 'url': '/control-panel', 'days': (0, 3)},
+    # Rodar é a recon contra o retorno da B3 (50%); conclui no End process.
+    {'id': 'swap-accrual', 'kind': 'routine', 'label': 'Swap Accrual', 'done_on': 'end',
+     'month': ('last', 1), 'icon': 'ti-calendar-dollar', 'url': '/accrual-swap', 'days': DIAS_UTEIS},
+    {'id': 'swap-mtm', 'kind': 'routine', 'label': 'Swap MtM', 'done_on': 'end',
+     'month': ('first', 4), 'icon': 'ti-chart-line', 'url': '/mtm-swap', 'days': DIAS_UTEIS},
 )
 TASK_IDS = tuple(t['id'] for t in TASKS)
 
@@ -394,7 +407,21 @@ def task_config(salvo):
     return out
 
 
-def avalia(cfg, dia, agora, feriado, feito, iniciado, feito_em=None):
+def janela_mensal(regra, dia, feriados):
+    """Os dias úteis ANBIMA do mês de `dia` em que a tarefa mensal é devida,
+    em ordem. `regra` = ('last', n) ou ('first', n); `feriados` = conjunto de
+    'AAAA-MM-DD'. Pura: o calendário chega pronto."""
+    from datetime import date as _d, timedelta as _td
+    lado, n = regra
+    d, uteis = _d(dia.year, dia.month, 1), []
+    while d.month == dia.month:
+        if d.weekday() < 5 and d.strftime('%Y-%m-%d') not in feriados:
+            uteis.append(d)
+        d += _td(days=1)
+    return uteis[-n:] if lado == 'last' else uteis[:n]
+
+
+def avalia(cfg, dia, agora, feriado, feito, iniciado, feito_em=None, prazo_dia=None):
     """O estado de UMA tarefa em `dia`, visto em `agora` (datetime, BRT).
 
     Devolve `due` (a tarefa existe neste dia), o prazo e `state`:
@@ -402,10 +429,12 @@ def avalia(cfg, dia, agora, feriado, feito, iniciado, feito_em=None):
       · `late`        — o prazo passou e ela não foi concluída;
       · `in_progress` — começou e não terminou (zona com parte fechada);
       · `todo`        — ainda nada.
-    Dia que já passou e ficou por fazer é `late`; dia futuro é `todo`."""
+    Dia que já passou e ficou por fazer é `late`; dia futuro é `todo`.
+    `prazo_dia`: o dia do prazo quando não é o próprio `dia` (tarefa mensal)."""
     from datetime import datetime as _dt
     hh, mm = (int(x) for x in cfg['deadline'].split(':'))
-    prazo = _dt(dia.year, dia.month, dia.day, hh, mm)
+    pd = prazo_dia or dia
+    prazo = _dt(pd.year, pd.month, pd.day, hh, mm)
     due = (dia.weekday() in cfg['days']) and not feriado
     if feito:
         state = 'done'

@@ -2874,5 +2874,10 @@
   "nd-col-ativo-subjacente": "Ativo Subjacente",
   "nd-search-failed-title": "Operações não carregadas",
   "nd-search-database_busy": "O banco desta tela está ocupado (outra instância está gravando). Nada foi perdido — tente de novo em um minuto.",
-  "nd-search-database_unreadable": "Um arquivo de banco desta tela não abriu (não é trava). O dado não se perdeu — o log da aplicação diz qual arquivo ([db-unreadable]); abra um chamado."
+  "nd-search-database_unreadable": "Um arquivo de banco desta tela não abriu (não é trava). O dado não se perdeu — o log da aplicação diz qual arquivo ([db-unreadable]); abra um chamado.",
+  "im-task-swap-accrual": "Swap Accrual",
+  "im-task-swap-mtm": "Swap MtM",
+  "im-ended-on": "End process em",
+  "im-month-last": "último dia útil do mês",
+  "im-month-first": "até o 4º dia útil do mês"
 }
