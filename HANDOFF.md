@@ -25446,3 +25446,17 @@ cliente e valores. Indexadores do aviso sempre em MAIÚSCULAS (a posição
 escreve `DOLAR DOS EUA`, a estratégia `SOFR Overnight`), e no contrato de
 estratégia vêm do Strategy (§602). `check_swap_advice.py` §16,
 `check_ops_trade_swap.py` §7, `check_swap_vcp_factors.py` §2c.
+
+## §606 — Swap VCP de equity: o principal não está na curva do OTM (2026-09-30)
+
+No 22I01597022 (EDG, bullet, S&P 3.640,47 → 7.683,69, VBR 2.068.350,00) a Swap
+VCP mandava o fator 1,11063132 e o Swap Calculator dizia 2,11063129. O OTM do
+swap de equity traz só a PERFORMANCE do trade (2.297.174,29) — o principal não
+troca de mãos —, e a regra do bullet no vencimento (§470) descontava os 100%
+dessa curva como se ela carregasse o principal, que é o caso da CEM. A
+Diferença ficava zerada porque a prova real (`liquidacao_vcp`) somava o MESMO
+principal de volta: tudo coerente, fator errado. Agora a linha EDG leva
+`principal_fora_da_curva` ao `domain.calcular`: `amort_na_curva = 0`, usado nos
+juros e na prova real; o `amortizado` segue na tela. Efeito colateral dito: com
+a perna calculada de curva zero e sem principal a tirar, `juros_c` passa a 0,0
+(não `None`) e a Diff B3 dessa perna é calculada. `check_swap_vcp_factors.py`.

@@ -2052,6 +2052,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   o percentual — `amortizar()` devolve zero ANTES de olhar para ele, senão um
   `100` esquecido no campo devolveria o principal inteiro num swap que não
   devolve nada. A mesma função responde ao fator VCP.
+- **Swap VCP de EQUITY: o OTM é a PERFORMANCE, sem o principal** (§606,
+  `principal_fora_da_curva`, pela LOB `EDG`): o principal não é tirado da
+  curva nem somado na prova real. Descontado, o bullet de equity no vencimento
+  perdia o 1,0 do fator (22I01597022: 1,1106 × 2,1106 do Swap Calculator) e a
+  Diferença saía ZERO, porque a prova real somava o mesmo principal de volta.
+  CEM/Hybrids seguem com o principal na curva.
 - **Swap VCP: BULLET no vencimento amortiza 100%** (§470,
   `other_products/domain.calcular`): `Na Data de Vencimento` responde "neste
   FLUXO não amortiza" (`amortiza_no_fluxo`) — regra certa, escrita para os

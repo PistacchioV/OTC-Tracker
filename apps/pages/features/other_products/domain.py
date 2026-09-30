@@ -233,8 +233,16 @@ def calcular(base, overrides=None):
     else:
         amort_calc = notional_amortizado(vbr, num(base.get('original')), pct, base_amort)
     amortizado = pega('amortizado', amort_calc)
-    juros_p = pega('juros_p', juros(num(base.get('curva_p')), amortizado))
-    juros_c = pega('juros_c', juros(num(base.get('curva_c')), amortizado))
+    # O que a CURVA carrega de principal. No swap de EQUITY (EDG) o OTM traz só
+    # a PERFORMANCE do trade — o principal não troca de mãos —, então não há
+    # principal a tirar da curva nem a somar na prova real. Descontado mesmo
+    # assim, o bullet de equity no vencimento perdia o 1,0 inteiro do fator
+    # (22I01597022: 1,11063132 no lugar de 2,11063129, com a Diferença zerada
+    # porque a prova real somava o mesmo principal de volta). O `amortizado`
+    # continua na tela: é quanto o contrato amortiza, só não está na curva.
+    amort_na_curva = 0.0 if base.get('principal_fora_da_curva') else amortizado
+    juros_p = pega('juros_p', juros(num(base.get('curva_p')), amort_na_curva))
+    juros_c = pega('juros_c', juros(num(base.get('curva_c')), amort_na_curva))
     diff_p = pega('diff_p', None if vcp_p else diff_b3(num(base.get('b3_juros_p')), juros_p))
     diff_c = pega('diff_c', None if vcp_c else diff_b3(num(base.get('b3_juros_c')), juros_c))
     # Só a perna VCP tem fator — é o que vai para a B3. A calculada fica sem, e
@@ -243,7 +251,8 @@ def calcular(base, overrides=None):
     fator_p = pega('fator_p', fator(juros_p, diff_c, vbr) if vcp_p else None)
     fator_c = pega('fator_c', fator(juros_c, diff_p, vbr) if vcp_c else None)
     return {'vbr': vbr, 'pct': pct, 'tipo': tipo, 'base_amort': base_amort,
-            'amortizado': amortizado, 'juros_p': juros_p, 'juros_c': juros_c,
+            'amortizado': amortizado, 'amort_na_curva': amort_na_curva,
+            'juros_p': juros_p, 'juros_c': juros_c,
             'diff_p': diff_p, 'diff_c': diff_c, 'fator_p': fator_p, 'fator_c': fator_c,
             'vcp_p': vcp_p, 'vcp_c': vcp_c,
             'manual': sorted(k for k in ov if ov[k] not in (None, '') and k in CAMPOS_EDITAVEIS)}

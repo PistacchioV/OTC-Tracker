@@ -361,6 +361,8 @@ def vcp_factor_rows(ref, rows=None, ci=None):
         calc = domain.calcular({
             'vbr': vbr, 'original': original, 'pct': pct, 'tipo': tipo, 'base_amort': base_amort,
             'bullet_vencimento': bullet_venc,
+            # EDG: o OTM é a performance do equity, sem o principal (domain).
+            'principal_fora_da_curva': lob == 'EDG',
             'curva_p': curva_p, 'curva_c': curva_c,
             'b3_juros_p': ev.get('PARTE / Valor Juros'), 'b3_juros_c': ev.get('CONTRAPARTE / Valor Juros'),
             'b3_fator_p': ev.get('PARTE / Fator de Juros'), 'b3_fator_c': ev.get('CONTRAPARTE / Fator de Juros'),
@@ -387,7 +389,7 @@ def vcp_factor_rows(ref, rows=None, ci=None):
         vcp_liq = domain.liquidacao_vcp(
             calc.get('vcp_p'), calc.get('vcp_c'), calc.get('fator_p'), calc.get('fator_c'),
             calc.get('vbr'), calc.get('juros_p'), calc.get('juros_c'),
-            calc.get('diff_p'), calc.get('diff_c'), calc.get('amortizado'))
+            calc.get('diff_p'), calc.get('diff_c'), calc.get('amort_na_curva'))
         dif, veredito = domain.diferenca_liquidacao(interno, vcp_liq)
         item.update({'interno': interno, 'vcp_liq': vcp_liq,
                      'diferenca': dif, 'veredito': veredito})
