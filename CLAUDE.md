@@ -828,6 +828,14 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 - **Alinhamento com `scrollX` são TRÊS coisas**: `columns.adjust()` depois de
   todo draw (+ passe atrasado 150 ms + `resize`); `autoWidth: true`; regras de
   `th` repetidas nos clones com `white-space: normal`.
+- **Título do cabeçalho centrado sobre a COLUNA, não sobre a sobra** (§603):
+  no flex `título · funil · ordenação` do DataTables 2 o título centrava no
+  espaço que sobrava, ~20px à esquerda do corpo. O `excel-filter.js`
+  (`centerTitles`/`centerAndAdjust`) reserva à ESQUERDA do título a largura do
+  que está à direita dele e pede o `columns.adjust` — alargar só o th (o
+  `widenTruncated`) deixava cabeçalho e corpo com larguras diferentes. Só no th
+  centralizado; página que trava o th (`nowrap` + `min-width`) limita o respiro
+  por `data-oxf-cap`. Página nova não escreve nada, e não centraliza à mão.
 - **Seleção de célula em TODA tabela, SOZINHA** (mesa, 30/09/2026, §600): o
   `table-std.js` é carregado pelo `base.html` depois dos scripts da página e se
   liga a toda DataTable pelo `init.dt`, como o funil — página nova não escreve
@@ -1296,6 +1304,22 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   do FX Start; a **Data de Cotação D-n** (48/50) é a coluna `Curve X Quote` e,
   como o recap não a diz, é lacuna (`swc_fx_quote`) — nunca D-1 presumido. A
   LOB também fica em branco (o recap não diz).
+- **Swap Calculator: contrato de ESTRATÉGIA puxa as pontas do Live Position ›
+  Swap › Strategy** (§602). Na posição as duas curvas são `VCP`; índice, taxa,
+  percentual, convenção, cotação inicial, D-n da moeda e lookback só existem na
+  consulta da estratégia, e ela VENCE a Denominação (o achado desta fica como
+  informação). **A Parte é o `Indicador_2`, não o `_1`** (mesa, 30/09/2026):
+  na `Aporte SOFR Flex x ME` (Parte = Banco) vem `_1 = USD`, `_2 = SOFR`, e o
+  banco RECEBE o SOFR — lido ao contrário, o resultado saía com o valor certo e
+  o SINAL trocado. Quem diz é `swap_strategies.PONTA_PARTE`/`PONTA_CONTRAPARTE`,
+  nunca o número solto (o Settlement Advice usa as mesmas). Os campos
+  NUMERADOS (`Valor Inicial n`, `Fixing n`) são do INDICADOR n e só servem à
+  ponta cujo indicador é a própria moeda — na ponta de SOFR o `Fixing` é o do
+  índice (D-1), e a moeda usa os sem número (`Cotação Inicial Moeda`, `Data
+  Cotação Moeda Final`). O `_n` do `Lookback da Taxa_n` numera a TAXA
+  flutuante: vale o da ponta, senão o ÚNICO; dois diferentes não se chutam.
+  Indicador que é código de moeda (`USD`) casa pelo nome do `currency-base`.
+  Só a lista importada (sem dados) é lacuna dita (`estrategia`).
 - **Swap Calculator: a Denominação diz o PISO do índice e ONDE o
   multiplicador incide** (mesa, 30/09/2026, §599). `[Max(0%, Term SOFR) +
   0,90%]*1.17647` é `(max(0; SOFR) + 0,90%) × k`; `Max 0%, Term SOFR * 1,17647
@@ -1932,6 +1956,17 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `_vcp_position_map` é fallback da DPOSICAO-SWAP pelo `Contrato` (§431).
 - **O Latam é reemitido no dia**: `_latam_pick_source` = mtime mais recente;
   preteridos ficam em disco e voltam em `ignored`.
+- **Swap › Strategy** (`/live-position-swap-strategy`, `features/swap_strategy`,
+  §602): os dois relatórios do MID de Swap da B3 (ConsultaEstrategiaContratos =
+  a lista, ConsultaDadosEstrategia = os dados de UMA estratégia) entram pelo
+  dropzone em qualquer formato e são lidos pelo CONTEÚDO — o cabeçalho é a
+  linha com "Código do Contrato", e é DELA que sai o separador (o título "B3
+  S.A. - BRASIL, BOLSA, BALCÃO" tem vírgulas). O `#` do contrato sai. Os dois se
+  FUNDEM por contrato (a lista não apaga dados, os dados não apagam o nome);
+  Status `Complete`/`Pending`. Contraparte e LOB NÃO são do arquivo: saem do
+  Swap Characteristics na leitura. O cadastro é lido pela platform
+  (`platform/swap_strategies.py`), porque o Swap Calculator e o Settlement
+  Advice também perguntam. `check_swap_strategy.py`.
 
 ### Liquidação (Other Products, NDF Summary, Settlement Advice)
 
@@ -2089,6 +2124,17 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   OTM pelo `Cpty SPN`, na leitura; o **Kapital Hybrids** pela coluna
   `Counterparty SPN` — mesa, 30/09/2026, §601): `le-spn` para entidade nossa,
   depois o Reference Data; o texto do arquivo é só o plano B.
+- **CEMHYB liquida pelo Kapital Hybrids, não pelo OTM nem pelo Athena**
+  (§605): o swap híbrido não está no Swap Athena nem no OTM. No Settlement
+  Advice, no Trade Level/Summary do Other Products e na página Swap VCP, a
+  linha CEMHYB tira do Hybrids (`_swaphyb_curvas`, pelo CETIP ID via
+  `mapping_swap-hyb` ou pelo Kapital ID do Athena) o Internal ID (= Kapital
+  ID), a contraparte pela SPN e os valores (Σ positivos, Σ negativos, a soma) —
+  a escolha é da LINHA inteira, para Banco + Cliente = Bruto fechar. Sem o
+  trade no Hybrids vale o de sempre. As pernas se agrupam numa função só
+  (`_swaphyb_groups`), a mesma da página do Hybrids. Indexador Banco/Cliente
+  do aviso sai sempre em MAIÚSCULAS, e no contrato de estratégia vem do
+  Strategy (`PONTA_PARTE` = banco).
 - **IR do termo de moeda é CALCULADO** (`_ndfsum_ir_apply`, §423): 0,005%,
   isento pelo `ndfc-ir-exempt`, piso de R$ 1,00 acumulado no mês no ledger
   `ndf-ir-ledger_AAAAMM.json`; o import do Cockpit reusa as mesmas funções
@@ -2387,6 +2433,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   estrangeiro e `N/A` ficam como vieram. O modal (Add Row/Edit e a edição em
   massa) tem a máscara de CNPJ e a `otcDateMask` nas datas; a Legal Name não
   corta (uma entidade por linha).
+- **O New Request toca o sino de BO e MO** (#OTC-0045, §604), as mesas das
+  etapas OTC e CEM MO (Legal não é papel no app); só o New Request, não a
+  edição. Rótulo `Onboarding` → Tracking Docs nos três mapas; melhor esforço.
+  **O prefixo do anexo sai do Doc Type** (#OTC-0046): o subtype do upload ao
+  EI era `CGD TEMPLATE` fixo no JS, e o CSA era gravado como CGD. O mapa é do
+  servidor (`cgd_docs.appendix_subtypes`: `CSA TEMPLATE`, `APPENDIX
+  TEMPLATE`…); arquivos já gravados não são renomeados.
 - **O `_id` muda a cada importação do SharePoint** (§548): a escrita por
   `_id` leva a GERAÇÃO (`cgd_meta`) que a tela leu, e geração velha é 409
   `onboarding_reimported` — sem isso, uma tela aberta antes carimbava outro CGD.
@@ -2622,7 +2675,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (180 scripts)
+### `scripts/tests/` (181 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
