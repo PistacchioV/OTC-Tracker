@@ -3024,6 +3024,9 @@ _CAMINHOS_PREGUICOSOS = {
     # A base de DOMÍNIOS da B3, atualizada pelo arquivo
     # `CETIP_YYMMDD_CADASTROCURVASMOEDASFEEDERDOMINIOS` do Save CETIP Files.
     'DOMINIO_JSON': ('Dominio.json',),
+    # A base de ATIVOS SUBJACENTES (aba Underlying Assets do Index B3),
+    # atualizada pelo arquivo `CETIP_YYMMDD_COE` do Save CETIP Files.
+    'SUBJ_JSON': ('Subjacente.json',),
 }
 
 

@@ -294,3 +294,139 @@ def _cetip_update_dominio_json(src_path):
     except Exception:
         _R().log.warning('[cetip] Dominio.json update failed:\n%s', traceback.format_exc())
         return None
+
+
+# As colunas do arquivo `CETIP_YYMMDD_COE` NA ORDEM EM QUE A B3 AS PUBLICA.
+# São os MESMOS nomes dos campos do `Subjacente.json` — o que muda é a ordem
+# (a tela do Index B3 mostra outra). Por isso a leitura casa pelo NOME do
+# cabeçalho; esta lista só vale quando o arquivo chega SEM cabeçalho.
+_SUBJ_FILE_COLUMNS = (
+    'Classe', 'Codigo do Ativo Subjacente', 'Bolsa de Negociacao',
+    'Indice Valorizacao', 'Mes Vencimento', 'Ano Vencimento', 'Tipo',
+    'Unidade de Negociacao', 'Moeda', 'Data Limite', 'Calculado', 'Commodity',
+    'Fator Conversao', 'Tipo Cotacao', 'Ticker', 'Tipo IF',
+)
+# Numéricos na base (float, como vieram da planilha original): gravados como
+# texto, a coluna ficaria com dois tipos e a tela ordenaria por texto calada.
+_SUBJ_NUMERIC = ('Mes Vencimento', 'Ano Vencimento', 'Data Limite', 'Fator Conversao')
+
+
+def _subj_norm(txt):
+    """Nome de coluna comparável: sem acento, minúsculo, espaço único."""
+    import unicodedata
+    t = unicodedata.normalize('NFKD', str(txt or ''))
+    t = ''.join(ch for ch in t if not unicodedata.combining(ch))
+    return ' '.join(t.lower().split())
+
+
+def _subj_value(campo, valor):
+    v = str(valor if valor is not None else '').strip()
+    if not v:
+        return None
+    if campo not in _SUBJ_NUMERIC:
+        return v
+    if campo == 'Data Limite' and '/' in v:          # dd/mm/aaaa → aaaammdd
+        partes = v.split('/')
+        if len(partes) == 3 and all(p.isdigit() for p in partes):
+            v = partes[2] + partes[1].zfill(2) + partes[0].zfill(2)
+    num = v.replace('.', '').replace(',', '.') if ',' in v else v
+    try:
+        return float(num)
+    except ValueError:
+        return v
+
+
+def _subj_key(rec):
+    """Chave de uma linha: (código, índice de valorização, tipo IF).
+
+    O código sozinho NÃO é chave — o AAPL34 aparece seis vezes (Máximo,
+    Mínimo e o próprio, em OPC e em COE). O trio é único nas 7.776 linhas da
+    base: chaveado só pelo código, o upsert reescreveria a linha de OPC com o
+    índice da de COE.
+    """
+    def _n(v):
+        return ' '.join(str(v if v is not None else '').split()).upper()
+    return (_n(rec.get('Codigo do Ativo Subjacente')), _n(rec.get('Indice Valorizacao')),
+            _n(rec.get('Tipo IF')))
+
+
+def _cetip_update_subj_json(src_path):
+    """Atualiza a base `Subjacente.json` NO LUGAR a partir do arquivo
+    `CETIP_YYMMDD_COE` salvo (';', cp1252).
+
+    Upsert por (código, índice de valorização, tipo IF). Linha que já existe
+    recebe os campos do arquivo e CONSERVA `STATUS`, `MAKER` e `CHECKER` — são
+    da mesa (o maker/checker do Index B3), não da B3. Linha nova entra
+    `ACTIVE`, sem maker/checker. Linha da base fora do arquivo fica INTACTA,
+    como nos gêmeos de VCP e domínios: apagar por ausência levaria junto o que
+    a mesa cadastrou à mão.
+
+    Melhor esforço: devolve o caminho ou None.
+    """
+    try:
+        # cp1252 e não latin-1 — ver `_cetip_update_dominio_json` (§480).
+        with open(src_path, 'r', encoding='cp1252', errors='replace', newline='') as fh:
+            linhas = [ln for ln in fh.read().splitlines() if ln.strip()]
+        if not linhas:
+            _R().log.warning('[cetip] Subjacente.json: %s esta vazio', src_path)
+            return None
+
+        # Colunas pelo NOME do cabeçalho (a ordem do arquivo não é a da tela);
+        # sem cabeçalho, a ordem publicada pela B3.
+        por_nome = {_subj_norm(c): c for c in _SUBJ_FILE_COLUMNS}
+        primeira = [_subj_norm(c) for c in linhas[0].split(';')]
+        if 'codigo do ativo subjacente' in primeira:
+            colunas = [por_nome.get(c) for c in primeira]
+            ignoradas = [linhas[0].split(';')[i].strip() for i, c in enumerate(colunas) if c is None]
+            if ignoradas:
+                _R().log.warning('[cetip] Subjacente.json: coluna(s) do arquivo sem campo na '
+                                 'base, ignorada(s): %s', ', '.join(x for x in ignoradas if x))
+            linhas = linhas[1:]
+        else:
+            colunas = list(_SUBJ_FILE_COLUMNS)
+
+        atual = []
+        if _store.isfile(_R().SUBJ_JSON):
+            try:
+                atual = _store.read(_R().SUBJ_JSON) or []
+            except Exception:                               # noqa: BLE001
+                atual = []
+        if not isinstance(atual, list):
+            atual = []
+        por_chave = {}
+        for r in atual:
+            if isinstance(r, dict):
+                por_chave.setdefault(_subj_key(r), []).append(r)
+
+        novas = atualizadas = 0
+        for ln in linhas:
+            f = ln.split(';')
+            campos = {}
+            for i, nome in enumerate(colunas):
+                if nome:
+                    campos[nome] = _subj_value(nome, f[i] if i < len(f) else '')
+            if not campos.get('Codigo do Ativo Subjacente'):
+                continue
+            chave = _subj_key(campos)
+            existentes = por_chave.get(chave)
+            if existentes:
+                for r in existentes:
+                    r.update(campos)
+                atualizadas += 1
+                continue
+            linha = {'STATUS': 'ACTIVE'}
+            for nome in _SUBJ_FILE_COLUMNS:
+                linha[nome] = campos.get(nome)
+            linha['MAKER'] = None
+            linha['CHECKER'] = None
+            atual.append(linha)
+            por_chave.setdefault(chave, []).append(linha)
+            novas += 1
+
+        _R()._atomic_write_json(_R().SUBJ_JSON, atual)
+        _R().log.info('[cetip] Subjacente.json atualizado: %d atualizada(s), %d nova(s) '
+                      '(%d no total)', atualizadas, novas, len(atual))
+        return _R().SUBJ_JSON
+    except Exception:
+        _R().log.warning('[cetip] Subjacente.json update failed:\n%s', traceback.format_exc())
+        return None

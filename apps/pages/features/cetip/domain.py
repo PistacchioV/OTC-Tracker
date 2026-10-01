@@ -139,6 +139,16 @@ _CETIP_BEHAVIOUR = {
     'Domain Registry (CADASTROCURVASMOEDASFEEDERDOMINIOS)': {
         'dominio_update': True,
         'attach_ops': True},
+    # Cadastro de ATIVOS SUBJACENTES da B3. O arquivo se chama
+    # `CETIP_YYMMDD_COE`, mas apesar do nome não é posição de COE: traz os
+    # subjacentes que alimentam a aba Underlying Assets do Index B3
+    # (`Subjacente.json`). Mesmo desenho do de domínios — salvo, atualiza a
+    # base (`subj_update`) e vai anexo no e-mail do OTC Ops. A linha do
+    # cadastro `cetip-files` é da mesa (/mapping); o TYPE dela casa com esta
+    # entrada pelo nome entre parênteses, `(COE)`.
+    'Underlying Assets (COE)': {
+        'subj_update': True,
+        'attach_ops': True},
     # Salvo e mais nada, DE PROPÓSITO — como os outros `{}` daqui. A entrada
     # vazia não é decoração: `_cetip_behaviour_for` avisa em WARNING quando um
     # TYPE do cadastro não casa com nada, justamente para um `attach_*` perdido
