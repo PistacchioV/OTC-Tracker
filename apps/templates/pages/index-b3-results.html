@@ -1311,19 +1311,58 @@ $(document).ready(function () {
     /* ════════════════════════════════════════════════════════════════════
        DATATABLE INIT
     ════════════════════════════════════════════════════════════════════ */
-    var raw = sessionStorage.getItem('b3_search_results');
-    if (!raw) {
+    /* Deep-link do sino: ?b3table=<subj|vcp|dominio|swapindex>&code=<código>.
+       A tela nasceu lendo o resultado da BUSCA que o /index-b3 guarda no
+       sessionStorage — vindo da notificação não há busca nenhuma (ou há uma
+       velha, de outra pesquisa). Aqui as quatro bases são carregadas inteiras,
+       a aba do registro abre e o funil da coluna-código já vem filtrado. */
+    var _qs       = new URLSearchParams(window.location.search);
+    var _dlTable  = (_qs.get('b3table') || '').trim();
+    var _dlCode   = (_qs.get('code') || '').trim();
+    var DL_TARGET = {
+        subj:      { tab: '#tabSubjacente', table: '#tblSubjacente', col: 3 },
+        vcp:       { tab: '#tabVCP',        table: '#tblVCP',        col: 2 },
+        dominio:   { tab: '#tabDominio',    table: '#tblDominio',    col: 5 },
+        swapindex: { tab: '#tabSwapIndex',  table: '#tblSwapIndex',  col: 2 }
+    };
+
+    function noData() {
         document.getElementById('noDataBanner').style.display = '';
         document.getElementById('resultsWrapper').style.display = 'none';
-        return;
-    }
-    var payload;
-    try { payload = JSON.parse(raw); } catch(e) {
-        document.getElementById('noDataBanner').style.display = '';
-        document.getElementById('resultsWrapper').style.display = 'none';
-        return;
     }
 
+    if (DL_TARGET[_dlTable]) {
+        var _base = '{{ config.ASSETS_ROOT }}/data/';
+        var _get = function(f) {
+            return fetch(_base + f, { credentials: 'same-origin' })
+                .then(function(r){ return r.ok ? r.json() : []; })
+                .then(function(d){ d = Array.isArray(d) ? d : []; d.forEach(function(r,i){ r._idx = i; }); return d; })
+                .catch(function(){ return []; });
+        };
+        Promise.all([_get('Subjacente.json'), _get('VCP.json'), _get('Dominio.json'), _get('SwapIndex.json')])
+            .then(function(arr) {
+                boot({ filters: {}, subj: arr[0], vcp: arr[1], dominio: arr[2], swapindex: arr[3] });
+            });
+    } else {
+        var raw = sessionStorage.getItem('b3_search_results');
+        var payload = null;
+        try { payload = raw ? JSON.parse(raw) : null; } catch(e) { payload = null; }
+        if (payload) boot(payload); else noData();
+    }
+
+    /* Ordem da grade: o que está Pending primeiro (pelo código, em ordem
+       alfabética), o resto na ordem da base. Chave só de SORT na coluna
+       Status — o funil e o export continuam lendo o badge desenhado. */
+    function pendingFirst(codeCol) {
+        return function(data, type, row) {
+            if (type !== 'sort') return data;
+            if (/>\s*Pend/.test(String(data || ''))) return '0|' + String(row[codeCol] || '').toUpperCase();
+            var m = /data-idx="(-?\d+)"/.exec(String(row[0] || ''));
+            return '1|' + ('000000' + Math.max(m ? +m[1] : 0, 0)).slice(-6);
+        };
+    }
+
+    function boot(payload) {
     var subjDataArr    = payload.subj    || [];
     var vcpDataArr     = payload.vcp     || [];
     var dominioDataArr = payload.dominio || [];
@@ -1336,8 +1375,7 @@ $(document).ready(function () {
     document.getElementById('cntSwap').textContent = swapIndexDataArr.length;
 
     if (!subjDataArr.length && !vcpDataArr.length && !dominioDataArr.length && !swapIndexDataArr.length) {
-        document.getElementById('noDataBanner').style.display = '';
-        document.getElementById('resultsWrapper').style.display = 'none';
+        noData();
         return;
     }
 
@@ -1356,9 +1394,10 @@ $(document).ready(function () {
         language: dtLang(),
         columnDefs: [
             {targets:[0], orderable:false, searchable:false},
-            {targets:[1], orderable:false},
+            {targets:[1], render: pendingFirst(3)},
             {targets:'_all', defaultContent:''}
         ],
+        order: [[1, 'asc']],
         initComplete: function() {
             var api = this.api();
             wireColSearch('srSubj', api);
@@ -1392,9 +1431,10 @@ $(document).ready(function () {
             language: dtLang(),
             columnDefs: [
                 {targets:[0], orderable:false, searchable:false},
-                {targets:[1], orderable:false},
+                {targets:[1], render: pendingFirst(2)},
                 {targets:'_all', defaultContent:''}
             ],
+            order: [[1, 'asc']],
             initComplete: function() {
                 var api = this.api();
                 wireColSearch('srVCP', api);
@@ -1420,9 +1460,10 @@ $(document).ready(function () {
             language: dtLang(),
             columnDefs: [
                 {targets:[0], orderable:false, searchable:false},
-                {targets:[1], orderable:false},
+                {targets:[1], render: pendingFirst(5)},
                 {targets:'_all', defaultContent:''}
             ],
+            order: [[1, 'asc']],
             initComplete: function() {
                 var api = this.api();
                 wireColSearch('srDom', api);
@@ -1448,9 +1489,10 @@ $(document).ready(function () {
             language: dtLang(),
             columnDefs: [
                 {targets:[0], orderable:false, searchable:false},
-                {targets:[1], orderable:false},
+                {targets:[1], render: pendingFirst(2)},
                 {targets:'_all', defaultContent:''}
             ],
+            order: [[1, 'asc']],
             initComplete: function() {
                 var api = this.api();
                 wireColSearch('srSwap', api);
@@ -1518,6 +1560,23 @@ $(document).ready(function () {
         icon.className = 'spinner-border spinner-border-sm me-1';
         this.classList.add('loading');
     });
+
+    /* Deep-link: abre a aba do registro e filtra a coluna-código pelo funil
+       (o mesmo `otcExcelFilter.set` do Reference Data). */
+    var dl = DL_TARGET[_dlTable];
+    if (dl) {
+        var tabBtn = document.querySelector('#resultTabs button[data-bs-target="' + dl.tab + '"]');
+        if (tabBtn && window.bootstrap) bootstrap.Tab.getOrCreateInstance(tabBtn).show();
+        if (_dlTable === 'vcp') ensureVCP();
+        if (_dlTable === 'dominio') ensureDom();
+        if (_dlTable === 'swapindex') ensureSwap();
+        if (_dlCode && _dlCode !== '—') {
+            setTimeout(function() {
+                if (window.otcExcelFilter) window.otcExcelFilter.set(dl.table, dl.col, _dlCode);
+            }, 0);
+        }
+    }
+    } // end boot
 
 }); // end ready
 </script>
