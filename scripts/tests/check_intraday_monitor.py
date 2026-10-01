@@ -373,6 +373,16 @@ tk = _tk('2026-10-05')
 check('End process no 2º dia útil conclui o MtM no 3º', tk['swap-mtm']['state'], 'done')
 check('... dizendo o dia', tk['swap-mtm']['ended_on'], '02/10')
 check('MtM depois da janela não é devido', _tk('2026-10-07')['swap-mtm']['due'], False)
+ag = {x['id']: x for x in cl.get('/api/control-panel/intraday-tasks').get_json()['tasks']}
+check('a agenda diz a regra mensal ao Control Panel',
+      (ag['swap-accrual']['month'], ag['swap-mtm']['month'], ag['recon-fxo']['month']),
+      (['last', 1], ['first', 4], None))
+cl.post('/api/control-panel/intraday-tasks', json={'tasks': {'swap-mtm': {'days': [2], 'deadline': '20:00'}}})
+check('mensal ignora o dia da semana salvo (quinta 01/10 com só quarta marcada)',
+      _tk('2026-10-01')['swap-mtm']['due'], True)
+cl.post('/api/control-panel/intraday-tasks', json={'tasks': {'swap-mtm': {'days': [], 'deadline': '20:00'}}})
+check('... e desligada no Control Panel não é devida', _tk('2026-10-01')['swap-mtm']['due'], False)
+cl.post('/api/control-panel/intraday-tasks', json={'tasks': {}})
 
 print('\n== 5. o endereço antigo ==')
 r = cl.get('/new-deals-monitor')

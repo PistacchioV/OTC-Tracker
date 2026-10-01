@@ -136,6 +136,7 @@ def api_cp_intraday_tasks():
         return jsonify({'success': True, 'tasks': [
             {'id': t['id'], 'label': t['label'], 'icon': t['icon'], 'kind': t['kind'],
              'default_days': list(t['days']), 'default_deadline': domain.DEADLINE_PADRAO,
+             'month': list(t['month']) if t.get('month') else None,
              **cfg[t['id']]} for t in domain.TASKS]})
     payload = request.get_json(silent=True) or {}
     salvo = payload.get('tasks')
