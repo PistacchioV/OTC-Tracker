@@ -25578,3 +25578,18 @@ O texto do Monitor dizia "first 4 business days of the month", e a mesa leu
 como se o MtM fosse devido em CADA um dos quatro dias. A regra é "até o 4º dia
 útil" — uma vez, com prazo no 4º —, e é o que a tela diz agora nas três línguas
 (Monitor e Control Panel).
+
+## §612 — Intrag NDF: Settlement Parity BRL num NDF EUR/USD (2026-09-30)
+
+Um NDF EUR/USD contra o Lawton chegou à Intrag NDF com Settlement Parity
+`BRL`. O valor era um LITERAL no `_save_intrag_ndf_moeda_entry` — o layout de
+termo de moeda foi escrito pensando só em par contra o real, e a coluna nunca
+olhou para o deal. A paridade é a moeda em que a taxa a termo é cotada: com
+BRL no par é `BRL`; sem BRL, a moeda de cotação — `USD` sempre que ele está no
+par (a Athena pode bookar a Quantity em qualquer perna, então não se confia na
+posição), senão a outra perna. Par ilegível fica `BRL`, o caso de quase todo
+deal. A regra é `intrag/domain.paridade_liquidacao`; `check_intrag_ndf_parity.py`.
+
+A linha já gravada não se corrige sozinha: o re-save da linha (Amend/Success
+do deal) reescreve os campos preservando a esteira, ou a mesa corrige pelo
+Edit da Intrag NDF.
