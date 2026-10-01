@@ -25671,3 +25671,31 @@ com a frase de rolagem do `_conf_co12_text` (a mesma do Termo). Sem
 `SettlementDate`/`FixingEndDate` no deal, a frase cai para `CO1-2` puro. Se um
 documento próprio vier a existir, a família volta a ser separada aqui, junto do
 `_CONF_OPT_FAMILY_TEMPLATES`.
+
+## §616 — 2FA com a animação "orbit → verifying → verified" (2026-10-01)
+
+A tela `/auth-2-two-factor` ganhou a animação do protótipo
+`auth-2-two-factor_new.html`, na paleta do OTC Tracker: acento
+`--ins-primary`, anel no gradiente StreamFlow (`--sf-cyan`, `--sf-blue`,
+`--sf-violet`), sucesso `--ins-success` + `--sf-mint`, erro `--ins-danger`; o
+confete lê os `--sf-*` em tempo de execução. Nenhuma cor literal; os dois temas
+conferidos em print.
+
+O protótipo era DEMO: autoplay em laço e 15% de erro sorteado. Aqui o fluxo é
+o real: completo o sexto dígito (ou colado o código inteiro), a órbita e o
+`POST /verify-2fa` correm em PARALELO; o anel segura em até 90% até a resposta
+(mínimo de 700 ms, senão resposta rápida pularia o anel); sucesso mostra o
+Verified e redireciona; erro treme o palco, pinta os campos e diz o motivo.
+Sessão expirada volta ao login.
+
+**Os avisos saem por código** (§486): `/verify-2fa` e `/resend-code`
+respondem `{success, code, message}` (`_auth_json` + `_AUTH_MSG_CODES` no
+`routes.py`), e a tela diz pelo `_TRANS` do `auth-two-factor-orbit.js`
+(`e_<code>`/`r_<code>`), com a `message` de fallback. O `/verify-2fa` sem
+`pending_sid` respondia um REDIRECT até para o fetch — a tela lia HTML e dava
+"Request failed"; agora é JSON `session_expired`.
+
+O JS é arquivo NOVO (`static/js/pages/auth-two-factor-orbit.js`, com
+`asset_v`): o `auth-two-factor.js` antigo continua servindo o
+`auth-two-factor.html`. As cores de estado do campo levam `!important` — no
+tema escuro a borda do tema vencia e o vermelho do erro sumia.

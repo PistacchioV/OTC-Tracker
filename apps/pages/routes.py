@@ -1134,6 +1134,28 @@ def verify_code(sid, code):
         conn.close()
 
 
+# A tela de 2FA diz o aviso no idioma de quem a usa (`_TRANS` do template):
+# o JSON leva o CÓDIGO, e a frase em inglês vai junto só como fallback.
+_AUTH_MSG_CODES = {
+    "Invalid verification code.": 'invalid',
+    "Too many incorrect attempts. Please request a new code.": 'attempts',
+    "Verification code has expired. Please request a new one.": 'expired',
+    "Please enter a valid 6-digit code.": 'format',
+    "Session expired.": 'session_expired',
+    "User not found.": 'user_not_found',
+    "A verification code was just sent. Please wait a moment before requesting another.": 'cooldown',
+    "Too many code requests. Please wait a few minutes and try again.": 'too_many',
+    "New code sent successfully.": 'sent',
+    "Failed to send email.": 'send_failed',
+}
+
+
+def _auth_json(success, message, status=200, **extra):
+    body = {"success": success, "code": _AUTH_MSG_CODES.get(message, ''), "message": message}
+    body.update(extra)
+    return jsonify(body), status
+
+
 def _code_send_allowed(sid):
     """Throttle verification-code emails for a SID. Returns (allowed, message).
 
@@ -1616,6 +1638,8 @@ def verify_2fa():
 
     if not sid:
         log.warning("[verify_2fa] No pending_sid in session — session keys: %s", list(session.keys()))
+        if request.is_json:
+            return _auth_json(False, "Session expired.", 400)
         flash("Session expired. Please try again.", "error")
         return redirect(url_for('pages_blueprint.sign_in_page'))
 
@@ -1631,7 +1655,7 @@ def verify_2fa():
     if not code or len(code) != 6:
         log.warning("[verify_2fa] Invalid code format for SID=%s: %r", sid, code)
         if request.is_json:
-            return jsonify({"success": False, "message": "Please enter a valid 6-digit code."}), 400
+            return _auth_json(False, "Please enter a valid 6-digit code.", 400)
         flash("Please enter a valid 6-digit code.", "error")
         return redirect(url_for('pages_blueprint.two_factor_page'))
 
@@ -1651,12 +1675,12 @@ def verify_2fa():
         log.info("[verify_2fa] 2FA SUCCESS for SID=%s — session set", sid)
 
         if request.is_json:
-            return jsonify({"success": True, "redirect": url_for('pages_blueprint.dashboard')})
+            return _auth_json(True, '', redirect=url_for('pages_blueprint.dashboard'))
         return redirect(url_for('pages_blueprint.dashboard'))
     else:
         log.warning("[verify_2fa] 2FA FAILED for SID=%s: %s", sid, message)
         if request.is_json:
-            return jsonify({"success": False, "message": message}), 400
+            return _auth_json(False, message, 400)
         flash(message, "error")
         return redirect(url_for('pages_blueprint.two_factor_page'))
 
@@ -1667,14 +1691,14 @@ def resend_code():
 
     if not sid:
         if request.is_json:
-            return jsonify({"success": False, "message": "Session expired."}), 400
+            return _auth_json(False, "Session expired.", 400)
         flash("Session expired. Please try again.", "error")
         return redirect(url_for('pages_blueprint.sign_in_page'))
 
     user = get_user_by_sid(sid)
     if not user:
         if request.is_json:
-            return jsonify({"success": False, "message": "User not found."}), 404
+            return _auth_json(False, "User not found.", 404)
         flash("User not found.", "error")
         return redirect(url_for('pages_blueprint.sign_in_page'))
 
@@ -1683,7 +1707,7 @@ def resend_code():
     allowed, wait_msg = _code_send_allowed(sid)
     if not allowed:
         if request.is_json:
-            return jsonify({"success": False, "message": wait_msg}), 429
+            return _auth_json(False, wait_msg, 429)
         flash(wait_msg, "warning")
         return redirect(url_for('pages_blueprint.two_factor_page'))
 
@@ -1693,8 +1717,8 @@ def resend_code():
 
     if request.is_json:
         if email_sent:
-            return jsonify({"success": True, "message": "New code sent successfully."})
-        return jsonify({"success": False, "message": "Failed to send email."}), 500
+            return _auth_json(True, "New code sent successfully.")
+        return _auth_json(False, "Failed to send email.", 500)
 
     if email_sent:
         flash("A new verification code has been sent to your email.", "success")
