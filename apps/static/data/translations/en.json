@@ -2835,7 +2835,7 @@
   "cp-it-d5": "Sat",
   "cp-it-d6": "Sun",
   "cp-it-month-last": "Monthly · last business day",
-  "cp-it-month-first": "Monthly · business days 1–4",
+  "cp-it-month-first": "Monthly · by the 4th business day",
   "im-k-prev": "Pending from D-1",
   "im-prev-sub": "items left open",
   "im-prev-none": "nothing left behind",
@@ -2881,5 +2881,5 @@
   "im-task-swap-mtm": "Swap MtM",
   "im-ended-on": "End process on",
   "im-month-last": "last business day of the month",
-  "im-month-first": "first 4 business days of the month"
+  "im-month-first": "by the 4th business day of the month"
 }
