@@ -908,7 +908,7 @@ def _conf_state_entry_or_404(args, product='ndf-comm'):
 # família, ciclo New → Generated → Success, Word+PDF+XML no Inventory), portado
 # da macro legada de opções (criar_documento/process_documents). Diferenças:
 # a coluna Nº do Anexo I usa o Deal name (opção não tem mais mnemônico), o
-# ticker CO1-2 tem template legado próprio (família 'co1-2', pendente) e o XML
+# ticker CO1-2 sai no documento da família comum com o texto de rolagem, e o XML
 # sai com tipoOperacao Option e prefixo Opt_Comm no numeroContrato — o resto
 # do padrão do contrato é idêntico ao do NDF.
 # ==============================================================================
@@ -959,10 +959,16 @@ def _conf_load_optcomm(ref):
 
 
 def _conf_opt_family(deal, subj):
-    """Família de template de uma opção: as mesmas do NDF + 'co1-2' (a macro
-    legada tinha um OPÇÃO COMMODITY-CO1-2.doc próprio para o Brent rolling)."""
-    if str(deal.get('UnderlyingAsset') or '').strip() == 'CO1-2':
-        return 'co1-2'
+    """Família de template de uma opção: as MESMAS do NDF.
+
+    O CO1-2 (Brent rolling — opção asiática com contrato a dois meses ou mais da
+    liquidação, §212) tinha família própria, 'co1-2', reservada para o OPÇÃO
+    COMMODITY-CO1-2.doc da macro legada. O template nunca foi portado, e a
+    família sem template travava o Generate do Monitor ("A família co1-2 ainda
+    não tem template de documento neste produto", SUZANO, 30/09/2026). Decisão
+    da mesa (01/10/2026): a opção de CO1-2 usa o documento da família comum,
+    com o texto de rolagem do primeiro × segundo futuro no ticker — o mesmo que
+    o Termo de CO1-2 já usa (`_conf_co12_text`)."""
     return _conf_deal_family(deal, subj)
 
 
@@ -1001,9 +1007,9 @@ def _conf_opt_generation_page(family):
         ua = str(deal.get('UnderlyingAsset') or '').strip()
         ticker = _CONF_TICKER_MAP.get(ua, ua)
         # Mesmo texto de rolagem do Termo — a regra do primeiro × segundo futuro
-        # é do ATIVO, não do produto (§178). O documento próprio do CO1-2 em
-        # opção (família 'co1-2') ainda não existe; quando existir, já nasce com
-        # o ticker certo em vez de repetir a regra numa terceira cópia.
+        # é do ATIVO, não do produto (§178). A opção de CO1-2 sai no documento
+        # da família comum (ver `_conf_opt_family`), e é este texto que diz nele
+        # que o ativo é o Brent rolling.
         if ua == 'CO1-2':
             ticker = _conf_co12_text(deal, i)
         fator = _conf_to_float((subj or {}).get('fator'))
