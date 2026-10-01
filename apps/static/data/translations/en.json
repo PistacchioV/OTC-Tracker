@@ -2834,6 +2834,8 @@
   "cp-it-d4": "Fri",
   "cp-it-d5": "Sat",
   "cp-it-d6": "Sun",
+  "cp-it-month-last": "Monthly · last business day",
+  "cp-it-month-first": "Monthly · business days 1–4",
   "im-k-prev": "Pending from D-1",
   "im-prev-sub": "items left open",
   "im-prev-none": "nothing left behind",

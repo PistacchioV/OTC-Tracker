@@ -2834,6 +2834,8 @@
   "cp-it-d4": "Sex",
   "cp-it-d5": "Sáb",
   "cp-it-d6": "Dom",
+  "cp-it-month-last": "Mensal · último dia útil",
+  "cp-it-month-first": "Mensal · 1º ao 4º dia útil",
   "im-k-prev": "Pendente de D-1",
   "im-prev-sub": "itens em aberto",
   "im-prev-none": "nada ficou para trás",

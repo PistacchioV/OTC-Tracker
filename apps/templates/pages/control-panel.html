@@ -119,6 +119,7 @@
 }
 .cp-it-day[aria-pressed="true"] { background: var(--vr-accent-2); border-color: var(--vr-accent-2); color: #fff; }
 .cp-it-day:active { scale: .95; }
+.cp-it-day.cp-it-month { padding: .22rem .8rem; }
 .cp-it-time { text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
 .cp-it-time.is-invalid { border-color: #d93025 !important; }
 .cp-it-reset {
@@ -1794,8 +1795,19 @@ document.addEventListener('click', function (e) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]; });
     }
+    // Tarefa MENSAL (`month` no catálogo) não tem dia da semana: a janela é
+    // a regra do mês, e a pílula única só a liga/desliga (grava os dias úteis
+    // ou a lista vazia — o servidor ignora o dia da semana dela).
+    function regraMensal(m) {
+        return m && m[0] === 'last'
+            ? t('cp-it-month-last', 'Monthly · last business day')
+            : t('cp-it-month-first', 'Monthly · business days 1–4');
+    }
     function linha(tk) {
-        var dias = DIAS.map(function (d, i) {
+        var dias = tk.month
+            ? '<button type="button" class="cp-it-day cp-it-month" data-month="1" aria-pressed="' +
+                  !!(tk.days || []).length + '">' + esc(regraMensal(tk.month)) + '</button>'
+            : DIAS.map(function (d, i) {
             var on = (tk.days || []).indexOf(i) !== -1;
             return '<button type="button" class="cp-it-day" data-day="' + i + '" aria-pressed="' + on + '">' +
                    esc(t(d[0], d[1])) + '</button>';
@@ -1845,7 +1857,9 @@ document.addEventListener('click', function (e) {
             row.classList.toggle('is-off', !row.querySelector('.cp-it-day[aria-pressed="true"]'));
         } else if (reset && tk) {
             row.querySelectorAll('.cp-it-day').forEach(function (b) {
-                b.setAttribute('aria-pressed', String(tk.default_days.indexOf(+b.getAttribute('data-day')) !== -1));
+                b.setAttribute('aria-pressed', String(b.hasAttribute('data-month')
+                    ? tk.default_days.length > 0
+                    : tk.default_days.indexOf(+b.getAttribute('data-day')) !== -1));
             });
             row.querySelector('.cp-it-time').value = tk.default_deadline;
             row.classList.toggle('is-off', !tk.default_days.length);
@@ -1867,7 +1881,9 @@ document.addEventListener('click', function (e) {
             var inp = row.querySelector('.cp-it-time');
             if (!HHMM.test(inp.value)) { inp.classList.add('is-invalid'); ruim.push(inp); }
             agenda[row.getAttribute('data-task')] = {
-                days: Array.prototype.map.call(row.querySelectorAll('.cp-it-day[aria-pressed="true"]'),
+                days: row.querySelector('.cp-it-month')
+                    ? (row.querySelector('.cp-it-month[aria-pressed="true"]') ? [0, 1, 2, 3, 4] : [])
+                    : Array.prototype.map.call(row.querySelectorAll('.cp-it-day[aria-pressed="true"]'),
                                                function (b) { return +b.getAttribute('data-day'); }),
                 deadline: inp.value
             };

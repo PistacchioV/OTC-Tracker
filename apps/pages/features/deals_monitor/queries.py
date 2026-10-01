@@ -566,7 +566,9 @@ def _intraday_snapshot(ref):
                     fim_em = _parse_hora(dia, item['ended_at'])
                 est = domain.avalia(c, dia, agora, feriado, feito, rodou, fim_em, prazo_dia)
                 if t.get('month'):
-                    est['due'] = est['due'] and dia in (janela or ())
+                    # Mensal: quem diz o dia é a janela, não o dia da semana
+                    # (a agenda só a liga ou desliga).
+                    est['due'] = bool(c['days']) and not feriado and dia in (janela or ())
             else:
                 feito = rodou
                 item['progress'] = 100 if feito else 0
