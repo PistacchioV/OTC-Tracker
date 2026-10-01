@@ -1064,6 +1064,7 @@
   "auth-create-account": "Criar uma conta",
   "auth-2fa-sub": "Enviamos um código de 6 dígitos para",
   "auth-2fa-code-label": "Digite seu código de 6 dígitos",
+  "auth-2fa-verified": "Verificado",
   "auth-confirm-btn": "Confirmar",
   "auth-no-code": "Não recebeu o código?",
   "auth-resend": "Reenviar",

@@ -3,11 +3,296 @@
 {% block title %}Two Factor Authentication{% endblock title %}
 
 {% block extra_css %}
+<style>
+/* 2FA — a animação "orbit → verifying → verified" na paleta do OTC Tracker:
+   azul/ciano do --ins-primary, o gradiente --vr-grad do StreamFlow e o verde
+   --ins-success. Nenhuma cor literal fora dos tokens. */
+#tfa-page {
+  --tfa-accent: var(--ins-primary);
+  --tfa-glow: color-mix(in oklab, var(--ins-primary) 22%, transparent);
+  --tfa-ok: var(--ins-success);
+  --tfa-ok-glow: color-mix(in oklab, var(--ins-success) 35%, transparent);
+  --tfa-err: var(--ins-danger);
+  --tfa-err-glow: color-mix(in oklab, var(--ins-danger) 22%, transparent);
+  --tfa-pill-w: 52px;
+  --tfa-pill-h: 60px;
+  --tfa-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+#tfa-page .tfa-status {
+  min-height: 1.5em;
+  transition: opacity 180ms var(--tfa-ease-out);
+}
+#tfa-page .tfa-status.is-swap { opacity: 0; }
+#tfa-page .tfa-stage {
+  position: relative;
+  height: 188px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#tfa-page .tfa-stage::before {            /* halo que respira atrás dos campos */
+  content: "";
+  position: absolute;
+  inset: -30px 10%;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--tfa-glow) 0%, transparent 65%);
+  pointer-events: none;
+  opacity: .7;
+  animation: tfa-breathe 6s ease-in-out infinite;
+}
+@keyframes tfa-breathe { 50% { transform: scale(1.08); opacity: 1; } }
 
+/* ── campos ─────────────────────────────────────────────────────────── */
+#tfa-page .two-factor {
+  position: relative;
+  z-index: 3;
+  gap: 10px;
+  transition: opacity 200ms var(--tfa-ease-out);
+}
+#tfa-page .two-factor.is-hidden { opacity: 0; pointer-events: none; }
+#tfa-page .two-factor .form-control {
+  width: var(--tfa-pill-w);
+  height: var(--tfa-pill-h);
+  padding: 0;
+  border-radius: 14px;
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  caret-color: var(--tfa-accent);
+  background: color-mix(in oklab, var(--vr-card-bg) 80%, transparent);
+  border: 1px solid var(--sf-hair);
+  box-shadow: 0 4px 12px rgba(10, 22, 44, .04);
+  transition: border-color 150ms var(--tfa-ease-out), box-shadow 150ms var(--tfa-ease-out),
+              transform 150ms var(--tfa-ease-out);
+  opacity: 0;
+  animation: tfa-pill-in 280ms var(--tfa-ease-out) forwards;
+}
+#tfa-page .two-factor .form-control:nth-child(2) { animation-delay: 40ms; }
+#tfa-page .two-factor .form-control:nth-child(3) { animation-delay: 80ms; }
+#tfa-page .two-factor .form-control:nth-child(4) { animation-delay: 120ms; }
+#tfa-page .two-factor .form-control:nth-child(5) { animation-delay: 160ms; }
+#tfa-page .two-factor .form-control:nth-child(6) { animation-delay: 200ms; }
+@keyframes tfa-pill-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+/* `!important` nas cores de estado: o tema escuro pinta a borda do campo por
+   cima de qualquer especificidade, e o vermelho do erro sumia no dark */
+#tfa-page .two-factor .form-control:focus {
+  border-color: var(--tfa-accent) !important;
+  box-shadow: 0 0 0 3px var(--tfa-glow);
+}
+#tfa-page .two-factor .form-control.is-filled { border-color: var(--tfa-accent) !important; }
+#tfa-page .two-factor .form-control.is-error {
+  border-color: var(--tfa-err) !important;
+  box-shadow: 0 0 0 3px var(--tfa-err-glow);
+}
+
+/* ── órbita: os dígitos saem dos campos e giram ao redor do centro ──── */
+#tfa-page .tfa-orbit {
+  position: absolute; inset: 0;
+  display: none;
+  align-items: center; justify-content: center;
+  pointer-events: none;
+  z-index: 4;
+}
+#tfa-page .tfa-orbit.is-active { display: flex; }
+#tfa-page .tfa-ring { position: relative; width: 0; height: 0; }
+#tfa-page .tfa-ring.is-spin { animation: tfa-ring 1.6s cubic-bezier(.6, 0, .4, 1) forwards; }
+@keyframes tfa-ring { to { transform: rotate(360deg); } }
+#tfa-page .tfa-node {
+  position: absolute;
+  left: calc(var(--tfa-pill-w) / -2 * .8);
+  top: calc(var(--tfa-pill-h) / -2 * .8);
+  width: calc(var(--tfa-pill-w) * .8);
+  height: calc(var(--tfa-pill-h) * .8);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.25rem; font-weight: 600;
+  color: var(--ins-body-color);
+  background: var(--ins-secondary-bg);
+  border: 1.5px solid var(--tfa-accent);
+  box-shadow: 0 0 12px var(--tfa-glow);
+  will-change: transform, opacity;
+  animation: tfa-node 1.6s cubic-bezier(.34, 1.4, .64, 1) forwards;
+}
+@keyframes tfa-node {
+  0%   { transform: translate(var(--sx), 0) scale(1); opacity: 1; }
+  25%  { transform: translate(var(--dx), var(--dy)) scale(1.05); opacity: 1; }
+  75%  { transform: translate(var(--dx), var(--dy)) scale(.95); opacity: 1; }
+  100% { transform: translate(0, 0) scale(.3); opacity: 0; }
+}
+
+/* ── verificando ────────────────────────────────────────────────────── */
+#tfa-page .tfa-loading,
+#tfa-page .tfa-success {
+  position: absolute; inset: 0;
+  display: none;
+  align-items: center; justify-content: center;
+  pointer-events: none;
+}
+#tfa-page .tfa-loading { z-index: 5; }
+#tfa-page .tfa-success { z-index: 6; }
+#tfa-page .tfa-loading.is-active,
+#tfa-page .tfa-success.is-active { display: flex; }
+#tfa-page .tfa-core {
+  position: relative;
+  width: 76px; height: 76px;
+  display: flex; align-items: center; justify-content: center;
+  animation: tfa-morph 450ms cubic-bezier(.34, 1.56, .64, 1) both;
+}
+@keyframes tfa-morph {
+  from { transform: scale(.4) rotate(-45deg); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+#tfa-page .tfa-core-ring {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0%, var(--sf-cyan) 30%, var(--sf-blue) 55%, var(--sf-violet) 80%, transparent 100%);
+  -webkit-mask: radial-gradient(circle, transparent 60%, #000 62%);
+  mask: radial-gradient(circle, transparent 60%, #000 62%);
+  animation: tfa-spin 1.1s linear infinite;
+}
+@keyframes tfa-spin { to { transform: rotate(360deg); } }
+#tfa-page .tfa-core-pulse {
+  position: absolute; inset: -14px;
+  border-radius: 50%;
+  border: 1px solid var(--tfa-accent);
+  opacity: 0;
+  animation: tfa-pulse 1.6s ease-out infinite;
+}
+@keyframes tfa-pulse {
+  0%   { transform: scale(.85); opacity: .55; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+#tfa-page .tfa-core-inner {
+  width: 46px; height: 46px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--ins-secondary-bg);
+  border: 1.5px solid color-mix(in oklab, var(--tfa-accent) 35%, transparent);
+  box-shadow: inset 0 0 12px var(--tfa-glow);
+  color: var(--tfa-accent);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── verificado ─────────────────────────────────────────────────────── */
+#tfa-page .tfa-flash {
+  position: absolute; left: 50%; top: 50%;
+  width: 240px; height: 240px; margin: -120px 0 0 -120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--tfa-ok-glow) 0%, transparent 70%);
+  opacity: 0;
+}
+#tfa-page .tfa-success.is-active .tfa-flash { animation: tfa-flash 900ms var(--tfa-ease-out) forwards; }
+@keyframes tfa-flash {
+  0%   { transform: scale(.4); opacity: 0; }
+  35%  { transform: scale(1);  opacity: 1; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+#tfa-page .tfa-bubble {
+  position: absolute; left: 50%; top: 50%;
+  width: 68px; height: 68px; margin: -34px 0 0 -34px;
+  border-radius: 50%;
+  border: 2px solid var(--tfa-ok);
+  opacity: 0;
+}
+#tfa-page .tfa-success.is-active .tfa-bubble { animation: tfa-bubble 1.4s var(--tfa-ease-out) forwards; }
+#tfa-page .tfa-success.is-active .tfa-bubble:nth-of-type(3) { animation-delay: 120ms; }
+#tfa-page .tfa-success.is-active .tfa-bubble:nth-of-type(4) { animation-delay: 240ms; }
+@keyframes tfa-bubble {
+  0%   { transform: scale(.2); opacity: 1; }
+  70%  { opacity: .5; }
+  100% { transform: scale(3.6); opacity: 0; }
+}
+#tfa-page .tfa-confetti {
+  position: absolute; left: 50%; top: 50%;
+  border-radius: 50%;
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: tfa-confetti 1.3s var(--tfa-ease-out) forwards;
+}
+@keyframes tfa-confetti {
+  0%   { transform: translate(-50%, -50%) scale(.4); opacity: 1; }
+  20%  { transform: translate(calc(-50% + var(--cx) * .3), calc(-50% + var(--cy) * .3)) scale(1.2); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--cx)), calc(-50% + var(--cy))) scale(.6); opacity: 0; }
+}
+#tfa-page .tfa-vault {
+  position: relative; z-index: 3;
+  width: 68px; height: 68px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, var(--sf-mint) 0%, var(--tfa-ok) 70%);
+  box-shadow: 0 0 0 8px color-mix(in oklab, var(--tfa-ok) 18%, transparent),
+              0 0 50px var(--tfa-ok-glow);
+  animation: tfa-pop 700ms cubic-bezier(.34, 1.56, .64, 1) both;
+}
+@keyframes tfa-pop {
+  0%   { transform: scale(0) rotate(-180deg); opacity: 0; }
+  55%  { transform: scale(1.2) rotate(12deg); opacity: 1; }
+  75%  { transform: scale(.95) rotate(-4deg); }
+  100% { transform: none; opacity: 1; }
+}
+#tfa-page .tfa-check {
+  width: 32px; height: 32px;
+  stroke: #fff; stroke-width: 3.2;
+  stroke-linecap: round; stroke-linejoin: round; fill: none;
+  stroke-dasharray: 48; stroke-dashoffset: 48;
+  animation: tfa-draw 550ms 300ms cubic-bezier(.65, 0, .35, 1) forwards;
+}
+@keyframes tfa-draw { to { stroke-dashoffset: 0; } }
+#tfa-page .tfa-badge {
+  position: absolute; left: 50%; top: calc(50% + 54px);
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: var(--tfa-ok);
+  color: #fff;
+  font-size: .7rem; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateX(-50%) translateY(10px) scale(.8);
+}
+#tfa-page .tfa-success.is-active .tfa-badge { animation: tfa-badge 550ms 650ms cubic-bezier(.34, 1.56, .64, 1) forwards; }
+@keyframes tfa-badge { to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
+
+/* ── erro ───────────────────────────────────────────────────────────── */
+#tfa-page .tfa-error {
+  color: var(--tfa-err);
+  font-size: .8rem; font-weight: 500;
+  min-height: 1.25rem;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 200ms var(--tfa-ease-out), transform 200ms var(--tfa-ease-out);
+}
+#tfa-page .tfa-error.is-shown { opacity: 1; transform: none; }
+#tfa-page .tfa-stage.is-shake { animation: tfa-shake 500ms cubic-bezier(.36, .07, .19, .97) both; }
+@keyframes tfa-shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-6px); }
+  40%, 60% { transform: translateX(6px); }
+}
+
+@media (max-width: 420px) {
+  #tfa-page { --tfa-pill-w: 42px; --tfa-pill-h: 52px; }
+  #tfa-page .two-factor { gap: 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #tfa-page *, #tfa-page *::before, #tfa-page *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+  #tfa-page .two-factor .form-control { opacity: 1; }
+}
+</style>
 {% endblock extra_css %}
 
 {% block content %}
-<div class="auth-box p-0 w-100">
+<div class="auth-box p-0 w-100" id="tfa-page">
     <div class="row w-100 g-0">
         <div class="col-md-auto">
             <!--Auth Box content -->
@@ -106,21 +391,41 @@
                         <div class="text-center mb-4">
                             <div class="fw-bold fs-3">{{ masked_email }}</div>
                         </div>
-                        <form class="mt-4" id="twoFactorForm">
-                            <div class="mb-3">
-                                <label class="form-label d-flex"><span data-lang="auth-2fa-code-label">Enter your 6-digit code</span> <span
-                                        class="text-danger ms-1">*</span></label>
-                                <div class="d-flex gap-2 two-factor">
-                                    <input class="form-control" required="" type="text" maxlength="1" autofocus />
-                                    <input class="form-control" required="" type="text" maxlength="1" />
-                                    <input class="form-control" required="" type="text" maxlength="1" />
-                                    <input class="form-control" required="" type="text" maxlength="1" />
-                                    <input class="form-control" required="" type="text" maxlength="1" />
-                                    <input class="form-control" required="" type="text" maxlength="1" />
+                        <form class="mt-4" id="twoFactorForm" novalidate>
+                            <label class="form-label d-flex justify-content-center tfa-status" id="tfaStatus" for="tfaDigit1">
+                                <span data-lang="auth-2fa-code-label">Enter your 6-digit code</span>
+                            </label>
+                            <div class="tfa-stage" id="tfaStage">
+                                <div class="d-flex justify-content-center two-factor" id="tfaInputs">
+                                    <input class="form-control" id="tfaDigit1" type="text" maxlength="1" inputmode="numeric" autocomplete="one-time-code" aria-label="Digit 1" autofocus />
+                                    <input class="form-control" type="text" maxlength="1" inputmode="numeric" aria-label="Digit 2" />
+                                    <input class="form-control" type="text" maxlength="1" inputmode="numeric" aria-label="Digit 3" />
+                                    <input class="form-control" type="text" maxlength="1" inputmode="numeric" aria-label="Digit 4" />
+                                    <input class="form-control" type="text" maxlength="1" inputmode="numeric" aria-label="Digit 5" />
+                                    <input class="form-control" type="text" maxlength="1" inputmode="numeric" aria-label="Digit 6" />
+                                </div>
+                                <div class="tfa-orbit" id="tfaOrbit"><div class="tfa-ring" id="tfaRing"></div></div>
+                                <div class="tfa-loading" id="tfaLoading" aria-hidden="true">
+                                    <div class="tfa-core">
+                                        <div class="tfa-core-ring"></div>
+                                        <div class="tfa-core-pulse"></div>
+                                        <div class="tfa-core-inner" id="tfaPercent">0</div>
+                                    </div>
+                                </div>
+                                <div class="tfa-success" id="tfaSuccess" aria-hidden="true">
+                                    <div class="tfa-flash"></div>
+                                    <div class="tfa-bubble"></div>
+                                    <div class="tfa-bubble"></div>
+                                    <div class="tfa-bubble"></div>
+                                    <div class="tfa-vault">
+                                        <svg class="tfa-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    </div>
+                                    <div class="tfa-badge" data-lang="auth-2fa-verified">Verified</div>
                                 </div>
                             </div>
+                            <div class="tfa-error text-center mb-2" id="tfaError" role="alert" aria-live="polite"></div>
                             <div class="d-grid">
-                                <button class="btn btn-primary fw-semibold py-2" type="submit" data-lang="auth-confirm-btn">Confirm</button>
+                                <button class="btn btn-primary fw-semibold py-2" type="submit" id="tfaConfirm" data-lang="auth-confirm-btn">Confirm</button>
                             </div>
                         </form>
                     </div>
@@ -148,46 +453,9 @@
     </div>
 </div>
 
-
-<!-- Two Factor Validator Js -->
-
-<!-- Password Suggestion Js -->
 {% endblock content %}
 
 {% block extra_javascript %}
-<script src="{{ config.ASSETS_ROOT }}/js/pages/auth-two-factor.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/auth-two-factor-orbit.js?v={{ asset_v('js/pages/auth-two-factor-orbit.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/pages/auth-password.js"></script>
-<script>
-// Resend a fresh 6-digit code to the user's email.
-(function () {
-    var link = document.getElementById('resendCodeLink');
-    if (!link) return;
-    link.addEventListener('click', function (e) {
-        e.preventDefault();
-        if (link.dataset.busy === '1') return;
-        link.dataset.busy = '1';
-        fetch('/resend-code', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-        })
-            .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
-            .then(function (res) {
-                link.dataset.busy = '0';
-                var msg = (res.data && res.data.message) ||
-                    (res.ok ? 'A new code has been sent.' : 'Failed to resend code.');
-                if (window.Swal) {
-                    Swal.fire({ text: msg, icon: res.ok && res.data && res.data.success ? 'success' : 'error',
-                        confirmButtonText: 'OK' });
-                } else {
-                    alert(msg);
-                }
-            })
-            .catch(function () {
-                link.dataset.busy = '0';
-                if (window.Swal) { Swal.fire({ text: 'Request failed. Please try again.', icon: 'error' }); }
-                else { alert('Request failed. Please try again.'); }
-            });
-    });
-})();
-</script>
 {% endblock extra_javascript %}

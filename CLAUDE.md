@@ -430,6 +430,10 @@ da subida e NÃO liga o farol; os caminhos do espelho são dinâmicos.
   várias abas se revezam, a contagem nunca zera e a escrita bate no
   `read_only` aberto (§547). Poll que ainda esbarra serve `_notif_last_good`
   (por SID × papel, teto 10 min — preserva o alarme de conexão vazada).
+  **Poll com o arquivo PARADO não abre o banco** (§614): carimbo
+  `(mtime_ns, tamanho)` do `.db` + `.wal` igual, mesmo dia e cópia com menos
+  de 30 s → serve o `_notif_last_good`. Notificação nova mexe no `.wal`; query
+  que falhou grava `stamp=None` e nunca vira atalho.
 - **Assinaturas de "arquivo em uso" moram no `database_access`**
   (`FILE_IN_USE_SIGNATURES`/`is_file_in_use`, `True` também para
   `DatabaseLockTimeout`); `_notif_arquivo_em_uso` é alias. Aviso
@@ -500,7 +504,12 @@ da subida e NÃO liga o farol; os caminhos do espelho são dinâmicos.
   `manual_conf.sla_days`, `_pc_metrics_history`, `_anbima_stamp`, os quatro
   finders do New Deals (`_nd_file_list`, do mais novo ao mais antigo, leitura
   pelo `_day_json`) e a listagem do Electronic Inventory (`_ei_walk` por
-  `scandir`, sem `stat` por arquivo).
+  `scandir`, sem `stat` por arquivo), o RefData por SPN/nome
+  (`_fxo_refdata_by_spn`, `_pc_refdata_by_name`: builder memoizado, wrapper
+  devolve `{}` na falha SEM memoizar e entrega CÓPIAS) e o
+  `recon_payrec._mapping_rows` (§614). No navegador, `/api/me/access` é UMA
+  promessa por página (`window.otcMeAccess()`, `base.html`) — não faça `fetch`
+  próprio dele.
 - **O calendário ANBIMA em memória acompanha o mtime do `anbima.json`**
   (`_anbima_stamp`): feriado cadastrado vale no request seguinte. Calendário
   FIXADO à mão (teste com mtime `None`) nunca é recarregado.
@@ -2022,8 +2031,10 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   recompra traz o PRÓPRIO cabeçalho (`headers`), e o bloqueador de linha
   incompleta confere cada linha pelo dela.
 - **`_ops_trade_rows(settle_ref)` é o único lugar que sabe quais famílias
-  existem** (SWAP + NDF Commodities); página, cards e e-mail de TED chamam
-  ele. Status do aviso vive no overlay `other-products-summary_YYYYMMDD.json`
+  existem** (SWAP + NDF Commodities + opção); página, cards e e-mail de TED
+  chamam ele. Família cuja coleta LEVANTOU fica em `g._ops_trade_failed` e o
+  card de reconciliação a marca `failed` (badge **Erro**, §613) — sem isso
+  `0 = 0` saía como batido. Status do aviso vive no overlay `other-products-summary_YYYYMMDD.json`
   por contraparte × LOB × produto. Linha que neta zero diz `0.00` no Receive.
   Trade Level ordena Product → LOB → Counterparty (`check_ops_trade_swap.py`).
 - **Equity é SWAP na B3; o outro lado vem do elo** `_ops_equity_link`
@@ -2187,6 +2198,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   RATE; nunca a forward (§438).
 
 ### Esteira de confirmação manual
+
+- **Opção de commodities de CO1-2 (Brent rolling) usa o documento da família
+  COMUM** (mesa, 01/10/2026, §615): `_conf_opt_family` = `_conf_deal_family`, e
+  o ticker sai com a frase de rolagem do `_conf_co12_text` (sem
+  `SettlementDate`/`FixingEndDate`, o `CO1-2` cru). A família `co1-2` nunca
+  teve template — separá-la de novo exige o template junto.
 
 - **A data do documento ("São Paulo, <data>") é a da OPERAÇÃO, nunca a do dia
   em que a confirmação é gerada** (mesa, 30/09/2026, §598), em TODO template:
