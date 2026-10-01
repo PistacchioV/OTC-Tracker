@@ -602,11 +602,14 @@
         var st = STATE.get(node);
         if (!st || st.dt !== dt) { attach(dt, { auto: true }); st = STATE.get(node); }
         if (!st) return false;
-        var wanted = (Array.isArray(values) ? values : [values]).map(function (v) { return norm(v).toUpperCase(); });
+        // `14058.0` (float que veio de planilha, como o servidor escreve no
+        // aviso) e `14058` (como a coluna desenha) são o mesmo código.
+        function canon(v) { return norm(v).toUpperCase().replace(/^(-?\d+)\.0+$/, '$1'); }
+        var wanted = (Array.isArray(values) ? values : [values]).map(canon);
         var hit = new Set();
         dt.rows().every(function (rowIdx) {
             var k = cellKey(dt, rowIdx, col);
-            if (wanted.indexOf(k.toUpperCase()) >= 0) hit.add(k);
+            if (wanted.indexOf(canon(k)) >= 0) hit.add(k);
         });
         st.filters[col] = hit.size ? hit : new Set(wanted);
         paint(st);

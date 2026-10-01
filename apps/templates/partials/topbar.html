@@ -649,6 +649,20 @@
                     var mSpn = /SPN\s+(\S+)/.exec(n.detail || '');
                     if (mSpn) pageUrl += '?spn=' + encodeURIComponent(mSpn[1]);
                 }
+                // Index B3: o aviso começa pelo rótulo da tabela + o código
+                // (`Underlying Asset KWZ6 · TRIGO — …`, `_detalhe` da vertical
+                // index_b3). Vai direto ao Results, na aba da tabela, com o funil
+                // da coluna-código filtrado. Item apagado não tem linha a mostrar:
+                // fica no /index-b3; aviso antigo sem o rótulo também.
+                if (pageUrl && n.page === 'Index B3' && n.action !== 'Item Deleted') {
+                    var B3_TABLE = { 'Underlying Asset': 'subj', 'VCP': 'vcp',
+                                     'Domain': 'dominio', 'Swap Index': 'swapindex' };
+                    var mB3 = /^(Underlying Asset|VCP|Domain|Swap Index)\s+(\S+)/.exec(n.detail || '');
+                    if (mB3) {
+                        pageUrl = '/index-b3-results?b3table=' + B3_TABLE[mB3[1]] +
+                                  (mB3[2] !== '—' ? '&code=' + encodeURIComponent(mB3[2]) : '');
+                    }
+                }
                 // Date deep-link: Accrual → ?date=, New Deals pages → ?tradedate=
                 // (falls back to the page's own default — today — when absent).
                 if (pageUrl && navDate) {
