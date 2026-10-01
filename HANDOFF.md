@@ -25593,3 +25593,81 @@ deal. A regra é `intrag/domain.paridade_liquidacao`; `check_intrag_ndf_parity.p
 A linha já gravada não se corrige sozinha: o re-save da linha (Amend/Success
 do deal) reescreve os campos preservando a esteira, ou a mesa corrige pelo
 Edit da Intrag NDF.
+
+## §613 — Other Products Summary: card de reconciliação distingue "sem liquidação" de "coleta quebrou" (2026-10-01)
+
+O card de Opção do Other Products Summary mostrava Internal 0 × B3 0, e a mesa
+não tinha como saber se o dia era mesmo sem opção ou se a coleta tinha falhado.
+`_ops_trade_rows` engolia a exceção de cada família (swap, NDF commodities,
+opção) com um `log.error` e seguia: a família que quebrou contava como vazia, e
+`0 = 0` ainda saía como "batido".
+
+Agora `_ops_trade_rows` guarda quais famílias falharam (`g._ops_trade_failed`,
+só dentro de request), e `_ops_recon` marca `failed` em cada entrada (e no
+`total` quando qualquer uma falhou). Na tela, `setRecon` pinta o badge
+vermelho **Erro** (`ti-alert-octagon`) com o tooltip `ops-r-failed-tip`, e
+traduz nas três línguas. Zero de verdade continua zero.
+
+Os zeros de opção que sobram têm três explicações: não há liquidação de opção
+no dia, o `opb3-events` filtrou os eventos (OPC: RESGATE, PAGAMENTO DE
+PRÊMIO) ou a coleta falhou, e este último caso agora aparece como **Erro**. Para
+diagnosticar um dia: `python scripts/diag_settlement_advice.py AAAA-MM-DD`.
+
+## §614 — Perf: menos idas ao banco e ao share por página e por linha (2026-10-01)
+
+Auditoria de cache sem mudar resultado de conta nem de busca. A regra é a de
+sempre: cache nunca guarda leitura que falhou, e read-modify-write nunca é
+memoizado.
+
+- **Sino**: o poll repete o payload do `_notif_last_good` sem abrir o banco
+  quando o carimbo `(mtime_ns, tamanho)` do `.db` e do `.wal`
+  (`_notif_files_stamp`) não mudou, o dia é o mesmo e a cópia tem menos de
+  `_NOTIF_UNCHANGED_TTL_SECONDS` (30 s). Uma notificação nova muda o `.wal`,
+  então o poll seguinte abre o banco. Uma query que falhou grava `stamp=None` e
+  nunca vira atalho. Os testes `check_db_read_path` (bloco 1b: poll repetido
+  faz 0 aberturas e o seguinte faz 1, depois de `_create_notification`) e
+  `check_notif_db_boot` (TTL 0 no teste de cópia velha) cobrem isso.
+- **`_asset_v`** fica memoizado por processo fora do debug: era um `stat` por
+  `<script>` em toda página.
+- **RefData por SPN/nome** (`_fxo_refdata_by_spn`, `_pc_refdata_by_name`):
+  `once_per_request` no builder. O wrapper devolve `{}` em IOError/JSON
+  inválido, sem memoizar, e entrega cópias dos registros.
+- **`recon_payrec._mapping_rows`** fica memoizado por request (`g`).
+- **`_mc_notify_roles`** lê as `validation_rules()` uma vez, não uma por linha.
+- **ANBIMA** em `manual_conf`/`recon_cgd`: o calendário segue o mtime do
+  `anbima.json`, reconferido no máximo a cada 60 s. O `data_path` é resolvido
+  uma vez (`_anbima_path`).
+- **Onboarding Tracking Docs**: os chips vêm na mesma resposta do `docs()`, e o
+  `/api/onboarding/overview` deixou de ser chamado (era uma segunda leitura
+  inteira do banco).
+- **LATAM**: o GET da página não chama mais `_latam_latest_ref()` (a varredura
+  da raiz do OTM). A data abre em hoje.
+- **Navegador**: `window.otcMeAccess()` (no `base.html`) é uma promessa só para
+  `/api/me/access`, usada por sidenav, topbar, visual-refresh, Control Panel e
+  Users Profile. Eram cinco GETs por página, e a promessa é limpa quando falha.
+  O sino pula o poll com a aba oculta e atualiza no `visibilitychange`. A
+  inscrição de push é deduplicada por `localStorage.__OTC_PUSH_SENT__`
+  (endpoint | sid | dia). O Holidays Calendar busca os calendários em paralelo.
+
+Ficaram mapeados e não feitos: `manual_conf.find_row` em lote no import de
+unwinds, um bootstrap único do Control Panel, `/api/mappings` só com contagens,
+o `fiLoadSpec` antecipado e o RefData repetido do New Deals, as traduções
+buscadas duas vezes por página, ETag no `/static/data` e o sync de
+SOFR/EURIBOR dentro do GET da página.
+
+## §615 — Opção de CO1-2 gera no documento da família comum (2026-10-01)
+
+O Generate de uma opção de commodities asiática de Brent (SUZANO, DBH-1P9IKQ,
+liquidação 30/09/2026) falhou com "A família co1-2 ainda não tem template de
+documento neste produto". Nada regrediu: o `_conf_opt_family` sempre separou a
+família `co1-2`, que nunca teve template (§178 já dizia "pendente de
+template"). O CO1-2 só aparece na asiática de Brent com contrato a dois meses
+ou mais da liquidação (§212), e esta foi a primeira operação assim a chegar ao
+Generate.
+
+Decisão da mesa (01/10/2026): a opção de CO1-2 usa o documento da família
+comum (`_conf_opt_family` = `_conf_deal_family`), e o ticker do Anexo I sai
+com a frase de rolagem do `_conf_co12_text` (a mesma do Termo). Sem
+`SettlementDate`/`FixingEndDate` no deal, a frase cai para `CO1-2` puro. Se um
+documento próprio vier a existir, a família volta a ser separada aqui, junto do
+`_CONF_OPT_FAMILY_TEMPLATES`.
