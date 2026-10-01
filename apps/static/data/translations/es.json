@@ -1801,6 +1801,8 @@
   "ops-r-ok": "OK",
   "ops-r-check": "Verificar",
   "ops-r-na": "n/d",
+  "ops-r-failed": "Error",
+  "ops-r-failed-tip": "No fue posible leer las fuentes de este producto en la fecha — vea el log del servidor ([ops-trade]).",
   "ops-teds": "TEDs",
   "ops-print-advice": "Print Advice",
   "ops-adv-none": "Ningún aviso a generar para esta fecha.",

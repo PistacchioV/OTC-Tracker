@@ -1802,6 +1802,8 @@
   "ops-r-ok": "OK",
   "ops-r-check": "Verificar",
   "ops-r-na": "n/d",
+  "ops-r-failed": "Erro",
+  "ops-r-failed-tip": "Não foi possível ler as fontes deste produto na data — veja o log do servidor ([ops-trade]).",
   "ops-teds": "TEDs",
   "ops-print-advice": "Print Advice",
   "ops-adv-none": "Nenhum aviso a gerar para esta data.",
