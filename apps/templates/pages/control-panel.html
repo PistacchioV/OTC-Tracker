@@ -2849,8 +2849,7 @@ document.addEventListener('click', function (e) {
 // Master / unconfigured users see everything. A configured allowlist may grant the
 // whole page ("/control-panel", legacy) or individual cards ("/control-panel#id").
 (function () {
-    fetch('/api/me/access', { credentials: 'same-origin' })
-        .then(function (r) { return r.json(); })
+    (window.otcMeAccess ? window.otcMeAccess() : fetch('/api/me/access', { credentials: 'same-origin' }).then(function (r) { return r.json(); }))
         .then(function (d) {
             if (!d || !d.success || d.is_admin || !d.configured) return;   // full access
             var pages = d.pages || [];

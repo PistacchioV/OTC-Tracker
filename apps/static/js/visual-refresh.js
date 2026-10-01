@@ -552,8 +552,7 @@
 
     // Filtra pelas páginas que o usuário pode acessar (mesmo critério do megamenu),
     // depois renderiza.
-    fetch("/api/me/access", { credentials: "same-origin" })
-      .then(function (r) { return r.json(); })
+    (window.otcMeAccess ? window.otcMeAccess() : fetch('/api/me/access', { credentials: 'same-origin' }).then(function (r) { return r.json(); }))
       .then(function (d) {
         if (d && d.success && !d.is_admin && d.configured) {
           allowed = {};

@@ -443,12 +443,29 @@ def _mapping_rows(key):
     daqui seria circular (o `duck_read` não é o blueprint, então ele pode vir), e
     reler a cada chamada é o que faz a edição na tela valer no run seguinte, sem
     restart."""
+    # UMA leitura por request: o `_is_bank_cpty` e o `_settlement_exception_for`
+    # são chamados por PAR de pernas no casamento, e cada chamada relia e
+    # re-parseava o cadastro. Dentro de um run o cadastro não muda; o run
+    # seguinte (outro request) relê — a edição na tela continua valendo nele.
+    # Fora de request (script) não memoiza. Falha não fica guardada.
+    store = None
+    try:
+        from flask import g, has_app_context
+        if has_app_context():
+            store = g.setdefault('_payrec_mapping_rows', {})
+    except Exception:                           # noqa: BLE001
+        store = None
+    if store is not None and key in store:
+        return store[key]
     try:                                        # DB-first (fase 3)
         from apps.pages import duck_read
         rows = duck_read.dataset_rows(mapping_file(key, _MAPPINGS_DIR))
     except Exception:
         return []
-    return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+    out = [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+    if store is not None:
+        store[key] = out
+    return out
 
 
 def _settlement_exceptions():

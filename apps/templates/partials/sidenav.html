@@ -1293,8 +1293,7 @@
 // users and admins see everything.
 (function () {
   var ALWAYS = { '/users-profile': 1, '/page-access': 1 };   // dashboards are grantable
-  fetch('/api/me/access', { credentials: 'same-origin' })
-    .then(function (r) { return r.json(); })
+  (window.otcMeAccess ? window.otcMeAccess() : fetch('/api/me/access', { credentials: 'same-origin' }).then(function (r) { return r.json(); }))
     .then(function (d) {
       if (!d || !d.success) return;
       if (d.is_admin) return;                          // admin: Page Access link is rendered server-side; nothing to hide

@@ -795,6 +795,13 @@
                 GUAROPTS = j.guarantor_options || [];
                 GEN = j.gen;
                 dados = j.rows || [];
+                // Contagens dos chips: vêm na mesma resposta, calculadas pela
+                // regra do Overview (`cgd_docs.overview`) — uma regra só para
+                // Active/Inactive/Cancelled, e uma leitura do banco só.
+                ['total', 'pending', 'active', 'inactive', 'cancelled'].forEach(function (k) {
+                    var el = document.getElementById('ob-' + k);
+                    if (el) el.textContent = (j.chips && j.chips[k]) || 0;
+                });
                 $('#ob-src').html(
                     j.db_ready
                         ? '<i class="ti ti-database"></i> <span>' + esc(t('src')) + ':</span> <code>' + esc(j.db) + '</code>' +
@@ -1160,19 +1167,6 @@
               .then(function (j) { if (!recusaLista(j)) { carrega(); } });
         });
     });
-
-    // As contagens dos chips: o MESMO endpoint do Overview — uma regra só
-    // para Active/Inactive/Cancelled (contar aqui pela grade duplicaria).
-    fetch('/api/onboarding/overview', { credentials: 'same-origin' })
-        .then(function (r) { return r.json(); })
-        .then(function (j) {
-            if (!j || !j.success) return;
-            ['total', 'pending', 'active', 'inactive', 'cancelled'].forEach(function (k) {
-                var el = document.getElementById('ob-' + k);
-                if (el) el.textContent = j[k] || 0;
-            });
-        })
-        .catch(function () {});
 
     $(carrega);
 })(jQuery);
