@@ -23,6 +23,20 @@ def _intrag_info_source(text):
     return re.sub(r'\s+', ' ', _INFO_SOURCE_SEPARADORES.sub(' ', text)).strip()
 
 
+def paridade_liquidacao(qty_ccy, oth_ccy):
+    """Settlement Parity do NDF de moeda na Intrag: a moeda em que a taxa a
+    termo é cotada. Com BRL no par é `BRL` (R$/moeda); sem BRL — o cross
+    EUR/USD, USD/CNH — é a perna que NÃO é a do nocional (`domain` do New
+    Deals: o nocional é a moeda que não é BRL nem USD), ou seja, `USD` no
+    EUR/USD. Par ilegível cai em `BRL`, o caso de quase todo deal."""
+    qty = (qty_ccy or '').strip().upper()
+    oth = (oth_ccy or '').strip().upper()
+    if 'BRL' in (qty, oth) or not qty or not oth:
+        return 'BRL'
+    # O USD vence a posição: a Athena pode bookar a Quantity em qualquer perna.
+    return 'USD' if 'USD' in (qty, oth) else oth
+
+
 _INTRAG_OPT_JPM_ACC    = '73760.00-9'
 
 

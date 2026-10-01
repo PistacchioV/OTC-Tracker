@@ -238,7 +238,7 @@ def _save_intrag_ndf_moeda_entry(deal):
         # esquerda em relação ao termo de mercadoria (as chaves são nomes
         # legados; o comentário ao lado é a coluna que cada uma alimenta).
         'strike':                 '0',         # Trade Price
-        'strike_currency':        'BRL',       # Settlement Parity
+        'strike_currency':        domain.paridade_liquidacao(qty_ccy, oth_ccy),  # Settlement Parity
         'expiry_month_year':      'N/A',       # Maturity Month/Year
         'anbima_bizdays':         'N/A',       # Spot Fixing
         'fixed_0':                rate_str,    # Forward Rate (R$/CCY)
