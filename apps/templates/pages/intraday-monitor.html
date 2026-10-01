@@ -1097,7 +1097,7 @@
             esc(t('im-offday', 'Not scheduled for this date:')) + ' ' + fora.map(function (x) {
                 if (x.month) return '<b>' + esc(nomeTarefa(x)) + '</b> (' + esc(x.month === 'last'
                     ? t('im-month-last', 'last business day of the month')
-                    : t('im-month-first', 'first 4 business days of the month')) + ')';
+                    : t('im-month-first', 'by the 4th business day of the month')) + ')';
                 return '<b>' + esc(nomeTarefa(x)) + '</b> (' + x.days.map(function (d) {
                     return esc(t('cp-it-d' + d, DIAS_TXT[d]));
                 }).join(', ') + ')';
@@ -1389,7 +1389,7 @@
     <span data-lang="im-task-swap-mtm">Swap MtM</span>
     <span data-lang="im-ended-on">End process on</span>
     <span data-lang="im-month-last">last business day of the month</span>
-    <span data-lang="im-month-first">first 4 business days of the month</span>
+    <span data-lang="im-month-first">by the 4th business day of the month</span>
     <span data-lang="im-br-pays">Bank pays</span>
     <span data-lang="im-br-receives">Bank receives</span>
     <span data-lang="im-br-settled">settled in Pay/Rec</span>

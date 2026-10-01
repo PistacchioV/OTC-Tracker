@@ -1166,9 +1166,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   Confirmations Escalation (segunda e quinta, grava quando o PACOTE da rotina
   sai sem erro, pelo Run do card ou pelo automático como `Automatic`). **Swap Accrual e Swap MtM são tarefas
   MENSAIS** (`month` no catálogo, `domain.janela_mensal`, mesa 30/09/2026):
-  Accrual no último dia útil ANBIMA, MtM do 1º ao 4º (prazo no fim da janela);
+  Accrual no último dia útil ANBIMA, MtM ATÉ o 4º (uma vez; prazo no fim da janela);
   rodar a recon é 50%, conclui no End process (`task_runs` `event='end'`), que
-  no MtM vale em qualquer dia da janela. O aviso das 19h é DAQUI (`_intraday_pending`)
+  no MtM vale em qualquer dia da janela. **Mensal não tem dia da semana**
+  (§611): no Control Panel a linha é UMA pílula com a regra, que só liga ou
+  desliga, e quem diz o dia devido é a janela — os `days` salvos não filtram.
+  O aviso das 19h é DAQUI (`_intraday_pending`)
   e se configura no card `intradaytasks` (o `dealsmonitor` saiu). O card de D-1
   aponta cada pendência com a data no link (`static/js/deep-link.js`:
   `?tradedate=`/`?date=`) — página que vira destino lê `otcLinkDmy()`/

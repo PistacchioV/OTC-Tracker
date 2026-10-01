@@ -347,6 +347,13 @@ cm = {'days': [0, 1, 2, 3, 4], 'deadline': '20:00'}
 check('prazo no fim da janela: no 1º dia útil, à noite, ainda não atrasou',
       D.avalia(cm, date(2026, 10, 1), datetime(2026, 10, 1, 21, 0), False, False, False,
                prazo_dia=date(2026, 10, 6))['state'], 'todo')
+check('... nem no 3º dia útil, à noite', D.avalia(cm, date(2026, 10, 5), datetime(2026, 10, 5, 23, 59),
+      False, False, False, prazo_dia=date(2026, 10, 6))['state'], 'todo')
+check('... com a recon rodada, em andamento (não atrasado)', D.avalia(cm, date(2026, 10, 5),
+      datetime(2026, 10, 5, 23, 59), False, False, True, prazo_dia=date(2026, 10, 6))['state'], 'in_progress')
+check('no 4º dia útil, depois do horário limite, sem End process: atrasado',
+      D.avalia(cm, date(2026, 10, 6), datetime(2026, 10, 6, 20, 1), False, False, False,
+               prazo_dia=date(2026, 10, 6))['state'], 'late')
 
 def _tk(dia):
     return {t['id']: t for t in cl.get('/api/intraday-monitor?date=' + dia).get_json()['tasks']}

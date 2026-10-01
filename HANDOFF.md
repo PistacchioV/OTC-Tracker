@@ -25548,3 +25548,33 @@ vez, `OTC_FI_READ_WORKERS`; bancos diferentes não disputam trava) e o
 `page-spec` NÃO espera: com leitura em voo responde 503 `fi_templates_loading`
 na hora — a página mantém o spec que tem e o recarrega a cada abertura do
 preview. O `_fi_variant_key` (geração de arquivo) continua esperando.
+
+## §611 — Swap Accrual e Swap MtM: tarefas MENSAIS do Intraday Monitor (2026-09-30)
+
+Pedido da mesa: o Swap Accrual é devido no ÚLTIMO dia útil do mês e o Swap MtM
+até o 4º dia útil; os dois só concluem quando o End process roda. Entraram no
+catálogo `domain.TASKS` como `routine` com `done_on: 'end'` e a chave `month`
+(`('last', 1)` / `('first', 4)`). A janela é `domain.janela_mensal` — os dias
+úteis ANBIMA do mês (o calendário chega pronto, a função é pura) — e o prazo é
+o horário limite no ÚLTIMO dia da janela (`avalia(..., prazo_dia=)`): no MtM,
+o 1º dia útil à noite ainda não está atrasado. Rodar a recon é 50%; o End
+process (`task_runs.record(..., event='end')`, gravado nos end-process do
+Accrual e do MtM, e a recon no `run` de cada um) conclui. No MtM o End process
+de qualquer dia ANTERIOR da janela vale — os dias seguintes não voltam a cobrar
+e o card diz o dia (`ended_on`). Limitação aceita: o Accrual só conta o End
+process feito no próprio último dia útil, e execuções anteriores ao deploy não
+têm registro.
+
+A primeira versão deixou a agenda do Control Panel mentindo: o card
+`intradaytasks` desenhava para as duas os sete botões de dia da semana,
+marcados de segunda a sexta, e o servidor ainda usava esses dias como filtro
+por cima da janela (salvar só "quarta" faria o MtM sumir no 1º dia útil que
+caísse numa quinta). Agora a API da agenda devolve `month`, a linha mensal é
+UMA pílula com a regra ("Mensal · último dia útil" / "Mensal · até o 4º dia
+útil") que grava os dias úteis ou a lista vazia, e no Monitor o `due` mensal é
+`ligada and não feriado and dia na janela`. `check_intraday_monitor.py` §4g.
+
+O texto do Monitor dizia "first 4 business days of the month", e a mesa leu
+como se o MtM fosse devido em CADA um dos quatro dias. A regra é "até o 4º dia
+útil" — uma vez, com prazo no 4º —, e é o que a tela diz agora nas três línguas
+(Monitor e Control Panel).
