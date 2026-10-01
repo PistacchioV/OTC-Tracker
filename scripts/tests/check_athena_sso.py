@@ -162,5 +162,69 @@ check('e o numero valido vale', A._seconds('ATHENA_X_TEST', 42) == 240)
 os.environ.pop('ATHENA_X_TEST', None)
 check('ausente devolve o padrao', A._seconds('ATHENA_X_TEST', 42) == 42)
 
+# 502/503/504 do gateway (o ADFS `idauatg2…/adfs/oauth2/authorize` caiu no
+# Conf. Matching, 01/10/2026): duas novas tentativas espaçadas; 4xx não repete.
+class _RespSt(object):
+    def __init__(self, status):
+        self.status_code = status
+        self.url = 'https://idauatg2.example/adfs/oauth2/authorize?x=1'
+        self.reason = 'Bad Gateway'
+        self.headers = {'Content-Type': 'application/json'}
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            e = RuntimeError('HTTPError %s' % self.status_code)
+            e.response = self
+            raise e
+
+    def json(self):
+        return {'ok': True}
+
+
+_pausas = []
+_sleep_real = __import__('time').sleep
+__import__('time').sleep = lambda s: _pausas.append(s)
+try:
+    seq = [502, 503, 200]
+    r = A.get_json_url(type('S', (), {'get': lambda self, url, params=None, timeout=None:
+                                       _RespSt(seq.pop(0))})(), 'https://athena/x')
+    check('502 e 503 seguidos de 200: a terceira tentativa vale', r == {'ok': True})
+    check('com as pausas de 2 s e 5 s', _pausas == [2, 5])
+    del _pausas[:]
+    seq = [502, 502, 502]
+    try:
+        A.get_json_url(type('S', (), {'get': lambda self, url, params=None, timeout=None:
+                                           _RespSt(seq.pop(0))})(), 'https://athena/x')
+        check('502 que persiste levanta', False)
+    except RuntimeError as e:
+        check('502 que persiste levanta (com o response)', e.response.status_code == 502)
+    del _pausas[:]
+    seq = [401, 200]
+    try:
+        A.get_json_url(type('S', (), {'get': lambda self, url, params=None, timeout=None:
+                                           _RespSt(seq.pop(0))})(), 'https://athena/x')
+        check('401 levanta', False)
+    except RuntimeError:
+        check('401 NÃO repete (é recusa, não passagem)', _pausas == [] and seq == [200])
+
+    # O Conf. Matching diz QUEM caiu, por código, em vez da URL do SSO.
+    from apps.pages import recon_conf_matching as CM
+    import datetime as _dt
+
+    def _cai(*a, **k):
+        _RespSt(502).raise_for_status()
+    _fetch_real = A.fetch_ndf_trades
+    A.fetch_ndf_trades = _cai
+    try:
+        CM.buscar_athena(_dt.date(2026, 9, 30))
+        check('Conf. Matching levanta ReconErro', False)
+    except CM.ReconErro as e:
+        check('Conf. Matching: código athena_gateway com host e status',
+              e.code == 'athena_gateway' and e.params == {'host': 'idauatg2.example', 'status': 502})
+    finally:
+        A.fetch_ndf_trades = _fetch_real
+finally:
+    __import__('time').sleep = _sleep_real
+
 print('FALHOU' if falhas else 'TUDO OK')
 sys.exit(1 if falhas else 0)

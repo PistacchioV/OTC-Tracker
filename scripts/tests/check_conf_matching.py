@@ -481,7 +481,7 @@ try:
     av_cgd = _codigos('apps/pages/recon_cgd.py', 'Aviso')
     av_cfm = _codigos('apps/pages/recon_conf_matching.py', r'_cgd\.Aviso') | box
     er_cfm = _codigos('apps/pages/recon_conf_matching.py', 'ReconErro')
-    check('os motores emitem avisos com código', (len(av_cgd) >= 12, len(av_cfm) >= 8, len(er_cfm)), (True, True, 3))
+    check('os motores emitem avisos com código', (len(av_cgd) >= 12, len(av_cfm) >= 8, len(er_cfm)), (True, True, 4))
     for lg, chaves in _chaves('reconciliation-cgd.html').items():
         check('CGD [%s]: nenhum aviso sem tradução' % lg, sorted('w_' + c for c in av_cgd if 'w_' + c not in chaves), [])
     for lg, chaves in _chaves('reconciliation-conf-matching.html').items():

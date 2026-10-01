@@ -303,6 +303,7 @@
               e_fep_not_found: "FepWeb report not found: the \"{subject}\" e-mail could not be read from the mailbox.",
               e_fep_no_columns: "The FepWeb report ({file}) has no \"Contrato\" and \"Data Operação\" columns — nothing was read from it.",
               e_athena_no_http: "The HTTP stack for the Athena API is not installed (requests).",
+              e_athena_gateway: "The server {host} answered {status} (gateway error) while fetching the Athena trades. This is an outage on the SSO/Athena side, not in the OTC Tracker — try again in a few minutes.",
               why: "What the mailbox search said:" },
         br: { total: 'Total', missing_fepweb: 'Falta no FepWeb', missing_athena: 'Falta na Athena',
               duplicated: 'Duplicados', ok: 'Ok',
@@ -327,6 +328,7 @@
               e_fep_not_found: "Relatório do FepWeb não encontrado: o e-mail \"{subject}\" não foi lido do box.",
               e_fep_no_columns: "O relatório do FepWeb ({file}) não tem as colunas \"Contrato\" e \"Data Operação\" — nada foi lido dele.",
               e_athena_no_http: "A pilha HTTP da API da Athena não está instalada (requests).",
+              e_athena_gateway: "O servidor {host} respondeu {status} (erro de gateway) ao buscar as operações da Athena. É indisponibilidade do lado do SSO/Athena, não do OTC Tracker — tente de novo em alguns minutos.",
               why: "O que a busca no box disse:" },
         es: { total: 'Total', missing_fepweb: 'Falta en FepWeb', missing_athena: 'Falta en Athena',
               duplicated: 'Duplicados', ok: 'Ok',
@@ -351,6 +353,7 @@
               e_fep_not_found: "Informe de FepWeb no encontrado: el correo \"{subject}\" no se pudo leer del buzón.",
               e_fep_no_columns: "El informe de FepWeb ({file}) no tiene las columnas \"Contrato\" y \"Data Operação\" — no se leyó nada.",
               e_athena_no_http: "La pila HTTP de la API de Athena no está instalada (requests).",
+              e_athena_gateway: "El servidor {host} respondió {status} (error de gateway) al buscar las operaciones de Athena. Es una indisponibilidad del lado del SSO/Athena, no del OTC Tracker — intente de nuevo en unos minutos.",
               why: "¿Qué dijo la búsqueda en el buzón?" }
     };
     function lang() {

@@ -370,7 +370,24 @@ def buscar_athena(ref):
     if not athena_api.is_available():
         raise ReconErro('athena_no_http',
                         'A pilha HTTP da API da Athena não está instalada (requests).')
-    payload = athena_api.fetch_ndf_trades(ref.strftime('%Y%m%d'))
+    try:
+        payload = athena_api.fetch_ndf_trades(ref.strftime('%Y%m%d'))
+    except Exception as exc:                                # noqa: BLE001
+        # Gateway (502/503/504) que persistiu depois das retentativas do
+        # `athena_api`: a tela dizia `HTTPError: 502…` seguido da URL de duas
+        # mil letras do SSO. O que a mesa precisa saber é QUEM caiu (o host) e
+        # que é para tentar de novo em instantes; a URL inteira fica no log.
+        resp = getattr(exc, 'response', None)
+        status = getattr(resp, 'status_code', None)
+        if status in (502, 503, 504):
+            from urllib.parse import urlsplit
+            host = urlsplit(getattr(resp, 'url', '') or '').netloc or '?'
+            raise ReconErro('athena_gateway',
+                            'O servidor {} respondeu {} ({}) ao buscar as operações da '
+                            'Athena — indisponibilidade do lado do SSO/Athena; tente de '
+                            'novo em alguns minutos.'.format(host, status, resp.reason),
+                            host=host, status=status) from exc
+        raise
     return athena_api.extract_records(payload)
 
 
