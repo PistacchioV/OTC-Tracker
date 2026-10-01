@@ -590,6 +590,30 @@
         paint(st);
     };
 
+    // Filtro posto por CÓDIGO (deep-link: ?spn= da notificação). A linha de
+    // filtro antiga saiu e o `removeFilterRows` zera a busca por coluna, então
+    // o `column().search()` que a página fazia era apagado em silêncio. Os
+    // valores casam cegos à caixa com os que a coluna DESENHA; sem nenhum
+    // casamento o filtro fica com o valor pedido (a tabela vazia diz que não há).
+    otcExcelFilter.set = function (selector, col, values) {
+        var node = $(selector)[0];
+        if (!node || !DT.isDataTable(node)) return false;
+        var dt = $(node).DataTable();
+        var st = STATE.get(node);
+        if (!st || st.dt !== dt) { attach(dt, { auto: true }); st = STATE.get(node); }
+        if (!st) return false;
+        var wanted = (Array.isArray(values) ? values : [values]).map(function (v) { return norm(v).toUpperCase(); });
+        var hit = new Set();
+        dt.rows().every(function (rowIdx) {
+            var k = cellKey(dt, rowIdx, col);
+            if (wanted.indexOf(k.toUpperCase()) >= 0) hit.add(k);
+        });
+        st.filters[col] = hit.size ? hit : new Set(wanted);
+        paint(st);
+        dt.draw();
+        return true;
+    };
+
     // Limpa os funis de TODAS as tabelas da página (o Clear Filters de cada
     // tela). Devolve as tabelas que tinham filtro, para quem chamou redesenhar.
     otcExcelFilter.clearAll = function () {

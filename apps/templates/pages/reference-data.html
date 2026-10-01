@@ -815,8 +815,20 @@ $(document).ready(function () {
             // As colunas de detalhe ficam escondidas na tela e ainda assim vão no
             // export: o EXPORT_COLS lista índices, e índice não olha visibilidade.
             {targets: CPD_COLS, visible: false},
+            // Ordem da tela: o que está Pending (inclusive Pend. Inactive/Delete
+            // e o Pending dos detalhes) primeiro, em ordem alfabética da
+            // Counterparty; o resto na ordem do cadastro. A chave é só de sort —
+            // o funil e o export leem o badge desenhado.
+            {targets: 2, render: function(data, type, row) {
+                if (type !== 'sort') return data;
+                if (/>\s*Pend/.test(String(data || ''))) return '0|' + _txt(row[3]).toUpperCase();
+                var m = /data-idx="(-?\d+)"/.exec(String(row[1] || ''));
+                var i = m ? +m[1] : 0;
+                return '1|' + ('000000' + Math.max(i, 0)).slice(-6);
+            }},
             {targets: '_all', defaultContent: ''}
         ],
+        order: [[2, 'asc']],
         dom:
             "<'d-md-flex justify-content-between align-items-center my-2'" +
                 "<'columnToggleWrapper me-2'><'addRowWrapper me-2'><'bulkApproveWrapper me-2'><'clearFiltersWrapper me-2'>B<'ms-auto'>" +
@@ -883,15 +895,6 @@ $(document).ready(function () {
                     if (api.column(idx).search() !== this.value) api.column(idx).search(this.value).draw();
                 });
             });
-
-            /* Deep-link from the notification bell: ?spn=NNN → pre-filter the SPN
-               column (index 9) so banking approvals land on the right row. */
-            var _spnParam = (new URLSearchParams(window.location.search).get('spn') || '').trim();
-            if (_spnParam) {
-                var _spnInput = document.querySelector('#refdata-search-row th:nth-child(10) input');
-                if (_spnInput) _spnInput.value = _spnParam;
-                api.column(9).search(_spnParam).draw();
-            }
 
             /* Column toggle (starts at col 2 = Status) */
             var colDefs = [
@@ -1006,7 +1009,13 @@ $(document).ready(function () {
             })
             .catch(function(e){ console.error('RefData load error:', e); if (done) done(); });
     }
-    reloadRefData();
+    /* Deep-link do sino: ?spn=NNN → funil da coluna SPN (9) já filtrado, para
+       a aprovação bancária cair na linha certa. Vai DEPOIS da carga: o funil
+       casa pelo valor que a coluna desenha, e antes dela a tabela está vazia. */
+    var _spnParam = (new URLSearchParams(window.location.search).get('spn') || '').trim();
+    reloadRefData(function() {
+        if (_spnParam && window.otcExcelFilter) window.otcExcelFilter.set('#ref-data-table', 9, _spnParam);
+    });
 
     /* ── Counterparty banking/contact details (indexed by SPN) ────────── */
     var _CPDETAILS = {};
