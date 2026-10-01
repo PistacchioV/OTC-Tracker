@@ -115,6 +115,9 @@ alice = client_for('A111111', 'BO')
 alice.get('/api/notifications')                 # aquece o init preguicoso do schema
 
 print('== 1. o sino nao toma mais a fila de escrita ==')
+# O atalho por carimbo (arquivos intocados -> resposta anterior) e medido no
+# bloco 1b; aqui se mede a CONSULTA, entao ele e desligado.
+R._notif_last_good.clear()
 ops[:] = []
 alice.get('/api/notifications')
 check('uma operacao por consulta', len(ops), 1)
@@ -124,6 +127,17 @@ check('uma operacao por consulta', len(ops), 1)
 # uma gravacao de notificacao em curso. E o unico ponto do app autorizado a
 # isso; quem vigia e o `check_unlocked_reads.py`.
 check('e ela nem toma o lock compartilhado', ops, ['unlocked read'])
+
+print('\n== 1b. poll com o banco intocado nem abre o banco ==')
+ops[:] = []
+alice.get('/api/notifications')
+check('repetir o poll sem gravacao no meio: zero aberturas', ops, [])
+R._create_notification('B222222', 'Bob', 'Gravou', 'Dashboard', '', '')
+ops[:] = []
+corpo = alice.get('/api/notifications').get_json()
+check('gravou no meio: o poll seguinte volta ao banco', len(ops), 1)
+check('e ja traz a notificacao nova',
+      any(n.get('action') == 'Gravou' for n in corpo.get('notifications', [])), True)
 
 print('\n== 2. a allowlist nao vai ao banco em toda navegacao ==')
 R._page_access_forget()

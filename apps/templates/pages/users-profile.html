@@ -229,8 +229,7 @@
     }
     function pinta(html) { alvo.innerHTML = html; }
 
-    fetch('/api/me/access', { credentials: 'same-origin' })
-        .then(function (r) { return r.json(); })
+    (window.otcMeAccess ? window.otcMeAccess() : fetch('/api/me/access', { credentials: 'same-origin' }).then(function (r) { return r.json(); }))
         .then(function (d) {
             if (!d || !d.success) { pinta('<span class="text-muted fs-xs">' + t('erro') + '</span>'); return; }
             // `configured=false` é acesso TOTAL (allowlist vazia = não

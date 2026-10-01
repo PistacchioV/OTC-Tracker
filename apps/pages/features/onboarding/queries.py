@@ -38,7 +38,13 @@ def docs():
     # geração nova validaria `_id`s da lista velha.
     gen = cgd_docs.generation()
     rows, existe, path = _rows()
+    # Os chips da tela (total/pending/active/inactive/cancelled) saem das
+    # MESMAS linhas, pela MESMA regra do Overview: a tela pedia o
+    # `/api/onboarding/overview` só para eles, e isso relia o banco inteiro.
+    ov = cgd_docs.overview(rows)
     data = {'db': path, 'db_ready': existe, 'gen': gen,
-            'rows': [mappers.with_stage(r) for r in rows]}
+            'rows': [mappers.with_stage(r) for r in rows],
+            'chips': {k: ov.get(k, 0) for k in
+                      ('total', 'pending', 'active', 'inactive', 'cancelled')}}
     data.update(mappers.field_domains())
     return data

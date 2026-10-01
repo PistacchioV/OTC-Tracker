@@ -837,9 +837,15 @@ def _mc_notify_roles(rows):
     from apps.pages import routes
     from apps.pages import manual_conf as _mc
     papeis, algum_alvo = [], False
+    # O cadastro de validação UMA vez para o lote: sem `rules`, o
+    # `pending_stage` relia o mapping a cada linha.
+    try:
+        rules = _mc.validation_rules()
+    except Exception:                                       # noqa: BLE001
+        rules = None
     for row in rows or []:
         try:
-            etapa = _mc.pending_stage(row)
+            etapa = _mc.pending_stage(row, rules)
         except Exception:
             continue
         alvo = _MC_STAGE_NOTIFY_ROLES.get(etapa)

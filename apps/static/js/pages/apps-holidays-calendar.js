@@ -324,12 +324,15 @@ class CalendarSchedule {
         // "Create New Calendar" usa para pôr o calendário novo na tela sem
         // recarregar a página — duas conversões produziriam eventos diferentes
         // para o mesmo arquivo.
+        // Em PARALELO: eram onze idas ao servidor uma depois da outra, cada uma
+        // esperando a anterior. A ordem dos eventos segue a dos calendários.
+        const porCalendario = await Promise.all(
+            self.calendars.map(cal => self.fetchCalendarEvents(cal)));
         const defaultEvents = [];
-        for (const cal of self.calendars) {
-            const evs = await self.fetchCalendarEvents(cal);
-            console.log(`✅ ${cal.name}: ${evs.length} feriados carregados`);
+        porCalendario.forEach((evs, i) => {
+            console.log(`✅ ${self.calendars[i].name}: ${evs.length} feriados carregados`);
             defaultEvents.push(...evs);
-        }
+        });
 
         // cal - init
         self.calendarObj = new FullCalendar.Calendar(self.calendar, {

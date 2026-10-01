@@ -120,6 +120,20 @@
           Monitor abre cada pendência já filtrada (§567). No <head>: as páginas
           leem na inicialização. #}
        <script src="{{ config.ASSETS_ROOT }}/js/deep-link.js?v=20260928a"></script>
+       {# `/api/me/access` UMA vez por página: menu lateral, megamenu, barra do
+          topo e o Control Panel perguntavam cada um a mesma coisa (3-4
+          requests por navegação). Todos leem desta promessa; falha não fica
+          guardada, para a próxima chamada tentar de novo. #}
+       <script>
+       window.otcMeAccess = function () {
+           if (!window.__otcMeAccess) {
+               window.__otcMeAccess = fetch('/api/me/access', { credentials: 'same-origin' })
+                   .then(function (r) { return r.json(); })
+                   .catch(function (e) { window.__otcMeAccess = null; throw e; });
+           }
+           return window.__otcMeAccess;
+       };
+       </script>
        {% endif %}
    
    </head>

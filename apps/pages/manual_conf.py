@@ -839,8 +839,34 @@ def pending_stage(row, rules=None):
 _ANBIMA = {'feriados': None}
 
 
+def _anbima_path():
+    """O caminho do `anbima.json`, resolvido UMA vez: o `data_path` pergunta ao
+    armazém se o arquivo existe (§522), e a conferência do carimbo é periódica."""
+    if not _ANBIMA.get('path'):
+        _ANBIMA['path'] = data_path('anbima.json')
+    return _ANBIMA['path']
+
+
 def _anbima_holidays():
+    # Releitura pelo CARIMBO do arquivo, conferido no máximo uma vez por minuto:
+    # o conjunto ficava em memória pela vida do processo, e um feriado
+    # cadastrado na tela Holidays só valia depois de um restart. O intervalo
+    # evita um `stat` no share por linha do laço que conta dias úteis.
+    agora = time.monotonic()
+    if _ANBIMA['feriados'] is not None and agora - _ANBIMA.get('conferido', 0) >= 60:
+        _ANBIMA['conferido'] = agora
+        try:
+            carimbo = _store.getmtime(_anbima_path())
+        except Exception:                       # noqa: BLE001
+            carimbo = _ANBIMA.get('carimbo')    # ilegível: mantém o que há
+        if carimbo != _ANBIMA.get('carimbo'):
+            _ANBIMA['feriados'] = None
     if _ANBIMA['feriados'] is None:
+        _ANBIMA['conferido'] = agora
+        try:
+            _ANBIMA['carimbo'] = _store.getmtime(_anbima_path())
+        except Exception:                       # noqa: BLE001
+            _ANBIMA['carimbo'] = None
         import json
         try:                                    # DB-first (fase 3)
             from apps.pages import duck_read

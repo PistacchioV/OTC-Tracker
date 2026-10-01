@@ -892,10 +892,17 @@ document.addEventListener('DOMContentLoaded', function () {
             card.querySelector('[data-recon-intc]').textContent = r.int_count != null ? r.int_count : 0;
             card.querySelector('[data-recon-intv]').textContent = r.int_value || '0.00';
             var badge = card.querySelector('[data-recon-badge]');
-            var na = !!r.na;
-            var ok = !na && !!r.matched;
+            // `failed`: a coleta da família ESTOUROU no servidor. Os zeros são
+            // falta de dado, e o card tem de dizer isso — com n/a ele se lia
+            // como "não houve liquidação hoje".
+            var failed = !!r.failed;
+            var na = !failed && !!r.na;
+            var ok = !na && !failed && !!r.matched;
             badge.className = 'ops-recon-badge' + (na ? '' : (ok ? ' is-ok' : ' is-check'));
-            badge.innerHTML = na
+            badge.title = failed ? t('ops-r-failed-tip', 'Could not read this product\'s sources for the date — see the server log ([ops-trade]).') : '';
+            badge.innerHTML = failed
+                ? '<i class="ti ti-alert-octagon"></i>' + t('ops-r-failed', 'Error')
+                : na
                 ? '<i class="ti ti-minus"></i>' + t('ops-r-na', 'n/a')
                 : (ok ? '<i class="ti ti-check"></i>' + t('ops-r-ok', 'OK')
                       : '<i class="ti ti-alert-triangle"></i>' + t('ops-r-check', 'Check'));

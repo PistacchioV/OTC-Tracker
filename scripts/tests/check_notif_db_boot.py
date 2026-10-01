@@ -277,12 +277,15 @@ check('sem ERROR no log', falhas, [])
 
 # O teto de idade: cache vencido volta ao caminho de sempre (ERROR + vazio) —
 # e a conexao vazada, que responde a MESMA mensagem para sempre, reaparece.
-_ttl = R._NOTIF_STALE_TTL_SECONDS
+# (O atalho por carimbo — arquivos intocados, resposta anterior — e outra
+# coisa e e desligado aqui: o que se mede e o teto da DISPUTA.)
+_ttl, _ttl_u = R._NOTIF_STALE_TTL_SECONDS, R._NOTIF_UNCHANGED_TTL_SECONDS
 R._NOTIF_STALE_TTL_SECONDS = 0
+R._NOTIF_UNCHANGED_TTL_SECONDS = 0
 corpo = cli.get('/api/notifications').get_json()
 check('cache vencido devolve o sino vazio', corpo.get('notifications'), [])
 check('e ai sim registra o motivo', len(falhas), 1)
-R._NOTIF_STALE_TTL_SECONDS = _ttl
+R._NOTIF_STALE_TTL_SECONDS, R._NOTIF_UNCHANGED_TTL_SECONDS = _ttl, _ttl_u
 R.get_notif_connection = _gnc
 R._notif_query_failed = _nqf
 

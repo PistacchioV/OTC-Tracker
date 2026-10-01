@@ -863,11 +863,24 @@
                     for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
                     return arr;
                 }
+                // A inscrição é a MESMA a cada navegação, e regravá-la era uma
+                // escrita exclusiva no banco do sino por página aberta. Reenvia
+                // só quando muda o endpoint, o usuário ou o dia (o reenvio
+                // diário recupera a inscrição que o servidor tenha descartado).
+                var _SUB_KEY = '__OTC_PUSH_SENT__';
                 function _sendSub(sub) {
+                    var sig = '';
+                    try {
+                        sig = [sub && sub.endpoint, {{ (session.get('user_sid') or '')|tojson }},
+                               new Date().toISOString().slice(0, 10)].join('|');
+                        if (sig && localStorage.getItem(_SUB_KEY) === sig) return;
+                    } catch (e) { sig = ''; }
                     fetch('/api/push/subscribe', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ subscription: sub })
+                    }).then(function (r) {
+                        if (r.ok && sig) { try { localStorage.setItem(_SUB_KEY, sig); } catch (e) {} }
                     }).catch(function () {});
                 }
                 navigator.serviceWorker.register('/sw.js').then(function (reg) {
@@ -1034,7 +1047,13 @@
             fetchNotifications();
             // 15s poll for near real-time cross-user propagation; pages also call
             // window.fetchNotifications() immediately after their own actions.
-            setInterval(fetchNotifications, 15000);
+            // Aba em segundo plano não consulta: o sino de quem não está olhando
+            // não precisa de 4 idas ao banco por minuto. Ao voltar, atualiza na
+            // hora (o toast do que chegou nesse meio-tempo sai normalmente).
+            setInterval(function () { if (!document.hidden) fetchNotifications(); }, 15000);
+            document.addEventListener('visibilitychange', function () {
+                if (!document.hidden) fetchNotifications();
+            });
         });
         </script>
 
@@ -1044,8 +1063,7 @@
         (function () {
             var mm = document.getElementById('megamenu-pages');
             if (!mm) return;
-            fetch('/api/me/access', { credentials: 'same-origin' })
-                .then(function (r) { return r.json(); })
+            (window.otcMeAccess ? window.otcMeAccess() : fetch('/api/me/access', { credentials: 'same-origin' }).then(function (r) { return r.json(); }))
                 .then(function (d) {
                     if (!d || !d.success || d.is_admin || !d.configured) return;   // full access
                     var allowed = {};

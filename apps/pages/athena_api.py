@@ -406,6 +406,34 @@ def build_session():
     return session
 
 
+# Status de GATEWAY: quem respondeu foi um intermediário (o proxy reverso do
+# ADFS — `idauatg2…/adfs/oauth2/authorize` — ou o da Athena) dizendo que o
+# servidor de trás não respondeu a tempo. É falha de passagem, e o mesmo clique
+# segundos depois costuma funcionar: desistir na primeira mostrava à mesa um
+# `502 Bad Gateway` com a URL de duas mil letras do SSO (Conf. Matching,
+# 01/10/2026). Duas novas tentativas espaçadas; 4xx não se repete (é recusa).
+_GATEWAY_STATUS = (502, 503, 504)
+_RETRY_PAUSAS = (2, 5)
+
+
+def _com_retentativa(chamar):
+    """Faz a requisição; em 502/503/504 tenta de novo após 2 s e 5 s. O que
+    sobra levanta com `raise_for_status`, como antes."""
+    import time
+    resp = chamar()
+    for pausa in _RETRY_PAUSAS:
+        status = getattr(resp, 'status_code', None)
+        if status not in _GATEWAY_STATUS:
+            break
+        logging.getLogger("otc_tracker").warning(
+            "[athena] %s %s — nova tentativa em %ss",
+            status, urlsplit(getattr(resp, 'url', '') or '').netloc, pausa)
+        time.sleep(pausa)
+        resp = chamar()
+    resp.raise_for_status()
+    return resp
+
+
 def get_json(session, path: str, params: Optional[dict] = None, timeout=None):
     """GET an Athena endpoint (path relative to BASE_URL) via Kerberos SSO."""
     return get_json_url(session, BASE_URL + path, params=params, timeout=timeout)
@@ -425,8 +453,7 @@ def get_json_url(session, url: str, params: Optional[dict] = None, timeout=None)
     limite justamente onde a conta é feita.
     """
     espera = _timeout(timeout)
-    resp = session.get(url, params=params, timeout=espera)
-    resp.raise_for_status()
+    resp = _com_retentativa(lambda: session.get(url, params=params, timeout=espera))
 
     # After SSO, ADFS returns auto-submitting form_post pages. Replay them
     # until the real JSON payload is returned (a browser does this in JS).
@@ -437,8 +464,8 @@ def get_json_url(session, url: str, params: Optional[dict] = None, timeout=None)
         parser.feed(resp.text)
         if not parser.action or parser.method != "post":
             break
-        resp = session.post(parser.action, data=parser.fields, timeout=espera)
-        resp.raise_for_status()
+        resp = _com_retentativa(lambda: session.post(parser.action, data=parser.fields,
+                                                     timeout=espera))
 
     return resp.json()
 

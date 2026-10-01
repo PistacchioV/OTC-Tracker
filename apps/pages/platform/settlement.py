@@ -27,6 +27,8 @@ import re
 import traceback
 from datetime import datetime, timedelta
 
+from flask import g, has_request_context
+
 
 # Cache de leitura por request — módulo próprio (apps/pages/request_cache.py),
 # o MESMO objeto que o routes importa: o decorador não é superfície de patch.
@@ -808,10 +810,14 @@ def _ops_recon(trade_rows):
             if internal is not None:
                 acc[k]['int_count'] += 1
                 acc[k]['int_value'] += internal
+    failed = set(g.get('_ops_trade_failed') or ()) if has_request_context() else set()
     out = {}
     for k, a in acc.items():
         na = (k != 'total') and (k not in seen)
         out[k] = {
+            # A coleta da família levantou (o motivo está no log como
+            # `[ops-trade]`): os zeros do card são falta de dado, não soma zero.
+            'failed': k in failed or (k == 'total' and bool(failed)),
             'b3_count': a['b3_count'], 'b3_value': routes._ndfsum_money(a['b3_value']),
             'int_count': a['int_count'], 'int_value': routes._ndfsum_money(a['int_value']),
             'diff_value': routes._ndfsum_money(a['int_value'] - a['b3_value']),
@@ -1269,15 +1275,22 @@ def _ops_trade_rows(settle_ref):
     Cada família em `try` próprio: uma fonte malformada não pode apagar as linhas
     que as outras já montaram.
     """
-    rows = []
-    for label, fn in (('swap', _ops_swap_trade_rows),
-                      ('NDF commodities', _ops_ndfc_trade_rows),
-                      ('option', _ops_opt_trade_rows)):
+    rows, failed = [], []
+    for label, fam, fn in (('swap', 'swap', _ops_swap_trade_rows),
+                           ('NDF commodities', 'ndf', _ops_ndfc_trade_rows),
+                           ('option', 'option', _ops_opt_trade_rows)):
         try:
             rows += fn(settle_ref)
         except Exception:
+            failed.append(fam)
             log.error("[ops-trade] falha montando as linhas de %s:\n%s",
                       label, traceback.format_exc())
+    # A família que ESTOUROU não pode chegar ao card como "sem linhas": as duas
+    # dão contagem 0 e badge n/a, e a mesa não distingue "não houve liquidação
+    # de opção hoje" de "a coleta de opção quebrou" (era a dúvida do card de
+    # Option zerado). O `_ops_recon` lê daqui e pinta o card de erro.
+    if has_request_context():
+        g._ops_trade_failed = failed
     return rows
 
 

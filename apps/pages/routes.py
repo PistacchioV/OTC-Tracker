@@ -24,7 +24,7 @@ from email.mime.multipart import MIMEMultipart
 import awmpy
 from flask import (
     render_template, request, redirect, send_from_directory,
-    url_for, session, flash, jsonify, make_response, has_app_context, g
+    url_for, session, flash, jsonify, make_response, has_app_context, g, current_app
 )
 from jinja2 import TemplateNotFound
 from werkzeug.exceptions import HTTPException, NotFound
@@ -1360,10 +1360,24 @@ def _asset_v(rel_path):
     Falha (arquivo ausente) devolve '0': pior caso o cache não é invalidado,
     que é o comportamento de hoje — nunca uma página quebrada.
     """
+    # Fora do DEBUG o token fica em memória pela vida do processo: a instância
+    # roda sem reloader, então estático novo só chega com restart — e o restart
+    # zera este dicionário. Sem isso eram 3 a 11 `stat` por página, cada um uma
+    # ida ao share quando o código roda de lá. No DEBUG (dev) segue o stat, para
+    # quem edita o JS ver o token mudar sem reiniciar.
+    debug = bool(current_app.debug) if has_app_context() else False
+    if not debug and rel_path in _ASSET_V_MEMO:
+        return _ASSET_V_MEMO[rel_path]
     try:
-        return str(int(_store.getmtime(os.path.join(_STATIC_DIR, rel_path))))
+        v = str(int(_store.getmtime(os.path.join(_STATIC_DIR, rel_path))))
     except Exception:
-        return '0'
+        return '0'          # falha não fica guardada: o arquivo pode aparecer
+    if not debug:
+        _ASSET_V_MEMO[rel_path] = v
+    return v
+
+
+_ASSET_V_MEMO = {}
 
 
 @blueprint.app_context_processor
@@ -11449,6 +11463,22 @@ def _refdata_spn_peso(rec):
 
 
 def _fxo_refdata_by_spn():
+    """Índice SPN → registro do RefData — ver `_fxo_refdata_by_spn_build`.
+
+    Montado UMA vez por request: ele é chamado por LINHA (Pending Confirmation,
+    Conf. Matching, Trade Level, New Deals), e cada chamada re-parseava o
+    cadastro inteiro. Quem recebe ganha CÓPIAS dos registros — o índice
+    compartilhado não pode ser alterado por um chamador e vazar para o
+    seguinte."""
+    try:
+        idx = _fxo_refdata_by_spn_build()
+    except (IOError, json.JSONDecodeError):
+        return {}           # falha NÃO fica memoizada: a próxima chamada relê
+    return {k: (dict(v) if isinstance(v, dict) else v) for k, v in idx.items()}
+
+
+@_once_per_request
+def _fxo_refdata_by_spn_build():
     """SPN (leading-zeros stripped) → RefData record, for client/taxid/acronym lookup.
 
     **Duas linhas do cadastro podem reivindicar o MESMO SPN**, e o índice guarda
@@ -11472,20 +11502,17 @@ def _fxo_refdata_by_spn():
     resposta errada sozinho.
     """
     out = {}
-    try:
-        from apps.pages import duck_read
-        data = duck_read.refdata_rows()
-        if data is None:
-            data = _store.read(os.path.join(_B3_DATA_DIR, 'RefData.json'))
-        for rec in (data if isinstance(data, list) else []):
-            key = _norm_spn(rec.get('SPN', ''))
-            if not key:
-                continue
-            atual = out.get(key)
-            if atual is None or _refdata_spn_peso(rec) > _refdata_spn_peso(atual):
-                out[key] = rec
-    except (IOError, json.JSONDecodeError):
-        pass
+    from apps.pages import duck_read
+    data = duck_read.refdata_rows()
+    if data is None:
+        data = _store.read(os.path.join(_B3_DATA_DIR, 'RefData.json'))
+    for rec in (data if isinstance(data, list) else []):
+        key = _norm_spn(rec.get('SPN', ''))
+        if not key:
+            continue
+        atual = out.get(key)
+        if atual is None or _refdata_spn_peso(rec) > _refdata_spn_peso(atual):
+            out[key] = rec
     return out
 
 
@@ -14565,6 +14592,28 @@ _notif_fail_last = {'msg': ''}
 # vazio), que é o que pede alguém.
 _notif_last_good = {}
 _NOTIF_STALE_TTL_SECONDS = 600
+# Poll com os arquivos INTOCADOS desde a última resposta boa deste usuário: a
+# resposta é a mesma, e abrir o DuckDB no share para descobrir isso custa uma
+# ida e volta pesada a cada 15 s POR ABA. Toda gravação no banco (notificação
+# nova, expurgo, checkpoint) muda o tamanho ou o mtime do `.db` ou do `.wal`,
+# então o `stat` dos dois decide — dois stats no lugar de uma abertura. O teto
+# limita o que o stat não vê: virada do dia (`CURRENT_DATE`) e allowlist de
+# páginas alterada (que tem o próprio TTL de 30 s).
+_NOTIF_UNCHANGED_TTL_SECONDS = 30
+
+
+def _notif_files_stamp():
+    """(mtime_ns, size) do `.db` e do `.wal` do sino; None se não deu para olhar."""
+    stamp = []
+    for path in (NOTIF_DB_PATH, NOTIF_DB_PATH + '.wal'):
+        try:
+            st = os.stat(path)
+            stamp.append((st.st_mtime_ns, st.st_size))
+        except FileNotFoundError:
+            stamp.append(None)
+        except OSError:
+            return None
+    return tuple(stamp)
 
 
 def _notif_query_failed(exc):
@@ -14612,6 +14661,12 @@ def api_get_notifications():
     # reservado para a falha que persiste (conexão vazada, ensure em loop),
     # que é a que pede alguém. O laço mantém UM ponto de chamada
     # `unlocked=True` — é o que o check_unlocked_reads prende por AST.
+    stamp = _notif_files_stamp()
+    prev = _notif_last_good.get((user_sid, user_role))
+    if (stamp is not None and prev and prev.get('stamp') == stamp
+            and prev.get('day') == datetime.now().date()
+            and time.monotonic() - prev['at'] < _NOTIF_UNCHANGED_TTL_SECONDS):
+        return jsonify(prev['payload'])
     conn = None
     for tentativa in (1, 2):
         try:
@@ -14665,6 +14720,7 @@ def api_get_notifications():
         except Exception as exc:
             _notif_query_failed(exc)
             rows = []
+            stamp = None            # resposta de falha não serve de atalho
         notifs = []
         for r in rows:
             notifs.append({
@@ -14696,7 +14752,8 @@ def api_get_notifications():
     payload = {"success": True, "notifications": notifs, "total_today": len(notifs)}
     # A resposta boa fica guardada para o poll que esbarrar numa gravação em
     # curso — ver o laço de abertura lá em cima.
-    _notif_last_good[(user_sid, user_role)] = {'payload': payload, 'at': time.monotonic()}
+    _notif_last_good[(user_sid, user_role)] = {'payload': payload, 'at': time.monotonic(),
+                                               'stamp': stamp, 'day': datetime.now().date()}
     return jsonify(payload)
 
 

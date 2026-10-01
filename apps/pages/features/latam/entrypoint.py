@@ -24,11 +24,14 @@ def _R():
 def other_products_swap_latamdeskposition():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
-    latest = _R()._latam_latest_ref()
+    # A data do último arquivo NÃO é calculada aqui: a tela abre com `load(null)`
+    # e a API devolve o último dia junto com os dados. Calculá-la no GET da
+    # página era uma varredura da árvore do OTM antes do HTML sair, para um
+    # `data-ref` que só serve de reserva antes da primeira carga.
+    today = _R()._br_now().strftime('%Y-%m-%d')
     return render_template('pages/other-products-swap-latamdeskposition.html',
                            segment='other-products-swap-latamdeskposition',
-                           today=_R()._br_now().strftime('%Y-%m-%d'),
-                           ref_date=(latest or datetime.now()).strftime('%Y-%m-%d'))
+                           today=today, ref_date=today)
 
 @blueprint.route('/api/other-products-swap-latamdeskposition/data')
 def api_latam_data():

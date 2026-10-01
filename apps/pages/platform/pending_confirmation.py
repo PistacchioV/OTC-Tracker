@@ -347,20 +347,29 @@ def _pc_is_intragroup(client):
 
 def _pc_refdata_by_name():
     """{normalized COUNTERPARTY name -> RefData record}, for economic-group /
-    signature-type lookups by counterparty name."""
-    from apps.pages import routes
-    out = {}
+    signature-type lookups by counterparty name.
+
+    Montado uma vez por request (é chamado por linha — ver
+    `_fxo_refdata_by_spn`); quem recebe ganha cópias dos registros."""
     try:
-        from apps.pages import duck_read
-        data = duck_read.refdata_rows()
-        if data is None:
-            data = _store.read(os.path.join(routes._B3_DATA_DIR, 'RefData.json'))
-        for rec in (data if isinstance(data, list) else []):
-            nm = _pc_norm(rec.get('COUNTERPARTY', ''))
-            if nm and nm not in out:
-                out[nm] = rec
+        idx = _pc_refdata_by_name_build()
     except (IOError, json.JSONDecodeError):
-        pass
+        return {}           # falha NÃO fica memoizada: a próxima chamada relê
+    return {k: (dict(v) if isinstance(v, dict) else v) for k, v in idx.items()}
+
+
+@once_per_request
+def _pc_refdata_by_name_build():
+    from apps.pages import routes
+    from apps.pages import duck_read
+    out = {}
+    data = duck_read.refdata_rows()
+    if data is None:
+        data = _store.read(os.path.join(routes._B3_DATA_DIR, 'RefData.json'))
+    for rec in (data if isinstance(data, list) else []):
+        nm = _pc_norm(rec.get('COUNTERPARTY', ''))
+        if nm and nm not in out:
+            out[nm] = rec
     return out
 
 
