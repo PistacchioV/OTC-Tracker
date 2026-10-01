@@ -559,6 +559,12 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
 `/verify-2fa`. Sessão: `authenticated`, `user_sid`, `user_name`, `user_email`,
 `user_role`, `session_ip`.
 
+- **`/verify-2fa` e `/resend-code` respondem `{success, code, message}`**
+  (`_auth_json` + `_AUTH_MSG_CODES`, §616): a tela de 2FA diz o aviso pelo
+  `_TRANS` do `auth-two-factor-orbit.js`; frase NOVA no `verify_code` /
+  `_code_send_allowed` entra no mapa, senão sai sem código (só o fallback em
+  inglês). Sem `pending_sid` é JSON `session_expired`, nunca redirect (o fetch
+  lia HTML). A animação corre em PARALELO ao POST — não a ponha na frente dele.
 - **A sessão só cai se o IP mudar** (mesa, 24/09/2026, §552): não há prazo,
   auto-lock por inatividade nem *Keep me signed in*. Ela é permanente (cookie
   renovado a cada request, `PERMANENT_SESSION_LIFETIME` de 365 dias) e o
