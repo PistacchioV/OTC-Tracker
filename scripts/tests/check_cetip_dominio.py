@@ -243,9 +243,12 @@ print('\n== 11. o arquivo vai ANEXO no e-mail de stage 1 (OTC Ops) ==')
 # tabela do e-mail continua listando tudo que foi salvo.
 check('a regra pede o anexo de OTC Ops',
       CD._cetip_behaviour_for('Domain Registry (%s)' % PAREN).get('attach_ops'), True)
-# Nenhum outro arquivo da rotina ganha esse anexo sem alguem decidir.
+# Nenhum outro arquivo da rotina ganha esse anexo sem alguem decidir. O
+# segundo e o de ativos subjacentes (`CETIP_YYMMDD_COE`), a pedido da mesa
+# (01/10/2026) — `check_cetip_subj.py`.
 outros = sorted(k for k, v in CD._CETIP_BEHAVIOUR.items() if v.get('attach_ops'))
-check('e so ele', outros, ['Domain Registry (%s)' % PAREN])
+check('so ele e o de subjacentes', outros,
+      ['Domain Registry (%s)' % PAREN, 'Underlying Assets (COE)'])
 
 import datetime as _dt
 from datetime import timezone as _tz, timedelta as _td

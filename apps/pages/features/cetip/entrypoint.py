@@ -162,6 +162,9 @@ def api_cp_cetip_settlement():
                 # CADASTROCURVASMOEDASFEEDERDOMINIOS → atualiza a base de domínios.
                 if rule.get('dominio_update'):
                     persistence._cetip_update_dominio_json(dest_path)
+                # CETIP_YYMMDD_COE → atualiza a base de ativos subjacentes.
+                if rule.get('subj_update'):
+                    persistence._cetip_update_subj_json(dest_path)
                 # Anexo do e-mail de stage 1 (OTC Ops). O caminho é o do arquivo
                 # JÁ SALVO no destino — nunca o da origem: é o que foi salvo que
                 # se confere, e a origem some no dia seguinte.
