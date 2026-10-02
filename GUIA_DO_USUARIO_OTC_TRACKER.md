@@ -2,7 +2,7 @@
 
 **Brazil OTC Operations · JPMorgan Chase & Co.**
 
-**Versão:** 2.3 · **Data:** 02/10/2026
+**Versão:** 2.4 · **Data:** 02/10/2026
 
 ---
 
@@ -582,12 +582,14 @@ A recompra aparece no **Intraday Monitor** (capítulo 5.1) como *Unwind NDF FX*,
 **Passo a passo:**
 
 1. Confira a **Reference Date** no alto — é o dia em que a recompra é gravada.
-2. **Arraste o e-mail direto do Outlook** para o dropzone. Serve `.msg`, `.eml` ou o corpo salvo como `.htm`; não precisa converter nada antes.
-3. Clique em **Import**. *Com a dropzone vazia, o Import varre a caixa sozinho* — é o mesmo botão para as duas coisas. A varredura automática também roda de 30 em 30 minutos, e cada e-mail importado é arquivado na pasta **Unwind**.
+2. **Arraste o e-mail direto do Outlook** para o dropzone — um ou vários de uma vez. Serve `.msg`, `.eml` ou o corpo salvo como `.htm`; não precisa converter nada antes.
+3. Clique em **Import**. *Com a dropzone vazia, o Import varre a caixa sozinho* — é o mesmo botão para as duas coisas. A varredura automática também roda de 30 em 30 minutos, e cada e-mail importado é arquivado na pasta **Unwind**. Os e-mails entram **em lote** (o botão mostra *Importing… n/N*): dezenas de recompras levam minutos, não horas. Um e-mail que não pôde ser lido volta com o motivo e fica no dropzone (ou no box); os outros entram normalmente.
 4. Olhe a coluna **Check** da linha:
    - **OK** (verde) — o resultado do e-mail bate com o recalculado;
    - **NOK** (vermelho) — não bate. **Não envie**: passe o mouse no badge para ver o que divergiu;
    - **–** (cinza) — não deu para conferir (faltou um valor no e-mail, ou a operação não foi encontrada no Live Position). Também não envie.
+
+   > **O valor que liquida é sempre o do e-mail.** O Check só confere: mesmo com **NOK**, o que vai para o NDF Cockpit, o Settlement Summary, o Pay/Rec, a Intrag e o Termo de Resilição é o **Input Termination Fee** do aviso, com o sinal dele — nunca o valor da coluna *OTC Tracker Result*. Editar strike, taxa ou dias úteis refaz só o Check; para mudar o valor que liquida, edite a coluna **Result**.
 5. **Duplo clique na linha** abre o arquivo da B3 campo a campo, com o texto cru embaixo. É aqui que se confere antes de mandar. O rodapé tem **Export** (baixa o arquivo para conferir, sem enviar), **Edit** e **Close** — o mesmo nas demais telas de recompra.
 6. Selecione a linha e clique em **Send** para gravar o arquivo no Batch Conecta. A linha vira **Sent** e deixa de poder ser apagada.
 
@@ -597,7 +599,7 @@ A recompra aparece no **Intraday Monitor** (capítulo 5.1) como *Unwind NDF FX*,
 
 **O que a tela preenche sozinha, e de onde:** o **B3 ID**, a **contraparte**, a **moeda** e as **contas** não vêm do e-mail — vêm da linha do Live Position da operação, achada pelo Athena ID: primeiro o id inteiro, depois os **14 primeiros** caracteres (só quando apontam para uma linha só) e, por último, os **14 últimos**. Se a coluna **B3 ID** vier vazia, é porque a operação não foi encontrada lá: confira o *Código Identificador* no Live Position de NDF antes de qualquer outra coisa.
 
-> **Uma coisa que o e-mail erra.** Em contrato com nocional em reais (*BRL fixed*), o campo *Direction* do aviso pode dizer **PAY** numa recompra **a receber** — e os campos *Future Value*, *Present Value* e *Calculated Termination Fee* vêm errados junto. A tela usa o **Input Termination Fee** e decide a direção pelo sinal do resultado, então a coluna *Direction* dela pode discordar do e-mail. Quando isso acontece, **a tela está certa** e o aviso registra a divergência.
+> **Uma coisa que o e-mail erra.** Em contrato com nocional em reais (*BRL fixed*), o campo *Direction* do aviso pode dizer **PAY** numa recompra **a receber** — e os campos *Future Value*, *Present Value* e *Calculated Termination Fee* vêm errados junto. A tela usa o **Input Termination Fee** e decide a direção pelo sinal **dele**, então a coluna *Direction* dela pode discordar do e-mail. Quando isso acontece, **a tela está certa** e o aviso registra a divergência.
 
 ### 5.11. As telas novas de Swap, de opção de EDG e das demais recompras
 
@@ -943,7 +945,7 @@ São cinco batimentos, cada um comparando duas fontes que deveriam dizer a mesma
 2. Clique em **Run** (botão azul).
 3. Confira as linhas: o que não bate aparece com a diferença calculada.
 4. Escreva a explicação na coluna **Comment** da linha que divergiu.
-5. **Casar à mão um débito com um crédito** que a recon deixou soltos (um estorno, uma TED devolvida, uma perna dividida em várias): marque a caixinha das linhas no **Pending Payment** (débitos) e no **Pending Receivement** (créditos) — pode ser mais de uma de cada lado — e clique em **Match** (botão azul). A janela mostra os débitos e os créditos lado a lado, o total de cada lado e a **soma**. O Match só é aceito se todas as linhas forem da **mesma contraparte** e a soma ficar **dentro de R$ 1,00**; fora disso, o botão fica desabilitado e a janela diz o porquê. As linhas casadas vão para o **Settled** com a marca *Manual*, e o casamento continua valendo se você rodar o **Run** de novo. Só aparece caixinha nas linhas que a recon não casou.
+5. **Casar à mão linhas que a recon deixou soltas** (uma perna dividida em várias, um estorno, uma TED devolvida): marque a caixinha de **duas ou mais** linhas no **Pending Payment** e/ou no **Pending Receivement** e clique em **Match** (botão azul). A janela mostra as linhas do **JPM** e as do **Client** lado a lado, com o total de cada lado. Havendo linhas dos dois lados, o que conta é a **diferença** entre os totais (duas pernas JPM contra uma do cliente, por exemplo); havendo só um lado, é a **soma** (um débito e o estorno dele). O Match só é aceito se todas as linhas forem da **mesma contraparte** e o valor ficar **dentro de R$ 1,00**; fora disso, o botão Confirmar fica desabilitado e a janela diz o porquê. As linhas casadas vão para o **Settled** com a marca *Manual*, e o casamento continua valendo se você rodar o **Run** de novo. Só aparece caixinha nas linhas que a recon não casou.
 6. Quando tudo estiver resolvido ou justificado, clique em **End process** (botão verde) — ele só habilita depois de o Run rodar, e é ele que fecha e comunica o resultado.
 
 **De onde vem o NDF do nosso lado:** do mesmo dia que o NDF Cockpit mostra — as operações que liquidam na data mais as **recompras de NDF**, com o IR já calculado. Se o Cockpit já foi importado para a data, o Run usa esse dia e responde na hora; se não, ele busca na API da Athena, o que pode levar alguns minutos. **Rode o Import do NDF Cockpit antes do Pay/Rec**: além de mais rápido, é o jeito de a recon ver uma liquidação que entrou na Athena depois do último import. A recompra de **NDF de Commodities** entra como **COMM TER** (termo), não como prêmio de opção. O arquivo `settlement.csv` **não é mais usado**: se ele estiver na pasta do Pay/Rec, é ignorado. Se a API não responder, o Run para e diz o motivo; tente de novo em alguns minutos, e se persistir, chame o suporte com a mensagem.
@@ -1992,7 +1994,7 @@ Várias pessoas usam a mesma base ao mesmo tempo, e o sistema impede que uma des
 | Pay/Rec — liquidação de cliente | menos de R$ 1,00 |
 | Pay/Rec — prêmio de opção de commodities (líquido do IR) | 0,005% do valor + R$ 0,20 |
 | Pay/Rec — liquidação interbancária (SPB) | até R$ 20,00 |
-| Pay/Rec — **Match** manual (débito × crédito) | até R$ 1,00 |
+| Pay/Rec — **Match** manual (diferença JPM × Client, ou soma do estorno) | até R$ 1,00 |
 | Recompra de NDF de Commodities × liquidação do dia | até R$ 1,00 |
 
 Fora da tolerância, a linha fica pendente e não é dada como liquidada.
@@ -2145,4 +2147,4 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 
 ---
 
-*OTC Tracker · Brazil OTC Operations · JPMorgan Chase & Co. · Guia do Usuário v2.3 — 02/10/2026*
+*OTC Tracker · Brazil OTC Operations · JPMorgan Chase & Co. · Guia do Usuário v2.4 — 02/10/2026*

@@ -25814,3 +25814,34 @@ antes. O Swal mostra as colunas JPM × Client e diz qual número decidiu
 entra no Settled com a tag Manual (já era assim). O grupo grava
 `total_jpm`/`total_client`/`kind`. `match_need_both` virou `match_need_two`.
 `check_payrec_manual_match.py` §5.
+
+## §624 — Unwind NDF FX: o valor que liquida é o do e-mail, mesmo divergente (2026-10-02)
+
+Pedido da mesa: o valor da recompra que flui para o NDF Cockpit, o Settlement
+Summary, o Pay/Rec, a Intrag e o Termo é o do E-MAIL, nunca o calculado, ainda
+que a conta divirja.
+
+O módulo já era o do e-mail (`Result` = Input Termination Fee), mas o SINAL
+não: todo consumidor faz `abs(Result)` + `Direction`, e a `Direction` era a da
+CONTA (`conf['direcao_calc']`). Dois defeitos saíam daí: (1) recompra cuja
+conta não roda (posição não resolvida no Live Position → lado desconhecido)
+ficava com `Direction` vazia e era DESCARTADA do Cockpit e do Summary
+(`settlement_rows` loga "sem direção apurada"); (2) o Edit que mexia em dado
+econômico trocava o `Result` pelo calculado (§571). Agora:
+
+- `domain.direcao_da_linha` — sinal do `Result`; a coluna `Direction` só
+  responde com Result vazio/zero (linhas antigas). Usada no `_cockpit_rec`,
+  `settlement_rows`, `_intrag_uma` e `termo_linha`, então linhas já gravadas
+  com a direção da conta passam a sair pelo sinal do e-mail sem migração (a
+  projeção no Cockpit se refaz no próximo Edit/reimport da linha).
+- No import, `Direction` = sinal do Fee; a da conta só sem Fee.
+- `reconferir_linha` não refaz mais o Result: só Check/`CalcResult`, e a
+  Direction acompanha o sinal do Result. `UNW_ECONOMICOS` saiu (sem uso).
+
+O sinal do Fee é confiável: nas três amostras reais a conta fecha com ele com
+o MESMO sinal (o que erra no fixo em reais é o campo Direction do e-mail e o
+Present Value). Fixtures de `check_unwind_summary`/`check_unwind_termo` tinham
+`Result` positivo com `PAY` — combinação que o import não grava — e foram
+corrigidas; `check_unwind_page` §13 prova a recompra sem posição no Cockpit.
+O catálogo (as onze) não mudou: lá a direção já era do sinal do Result.
+

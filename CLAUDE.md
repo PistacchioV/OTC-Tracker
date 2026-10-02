@@ -1755,8 +1755,14 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   para conferir): "passou por omissão" não existe. Quando não fecha, a coluna
   **OTC Tracker Result** (`CalcResult`, não editável, §573) mostra o que o app
   calculou; e o Edit reconfere pelas COLUNAS da grade
-  (`domain.reconferir_linha`) — dado econômico mudado refaz Result e Direction,
-  como no catálogo (§571).
+  (`domain.reconferir_linha`). **O que LIQUIDA é o valor do E-MAIL, mesmo
+  divergente** (mesa, 02/10/2026, §624): o `Result` é o Input Termination Fee
+  e a conta nunca o troca — nem no Edit econômico (aqui a NDF FX diverge do
+  catálogo, §571) —, e a direção é o SINAL dele (`domain.direcao_da_linha`, que
+  Cockpit, Summary, Pay/Rec, Intrag e Termo leem; a coluna `Direction` só
+  responde com Result vazio). Pela direção da conta, a recompra sem posição no
+  Live Position ficava FORA do Cockpit e do Summary, e a que divergia saía com
+  o sinal da conta.
 - **O Novo Valor Base do Termo são TRÊS parcelas** (mesa, 18/09/2026): o
   nocional **ORIGINAL** (o do aviso), menos o que a posição já mostra como
   recomprado (`Valor Antecipado`), menos o recomprado agora. As três são
@@ -1935,6 +1941,16 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 - **Toda ação da página toca o sino** (Import, Box Scan, Edit, Confirm, Delete,
   Send, Termo salvo), porque o arquivo-dia é da mesa inteira. A exceção é o
   `dry_run` do Import: ali nada foi gravado, é a pergunta das duplicatas.
+- **Import e varredura são em LOTE** (mesa, 02/10/2026, §622): o
+  `import_emails`/`import_email_uploads` lê a posição UMA vez e faz UM upsert,
+  UMA passada de esteira (`_pc_save_from_deals`/`_mc_save_from_deals`: uma
+  leitura e uma escrita por banco), uma de Intrag e uma de Cockpit; o box scan
+  chama o mesmo lote e arquiva tudo numa resolução de pasta
+  (`otc_boxscan.archive_unwind_emails`). Um e-mail por vez abria cada banco
+  uma vez POR RECOMPRA no share: 79 recompras passavam de uma hora. E-mail que
+  falha volta em `failed` sem derrubar os outros; a tela manda os arquivos em
+  fatias de 25. Caminho NOVO de gravação por recompra entra no lote, nunca num
+  laço de chamadas unitárias.
 - **A varredura roda sozinha a cada 30 min**, em laço PRÓPRIO da vertical
   (`unwinds/commands.scheduler_loop`, registrado no `routes.py` como
   `unwind-boxscan`) e não dentro do `features/boxscan`: **feature não importa
@@ -2392,11 +2408,15 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `unwind_rows`): casa pelo Trade Id (exato ou os 14 da direita) ou, sem ele,
   por contraparte (sem pontuação e sufixo societário) + valor dentro de R$ 1,00,
   cada recompra UMA perna. Vertical ilegível não derruba a recon (avisa no log).
-- **Pay/Rec: o botão Match casa À MÃO débito × crédito** (mesa, 02/10/2026, §617):
-  linhas marcadas do Pending Payment (negativas) e do Pending Receivement
-  (positivas), só as de UM lado (a que tem JPM e cliente já foi casada pelo
-  motor), da MESMA contraparte pela `_cpty_key`, com a soma dentro de
-  `_MANUAL_TOL` (= `_TOL_SETTLED`). O servidor confere tudo de novo e recusa
+- **Pay/Rec: o botão Match casa À MÃO o que o motor deixou solto** (mesa,
+  02/10/2026, §617/§623): duas ou mais linhas marcadas do Pending Payment e/ou
+  do Pending Receivement, só as de UM lado (a que tem JPM e cliente já foi
+  casada pelo motor), da MESMA contraparte pela `_cpty_key`. O LADO de cada
+  linha (JPM ou Client) decide a conta (`_manual_balance`): com os DOIS lados
+  presentes é PAR — total JPM × total Client, a DIFERENÇA dentro de
+  `_MANUAL_TOL` (= `_TOL_SETTLED`); só um lado é ESTORNO — a SOMA dentro dela.
+  Exigir débito × crédito deixava o Match apagado para duas pernas JPM e uma
+  Client no MESMO Pending Payment, que é o caso mais comum. O servidor confere tudo de novo e recusa
   por código (`match_*`). O grupo vai para `manual-matches/<data>.json` e é
   **reaplicado no fim de todo Run** (`_apply_manual_matches`) — o Run regrava o
   dia do zero, e gravado só no resultado o par voltaria a Pending; linha que
