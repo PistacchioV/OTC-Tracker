@@ -208,15 +208,20 @@ def scan_box(ref_dt=None):
                          for i, it in enumerate(achados)], ref_dt=ref)
     avisos = list(out['warnings'])
     recusados = {f['name'] for f in out['failed']}
-    for i, item in enumerate(achados):
-        if str(i) in recusados:
-            continue
-        try:
-            otc_boxscan.archive_unwind_email(item.get('entry_id') or '')
-        except Exception as exc:                            # noqa: BLE001
+    # O arquivamento tambem e em lote: a pasta Unwind e resolvida uma vez.
+    entraram = [it for i, it in enumerate(achados) if str(i) not in recusados]
+    try:
+        motivos = otc_boxscan.archive_unwind_emails(
+            [it.get('entry_id') or '' for it in entraram])
+    except Exception as exc:                                # noqa: BLE001
+        motivos = {it.get('entry_id') or '': str(exc) for it in entraram}
+    for item in entraram:
+        eid = item.get('entry_id') or ''
+        motivo = motivos.get(eid, 'not archived') if eid else 'entry_id vazio'
+        if motivo:
             avisos.append({'code': 'unwind_archive_failed',
                            'params': {'subject': item.get('subject') or ''},
-                           'text': 'Imported, but the e-mail could not be archived: %s' % exc})
+                           'text': 'Imported, but the e-mail could not be archived: %s' % motivo})
     falhas = [{'subject': f['subject'], 'reason': f['reason']} for f in out['failed']]
     return {'rows': out['rows'], 'warnings': avisos, 'failed': falhas,
             'scanned': len(achados)}
