@@ -107,8 +107,9 @@ def reconciliation_payrec_justify():
 
 @blueprint.route('/reconciliation-payrec/manual-match', methods=['POST'])
 def reconciliation_payrec_manual_match():
-    """Match manual: débitos do Pending Payment × créditos do Pending
-    Receivement da MESMA contraparte, com a soma dentro da tolerância."""
+    """Match manual da MESMA contraparte, linhas de qualquer das duas tabelas:
+    pernas JPM × pernas Client (Σ JPM = Σ Client) ou linhas que se compensam
+    (soma zero), dentro da tolerância. As linhas vão para o Settled."""
     from apps.pages.recon_payrec import ManualMatchError
     R = _routes()
     if not session.get('authenticated'):

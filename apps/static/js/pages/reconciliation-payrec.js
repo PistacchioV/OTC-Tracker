@@ -37,11 +37,11 @@
           w_branch_no_account: 'No approved {slot} account for {entity} in Reference Data › Counterparty Details.',
           w_branch_legacy_route: '{n} settlement(s) still through the MGT omnibus 04880.10-9 (net {value}) — not in the reversal.',
           branchTagB2b: 'B2B', branchTagRev: 'Branch Reversal',
-          matchTitle: 'Manual match', matchDebit: 'Debit', matchCredit: 'Credit',
-          matchCpty: 'Counterparty', matchValue: 'Value', matchTotal: 'Total', matchSum: 'Sum (debit + credit)',
+          matchTitle: 'Manual match',
+          matchCpty: 'Counterparty', matchValue: 'Value', matchTotal: 'Total', matchSum: 'Sum of the rows', matchDiff: 'Difference (JPM − Client)', matchJpm: 'JPM', matchClient: 'Client',
           matchTol: 'Tolerance', matchWithin: 'Within tolerance', matchOver: 'Above tolerance',
           matchDo: 'Match', matchDone: 'Rows matched and moved to Settled.', matchTag: 'Manual',
-          e_match_need_both: 'Select at least one debit (Pending Payment) and one credit (Pending Receivement).',
+          e_match_need_two: 'Select at least two rows to match.',
           e_match_cpty_differs: 'The selected rows are not from the same counterparty: {names}',
           e_match_over_tolerance: 'The difference {net} is above the tolerance of {tol}.',
           e_match_no_recon: 'There is no reconciliation for this date. Run it first.',
@@ -70,11 +70,11 @@
           w_branch_no_account: 'Sem conta {slot} aprovada para {entity} em Reference Data › Counterparty Details.',
           w_branch_legacy_route: '{n} liquidação(ões) ainda pela guarda-chuva da MGT 04880.10-9 (net {value}) — fora da reversão.',
           branchTagB2b: 'B2B', branchTagRev: 'Branch Reversal',
-          matchTitle: 'Match manual', matchDebit: 'Débito', matchCredit: 'Crédito',
-          matchCpty: 'Contraparte', matchValue: 'Valor', matchTotal: 'Total', matchSum: 'Soma (débito + crédito)',
+          matchTitle: 'Match manual',
+          matchCpty: 'Contraparte', matchValue: 'Valor', matchTotal: 'Total', matchSum: 'Soma das linhas', matchDiff: 'Diferença (JPM − Client)', matchJpm: 'JPM', matchClient: 'Client',
           matchTol: 'Tolerância', matchWithin: 'Dentro da tolerância', matchOver: 'Acima da tolerância',
           matchDo: 'Casar', matchDone: 'Linhas casadas e movidas para Settled.', matchTag: 'Manual',
-          e_match_need_both: 'Selecione ao menos um débito (Pending Payment) e um crédito (Pending Receivement).',
+          e_match_need_two: 'Selecione ao menos duas linhas para casar.',
           e_match_cpty_differs: 'As linhas selecionadas não são da mesma contraparte: {names}',
           e_match_over_tolerance: 'A diferença {net} está acima da tolerância de {tol}.',
           e_match_no_recon: 'Não há reconciliação nesta data. Rode-a primeiro.',
@@ -103,11 +103,11 @@
           w_branch_no_account: 'Sin cuenta {slot} aprobada para {entity} en Reference Data › Counterparty Details.',
           w_branch_legacy_route: '{n} liquidación(es) aún por la cuenta ómnibus de la MGT 04880.10-9 (net {value}) — fuera de la reversión.',
           branchTagB2b: 'B2B', branchTagRev: 'Branch Reversal',
-          matchTitle: 'Match manual', matchDebit: 'Débito', matchCredit: 'Crédito',
-          matchCpty: 'Contraparte', matchValue: 'Valor', matchTotal: 'Total', matchSum: 'Suma (débito + crédito)',
+          matchTitle: 'Match manual',
+          matchCpty: 'Contraparte', matchValue: 'Valor', matchTotal: 'Total', matchSum: 'Suma de las filas', matchDiff: 'Diferencia (JPM − Client)', matchJpm: 'JPM', matchClient: 'Client',
           matchTol: 'Tolerancia', matchWithin: 'Dentro de la tolerancia', matchOver: 'Por encima de la tolerancia',
           matchDo: 'Conciliar', matchDone: 'Filas conciliadas y movidas a Settled.', matchTag: 'Manual',
-          e_match_need_both: 'Seleccione al menos un débito (Pending Payment) y un crédito (Pending Receivement).',
+          e_match_need_two: 'Seleccione al menos dos filas para conciliar.',
           e_match_cpty_differs: 'Las filas seleccionadas no son de la misma contraparte: {names}',
           e_match_over_tolerance: 'La diferencia {net} está por encima de la tolerancia de {tol}.',
           e_match_no_recon: 'No hay reconciliación en esta fecha. Ejecútela primero.',
@@ -527,13 +527,13 @@
     var n = parseFloat(String(v).replace(/\./g, '').replace(',', '.'));
     return isNaN(n) ? 0 : n;
   }
-  // { value, cpty } da linha com UM lado só; null quando tem os dois ou nenhum.
+  // { value, cpty, side } da linha com UM lado só; null quando tem os dois ou nenhum.
   function sideValue(r) {
     var hasJ = r.jpm_value !== '' && r.jpm_value != null;
     var hasC = r.client_value !== '' && r.client_value != null;
     if (hasJ === hasC) return null;
-    return hasJ ? { value: toNum(r.jpm_value), cpty: r.jpm_cpty || '' }
-                : { value: toNum(r.client_value), cpty: r.client || '' };
+    return hasJ ? { value: toNum(r.jpm_value), cpty: r.jpm_cpty || '', side: 'jpm' }
+                : { value: toNum(r.client_value), cpty: r.client || '', side: 'client' };
   }
   // A mesma chave do servidor (`_cpty_key`): só letras e dígitos, sem sufixo societário.
   function cptyKey(name) {
@@ -548,13 +548,15 @@
       var p = k.split(':');
       if (p[0] !== tableKey || !matchSel[k]) return;
       var i = parseInt(p[1], 10), r = (arr || [])[i], sv = r && sideValue(r);
-      if (sv) out.push({ index: i, cpty: sv.cpty, value: sv.value });
+      if (sv) out.push({ index: i, cpty: sv.cpty, value: sv.value, side: sv.side, table: tableKey });
     });
     return out.sort(function (a, b) { return a.index - b.index; });
   }
   function syncMatchBtn() {
     var btn = document.getElementById('prMatchBtn');
-    if (btn) btn.disabled = !(selectedRows('pay').length && selectedRows('rec').length);
+    // Duas linhas ou mais, em QUALQUER das tabelas (§623): perna JPM × perna
+    // Client do mesmo lado também se casa, não só débito × crédito.
+    if (btn) btn.disabled = selectedRows('pay').length + selectedRows('rec').length < 2;
   }
   function wireMatchSelection() {
     ['prPendPayBody', 'prPendRecBody'].forEach(function (bodyId) {
@@ -576,35 +578,44 @@
   }
 
   function openMatch(btn) {
-    var deb = selectedRows('pay'), cred = selectedRows('rec');
-    if (!deb.length || !cred.length) {
-      Swal.fire({ icon: 'info', title: t('matchTitle'), html: esc(t('e_match_need_both')), confirmButtonColor: '#0066cc' });
+    var deb = selectedRows('pay'), cred = selectedRows('rec'), all = deb.concat(cred);
+    if (all.length < 2) {
+      Swal.fire({ icon: 'info', title: t('matchTitle'), html: esc(t('e_match_need_two')), confirmButtonColor: '#0066cc' });
       return;
     }
     var sum = function (a) { return a.reduce(function (s, r) { return s + r.value; }, 0); };
-    var totD = sum(deb), totC = sum(cred), net = Math.round((totD + totC) * 100) / 100;
+    var jpm = all.filter(function (r) { return r.side === 'jpm'; });
+    var cli = all.filter(function (r) { return r.side === 'client'; });
+    var totJ = sum(jpm), totCl = sum(cli);
+    var r2 = function (v) { return Math.round(v * 100) / 100; };
+    var fits = function (v) { return Math.abs(v) <= MATCH_TOL + 1e-9; };
+    // A MESMA regra do servidor (`_manual_balance`): JPM × Client fecha pela
+    // diferença; linhas que se compensam (§617), pela soma.
+    var diff = r2(totJ - totCl), soma = r2(totJ + totCl);
+    var usaDiff = jpm.length && cli.length && (fits(diff) || !fits(soma));
+    var net = usaDiff ? diff : soma;
     var names = {};
-    deb.concat(cred).forEach(function (r) { names[cptyKey(r.cpty)] = r.cpty; });
+    all.forEach(function (r) { names[cptyKey(r.cpty)] = r.cpty; });
     var keys = Object.keys(names);
     var sameCpty = keys.length === 1 && keys[0] !== '';
-    var within = Math.abs(net) <= MATCH_TOL + 1e-9;
+    var within = fits(net);
     var num = function (v) { return '<td class="pr-num' + (v < 0 ? ' pr-neg' : '') + '">' + fmtNum(v) + '</td>'; };
-    var n = Math.max(deb.length, cred.length), rows = '';
+    var n = Math.max(jpm.length, cli.length), rows = '';
     for (var i = 0; i < n; i++) {
-      var d = deb[i], c = cred[i];
+      var d = jpm[i], c = cli[i];
       rows += '<tr>' +
         '<td>' + (d ? esc(d.cpty) : '') + '</td>' + (d ? num(d.value) : '<td></td>') +
         '<td>' + (c ? esc(c.cpty) : '') + '</td>' + (c ? num(c.value) : '<td></td>') + '</tr>';
     }
     var html =
       '<div class="table-responsive"><table class="pr-match-table">' +
-        '<thead><tr><th>' + esc(t('matchDebit')) + ' — ' + esc(t('matchCpty')) + '</th><th>' + esc(t('matchValue')) + '</th>' +
-        '<th>' + esc(t('matchCredit')) + ' — ' + esc(t('matchCpty')) + '</th><th>' + esc(t('matchValue')) + '</th></tr></thead>' +
+        '<thead><tr><th>' + esc(t('matchJpm')) + ' — ' + esc(t('matchCpty')) + '</th><th>' + esc(t('matchValue')) + '</th>' +
+        '<th>' + esc(t('matchClient')) + ' — ' + esc(t('matchCpty')) + '</th><th>' + esc(t('matchValue')) + '</th></tr></thead>' +
         '<tbody>' + rows + '</tbody>' +
-        '<tfoot><tr><td>' + esc(t('matchTotal')) + ' ' + esc(t('matchDebit')) + '</td>' + num(totD) +
-        '<td>' + esc(t('matchTotal')) + ' ' + esc(t('matchCredit')) + '</td>' + num(totC) + '</tr></tfoot>' +
+        '<tfoot><tr><td>' + esc(t('matchTotal')) + ' ' + esc(t('matchJpm')) + '</td>' + num(totJ) +
+        '<td>' + esc(t('matchTotal')) + ' ' + esc(t('matchClient')) + '</td>' + num(totCl) + '</tr></tfoot>' +
       '</table></div>' +
-      '<div class="pr-match-sum">' + esc(t('matchSum')) + ': <b class="' + (net < 0 ? 'pr-neg' : '') + '">' + fmtNum(net) + '</b>' +
+      '<div class="pr-match-sum">' + esc(t(usaDiff ? 'matchDiff' : 'matchSum')) + ': <b class="' + (net < 0 ? 'pr-neg' : '') + '">' + fmtNum(net) + '</b>' +
         '<span class="pr-match-chip ' + (within ? 'ok' : 'no') + '">' + esc(t(within ? 'matchWithin' : 'matchOver')) +
         ' · ' + esc(t('matchTol')) + ' ' + fmtNum(MATCH_TOL) + '</span></div>' +
       (sameCpty ? '' : '<div class="pr-match-err">' + esc(fmtParams(t('e_match_cpty_differs'),
