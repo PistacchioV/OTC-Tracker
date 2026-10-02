@@ -88,6 +88,43 @@
         return keyOf(cellText(v));
     }
 
+    // ── data `dd/mm/aaaa` ordena como DATA ─────────────────────────────────
+    // O DataTables só conhece data ISO (o `Date.parse` lê `05/09/2026` como 9
+    // de maio e `25/09/2026` como inválida): a coluna de data caía em texto e o
+    // A→Z — do funil e do clique no cabeçalho — ordenava pelo DIA. O tipo vale
+    // para toda tabela, inclusive com hora (`dd/mm/aaaa HH:MM[:SS]`) e com a
+    // data dentro de um badge (o HTML sai antes da conferência).
+    var DMY_RE = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/;
+    function dmyNum(v) {
+        var m = norm(cellText(v)).match(DMY_RE);
+        if (!m) return null;
+        return (((+m[3] * 100 + +m[2]) * 100 + +m[1]) * 100 + +(m[4] || 0)) * 10000
+               + +(m[5] || 0) * 100 + +(m[6] || 0);
+    }
+    var DMY_TYPE = 'otc-dmy';
+    if (DT.ext && DT.ext.type && !DT.ext.type.order[DMY_TYPE + '-pre']) {
+        // na FRENTE dos tipos nativos: o `date` do DataTables pegaria a coluna
+        // em que todo dia é ≤ 12 e a ordenaria como mês/dia
+        DT.ext.type.detect.unshift(function (d) {
+            if (d === null || d === undefined || d === '') return DMY_TYPE;   // vazia não decide
+            return (typeof d === 'string' && dmyNum(d) !== null) ? DMY_TYPE : null;
+        });
+        DT.ext.type.order[DMY_TYPE + '-pre'] = function (d) {
+            var n = dmyNum(d);
+            return n === null ? -Infinity : n;
+        };
+    }
+    // A tabela que nasceu ANTES deste arquivo já teve o tipo detectado sem a
+    // regra acima: zera o tipo e o cache de ordenação para o DataTables
+    // detectar de novo na próxima ordenação.
+    function redetectTypes(dt) {
+        try {
+            var s = dt.settings()[0];
+            (s.aoColumns || []).forEach(function (c) { if (c.sType !== DMY_TYPE) c.sType = null; });
+            (s.aoData || []).forEach(function (r) { if (r) r._aSortData = null; });
+        } catch (e) { /* interno do DataTables; sem ele fica a ordem de antes */ }
+    }
+
     // ── o filtro em si: um ext.search para todas as tabelas ligadas ────────
     DT.ext.search.push(function (settings, searchData, dataIndex) {
         var st = STATE.get(settings.nTable);
@@ -123,6 +160,8 @@
         out.sort(function (a, b) {
             if (a === BLANK) return 1;
             if (b === BLANK) return -1;
+            var da = dmyNum(a), db = dmyNum(b);              // dd/mm/aaaa por data
+            if (da !== null && db !== null) return da - db;
             if (numRe.test(a) && numRe.test(b)) return asNum(a) - asNum(b);
             return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
         });
@@ -554,6 +593,7 @@
             $(dt.table().container()).find('.oxf-btn').remove();
         }
         var changed = removeFilterRows(dt);
+        redetectTypes(dt);
         addButtons(st);
         // A tradução da página (data-lang no th) reescreve o cabeçalho e leva o
         // funil junto: ele volta a cada draw (addButtons é idempotente).
