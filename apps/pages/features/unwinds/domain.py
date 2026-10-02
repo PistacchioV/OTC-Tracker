@@ -895,9 +895,6 @@ UNW_NAO_EDITAVEL = ('AthenaID', 'Check', 'CalcResult', 'Status', 'Maker', 'Check
 # `conferido` do `conferir_apuracao`: nao existe "deu certo por omissao".
 CHECK_OK, CHECK_NOK, CHECK_NA = 'OK', 'NOK', '-'
 
-# O que, mudado no Edit, refaz as contas da linha (a regra do catalogo, §571).
-UNW_ECONOMICOS = ('OriginalNotional', 'UnwoundBefore', 'UnwoundNotional', 'Strike',
-                  'TerminationRate', 'PreFWDRate', 'DU')
 # Os codigos que a conferencia escreve — a reconferencia do Edit os troca.
 _CODIGOS_DA_CONFERENCIA = ('unwind_result_mismatch', 'unwind_check_missing',
                            'unwind_position_unknown')
@@ -939,15 +936,32 @@ def resultado_da_linha(linha):
     return fv / ((1.0 + pre / 100.0) ** (du / BASE_DU)), None
 
 
-def reconferir_linha(linha, refazer_resultado=False):
+def direcao_do_valor(valor):
+    """RECEIVE/PAY pelo SINAL do valor; '' sem valor ou com zero."""
+    if valor is None or valor == 0:
+        return ''
+    return 'RECEIVE' if valor > 0 else 'PAY'
+
+
+def direcao_da_linha(linha):
+    """A direcao que LIQUIDA: o sinal do `Result`, que e o valor do E-MAIL
+    (mesa, 02/10/2026, §624). A coluna `Direction` so responde quando o Result
+    nao tem sinal (vazio ou zero) — gravada por import antigo, ela pode ser a
+    da CONTA, e a conta nao decide o caixa nem quando diverge do e-mail."""
+    d = direcao_do_valor(_num_linha((linha or {}).get('Result')))
+    return d or str((linha or {}).get('Direction') or '').strip().upper()
+
+
+def reconferir_linha(linha):
     """Refaz, NO LUGAR, o Check e o `CalcResult` da linha pelas colunas da
-    grade; com `refazer_resultado` (dado economico mudado no Edit e o Result
-    nao digitado) o Result e a Direction passam a ser os da conta."""
+    grade. **O Result nunca e trocado pela conta** (mesa, 02/10/2026, §624): o
+    que liquida e o valor do e-mail (ou o digitado), mesmo divergente — a conta
+    so DIZ a divergencia, no Check e no `CalcResult`. A Direction acompanha o
+    sinal do Result."""
     res, falta = resultado_da_linha(linha)
-    if refazer_resultado and res is not None:
-        linha['Result'] = round(res, 2)
-        linha['Direction'] = 'RECEIVE' if res > 0 else ('PAY' if res < 0 else '')
     fee = _num_linha(linha.get('Result'))
+    if fee:
+        linha['Direction'] = direcao_do_valor(fee)
     if res is None or fee is None:
         veredito, calc, codigo = CHECK_NA, None, falta or 'unwind_check_missing'
     elif _perto(fee, res):
@@ -1027,7 +1041,11 @@ def linha_da_recompra(rec, posicao, hoje, contrato=None, omnibus=None):
         # amostra o banco esta VENDIDO e RECEBE. O lado vem da posicao e fica
         # guardado; a direcao e so o sinal.
         'Comprado': pos['comprado'],
-        'Direction': conf['direcao_calc'] or '',
+        # (mesa, 02/10/2026, §624) A direcao que liquida e a do SINAL do valor
+        # do E-MAIL (o Input Termination Fee), nunca a da conta: o Cockpit, o
+        # Summary, o Pay/Rec, a Intrag e o Termo leem o valor do e-mail mesmo
+        # quando a conta diverge. A da conta so entra sem fee no e-mail.
+        'Direction': direcao_do_valor(resultado_apurado(depois)) or conf['direcao_calc'] or '',
         'EmailDirection': depois.get('Direction') or '',
         'TradeDate': antes.get('Trade Date') or '',
         'MaturityDate': antes.get('Maturity Date') or '',
@@ -1180,7 +1198,7 @@ def termo_linha(linha):
     prefixo_vbl = '' if e_mercadoria else moeda
     recomprado = numero_flex((linha or {}).get('UnwoundNotional'))
     resultado = numero_flex((linha or {}).get('Result'))
-    direcao = str((linha or {}).get('Direction') or '').strip().upper()
+    direcao = direcao_da_linha(linha)
 
     # Total x Parcial: a pergunta é UMA (`recompra_total`) porque a resposta vai
     # em dois lugares — a cláusula do Termo e a Situação da planilha da Intrag

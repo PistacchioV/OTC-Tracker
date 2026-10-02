@@ -165,10 +165,14 @@ def main():
     print('\n== 4. o pagador e o SINAL do resultado ==')
     check('recebemos -> paga a Parte B', rows[0]['pagador'] == domain.PAGADOR_PARTE_B)
     check('pagamos -> paga a Parte A', rows[1]['pagador'] == domain.PAGADOR_PARTE_A)
-    # Na amostra fixa em reais o e-mail diz PAY numa recompra a RECEBER: a
-    # linha ja guarda a direcao APURADA, e e so nela que o termo olha.
-    sem_dir, av = domain.termo_linha(dict(L1, Direction=''))
-    check('sem direcao apurada o pagador fica em branco', sem_dir['pagador'] == '')
+    # Quem diz o pagador e o SINAL do valor do e-mail (o Input Termination
+    # Fee, §624) — nem o campo Direction do e-mail (que mente no fixo em
+    # reais), nem uma Direction gravada que discorde do sinal.
+    velha, _av = domain.termo_linha(dict(L1, Direction='PAY'))
+    check('o sinal do Result vence a Direction gravada',
+          velha['pagador'] == domain.PAGADOR_PARTE_B, velha['pagador'])
+    sem_dir, av = domain.termo_linha(dict(L1, Direction='', Result=''))
+    check('sem valor e sem direcao o pagador fica em branco', sem_dir['pagador'] == '')
     check('e avisa', any(a['code'] == 'unwind_termo_sem_direcao' for a in av))
 
     print('\n== 5. o Valor de Resilicao vai em MODULO ==')
