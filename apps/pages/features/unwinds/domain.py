@@ -143,10 +143,14 @@ def parse_notification(tabelas, subject=''):
 #     'XE-10G5U5X-0-0' na posicao (a amostra do §488);
 #   * INTEIRO — 'ATS-4T6-2W4YU86-0-0' nos dois lados (18/09/2026).
 #
-# Por isso o casamento tenta primeiro a igualdade EXATA e so depois compara as
-# duas pontas pelos 14 da direita. Truncando so o lado do aviso, a posicao que
-# guarda o id inteiro nunca casava: o import saia sem contrato e sem
-# contraparte, e as duas colunas em branco na tela nao diziam por que.
+# O casamento tem TRES passadas (mesa, 02/10/2026): a igualdade EXATA, depois
+# os 14 caracteres da ESQUERDA dos dois lados e, so se eles nao acharem, os 14
+# da DIREITA. A da esquerda so vale com candidato UNICO: ids da mesma familia
+# diferem no FIM ('ATS-4T6-2W4YU86-0-0' x 'ATS-4T6-2W4YU86-1-0' tem os mesmos
+# 14 da esquerda), e ai quem separa e a da direita. Truncando so o lado do
+# aviso, a posicao que guarda o id inteiro nunca casava: o import saia sem
+# contrato e sem contraparte, e as duas colunas em branco na tela nao diziam
+# por que.
 IDENT_LEN = 14
 
 
@@ -157,15 +161,20 @@ def identificador(athena_id):
     return t[-IDENT_LEN:] if len(t) > IDENT_LEN else t
 
 
+def identificador_esquerda(athena_id):
+    """Os 14 caracteres da ESQUERDA do id; mais curto volta inteiro."""
+    t = str(athena_id or '').strip()
+    return t[:IDENT_LEN] if len(t) > IDENT_LEN else t
+
+
 def contrato_por_identificador(linhas, athena_id):
     """(contrato, posicao) da linha do Live Position NDF cujo `Codigo
     Identificador` casa com o Athena ID; (None, None) se nao houver.
 
-    Recebe as LINHAS (o dominio e puro). Casa sem caixa e sem branco, em duas
-    passadas: a igualdade EXATA primeiro (a posicao que guarda o Athena ID
-    inteiro) e, so se ela nao achar nada, os 14 da direita dos DOIS lados (a
-    posicao que guarda o id truncado). A exata vem antes de proposito — a
-    truncagem joga fora o prefixo, e dois ids diferentes podem terminar igual.
+    Recebe as LINHAS (o dominio e puro). Casa sem caixa e sem branco, em tres
+    passadas: a igualdade EXATA; os 14 da ESQUERDA dos dois lados, so com UM
+    candidato; e os 14 da DIREITA dos dois lados. A exata vem antes de
+    proposito — cada truncagem joga fora um pedaco do id.
 
     Duas linhas com o mesmo identificador devolvem a PRIMEIRA e quem chama
     avisa: escolher em silencio entre duas posicoes e recomprar a errada."""
@@ -176,10 +185,22 @@ def contrato_por_identificador(linhas, athena_id):
     def _ident(l):
         return str(l.get('Codigo Identificador', '') or '').strip().upper()
 
-    achadas = [l for l in (linhas or []) if _ident(l) == cru]
+    linhas = list(linhas or [])
+    achadas = [l for l in linhas if _ident(l) == cru]
+    ambiguas = []
+    if not achadas:
+        alvo = identificador_esquerda(cru)
+        pela_esquerda = [l for l in linhas if identificador_esquerda(_ident(l)) == alvo]
+        if len(pela_esquerda) == 1:
+            achadas = pela_esquerda
+        else:
+            ambiguas = pela_esquerda
     if not achadas:
         alvo = identificador(cru)
-        achadas = [l for l in (linhas or []) if identificador(_ident(l)) == alvo]
+        achadas = [l for l in linhas if identificador(_ident(l)) == alvo]
+    # Mais de um pela esquerda e nenhum pela direita: devolve o primeiro, e o
+    # chamador avisa (a regra das duas linhas com o mesmo identificador).
+    achadas = achadas or ambiguas
     if not achadas:
         return None, None
     pos = achadas[0]

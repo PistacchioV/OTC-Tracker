@@ -1716,12 +1716,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 - **A ponte até o contrato é o `Código Identificador` do Live Position, e ele
   vem de DUAS formas**: TRUNCADO nos 14 da direita (o aviso traz
   `STP-XE-10G5U5X-0-0` e a posição, `XE-10G5U5X-0-0`) ou INTEIRO
-  (`ATS-4T6-2W4YU86-0-0` nos dois lados). O casamento tenta a igualdade EXATA
-  primeiro e só depois compara os 14 da direita dos DOIS lados — truncando só o
-  lado do aviso, a posição que guarda o id inteiro nunca casava, e o import
-  saía sem contrato e sem contraparte com a linha bem ali na tela ao lado. A
-  exata vem antes porque a truncagem joga fora o prefixo, e dois ids diferentes
-  podem terminar igual. O aviso NÃO se basta — moeda, lado da posição, contas
+  (`ATS-4T6-2W4YU86-0-0` nos dois lados). O casamento tem TRÊS passadas
+  (mesa, 02/10/2026): a igualdade EXATA, os 14 da ESQUERDA dos dois lados — só
+  com candidato ÚNICO, porque ids da mesma família diferem no FIM
+  (`…-0-0` × `…-1-0`) — e, sem eles, os 14 da DIREITA dos dois lados.
+  Truncando só o lado do aviso, a posição que guarda o id inteiro nunca casava,
+  e o import saía sem contrato e sem contraparte com a linha bem ali na tela ao
+  lado. A exata vem antes porque cada truncagem joga fora um pedaço do id. O aviso NÃO se basta — moeda, lado da posição, contas
   e contraparte só existem na posição.
 - **Numa conta GUARDA-CHUVA o `Nome da Contraparte` da posição NÃO é a
   contraparte** — é o titular da conta, que somos nós (`BANCO J.P. MORGAN
