@@ -1021,6 +1021,14 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   as MESMAS datas; sem `FXHolidaySchedule` (a API não manda) vale o ANBIMA, e
   calendário ilegível LEVANTA. Eram dois calendários, e o 07/09 foi à B3.
 - **Só `isCancelled` é cancelado** na Athena; `isDead` importa normalmente.
+- **O import do dropzone não decide sozinho se a operação é nova** (§625):
+  a grade só tem o que a busca carregou. Linha que ela não acha vai num POST
+  com `_import`, e o SERVIDOR procura (`_nd_import_upsert`: Deal + Acronym,
+  depois Deal + Client, em todos os dias do produto) e aplica a regra do
+  Amend do box scan (B3 ID preservado). Sem isso a mesma operação entrava
+  duas vezes — Client reenriquecido ou Trade Date corrigida — ou era
+  substituída como `New`, perdendo o B3 ID. POST de cache novo que recebe
+  import passa pelo `_import_resposta`.
 - **O veredito do `mapping-b3` sai da GRAVAÇÃO, nunca da intenção** (§521): os
   quatro endpoints decidiam o Status pelo arquivo de retorno da B3 e o
   devolviam à tela sem olhar se o arquivo-dia foi gravado, atrás de um

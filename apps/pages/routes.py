@@ -9370,6 +9370,7 @@ def _mdea_record_rebooks(rebooks, now):
     _mdea.record_rebooks(rebooks, now)
 _ndf_ter_path = _pf_nd._ndf_ter_path
 _find_deal_in_cache = _pf_nd._find_deal_in_cache
+_nd_import_upsert = _pf_nd._nd_import_upsert
 _nd_fix_underlying_marker = _pf_nd._nd_fix_underlying_marker
 _deal_matches = _pf_nd._deal_matches
 _find_fxo = _pf_nd._find_fxo

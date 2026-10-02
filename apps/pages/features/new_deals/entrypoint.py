@@ -90,6 +90,17 @@ def _grava_mapeamento(finder, deal_text, client_name, updates):
             return False, None, '%s: %s' % (type(exc).__name__, exc)
 
 
+def _import_resposta(deals, data, base_dir, suffix, file_path):
+    """O POST que o IMPORT do dropzone manda (`_import`) quando a grade não tem
+    a operação: acha a linha já gravada em vez de duplicá-la (ver
+    `_nd_import_upsert`). Chamar sob o `_cache_lock`, com `deals` já lido."""
+    resultado, linha = _R()._nd_import_upsert(deals, data, base_dir, suffix, file_path)
+    if resultado != 'same':
+        _R()._atomic_write_json(file_path, deals)
+    return jsonify({"success": True, "deal": data.get('Deal', ''), "result": resultado,
+                    "status": linha.get('Status', ''), "b3_id": linha.get('B3_ID', '')})
+
+
 # ── 4-olhos no SERVIDOR ───────────────────────────────────────────────────────
 # O PATCH aplicava `deals[idx].update(updates)` com o que o navegador mandou:
 # qualquer Status, e Maker/Checker do CORPO do pedido. A regra de que quem
@@ -175,6 +186,8 @@ def api_save_deal_cache():
         else:
             deals = []
 
+        if data.get('_import'):
+            return _import_resposta(deals, data, _R().CACHE_BASE_DIR, '_optcomm.json', file_path)
         deal_name   = data.get('Deal', '').strip()
         client_name = data.get('Client', '').strip()
         data.pop('_client', None)
@@ -1135,6 +1148,8 @@ def api_ndf_save_deal_cache():
         else:
             deals = []
 
+        if data.get('_import'):
+            return _import_resposta(deals, data, _R().NDF_COMM_CACHE_DIR, '_ndfcomm.json', file_path)
         deal_name   = data.get('Deal', '').strip()
         client_name = data.get('Client', '').strip()
         existing_idx = next((i for i, d in enumerate(deals)
@@ -2172,6 +2187,8 @@ def api_generic_nd_save_cache(product):
         else:
             deals = []
 
+        if data.get('_import'):
+            return _import_resposta(deals, data, cfg['dir'], cfg['suffix'], file_path)
         deal_name   = data.get('Deal', '').strip()
         client_name = data.get('Client', '').strip()
         existing_idx = next((i for i, d in enumerate(deals)

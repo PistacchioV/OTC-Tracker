@@ -155,6 +155,100 @@ def _find_deal_in_cache(deal_name, client_name=None):
     return None, None
 
 
+# Campos que o import NÃO compara nem copia por cima: são do fluxo da página
+# (status, B3 ID, quem operou) ou marcadores, não do e-mail.
+_ND_IMPORT_KEEP = ('Status', 'B3_ID', 'Maker', 'Checker', 'AmendChanged', 'id', '_import')
+
+
+def _nd_import_key_match(e, deal, acronym, client):
+    if not isinstance(e, dict) or (e.get('Deal') or '').strip() != deal:
+        return 0
+    if acronym and (e.get('Acronym') or '').strip().upper() == acronym:
+        return 2
+    if (e.get('Client') or '').strip() == client:
+        return 1
+    return 0
+
+
+def _nd_import_upsert(deals, data, base_dir, suffix, file_path):
+    """Grava uma operação que o IMPORT do dropzone trouxe e a grade não tinha.
+
+    O `otc-fileupload.js` só reconhece a operação já importada entre as linhas
+    CARREGADAS na grade; fora dela (outro dia na busca, filtro ativo), ele
+    mandava um POST de linha nova, e o servidor só substituía com Deal + Client
+    IGUAIS no arquivo da Trade Date. O Client do import sai do RefData do
+    navegador e o gravado pode ter sido reenriquecido pelo servidor ou editado;
+    e a Trade Date corrigida leva a outro arquivo-dia — nos dois casos a mesma
+    operação entrava DUAS vezes (mesa, 02/10/2026).
+
+    Aqui a linha é achada pela chave do import, **Deal + Acronym** (a mesma da
+    grade e da varredura do box), depois por Deal + Client; primeiro no arquivo
+    da Trade Date, depois nos outros dias do produto (aí ela MUDA de arquivo).
+    Achada, vale a regra do box scan: nada mudou → fica como está; mudou →
+    `Amend`, B3 ID preservado, Checker zerado. `deals` é a lista JÁ LIDA do
+    arquivo-alvo, alterada no lugar; o arquivo de origem, se outro, é gravado
+    aqui. Chamar sob o `_cache_lock`. Devolve ('new' | 'same' | 'amend', linha)."""
+    from apps.pages import routes
+    data.pop('_import', None)
+    deal = (data.get('Deal') or '').strip()
+    acronym = (data.get('Acronym') or '').strip().upper()
+    client = (data.get('Client') or '').strip()
+    if not deal:
+        deals.append(data)
+        return 'new', data
+
+    def _melhor(lista):
+        best, best_i = 0, None
+        for i, e in enumerate(lista):
+            m = _nd_import_key_match(e, deal, acronym, client)
+            if m > best:
+                best, best_i = m, i
+        return best_i
+
+    idx = _melhor(deals)
+    origem = None
+    if idx is None:
+        alvo = os.path.normcase(os.path.normpath(file_path))
+        for fp, _fn, _mt, _sz in routes._day_files(base_dir, suffix, strict=True):
+            if os.path.normcase(os.path.normpath(fp)) == alvo:
+                continue
+            outros = routes._day_records_for_write(fp, lambda _d: None) or []
+            j = _melhor(outros)
+            if j is not None:
+                origem = (fp, outros, j)
+                break
+
+    if idx is None and origem is None:
+        deals.append(data)
+        return 'new', data
+
+    old = deals[idx] if idx is not None else origem[1][origem[2]]
+    changed = [k for k, v in data.items()
+               if k not in _ND_IMPORT_KEEP
+               and str(old.get(k, '') or '').strip() != str(v or '').strip()]
+    if not changed and origem is None:
+        return 'same', old
+    merged = dict(old)
+    if changed:
+        merged.update({k: v for k, v in data.items() if k not in _ND_IMPORT_KEEP})
+        merged['Status'] = 'Amend'
+        merged['Maker'] = data.get('Maker') or old.get('Maker', '')
+        merged['Checker'] = ''
+        merged['AmendChanged'] = sorted(set(old.get('AmendChanged') or []) | set(changed))
+    merged['B3_ID'] = str(old.get('B3_ID') or '').strip()
+    if origem is not None:
+        fp, outros, j = origem
+        del outros[j]
+        routes._atomic_write_json(fp, outros)
+        routes._daycache_forget(fp)
+        log.warning('[new-deals] import: deal=%r estava em %s e MUDOU de dia (Trade Date) — '
+                    'movida para %s', deal, os.path.basename(fp), os.path.basename(file_path))
+        deals.append(merged)
+    else:
+        deals[idx] = merged
+    return ('amend' if changed else 'same'), merged
+
+
 def _nd_fix_underlying_marker(deal):
     """Tira do UnderlyingAsset um `"MY"` que tenha sobrado do padrão do cadastro.
 

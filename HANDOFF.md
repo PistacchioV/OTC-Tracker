@@ -25845,3 +25845,34 @@ Present Value). Fixtures de `check_unwind_summary`/`check_unwind_termo` tinham
 corrigidas; `check_unwind_page` §13 prova a recompra sem posição no Cockpit.
 O catálogo (as onze) não mudou: lá a direção já era do sinal do Result.
 
+
+## §625 — New Deals: o import do dropzone duplicava a operação que a grade não tinha (2026-10-02)
+
+Relato da mesa: duas operações de Opt Comm reimportadas pelo dropzone entraram
+como linha NOVA em vez de substituir a existente.
+
+Causa: o `otc-fileupload.js` (o mesmo das cinco páginas com dropzone — Opt
+Comm, NDF Comm, Vanilla, FWD Start, Other Publisher) só reconhecia a operação
+já importada entre as linhas **carregadas na grade** (Deal + Acronym). Fora
+dela — outro dia na busca, filtro ativo — mandava um POST de linha nova, e o
+POST de `/cache` só substituía com Deal + Client **iguais** no arquivo da
+Trade Date. O Client do import sai do RefData do navegador, e o gravado pode
+ter sido reenriquecido pelo servidor (`_generic_nd_reenrich`) ou editado; e a
+Trade Date corrigida leva a outro arquivo-dia. Nos dois casos a operação
+entrava duas vezes — e, quando o Client batia, a linha era SUBSTITUÍDA com
+`New`, perdendo o B3 ID de uma operação já registrada.
+
+Agora o POST do import vai com `_import` (`postImport`) e o servidor decide
+(`platform/new_deals._nd_import_upsert`, via `_import_resposta` nos três
+POSTs — Opt Comm, NDF Comm e o genérico): acha a linha por **Deal + Acronym**
+(a chave da grade e da varredura do box), depois Deal + Client, primeiro no
+arquivo da Trade Date e depois nos outros dias do produto (aí ela MUDA de
+arquivo, com WARNING no log). Achada, a regra é a do box scan: nada mudou →
+`same`, nada gravado; mudou → `Amend`, B3 ID preservado, Checker zerado,
+`AmendChanged` acumulado. A resposta diz o resultado, e a grade pinta o Status
+e o B3 ID que ficaram no banco. Add Row, Edit e o fallback do Send (sem
+`_import`) seguem como eram. A varredura do box (`boxscan/persistence`) já
+chaveava por Deal + Acronym e não mudou.
+
+Linhas JÁ duplicadas não se desfazem sozinhas: apague a cópia indevida pela
+tela. `check_nd_import_dedupe.py` (Opt Comm, NDF Comm, Vanilla).
