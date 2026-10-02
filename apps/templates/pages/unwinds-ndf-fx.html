@@ -74,6 +74,22 @@
 
   /* O aviso da linha: por que a recompra não pode ir para a B3. */
   .unw-warn { color: #dc3545; cursor: help; }
+  /* ── Smart filter widget (o mesmo das páginas de New Deals) ─────────── */
+  .smart-filter-wrapper { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; padding: 4px 8px; min-height: 38px; background: var(--ins-secondary-bg); cursor: text; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+  .smart-filter-wrapper:focus-within { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
+  .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .smart-filter-chip { display: inline-flex; align-items: center; gap: 5px; background: #6c757d; color: #fff; border-radius: 50rem; padding: 2px 8px; font-size: 10px; font-weight: 500; white-space: nowrap; }
+  .smart-filter-chip .sf-chip-remove { cursor: pointer; opacity: .75; font-size: 13px; line-height: 1; margin-left: 2px; }
+  .smart-filter-chip .sf-chip-remove:hover { opacity: 1; }
+  .smart-filter-input { border: none; outline: none; flex: 1; min-width: 200px; font-size: 0.82rem; background: transparent; color: var(--ins-body-color); padding: 2px 0; }
+  .smart-filter-input::placeholder { color: var(--ins-secondary-color); }
+  .smart-filter-dropdown { position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 1055; background: var(--ins-secondary-bg); border: 1px solid var(--ins-border-color); border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.25); max-height: 240px; overflow-y: auto; display: none; padding: 4px 0; }
+  .smart-filter-dropdown li { padding: 6px 12px; cursor: pointer; font-size: 0.81rem; display: flex; align-items: center; gap: 8px; list-style: none; color: var(--ins-body-color); }
+  .smart-filter-dropdown li:hover, .smart-filter-dropdown li.sf-kbd-active { background: var(--ins-tertiary-bg); }
+  .sf-type-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; text-transform: uppercase; font-weight: 600; color: #fff; opacity: .85; }
+  .sf-type-text   { background: #6c757d; }
+  .sf-type-date   { background: #0dcaf0; color: #000 !important; }
+  .sf-type-number { background: #198754; }
 </style>
 {% endblock extra_css %}
 
@@ -140,6 +156,24 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- ── Filtro inteligente: o MESMO das páginas de New Deals ───── -->
+                <div class="d-flex align-items-center gap-2 px-2 py-2 border-top border-bottom nd-filter-bar">
+                    <div class="flex-grow-1 position-relative">
+                        <div class="smart-filter-wrapper" id="smartFilter">
+                            <div class="smart-filter-chips" id="sfChips"></div>
+                            <input type="text" class="smart-filter-input" id="sfInput"
+                                   placeholder="Type a letter for text fields, or a number / date for value fields…"
+                                   autocomplete="off">
+                            <ul class="smart-filter-dropdown mb-0 ps-0" id="sfDropdown"></ul>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn btn-secondary bg-gradient btn-search" type="button" id="sfSearchBtn">
+                            <i class="ti ti-search fs-xl me-1"></i> <span data-lang="b3-btn-search">Search</span>
+                        </button>
                     </div>
                 </div>
 
@@ -508,7 +542,7 @@ $(document).ready(function () {
                     '<input type="text" id="unwRefDate" class="form-control form-control-sm otc-datefield" style="width:130px" value="' + ((window.otcLinkDmy && window.otcLinkDmy()) || _todayDmy()) + '" placeholder="dd/mm/yyyy">';
                 var el = document.getElementById('unwRefDate');
                 if (el && typeof flatpickr !== 'undefined') flatpickr(el, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
-                if (el) el.addEventListener('change', load);
+                if (el) el.addEventListener('change', function () { sfSetRefDate(el.value); });
             }
 
             // ── Import: fila do dropzone ou, se ela estiver VAZIA, o box ──
@@ -597,7 +631,8 @@ $(document).ready(function () {
             }
 
             setTimeout(function () { api.columns.adjust(); }, 150);
-            load();
+            // Depois do ready: o filtro inteligente é montado abaixo da tabela.
+            setTimeout(load, 0);
         }
     });
     $(window).on('resize', function () { table.columns.adjust(); });
@@ -641,18 +676,156 @@ $(document).ready(function () {
         setTimeout(function () { table.columns.adjust(); }, 100);
     }
 
-    function load() {
+    // A tela carrega pelo FILTRO INTELIGENTE (o mesmo das páginas de New
+    // Deals): os chips viram `filters` e o servidor responde com as linhas de
+    // TODOS os dias que passam neles. A Reference Date é um chip (o dia do
+    // arquivo-dia, `_day`), o padrão ao abrir — o que a tela mostrava antes.
+    function load() { sfApply(); }
+    window.unwReload = load;
+    // O arquivo-dia em que a linha mora: é por ele que o servidor a acha
+    // (Edit, Confirm, Delete, Send, Preview). Linha de outro dia que a busca
+    // trouxe não está no dia da Reference Date.
+    function dayOf(aid) { return (ROWS[aid] && ROWS[aid]._day) || refDateIso(); }
+
+    var SF_COLS = [{ label: 'Reference Date', type: 'date', dtCol: 'ref', field: '_day' }];
+    var SF_NUM = { Strike: 1, TerminationRate: 1, PreFWDRate: 1, DU: 1 };
+    UNW_COLS.forEach(function (c, i) {
+        SF_COLS.push({ label: c[1], dtCol: i + C_OFF, field: c[0],
+                       type: UNW_DATE[c[0]] ? 'date' : ((UNW_MONEY[c[0]] || SF_NUM[c[0]]) ? 'number' : 'text') });
+    });
+    var sfActive = [];
+    var sfKbdIdx = -1;
+    var sfInput = document.getElementById('sfInput'), sfDropdown = document.getElementById('sfDropdown'),
+        sfChips = document.getElementById('sfChips'), sfWrapper = document.getElementById('smartFilter');
+
+    function sfIsDateLike(s) { return /^\d{1,2}[\/\-]\d/.test(s) || /^\d{4}[\/\-]/.test(s); }
+    var SF_RANGE_WORDS = { en: { from: 'FROM', to: 'TO' }, br: { from: 'DE', to: 'ATÉ' }, es: { from: 'DESDE', to: 'HASTA' } };
+    function sfRangeWord(mode) { var m = SF_RANGE_WORDS[_lang()] || SF_RANGE_WORDS.en; return mode === 'from' ? m.from : m.to; }
+    function sfFilterKey(col, mode) { return col.type === 'date' ? (col.dtCol + '|' + mode) : (mode === 'not' ? col.dtCol + '|not' : String(col.dtCol)); }
+    function sfDateCandidates() {
+        var out = [];
+        SF_COLS.filter(function (c) { return c.type === 'date'; }).forEach(function (col) {
+            var hasFrom = sfActive.some(function (f) { return f.col.dtCol === col.dtCol && f.mode === 'from'; });
+            var hasTo   = sfActive.some(function (f) { return f.col.dtCol === col.dtCol && f.mode === 'to'; });
+            if (hasFrom && !hasTo) out.push({ col: col, mode: 'to', label: sfRangeWord('to') + ': ' + col.label });
+            else { out.push({ col: col, mode: 'from', label: sfRangeWord('from') + ': ' + col.label }); out.push({ col: col, mode: 'exact', label: col.label }); }
+        });
+        out.sort(function (a, b) { return (a.mode === 'to' ? 0 : 1) - (b.mode === 'to' ? 0 : 1); });
+        return out;
+    }
+    function sfCandidates(val) {
+        if (!val) return [];
+        var texto = SF_COLS.filter(function (c) { return c.type === 'text'; }).map(function (c) { return { col: c, mode: 'text', label: c.label }; });
+        // Lista de valores (`123; 456`, ids colados do Excel) → colunas de texto (sf-multi.js).
+        if (otcSfMulti.isMulti(val) || !/^\d/.test(val)) return texto;
+        if (sfIsDateLike(val)) return sfDateCandidates();
+        var out = [];
+        SF_COLS.forEach(function (c) {
+            if (c.type === 'number') out.push({ col: c, mode: 'number', label: c.label });
+            else if (c.type === 'date') out.push({ col: c, mode: 'exact', label: c.label });
+        });
+        // Texto que começa com dígito (B3 ID, Athena ID, Tax ID) também é candidato.
+        SF_COLS.filter(function (c) { return c.type === 'text' && /^(AthenaID|Contract|TaxID)$/.test(c.field); })
+               .forEach(function (c) { out.push({ col: c, mode: 'text', label: c.label }); });
+        return out;
+    }
+    function sfRenderDropdown(val) {
+        sfDropdown.innerHTML = ''; sfKbdIdx = -1;
+        var matches = sfCandidates(val);
+        if (!matches.length) { sfDropdown.style.display = 'none'; return; }
+        matches.forEach(function (cand) {
+            var col = cand.col, li = document.createElement('li');
+            var badgeCls = col.type === 'date' ? 'sf-type-date' : col.type === 'number' ? 'sf-type-number' : 'sf-type-text';
+            li.innerHTML = '<span class="sf-type-badge ' + badgeCls + '">' + col.type + '</span><span>' + esc(cand.label) + '</span>';
+            li.addEventListener('mousedown', function (e) { e.preventDefault(); sfAddFilter(cand.col, sfInput.value.trim(), cand.mode); });
+            sfDropdown.appendChild(li);
+        });
+        sfDropdown.style.display = 'block';
+    }
+    function sfAddFilter(col, value, mode) {
+        if (!value) return;
+        mode = mode || (col.type === 'date' ? 'exact' : col.type);
+        if (col.type === 'date') {
+            if (mode === 'exact') sfActive = sfActive.filter(function (f) { return f.col.dtCol !== col.dtCol; });
+            else sfActive = sfActive.filter(function (f) { return !(f.col.dtCol === col.dtCol && (f.mode === mode || f.mode === 'exact')); });
+        } else {
+            sfActive = sfActive.filter(function (f) { return f.col.dtCol !== col.dtCol; });
+        }
+        sfActive.push({ col: col, value: value, mode: mode, key: sfFilterKey(col, mode) });
+        sfInput.value = ''; sfDropdown.style.display = 'none'; sfKbdIdx = -1;
+        sfRenderChips(); sfInput.focus();
+    }
+    function sfRemoveFilter(key) { sfActive = sfActive.filter(function (f) { return f.key !== key; }); sfRenderChips(); }
+    function sfChipPrefix(f) {
+        if (f.col.type === 'date' && (f.mode === 'from' || f.mode === 'to')) return sfRangeWord(f.mode) + ' ' + f.col.label.toUpperCase();
+        if (f.mode === 'not') return f.col.label.toUpperCase() + ' ≠';
+        return f.col.label.toUpperCase();
+    }
+    function sfRenderChips() {
+        sfChips.innerHTML = '';
+        sfActive.forEach(function (f) {
+            var chip = document.createElement('span'); chip.className = 'smart-filter-chip';
+            chip.innerHTML = '<strong>' + esc(sfChipPrefix(f)) + ':</strong>&nbsp;' + esc(f.value) + '<span class="sf-chip-remove" title="Remove filter">&#215;</span>';
+            chip.querySelector('.sf-chip-remove').addEventListener('click', function () { sfRemoveFilter(f.key); });
+            sfChips.appendChild(chip);
+        });
+    }
+    var _sfSeq = 0;
+    function sfApply() {
         selected.clear();
-        fetch('/api/unwinds/ndf/fx?date=' + encodeURIComponent(refDateIso()), { credentials: 'same-origin' })
+        var filters = sfActive.map(function (f) { return { field: f.col.field, type: f.col.type, value: f.value, mode: f.mode }; });
+        var seq = ++_sfSeq;      // resposta de uma busca antiga não pinta por cima da nova
+        fetch('/api/unwinds/ndf/fx/cache/search', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                    credentials: 'same-origin', body: JSON.stringify({ filters: filters }) })
             .then(function (r) { return r.json(); })
             .then(function (res) {
-                if (!res || !res.success) { ENTRIES = []; renderAll(); return; }
+                if (seq !== _sfSeq) return;
+                if (!res || !res.success) {
+                    var err = res && res.error;
+                    Swal.fire({ icon: 'warning', title: t('nd-search-failed-title', 'Operations not loaded'),
+                                text: (err === 'database_busy' || err === 'database_unreadable')
+                                    ? t('nd-search-' + err, (res && res.message) || '') : ((res && (res.message || res.error)) || '') });
+                    return;
+                }
                 ENTRIES = res.entries || [];
                 renderAll();
             })
-            .catch(function () { ENTRIES = []; renderAll(); });
+            .catch(function (e) { console.error('Search error:', e); });
     }
-    window.unwReload = load;
+    // O campo Reference Date aponta o chip do dia e recarrega.
+    function sfSetRefDate(dmy) {
+        if (!/^\d{2}\/\d{2}\/\d{4}$/.test(String(dmy || ''))) return;
+        var col = SF_COLS[0], key = sfFilterKey(col, 'exact');
+        sfActive = sfActive.filter(function (f) { return f.col.dtCol !== col.dtCol; });
+        sfActive.push({ col: col, value: dmy, mode: 'exact', key: key });
+        sfRenderChips(); sfApply();
+    }
+    sfInput.addEventListener('input', function () { sfRenderDropdown(this.value.trim()); });
+    sfInput.addEventListener('keydown', function (e) {
+        var items = sfDropdown.querySelectorAll('li');
+        var dropdownOpen = sfDropdown.style.display !== 'none' && items.length;
+        if (e.key === 'Backspace' && !this.value && sfActive.length) { e.preventDefault(); sfRemoveFilter(sfActive[sfActive.length - 1].key); return; }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (dropdownOpen && sfKbdIdx >= 0 && items[sfKbdIdx]) items[sfKbdIdx].dispatchEvent(new MouseEvent('mousedown'));
+            else { sfDropdown.style.display = 'none'; sfApply(); }
+            return;
+        }
+        if (!items.length) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); sfKbdIdx = Math.min(sfKbdIdx + 1, items.length - 1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); sfKbdIdx = Math.max(sfKbdIdx - 1, 0); }
+        else if (e.key === 'Escape') { sfDropdown.style.display = 'none'; return; }
+        items.forEach(function (li, i) { li.classList.toggle('sf-kbd-active', i === sfKbdIdx); });
+        if (sfKbdIdx >= 0 && items[sfKbdIdx]) items[sfKbdIdx].scrollIntoView({ block: 'nearest' });
+    });
+    sfInput.addEventListener('blur', function () { setTimeout(function () { sfDropdown.style.display = 'none'; }, 160); });
+    sfInput.addEventListener('focus', function () { if (this.value.trim()) sfRenderDropdown(this.value.trim()); });
+    sfWrapper.addEventListener('click', function () { sfInput.focus(); });
+    document.getElementById('sfSearchBtn').addEventListener('click', function () { sfApply(); });
+    // Chip padrão: Reference Date = ?date= (deep-link do sino/Monitor) senão hoje.
+    sfActive.push({ col: SF_COLS[0], value: (window.otcLinkDmy && window.otcLinkDmy()) || _todayDmy(),
+                    mode: 'exact', key: sfFilterKey(SF_COLS[0], 'exact') });
+    sfRenderChips();
 
     // ── Import: a fila do dropzone; vazia, a varredura do box ─────────────
     function runImport() {
@@ -737,7 +910,7 @@ $(document).ready(function () {
     // ── Preview do arquivo da B3 (otcFilePreview, §480) ────────────────────
     function previewRow(aid, tr) {
         var e = ROWS[aid]; if (!e) return;
-        fetch('/api/unwinds/ndf/fx/preview?athena_id=' + encodeURIComponent(aid) + '&date=' + encodeURIComponent(refDateIso()),
+        fetch('/api/unwinds/ndf/fx/preview?athena_id=' + encodeURIComponent(aid) + '&date=' + encodeURIComponent(dayOf(aid)),
               { credentials: 'same-origin' })
             .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); })
             .then(function (o) {
@@ -773,7 +946,7 @@ $(document).ready(function () {
         }).then(function (r) {
             if (!r.isConfirmed) return;
             fetch('/api/unwinds/ndf/fx/send-conecta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-                                                        body: JSON.stringify({ items: ids.map(function (a) { return { athena_id: a }; }), date: refDateIso() }) })
+                                                        body: JSON.stringify({ items: ids.map(function (a) { return { athena_id: a, ref_date: dayOf(a) }; }), date: refDateIso() }) })
                 .then(function (rr) { return rr.json(); })
                 .then(function (res) {
                     if (!res || !res.success) { Swal.fire({ icon: 'error', title: 'Nothing sent', text: (res && res.message) || 'Send failed', width: 640 }); return; }
@@ -796,7 +969,7 @@ $(document).ready(function () {
                 ids.forEach(function (a) {
                     chain = chain.then(function () {
                         return fetch('/api/unwinds/ndf/fx/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-                                                                     body: JSON.stringify({ athena_id: a, date: refDateIso() }) })
+                                                                     body: JSON.stringify({ athena_id: a, date: dayOf(a) }) })
                             .then(function (rr) { return rr.json(); })
                             .then(function (res) { if (!res || !res.success) errs.push(a + ': ' + ((res && res.message) || 'failed')); });
                     });
@@ -891,7 +1064,7 @@ $(document).ready(function () {
         var btn = this; btn.disabled = true;
         fetch('/api/unwinds/ndf/fx/edit', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                                             credentials: 'same-origin',
-                                            body: JSON.stringify({ athena_id: _editId, date: refDateIso(), fields: fields }) })
+                                            body: JSON.stringify({ athena_id: _editId, date: dayOf(_editId), fields: fields }) })
             .then(function (r) { return r.json(); })
             .then(function (res) {
                 btn.disabled = false;
@@ -911,7 +1084,7 @@ $(document).ready(function () {
         if (!d) return;
         fetch('/api/unwinds/ndf/fx/approve', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                                                credentials: 'same-origin',
-                                               body: JSON.stringify({ athena_id: d[C_KEY], date: refDateIso() }) })
+                                               body: JSON.stringify({ athena_id: d[C_KEY], date: dayOf(d[C_KEY]) }) })
             .then(function (r) { return r.json(); })
             .then(function (res) {
                 if (!res || !res.success) {

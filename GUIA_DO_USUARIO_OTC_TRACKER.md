@@ -235,7 +235,7 @@ As colunas de **caixa de seleção** e de **Actions** não têm funil — não h
 
 **Para ordenar:** clique no **nome** da coluna, no cabeçalho. Clique de novo para inverter. Números ordenam como número (`9,00` antes de `1.000,00`) e datas como data (`05/01/2027` depois de `25/09/2026`), não como texto — vale também para a lista de valores do funil.
 
-### 4.4. A busca por fichas (New Deals e Pending Confirmation)
+### 4.4. A busca por fichas (New Deals, Unwinds NDF FX e Pending Confirmation)
 
 Algumas telas trazem, acima da tabela, um campo largo com o texto *"Type a letter for text fields, or a number / date for value fields…"*. Ele busca **no servidor**, e não só no que está carregado.
 
@@ -246,6 +246,8 @@ Algumas telas trazem, acima da tabela, um campo largo com o texto *"Type a lette
 5. Repita para combinar critérios (por exemplo, *Trade Date* **e** *Status*).
 6. Para tirar uma ficha, clique no **×** dela.
 7. Clique em **Search** (o botão roxo à direita) para reexecutar a busca.
+
+> **Na recompra de NDF FX** (Unwinds › NDF › FX) a ficha padrão é a **Reference Date** — o dia em que a recompra foi importada — e o campo *Reference Date* da barra de ferramentas troca essa ficha. Tire-a, ou use **DE**/**ATÉ**, para ver recompras de vários dias de uma vez: Edit, Confirm, Delete, Send e o Preview de cada linha agem no dia **dela**, não no da *Reference Date*.
 
 > Uma ficha pode ser de **igual** ou de **diferente**: a ficha `STATUS ≠ Success` que aparece por padrão nas telas de New Deals é o que esconde as operações já registradas e deixa na tela só o que ainda dá trabalho.
 

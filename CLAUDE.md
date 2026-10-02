@@ -1854,6 +1854,15 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   máquina, intocada), `Approved` (mexida e conferida) e `Sent` (reenvio). O `Status` e o `Check`
   ficam fora dos campos editáveis: um é estado da esteira, o outro é veredito
   apurado.
+- **A tela carrega pelo FILTRO INTELIGENTE** (mesa, 02/10/2026): o mesmo
+  das páginas de New Deals, em `POST /api/unwinds/ndf/fx/cache/search`
+  (`queries.search`, `_deal_matches`, leitura ESTRITA). A Reference Date é o
+  chip padrão sobre a pseudo-coluna `_day` — o dia do ARQUIVO-DIA, que a busca
+  acrescenta numa CÓPIA da linha e que limita os dias lidos. As ações da linha
+  (Edit, Confirm, Delete, Send, Preview) mandam o `_day` DA LINHA (`dayOf`),
+  nunca a Reference Date: o `queries.find` com data só olha aquele dia, e uma
+  linha de outro dia trazida pela busca daria "not found". Import, varredura e
+  Mapping B3 seguem gravando no dia da Reference Date.
 - **O `Status` é a PRIMEIRA coluna de dado**, logo depois das Actions: em
   dezoito colunas, no fim da grade a resposta "esta linha já foi?" só aparece
   depois de rolar a tabela inteira.

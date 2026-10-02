@@ -43,6 +43,56 @@ def entries(date_str='', date_from='', date_to=''):
     return [e for e in out if isinstance(e, dict) and persistence.key_of(e)]
 
 
+# A coluna-pseudo do filtro inteligente: o DIA do arquivo-dia. Ela não existe
+# na linha gravada — a busca a acrescenta numa CÓPIA, e é por ela que a tela
+# sabe em que arquivo-dia cada linha mora (as ações procuram a linha por ele).
+CAMPO_DIA = '_day'
+
+
+def _faixa_do_dia(filters):
+    """(desde, até) dos chips do DIA: só esses dias são lidos — a árvore
+    inteira no share é uma abertura por banco a mais por busca."""
+    R = _R()
+    desde = ate = None
+    for f in filters or []:
+        if f.get('field') != CAMPO_DIA:
+            continue
+        d = R._parse_date_any(str(f.get('value') or ''))
+        if d is None:
+            continue
+        modo = (f.get('mode') or 'exact').lower()
+        if modo in ('exact', 'from'):
+            desde = d if desde is None else max(desde, d)
+        if modo in ('exact', 'to'):
+            ate = d if ate is None else min(ate, d)
+    return desde, ate
+
+
+def search(filters):
+    """A busca do filtro inteligente — o MESMO contrato das páginas de New
+    Deals (`filters` = [{field, type, value, mode}] pelo `_deal_matches`),
+    sobre os arquivos-dia da recompra. Leitura ESTRITA (§608): banco ocupado
+    ou ilegível SOBE, nunca vira tabela vazia."""
+    R = _R()
+    desde, ate = _faixa_do_dia(filters)
+    dias = list(R._day_files(persistence.cache_dir(), persistence.SUFFIX, desde, ate, strict=True))
+    R._day_prefetch(dias)
+    out = []
+    for fp, fname, mtime, size in dias:
+        fdate = R._parse_date_any(fname[:8])
+        if fdate is None or (desde and fdate < desde) or (ate and fdate > ate):
+            continue
+        dia = fdate.strftime('%Y-%m-%d')
+        for e in R._day_json(fp, mtime, size, strict=True):
+            if not (isinstance(e, dict) and persistence.key_of(e)):
+                continue
+            linha = dict(e)
+            linha[CAMPO_DIA] = dia
+            if R._deal_matches(linha, filters):
+                out.append(linha)
+    return out
+
+
 def find(athena_id, ref_date=''):
     """(caminho, lista MUTAVEL, indice) da linha — pelo arquivo-dia de
     `ref_date` quando ela vem; senao varre a arvore."""

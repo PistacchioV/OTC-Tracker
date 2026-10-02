@@ -58,6 +58,22 @@ def api_unwinds_ndf_fx():
                     'labels': list(domain.UNW_LABELS)})
 
 
+@blueprint.route('/api/unwinds/ndf/fx/cache/search', methods=['POST'])
+def api_unwinds_ndf_fx_search():
+    """O filtro inteligente da tela: `filters` = [{field, type, value, mode}],
+    o contrato das páginas de New Deals. Cada linha volta com `_day` — o dia do
+    arquivo-dia em que ela mora, que as ações da linha mandam de volta."""
+    err = _auth()
+    if err:
+        return err
+    filters = (request.get_json(silent=True) or {}).get('filters', [])
+    if not isinstance(filters, list):
+        filters = []
+    return jsonify({'success': True, 'entries': queries.search(filters),
+                    'fields': list(domain.UNW_FIELDS),
+                    'labels': list(domain.UNW_LABELS)})
+
+
 @blueprint.route('/api/unwinds/ndf/fx/import-file', methods=['POST'])
 def api_unwinds_ndf_fx_import():
     """O corpo do e-mail no dropzone (multipart `file`, .htm/.html/.txt).
