@@ -338,3 +338,27 @@ def archive_unwind_email(entry_id):
         return {'ok': True}
     finally:
         pythoncom.CoUninitialize()
+
+
+def archive_unwind_emails(entry_ids):
+    """O `archive_unwind_email` de VARIOS avisos: a pasta Unwind e resolvida
+    UMA vez (a arvore do Outlook era percorrida a cada e-mail, §622) e cada
+    um e movido. -> `{entry_id: None | o motivo da falha}`; um que falha nao
+    impede os outros."""
+    ids = [e for e in entry_ids or [] if e]
+    out = {}
+    if not ids:
+        return out
+    _w, pythoncom = _win32()
+    pythoncom.CoInitialize()
+    try:
+        outlook, dest = resolve_folder(_w, UNWIND_MAILBOX, UNWIND_ARCHIVE_PATH, create=True)
+        for eid in ids:
+            try:
+                outlook.GetItemFromID(eid).Move(dest)
+                out[eid] = None
+            except Exception as exc:                        # noqa: BLE001
+                out[eid] = str(exc)
+        return out
+    finally:
+        pythoncom.CoUninitialize()

@@ -711,6 +711,32 @@ def main():
                       data={'file': [(io.BytesIO(b'<p>x</p>'), 'lixo.htm')], 'date': '2026-09-17'},
                       content_type='multipart/form-data')
     check('lote em que NENHUM se le e 400', so_lixo.status_code == 400, so_lixo.status_code)
+
+    # A varredura do box tambem e UM lote: importa a caixa inteira de uma vez
+    # e arquiva numa chamada so (a pasta Unwind resolvida uma vez), deixando
+    # na caixa o e-mail que nao se leu.
+    from apps.pages import otc_boxscan as _bx
+    caixa = [{'html': HTML.replace('STP-XE-10G5U5X-0-0', a), 'entry_id': 'E%d' % i,
+              'subject': SUBJECT.replace('STP-XE-10G5U5X-0-0', a)} for i, a in enumerate(ids)]
+    caixa.append({'html': '<p>sem tabela</p>', 'entry_id': 'LIXO', 'subject': 'lixo'})
+    chamadas = []
+    _scan, _arq = _bx.scan_unwind_box, getattr(_bx, 'archive_unwind_emails')
+    _bx.scan_unwind_box = lambda produto: {'emails': caixa}
+    _bx.archive_unwind_emails = lambda eids: chamadas.append(list(eids)) or \
+        {e: ('trancado' if e == 'E2' else None) for e in eids}
+    coletas[:] = []
+    try:
+        vb = commands.scan_box(ref_dt=date(2026, 9, 18))
+    finally:
+        _bx.scan_unwind_box, _bx.archive_unwind_emails = _scan, _arq
+    check('a varredura importa as tres num lote so',
+          len(vb['rows']) == 3 and len(coletas) == 1, (len(vb['rows']), len(coletas)))
+    check('e arquiva numa chamada so, sem o e-mail recusado',
+          chamadas == [['E0', 'E1', 'E2']], chamadas)
+    check('o recusado volta em failed', [f['subject'] for f in vb['failed']] == ['lixo'], vb['failed'])
+    check('e o que nao arquivou vira aviso',
+          [a['params']['subject'] for a in vb['warnings'] if a.get('code') == 'unwind_archive_failed']
+          == [caixa[2]['subject']], vb['warnings'])
     R._lpndf_collect = _collect([POS])
 
     print('')

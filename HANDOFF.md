@@ -25793,5 +25793,7 @@ versão sobre a linha já lida (`manual_conf.untouched`). Se o lote da esteira
 falha, ela refaz linha a linha pela porta de sempre. O endpoint `import-file`
 aceita vários `file`; e-mail ilegível volta em `failed` e só é 400 quando
 nenhum se lê. A tela manda lotes de 25 com progresso no botão; a varredura do
-box é um lote só. A Intrag continua linha a linha (só as recompras de fundo).
+box é um lote só, e o arquivamento também (`otc_boxscan.archive_unwind_emails`
+resolve a pasta Unwind uma vez; antes a árvore do Outlook era percorrida por
+e-mail). A Intrag continua linha a linha (só as recompras de fundo).
 `check_unwind_page.py` §15, `check_unwind_termo.py` §11.
