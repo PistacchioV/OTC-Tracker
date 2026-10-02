@@ -234,6 +234,30 @@ for lang in ('en', 'br', 'es'):
     check('%s: swal-mapping-failed-n' % lang,
           bool(str(d.get('swal-mapping-failed-n') or '').strip()), True)
 
+print('\n== 8. o Mapping não trava mais em Sent/Error (mesa, 02/10/2026) ==')
+from apps.pages.platform import new_deals as PND                 # noqa: E402
+from apps.pages import duck_read as _DR                          # noqa: E402
+_DIA = [{'Deal': 'A', 'Client': 'C', 'Status': 'Approved'},
+        {'Deal': 'B', 'Client': 'C', 'Status': 'Pending'},
+        {'Deal': 'S', 'Client': 'C', 'Status': 'Sent'},
+        {'Deal': 'K', 'Client': 'C', 'Status': 'Success', 'B3_ID': '26E1'},
+        {'Deal': 'Z', 'Client': 'C', 'Status': 'Canceled'}]
+_isfile0, _dr0 = _store.isfile, _DR.day_records
+_store.isfile = lambda p: True
+_DR.day_records = lambda p: [dict(d) for d in _DIA]
+try:
+    for prod in ('fwd-start', 'other-publisher', 'vanilla'):
+        got = [c['Deal'] for c in PND._generic_nd_mapping_candidates(
+            {'dir': '/tmp/x', 'suffix': '_x.json'}, prod, '2026-10-01')]
+        check(prod + ': Approved/Pending/Sent entram, Success com B3 ID e Canceled não',
+              got, ['A', 'B', 'S'])
+finally:
+    _store.isfile, _DR.day_records = _isfile0, _dr0
+for pag in ('new_deals-ndf-commodities', 'new_deals-opt-commodities', 'new_deals-opt-fxo'):
+    src = io.open(os.path.join(ROOT, 'apps/templates/pages/%s.html' % pag), encoding='utf-8').read()
+    check(pag + ': sem o filtro Sent/Error',
+          "(status === 'Sent' || status === 'Error') &&" in src, False)
+
 print()
 if falhas:
     for f in falhas:

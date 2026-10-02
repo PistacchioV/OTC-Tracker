@@ -1029,6 +1029,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   duas vezes — Client reenriquecido ou Trade Date corrigida — ou era
   substituída como `New`, perdendo o B3 ID. POST de cache novo que recebe
   import passa pelo `_import_resposta`.
+- **O Mapping B3 ID do New Deals entra em QUALQUER status** (mesa, 02/10/2026,
+  §626): a trava de só `Sent`/`Error` saiu dos três JS (NDF Comm, Opt Comm, Opt
+  FXO) e do `_generic_nd_mapping_candidates` (FWD Start, Other Publisher; o
+  Vanilla já era assim). Ficam fora `Canceled` e `Success` COM B3 ID. Quem o
+  retorno não traz só vira `Error` se esperava resposta
+  (`_ND_MAPPING_ERRORABLE`, no endpoint) — Approved/Pending ficam como estão.
 - **O veredito do `mapping-b3` sai da GRAVAÇÃO, nunca da intenção** (§521): os
   quatro endpoints decidiam o Status pelo arquivo de retorno da B3 e o
   devolviam à tela sem olhar se o arquivo-dia foi gravado, atrás de um

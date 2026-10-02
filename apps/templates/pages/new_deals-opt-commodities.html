@@ -1879,7 +1879,9 @@ $(document).ready(function() {
                         var rowId  = d[35] || '';
                         var deal   = _sh(d[3]);
                         var status = _sh(d[2]);
-                        if ((status === 'Sent' || status === 'Error') && rowId && deal) {
+                        // Todo status entra (mesa, 02/10/2026): o servidor só grava quem o retorno
+                        // traz. Fora: cancelada e Success que já tem B3 ID.
+                        if (status !== 'Canceled' && !(status === 'Success' && _sh(d[4])) && rowId && deal) {
                             // Dedupe by Deal+Client so duplicate rows aren't sent/counted twice
                             var client = _sh(d[10]);
                             var key = deal + '|' + client;
@@ -1892,7 +1894,7 @@ $(document).ready(function() {
                     if (!sentDeals.length) {
                         Swal.fire({
                             title: t('swal-mapping-b3-title', 'Mapping B3 ID'),
-                            text: t('swal-mapping-no-sent', 'No operations with status "Sent" or "Error" to map.'),
+                            text: t('swal-mapping-none', 'No operations to map.'),
                             icon: 'info',
                             confirmButtonText: t('swal-ok', 'OK'),
                             confirmButtonColor: '#198754'
