@@ -114,6 +114,32 @@
 }
 #payrec-page table.pr-table .pr-actions-cell .btn i { font-size: 1rem; }
 
+/* Seleção para o match manual: só a linha com UM lado (não casada pelo motor)
+   ganha a caixinha; a marcada fica realçada. */
+#payrec-page table.pr-table .pr-sel-col { width: 34px; padding-left: 8px; padding-right: 4px; }
+#payrec-page table.pr-table .pr-sel { width: 15px; height: 15px; cursor: pointer; vertical-align: middle; }
+#payrec-page table.pr-table tr.pr-selected td { background: rgba(0,102,204,.10); }
+#payrec-page .pr-manual-tag { display: inline-block; margin-left: .35rem; padding: 1px 7px; border-radius: 20px;
+    font-size: .65rem; font-weight: 700; background: #e3f2fd; color: #0d47a1; white-space: nowrap; }
+[data-bs-theme="dark"] #payrec-page .pr-manual-tag { background: rgba(33,150,243,.18); color: #90caf9; }
+/* A tabela do Swal pende do <body> (fora do #payrec-page). */
+.pr-match-table { width: 100%; border-collapse: collapse; font-size: .8rem; margin: 0; }
+.swal2-popup .pr-match-table thead th { background: #1c2b6b !important; color: #fff !important; font-weight: 600;
+    padding: 6px 10px; text-align: center; white-space: nowrap; }
+.pr-match-table td { padding: 6px 10px; border-bottom: 1px solid rgba(127,127,127,.2); text-align: center; white-space: nowrap; }
+.pr-match-table td.pr-num { font-variant-numeric: tabular-nums; }
+.pr-match-table tfoot td { font-weight: 700; border-top: 2px solid rgba(127,127,127,.35); border-bottom: 0; }
+.pr-match-table .pr-neg { color: #c0392b; }
+.pr-match-sum { margin-top: .8rem; display: flex; justify-content: center; align-items: center; gap: .6rem; font-size: .9rem; }
+.pr-match-sum b { font-variant-numeric: tabular-nums; }
+.pr-match-chip { font-size: .72rem; font-weight: 700; padding: 2px 9px; border-radius: 50rem; }
+.pr-match-chip.ok { background: #e8f5e9; color: #1b5e20; }
+.pr-match-chip.no { background: #fde8e8; color: #b71c1c; }
+[data-bs-theme="dark"] .pr-match-chip.ok { background: rgba(76,175,80,.18); color: #a5d6a7; }
+[data-bs-theme="dark"] .pr-match-chip.no { background: rgba(244,67,54,.18); color: #ef9a9a; }
+.pr-match-err { margin-top: .5rem; font-size: .8rem; color: #b71c1c; }
+[data-bs-theme="dark"] .pr-match-err { color: #ef9a9a; }
+
 #payrec-page .ti-spin { animation: pr-spin 700ms linear infinite; }
 @keyframes pr-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
@@ -124,7 +150,7 @@
 {% endblock extra_css %}
 
 {% block page_content %}
-<div id="payrec-page" class="container-fluid" data-ref-date="{{ ref_date }}">
+<div id="payrec-page" class="container-fluid" data-ref-date="{{ ref_date }}" data-match-tol="{{ match_tol }}">
     {% set title='Pay/Rec Reconciliation' %}
     {% include 'partials/page-title.html' %}
 
@@ -161,6 +187,12 @@
                             </button>
                             <button class="btn btn-sm btn-success bg-gradient pr-tbtn" type="button" id="prEndBtn" disabled>
                                 <i class="ti ti-mail-forward me-1"></i><span data-lang="pr-end">End process</span>
+                            </button>
+                            {# Match manual: débito(s) do Pending Payment × crédito(s) do Pending
+                               Receivement da MESMA contraparte, soma dentro da tolerância. Liga
+                               quando há ao menos uma linha marcada em cada tabela. #}
+                            <button class="btn btn-sm btn-info bg-gradient pr-tbtn" type="button" id="prMatchBtn" disabled>
+                                <i class="ti ti-arrows-exchange me-1"></i><span data-lang="pr-match">Match</span>
                             </button>
                             {# Branch Settlement (G&O): só aparece com liquidação contra a MGT
                                na data de HOJE — o JS decide pelo `branch` do resultado. #}
@@ -207,6 +239,7 @@
                 <div class="pr-table-wrap">
                     <table class="pr-table">
                         <thead><tr>
+                            <th class="pr-sel-col"></th>
                             <th>LE</th>
                             <th data-lang="pr-c-product">Product</th>
                             <th data-lang="pr-c-jpmcpty">JPM cpty</th>
@@ -232,6 +265,7 @@
                 <div class="pr-table-wrap">
                     <table class="pr-table">
                         <thead><tr>
+                            <th class="pr-sel-col"></th>
                             <th>LE</th>
                             <th data-lang="pr-c-product">Product</th>
                             <th data-lang="pr-c-jpmcpty">JPM cpty</th>
@@ -292,7 +326,7 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js?v={{ asset_v('js/table-std.js') }}"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/reconciliation-payrec.js?v=20260925f"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/reconciliation-payrec.js?v=20261002a"></script>
 <script>
 // Seleção de célula + Ctrl+C — padrão New Deals. Delegação no nó da tabela,
 // então sobrevive aos rebuilds do tbody a cada reconciliação.

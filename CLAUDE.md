@@ -2377,6 +2377,16 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `unwind_rows`): casa pelo Trade Id (exato ou os 14 da direita) ou, sem ele,
   por contraparte (sem pontuação e sufixo societário) + valor dentro de R$ 1,00,
   cada recompra UMA perna. Vertical ilegível não derruba a recon (avisa no log).
+- **Pay/Rec: o botão Match casa À MÃO débito × crédito** (mesa, 02/10/2026):
+  linhas marcadas do Pending Payment (negativas) e do Pending Receivement
+  (positivas), só as de UM lado (a que tem JPM e cliente já foi casada pelo
+  motor), da MESMA contraparte pela `_cpty_key`, com a soma dentro de
+  `_MANUAL_TOL` (= `_TOL_SETTLED`). O servidor confere tudo de novo e recusa
+  por código (`match_*`). O grupo vai para `manual-matches/<data>.json` e é
+  **reaplicado no fim de todo Run** (`_apply_manual_matches`) — o Run regrava o
+  dia do zero, e gravado só no resultado o par voltaria a Pending; linha que
+  sumiu do insumo derruba o grupo inteiro (log), nunca metade. O Summary não é
+  recalculado (ele vem dos insumos crus). `check_payrec_manual_match.py`.
 - **Pay/Rec**: `SPB - outros bancos` casa só com BANCO (`_match_allowed`, pelo
   `bank-name`, por PALAVRA nunca substring, `banco` é token significativo,
   direção entra pela mesma porta, vale nos três estágios; fora do cadastro

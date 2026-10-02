@@ -1904,6 +1904,9 @@ def run_payrec(recon_date, files=None, mode='auto', ndf_rows=None, ops_rows=None
     # Carry forward the previous day's unresolved Pending Payment/Receivement rows
     # (dropping any that settled today) so they persist until settled or justified.
     pend_pay, pend_rec = _apply_carry_forward(recon_date, pend_pay, pend_rec, settled)
+    # Os matches manuais do dia sobrevivem a um novo Run: o Run refaz tudo do
+    # zero e regrava o dia, e sem isto o par casado à mão voltaria a Pending.
+    _apply_manual_matches(recon_date, pend_pay, pend_rec, settled)
     payload = {
         'success': True, 'recon_date': recon_date, 'recon_date_fmt': _fmt_date(recon_date),
         'summary': summary, 'pending_payment': pend_pay,
@@ -2039,6 +2042,181 @@ def _justify_locked(recon_date, table, index, comment, status):
     rows[index]['comment'] = str(comment or '').strip()
     _persist(recon_date, data, strict=True)
     return data
+
+
+# ── Match manual (débito × crédito da mesma contraparte) ─────────────────────
+# A mesa casa à mão o que o motor deixou solto: linhas do Pending Payment
+# (débito, valor negativo) contra linhas do Pending Receivement (crédito,
+# positivo) da MESMA contraparte, quando a soma dos dois lados fica dentro da
+# tolerância. Só entra linha com UM lado preenchido — a que tem JPM e cliente já
+# foi casada pelo motor (e ficou Pending pela diferença).
+#
+# Os grupos ficam num arquivo PRÓPRIO por dia (`manual-matches/<data>.json`) e
+# são reaplicados no fim de todo Run: o Run refaz o dia do zero, e gravados só
+# no resultado do dia eles sumiriam no Run seguinte, com o par voltando a Pending.
+_MANUAL_TOL = _TOL_SETTLED
+_MANUAL_DIR = os.path.join(_CACHE_DIR, 'manual-matches')
+
+
+class ManualMatchError(ValueError):
+    """O match foi recusado; `code`/`params` são o que a tela traduz (§486)."""
+
+    def __init__(self, code, text, params=None):
+        super().__init__(text)
+        self.code = code
+        self.params = params or {}
+
+
+def _row_side_value(r):
+    """(valor, nome da contraparte) da linha com UM lado só; None quando ela tem
+    os dois (casada pelo motor) ou nenhum."""
+    has_j = r.get('jpm_value', '') not in ('', None)
+    has_c = r.get('client_value', '') not in ('', None)
+    if has_j == has_c:
+        return None
+    if has_j:
+        return _num(r.get('jpm_value')), str(r.get('jpm_cpty') or '')
+    return _num(r.get('client_value')), str(r.get('client') or '')
+
+
+def _row_sig(table, r):
+    """A identidade da linha entre um Run e outro (o índice muda, isto não)."""
+    def _v(k):
+        v = r.get(k, '')
+        return '' if v in ('', None) else '{:.2f}'.format(_num(v))
+    return [table, str(r.get('le') or 'JPM'), str(r.get('product') or ''),
+            str(r.get('jpm_cpty') or ''), str(r.get('client') or ''),
+            str(r.get('pay_receive') or ''), _v('jpm_value'), _v('client_value')]
+
+
+def _manual_path(recon_date):
+    return os.path.join(_MANUAL_DIR, (recon_date or 'last').replace('/', '-') + '.json')
+
+
+def _load_manual(recon_date, strict=False):
+    p = _manual_path(recon_date)
+    try:
+        if _store.exists(p):
+            data = _store.read(p)
+            return list(data.get('groups') or []) if isinstance(data, dict) else []
+    except FileNotFoundError:
+        return []
+    except Exception:
+        if strict:
+            raise
+        _LOG.warning('[payrec] matches manuais de %s ilegíveis:\n%s',
+                     recon_date, traceback.format_exc())
+    return []
+
+
+def _apply_groups(groups, pend_pay, pend_rec, settled):
+    """Move para o Settled as linhas de cada grupo; grupo que não acha TODAS as
+    linhas (o insumo mudou) não se aplica pela metade — vai para o log."""
+    pools = {'pay': pend_pay, 'rec': pend_rec}
+    applied = 0
+    for g in groups:
+        picks, used = [], set()
+        for s in g.get('rows') or []:
+            tbl = s.get('table')
+            pool = pools.get(tbl)
+            sig = list(s.get('sig') or [])
+            idx = next((i for i, r in enumerate(pool or [])
+                        if (tbl, i) not in used and _row_sig(tbl, r) == sig), None)
+            if idx is None:
+                picks = None
+                break
+            used.add((tbl, idx))
+            picks.append((tbl, idx))
+        if not picks:
+            _LOG.warning('[payrec] match manual %s não reaplicado — as linhas dele não '
+                         'estão mais pendentes no resultado do dia', g.get('id'))
+            continue
+        moved = [pools[tbl][i] for tbl, i in picks]
+        for tbl, i in sorted(picks, key=lambda p: -p[1]):
+            pools[tbl].pop(i)
+        for r in moved:
+            settled.append(dict(r, status='Settled', manual_match=g.get('id', ''),
+                                matched_by=g.get('user', ''), matched_at=g.get('at', '')))
+        applied += 1
+    return applied
+
+
+def _apply_manual_matches(recon_date, pend_pay, pend_rec, settled):
+    return _apply_groups(_load_manual(recon_date), pend_pay, pend_rec, settled)
+
+
+def manual_match(recon_date, pay_idx, rec_idx, user='', sid=''):
+    """Casa à mão as linhas `pay_idx` do Pending Payment com as `rec_idx` do
+    Pending Receivement. Devolve (payload do dia, grupo). Levanta
+    `ManualMatchError` com o motivo quando recusa. Ler → validar → gravar sob o
+    `_cache_lock` e com a leitura ESTRITA (o desenho do Justify)."""
+    from apps.pages import routes
+    with routes._cache_lock:
+        return _manual_match_locked(recon_date, pay_idx, rec_idx, user, sid)
+
+
+def _manual_match_locked(recon_date, pay_idx, rec_idx, user, sid):
+    from apps.pages import routes
+    data = _load_flat(recon_date, strict=True)
+    if not data:
+        raise ManualMatchError('match_no_recon', 'No reconciliation for this date — run it first.')
+    try:
+        sel = {'pay': sorted({int(i) for i in pay_idx or []}),
+               'rec': sorted({int(i) for i in rec_idx or []})}
+    except (TypeError, ValueError):
+        raise ManualMatchError('match_row_missing', 'Invalid row selection.')
+    if not sel['pay'] or not sel['rec']:
+        raise ManualMatchError('match_need_both',
+                               'Select at least one debit (Pending Payment) and one credit '
+                               '(Pending Receivement).')
+    keys = {'pay': 'pending_payment', 'rec': 'pending_receivement'}
+    totals = {'pay': 0.0, 'rec': 0.0}
+    names, rows = {}, []
+    for tbl in ('pay', 'rec'):
+        lst = data.get(keys[tbl]) or []
+        for i in sel[tbl]:
+            if not 0 <= i < len(lst):
+                raise ManualMatchError('match_row_missing',
+                                       'A selected row is no longer pending — reload the page.')
+            sv = _row_side_value(lst[i])
+            if sv is None:
+                raise ManualMatchError('match_already_matched',
+                                       'A selected row was already matched by the reconciliation.')
+            totals[tbl] += sv[0]
+            names.setdefault(_cpty_key(_norm_cpty(sv[1])), sv[1])
+            rows.append({'table': tbl, 'sig': _row_sig(tbl, lst[i])})
+    if len(names) != 1 or '' in names:
+        lista = ', '.join(sorted(v or '—' for v in names.values()))
+        raise ManualMatchError('match_cpty_differs',
+                               'The selected rows are not from the same counterparty: ' + lista,
+                               {'names': lista})
+    net = round(totals['pay'] + totals['rec'], 2)
+    if abs(net) > _MANUAL_TOL:
+        params = {'net': '{:,.2f}'.format(net), 'tol': '{:,.2f}'.format(_MANUAL_TOL)}
+        raise ManualMatchError('match_over_tolerance',
+                               'Difference {net} is above the tolerance of {tol}.'.format(**params),
+                               params)
+    group = {'id': datetime.now().strftime('%Y%m%d%H%M%S%f'), 'at': datetime.now().isoformat(timespec='seconds'),
+             'user': user or '', 'sid': sid or '', 'cpty': next(iter(names.values())),
+             'total_debit': round(totals['pay'], 2), 'total_credit': round(totals['rec'], 2),
+             'net': net, 'rows': rows}
+    # O grupo vai PRIMEIRO para o arquivo dos matches: é ele que o Run reaplica.
+    groups = _load_manual(recon_date, strict=True) + [group]
+    os.makedirs(_MANUAL_DIR, exist_ok=True)
+    routes._atomic_write_json(_manual_path(recon_date), {'groups': groups})
+    _apply_groups([group], data.setdefault('pending_payment', []),
+                  data.setdefault('pending_receivement', []), data.setdefault('settled', []))
+    _persist(recon_date, data, strict=True)
+    # Dia já finalizado: a tela (e o carry-forward do dia seguinte) leem o
+    # histórico, então ele recebe o mesmo match.
+    hp = _history_path(recon_date)
+    if hp and _store.exists(hp):
+        hist = _store.read(hp)
+        if _apply_groups([group], hist.setdefault('pending_payment', []),
+                         hist.setdefault('pending_receivement', []), hist.setdefault('settled', [])):
+            routes._atomic_write_json(hp, hist)
+            data = hist
+    return data, group
 
 
 def load_last(recon_date=''):

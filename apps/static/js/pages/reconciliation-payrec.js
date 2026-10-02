@@ -36,7 +36,17 @@
           e_branch_no_reversal: 'Operations B3 has no Branch client settlement (73760.20-5 × 04880.00-6) for this date — there is no reversal to approve.',
           w_branch_no_account: 'No approved {slot} account for {entity} in Reference Data › Counterparty Details.',
           w_branch_legacy_route: '{n} settlement(s) still through the MGT omnibus 04880.10-9 (net {value}) — not in the reversal.',
-          branchTagB2b: 'B2B', branchTagRev: 'Branch Reversal' },
+          branchTagB2b: 'B2B', branchTagRev: 'Branch Reversal',
+          matchTitle: 'Manual match', matchDebit: 'Debit', matchCredit: 'Credit',
+          matchCpty: 'Counterparty', matchValue: 'Value', matchTotal: 'Total', matchSum: 'Sum (debit + credit)',
+          matchTol: 'Tolerance', matchWithin: 'Within tolerance', matchOver: 'Above tolerance',
+          matchDo: 'Match', matchDone: 'Rows matched and moved to Settled.', matchTag: 'Manual',
+          e_match_need_both: 'Select at least one debit (Pending Payment) and one credit (Pending Receivement).',
+          e_match_cpty_differs: 'The selected rows are not from the same counterparty: {names}',
+          e_match_over_tolerance: 'The difference {net} is above the tolerance of {tol}.',
+          e_match_no_recon: 'There is no reconciliation for this date. Run it first.',
+          e_match_row_missing: 'A selected row is no longer pending. Reload the page.',
+          e_match_already_matched: 'A selected row was already matched by the reconciliation.' },
     br: { running: 'Processando…', sending: 'Enviando…', run: 'Rodar reconciliação', end: 'Encerrar processo',
           noFiles: 'Sem arquivos', noFilesMsg: 'Anexe os arquivos no dropzone ou verifique se a pasta Pay/Rec tem os arquivos de insumo desta data.',
           failTitle: 'Reconciliação falhou', netErr: 'Erro de rede.', done: 'Reconciliação concluída',
@@ -59,7 +69,17 @@
           e_branch_no_reversal: 'O Operations B3 não tem liquidação de cliente da Branch (73760.20-5 × 04880.00-6) nesta data — não há reversão para aprovar.',
           w_branch_no_account: 'Sem conta {slot} aprovada para {entity} em Reference Data › Counterparty Details.',
           w_branch_legacy_route: '{n} liquidação(ões) ainda pela guarda-chuva da MGT 04880.10-9 (net {value}) — fora da reversão.',
-          branchTagB2b: 'B2B', branchTagRev: 'Branch Reversal' },
+          branchTagB2b: 'B2B', branchTagRev: 'Branch Reversal',
+          matchTitle: 'Match manual', matchDebit: 'Débito', matchCredit: 'Crédito',
+          matchCpty: 'Contraparte', matchValue: 'Valor', matchTotal: 'Total', matchSum: 'Soma (débito + crédito)',
+          matchTol: 'Tolerância', matchWithin: 'Dentro da tolerância', matchOver: 'Acima da tolerância',
+          matchDo: 'Casar', matchDone: 'Linhas casadas e movidas para Settled.', matchTag: 'Manual',
+          e_match_need_both: 'Selecione ao menos um débito (Pending Payment) e um crédito (Pending Receivement).',
+          e_match_cpty_differs: 'As linhas selecionadas não são da mesma contraparte: {names}',
+          e_match_over_tolerance: 'A diferença {net} está acima da tolerância de {tol}.',
+          e_match_no_recon: 'Não há reconciliação nesta data. Rode-a primeiro.',
+          e_match_row_missing: 'Uma linha selecionada não está mais pendente. Recarregue a página.',
+          e_match_already_matched: 'Uma linha selecionada já foi casada pela reconciliação.' },
     es: { running: 'Procesando…', sending: 'Enviando…', run: 'Ejecutar reconciliación', end: 'Finalizar proceso',
           noFiles: 'Sin archivos', noFilesMsg: 'Adjunte los archivos en el dropzone o verifique que la carpeta Pay/Rec tenga los archivos de esta fecha.',
           failTitle: 'La reconciliación falló', netErr: 'Error de red.', done: 'Reconciliación completada',
@@ -82,7 +102,17 @@
           e_branch_no_reversal: 'Operations B3 no tiene liquidación de cliente de la Branch (73760.20-5 × 04880.00-6) en esta fecha — no hay reversión para aprobar.',
           w_branch_no_account: 'Sin cuenta {slot} aprobada para {entity} en Reference Data › Counterparty Details.',
           w_branch_legacy_route: '{n} liquidación(es) aún por la cuenta ómnibus de la MGT 04880.10-9 (net {value}) — fuera de la reversión.',
-          branchTagB2b: 'B2B', branchTagRev: 'Branch Reversal' },
+          branchTagB2b: 'B2B', branchTagRev: 'Branch Reversal',
+          matchTitle: 'Match manual', matchDebit: 'Débito', matchCredit: 'Crédito',
+          matchCpty: 'Contraparte', matchValue: 'Valor', matchTotal: 'Total', matchSum: 'Suma (débito + crédito)',
+          matchTol: 'Tolerancia', matchWithin: 'Dentro de la tolerancia', matchOver: 'Por encima de la tolerancia',
+          matchDo: 'Conciliar', matchDone: 'Filas conciliadas y movidas a Settled.', matchTag: 'Manual',
+          e_match_need_both: 'Seleccione al menos un débito (Pending Payment) y un crédito (Pending Receivement).',
+          e_match_cpty_differs: 'Las filas seleccionadas no son de la misma contraparte: {names}',
+          e_match_over_tolerance: 'La diferencia {net} está por encima de la tolerancia de {tol}.',
+          e_match_no_recon: 'No hay reconciliación en esta fecha. Ejecútela primero.',
+          e_match_row_missing: 'Una fila seleccionada ya no está pendiente. Recargue la página.',
+          e_match_already_matched: 'Una fila seleccionada ya fue conciliada por la reconciliación.' },
   };
   function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k]; }
   function esc(s) {
@@ -155,7 +185,7 @@
     var span = countId ? String(rows ? rows.length : 0) : '';
     if (countId) setText(countId, span);
     if (!rows || !rows.length) {
-      body.innerHTML = '<tr><td colspan="10" class="pr-empty">' + esc(t('empty')) + '</td></tr>';
+      body.innerHTML = '<tr><td colspan="11" class="pr-empty">' + esc(t('empty')) + '</td></tr>';
       show(cardId, true);
       return;
     }
@@ -163,7 +193,8 @@
       var base =
         '<td>' + esc(r.le || '') + '</td>' +
         '<td>' + esc(r.product) + '</td>' +
-        '<td>' + esc(r.jpm_cpty) + (r.branch ? '<span class="pr-branch-tag">' + esc(t(r.branch === 'b2b' ? 'branchTagB2b' : (r.branch === 'reversal' ? 'branchTagRev' : 'branchTag'))) + '</span>' : '') + '</td>' +
+        '<td>' + esc(r.jpm_cpty) + (r.branch ? '<span class="pr-branch-tag">' + esc(t(r.branch === 'b2b' ? 'branchTagB2b' : (r.branch === 'reversal' ? 'branchTagRev' : 'branchTag'))) + '</span>' : '') +
+          (r.manual_match ? '<span class="pr-manual-tag" title="' + esc(r.matched_by || '') + '">' + esc(t('matchTag')) + '</span>' : '') + '</td>' +
         '<td>' + esc(r.client) + '</td>' +
         '<td>' + esc(r.pay_receive) + '</td>' +
         numCell(r.jpm_value) + numCell(r.client_value);
@@ -181,7 +212,14 @@
           '<button type="button" class="btn btn-success btn-sm rounded-circle pr-act-confirm" title="Confirm"><i class="ti ti-check"></i></button>' +
           '</div>'
         : '';
-      return '<tr data-pr-table="' + esc(tableKey || '') + '" data-pr-index="' + i + '">' + base +
+      // Caixinha do match manual: só na linha com UM lado (a que o motor não casou).
+      var selKey = tableKey + ':' + i;
+      var canSel = !!sideValue(r);
+      var sel = canSel && matchSel[selKey];
+      var selCell = '<td class="pr-sel-col">' + (canSel
+        ? '<input type="checkbox" class="form-check-input pr-sel" data-sel="' + esc(selKey) + '"' + (sel ? ' checked' : '') + '>'
+        : '') + '</td>';
+      return '<tr data-pr-table="' + esc(tableKey || '') + '" data-pr-index="' + i + '"' + (sel ? ' class="pr-selected"' : '') + '>' + selCell + base +
         '<td class="pr-status-cell">' + statusBadge(r.status) + '</td>' +
         '<td class="pr-comment-cell">' + esc(r.comment || '') + '</td>' +
         '<td class="pr-actions-cell">' + actions + '</td>' +
@@ -191,6 +229,7 @@
   }
 
   function render(d) {
+    if (d !== _lastData) matchSel = {};   // resultado novo → seleção antiga não vale
     _lastData = d || {};
     renderSummary(d.summary || []);
     renderList('prCardPendPay', 'prPendPayBody', 'prPendPayCount', d.pending_payment || [], 'pend', 'pay');
@@ -201,6 +240,7 @@
     var endBtn = document.getElementById('prEndBtn');
     if (endBtn) endBtn.disabled = false;
     syncBranchBtn(d);
+    syncMatchBtn();
     if (window.lucide && lucide.createIcons) lucide.createIcons();
     applyTranslationsIfAny();
   }
@@ -474,6 +514,130 @@
     });
   }
 
+  // ── Match manual (débito × crédito da mesma contraparte) ───────────────────
+  // A mesa marca linhas do Pending Payment (débito) e do Pending Receivement
+  // (crédito) que o motor não casou; o Swal mostra os dois lados, os totais e a
+  // soma, e só deixa casar quando a soma fica dentro da tolerância e todas são
+  // da mesma contraparte. O servidor confere tudo de novo — o JS é conveniência.
+  var matchSel = {};
+  var MATCH_TOL = parseFloat(page.getAttribute('data-match-tol')) || 1;
+
+  function toNum(v) {
+    if (typeof v === 'number') return v;
+    var n = parseFloat(String(v).replace(/\./g, '').replace(',', '.'));
+    return isNaN(n) ? 0 : n;
+  }
+  // { value, cpty } da linha com UM lado só; null quando tem os dois ou nenhum.
+  function sideValue(r) {
+    var hasJ = r.jpm_value !== '' && r.jpm_value != null;
+    var hasC = r.client_value !== '' && r.client_value != null;
+    if (hasJ === hasC) return null;
+    return hasJ ? { value: toNum(r.jpm_value), cpty: r.jpm_cpty || '' }
+                : { value: toNum(r.client_value), cpty: r.client || '' };
+  }
+  // A mesma chave do servidor (`_cpty_key`): só letras e dígitos, sem sufixo societário.
+  function cptyKey(name) {
+    var u = String(name || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toUpperCase();
+    u = u.replace(/[^A-Z0-9 ]/g, '').trim().replace(/\s+(SA|LTDA|ME|EPP)$/, '');
+    return u.replace(/ /g, '');
+  }
+  function selectedRows(tableKey) {
+    var arr = tableKey === 'pay' ? (_lastData && _lastData.pending_payment) : (_lastData && _lastData.pending_receivement);
+    var out = [];
+    Object.keys(matchSel).forEach(function (k) {
+      var p = k.split(':');
+      if (p[0] !== tableKey || !matchSel[k]) return;
+      var i = parseInt(p[1], 10), r = (arr || [])[i], sv = r && sideValue(r);
+      if (sv) out.push({ index: i, cpty: sv.cpty, value: sv.value });
+    });
+    return out.sort(function (a, b) { return a.index - b.index; });
+  }
+  function syncMatchBtn() {
+    var btn = document.getElementById('prMatchBtn');
+    if (btn) btn.disabled = !(selectedRows('pay').length && selectedRows('rec').length);
+  }
+  function wireMatchSelection() {
+    ['prPendPayBody', 'prPendRecBody'].forEach(function (bodyId) {
+      var body = document.getElementById(bodyId);
+      if (!body) return;
+      body.addEventListener('change', function (e) {
+        var cb = e.target.closest('.pr-sel');
+        if (!cb) return;
+        matchSel[cb.getAttribute('data-sel')] = cb.checked;
+        var tr = cb.closest('tr'); if (tr) tr.classList.toggle('pr-selected', cb.checked);
+        syncMatchBtn();
+      });
+    });
+  }
+
+  function matchError(b) {
+    if (b && b.code && t('e_' + b.code)) return esc(fmtParams(t('e_' + b.code), b.params));
+    return b && b.error ? esc(b.error) : t('netErr');
+  }
+
+  function openMatch(btn) {
+    var deb = selectedRows('pay'), cred = selectedRows('rec');
+    if (!deb.length || !cred.length) {
+      Swal.fire({ icon: 'info', title: t('matchTitle'), html: esc(t('e_match_need_both')), confirmButtonColor: '#0066cc' });
+      return;
+    }
+    var sum = function (a) { return a.reduce(function (s, r) { return s + r.value; }, 0); };
+    var totD = sum(deb), totC = sum(cred), net = Math.round((totD + totC) * 100) / 100;
+    var names = {};
+    deb.concat(cred).forEach(function (r) { names[cptyKey(r.cpty)] = r.cpty; });
+    var keys = Object.keys(names);
+    var sameCpty = keys.length === 1 && keys[0] !== '';
+    var within = Math.abs(net) <= MATCH_TOL + 1e-9;
+    var num = function (v) { return '<td class="pr-num' + (v < 0 ? ' pr-neg' : '') + '">' + fmtNum(v) + '</td>'; };
+    var n = Math.max(deb.length, cred.length), rows = '';
+    for (var i = 0; i < n; i++) {
+      var d = deb[i], c = cred[i];
+      rows += '<tr>' +
+        '<td>' + (d ? esc(d.cpty) : '') + '</td>' + (d ? num(d.value) : '<td></td>') +
+        '<td>' + (c ? esc(c.cpty) : '') + '</td>' + (c ? num(c.value) : '<td></td>') + '</tr>';
+    }
+    var html =
+      '<div class="table-responsive"><table class="pr-match-table">' +
+        '<thead><tr><th>' + esc(t('matchDebit')) + ' — ' + esc(t('matchCpty')) + '</th><th>' + esc(t('matchValue')) + '</th>' +
+        '<th>' + esc(t('matchCredit')) + ' — ' + esc(t('matchCpty')) + '</th><th>' + esc(t('matchValue')) + '</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+        '<tfoot><tr><td>' + esc(t('matchTotal')) + ' ' + esc(t('matchDebit')) + '</td>' + num(totD) +
+        '<td>' + esc(t('matchTotal')) + ' ' + esc(t('matchCredit')) + '</td>' + num(totC) + '</tr></tfoot>' +
+      '</table></div>' +
+      '<div class="pr-match-sum">' + esc(t('matchSum')) + ': <b class="' + (net < 0 ? 'pr-neg' : '') + '">' + fmtNum(net) + '</b>' +
+        '<span class="pr-match-chip ' + (within ? 'ok' : 'no') + '">' + esc(t(within ? 'matchWithin' : 'matchOver')) +
+        ' · ' + esc(t('matchTol')) + ' ' + fmtNum(MATCH_TOL) + '</span></div>' +
+      (sameCpty ? '' : '<div class="pr-match-err">' + esc(fmtParams(t('e_match_cpty_differs'),
+        { names: keys.map(function (k) { return names[k] || '—'; }).join(', ') })) + '</div>');
+    var allowed = within && sameCpty;
+    Swal.fire({
+      title: t('matchTitle'), html: html, width: 760,
+      showCancelButton: true, confirmButtonText: t('matchDo'), cancelButtonText: t('cancel'),
+      confirmButtonColor: '#198754', cancelButtonColor: '#6c757d',
+      didOpen: function () { if (!allowed) Swal.getConfirmButton().disabled = true; },
+      showLoaderOnConfirm: true,
+      preConfirm: function () {
+        if (!allowed) return false;
+        return fetch('/reconciliation-payrec/manual-match', {
+          method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recon_date: refDate(),
+                                 pay: deb.map(function (r) { return r.index; }),
+                                 rec: cred.map(function (r) { return r.index; }) })
+        }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+          .then(function (res) {
+            if (!(res.ok && res.body && res.body.success)) { Swal.showValidationMessage(matchError(res.body)); return false; }
+            return res.body;
+          })
+          .catch(function () { Swal.showValidationMessage(t('netErr')); return false; });
+      },
+      allowOutsideClick: function () { return !Swal.isLoading(); }
+    }).then(function (r) {
+      if (!r.isConfirmed || !r.value) return;
+      render(r.value.data || _lastData);
+      Swal.fire({ icon: 'success', title: t('matchTitle'), html: esc(t('matchDone')), confirmButtonColor: '#0066cc', timer: 1600, showConfirmButton: false });
+    });
+  }
+
   // ── Dropzone (holds files until Run) ────────────────────────────────────────
   var dzFiles = [];
   var dzRenderChips = function () {};        // set by wireDropzone; used to redraw the chips
@@ -546,6 +710,7 @@
     var endBtn = document.getElementById('prEndBtn');
     if (endBtn) endBtn.disabled = true;
     syncBranchBtn(null);
+    matchSel = {}; syncMatchBtn();
   }
 
   // Pull the saved status for the current reference date (finalised history, or
@@ -566,6 +731,9 @@
     try { wireDropzone(); } catch (e) {}
     try { wireDatePicker(); } catch (e) {}
     try { wireJustifyActions(); } catch (e) {}
+    try { wireMatchSelection(); } catch (e) {}
+    var matchBtn = document.getElementById('prMatchBtn');
+    if (matchBtn) matchBtn.addEventListener('click', function () { if (typeof Swal !== 'undefined') openMatch(matchBtn); });
     var runBtn = document.getElementById('prRunBtn');
     var endBtn = document.getElementById('prEndBtn');
     if (runBtn) runBtn.addEventListener('click', function () { run(runBtn); });
