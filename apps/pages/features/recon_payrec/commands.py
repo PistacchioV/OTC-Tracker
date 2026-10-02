@@ -81,6 +81,13 @@ def justify(recon_date, table, index, comment, status):
     return justify_row(recon_date, table, index, comment, status)
 
 
+def manual_match(recon_date, pay_idx, rec_idx, user='', sid=''):
+    """(payload do dia, grupo) do match manual débito × crédito; recusa com
+    `recon_payrec.ManualMatchError` (código + params para a tela)."""
+    from apps.pages.recon_payrec import manual_match as _mm
+    return _mm(recon_date, pay_idx, rec_idx, user=user, sid=sid)
+
+
 def end_process(recon_date):
     """(saved, emailed). Persiste PRIMEIRO o histórico datado do dia — o registro
     do dia finalizado independe de o SMTP estar de pé — e só então manda o

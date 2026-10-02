@@ -27,7 +27,8 @@ def reconciliation_payrec():
     if re.match(r'^\d{4}-\d{2}-\d{2}$', link):
         ref_date = link
     return render_template('pages/reconciliation-payrec.html',
-                           segment='reconciliation-payrec', ref_date=ref_date)
+                           segment='reconciliation-payrec', ref_date=ref_date,
+                           match_tol=queries.match_tolerance())
 
 
 @blueprint.route('/reconciliation-payrec/data')
@@ -102,6 +103,36 @@ def reconciliation_payrec_justify():
     except Exception as e:                                  # noqa: BLE001
         R.log.error('[recon_payrec_justify] %s', e)
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@blueprint.route('/reconciliation-payrec/manual-match', methods=['POST'])
+def reconciliation_payrec_manual_match():
+    """Match manual: débitos do Pending Payment × créditos do Pending
+    Receivement da MESMA contraparte, com a soma dentro da tolerância."""
+    from apps.pages.recon_payrec import ManualMatchError
+    R = _routes()
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    recon_date = (payload.get('recon_date') or '').strip()
+    try:
+        data, group = commands.manual_match(recon_date, payload.get('pay') or [],
+                                            payload.get('rec') or [],
+                                            user=session.get('user_name', ''),
+                                            sid=session.get('user_sid', ''))
+    except ManualMatchError as e:
+        return jsonify({'success': False, 'code': e.code, 'params': e.params,
+                        'error': str(e)}), 400
+    except Exception as e:                                  # noqa: BLE001
+        R.log.error('[recon_payrec_manual_match]\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    R._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                           'Pay/Rec Manual Match', 'Reconciliation',
+                           '{} — {} row(s), net {:,.2f}'.format(
+                               group.get('cpty', ''), len(group.get('rows') or []),
+                               group.get('net') or 0) +
+                           (' (' + recon_date + ')' if recon_date else ''))
+    return jsonify({'success': True, 'data': data, 'group': group})
 
 
 @blueprint.route('/reconciliation-payrec/end-process', methods=['POST'])

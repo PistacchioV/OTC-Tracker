@@ -15,6 +15,12 @@ def last(recon_date):
     return load_last(recon_date)
 
 
+def match_tolerance():
+    """A tolerância do match manual (a mesma do Settled do motor)."""
+    from apps.pages.recon_payrec import _MANUAL_TOL
+    return _MANUAL_TOL
+
+
 def recipients():
     return persistence.load_recipients()
 
