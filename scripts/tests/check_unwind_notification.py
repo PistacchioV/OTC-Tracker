@@ -143,6 +143,26 @@ DOIS = [{'Codigo Identificador': 'XXX-4T6-2W4YU86-0-0', 'Contrato': '99C99999999
 check('com id inteiro dos dois lados, a igualdade EXATA vence a truncagem',
       domain.contrato_por_identificador(DOIS, 'ATS-4T6-2W4YU86-0-0')[0], '25L04197478')
 
+# Os 14 da ESQUERDA vem antes dos 14 da direita (mesa, 02/10/2026): o aviso
+# com sufixo diferente do da posicao casa pelo comeco do id.
+check('os 14 da esquerda', domain.identificador_esquerda('ATS-4T6-2W4YU86-0-0'), 'ATS-4T6-2W4YU8')
+ESQ = [{'Codigo Identificador': 'ATS-4T6-2W4YU86-9-9', 'Contrato': '26A00000001'}]
+check('sem exata, casa pelos 14 da ESQUERDA',
+      domain.contrato_por_identificador(ESQ, 'ATS-4T6-2W4YU86-0-0')[0], '26A00000001')
+ESQ_DIR = [{'Codigo Identificador': 'ZZZ-4T6-2W4YU86-0-0', 'Contrato': '26B00000002'},
+           {'Codigo Identificador': 'ATS-4T6-2W4YU8X-7-7', 'Contrato': '26C00000003'}]
+check('a esquerda vence a direita quando as duas achariam',
+      domain.contrato_por_identificador(ESQ_DIR, 'ATS-4T6-2W4YU86-0-0')[0], '26C00000003')
+# Ids da MESMA familia tem os mesmos 14 da esquerda e diferem no fim: ali a
+# esquerda e ambigua e quem separa e a direita.
+FAMILIA = [{'Codigo Identificador': 'ATS-4T6-2W4YU86-1-0', 'Contrato': '26D00000004'},
+           {'Codigo Identificador': 'XX-4T6-2W4YU86-0-0', 'Contrato': '26E00000005'},
+           {'Codigo Identificador': 'ATS-4T6-2W4YU86-2-0', 'Contrato': '26F00000006'}]
+check('esquerda AMBIGUA cai para os 14 da direita',
+      domain.contrato_por_identificador(FAMILIA, 'ATS-4T6-2W4YU86-0-0')[0], '26E00000005')
+check('esquerda ambigua e direita sem nada: a primeira (quem chama avisa)',
+      domain.contrato_por_identificador(FAMILIA[:1] + FAMILIA[2:], 'ATS-4T6-2W4YU86-0-0')[0], '26D00000004')
+
 print('\n== 10b. quem e a contraparte: o TIPO DA CONTA decide ==')
 # Numa conta GUARDA-CHUVA o `Nome da Contraparte` e o titular — que somos nos.
 # Lendo o nome, toda recompra contra cliente sai com a contraparte errada e o
