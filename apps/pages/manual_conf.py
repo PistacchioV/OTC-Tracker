@@ -1142,6 +1142,39 @@ def upsert_row(row):
     return target
 
 
+def insert_rows(rows):
+    """O `upsert_row` de VARIAS linhas: uma transacao por banco de destino
+    (DELETE + INSERT de cada chave) e, so depois de o destino gravar, a
+    limpeza das mesmas chaves no outro banco — a ordem do `upsert_row`, que
+    no pior caso deixa duplicata, nunca vazio. O import em lote da recompra
+    (§622) gravava linha a linha: duas aberturas exclusivas no share por
+    operacao. Chave repetida no lote vale a ULTIMA. -> quantidade gravada."""
+    cols = ', '.join('"{}"'.format(c) for c in DB_COLUMNS)
+    ph = ', '.join('?' for _ in DB_COLUMNS)
+    por_chave = {}
+    for row in rows or []:
+        refresh_derived(row)
+        key = str(row.get(KEY_COLUMN, '') or '').strip()
+        if key:
+            por_chave[key] = row
+    por_alvo = {}
+    for key, row in por_chave.items():
+        por_alvo.setdefault(target_category(row), []).append((key, row))
+    for alvo, itens in por_alvo.items():
+        ops = []
+        for key, row in itens:
+            ops.append(('DELETE FROM {} WHERE trim("{}") = ?'.format(TABLE, KEY_COLUMN), [key]))
+            ops.append(('INSERT INTO {} ({}) VALUES ({})'.format(TABLE, cols, ph),
+                        [str(row.get(c, '') or '') for c in DB_COLUMNS]))
+        _write_exec(alvo, ops, raise_errors=True)
+    for alvo, itens in por_alvo.items():
+        for cat in ('pending', 'ok'):
+            if cat != alvo:
+                _write_exec(cat, [('DELETE FROM {} WHERE trim("{}") = ?'.format(TABLE, KEY_COLUMN),
+                                   [key]) for key, _row in itens])
+    return len(por_chave)
+
+
 _SEL_ROW = 'SELECT {} FROM {} WHERE trim("{}") = ? LIMIT 1'
 
 
@@ -1253,7 +1286,13 @@ def row_untouched(key):
     Linha que nao existe e "nao ha o que preservar" (True): quem pergunta
     quer saber se pode seguir.
     """
-    row = find_row(key)
+    return untouched(find_row(key))
+
+
+def untouched(row):
+    """O `row_untouched` sobre uma linha JA LIDA (`None` = nao esta na
+    esteira). Quem decide em lote le a esteira UMA vez e pergunta aqui: o
+    `find_row` carrega os dois bancos inteiros a cada chamada (§622)."""
     if row is None:
         return True
     marcas = ['Data envio validação OTC', 'Data Callback', SENT_COLUMN]

@@ -56,44 +56,73 @@ def _hoje():
 def import_email(html, subject='', ref_dt=None, dry_run=False):
     """O corpo HTML de UM `BRL NDF Unwind Notification` -> a linha da recompra.
 
-    Devolve `{'rows': [...], 'warnings': [...], 'source_date': iso}`. A
-    posicao e lida UMA vez por import, e e dela que saem contrato, contas,
-    moeda, lado e contraparte — a recompra e de operacao ja registrada.
+    Devolve `{'rows': [...], 'warnings': [...], 'source_date': iso}`; e-mail
+    que nao se le e ValueError. E o `import_emails` de um item so."""
+    out = import_emails([(html, subject, '')], ref_dt=ref_dt, dry_run=dry_run)
+    if out['failed']:
+        raise ValueError(out['failed'][0]['reason'])
+    return out
 
-    `dry_run` so parseia: e o primeiro passo do Import das paginas desta casa
-    (a tela confere as duplicatas e pergunta se substitui)."""
+
+def import_emails(items, ref_dt=None, dry_run=False):
+    """VARIOS e-mails `[(html, assunto, nome)]` num import so.
+
+    A posicao e lida UMA vez para o lote (e dela que saem contrato, contas,
+    moeda, lado e contraparte — a recompra e de operacao ja registrada), e
+    cada destino e gravado UMA vez: o arquivo-dia, o Pending Confirmation e a
+    esteira, a Intrag, o Cockpit (e o IR do dia). Um e-mail por request
+    relia o Live Position inteiro e abria uns quinze bancos no share por
+    recompra — 79 recompras passavam de uma hora (§622).
+
+    E-mail que nao se le volta em `failed` com o motivo e nao derruba os
+    outros. `dry_run` so parseia: e o primeiro passo do Import das paginas
+    desta casa (a tela confere as duplicatas e pergunta se substitui).
+    -> `{'rows', 'warnings', 'failed': [{name, subject, reason}], 'source_date'}`."""
     ref = ref_dt or _hoje()
-    tabelas = notification_html.tables(html or '')
-    if not tabelas:
-        raise ValueError('No table found in the e-mail body')
-    rec = domain.parse_notification(tabelas, subject or '')
-    if not rec.get('athena_id'):
-        raise ValueError('The e-mail carries no Athena ID')
+    recs, falhas = [], []
+    for html, assunto, nome in items or []:
+        try:
+            tabelas = notification_html.tables(html or '')
+            if not tabelas:
+                raise ValueError('No table found in the e-mail body')
+            rec = domain.parse_notification(tabelas, assunto or '')
+            if not rec.get('athena_id'):
+                raise ValueError('The e-mail carries no Athena ID')
+            recs.append(rec)
+        except ValueError as exc:
+            falhas.append({'name': nome or '', 'subject': assunto or '', 'reason': str(exc)})
+    if not recs:
+        return {'rows': [], 'warnings': [], 'failed': falhas, 'source_date': ''}
     linhas, src = queries.position_rows(ref)
-    contrato, posicao = domain.contrato_por_identificador(linhas, rec['athena_id'])
-    # Conta guarda-chuva? A resposta e do cadastro `b3-accounts` (pelo TIPO da
-    # conta) e o `domain` nao fala com cadastro — ela vai PRONTA. Numa
-    # guarda-chuva o `Nome da Contraparte` da posicao e o titular, que somos
-    # nos: quem identifica o cliente e o CPF/CNPJ.
-    omnibus = _R()._b3_is_omnibus((posicao or {}).get('Codigo da Contraparte'))
-    linha, avisos = domain.linha_da_recompra(rec, posicao, ref, contrato, omnibus=omnibus)
-    _completar_contraparte(linha)
-    linha['MyNumber'] = _rand10()
-    linha['ImportedAt'] = _R()._br_now().strftime('%Y-%m-%d %H:%M')
-    linha['PositionDate'] = src
+    rows, avisos = [], []
+    agora = _R()._br_now().strftime('%Y-%m-%d %H:%M')
+    for rec in recs:
+        contrato, posicao = domain.contrato_por_identificador(linhas, rec['athena_id'])
+        # Conta guarda-chuva? A resposta e do cadastro `b3-accounts` (pelo TIPO
+        # da conta) e o `domain` nao fala com cadastro — ela vai PRONTA. Numa
+        # guarda-chuva o `Nome da Contraparte` da posicao e o titular, que
+        # somos nos: quem identifica o cliente e o CPF/CNPJ.
+        omnibus = _R()._b3_is_omnibus((posicao or {}).get('Codigo da Contraparte'))
+        linha, av = domain.linha_da_recompra(rec, posicao, ref, contrato, omnibus=omnibus)
+        _completar_contraparte(linha)
+        linha['MyNumber'] = _rand10()
+        linha['ImportedAt'] = agora
+        linha['PositionDate'] = src
+        rows.append(linha)
+        avisos.extend(av)
     if not dry_run:
-        persistence.upsert(datetime(ref.year, ref.month, ref.day), [linha])
+        persistence.upsert(datetime(ref.year, ref.month, ref.day), rows)
         # A recompra entra na esteira JÁ NO IMPORT (mesa): Pending Confirmation,
         # Track e Confirmations Monitor a mostram sem esperar o Send.
-        esteira_da_recompra([linha], ref)
+        esteira_da_recompra(rows, ref)
         # E a perna do FUNDO na Intrag › Unwind, também no IMPORT (mesa,
         # 28/09/2026): nem toda recompra é registrada na B3 pelo OTC Tracker,
         # e esperar o Send deixava a Intrag sem a instrução das que não são.
-        intrag_da_recompra([linha], ref)
+        intrag_da_recompra(rows, ref)
         # E no NDF Cockpit, que é a tela onde a mesa acompanha a liquidação e o
         # imposto — o dia dela é o da LIQUIDAÇÃO, não o do import.
-        cockpit_da_recompra([linha])
-    return {'rows': [linha], 'warnings': avisos, 'source_date': src}
+        cockpit_da_recompra(rows)
+    return {'rows': rows, 'warnings': avisos, 'failed': falhas, 'source_date': src}
 
 
 def _completar_contraparte(linha):
@@ -128,6 +157,15 @@ def _completar_contraparte(linha):
 
 def import_email_upload(filename, data, ref_dt=None, dry_run=False):
     """O arquivo do dropzone: `.msg`, `.eml` ou o corpo salvo como `.htm`.
+    E o `import_email_uploads` de um arquivo so (ValueError se nao se le)."""
+    out = import_email_uploads([(filename, data)], ref_dt=ref_dt, dry_run=dry_run)
+    if out['failed']:
+        raise ValueError(out['failed'][0]['reason'])
+    return out
+
+
+def import_email_uploads(files, ref_dt=None, dry_run=False):
+    """Os arquivos do dropzone `[(nome, bytes)]` num import so.
 
     Quem decide o formato e o CONTEUDO (`infra.email_file`), nao a extensao —
     o mesmo que as paginas de New Deals fazem, e por isso elas nunca pediram
@@ -136,11 +174,20 @@ def import_email_upload(filename, data, ref_dt=None, dry_run=False):
     O assunto sai do proprio arquivo quando ele o carrega (`.msg` e `.eml`);
     so o corpo solto cai para o NOME do arquivo, que e onde o Outlook poe o
     assunto ao salvar — e e de la que saem os dois identificadores."""
-    nome = str(filename or '')
-    texto, assunto = email_file.ler(nome, data)
-    if not assunto:
-        assunto = os.path.splitext(os.path.basename(nome))[0]
-    return import_email(texto, assunto, ref_dt=ref_dt, dry_run=dry_run)
+    items, falhas = [], []
+    for filename, data in files or []:
+        nome = str(filename or '')
+        try:
+            texto, assunto = email_file.ler(nome, data)
+        except ValueError as exc:
+            falhas.append({'name': nome, 'subject': '', 'reason': str(exc)})
+            continue
+        if not assunto:
+            assunto = os.path.splitext(os.path.basename(nome))[0]
+        items.append((texto, assunto, nome))
+    out = import_emails(items, ref_dt=ref_dt, dry_run=dry_run)
+    out['failed'] = falhas + out['failed']
+    return out
 
 
 def scan_box(ref_dt=None):
@@ -154,22 +201,24 @@ def scan_box(ref_dt=None):
     ref = ref_dt or _hoje()
     resultado = otc_boxscan.scan_unwind_box('ndf') or {}
     achados = resultado.get('emails') or []
-    rows, avisos, falhas = [], [], []
-    for item in achados:
-        try:
-            out = import_email(item.get('html') or '', item.get('subject') or '', ref_dt=ref)
-        except ValueError as exc:
-            falhas.append({'subject': item.get('subject') or '', 'reason': str(exc)})
+    # UM import para a caixa inteira (§622): posicao lida uma vez e cada
+    # destino gravado uma vez. O `nome` e o indice, para saber de volta quais
+    # e-mails entraram e podem ser arquivados.
+    out = import_emails([(it.get('html') or '', it.get('subject') or '', str(i))
+                         for i, it in enumerate(achados)], ref_dt=ref)
+    avisos = list(out['warnings'])
+    recusados = {f['name'] for f in out['failed']}
+    for i, item in enumerate(achados):
+        if str(i) in recusados:
             continue
-        rows.extend(out['rows'])
-        avisos.extend(out['warnings'])
         try:
             otc_boxscan.archive_unwind_email(item.get('entry_id') or '')
         except Exception as exc:                            # noqa: BLE001
             avisos.append({'code': 'unwind_archive_failed',
                            'params': {'subject': item.get('subject') or ''},
                            'text': 'Imported, but the e-mail could not be archived: %s' % exc})
-    return {'rows': rows, 'warnings': avisos, 'failed': falhas,
+    falhas = [{'subject': f['subject'], 'reason': f['reason']} for f in out['failed']]
+    return {'rows': out['rows'], 'warnings': avisos, 'failed': falhas,
             'scanned': len(achados)}
 
 
@@ -916,7 +965,10 @@ def esteira_sem_a_recompra(athena_ids):
                           chave, traceback.format_exc())
 
 
-def esteira_data_da_operacao(linha, ref):
+_LER = object()   # `row` nao informado: o `find_row` le a esteira
+
+
+def esteira_data_da_operacao(linha, ref, row=_LER):
     """Reimportada noutro dia: leva a `Data Operacao` da esteira para o
     arquivo-dia NOVO.
 
@@ -935,8 +987,9 @@ def esteira_data_da_operacao(linha, ref):
         return False
     try:
         mc = R._mc_mod
-        row = mc.find_row(chave)
-        if row is None or not mc.row_untouched(chave):
+        if row is _LER:
+            row = mc.find_row(chave)
+        if row is None or not mc.untouched(row):
             return False
         nova = ref.strftime('%d/%m/%Y')
         if str(row.get('Data Operação', '') or '').strip() == nova:
@@ -954,26 +1007,58 @@ def esteira_da_recompra(linhas, ref=None):
     """Manda para o Pending Confirmation (e daí para a esteira) as recompras
     que acabaram de ser IMPORTADAS.
 
+    Em LOTE (§622): a esteira é lida uma vez para a decisão de cada linha, e o
+    Pending Confirmation e a esteira são gravados por `_pc_save_from_deals`.
+    Se o lote falhar, refaz linha a linha pelo `_pc_save_from_deal`, que é a
+    porta de sempre — mais lento, mas nada fica de fora por causa de um.
+
     Falha aqui NÃO derruba o import: a linha já está no arquivo-dia, e uma
     exceção no espelho faria a tela dizer que o import falhou depois de ele ter
     acontecido. O que se perde é recuperável pelo
     `backfill_manual_confirmations.py`."""
+    R = _R()
+    mc = R._mc_mod
+    try:
+        fila = {str(r.get(mc.KEY_COLUMN, '') or '').strip(): r
+                for r in mc.load_all(strict=True)}
+    except Exception:                                       # noqa: BLE001
+        R.log.warning('[UNWIND NDF FX] esteira ilegivel; a data da operacao e o '
+                      'fundo seguem linha a linha:\n%s', traceback.format_exc())
+        fila = None
+    itens, clientes = [], []
     for l in linhas or []:
         try:
             if e_do_fundo(l):
-                esteira_fora_do_fundo(l.get('AthenaID'))
+                esteira_fora_do_fundo(l.get('AthenaID'), fila)
                 continue
             deal = confirmation_deal(l, ref)
-            _R()._pc_save_from_deal(deal, MC_SOURCE, source=MC_SOURCE,
-                                    trade_number=deal['Deal'])
-            # A linha que JA existia nao e reescrita pelo save (um amend nao
-            # pode apagar carimbo de ninguem), e por isso a data de quem
-            # reimportou noutro dia se acerta aqui.
-            esteira_data_da_operacao(l, ref or _R()._parse_date_any(
-                l.get('SettlementDate')) or _hoje())
+            itens.append((deal, MC_SOURCE, {'source': MC_SOURCE, 'trade_number': deal['Deal']}))
+            clientes.append(l)
         except Exception:                                   # noqa: BLE001
-            _R().log.warning('[UNWIND NDF FX] esteira: %s ficou de fora — %s',
-                             l.get('AthenaID'), traceback.format_exc())
+            R.log.warning('[UNWIND NDF FX] esteira: %s ficou de fora — %s',
+                          l.get('AthenaID'), traceback.format_exc())
+    if itens:
+        try:
+            R._pc_save_from_deals(itens)
+        except Exception:                                   # noqa: BLE001
+            R.log.warning('[UNWIND NDF FX] esteira em lote falhou; refazendo linha a '
+                          'linha:\n%s', traceback.format_exc())
+            for deal, pt, kw in itens:
+                try:
+                    R._pc_save_from_deal(deal, pt, **kw)
+                except Exception:                           # noqa: BLE001
+                    R.log.warning('[UNWIND NDF FX] esteira: %s ficou de fora — %s',
+                                  deal.get('Deal'), traceback.format_exc())
+    # A linha que JA existia nao e reescrita pelo save (um amend nao pode
+    # apagar carimbo de ninguem), e por isso a data de quem reimportou noutro
+    # dia se acerta aqui. A `fila` foi lida ANTES do save, e serve: a linha
+    # que o save criou já nasceu com a data certa, e a que existia ele não
+    # tocou.
+    for l in clientes:
+        chave = str(l.get('AthenaID') or '').strip()
+        esteira_data_da_operacao(
+            l, ref or R._parse_date_any(l.get('SettlementDate')) or _hoje(),
+            _LER if fila is None else fila.get(chave))
 
 
 # ── A recompra no NDF Cockpit (a tela onde a mesa vê o IR) ───────────────────
@@ -1153,12 +1238,16 @@ def e_do_fundo(linha):
     return queries.e_do_fundo(linha)
 
 
-def esteira_fora_do_fundo(chave):
+def esteira_fora_do_fundo(chave, fila=None):
     """Tira da esteira a recompra de fundo que entrou antes da regra do §580 —
-    so a INTOCADA: documento gerado ou validacao assinada e registro."""
+    so a INTOCADA: documento gerado ou validacao assinada e registro.
+    `fila` e a esteira ja lida (`{chave: linha}`), quem decide em lote."""
     chave = str(chave or '').strip()
+    if not chave:
+        return
     mc = _R()._mc_mod
-    if chave and mc.find_row(chave) is not None and mc.row_untouched(chave):
+    row = mc.find_row(chave) if fila is None else fila.get(chave)
+    if row is not None and mc.untouched(row):
         esteira_sem_a_recompra([chave])
 
 

@@ -221,7 +221,6 @@ def _mc_save_from_deal(deal, source, trade_number=None):
     mapeamento do mesmo deal (um amend, uma remapeação) não pode apagar o
     'Conferido OTC' que alguém carimbou.
     """
-    from apps.pages import routes
     if source not in _MC_CONFIRMATION_SOURCES:
         return
     try:
@@ -229,51 +228,78 @@ def _mc_save_from_deal(deal, source, trade_number=None):
         key = str(trade_number or deal.get('Deal', '') or '').strip()
         if not key or _mc.find_row(key) is not None:
             return
-        td = routes._parse_date_any(deal.get('TradeDate', ''))
-        md = routes._parse_date_any(deal.get('SettlementDate', ''))
-
-        def first(*names):
-            for n in names:
-                v = str(deal.get(n, '') or '').strip()
-                if v:
-                    return v
-            return ''
-
-        _mc.upsert_row(_mc.blank_row(**{
-            'Legal Entity': _mc_legal_entity(deal, source),
-            'Cliente': str(deal.get('Client', '') or ''),
-            'Produto': source,
-            'LOB': _lob_for_source(source, deal),
-            'Trade ID': key,
-            # O `Athena ID` saiu da esteira (repetia o Trade ID em quase todo
-            # produto e vinha vazio no FWD Start), e por isso não é mais gravado:
-            # o `blank_row` descartaria a chave em silêncio, e um campo que se
-            # escreve para nada é dívida esperando alguém procurá-lo.
-            'Cetip ID': first('B3_ID'),
-            # O campo é o ATIVO da confirmação: nas commodities entra a
-            # commodity (é ela que distingue OLEO de PLATTS no mesmo dia e
-            # acha o PDF exato); no câmbio, a moeda. A cadeia evita um ramo
-            # por página, que envelheceria a cada coluna nova.
-            #
-            # No TERMO DE MOEDA a moeda é a **Moeda Base** — a estrangeira do
-            # par —, e ela vem da MESMA função que segrega as confirmações
-            # (`_conf_fwdstart_moeda`), não da `QuantityCurrency`. As duas
-            # divergem justamente no caso comum do deal cotado em BRL: a
-            # QuantityCurrency é BRL e a Moeda Base é o EUR/USD do outro lado.
-            # Com BRL na esteira, duas operações da mesma contraparte em moedas
-            # diferentes caíam no MESMO card do Monitor — e o Generate, que
-            # devolve o grupo do New Deals que casa com as chaves do card,
-            # abria o documento de UMA delas. A outra sumia: nem segunda
-            # confirmação, nem segunda linha na primeira.
-            'Moeda': _mc_moeda_do_ativo(deal, source, first),
-            'Notional': first('Notional', 'TotalNotional'),
-            'Notional Amount CCY': _mc_notional_ccy(
-                deal, source, first('Notional', 'TotalNotional')),
-            'Data Operação': td.strftime('%d/%m/%Y') if td else first('TradeDate'),
-            'Data de vencimento': md.strftime('%d/%m/%Y') if md else first('SettlementDate'),
-        }))
+        _mc.upsert_row(_mc_row_from_deal(deal, source, key))
     except Exception:
         log.warning('[manual-conf] save-from-deal falhou:\n%s', traceback.format_exc())
+
+
+def _mc_save_from_deals(items):
+    """O `_mc_save_from_deal` de um LOTE `[(deal, source, trade_number)]`: a
+    esteira e lida UMA vez (o `find_row` carrega os dois bancos inteiros por
+    chamada) e as linhas novas entram numa transacao por banco
+    (`manual_conf.insert_rows`). Mesma regra: so produto que gera documento,
+    e linha existente nunca e sobrescrita. A falha SOBE — quem chama em lote
+    decide o que fazer (o import da recompra refaz linha a linha, §622)."""
+    from apps.pages import manual_conf as _mc
+    itens = [(d, s, str(t or (d or {}).get('Deal', '') or '').strip())
+             for d, s, t in (items or []) if s in _MC_CONFIRMATION_SOURCES]
+    itens = [(d, s, k) for d, s, k in itens if k]
+    if not itens:
+        return 0
+    existentes = {str(r.get(_mc.KEY_COLUMN, '') or '').strip()
+                  for r in _mc.load_all(strict=True)}
+    novas = [_mc_row_from_deal(d, s, k) for d, s, k in itens if k not in existentes]
+    return _mc.insert_rows(novas) if novas else 0
+
+
+def _mc_row_from_deal(deal, source, key):
+    """A linha em branco da esteira para `deal` (chave `key`)."""
+    from apps.pages import routes
+    from apps.pages import manual_conf as _mc
+    td = routes._parse_date_any(deal.get('TradeDate', ''))
+    md = routes._parse_date_any(deal.get('SettlementDate', ''))
+
+    def first(*names):
+        for n in names:
+            v = str(deal.get(n, '') or '').strip()
+            if v:
+                return v
+        return ''
+
+    return _mc.blank_row(**{
+        'Legal Entity': _mc_legal_entity(deal, source),
+        'Cliente': str(deal.get('Client', '') or ''),
+        'Produto': source,
+        'LOB': _lob_for_source(source, deal),
+        'Trade ID': key,
+        # O `Athena ID` saiu da esteira (repetia o Trade ID em quase todo
+        # produto e vinha vazio no FWD Start), e por isso não é mais gravado:
+        # o `blank_row` descartaria a chave em silêncio, e um campo que se
+        # escreve para nada é dívida esperando alguém procurá-lo.
+        'Cetip ID': first('B3_ID'),
+        # O campo é o ATIVO da confirmação: nas commodities entra a
+        # commodity (é ela que distingue OLEO de PLATTS no mesmo dia e
+        # acha o PDF exato); no câmbio, a moeda. A cadeia evita um ramo
+        # por página, que envelheceria a cada coluna nova.
+        #
+        # No TERMO DE MOEDA a moeda é a **Moeda Base** — a estrangeira do
+        # par —, e ela vem da MESMA função que segrega as confirmações
+        # (`_conf_fwdstart_moeda`), não da `QuantityCurrency`. As duas
+        # divergem justamente no caso comum do deal cotado em BRL: a
+        # QuantityCurrency é BRL e a Moeda Base é o EUR/USD do outro lado.
+        # Com BRL na esteira, duas operações da mesma contraparte em moedas
+        # diferentes caíam no MESMO card do Monitor — e o Generate, que
+        # devolve o grupo do New Deals que casa com as chaves do card,
+        # abria o documento de UMA delas. A outra sumia: nem segunda
+        # confirmação, nem segunda linha na primeira.
+        'Moeda': _mc_moeda_do_ativo(deal, source, first),
+        'Notional': first('Notional', 'TotalNotional'),
+        'Notional Amount CCY': _mc_notional_ccy(
+            deal, source, first('Notional', 'TotalNotional')),
+        'Data Operação': td.strftime('%d/%m/%Y') if td else first('TradeDate'),
+        'Data de vencimento': md.strftime('%d/%m/%Y') if md else first('SettlementDate'),
+    })
+
 
 def _mc_conf_trade_keys(picked, product):
     """As chaves de Manual Confirmations das operações que a confirmação cobre.

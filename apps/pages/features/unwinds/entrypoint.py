@@ -76,20 +76,25 @@ def api_unwinds_ndf_fx_search():
 
 @blueprint.route('/api/unwinds/ndf/fx/import-file', methods=['POST'])
 def api_unwinds_ndf_fx_import():
-    """O corpo do e-mail no dropzone (multipart `file`, .htm/.html/.txt).
-    `dry_run` so parseia — e a tela quem confere as duplicatas e pergunta."""
+    """Os e-mails do dropzone (multipart `file`, um ou VARIOS no mesmo campo).
+    O lote vai num request so (§622): posicao lida uma vez e cada destino
+    gravado uma vez. E-mail que nao se le volta em `failed`; so quando NENHUM
+    se le e 400. `dry_run` so parseia — e a tela quem confere as duplicatas."""
     err = _auth()
     if err:
         return err
-    f = request.files.get('file')
-    if f is None or not f.filename:
+    files = [f for f in request.files.getlist('file') if f is not None and f.filename]
+    if not files:
         return jsonify({'success': False, 'message': 'No file received'}), 400
     ref_dt = _R()._api_ref_date(request.form.get('date'))
     dry_run = (request.args.get('dry_run') in ('1', 'true', 'yes')
                or request.form.get('dry_run') in ('1', 'true', 'yes'))
     try:
-        out = commands.import_email_upload(f.filename, f.read(), ref_dt=ref_dt,
-                                           dry_run=dry_run)
+        out = commands.import_email_uploads([(f.filename, f.read()) for f in files],
+                                            ref_dt=ref_dt, dry_run=dry_run)
+        if out['failed'] and not out['rows']:
+            raise ValueError('; '.join('%s: %s' % (x['name'], x['reason']) if len(files) > 1
+                                       else x['reason'] for x in out['failed']))
     except ValueError as exc:
         return jsonify({'success': False, 'message': 'Could not read the e-mail: ' + str(exc)}), 400
     except Exception as exc:                                # noqa: BLE001

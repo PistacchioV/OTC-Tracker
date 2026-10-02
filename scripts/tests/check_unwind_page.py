@@ -676,6 +676,43 @@ def main():
     finally:
         R._create_notification = _orig_notif
 
+    print('\n== 15. o import em LOTE: varios e-mails num request (§622) ==')
+    # Um e-mail por request relia o Live Position inteiro e abria uns quinze
+    # bancos no share por recompra: 79 recompras passavam de uma hora. O lote
+    # le a posicao UMA vez e grava cada destino uma vez — e o e-mail que nao se
+    # le volta em `failed` sem derrubar os outros.
+    ids = ['STP-XE-%dG5U5X-0-0' % n for n in (3, 4, 5)]
+    # Conta de terceiro (nem fundo nem guarda-chuva): a recompra vai para a
+    # esteira e o Pending Confirmation, que e o que esta secao confere.
+    posicoes = [dict(POS, **{'Codigo Identificador': a[4:], 'Contrato': '26C0320279%d' % i,
+                             'Codigo da Contraparte': '99999.00-1'})
+                for i, a in enumerate(ids)]
+    coletas = []
+    _col = _collect(posicoes)
+    R._lpndf_collect = lambda ref: coletas.append(ref) or _col(ref)
+    arquivos = [(io.BytesIO(HTML.replace('STP-XE-10G5U5X-0-0', a).encode('utf-8')),
+                 SUBJECT.replace('STP-XE-10G5U5X-0-0', a) + '.htm') for a in ids]
+    arquivos.append((io.BytesIO(b'<html><body>sem tabela</body></html>'), 'lixo.htm'))
+    lote = cl.post('/api/unwinds/ndf/fx/import-file',
+                   data={'file': arquivos, 'date': '2026-09-17'},
+                   content_type='multipart/form-data').get_json()
+    check('o lote responde com as tres recompras',
+          lote.get('success') and sorted(r['AthenaID'] for r in lote['rows']) == sorted(ids),
+          lote)
+    check('a posicao e lida UMA vez para o lote', len(coletas) == 1, len(coletas))
+    check('o e-mail ilegivel volta em failed, pelo nome',
+          [f['name'] for f in lote.get('failed') or []] == ['lixo.htm'], lote.get('failed'))
+    check('as tres estao no arquivo-dia',
+          sorted(e['AthenaID'] for e in queries.entries('2026-09-17')) == sorted(ids))
+    pc = R._pc_find_rows(ids)
+    check('as tres estao no Pending Confirmation', sorted(pc) == sorted(ids), sorted(pc))
+    check('e as tres na esteira', all(_mc.find_row(a) is not None for a in ids))
+    so_lixo = cl.post('/api/unwinds/ndf/fx/import-file',
+                      data={'file': [(io.BytesIO(b'<p>x</p>'), 'lixo.htm')], 'date': '2026-09-17'},
+                      content_type='multipart/form-data')
+    check('lote em que NENHUM se le e 400', so_lixo.status_code == 400, so_lixo.status_code)
+    R._lpndf_collect = _collect([POS])
+
     print('')
     if FALHAS:
         print('FALHAS (%d): %s' % (len(FALHAS), ', '.join(FALHAS)))
