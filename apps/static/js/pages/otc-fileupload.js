@@ -1255,12 +1255,9 @@ var OTCFileUpload = (function () {
                 if (!isNDF) {
                     var existingId = String(existingRowData[35] || '');
                     if (!existingId) {
-                        // OPT: no UUID — treat as new row
-                        tableInstance.row.add(newRow).draw(false);
-                        fetch(cacheEndpoint, {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(newData)
-                        }).catch(function (err) { console.warn('OTCFileUpload: cache save failed', err); });
+                        // OPT: no UUID — o servidor decide (ver `postImport`)
+                        var addedOpt = tableInstance.row.add(newRow).draw(false);
+                        postImport(cacheEndpoint, newData, newRow, addedOpt, tableInstance);
                         return;
                     }
                     newRow[35]   = existingId;
@@ -1275,20 +1272,44 @@ var OTCFileUpload = (function () {
                 }).catch(function (err) { console.error('OTCFileUpload: cache PATCH error', err); });
 
             } else {
-                // ── NEW ROW: deal not yet in table ───────────────────────────
-                tableInstance.row.add(newRow).draw(false);
-                fetch(cacheEndpoint, {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify(newData)
-                }).then(function(r) {
-                    if (!r.ok) console.error('OTCFileUpload: cache POST failed', r.status, r.statusText, newData.Deal);
-                }).catch(function (err) {
-                    console.error('OTCFileUpload: cache POST error', err);
-                });
+                // ── NEW ROW: deal not in the GRID ────────────────────────────
+                // A grade só tem o que a busca carregou: a operação pode já
+                // estar gravada noutro dia ou fora do filtro. `_import` faz o
+                // SERVIDOR procurá-la (Deal + Acronym, depois Deal + Client, em
+                // todos os dias) e aplicar a regra do Amend em vez de duplicar
+                // a linha (02/10/2026). A resposta diz o que ficou gravado.
+                var addedRow = tableInstance.row.add(newRow).draw(false);
+                postImport(cacheEndpoint, newData, newRow, addedRow, tableInstance);
             }
         });
         return deals.length;
+    }
+
+    function postImport(cacheEndpoint, newData, newRow, rowApi, tableInstance) {
+        var payload = Object.assign({}, newData, { _import: true });
+        fetch(cacheEndpoint, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(payload)
+        }).then(function (r) {
+            if (!r.ok) {
+                console.error('OTCFileUpload: cache POST failed', r.status, r.statusText, newData.Deal);
+                return null;
+            }
+            return r.json();
+        }).then(function (res) {
+            if (!res || !res.result || res.result === 'new') return;
+            // Já estava gravada: a linha da grade mostra o que ficou no banco.
+            var badge = res.status === 'Amend' ? 'text-bg-warning'
+                      : res.status === 'Success' ? 'text-bg-success'
+                      : res.status === 'Sent' ? 'badge-sent' : 'text-bg-secondary';
+            newRow[2] = '<span class="badge ' + badge + ' bg-gradient">' + (res.status || '') + '</span>';
+            newRow[4] = res.b3_id || '';
+            rowApi.data(newRow);
+            tableInstance.draw(false);
+        }).catch(function (err) {
+            console.error('OTCFileUpload: cache POST error', err);
+        });
     }
 
     function processEmailFile(file, tableInstance, assetsRoot, makerSid, cacheEndpoint, rowLayout) {
