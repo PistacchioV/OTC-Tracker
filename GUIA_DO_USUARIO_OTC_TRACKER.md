@@ -2,7 +2,7 @@
 
 **Brazil OTC Operations · JPMorgan Chase & Co.**
 
-**Versão:** 2.2 · **Data:** 02/10/2026
+**Versão:** 2.3 · **Data:** 02/10/2026
 
 ---
 
@@ -595,7 +595,7 @@ A recompra aparece no **Intraday Monitor** (capítulo 5.1) como *Unwind NDF FX*,
 
 > **Linha `Sent` ainda se edita e se reenvia.** Se a B3 recusou o arquivo ou ele sumiu da pasta, clique em **Send** de novo: o arquivo é regravado. Editar uma linha `Sent` a devolve a **Pending**, e ela só volta à B3 depois que outra pessoa aprovar. O que continua travado em `Sent` é apagar e reimportar.
 
-**O que a tela preenche sozinha, e de onde:** o **B3 ID**, a **contraparte**, a **moeda** e as **contas** não vêm do e-mail — vêm da linha do Live Position da operação, achada pelos 14 últimos caracteres do Athena ID. Se a coluna **B3 ID** vier vazia, é porque a operação não foi encontrada lá: confira o *Código Identificador* no Live Position de NDF antes de qualquer outra coisa.
+**O que a tela preenche sozinha, e de onde:** o **B3 ID**, a **contraparte**, a **moeda** e as **contas** não vêm do e-mail — vêm da linha do Live Position da operação, achada pelo Athena ID: primeiro o id inteiro, depois os **14 primeiros** caracteres (só quando apontam para uma linha só) e, por último, os **14 últimos**. Se a coluna **B3 ID** vier vazia, é porque a operação não foi encontrada lá: confira o *Código Identificador* no Live Position de NDF antes de qualquer outra coisa.
 
 > **Uma coisa que o e-mail erra.** Em contrato com nocional em reais (*BRL fixed*), o campo *Direction* do aviso pode dizer **PAY** numa recompra **a receber** — e os campos *Future Value*, *Present Value* e *Calculated Termination Fee* vêm errados junto. A tela usa o **Input Termination Fee** e decide a direção pelo sinal do resultado, então a coluna *Direction* dela pode discordar do e-mail. Quando isso acontece, **a tela está certa** e o aviso registra a divergência.
 
@@ -2145,4 +2145,4 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 
 ---
 
-*OTC Tracker · Brazil OTC Operations · JPMorgan Chase & Co. · Guia do Usuário v2.2 — 02/10/2026*
+*OTC Tracker · Brazil OTC Operations · JPMorgan Chase & Co. · Guia do Usuário v2.3 — 02/10/2026*

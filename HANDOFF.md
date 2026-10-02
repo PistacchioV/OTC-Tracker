@@ -25699,3 +25699,75 @@ O JS é arquivo NOVO (`static/js/pages/auth-two-factor-orbit.js`, com
 `asset_v`): o `auth-two-factor.js` antigo continua servindo o
 `auth-two-factor.html`. As cores de estado do campo levam `!important` — no
 tema escuro a borda do tema vencia e o vermelho do erro sumia.
+
+## §617 — Pay/Rec: botão Match, casamento manual de débito × crédito (2026-10-02)
+
+O motor deixava soltas pernas que a mesa sabe que se compensam (estorno, TED
+devolvida, perna dividida em várias) e a única saída era justificar uma a uma,
+com as duas no Pending e o End process cobrando. Agora a mesa marca linhas do
+Pending Payment (débitos, negativos) e do Pending Receivement (créditos,
+positivos) e o **Match** abre um Swal com a tabela débito × crédito, os totais
+e a soma. Só casa com a soma dentro de `_MANUAL_TOL` (= `_TOL_SETTLED`, R$ 1,00)
+e todas da mesma contraparte pela `_cpty_key` (`SUZANO SA` = `SUZANO S.A.`); só
+entram linhas com UM lado (a que tem JPM e cliente o motor já casou). O
+servidor confere tudo de novo e recusa por código (`match_*`).
+
+O grupo vai para `cache/reconciliation/payrec/manual-matches/<data>.json` e é
+reaplicado no fim de TODO Run (`_apply_manual_matches`): o Run regrava o dia do
+zero e, gravado só no resultado, o par voltaria a Pending. Grupo cujas linhas
+sumiram não se aplica pela metade (log). Dia finalizado recebe o match também
+no histórico. O Summary NÃO é recalculado — vem dos insumos crus.
+`check_payrec_manual_match.py`.
+
+## §618 — Funil: coluna de data ordena por data (2026-10-02)
+
+O DataTables só reconhece data ISO: `Date.parse` lê `05/09/2026` como 9 de maio
+e `25/09/2026` como inválida, então toda coluna `dd/mm/aaaa` caía em texto e o
+A→Z (funil e cabeçalho) ordenava pelo DIA; a lista de valores do funil também.
+Só a Live Position NDF tinha detector próprio. O `excel-filter.js` registra o
+tipo `otc-dmy` na FRENTE dos nativos (senão o `date` nativo pega a coluna em
+que todo dia é ≤ 12 e a ordena como mês/dia), com hora e dentro de badge; a
+lista do funil compara por data; e a tabela inicializada antes do helper tem o
+tipo zerado e redetectado ao ligar (`redetectTypes`, internos `sType` e
+`_aSortData`). Conferido no Chromium: clique, A→Z/Z→A do funil, lista e a
+tabela pré-existente.
+
+## §619 — Guia do Usuário v2.2: capítulo 18, controles de erro e validação (2026-10-02)
+
+Pergunta de um slide de controles (Error Handling / Data Validation): o guia
+cobria a validação espalhada por tela e quase nada de falha de sistema. O
+capítulo 18 novo reúne entrada incorreta, falhas de sistema (base ocupada e
+ilegível, Athena, relatório parcial, e-mail, gravação que falha, `Failed` ×
+`Error`, sessão), trabalho simultâneo e segregação de funções, e a validação
+em exatidão, completude, tempestividade e limites, com a tabela de
+tolerâncias. Anexos viraram o 19. Três afirmações foram cortadas na revisão por
+prometerem mais do que o sistema faz: rotina perdida reexecutada no retorno (só
+o aviso das 19h), largura do arquivo B3 "conferida", linha `Sent` nunca
+sobrescrita no New Deals (dado econômico a devolve a `Amend`).
+
+## §620 — Unwind NDF FX: filtro inteligente (2026-10-02)
+
+A tela só mostrava o dia da Reference Date. Agora carrega pelo filtro
+inteligente do New Deals (`POST /api/unwinds/ndf/fx/cache/search`,
+`queries.search` + `_deal_matches`, leitura estrita do §608). A Reference Date
+é o chip padrão sobre a pseudo-coluna `_day` (o dia do arquivo-dia,
+acrescentado numa CÓPIA da linha e usado para limitar os dias lidos). O
+cuidado: `queries.find` com data só olha aquele arquivo-dia, e as ações
+mandavam a Reference Date — linha de outro dia trazida pela busca daria "not
+found". Edit, Confirm, Delete, Send e Preview mandam agora o `_day` da linha
+(`dayOf`); Import, varredura e Mapping B3 seguem no dia da Reference Date. O
+`load()` do `initComplete` foi para `setTimeout`: ele roda antes de as
+variáveis do filtro existirem. Pendência vista no teste: o Swal do Preview com
+lacuna mostra os códigos crus (`unwind_no_contract`), não a frase traduzida.
+
+## §621 — Unwind NDF FX: B3 ID pelos 14 da esquerda, fallback nos 14 da direita (2026-10-02)
+
+A ponte Athena ID → `Codigo Identificador` do Live Position comparava a
+igualdade exata e os 14 da DIREITA; a mesa identifica pelos 14 da ESQUERDA.
+`domain.contrato_por_identificador` passou a três passadas: exata, 14 da
+esquerda (`identificador_esquerda`) e 14 da direita. A da esquerda só vale com
+candidato ÚNICO: ids da mesma família diferem no fim (`…-0-0` × `…-1-0`) e têm
+os mesmos 14 da esquerda; ambígua, cai para a direita, e se a direita não
+achar nada vale a primeira da esquerda. O truncado de sempre
+(`STP-XE-10G5U5X-0-0` × `XE-10G5U5X-0-0`) segue pela direita. Recompra já
+importada só muda com novo import. `check_unwind_notification.py` §10.

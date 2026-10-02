@@ -757,7 +757,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   das linhas que passam nos filtros das OUTRAS. O valor comparado é o que a
   célula DESENHA (`render('display')`, sem HTML) — nunca `data()[col]`, que
   numa tabela de objetos é `undefined`. **Data `dd/mm/aaaa` ordena como DATA**
-  (02/10/2026): o helper registra o tipo `otc-dmy` na FRENTE dos nativos (com
+  (02/10/2026, §618): o helper registra o tipo `otc-dmy` na FRENTE dos nativos (com
   hora e dentro de badge também) — o `date` do DataTables lê `05/09` como 9 de
   maio e a coluna caía em texto, ordenando pelo DIA no clique, no A→Z e na
   lista do funil. Tabela que nasceu antes dele tem o tipo zerado e redetectado
@@ -1717,7 +1717,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   vem de DUAS formas**: TRUNCADO nos 14 da direita (o aviso traz
   `STP-XE-10G5U5X-0-0` e a posição, `XE-10G5U5X-0-0`) ou INTEIRO
   (`ATS-4T6-2W4YU86-0-0` nos dois lados). O casamento tem TRÊS passadas
-  (mesa, 02/10/2026): a igualdade EXATA, os 14 da ESQUERDA dos dois lados — só
+  (mesa, 02/10/2026, §621): a igualdade EXATA, os 14 da ESQUERDA dos dois lados — só
   com candidato ÚNICO, porque ids da mesma família diferem no FIM
   (`…-0-0` × `…-1-0`) — e, sem eles, os 14 da DIREITA dos dois lados.
   Truncando só o lado do aviso, a posição que guarda o id inteiro nunca casava,
@@ -1855,7 +1855,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   máquina, intocada), `Approved` (mexida e conferida) e `Sent` (reenvio). O `Status` e o `Check`
   ficam fora dos campos editáveis: um é estado da esteira, o outro é veredito
   apurado.
-- **A tela carrega pelo FILTRO INTELIGENTE** (mesa, 02/10/2026): o mesmo
+- **A tela carrega pelo FILTRO INTELIGENTE** (mesa, 02/10/2026, §620): o mesmo
   das páginas de New Deals, em `POST /api/unwinds/ndf/fx/cache/search`
   (`queries.search`, `_deal_matches`, leitura ESTRITA). A Reference Date é o
   chip padrão sobre a pseudo-coluna `_day` — o dia do ARQUIVO-DIA, que a busca
@@ -2392,7 +2392,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `unwind_rows`): casa pelo Trade Id (exato ou os 14 da direita) ou, sem ele,
   por contraparte (sem pontuação e sufixo societário) + valor dentro de R$ 1,00,
   cada recompra UMA perna. Vertical ilegível não derruba a recon (avisa no log).
-- **Pay/Rec: o botão Match casa À MÃO débito × crédito** (mesa, 02/10/2026):
+- **Pay/Rec: o botão Match casa À MÃO débito × crédito** (mesa, 02/10/2026, §617):
   linhas marcadas do Pending Payment (negativas) e do Pending Receivement
   (positivas), só as de UM lado (a que tem JPM e cliente já foi casada pelo
   motor), da MESMA contraparte pela `_cpty_key`, com a soma dentro de
