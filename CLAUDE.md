@@ -756,7 +756,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   já filtrada, SOMA em vez de trocar), OK/Cancelar. A lista de cada coluna sai
   das linhas que passam nos filtros das OUTRAS. O valor comparado é o que a
   célula DESENHA (`render('display')`, sem HTML) — nunca `data()[col]`, que
-  numa tabela de objetos é `undefined`. Página nova não escreve nada; coluna
+  numa tabela de objetos é `undefined`. **Data `dd/mm/aaaa` ordena como DATA**
+  (02/10/2026): o helper registra o tipo `otc-dmy` na FRENTE dos nativos (com
+  hora e dentro de badge também) — o `date` do DataTables lê `05/09` como 9 de
+  maio e a coluna caía em texto, ordenando pelo DIA no clique, no A→Z e na
+  lista do funil. Tabela que nasceu antes dele tem o tipo zerado e redetectado
+  ao ligar (`redetectTypes`); página nova não registra detector próprio. Página nova não escreve nada; coluna
   sem funil = cabeçalho vazio, checkbox, Actions ou `searchable: false`;
   tabela fora com `data-excel-filter="off"`; `serverSide` e `searching:
   false` ficam de fora (a segunda desliga TODA filtragem — são as tabelas
