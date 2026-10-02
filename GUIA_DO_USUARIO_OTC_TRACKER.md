@@ -2,7 +2,7 @@
 
 **Brazil OTC Operations · JPMorgan Chase & Co.**
 
-**Versão:** 2.1 · **Data:** 30/09/2026
+**Versão:** 2.2 · **Data:** 02/10/2026
 
 ---
 
@@ -17,7 +17,8 @@ O guia está organizado do jeito que o trabalho acontece, e não em ordem alfab�
 - O **capítulo 3** cobre o que você faz uma vez: entrar, reconhecer a barra superior e achar as coisas no menu.
 - O **capítulo 4** é o mais importante e o mais curto: ele explica o que se repete em **toda** tela do sistema — a barra de ferramentas, o filtro do cabeçalho (o funil), o Export, a cópia de células, os campos de data. Os capítulos seguintes **não repetem** essas instruções; eles dizem apenas o que é próprio de cada tela.
 - Os **capítulos 5 a 17** têm uma seção por tela, sempre no mesmo formato: a imagem da tela, *para que ela serve*, e o *passo a passo* de cada ação — que botão clicar, onde ele fica e o que acontece depois.
-- O **capítulo 18** reúne os anexos: significado de cada status, glossário, o que ainda não está disponível e os problemas mais comuns.
+- O **capítulo 18** reúne os controles de erro e de validação de dados que o sistema traz — a visão de conjunto do que os capítulos anteriores descrevem tela a tela.
+- O **capítulo 19** reúne os anexos: significado de cada status, glossário, o que ainda não está disponível e os problemas mais comuns.
 
 **Convenções do texto**
 
@@ -232,7 +233,7 @@ Ao lado do nome de cada coluna há um **funil**. Ele funciona como o filtro do E
 
 As colunas de **caixa de seleção** e de **Actions** não têm funil — não há dado para filtrar nelas.
 
-**Para ordenar:** clique no **nome** da coluna, no cabeçalho. Clique de novo para inverter. Números ordenam como número (`9,00` antes de `1.000,00`), não como texto.
+**Para ordenar:** clique no **nome** da coluna, no cabeçalho. Clique de novo para inverter. Números ordenam como número (`9,00` antes de `1.000,00`) e datas como data (`05/01/2027` depois de `25/09/2026`), não como texto — vale também para a lista de valores do funil.
 
 ### 4.4. A busca por fichas (New Deals e Pending Confirmation)
 
@@ -940,7 +941,8 @@ São cinco batimentos, cada um comparando duas fontes que deveriam dizer a mesma
 2. Clique em **Run** (botão azul).
 3. Confira as linhas: o que não bate aparece com a diferença calculada.
 4. Escreva a explicação na coluna **Comment** da linha que divergiu.
-5. Quando tudo estiver resolvido ou justificado, clique em **End process** (botão verde) — ele só habilita depois de o Run rodar, e é ele que fecha e comunica o resultado.
+5. **Casar à mão um débito com um crédito** que a recon deixou soltos (um estorno, uma TED devolvida, uma perna dividida em várias): marque a caixinha das linhas no **Pending Payment** (débitos) e no **Pending Receivement** (créditos) — pode ser mais de uma de cada lado — e clique em **Match** (botão azul). A janela mostra os débitos e os créditos lado a lado, o total de cada lado e a **soma**. O Match só é aceito se todas as linhas forem da **mesma contraparte** e a soma ficar **dentro de R$ 1,00**; fora disso, o botão fica desabilitado e a janela diz o porquê. As linhas casadas vão para o **Settled** com a marca *Manual*, e o casamento continua valendo se você rodar o **Run** de novo. Só aparece caixinha nas linhas que a recon não casou.
+6. Quando tudo estiver resolvido ou justificado, clique em **End process** (botão verde) — ele só habilita depois de o Run rodar, e é ele que fecha e comunica o resultado.
 
 **De onde vem o NDF do nosso lado:** do mesmo dia que o NDF Cockpit mostra — as operações que liquidam na data mais as **recompras de NDF**, com o IR já calculado. Se o Cockpit já foi importado para a data, o Run usa esse dia e responde na hora; se não, ele busca na API da Athena, o que pode levar alguns minutos. **Rode o Import do NDF Cockpit antes do Pay/Rec**: além de mais rápido, é o jeito de a recon ver uma liquidação que entrou na Athena depois do último import. A recompra de **NDF de Commodities** entra como **COMM TER** (termo), não como prêmio de opção. O arquivo `settlement.csv` **não é mais usado**: se ele estiver na pasta do Pay/Rec, é ignorado. Se a API não responder, o Run para e diz o motivo; tente de novo em alguns minutos, e se persistir, chame o suporte com a mensagem.
 
@@ -1891,9 +1893,113 @@ Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de pa
 
 ---
 
-## 18. Anexos
+## 18. Controles de erro e validação de dados
 
-### 18.1. Os status, por tela
+Este capítulo reúne num lugar só os controles que o sistema já traz para **identificar e tratar erros** (entrada incorreta e falha de sistema) e para **validar os dados** antes de processá-los (exatidão, completude, tempestividade e limites esperados). Cada controle aparece também no capítulo da sua tela; aqui está a visão de conjunto, com a referência de onde ler o detalhe.
+
+O princípio que vale para todos é o mesmo: **na dúvida, o sistema para e diz por quê.** Ele prefere recusar uma ação, deixar um campo em branco sinalizado ou mostrar uma mensagem de erro a seguir com um dado presumido. Uma tela vazia, um valor chutado ou um "sucesso" que não gravou nada são justamente o que os controles abaixo existem para impedir.
+
+### 18.1. Tratamento de erros
+
+#### 18.1.1. Entrada incorreta
+
+| Situação | O que o sistema faz | Onde |
+|---|---|---|
+| Campo obrigatório em branco | Recusa a gravação e marca em vermelho os campos que faltam | New Request do Onboarding (10.1) |
+| Data digitada | O campo só aceita **números**: as barras se escrevem sozinhas e a data é sempre `dd/mm/aaaa`. Só a data inteira vale | 4.11 |
+| Data futura onde não pode haver | Recusa, em vez de devolver o dado de hoje com o nome de outro dia | 14.3 · Calculators (13.4.2) |
+| Arquivo errado no dropzone | O arquivo é lido pelo **conteúdo**, não pela extensão. O que não é reconhecido volta com o motivo, e nada é gravado | New Deals (5.3) · Recompras (5.10, 5.11) |
+| Lote com lacuna (Deal Ticket de Swap sem um dado obrigatório) | Recusa o **lote inteiro**, dizendo qual operação e qual campo — não grava metade | 5.11 |
+| Operação já importada | O Import pergunta antes: as duplicatas aparecem e você escolhe substituir ou não | 5.3 |
+| Contraparte ou ativo sem cadastro | A aprovação é recusada com o aviso de qual cadastro falta (*Missing Counterparty*, *Asset Not Registered*) | 5.5 |
+| Conta que não está no cadastro de contas B3 | O arquivo da B3 não é gerado | 5.10 |
+| Ação fora do status permitido | Recusada com a frase do motivo (ex.: enviar uma linha `Pending`) | 5.6 · 18.1.3 |
+| Valor que identifica algo e parece número (contrato `26E04610365`) | Exportado como **texto** no Excel, para não virar `#NULL!` | 4.6 |
+
+> **As mensagens saem no seu idioma.** Todo aviso e todo erro de tela é traduzido para o idioma escolhido no seletor **EN** da barra superior, e diz **o que** falhou e **por quê** — por exemplo, a operação, o campo e o cadastro que faltam. Uma frase genérica do tipo "não foi possível" não é a resposta esperada; se aparecer, abra um chamado com ela (capítulo 16).
+
+#### 18.1.2. Falhas de sistema
+
+O OTC Tracker depende de serviços externos — a base de dados no servidor de rede, a API da Athena, a B3 (Conecta), o e-mail corporativo e a caixa do Outlook. Quando um deles falha, o comportamento é este:
+
+| Falha | O que o sistema faz | O que você faz |
+|---|---|---|
+| **Base de dados ocupada** (outra pessoa gravando no mesmo momento) | Tenta de novo sozinho por alguns segundos. Se ainda estiver ocupada, mostra a **última cópia boa** que tem em memória; sem ela, avisa que a base está ocupada. **Nunca** mostra a tabela vazia como se não houvesse dado | Aguarde alguns segundos e recarregue |
+| **Base de dados ilegível** | Avisa que aquela base não pode ser lida, em vez de tratá-la como vazia | Abra um chamado com a mensagem |
+| **API da Athena fora do ar** | A rotina que depende dela **para** e diz o motivo. Ex.: o Pay/Rec não reconcilia sem o NDF — sem ele, toda liquidação de cliente apareceria como pendente | Tente de novo em alguns minutos (8.2) |
+| **Um relatório de vários falha** (Intrag DCE NDF busca cinco) | Os outros continuam; o que falhou volta listado com o motivo. Só é erro quando nenhum responde | 11 |
+| **E-mail fora do ar** no End process do Pay/Rec | A situação final do dia é **gravada antes** de tentar o e-mail. O registro do dia não depende do envio | 8.2 |
+| **E-mail que o sistema não conseguiu ler** na varredura da caixa (recompras, booking recap) | O e-mail fica na caixa de entrada, sem ser arquivado, e o motivo vai para o registro do sistema | 5.10 |
+| **Gravação que falhou** | A tela mostra o erro com o motivo. Uma ação só aparece como concluída **depois** que o servidor confirmou a gravação — um Delete, por exemplo, só some da tela depois disso | — |
+| **Retorno da B3 que não pôde ser gravado** no Mapping B3 ID | A linha fica `Failed` (problema do nosso lado), e não `Error` (que é o veredito da B3). O B3 ID só aparece na tela se foi gravado | 5.7 |
+| **Sessão encerrada** (troca de IP, rede) | No clique seguinte a tela avisa "Sessão encerrada" e volta para o login. Nada é gravado sem sessão | 3.3 |
+
+> **Rotinas automáticas.** As importações agendadas rodam só entre **08:00 e 20:00** (horário de Brasília). Se o sistema estava fora no horário do aviso das 19h, o aviso é enviado quando ele volta. Uma rotina que falha não é dada como feita: o Intraday Monitor continua mostrando a tarefa em aberto (5.1).
+
+#### 18.1.3. Trabalho simultâneo e segregação de funções
+
+Várias pessoas usam a mesma base ao mesmo tempo, e o sistema impede que uma desfaça o trabalho da outra:
+
+- **Quem grava, relê antes.** Antes de gravar uma alteração, o sistema lê de novo o dado atual e grava só o que mudou. Duas pessoas validando a mesma confirmação em mesas diferentes não apagam a assinatura uma da outra.
+- **Tela desatualizada é recusada.** Se a lista do Onboarding foi reimportada depois que você abriu a tela, a gravação é recusada com o aviso para recarregar — em vez de gravar no registro errado.
+- **Maker ≠ Checker.** Quem importou ou editou uma operação não pode aprová-la nem enviá-la à B3 (5.6). Uma linha editada vai para `Pending` e só um segundo usuário a leva para `Approved`.
+- **Cada etapa é assinada pela sua mesa.** A esteira de confirmação só aceita a assinatura da mesa da etapa (OTC, MO, FO); quem é de outra mesa vê o documento sem os botões de assinar, e `ADMIN` não é exceção (9.5, 15.1).
+- **Registro não se apaga.** Na recompra, a linha já enviada à B3 (`Sent`/`Success`) não pode ser apagada nem sobrescrita por uma nova importação; no New Deals, só uma mudança de dado **econômico** vinda da Athena devolve uma linha `Sent`/`Success` para `Amend`. Na esteira de confirmação, a linha com documento gerado, validação ou envio ao cliente não pode ser apagada.
+
+#### 18.1.4. Quando aparecer um erro
+
+1. Leia a mensagem: ela diz o que falhou e, na maioria das vezes, qual cadastro ou qual dado corrigir.
+2. Se for cadastro, corrija na tela indicada (Reference Data, Index B3, Mapping) e repita a ação — cadastro vale no clique seguinte, sem reiniciar nada.
+3. Se for base ocupada ou serviço fora do ar, aguarde e tente de novo.
+4. Se persistir, abra um chamado no Support Center (capítulo 16) **com a mensagem exata** e a tela onde ela apareceu.
+
+### 18.2. Validação de dados
+
+#### 18.2.1. Exatidão — o dado está certo?
+
+- **Reconciliações.** Cada base é batida contra outra antes de virar liquidação ou documento: Comitente (8.1), Pay/Rec (8.2), FXO — Athena × B3 (8.3), CGD (8.4) e Conf. Matching — FepWeb × Athena (8.5). O que não bate fica pendente com a diferença calculada e precisa ser justificado ou resolvido.
+- **Conferência do valor da recompra.** O sistema refaz a conta da recompra pela fórmula e compara com o valor do aviso. A coluna **Check** tem **três** estados — fecha, não fecha, e **não dá para conferir** — e quando não fecha a coluna *OTC Tracker Result* mostra o valor que o sistema calculou (5.10).
+- **Cadastros como fonte única.** Contraparte, CNPJ, contas, ativos e códigos vêm do Reference Data, do Index B3 e do Mapping — nunca de valores fixos no programa. CNPJ é comparado só pelos dígitos e conta B3 pelos oito dígitos, para que a mesma entidade escrita de dois jeitos seja reconhecida como uma só.
+- **O que não se sabe não se presume.** Dado que a fonte não traz (a LOB de uma operação, uma cotação de fixing que ainda não saiu, a contraparte de uma conta guarda-chuva sem cadastro) fica **em branco e sinalizado**, com o motivo — nunca preenchido com um valor provável.
+- **Arquivo da B3 pelo layout cadastrado.** Os arquivos gerados para a B3 seguem o layout do File Interpreter (13.6) e podem ser conferidos campo a campo no **Preview** antes do envio.
+
+#### 18.2.2. Completude — falta alguma coisa?
+
+- **Campos obrigatórios** nos formulários (Onboarding, New Request) e nos lotes importados (Deal Ticket de Swap).
+- **Selos de pendência na linha**: *Missing Counterparty* (5.4), ativo não registrado (5.5), *Callback* ausente — que **trava** o *Mark as sent* da confirmação (9.4).
+- **Aviso de liquidação com linha incompleta** não sai; o TED avisa de qual contraparte falta a SSI (6.1).
+- **Quantidade e valor** dos dois lados são comparados no Pay/Rec (*Check Qty* e *Check Value*), e as pendências do dia anterior marcadas como *Pending Payment/Receivement* voltam automaticamente no dia seguinte até liquidarem (8.2).
+- **Advanced Export**: cada dia é conferido pela data do próprio arquivo; dia sem arquivo é pulado e informado no fim, nunca preenchido com outro dia (4.7).
+
+#### 18.2.3. Tempestividade — o dado é do dia certo?
+
+- **Intraday Monitor** (5.1): as tarefas do dia, com horário limite, e o que ainda está em aberto por produto. Às **19h** sai o e-mail *Pending Action* com o que ficou pendente.
+- **Prazos (SLA) da confirmação** em dias úteis a partir da data da operação — OTC D+3, MO D+4, FO D+6. Passado o prazo, a validação só passa com justificativa (9.5).
+- **A data lida é sempre mostrada.** Quando falta o arquivo do dia, o Live Position busca até dez dias úteis para trás e **diz qual data leu** (7). O Pending Confirmation diz de que dia é a foto que está no servidor (14.3).
+- **Calendário ANBIMA** para todo prazo e todo dia útil; feriado cadastrado no Holidays Calendar vale no clique seguinte (13.5). Datas de fixing de índices estrangeiros seguem o calendário do próprio índice.
+- **Formato de data único** `dd/mm/aaaa` em toda tela, para que `03/04` nunca seja lido como dois dias diferentes (4.11). Um relatório externo que muda de formato tem as linhas ambíguas separadas com aviso, em vez de lidas como outra data (8.5).
+
+#### 18.2.4. Dentro dos limites esperados
+
+- **Status controlam o fluxo.** Cada ação só é aceita a partir de certos status (por exemplo, só `Approved` vai para a B3), e cada tela documenta o seu ciclo (19.1).
+- **Listas fechadas** onde o valor tem de ser um de poucos: tipo de assinatura, status do Onboarding, tipo de confirmação, LOB — escolhidos numa lista, não digitados.
+- **Tolerâncias de batimento.** A diferença que o sistema aceita como "bate" é explícita:
+
+| Onde | Tolerância |
+|---|---|
+| Pay/Rec — liquidação de cliente | menos de R$ 1,00 |
+| Pay/Rec — prêmio de opção de commodities (líquido do IR) | 0,005% do valor + R$ 0,20 |
+| Pay/Rec — liquidação interbancária (SPB) | até R$ 20,00 |
+| Pay/Rec — **Match** manual (débito × crédito) | até R$ 1,00 |
+| Recompra de NDF de Commodities × liquidação do dia | até R$ 1,00 |
+
+Fora da tolerância, a linha fica pendente e não é dada como liquidada.
+
+---
+
+## 19. Anexos
+
+### 19.1. Os status, por tela
 
 **New Deals**
 
@@ -1931,7 +2037,7 @@ Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de pa
 |---|---|
 | `Pending B3` · `Pending Action` · `Only in B3` · `Justified` · `Matched` | Ver a tabela do capítulo 8.4 |
 
-### 18.2. Glossário
+### 19.2. Glossário
 
 | Termo | O que é |
 |---|---|
@@ -1954,7 +2060,7 @@ Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de pa
 | **SLA** | O prazo de cada mesa, em dias úteis, contado **da data da operação** |
 | **TED** | A transferência do valor liquidado |
 
-### 18.3. O que ainda não está disponível
+### 19.3. O que ainda não está disponível
 
 Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devolve "página não encontrada". Não é defeito do seu acesso:
 
@@ -1964,7 +2070,7 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 - **Regulatory › e-Financeira** — Kapital · Athena NDF · Athena FXO · Pyramid
 - **Regulatory › WHT**
 
-### 18.4. Problemas comuns
+### 19.4. Problemas comuns
 
 | O que acontece | Por quê | O que fazer |
 |---|---|---|
@@ -1982,7 +2088,7 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 | **O Tracking Docs abre sem linhas** | O banco da lista do SharePoint ainda não foi importado | A própria tela diz isso, em vermelho, com o caminho e o comando (10.2) |
 | **Mudei algo e não surtiu efeito** | Cadastro do **Mapping** vale no request seguinte; mudança no *código* exige reinício do sistema | Recarregue a página; se persistir, abra um chamado |
 
-### 18.5. Índice das telas
+### 19.5. Índice das telas
 
 | Tela | Menu | Capítulo |
 |---|---|---|
@@ -2037,4 +2143,4 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 
 ---
 
-*OTC Tracker · Brazil OTC Operations · JPMorgan Chase & Co. · Guia do Usuário v2.1 — 30/09/2026*
+*OTC Tracker · Brazil OTC Operations · JPMorgan Chase & Co. · Guia do Usuário v2.2 — 02/10/2026*
