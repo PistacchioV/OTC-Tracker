@@ -516,10 +516,17 @@ def main():
           domain._num_linha(108.885, taxa=True) == 108.885
           and domain._num_linha('108.885', taxa=True) == 108.885
           and domain._num_linha(0) == 0.0 and domain._num_linha('100,000.00') == 100000.0)
-    l3 = domain.reconferir_linha(dict(base, Result=19000.0, TerminationRate='4.9'),
-                                 refazer_resultado=True)
-    check('edit economico refaz Result e Direction pelo sinal',
-          (l3['Result'], l3['Direction'], l3['Check']) == (-10000.0, 'PAY', 'OK'), l3)
+    # O valor que liquida e o do E-MAIL, mesmo divergente (mesa, 02/10/2026,
+    # §624): o Edit economico NAO troca o Result pela conta, so reconfere.
+    l3 = domain.reconferir_linha(dict(base, Result=19000.0, TerminationRate='4.9',
+                                      Direction='PAY'))
+    check('edit economico mantem o Result do e-mail e so reconfere',
+          (l3['Result'], l3['Direction'], l3['Check'], l3['CalcResult'])
+          == (19000.0, 'RECEIVE', 'NOK', -10000.0), l3)
+    check('a direcao que liquida e o sinal do Result, nao a da conta',
+          domain.direcao_da_linha({'Result': -42.8, 'Direction': 'RECEIVE'}) == 'PAY'
+          and domain.direcao_da_linha({'Result': 42.8, 'Direction': 'PAY'}) == 'RECEIVE'
+          and domain.direcao_da_linha({'Result': '', 'Direction': 'pay'}) == 'PAY')
 
     # Pending NAO vai para a B3: e o gate inteiro.
     check('recompra Pending nao e enviavel',
@@ -583,8 +590,16 @@ def main():
     from apps.pages import data_store as _ds
     jp_ck = R._ndfc_json_path(date(2026, 9, 10))
     recs = _ds.read(jp_ck) if _ds.isfile(jp_ck) else []
-    unw = [r for r in recs if r.get('_nc_unwind')]
+    _xe = commands.COCKPIT_ID_PREFIX + 'STP-XE-10G5U5X-0-0'
+    unw = [r for r in recs if r.get('_nc_unwind') and r.get('_nc_id') == _xe]
     check('o import escreveu a recompra no dia do Cockpit', len(unw) == 1, len(recs))
+    # Sem posicao no Live Position a conta nao sai (nao se sabe o lado), mas o
+    # valor do E-MAIL liquida do mesmo jeito (mesa, 02/10/2026, §624): antes a
+    # recompra ficava FORA do Cockpit e do Summary por falta da direcao apurada.
+    _yy = [r for r in recs if r.get('_nc_id') == commands.COCKPIT_ID_PREFIX + 'STP-YY-8888888-0-0']
+    check('recompra sem posicao entra no Cockpit pelo valor do e-mail',
+          len(_yy) == 1 and _yy[0]['[PROD] Cockpit.SETTLEMENT'] == unw[0]['[PROD] Cockpit.SETTLEMENT'],
+          [r.get('[PROD] Cockpit.SETTLEMENT') for r in _yy])
     if unw:
         r = unw[0]
         check('com o Athena ID no ID_SOURCE_DEAL',
@@ -592,8 +607,8 @@ def main():
         check('o contrato da B3 na coluna do CETIP',
               r['CD_CETIP_RETURN'] == '26C03202688', r['CD_CETIP_RETURN'])
         # RECEIVE e positivo, PAY e negativo — a convencao do Summary, e o sinal
-        # vem da direcao APURADA (o sinal do resultado), nunca do campo do
-        # e-mail (§488).
+        # e o do valor do E-MAIL (Input Termination Fee, §624), nunca o campo
+        # Direction do e-mail (§488).
         _lin = (queries.find('STP-XE-10G5U5X-0-0', '2026-09-10')[1] or [{}])
         _dir = (_lin[queries.find('STP-XE-10G5U5X-0-0', '2026-09-10')[2]] or {}).get('Direction')
         _neg = r['[PROD] Cockpit.SETTLEMENT'].startswith('-')
@@ -610,21 +625,20 @@ def main():
     commands.import_email(HTML, SUBJECT, ref_dt=HOJE)
     recs2 = _ds.read(jp_ck) if _ds.isfile(jp_ck) else []
     check('reimportar nao duplica a linha do Cockpit',
-          len([r for r in recs2 if r.get('_nc_unwind')]) == 1, len(recs2))
+          len([r for r in recs2 if r.get('_nc_id') == _xe]) == 1, len(recs2))
     # E o import do COCKPIT preserva a recompra ao reescrever o dia: ele monta
     # o dia inteiro a partir da API, onde a recompra nao existe.
     do_zero = [{'ID_SOURCE_DEAL': 'OUTRO', '_nc_id': 'X1'}]
     R._ndfc_keep_unwinds(date(2026, 9, 10), do_zero)
     check('o reimport do Cockpit PRESERVA a recompra',
-          [r.get('_nc_id') for r in do_zero if r.get('_nc_unwind')]
-          == [commands.COCKPIT_ID_PREFIX + 'STP-XE-10G5U5X-0-0'],
+          _xe in [r.get('_nc_id') for r in do_zero if r.get('_nc_unwind')],
           [r.get('_nc_id') for r in do_zero])
 
     # O valor: 0,005% sobre a liquidacao em que o BANCO PAGA. Acima do piso
     # mensal de R$ 1,00 o imposto e retido e vai para a celula — e a conta e a
     # do `_ndfc_apply_ir`, a MESMA do Run do Cockpit e do NDF Summary.
     _f, _l, _i = queries.find('STP-XE-10G5U5X-0-0', '2026-09-10')
-    grande = dict(_l[_i], AthenaID='STP-BIG', Result=400000.0, Direction='PAY')
+    grande = dict(_l[_i], AthenaID='STP-BIG', Result=-400000.0, Direction='PAY')
     persistence.upsert(datetime(2026, 9, 10), [grande])      # existe na vertical tambem
     commands.cockpit_da_recompra([grande])
     big = [r for r in (_ds.read(jp_ck) or []) if r.get('_nc_id', '').endswith('STP-BIG')]
@@ -644,6 +658,7 @@ def main():
     # caixa fantasma ficaria no Trade Level e no IR do dia para sempre.
     commands.delete('STP-BIG', '2026-09-10')
     commands.delete('STP-XE-10G5U5X-0-0', '2026-09-10')
+    commands.delete('STP-YY-8888888-0-0', '2026-09-10')
     sobrou = [r for r in (_ds.read(jp_ck) or []) if r.get('_nc_unwind')]
     check('o Delete tira a recompra do Cockpit', sobrou == [], [r.get('_nc_id') for r in sobrou])
 

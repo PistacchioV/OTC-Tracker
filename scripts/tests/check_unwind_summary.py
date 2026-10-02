@@ -9,9 +9,10 @@ numa tela so. O que este teste prende:
      arquivo da B3 deixava o Summary do dia sem ela). A janela nao e so o dia:
      a recompra fica no arquivo-dia em que ENTROU e quem manda e a
      `SettlementDate`;
-  2. o SINAL segue a convencao do Summary (negativo = o banco paga) e sai da
-     `Direction` APURADA, nunca do campo do e-mail; sem direcao, a recompra
-     fica de fora em vez de entrar com o sinal trocado;
+  2. o SINAL segue a convencao do Summary (negativo = o banco paga) e sai do
+     sinal do VALOR DO E-MAIL (o Input Termination Fee, mesa, 02/10/2026,
+     §624), nunca da conta nem do campo Direction do e-mail; sem valor, a
+     recompra fica de fora em vez de entrar com um caixa inventado;
   3. ela aparece no Trade Level com o veredito **None** — nao ha resgate da B3
      do outro lado, e "nao ha o que conferir" nao e "diverge";
   4. entra no Summary da contraparte (somando com as liquidacoes do dia);
@@ -43,7 +44,7 @@ def check(nome, cond, extra=''):
 HOJE = date(2026, 9, 18)
 BASE = {'AthenaID': 'STP-XE-1', 'Contract': '26C03202688', 'Currency': 'USD',
         'Counterparty': 'COFCO INTERNATIONAL BRASIL SA', 'TaxID': '02.916.265/0001-60',
-        'UnwoundNotional': 42227.42, 'Balance': 587224.31, 'Result': 11144.00,
+        'UnwoundNotional': 42227.42, 'Balance': 587224.31, 'Result': -11144.00,
         'Direction': 'PAY', 'PartyAccount': '73760009', 'CptyAccount': '12345678',
         'TradeDate': '2026-04-01', 'MaturityDate': '2026-09-30',
         'SettlementDate': '2026-09-18', 'OriginalNotional': 587224.31,
@@ -69,11 +70,11 @@ def main():
     # janela de busca existe para cobrir.
     persistence.upsert(datetime(2026, 9, 17), [dict(BASE)])
     # Uma so IMPORTADA liquidando hoje (entra), uma enviada que liquida OUTRO
-    # dia (nao entra) e uma sem direcao apurada (nao entra).
+    # dia (nao entra) e uma sem valor no e-mail (nao entra).
     persistence.upsert(datetime(2026, 9, 18), [
         dict(BASE, AthenaID='STP-NEW', Status='Imported'),
         dict(BASE, AthenaID='STP-AMANHA', SettlementDate='2026-09-21'),
-        dict(BASE, AthenaID='STP-SEMDIR', Direction=''),
+        dict(BASE, AthenaID='STP-SEMDIR', Result='', Direction=''),
     ])
 
     print('\n== 1. quem entra no dia ==')
@@ -86,7 +87,7 @@ def main():
     check('a ainda NAO enviada tambem entra (o gatilho e o import)',
           'STP-NEW' in ids, ids)
     check('a que liquida em outro dia NAO entra', 'STP-AMANHA' not in ids, ids)
-    check('a sem direcao apurada fica de fora (em vez de entrar com o sinal trocado)',
+    check('a sem valor no e-mail fica de fora (em vez de entrar com caixa inventado)',
           'STP-SEMDIR' not in ids, ids)
     check('e sao essas duas', len(rows) == 2, len(rows))
 
@@ -94,12 +95,18 @@ def main():
     r = next(x for x in rows if x['athena'] == 'STP-XE-1')
     check('PAY -> negativo (o banco paga)', r['settlement'] == -11144.00, r['settlement'])
     check('a linha vem marcada como recompra', r.get('unwind') is True)
-    # O mesmo resultado com a direcao trocada muda so o SINAL.
+    # O sinal e o do VALOR: uma Direction gravada que discorde (a da conta,
+    # num import antigo) nao muda o caixa (§624).
     persistence.upsert(datetime(2026, 9, 17), [dict(BASE, AthenaID='STP-XE-1',
                                                     Direction='RECEIVE')])
     rec = [x for x in commands.settlement_rows(HOJE) if x['athena'] == 'STP-XE-1']
-    check('RECEIVE -> positivo', rec and rec[0]['settlement'] == 11144.00,
-          rec[0]['settlement'] if rec else None)
+    check('a Direction gravada nao vence o sinal do valor',
+          rec and rec[0]['settlement'] == -11144.00, rec[0]['settlement'] if rec else None)
+    persistence.upsert(datetime(2026, 9, 17), [dict(BASE, AthenaID='STP-XE-1',
+                                                    Result=11144.00, Direction='RECEIVE')])
+    rec = [x for x in commands.settlement_rows(HOJE) if x['athena'] == 'STP-XE-1']
+    check('valor positivo -> positivo (o banco recebe)',
+          rec and rec[0]['settlement'] == 11144.00, rec[0]['settlement'] if rec else None)
     persistence.upsert(datetime(2026, 9, 17), [dict(BASE)])      # de volta ao PAY
 
     print('\n== 3. no Trade Level, no Summary e FORA do e-mail ==')
@@ -220,7 +227,7 @@ def main():
     check('duas de R$ 0,56 cruzam o piso MENSAL e as duas retem',
           [t['cells'][13] for t in taxas] == ['0.56', '0.56'],
           [t['cells'][13] for t in taxas])
-    grande = dict(BASE, AthenaID='STP-BIG', Result=400000.0, Direction='PAY')
+    grande = dict(BASE, AthenaID='STP-BIG', Result=-400000.0, Direction='PAY')
     persistence.upsert(datetime(2026, 9, 18), [grande])
     with app.test_request_context():
         out2 = R._ndfsum_collect(datetime(2026, 9, 18))

@@ -534,21 +534,15 @@ def editar(athena_id, ref_date='', fields=None, sid=''):
         # Linha ja ENVIADA tambem se edita (mesa, 28/09/2026): volta a
         # `Pending` e so sai de novo depois do checker.
         liq_antes = lst[idx].get('SettlementDate')
-        mudou = set()
         for k, v in (fields or {}).items():
             # `k in lst[idx]` de proposito: a tela manda as colunas da grade, e
             # campo que a linha nao tem nao se INVENTA aqui.
             if k in lst[idx] and k not in domain.UNW_NAO_EDITAVEL:
-                if str(lst[idx][k] if lst[idx][k] is not None else '').strip() != \
-                        str(v if v is not None else '').strip():
-                    mudou.add(k)
                 lst[idx][k] = v
-        # Dado economico mudado refaz o Result e a Direction (o que foi
-        # digitado no mesmo Save vence); o Check e o `CalcResult` sao sempre
-        # reconferidos — um OK que sobrevivesse a edicao seria falso (§571).
-        domain.reconferir_linha(
-            lst[idx], refazer_resultado=bool(mudou & set(domain.UNW_ECONOMICOS))
-            and 'Result' not in mudou)
+        # O Check e o `CalcResult` sao sempre reconferidos — um OK que
+        # sobrevivesse a edicao seria falso (§571). O Result NAO e refeito pela
+        # conta: o que liquida e o valor do e-mail (mesa, 02/10/2026, §624).
+        domain.reconferir_linha(lst[idx])
         lst[idx]['Status'] = domain.STATUS_PENDENTE
         lst[idx]['Maker'] = sid or ''
         lst[idx]['Checker'] = ''
@@ -1089,7 +1083,7 @@ def _cockpit_rec(linha):
     """A recompra no formato de registro do Cockpit (`_NDFC_COLUMNS`)."""
     R = _R()
     resultado = domain.numero_flex(linha.get('Result'))
-    direcao = str(linha.get('Direction') or '').strip().upper()
+    direcao = domain.direcao_da_linha(linha)
     if resultado is None or direcao not in ('RECEIVE', 'PAY'):
         return None
     valor = abs(resultado) if direcao == 'RECEIVE' else -abs(resultado)
@@ -1314,7 +1308,7 @@ def _intrag_uma(linha, ref):
         if not fundo:
             continue
         try:
-            direcao = str(l.get('Direction') or '').strip().upper()
+            direcao = domain.direcao_da_linha(l)
             # O Sentido é na VISÃO DO FUNDO. A `Direction` da linha é a da
             # PARTE (é o lado dela na posição que apura o sinal): com o fundo
             # na contraparte, o sentido é o INVERSO — recebemos quer dizer que
@@ -1518,7 +1512,7 @@ def settlement_rows(ref):
         if liq != alvo:
             continue
         resultado = domain.numero_flex(l.get('Result'))
-        direcao = str(l.get('Direction') or '').strip().upper()
+        direcao = domain.direcao_da_linha(l)
         if resultado is None or direcao not in ('RECEIVE', 'PAY'):
             _R().log.warning('[UNWIND NDF FX] %s fora do Summary de %s: sem resultado ou '
                              'sem direção apurada', l.get('AthenaID'), alvo)
