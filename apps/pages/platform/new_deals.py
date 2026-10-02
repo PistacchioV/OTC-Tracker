@@ -2768,13 +2768,14 @@ def _generic_nd_mapping_candidates(cfg, product, ref_date):
     busca — mapear o que estava renderizado deixava para trás operações do mesmo
     dia que ninguém tinha filtrado.
 
-    Entram todos os status, exceto:
+    Entram todos os status, em TODAS as páginas (mesa, 02/10/2026 — a trava
+    de só `New`/`Sent`/`Error` saiu: operação registrada por outro caminho, ou
+    editada depois do envio, ficava sem B3 ID), exceto:
       • 'Canceled' — cancelado na API, fora do fluxo;
       • já 'Success' COM B3 ID — não há o que mapear e uma segunda passada só
         poderia perder informação.
-    Nas outras páginas o filtro antigo (New/Sent/Error) é mantido: o Vanilla é
-    que é registrado por outra ferramenta, e por isso precisa olhar qualquer
-    status."""
+    Quem não está no retorno só vira `Error` se esperava resposta
+    (`_ND_MAPPING_ERRORABLE`, no endpoint); o resto fica como está."""
     from apps.pages import routes
     ref = routes._parse_date_any(ref_date)
     if not ref:
@@ -2802,8 +2803,6 @@ def _generic_nd_mapping_candidates(cfg, product, ref_date):
         if status == 'Canceled':
             continue
         if status == 'Success' and str(d.get('B3_ID', '') or '').strip():
-            continue
-        if product != 'vanilla' and status not in _ND_MAPPING_ERRORABLE:
             continue
         client = str(d.get('Client', '') or '').strip()
         key = (deal, client)

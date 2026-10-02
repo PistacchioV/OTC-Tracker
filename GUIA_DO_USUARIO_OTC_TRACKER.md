@@ -550,6 +550,8 @@ Depois que a B3 devolve o arquivo de retorno:
 2. Clique no botão **verde de atualizar** (*Mapping B3 ID*), à direita do Import.
 3. O sistema lê o arquivo de retorno do dia e preenche o **B3 ID** das operações que casaram, mudando o status para `Success`.
 
+> Entra operação em **qualquer status** — não precisa estar *Sent* ou *Error*. Uma operação registrada por outro caminho, ou editada depois do envio, também recebe o B3 ID. Ficam de fora só as canceladas e as que já estão *Success* com B3 ID. Quem não aparece no retorno fica como está; só vira *Error* quem tinha sido enviado e esperava a resposta.
+
 > Este botão trabalha a partir do **arquivo do dia inteiro**, e não do que está na tela: operações que você não filtrou também são atualizadas.
 
 ### 5.8. Os botões próprios de cada produto
@@ -2147,4 +2149,4 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 
 ---
 
-*OTC Tracker · Brazil OTC Operations · JPMorgan Chase & Co. · Guia do Usuário v2.4 — 02/10/2026*
+*OTC Tracker · Brazil OTC Operations · JPMorgan Chase & Co. · Guia do Usuário v2.5 — 02/10/2026*

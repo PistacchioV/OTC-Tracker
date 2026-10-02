@@ -843,7 +843,7 @@
   "nd-b3id-hint": "(fill to confirm Sent/Error → Success)",
   "swal-b3-confirmed-title": "Confirmed",
   "swal-b3-confirmed-text": "B3 ID saved — status set to Success and sent to Intrag.",
-  "swal-mapping-no-sent": "No operations with status \"Sent\" or \"Error\" to map.",
+  "swal-mapping-none": "No operations to map.",
   "swal-mapping-no-new": "No operations with status \"New\", \"Sent\" or \"Error\" to map.",
   "swal-err-title": "Error",
   "swal-mapping-read-error": "Failed to read return files.",

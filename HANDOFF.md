@@ -25876,3 +25876,24 @@ chaveava por Deal + Acronym e não mudou.
 
 Linhas JÁ duplicadas não se desfazem sozinhas: apague a cópia indevida pela
 tela. `check_nd_import_dedupe.py` (Opt Comm, NDF Comm, Vanilla).
+
+## §626 — New Deals: Mapping B3 ID sem a trava de Sent/Error (2026-10-02)
+
+Pedido da mesa: o botão Mapping B3 ID só levava ao servidor as operações em
+`Sent` ou `Error`. Operação registrada por outro caminho, ou editada depois
+do envio (volta a `Pending`), ficava sem B3 ID mesmo com o retorno da B3 na
+pasta.
+
+- NDF Comm, Opt Comm e Opt FXO montam a lista no navegador: agora entra todo
+  status menos `Canceled` e `Success` que já tem B3 ID. O servidor desses três
+  só grava quem o retorno traz, então nada mais muda para quem não está lá.
+- FWD Start e Other Publisher montam a lista no servidor
+  (`_generic_nd_mapping_candidates`), que filtrava por
+  `_ND_MAPPING_ERRORABLE` fora do Vanilla; o filtro saiu. O endpoint segue
+  usando `_ND_MAPPING_ERRORABLE` para decidir quem vira `Error` quando o
+  retorno não o traz — Approved/Pending ficam como estão.
+- O Swap Bullet já casava qualquer status e não mudou.
+- A frase "No operations with status Sent or Error" virou `swal-mapping-none`
+  nas três línguas.
+
+`check_nd_mapping_b3.py` §8; guia v2.5 (5.7).

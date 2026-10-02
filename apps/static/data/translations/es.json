@@ -842,7 +842,7 @@
   "nd-b3id-hint": "(rellene para confirmar Sent/Error → Success)",
   "swal-b3-confirmed-title": "Confirmado",
   "swal-b3-confirmed-text": "B3 ID guardado — estado cambiado a Success y enviado a Intrag.",
-  "swal-mapping-no-sent": "No hay operaciones con estado \"Sent\" o \"Error\" para mapear.",
+  "swal-mapping-none": "No hay operaciones para mapear.",
   "swal-mapping-no-new": "Ninguna operación con estado \"New\", \"Sent\" o \"Error\" para mapear.",
   "swal-err-title": "Error",
   "swal-mapping-read-error": "Error al leer los archivos de retorno.",
