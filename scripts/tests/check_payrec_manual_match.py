@@ -109,7 +109,7 @@ def _err(fn):
 
 # 1 · recusas
 _seed()
-check(_err(lambda: RP.manual_match(DATE, [0], [])) == 'match_need_both', 'sem crédito → match_need_both')
+check(_err(lambda: RP.manual_match(DATE, [0], [])) == 'match_need_two', 'uma linha só → match_need_two')
 check(_err(lambda: RP.manual_match(DATE, [2], [0])) == 'match_cpty_differs', 'VALE × SUZANO → match_cpty_differs')
 check(_err(lambda: RP.manual_match(DATE, [0], [0])) == 'match_over_tolerance',
       '-1000 + 1500 = 500 → match_over_tolerance')
@@ -145,6 +145,27 @@ MEM[RP._manual_path(DATE)] = {'groups': [group]}
 pp, pr, st = fresh['pending_payment'], fresh['pending_receivement'], fresh['settled']
 n = RP._apply_manual_matches(DATE, pp, pr, st)
 check(n == 0 and len(pp) == 4 and not st, 'linha ausente → grupo não aplicado e nada se move')
+
+# 5 · pernas JPM × perna Client do MESMO lado (§623): duas JPM no Pending
+# Payment contra uma Client no Pending Payment, Σ JPM = Σ Client. Era o caso
+# que o botão nem habilitava — só aceitava débito × crédito.
+MEM.clear()
+RP._persist(DATE, {'success': True, 'summary': [], 'settled': [], 'pending_receivement': [],
+                   'pending_payment': [
+                       _row('Pay', jpm_cpty='LAWTON MULTIMERCADO EXCLUSIVO', jv=-298394195.14),  # 0
+                       _row('Pay', jpm_cpty='LAWTON MULTIMERCADO EXCLUSIVO', jv=-96882517.44),   # 1
+                       _row('Pay', client='LAWTON MULTIMERCADO EXCLUSIVO', cv=-395276712.58),    # 2
+                       _row('Pay', client='LAWTON MULTIMERCADO EXCLUSIVO', cv=-136927600.63),    # 3
+                   ]}, strict=True)
+check(_err(lambda: RP.manual_match(DATE, [0, 1, 3], [])) == 'match_over_tolerance',
+      'JPM 395,3 mi × Client 136,9 mi → match_over_tolerance')
+data, group = RP.manual_match(DATE, [0, 1, 2], [], user='Tester')
+check(group['kind'] == 'pair' and abs(group['net']) < 1e-6,
+      'Σ JPM = Σ Client → casa como pair, diferença zero')
+check([r['client_value'] for r in data['pending_payment']] == [-136927600.63],
+      'as três saem do Pending Payment')
+check(len([r for r in data['settled'] if r.get('manual_match') == group['id']]) == 3,
+      'e entram no Settled')
 
 os.makedirs = _orig_makedirs
 print()

@@ -188,9 +188,9 @@
                             <button class="btn btn-sm btn-success bg-gradient pr-tbtn" type="button" id="prEndBtn" disabled>
                                 <i class="ti ti-mail-forward me-1"></i><span data-lang="pr-end">End process</span>
                             </button>
-                            {# Match manual: débito(s) do Pending Payment × crédito(s) do Pending
-                               Receivement da MESMA contraparte, soma dentro da tolerância. Liga
-                               quando há ao menos uma linha marcada em cada tabela. #}
+                            {# Match manual da MESMA contraparte: pernas JPM × pernas Client
+                               (Σ JPM = Σ Client) ou linhas que se compensam (soma zero), em
+                               qualquer das tabelas. Liga com duas linhas marcadas (§623). #}
                             <button class="btn btn-sm btn-info bg-gradient pr-tbtn" type="button" id="prMatchBtn" disabled>
                                 <i class="ti ti-arrows-exchange me-1"></i><span data-lang="pr-match">Match</span>
                             </button>
@@ -326,7 +326,7 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js?v={{ asset_v('js/table-std.js') }}"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/reconciliation-payrec.js?v=20261002a"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/reconciliation-payrec.js?v=20261002b"></script>
 <script>
 // Seleção de célula + Ctrl+C — padrão New Deals. Delegação no nó da tabela,
 // então sobrevive aos rebuilds do tbody a cada reconciliação.

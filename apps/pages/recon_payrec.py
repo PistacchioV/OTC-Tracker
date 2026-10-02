@@ -2048,7 +2048,7 @@ def _justify_locked(recon_date, table, index, comment, status):
 # A mesa casa à mão o que o motor deixou solto: linhas do Pending Payment
 # (débito, valor negativo) contra linhas do Pending Receivement (crédito,
 # positivo) da MESMA contraparte, quando a soma dos dois lados fica dentro da
-# tolerância. Só entra linha com UM lado preenchido — a que tem JPM e cliente já
+# tolerância — ou pernas JPM × pernas Client com Σ JPM = Σ Client (§623). Só entra linha com UM lado preenchido — a que tem JPM e cliente já
 # foi casada pelo motor (e ficou Pending pela diferença).
 #
 # Os grupos ficam num arquivo PRÓPRIO por dia (`manual-matches/<data>.json`) e
@@ -2068,15 +2068,32 @@ class ManualMatchError(ValueError):
 
 
 def _row_side_value(r):
-    """(valor, nome da contraparte) da linha com UM lado só; None quando ela tem
-    os dois (casada pelo motor) ou nenhum."""
+    """(valor, nome da contraparte, lado 'jpm'|'client') da linha com UM lado
+    só; None quando ela tem os dois (casada pelo motor) ou nenhum."""
     has_j = r.get('jpm_value', '') not in ('', None)
     has_c = r.get('client_value', '') not in ('', None)
     if has_j == has_c:
         return None
     if has_j:
-        return _num(r.get('jpm_value')), str(r.get('jpm_cpty') or '')
-    return _num(r.get('client_value')), str(r.get('client') or '')
+        return _num(r.get('jpm_value')), str(r.get('jpm_cpty') or ''), 'jpm'
+    return _num(r.get('client_value')), str(r.get('client') or ''), 'client'
+
+
+def _manual_balance(tot_jpm, tot_client, has_jpm, has_client):
+    """O critério do match manual -> (tipo, valor que tem de caber na tolerância).
+
+    Dois casos casam (§623): `pair` — pernas JPM × pernas Client da mesma
+    contraparte, Σ JPM = Σ Client, que é o que o motor casa quando o valor bate
+    (a perna dividida, a TED que chegou em duas) — e `offset` — linhas que se
+    compensam, soma zero (estorno, TED devolvida, §617). Vale o que fecha; sem
+    nenhum, o número dito é o do caso que a seleção sugere (os dois lados →
+    `pair`)."""
+    soma = round(tot_jpm + tot_client, 2)
+    if has_jpm and has_client:
+        diff = round(tot_jpm - tot_client, 2)
+        if abs(diff) <= _MANUAL_TOL or abs(soma) > _MANUAL_TOL:
+            return 'pair', diff
+    return 'offset', soma
 
 
 def _row_sig(table, r):
@@ -2146,10 +2163,11 @@ def _apply_manual_matches(recon_date, pend_pay, pend_rec, settled):
 
 
 def manual_match(recon_date, pay_idx, rec_idx, user='', sid=''):
-    """Casa à mão as linhas `pay_idx` do Pending Payment com as `rec_idx` do
-    Pending Receivement. Devolve (payload do dia, grupo). Levanta
-    `ManualMatchError` com o motivo quando recusa. Ler → validar → gravar sob o
-    `_cache_lock` e com a leitura ESTRITA (o desenho do Justify)."""
+    """Casa à mão as linhas `pay_idx` do Pending Payment e `rec_idx` do Pending
+    Receivement (qualquer combinação, ao menos duas linhas). Devolve (payload do
+    dia, grupo). Levanta `ManualMatchError` com o motivo quando recusa. Ler →
+    validar → gravar sob o `_cache_lock` e com a leitura ESTRITA (o desenho do
+    Justify)."""
     from apps.pages import routes
     with routes._cache_lock:
         return _manual_match_locked(recon_date, pay_idx, rec_idx, user, sid)
@@ -2165,12 +2183,12 @@ def _manual_match_locked(recon_date, pay_idx, rec_idx, user, sid):
                'rec': sorted({int(i) for i in rec_idx or []})}
     except (TypeError, ValueError):
         raise ManualMatchError('match_row_missing', 'Invalid row selection.')
-    if not sel['pay'] or not sel['rec']:
-        raise ManualMatchError('match_need_both',
-                               'Select at least one debit (Pending Payment) and one credit '
-                               '(Pending Receivement).')
+    if len(sel['pay']) + len(sel['rec']) < 2:
+        raise ManualMatchError('match_need_two', 'Select at least two rows to match.')
     keys = {'pay': 'pending_payment', 'rec': 'pending_receivement'}
     totals = {'pay': 0.0, 'rec': 0.0}
+    lados = {'jpm': 0.0, 'client': 0.0}
+    tem = set()
     names, rows = {}, []
     for tbl in ('pay', 'rec'):
         lst = data.get(keys[tbl]) or []
@@ -2183,6 +2201,8 @@ def _manual_match_locked(recon_date, pay_idx, rec_idx, user, sid):
                 raise ManualMatchError('match_already_matched',
                                        'A selected row was already matched by the reconciliation.')
             totals[tbl] += sv[0]
+            lados[sv[2]] += sv[0]
+            tem.add(sv[2])
             names.setdefault(_cpty_key(_norm_cpty(sv[1])), sv[1])
             rows.append({'table': tbl, 'sig': _row_sig(tbl, lst[i])})
     if len(names) != 1 or '' in names:
@@ -2190,7 +2210,7 @@ def _manual_match_locked(recon_date, pay_idx, rec_idx, user, sid):
         raise ManualMatchError('match_cpty_differs',
                                'The selected rows are not from the same counterparty: ' + lista,
                                {'names': lista})
-    net = round(totals['pay'] + totals['rec'], 2)
+    kind, net = _manual_balance(lados['jpm'], lados['client'], 'jpm' in tem, 'client' in tem)
     if abs(net) > _MANUAL_TOL:
         params = {'net': '{:,.2f}'.format(net), 'tol': '{:,.2f}'.format(_MANUAL_TOL)}
         raise ManualMatchError('match_over_tolerance',
@@ -2199,7 +2219,8 @@ def _manual_match_locked(recon_date, pay_idx, rec_idx, user, sid):
     group = {'id': datetime.now().strftime('%Y%m%d%H%M%S%f'), 'at': datetime.now().isoformat(timespec='seconds'),
              'user': user or '', 'sid': sid or '', 'cpty': next(iter(names.values())),
              'total_debit': round(totals['pay'], 2), 'total_credit': round(totals['rec'], 2),
-             'net': net, 'rows': rows}
+             'total_jpm': round(lados['jpm'], 2), 'total_client': round(lados['client'], 2),
+             'kind': kind, 'net': net, 'rows': rows}
     # O grupo vai PRIMEIRO para o arquivo dos matches: é ele que o Run reaplica.
     groups = _load_manual(recon_date, strict=True) + [group]
     os.makedirs(_MANUAL_DIR, exist_ok=True)

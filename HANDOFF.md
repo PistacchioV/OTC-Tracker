@@ -25797,3 +25797,20 @@ box é um lote só, e o arquivamento também (`otc_boxscan.archive_unwind_emails
 resolve a pasta Unwind uma vez; antes a árvore do Outlook era percorrida por
 e-mail). A Intrag continua linha a linha (só as recompras de fundo).
 `check_unwind_page.py` §15, `check_unwind_termo.py` §11.
+
+## §623 — Pay/Rec: Match também casa perna JPM × perna Client (2026-10-02)
+
+O botão Match só habilitava com uma linha marcada no Pending Payment E outra no
+Pending Receivement (débito × crédito, §617). A mesa marcou duas pernas só-JPM
+e uma só-Client da Lawton, todas no Pending Payment (todas Pay, negativas), e
+o botão ficou cinza: é o casamento que o motor faz quando o valor bate, e que
+ele não fez porque a perna veio dividida. Agora o Match liga com duas linhas ou
+mais em QUALQUER das tabelas, e o servidor aceita dois critérios
+(`_manual_balance`): `pair`, Σ JPM = Σ Client, e `offset`, a soma das linhas
+igual a zero (o caso do §617, que continua valendo). Vale o que fecha dentro da
+`_MANUAL_TOL`; mesma contraparte pela `_cpty_key` e só linha com UM lado, como
+antes. O Swal mostra as colunas JPM × Client e diz qual número decidiu
+(Diferença JPM − Client ou Soma). Confirmado, o grupo sai das pendências e
+entra no Settled com a tag Manual (já era assim). O grupo grava
+`total_jpm`/`total_client`/`kind`. `match_need_both` virou `match_need_two`.
+`check_payrec_manual_match.py` §5.

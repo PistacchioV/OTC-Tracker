@@ -82,7 +82,7 @@ def justify(recon_date, table, index, comment, status):
 
 
 def manual_match(recon_date, pay_idx, rec_idx, user='', sid=''):
-    """(payload do dia, grupo) do match manual débito × crédito; recusa com
+    """(payload do dia, grupo) do match manual (JPM × Client ou compensação); recusa com
     `recon_payrec.ManualMatchError` (código + params para a tela)."""
     from apps.pages.recon_payrec import manual_match as _mm
     return _mm(recon_date, pay_idx, rec_idx, user=user, sid=sid)
