@@ -579,6 +579,36 @@ def _pc_find_row(tn):
     return None
 
 
+def _pc_find_rows(tns):
+    """O `_pc_find_row` de VÁRIOS Trade Numbers: `{tn: linha}`, numa leitura
+    por banco e com a mesma precedência (backlog → pending → ok). ESTRITA,
+    pela mesma razão."""
+    from apps.pages import routes
+    faltam = {str(t or '').strip() for t in tns or []} - {''}
+    out = {}
+    if not faltam:
+        return out
+    cols = ', '.join('"{}"'.format(c) for c in _PC_COLUMNS)
+    tn_idx = _PC_COLUMNS.index('Trade Number')
+    for cat in ('backlog', 'pending', 'ok'):
+        if not faltam:
+            break
+        path = os.path.join(routes._PC_DB_DIR, _PC_DBS[cat])
+        if not _store.isfile(path):
+            continue
+        _pc_ensure_db(path)
+        lista = sorted(faltam)
+        with routes.duckdb_read(path) as con:
+            achadas = con.execute('SELECT {} FROM {} WHERE "Trade Number" IN ({})'.format(
+                cols, _PC_TABLE, ', '.join('?' for _ in lista)), lista).fetchall()
+        for r in achadas:
+            tn = str(r[tn_idx] or '').strip()
+            if tn in faltam:
+                out[tn] = dict(zip(_PC_COLUMNS, ('' if v is None else v for v in r)))
+                faltam.discard(tn)
+    return out
+
+
 def _pc_insert_into(category, row):
     # INSERT com colunas explícitas: funciona também num DB ainda não migrado
     # (colunas legadas extras ficam NULL) — o VALUES posicional quebraria.
@@ -813,26 +843,9 @@ def _pc_save_from_deal(deal, product_type, pending_status=None, trade_number=Non
     Product Type — sem ele o FWD Start não se separa de Vanilla/Other Publisher."""
     from apps.pages import routes
     try:
-        client = str(deal.get('Client', '') or '')
-        if _pc_is_internal_counterparty(client, deal.get('SPN', '')):
+        row = _pc_row_from_deal(deal, product_type, pending_status, trade_number, source)
+        if row is None:
             return          # bank / Lawton / intragroup leg → not a client confirmation
-        td = routes._parse_date_any(deal.get('TradeDate', ''))
-        md = routes._parse_date_any(deal.get('SettlementDate', ''))
-        aging = (datetime.now().date() - td).days if td else None
-        row = {c: '' for c in _PC_COLUMNS}
-        row['Status'] = _pc_aging_band_label(aging)
-        # A LOB acompanha o produto: mercadoria é COMMODITY, o resto é CEM.
-        row['LOB'] = routes._lob_for_source(source or product_type, deal)
-        row['SPN'] = str(deal.get('SPN', '') or '')
-        row['Client'] = client
-        row['Aging'] = str(aging) if aging is not None else ''
-        row['Product Type'] = product_type
-        row['Trade Date'] = td.strftime('%d/%m/%Y') if td else str(deal.get('TradeDate', '') or '')
-        row['Maturity Date'] = md.strftime('%d/%m/%Y') if md else str(deal.get('SettlementDate', '') or '')
-        row['Trade Number'] = str(trade_number or deal.get('Deal', '') or '')
-        row['Pending Status'] = pending_status or 'Pending OTC'
-        row['Owner'] = _pc_banker_for_spn(deal.get('SPN', ''))
-        _pc_refdata_enrich(row)      # Economic Group / Signature Type do RefData
         # A linha que JÁ EXISTE não volta a ser uma linha nova: todo PATCH
         # `Success` do New Deals, todo `b3_mapped` e todo reimport da recompra
         # passam por aqui, e a linha em branco apagava EA, Send/Return Date,
@@ -841,22 +854,84 @@ def _pc_save_from_deal(deal, product_type, pending_status=None, trade_number=Non
         # a discordar. Do deal só vem o que é DELE (`_PC_DEAL_COLUMNS`, quando
         # preenchido); o resto é da mesa. Leitura estrita: banco que não abre
         # interrompe aqui (vai para o log abaixo) em vez de gravar em branco.
-        atual = _pc_find_row(row['Trade Number'])
-        if atual is not None:
-            novo = dict(atual)
-            for c in _PC_DEAL_COLUMNS:
-                if str(row.get(c, '') or '').strip():
-                    novo[c] = row[c]
-            for c in _PC_COLUMNS:            # vazio na mesa → o que o deal/cadastro sabe
-                if not str(novo.get(c, '') or '').strip() and str(row.get(c, '') or '').strip():
-                    novo[c] = row[c]
-            row = novo
+        row = _pc_merge_existing(row, _pc_find_row(row['Trade Number']))
         _pc_upsert_rows([row])       # routes to pending (or backlog if >12 months)
         # A MESMA operação entra na esteira de validação da confirmação — só os
         # produtos que geram documento (ver _MC_CONFIRMATION_SOURCES).
         routes._mc_save_from_deal(deal, source or product_type, trade_number=row['Trade Number'])
     except Exception:
         log.warning('[pending-confirmation] save-from-deal failed:\n%s', traceback.format_exc())
+
+
+def _pc_save_from_deals(items):
+    """O `_pc_save_from_deal` de um LOTE `[(deal, product_type, kwargs)]`.
+
+    Mesma linha, mesma mescla com a que já existe, mesma esteira — mas as
+    linhas existentes saem de UMA leitura por banco (`_pc_find_rows`), a
+    gravação é UM `_pc_upsert_rows` e a esteira, um `_mc_save_from_deals`. O
+    import da recompra fazia isto por operação: ~10 aberturas no share cada,
+    e 79 recompras passavam de uma hora (§622). A falha SOBE (não é engolida
+    como na versão de uma linha): quem chama em lote refaz linha a linha."""
+    from apps.pages import routes
+    rows, mc_items = [], []
+    for deal, product_type, kw in items or []:
+        kw = dict(kw or {})
+        row = _pc_row_from_deal(deal, product_type, kw.get('pending_status'),
+                                kw.get('trade_number'), kw.get('source'))
+        if row is None:
+            continue
+        rows.append(row)
+        mc_items.append((deal, kw.get('source') or product_type, row['Trade Number']))
+    if not rows:
+        return 0
+    atuais = _pc_find_rows([r['Trade Number'] for r in rows])
+    rows = [_pc_merge_existing(r, atuais.get(str(r['Trade Number']).strip())) for r in rows]
+    _pc_upsert_rows(rows)
+    routes._mc_save_from_deals(mc_items)
+    return len(rows)
+
+
+def _pc_row_from_deal(deal, product_type, pending_status=None, trade_number=None,
+                      source=None):
+    """A linha do Pending Confirmation para `deal`, ou `None` quando a perna é
+    interna (banco / Lawton / intragrupo não tem confirmação de cliente)."""
+    from apps.pages import routes
+    client = str(deal.get('Client', '') or '')
+    if _pc_is_internal_counterparty(client, deal.get('SPN', '')):
+        return None
+    td = routes._parse_date_any(deal.get('TradeDate', ''))
+    md = routes._parse_date_any(deal.get('SettlementDate', ''))
+    aging = (datetime.now().date() - td).days if td else None
+    row = {c: '' for c in _PC_COLUMNS}
+    row['Status'] = _pc_aging_band_label(aging)
+    # A LOB acompanha o produto: mercadoria é COMMODITY, o resto é CEM.
+    row['LOB'] = routes._lob_for_source(source or product_type, deal)
+    row['SPN'] = str(deal.get('SPN', '') or '')
+    row['Client'] = client
+    row['Aging'] = str(aging) if aging is not None else ''
+    row['Product Type'] = product_type
+    row['Trade Date'] = td.strftime('%d/%m/%Y') if td else str(deal.get('TradeDate', '') or '')
+    row['Maturity Date'] = md.strftime('%d/%m/%Y') if md else str(deal.get('SettlementDate', '') or '')
+    row['Trade Number'] = str(trade_number or deal.get('Deal', '') or '')
+    row['Pending Status'] = pending_status or 'Pending OTC'
+    row['Owner'] = _pc_banker_for_spn(deal.get('SPN', ''))
+    _pc_refdata_enrich(row)      # Economic Group / Signature Type do RefData
+    return row
+
+
+def _pc_merge_existing(row, atual):
+    """A linha nova mesclada com a que JÁ está gravada (`atual`, ou `None`)."""
+    if atual is None:
+        return row
+    novo = dict(atual)
+    for c in _PC_DEAL_COLUMNS:
+        if str(row.get(c, '') or '').strip():
+            novo[c] = row[c]
+    for c in _PC_COLUMNS:            # vazio na mesa → o que o deal/cadastro sabe
+        if not str(novo.get(c, '') or '').strip() and str(row.get(c, '') or '').strip():
+            novo[c] = row[c]
+    return novo
+
 
 # ============================================================================
 #  METRICS — Pending Confirmation

@@ -25771,3 +25771,27 @@ os mesmos 14 da esquerda; ambígua, cai para a direita, e se a direita não
 achar nada vale a primeira da esquerda. O truncado de sempre
 (`STP-XE-10G5U5X-0-0` × `XE-10G5U5X-0-0`) segue pela direita. Recompra já
 importada só muda com novo import. `check_unwind_notification.py` §10.
+
+## §622 — Unwind NDF FX: import em LOTE (2026-10-02)
+
+79 recompras levavam mais de uma hora para importar. A causa: o dropzone mandava
+UM e-mail por request (e a varredura do box chamava `import_email` em laço), e
+cada um repetia o caminho inteiro: o `_lpndf_collect` (o Live Position todo,
+formatado), a gravação do arquivo-dia, o `_pc_save_from_deal` (3 leituras + até
+3 gravações no Pending Confirmation, e o `_mc_save_from_deal`, cujo
+`manual_conf.find_row` carrega os DOIS bancos da esteira inteiros), o
+`esteira_data_da_operacao` (mais dois `find_row`), a Intrag e o Cockpit com o IR
+do dia refeito. Umas quinze aberturas de banco no share por recompra.
+
+Agora é `commands.import_emails` / `import_email_uploads`: posição lida UMA vez
+por lote, e cada destino gravado uma vez — `persistence.upsert` com as linhas
+todas, `esteira_da_recompra` em lote (`_pc_save_from_deals`: `_pc_find_rows`
+numa leitura por banco, um `_pc_upsert_rows`, `_mc_save_from_deals` com a
+esteira lida uma vez e `manual_conf.insert_rows` numa transação por banco),
+Cockpit uma vez por dia de liquidação. A decisão "intocada?" passou a ter a
+versão sobre a linha já lida (`manual_conf.untouched`). Se o lote da esteira
+falha, ela refaz linha a linha pela porta de sempre. O endpoint `import-file`
+aceita vários `file`; e-mail ilegível volta em `failed` e só é 400 quando
+nenhum se lê. A tela manda lotes de 25 com progresso no botão; a varredura do
+box é um lote só. A Intrag continua linha a linha (só as recompras de fundo).
+`check_unwind_page.py` §15, `check_unwind_termo.py` §11.

@@ -361,7 +361,9 @@ def main():
 
     print('\n== 11. o gatilho e o IMPORT, e a linha vai CARIMBADA ==')
     vistos = []
-    R._pc_save_from_deal = lambda d, pt, **kw: vistos.append((d, pt, kw))
+    # O import grava a esteira em LOTE (§622): a porta é o `_pc_save_from_deals`.
+    _pc_lote_original = R._pc_save_from_deals
+    R._pc_save_from_deals = lambda itens: vistos.extend(itens)
     commands.esteira_da_recompra([dict(L1)], HOJE)
     check('o import manda a recompra para o Pending Confirmation', len(vistos) == 1)
     if vistos:
@@ -373,11 +375,18 @@ def main():
     def _explode(*a, **k):
         raise RuntimeError('banco ocupado')
     R._pc_save_from_deal = _explode
+    R._pc_save_from_deals = _explode
     try:
         commands.esteira_da_recompra([dict(L1)], HOJE)
         check('falha no espelho nao derruba o import', True)
     except Exception as exc:                                # noqa: BLE001
         check('falha no espelho nao derruba o import', False, exc)
+    # E o lote que falha refaz LINHA A LINHA pela porta de sempre.
+    vistos_um = []
+    R._pc_save_from_deal = lambda d, pt, **kw: vistos_um.append(d['Deal'])
+    commands.esteira_da_recompra([dict(L1), dict(L2)], HOJE)
+    check('lote que falha refaz linha a linha', vistos_um == [L1['AthenaID'], L2['AthenaID']], vistos_um)
+    R._pc_save_from_deals = _pc_lote_original
 
     print('\n== 12. a segregacao do Generate ve o grupo da recompra ==')
     R._pc_save_from_deal = lambda *a, **k: None

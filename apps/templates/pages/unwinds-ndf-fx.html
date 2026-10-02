@@ -843,17 +843,28 @@ $(document).ready(function () {
         btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i> Importing...';
         function _restore() { btn.disabled = false; btn.innerHTML = '<i class="ti ti-upload me-1"></i> Import'; }
         var rows = [], warns = [], errors = [], processados = [];
+        // Em LOTES, não um e-mail por request (§622): o servidor lê a posição
+        // UMA vez por request e grava cada destino uma vez — um por request
+        // eram ~15 aberturas de banco no share por recompra, e 79 recompras
+        // passavam de uma hora. 25 por lote mantém o progresso visível.
+        var LOTE = 25, lotes = [];
+        for (var i = 0; i < files.length; i += LOTE) lotes.push(files.slice(i, i + LOTE));
+        var feitos = 0;
         var chain = Promise.resolve();
-        files.forEach(function (f) {
+        lotes.forEach(function (lote) {
             chain = chain.then(function () {
+                btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i> Importing... ' + feitos + '/' + files.length;
                 var fd = new FormData();
-                fd.append('file', f);
+                lote.forEach(function (f) { fd.append('file', f); });
                 fd.append('date', refDateIso());
                 return fetch('/api/unwinds/ndf/fx/import-file', { method: 'POST', body: fd, credentials: 'same-origin' })
                     .then(function (r) { return r.json(); })
                     .then(function (res) {
-                        if (!res || !res.success) { errors.push(f.name + ': ' + ((res && res.message) || 'Import failed')); return; }
-                        processados.push(f);
+                        feitos += lote.length;
+                        if (!res || !res.success) { errors.push((res && res.message) || 'Import failed'); return; }
+                        var recusados = (res.failed || []).map(function (x) { return x.name; });
+                        (res.failed || []).forEach(function (x) { errors.push(x.name + ': ' + x.reason); });
+                        lote.forEach(function (f) { if (recusados.indexOf(f.name) < 0) processados.push(f); });
                         rows = rows.concat(res.rows || []);
                         warns = warns.concat(res.warnings || []);
                     });
