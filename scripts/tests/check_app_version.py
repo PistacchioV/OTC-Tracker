@@ -13,7 +13,7 @@ Tres coisas que nao dao erro nenhum se cairem, e que este script prende:
   2. o destinatario e quem esta ATIVO. Mandar para `Pending` e avisar quem
      ainda nao foi aprovado; deixar de mandar para `Active` e deixar gente no
      codigo velho;
-  3. o corpo e o PROCEDIMENTO — fechar o DevShell ANTES de rodar o .bat. Sem o
+  3. o corpo e o PROCEDIMENTO — fechar a janela ANTES de rodar o .bat. Sem o
      passo 1 a pessoa sobe um segundo servidor e continua na versao anterior,
      achando que atualizou.
 """
@@ -206,22 +206,23 @@ _html = _texto            # o mesmo conteudo; nome proprio para as checagens de 
 for trecho, rotulo in [
         ('v8', 'a versao'),
         (AD.STARTER, 'o nome do .bat a executar'),
-        ('DevShell', 'a janela que tem de ser fechada'),
+        ('OTC Tracker</strong> window', 'a janela que tem de ser fechada'),
         ('Ctrl + C', 'como parar o processo'),
         ('Close the application that is running', 'o passo 1: derrubar o que esta no ar')]:
     check('o corpo cita ' + rotulo, trecho in _texto, True)
 check('o passo 1 vem ANTES do .bat no corpo',
       _texto.index('Close the application') < _texto.index(AD.STARTER), True)
 
-# O .bat NAO se abre com duplo clique: ele tem de rodar DENTRO do DevShell. O
-# texto dizia "(double-click)", que e o caminho que nao funciona — e e o que a
-# pessoa tenta primeiro, porque e o obvio.
-check('o corpo diz para arrastar o .bat para o DevShell',
-      'drag' in _texto and 'into it' in _texto, True)
-check('   e desaconselha o duplo clique explicitamente',
-      'Do not double-click' in _texto, True)
-check('   sem sobrar o "(double-click)" antigo',
-      '(double-click)' in _texto, False)
+# Desde 08/10/2026 o .bat sobe com DUPLO CLIQUE, sem DevShell (§628): ele
+# instala o proprio Python e cria o atalho "OTC Tracker" no Desktop. O e-mail
+# antigo mandava arrastar o .bat para o DevShell e PROIBIA o duplo clique —
+# deixado assim, ele ensinaria o caminho que nao existe mais.
+check('o corpo manda dar duplo clique no atalho ou no .bat',
+      'Double-click' in _texto and 'shortcut' in _texto, True)
+check('   e diz que o DevShell nao e mais preciso',
+      'No DevShell needed' in _texto, True)
+check('   sem sobrar a instrucao antiga de arrastar para o DevShell',
+      'drag' in _texto or 'Do not double-click' in _texto, False)
 
 # Os DOIS enderecos, e nenhum deles derivado do hostname: cada pessoa roda a
 # propria instancia, e o hostname de quem ENVIA nao abre nada para quem recebe
