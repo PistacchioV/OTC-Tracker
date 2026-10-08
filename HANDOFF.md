@@ -25897,3 +25897,97 @@ pasta.
   nas três línguas.
 
 `check_nd_mapping_b3.py` §8; guia v2.5 (5.7).
+
+## §627 — Limpeza: sem ORM, sem gráfico matplotlib, motor do standalone uma vez só (2026-10-08)
+
+Varredura de over-engineering (`/ponytail-audit`). Nada muda para a mesa; o
+que muda é o que se instala e o que se entrega.
+
+- **SQLAlchemy/Flask-SQLAlchemy/Flask-Migrate saíram.** A única coisa que
+  faziam era um `create_all()` num `apps/db.sqlite3` vazio, sem modelo nenhum.
+  Foram junto `register_extensions`/`configure_database`, o `Migrate(app, db)`
+  do `run.py`, `SQLALCHEMY_*`, `DB_*`, `USE_SQLITE`, o bloco do `env.sample`, o
+  `db.sqlite3` do `DATABASE_ACCESS_PATHS` e o `db.sqlite3(.lock)` do
+  `DEPLOY_FILES`. O `_SQLITE_DIR_DEFAULT` FICOU no bloco ENV (morto): tirá-lo
+  é mexer nas duas branches juntas — o modelo do `/commitjp` o escreve.
+  Sobram `apps/db.sqlite3(.lock)` órfãos no checkout e na pasta da aplicação
+  no share; podem ser apagados com a instância parada.
+- ⚠️ **O `run.py` da INSTÂNCIA não é o do repositório** (6fbb3906: ela tem um
+  próprio, em `apps/`, e é ele que o `new-otc-deploy.bat` leva do
+  `otc-source`). Se ele ainda tiver `from apps import create_app, db`,
+  `Migrate(app, db)` ou o log do `SQLALCHEMY_DATABASE_URI`, a subida morre em
+  `ImportError: cannot import name 'db'`. Conferir ANTES do deploy.
+- **`forecast_charts.py` + `matplotlib`/`seaborn` saíram**: nunca foram
+  ligados — o Settlement Forecast desenha no navegador (Chart.js) e manda o PNG.
+- **`recon_comitente` só com `rapidfuzz`.** O código tentava o `fuzzywuzzy`
+  primeiro, e a instância (pip sobre o mesmo Python) ainda o tem: o score
+  volta INTEIRO (`round(ratio)`, o `intr` do fuzzywuzzy) para o status das
+  linhas gravadas e o corte de 70 do endereço não mudarem na primeira recon.
+- **`scripts/standalone/`: o motor UMA vez, no `_motor.py`**; as 40 fatias são
+  cascas que o importam (eram 40 cópias do corpo, ~80 mil linhas). Entrega-se a
+  PASTA; fatia sozinha diz `falta o _motor.py`. `check_duckdb_standalone` cobra
+  o corpo no `_motor.py`, nenhuma fatia com corpo e toda fatia importando dele.
+
+Varredura depois (workflow, 13 agentes): nenhuma referência sobrando, app sobe
+com os pacotes BLOQUEADOS no import, fatias velhas × novas produzem os MESMOS
+bancos tabela a tabela, o patch aplica limpo na `StreamFlow-prod`, e as 13
+falhas da suíte são as mesmas da HEAD com os mesmos dados.
+
+## §628 — `start-otc-tracker.bat` sobe com duplo clique, sem DevShell (2026-10-08)
+
+Pedido: o `.bat` da instância tinha de rodar como um executável — duplo clique e
+pronto —, sem abrir o DevShell, e instalando o que faltasse por conta própria.
+
+O DevShell dava três coisas, e cada uma tem substituto no próprio `.bat`:
+
+- **O Python 3.12** (`ds tool install python3.12`) → um Python PRÓPRIO em
+  `%LOCALAPPDATA%\OTC-Tracker\python312`, instalado só para o usuário (sem
+  admin, `/quiet InstallAllUsers=0`, fora do PATH, sem launcher). Antes de
+  instalar ele procura um 3.12 do usuário no registro (`HKCU\...\PythonCore\3.12`)
+  e o usa; depois de instalar procura de novo, porque o instalador do python.org
+  ATUALIZA um 3.12 existente no lugar dele e ignora o `TargetDir`. O instalador
+  (3.12.10, o último 3.12 com binário) sai de `Application\installers\` no share
+  — sem internet — ou do python.org pelo proxy do sistema (Invoke-WebRequest com
+  as credenciais do Windows; o BITS de reserva). **Só roda ASSINADO**
+  (`Get-AuthenticodeSignature`): a página de bloqueio do proxy salva com o nome
+  do `.exe` nunca é executada.
+- **O pip configurado** → `PIP_INDEX_URL` no Artifactory (o mesmo do awmpy),
+  se a máquina não define outro. O pip do 3.12.10 confia no repositório de
+  certificados do Windows (truststore).
+- **O `localproxy-cfg`** → não é instalado; o app não depende dele.
+
+O retrato do `requirements.txt` mora DENTRO da pasta do Python: num lugar comum
+ele diria "tudo instalado" para um Python recém-reinstalado e vazio — e o
+retrato do `.bat` antigo, que é do Python do DevShell, não vale para este.
+
+Extras de "executável": o navegador abre sozinho quando o servidor RESPONDE (um
+PowerShell escondido, em janela própria — com `/b` ele dividiria o console e o
+`-WindowStyle Hidden` esconderia o servidor); e na primeira vez um atalho
+"OTC Tracker" no Desktop com o `otc-tracker.ico` (gerado do logo; mora ao lado do
+`.bat` e é copiado para o disco local). O alvo do atalho é `cmd.exe /c "<.bat>"`:
+atalho de `.bat` não se FIXA na barra de tarefas, o de `cmd.exe` sim, e ele abre
+com a pasta local como diretório atual (some o aviso de UNC). Uma vez por
+máquina (`atalho.ok`): apagado, não volta.
+
+O e-mail de versão nova mandava arrastar o `.bat` para o DevShell e PROIBIA o
+duplo clique; agora manda o duplo clique e diz que o navegador abre sozinho, e
+o card do Control Panel acompanha nas três línguas (`check_app_version`).
+
+**Não testado no Windows** (a dev é macOS): a primeira subida numa máquina deve
+ser acompanhada. Pontos que só a instância responde: o AppLocker deixar rodar o
+instalador, o Artifactory atender o `pip install -r` fora do DevShell, e o
+`WScript.Shell` estar liberado para o PowerShell (em Constrained Language Mode o
+atalho não nasce — o `.bat` avisa e segue). Para não depender da internet, deixe
+o `python-3.12.10-amd64.exe` em `Application\installers\`.
+
+**Ícone e `naeast`** (mesmo dia). O `.bat` não aceita ícone próprio — o Windows
+desenha um só para todo `.bat` — e um `.exe` com ícone não roda na máquina do
+JPM; a resposta é o ATALHO, e ele nasce agora também na pasta `Application` do
+share (com o `.ico` do share; a primeira máquina com permissão de escrita o cria
+para as outras), além do Desktop. O `start-otc-tracker_naeast.bat` deixou de ser
+uma CÓPIA do `.bat` (que dependia do DevShell) e virou um LANÇADOR de poucas
+linhas: define `OTC_NOME` ("OTC Tracker NAEAST"), `OTC_LAUNCHER` (ele mesmo, que é
+o alvo do atalho dele) e `OTC_ESPELHO_LOCAL=1`, e chama o `start-otc-tracker.bat`
+da mesma pasta. O espelho do §524 virou a sub-rotina `:espelha` do principal —
+`src-teste` e `pycache-teste` como antes —, então os dois sobem com a MESMA
+instalação do Python e das dependências, e cada um tem o seu atalho.

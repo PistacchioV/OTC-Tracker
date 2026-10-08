@@ -126,14 +126,6 @@ Copie o arquivo `env.sample` para `.env` e configure as seguintes variáveis:
 FLASK_APP=run.py
 FLASK_ENV=development
 
-# Database
-DB_ENGINE=
-DB_USERNAME=
-DB_PASS=
-DB_HOST=
-DB_PORT=
-DB_NAME=
-
 # Assets
 ASSETS_ROOT=/static
 ```
@@ -155,9 +147,8 @@ ASSETS_ROOT=/static
 
 ### 2. Configuração do Banco de Dados
 
-O SQLAlchemy vem configurado do template (SQLite por padrão, PostgreSQL/MySQL
-pelas variáveis `DB_*` do `.env`), mas **a lógica da aplicação não o usa**. Os
-dados de verdade estão em três lugares:
+Não há ORM (SQLAlchemy/Flask-Migrate saíram em 08/10/2026, §627). Os dados
+estão nestes lugares:
 
 - **DuckDB** — usuários/2FA (`Users_OTCTracker.db`), notificações
   (`Notifications_OTCTracker.db`) e os bancos de Pending Confirmation, esteira
@@ -190,7 +181,8 @@ quebrados até o produto, o Daily Settlement e o B3 Files por arquivo e uma fati
 por reconciliação) que várias pessoas rodam ao mesmo tempo —
 `scripts/convert/README.md` explica.
 Para uma máquina **sem o código do app**, o `scripts/standalone/` tem o mesmo
-corte com os caminhos do share fixos e só o `duckdb` como dependência.
+corte com os caminhos do share fixos e só o `duckdb` como dependência — entregue
+a PASTA inteira: o motor mora uma vez no `_motor.py`, e uma fatia sozinha não roda.
 
 ## Executando o Projeto
 
@@ -367,10 +359,6 @@ def dashboard():
 
 ### 3. Principais Dependências
 - Flask 3.1.1: Framework web
-- Flask-SQLAlchemy 3.0.5: ORM para banco de dados
-- Flask-Login 0.6.3: Gerenciamento de autenticação
-- Flask-WTF 1.2.1: Formulários e validação
-- Flask-Migrate 4.0.4: Migrações de banco de dados
 - Flask-Minify 0.42: Minificação de assets
 - Gunicorn 20.1.0: Servidor WSGI para produção
 

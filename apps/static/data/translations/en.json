@@ -2116,7 +2116,7 @@
   "cp-sec-app-title": "Application",
   "cp-sec-app-desc": "Routines about the tool itself, not about the trades it handles.",
   "cp-r-appver-title": "New Version Released",
-  "cp-r-appver-desc": "E-mails every user whose status is Active that a new version is available and has to be started by hand: the instance runs with the reloader off, so the process already up keeps serving the previous code until someone closes the DevShell window and runs start-otc-tracker.bat again. The version is not typed — it is read from the link.txt that sits next to the .bat, so the e-mail announces the version the instance will actually start.",
+  "cp-r-appver-desc": "E-mails every user whose status is Active that a new version is available and has to be started by hand: the instance runs with the reloader off, so the process already up keeps serving the previous code until someone closes the OTC Tracker window and double-clicks start-otc-tracker.bat again. The version is not typed — it is read from the link.txt that sits next to the .bat, so the e-mail announces the version the instance will actually start.",
   "cp-appver-cc": "CC",
   "cp-appver-meta": "Manual → every Active user",
   "cp-appver-send": "Announce",

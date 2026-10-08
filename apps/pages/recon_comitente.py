@@ -20,12 +20,9 @@ import pandas as pd
 from apps.pages.database_access import sqlite_read, sqlite_write
 
 try:
-    from fuzzywuzzy import fuzz as _fuzz
+    from rapidfuzz import fuzz as _fuzz
 except ImportError:
-    try:
-        from rapidfuzz import fuzz as _fuzz
-    except ImportError:
-        _fuzz = None
+    _fuzz = None
 
 _log = logging.getLogger(__name__)
 
@@ -92,7 +89,10 @@ def _fuzzy_score(a, b):
     if not sa and not sb:
         return 0.0
     try:
-        return round(_fuzz.ratio(sa, sb), 2)
+        # Inteiro, como o fuzzywuzzy entregava (`int(round(...))`): a instância
+        # rodou com ele, e o score com casas mudaria o status das linhas já
+        # gravadas (e o corte de 70 do endereço) na primeira recon depois.
+        return round(_fuzz.ratio(sa, sb))
     except Exception:
         return 0.0
 

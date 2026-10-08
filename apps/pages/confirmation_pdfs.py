@@ -1167,14 +1167,17 @@ _FX_DROP = {'style', 'script', 'title', 'head', 'meta', 'link'}
 # Uma fonte TrueType da máquina responde por esses dois glifos (Segoe UI
 # Symbol no Windows da instância, Arial Unicode no Mac); sem nenhuma, o PDF
 # escreve [X] / [  ], que ainda diz o que está marcado.
-_SYMBOL_FONT_CANDIDATES = (
-    os.path.join(os.environ.get('WINDIR', r'C:\Windows'), 'Fonts', 'seguisym.ttf'),
-    os.path.join(os.environ.get('WINDIR', r'C:\Windows'), 'Fonts', 'ARIALUNI.TTF'),
+# A pasta de fontes do Windows sai do `WINDIR` (sempre definido lá); sem ele não
+# há Windows, e os dois candidatos somem em vez de virar caminho relativo.
+_WINDIR = os.environ.get('WINDIR', '')
+_SYMBOL_FONT_CANDIDATES = tuple(p for p in (
+    _WINDIR and os.path.join(_WINDIR, 'Fonts', 'seguisym.ttf'),
+    _WINDIR and os.path.join(_WINDIR, 'Fonts', 'ARIALUNI.TTF'),
     '/System/Library/Fonts/Supplemental/Arial Unicode.ttf',
     '/Library/Fonts/Arial Unicode.ttf',
     '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-)
-_SYMBOL_FONT = {'name': None, 'tried': False}
+) if p)
+_SYMBOL_FONT ={'name': None, 'tried': False}
 
 
 def _symbol_font():

@@ -2116,7 +2116,7 @@
   "cp-sec-app-title": "Aplicação",
   "cp-sec-app-desc": "Rotinas sobre a própria ferramenta, e não sobre as operações que ela trata.",
   "cp-r-appver-title": "Nova Versão Liberada",
-  "cp-r-appver-desc": "Envia e-mail a todo usuário com status Ativo avisando que há uma versão nova e que ela precisa ser iniciada à mão: a instância roda com o reloader desligado, então o processo que já está no ar continua servindo o código anterior até alguém fechar a janela do DevShell e rodar o start-otc-tracker.bat de novo. A versão não é digitada — ela é lida do link.txt que fica ao lado do .bat, então o e-mail anuncia a versão que a instância vai de fato subir.",
+  "cp-r-appver-desc": "Envia e-mail a todo usuário com status Ativo avisando que há uma versão nova e que ela precisa ser iniciada à mão: a instância roda com o reloader desligado, então o processo que já está no ar continua servindo o código anterior até alguém fechar a janela do OTC Tracker e dar dois cliques no start-otc-tracker.bat de novo. A versão não é digitada — ela é lida do link.txt que fica ao lado do .bat, então o e-mail anuncia a versão que a instância vai de fato subir.",
   "cp-appver-cc": "CC",
   "cp-appver-meta": "Manual → todo usuário Ativo",
   "cp-appver-send": "Anunciar",

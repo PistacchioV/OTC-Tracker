@@ -1,87 +1,14 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""O motor da conversão JSON → DuckDB (fase 2 da migração: HANDOFF §324–§326).
+r"""O motor JSON -> DuckDB das fatias desta pasta.
 
-Era o corpo do `scripts/convert_json_to_duckdb.py` e virou módulo do app
-porque ele tem DOIS chamadores: o script (a carga do legado em JSON, rodada à
-mão) e o **armazém** (`apps/pages/data_store.py`, §434), que grava cada
-payload no banco pelo mesmo `target_of`/`escrever_payload`. Duplicar a regra
-nos dois seria criar duas respostas para "como este JSON vira tabela".
+Não se roda sozinho: cada `00_*`/`01_*`/`02_*`/`99_*` ao lado importa daqui.
+Copie a PASTA inteira para a máquina que vai rodar. Requisito único:
+pip install duckdb
 
-Materializa os dados que hoje vivem em JSON como bancos DuckDB tipados, ao
-lado dos próprios JSONs (que continuam sendo a fonte de LEITURA enquanto os
-consumidores não forem religados — fase 3). Idempotente e INCREMENTAL: cada
-banco guarda um `_manifest` (caminho, mtime, tamanho) e só reconverte o
-arquivo que mudou — rodar de novo com nada mudado não reescreve nada, e um
-calendário/dia novo vira tabela nova sem tocar nas existentes.
-
-Três bancos, no desenho pedido:
-
-- **`holiday_calendars.db`** — UMA TABELA POR CALENDÁRIO (nome vindo do
-  registro `holiday-calendars.json`; calendário criado pela tela ganha a
-  tabela na rodada seguinte). Colunas tipadas: `date DATE`, `title`,
-  `calendar`. A tabela `_registry` guarda o próprio registro (cores/CSS).
-- **`reference_data.db`** — duas tabelas: `refdata` (RefData.json) e
-  `counterparty_details` (CounterpartyDetails.json). TUDO VARCHAR de
-  propósito: é cadastro de IDENTIFICADOR (SPN, ECI, TAX ID, conta B3), e 158
-  dos 553 documentos começam com zero — um BIGINT aqui perderia o zero à
-  esquerda e a chave deixaria de casar em silêncio (CLAUDE.md §7). O que é
-  aninhado (CGD, CONTACTS, BANKING, NET) vira texto JSON na coluna, legível
-  por `json_extract` de quem consultar.
-- **`daily_<produto>.db`** — UM BANCO POR PRODUTO de arquivo-dia, com o
-  caminho INTEIRO de `<DATA_DIR>/cache/` no nome (`daily_new_deals_ndf_vanilla.db`,
-  `daily_new_deals_option_fxo.db`, `daily_b3_files_swap.db`, …) e cada dia
-  como UMA TABELA (`d_AAAAMMDD[_tag]`). Onde a rotina NÃO se ramifica em
-  pastas — o Daily Settlement grava os dez arquivos do dia na mesma pasta —,
-  quem separa os produtos é o NOME do arquivo, e a tag dele entra no banco
-  (`daily_settlement_otm.db`, `daily_settlement_ndf_cockpit.db`): assim toda
-  rotina tem a mesma quebra, venha o produto da pasta ou do nome. Payload
-  lista-de-objetos vira tabela TIPADA por inferência; payload objeto vira uma
-  tabela por lista interna (`d_..._summary`) mais uma `_meta` chave→valor.
-  Produto novo em `cache/` ganha o próprio banco sozinho.
-- **`<pasta>_<arquivo>.db`** — UM BANCO POR JSON avulso para todo o resto
-  (`mappings_mt300.db`, `control_panel_mt300_status.db`,
-  `file_interpreter_termo.db`, `subjacente.db` na raiz), com uma tabela por
-  arquivo. Um banco por arquivo também tira a contenção que um banco
-  compartilhado criava: o espelho reconvertendo UM mapping não fecha a
-  leitura dos outros 42.
-
-A inferência de tipos otimiza a leitura sem trair o dado:
-
-- número só vira BIGINT/DOUBLE quando TODOS os valores da coluna parseiam —
-  e **número com zero à esquerda é texto** (Trade ID todo numérico não perde o
-  zero); inteiro fora de 64 bits é texto;
-- data reconhece ISO (`AAAA-MM-DD`) e o padrão da casa (`dd/mm/aaaa` — a
-  convenção do app inteiro, CLAUDE.md §3; nunca mm/dd);
-- coluna de texto preserva o valor BYTE A BYTE, espaço no fim incluído (o
-  `'C '` dos códigos B3); `''` em coluna tipada vira NULL, em coluna de texto
-  fica `''`.
-
-Os caminhos chegam EXPLÍCITOS (`data_dir`, `out_dir`) — quem resolve os
-padrões (`Config.DATA_DIR` → `Config.DATABASE_DIR`) é cada chamador; este
-módulo não monta caminho de dado por conta própria.
-
-A carga completa tem DOIS splits, e os dois são repartidos numa fatia por BLOCO
-de `cache/` para várias pessoas rodarem em paralelo — a
-diferença entre eles é só de DEPENDÊNCIA:
-
-  - `scripts/convert/`     usa o `Config` do app (roda DENTRO do checkout). São
-                           CHAMADAS de três linhas para `convert_json_to_duckdb.run`,
-                           não cópias: aqui não há motivo para duplicar a CLI.
-  - `scripts/standalone/`  não usa nada do app (roda numa máquina sem o código).
-
-⚠️ **Por isso o standalone carrega uma CÓPIA deste motor**
-(`scripts/standalone/_motor.py`, que as fatias importam): ela é
-GERADA a partir daqui e não se atualizam sozinhos — por três vezes tiveram de
-ser regerados depois de uma mudança neste arquivo, e na quarta passou batido,
-com os dois lados produzindo bancos DIFERENTES do mesmo dado e nenhum erro.
-Depois de mexer aqui, rode `python scripts/build_duckdb_standalone.py` e commite
-o resultado; o `check_duckdb_standalone.py` reprova quem esquecer.
-
-O `ROTINAS_CACHE` mora aqui pela mesma razão: é o eixo dos DOIS splits, e
-escrito em cada um envelheceria de um lado só. `check_convert_split.py` prende
-que eles tenham as mesmas fatias e que nenhum banco seja reivindicado por duas.
-
-Teste de regressão: `scripts/tests/check_json_to_duckdb.py`.
+GERADO por scripts/build_duckdb_standalone.py a partir de
+apps/pages/json_to_duckdb.py — não edite à mão: mexer no motor e não regerar
+estes arquivos é como eles passam a discordar.
 """
 import datetime
 import json
@@ -419,14 +346,10 @@ def _holiday_registry(data_dir):
     if os.path.isfile(path):
         rows = _load_json(path) or []
         return [r for r in rows if isinstance(r, dict) and str(r.get('name', '')).strip()]
-    # Instância que nunca abriu a tela: o registro ainda não foi semeado.
-    # O seed do app é a mesma lista que a tela usaria — importado só aqui,
-    # e só neste caso.
-    try:
-        from apps.pages.features.holidays import domain
-        return [dict(r) for r in domain.CAL_SEED]
-    except Exception:                                          # noqa: BLE001
-        return []
+    # Sem registro não há o que converter — o arquivo nasce quando alguém
+    # abre a tela de calendários no app. (No app este ramo cai no seed da
+    # vertical de feriados; aqui não há `apps` para importar.)
+    return []
 
 
 def convert_holidays(data_dir, out_dir, force=False, dry_run=False):
@@ -1997,3 +1920,41 @@ def apagar_payload(con, rel, kind):
     chave = manifest_key_of(rel, kind)
     _drop_targets(con, manifest_targets(con, chave))
     con.execute('DELETE FROM _manifest WHERE path = ?', [chave])
+
+# ── CLI comum (caminhos fixos do share — versão standalone) ─────────────────
+# O share tem DOIS endereços que apontam para o mesmo lugar: o UNC, que é o que a
+# instância do JPM usa (o bloco ENV:PROD do config), e a letra `I:` mapeada, que
+# é como a mesa o enxerga. Qual deles existe depende da máquina de quem roda,
+# então tenta-se na ordem e vale o primeiro que responder — fixar um só faria o
+# script não achar nada na metade das máquinas, e o sintoma seria "não converteu
+# nada", não "caminho errado".
+DATA_DIR_CANDIDATOS = (
+    r'\\Nawest.ad.jpmorganchase.com\lac\BRA\intra\Confirmation\Derivativos\OTC Tracker\Application\static\data',
+    r'I:\Confirmation\Derivativos\OTC Tracker\Application\static\data',
+)
+
+
+def _data_dir_padrao():
+    for cand in DATA_DIR_CANDIDATOS:
+        if os.path.isdir(cand):
+            return cand
+    return DATA_DIR_CANDIDATOS[0]
+
+
+def _resumo(nome, stats, houve_erro):
+    print('\n== %s -> %s' % (nome, os.path.basename(stats['db'])))
+    print('   convertidos: %d | inalterados: %d%s%s%s' % (
+        len(stats['converted']), len(stats['skipped']),
+        ' | fora da janela: %d' % len(stats['antigos'])
+        if stats.get('antigos') else '',
+        ' | ja cobertos por outro conversor: %d' % len(stats['cobertos'])
+        if stats.get('cobertos') else '',
+        ' | fora deste conversor: %d' % len(stats['ignored'])
+        if stats.get('ignored') else ''))
+    for aviso in stats.get('avisos') or ():
+        print('   ! %s' % aviso)
+    for item in stats['converted']:
+        print('   + %s' % item)
+    for rel, erro in stats['errors']:
+        houve_erro[0] = True
+        print('   ERRO %s: %s' % (rel, str(erro).strip().splitlines()[-1]))

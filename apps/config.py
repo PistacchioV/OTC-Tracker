@@ -25,8 +25,6 @@ class Config(object):
     if not SECRET_KEY:
         SECRET_KEY = secrets.token_hex(32)
 
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
-
     # Reject oversized request bodies before they are read into memory. Uploads
     # (.msg / .xlsx) are read fully into RAM and handed to extract_msg / openpyxl
     # / pandas, so without a cap a small zip-bomb xlsx can OOM the worker.
@@ -37,13 +35,6 @@ class Config(object):
     # not wired app-wide. Applied in every environment (works over HTTP too).
     SESSION_COOKIE_SAMESITE = 'Lax'
     REMEMBER_COOKIE_SAMESITE = 'Lax'
-
-    DB_ENGINE   = os.getenv('DB_ENGINE'   , None)
-    DB_USERNAME = os.getenv('DB_USERNAME' , None)
-    DB_PASS     = os.getenv('DB_PASS'     , None)
-    DB_HOST     = os.getenv('DB_HOST'     , None)
-    DB_PORT     = os.getenv('DB_PORT'     , None)
-    DB_NAME     = os.getenv('DB_NAME'     , None)
 
     # ══ AMBIENTE — o único bloco que difere entre as branches ═════════════════
     #
@@ -120,8 +111,6 @@ class Config(object):
     # cadastros — sem exigir que alguém as copie para o share antes de subir.
     DATA_DIR = _absolute_path_from_environment('OTC_DATA_DIR', _DATA_DIR_DEFAULT)
 
-    USE_SQLITE  = True
-
     # 30 s, e não os 15 s de antes: o permit local é tomado ANTES do lock de
     # arquivo, e quem o segura pode esperar o lock por até
     # DATABASE_READ_LOCK_TIMEOUT_SECONDS. Com os dois em 15 s, um escritor no
@@ -166,37 +155,7 @@ class Config(object):
         os.path.join(DATABASE_DIR, 'manual_confirmations_ok.db'),
         os.path.join(DATABASE_DIR, 'matching_comitentes.db'),
         os.path.join(DATABASE_DIR, 'cgd_sharepoint.db'),
-        os.path.join(_SQLITE_DIR_DEFAULT, 'db.sqlite3'),
     )
-
-    # try to set up a Relational DBMS
-    if DB_ENGINE and DB_NAME and DB_USERNAME:
-
-        try:
-            
-            # Relational DBMS: PSQL, MySql
-            SQLALCHEMY_DATABASE_URI = '{}://{}:{}@{}:{}/{}'.format(
-                DB_ENGINE,
-                DB_USERNAME,
-                DB_PASS,
-                DB_HOST,
-                DB_PORT,
-                DB_NAME
-            ) 
-
-            USE_SQLITE  = False
-
-        except Exception as e:
-
-            print('> Error: DBMS Exception: ' + str(e) )
-            print('> Fallback to SQLite ')    
-
-    if USE_SQLITE:
-
-        # O MESMO caminho que entra no DATABASE_ACCESS_PATHS: com os dois
-        # escritos à mão, o gerenciador de lock guardava um arquivo e o ORM
-        # abria outro — e nada acusaria isso.
-        SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(_SQLITE_DIR_DEFAULT, 'db.sqlite3')
 
 
 class ProductionConfig(Config):

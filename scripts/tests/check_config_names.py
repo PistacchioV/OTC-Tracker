@@ -267,12 +267,6 @@ check(not dados,
       'nenhum modulo de apps/ monta static/data a mao (use o data_paths)' +
       ('' if not dados else ' — ' + '; '.join(dados[:6])))
 
-print()
-if falhas:
-    print('{} falha(s)'.format(len(falhas)))
-    sys.exit(1)
-print('tudo ok')
-
 
 # ── 8. "É produção?" tem UMA resposta ────────────────────────────────────────
 # O guard do SECRET_KEY existe para a instância de produção não subir com uma
@@ -285,13 +279,26 @@ print('tudo ok')
 # A `DEBUG` do ambiente é o jeito DOCUMENTADO de escolher o modo (`set
 # DEBUG=False`, topo do run.py). Se qualquer uma das duas diz debug, não é
 # produção.
+#
+# Sem a variável, a produção lê (ou cria) a chave num ARQUIVO por máquina
+# (`_persisted_secret_key`) e só RECUSA quando nem ele dá. O arquivo vai sempre
+# para um tmp — o padrão seria a home de quem roda o teste —, e "não dá" é um
+# caminho debaixo de um ARQUIVO, onde o `makedirs` não tem como criar a pasta.
 print('\n== o guard do SECRET_KEY ==')
 import importlib                                            # noqa: E402
+import tempfile                                             # noqa: E402
+
+_TMP_CHAVE = tempfile.mkdtemp(prefix='otc-secret-')
+_CHAVE_OK = os.path.join(_TMP_CHAVE, 'secret_key.txt')
+_bloqueio = os.path.join(_TMP_CHAVE, 'arquivo')
+io.open(_bloqueio, 'w').close()
+_CHAVE_IMPOSSIVEL = os.path.join(_bloqueio, 'sub', 'secret_key.txt')
 
 
-def _sobe(cfg_nome, **env):
+def _sobe(cfg_nome, chave_em=_CHAVE_OK, **env):
     for k in ('DEBUG', 'SECRET_KEY'):
         os.environ.pop(k, None)
+    os.environ['OTC_SECRET_KEY_FILE'] = chave_em
     for k, v in env.items():
         os.environ[k] = v
     for m in [m for m in list(sys.modules) if m.startswith('apps')]:
@@ -307,10 +314,15 @@ def _sobe(cfg_nome, **env):
 
 check(_sobe('Config', DEBUG='True') is True,
       'Config base + DEBUG=True sobe (o start-debug da instância)')
-check(_sobe('Config') is False,
-      '   e sem DEBUG e sem SECRET_KEY continua RECUSANDO')
-check(_sobe('ProductionConfig', DEBUG='False') is False,
-      '   ProductionConfig sem SECRET_KEY também recusa')
+check(_sobe('Config') is True,
+      '   sem DEBUG e sem SECRET_KEY sobe pela chave do ARQUIVO por máquina')
+check(_sobe('Config', chave_em=_CHAVE_OK) is True and
+      io.open(_CHAVE_OK, encoding='utf-8').read().strip() != '',
+      '   e a chave fica gravada lá (estável entre restarts)')
+check(_sobe('Config', chave_em=_CHAVE_IMPOSSIVEL) is False,
+      '   sem SECRET_KEY e sem como gravar o arquivo, RECUSA')
+check(_sobe('ProductionConfig', chave_em=_CHAVE_IMPOSSIVEL, DEBUG='False') is False,
+      '   ProductionConfig idem: recusa')
 check(_sobe('Config', SECRET_KEY='x') is True, '   e com SECRET_KEY sobe')
 # A mensagem tem de dizer os DOIS caminhos: quem está em debug não precisa de
 # chave nenhuma, e quem está em produção precisa saber onde pô-la.
@@ -318,3 +330,13 @@ _raiz = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__))
 _src_init = io.open(os.path.join(_raiz, 'apps', '__init__.py'), encoding='utf-8').read()
 check('DEBUG=True' in _src_init and '.env' in _src_init,
       'a mensagem aponta o DEBUG e o SECRET_KEY')
+
+os.environ.pop('OTC_SECRET_KEY_FILE', None)
+import shutil                                               # noqa: E402
+shutil.rmtree(_TMP_CHAVE, ignore_errors=True)
+
+print()
+if falhas:
+    print('{} falha(s)'.format(len(falhas)))
+    sys.exit(1)
+print('tudo ok')

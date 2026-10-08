@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""check_duckdb_standalone.py — as cópias entregues × o motor do app.
+"""check_duckdb_standalone.py — a pasta entregue × o motor do app.
 
 Os `scripts/standalone/*.py` são a versão do conversor para rodar numa máquina
 SEM o código do OTC Tracker (sem Config, sem import de `apps`, `pip install
 duckdb` como requisito único). São VERSIONADOS para ser entregues junto com o
-código, e são UMA CÓPIA POR FATIA (hoje 29) de um motor que vive em
-`apps/pages/json_to_duckdb.py`.
+código: UMA cópia do motor de `apps/pages/json_to_duckdb.py` no `_motor.py`,
+e uma casca por fatia importando dela.
 
 Cópia da mesma regra diverge, e esta já divergiu: por três vezes o motor mudou e
 o standalone teve de ser regerado à mão (HANDOFF §331/§333/§334), e na quarta (a
@@ -97,7 +97,7 @@ for arq in esperados:
     check('%s é byte a byte o que o gerador produz' % arq, atual == novo)
 
 # ── 2. o que faz deles standalone ────────────────────────────────────────────
-print('\n== 2. autocontidos: nada de `apps`, nada de Config ==')
+print('\n== 2. a pasta é autocontida: nada de `apps`, nada de Config ==')
 _PERMITIDOS = {'argparse', 'collections', 'datetime', 'duckdb', 'json', 'os', 're', 'sys', 'time', 'traceback'}
 for arq in existentes:
     s = _ler(os.path.join(PASTA, arq))
@@ -112,6 +112,8 @@ check('o cabeçalho avisa que é GERADO',
 
 # ── 3. o corpo é o do motor, a menos da adaptação declarada ─────────────────
 print('\n== 3. o corpo é o MESMO motor ==')
+MOTOR_SA = os.path.join(PASTA, '_motor.py')
+fatias_todas = [a for a in existentes if a != '_motor.py']
 motor = _ler(MOTOR)
 corpo_motor = motor[motor.index('REGISTRY_FILE = '):].rstrip('\n')
 check('o seed do app ainda está no motor (a adaptação tem alvo)',
@@ -119,13 +121,20 @@ check('o seed do app ainda está no motor (a adaptação tem alvo)',
 adaptado = corpo_motor.replace(gen.SEED_APP, gen.SEED_STANDALONE)
 # Comparação EXATA contra a constante do gerador, não heurística de palavras:
 # o ponto é provar que o gerador não faz mais nada além do que declara.
-for arq in existentes:
-    s = _ler(os.path.join(PASTA, arq))
-    corpo = s[s.index('REGISTRY_FILE = '):s.index('# ── CLI (caminhos fixos')].rstrip('\n')
-    check('%s: corpo idêntico ao motor + a adaptação' % arq, corpo == adaptado)
+_sa = _ler(MOTOR_SA)
+check('_motor.py: corpo idêntico ao motor + a adaptação',
+      _sa[_sa.index('REGISTRY_FILE = '):_sa.index('# ── CLI comum')].rstrip('\n'),
+      adaptado)
+# O motor existe UMA vez: fatia com corpo próprio é cópia que pode divergir.
+check('nenhuma fatia carrega o corpo do motor',
+      [a for a in fatias_todas if 'REGISTRY_FILE = ' in _ler(os.path.join(PASTA, a))],
+      [])
+check('toda fatia importa do _motor.py',
+      [a for a in fatias_todas if 'from _motor import' not in _ler(os.path.join(PASTA, a))],
+      [])
 
-print('\n== 4. a quebra por produto (§336) está nas cópias ==')
-_um = _ler(os.path.join(PASTA, '00_completo.py'))
+print('\n== 4. a quebra por produto (§336) está no _motor.py ==')
+_um = _ler(MOTOR_SA)
 for nome in ('_daily_db_name(rotina_parts', '_tabela_dia(banco_toks',
              '_colisoes', '_drop_legacy_dbs', '_sem_data', 'cache_families'):
     check('o standalone tem o %s de hoje' % nome.split('(')[0], nome in _um)
@@ -176,7 +185,7 @@ def _SEM_JANELA(mod):
         mod.__file__, encoding='utf-8').read() else []
 
 
-fatias = [a for a in existentes if a != '00_completo.py']
+fatias = [a for a in fatias_todas if a != '00_completo.py']
 for arq in fatias:
     mod = _carregar('sa_' + arq[:-3], os.path.join(PASTA, arq))
     rc = mod.main(['--data-dir', DATA, '--out-dir', OUT_FATIAS] + _SEM_JANELA(mod))
@@ -332,11 +341,12 @@ check('e é ELA que remove o banco de formato antigo',
       os.path.isfile(os.path.join(_OUT_JAN, 'daily_b3_files_swap.db')), False)
 
 # A data sai do CAMINHO, não do mtime: o arquivo antigo foi escrito agora.
+motor_sa = _carregar('_motor', MOTOR_SA)
 check('o corte é pelo dia do arquivo, nao pelo mtime',
-      mod.dia_do_rel('cache/b3 files/Swap/2024/03/05/DPOSICAO_20240305.json'),
+      motor_sa.dia_do_rel('cache/b3 files/Swap/2024/03/05/DPOSICAO_20240305.json'),
       datetime.date(2024, 3, 5))
 check('12 meses de 31/03 cai em 28/02, nao num dia que nao existe',
-      mod.data_de_corte(1, datetime.date(2026, 3, 31)),
+      motor_sa.data_de_corte(1, datetime.date(2026, 3, 31)),
       datetime.date(2026, 2, 28))
 
 shutil.rmtree(JAN, ignore_errors=True)
