@@ -26,6 +26,10 @@ fatias nunca escrevem no mesmo `.db`:
                     então tanto uma rotina nova quanto uma pasta nova dentro de
                     uma já coberta caem ali
 
+O motor vai UMA vez, no `_motor.py` da mesma pasta, e cada fatia é só a casca
+dela (escopo + CLI) importando de lá: 40 cópias do mesmo corpo eram 80 mil
+linhas no repositório dizendo a mesma coisa. Entrega-se a PASTA.
+
 Eles são VERSIONADOS em `scripts/standalone/` para serem entregues junto com o
 código, e são gerados — nunca editados à mão — porque são cópias de um motor
 que vive noutro lugar: por três vezes (HANDOFF §331, §333, §334) o motor mudou e
@@ -70,35 +74,19 @@ def _rotinas_do_motor():
 
 ROTINAS, PASTAS = _rotinas_do_motor()
 
-_CAB = r'''#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-r"""%(titulo)s
-
-%(resumo)s
-
-Versão AUTOCONTIDA: roda em QUALQUER máquina, sem o código do OTC Tracker por
-perto. Requisito único:  pip install duckdb
-
-    Origem : o static\data do share — o UNC
-             (\\Nawest.ad.jpmorganchase.com\lac\BRA\intra\...) ou a letra I:,
-             o que existir na máquina. `--data-dir` manda em qualquer caso.
-    Destino: ...\static\data\db   (a pasta db dentro da origem)
-
-Uso:
-    python %(arquivo)s
-    python %(arquivo)s --dry-run
-    python %(arquivo)s --data-dir "D:\outra\pasta" --out-dir "D:\saida"
-
-%(escopo_doc)s
-
-É IDEMPOTENTE e INCREMENTAL: cada banco guarda um `_manifest` com
-caminho/mtime/tamanho e só reconverte o arquivo que mudou — rodar de novo com
-nada alterado não reescreve nada. `--force` reconverte tudo; `--dry-run` só
-lista. Erro num arquivo não para o resto: sai no resumo do fim.
-
-GERADO por scripts/build_duckdb_standalone.py a partir de
+_GERADO = '''GERADO por scripts/build_duckdb_standalone.py a partir de
 apps/pages/json_to_duckdb.py — não edite à mão: mexer no motor e não regerar
-estes arquivos é como eles passam a discordar.
+estes arquivos é como eles passam a discordar.'''
+
+_MOTOR_CAB = r'''#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+r"""O motor JSON -> DuckDB das fatias desta pasta.
+
+Não se roda sozinho: cada `00_*`/`01_*`/`02_*`/`99_*` ao lado importa daqui.
+Copie a PASTA inteira para a máquina que vai rodar. Requisito único:
+pip install duckdb
+
+%(gerado)s
 """
 import datetime
 import json
@@ -112,12 +100,9 @@ import duckdb
 
 '''
 
-_RODAPE = r'''
+_MOTOR_CLI = r'''
 
-# ── CLI (caminhos fixos do share — versão standalone) ───────────────────────
-import argparse
-import sys
-
+# ── CLI comum (caminhos fixos do share — versão standalone) ─────────────────
 # O share tem DOIS endereços que apontam para o mesmo lugar: o UNC, que é o que a
 # instância do JPM usa (o bloco ENV:PROD do config), e a letra `I:` mapeada, que
 # é como a mesa o enxerga. Qual deles existe depende da máquina de quem roda,
@@ -138,22 +123,67 @@ def _data_dir_padrao():
 
 
 def _resumo(nome, stats, houve_erro):
-    print('\n== %%s -> %%s' %% (nome, os.path.basename(stats['db'])))
-    print('   convertidos: %%d | inalterados: %%d%%s%%s%%s' %% (
+    print('\n== %s -> %s' % (nome, os.path.basename(stats['db'])))
+    print('   convertidos: %d | inalterados: %d%s%s%s' % (
         len(stats['converted']), len(stats['skipped']),
-        ' | fora da janela: %%d' %% len(stats['antigos'])
+        ' | fora da janela: %d' % len(stats['antigos'])
         if stats.get('antigos') else '',
-        ' | ja cobertos por outro conversor: %%d' %% len(stats['cobertos'])
+        ' | ja cobertos por outro conversor: %d' % len(stats['cobertos'])
         if stats.get('cobertos') else '',
-        ' | fora deste conversor: %%d' %% len(stats['ignored'])
+        ' | fora deste conversor: %d' % len(stats['ignored'])
         if stats.get('ignored') else ''))
     for aviso in stats.get('avisos') or ():
-        print('   ! %%s' %% aviso)
+        print('   ! %s' % aviso)
     for item in stats['converted']:
-        print('   + %%s' %% item)
+        print('   + %s' % item)
     for rel, erro in stats['errors']:
         houve_erro[0] = True
-        print('   ERRO %%s: %%s' %% (rel, str(erro).strip().splitlines()[-1]))
+        print('   ERRO %s: %s' % (rel, str(erro).strip().splitlines()[-1]))
+'''
+
+_CAB = r'''#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+r"""%(titulo)s
+
+%(resumo)s
+
+Versão AUTOCONTIDA: roda em QUALQUER máquina, sem o código do OTC Tracker por
+perto — com o `_motor.py` desta pasta ao lado (copie a pasta inteira).
+Requisito único:  pip install duckdb
+
+    Origem : o static\data do share — o UNC
+             (\\Nawest.ad.jpmorganchase.com\lac\BRA\intra\...) ou a letra I:,
+             o que existir na máquina. `--data-dir` manda em qualquer caso.
+    Destino: ...\static\data\db   (a pasta db dentro da origem)
+
+Uso:
+    python %(arquivo)s
+    python %(arquivo)s --dry-run
+    python %(arquivo)s --data-dir "D:\outra\pasta" --out-dir "D:\saida"
+
+%(escopo_doc)s
+
+É IDEMPOTENTE e INCREMENTAL: cada banco guarda um `_manifest` com
+caminho/mtime/tamanho e só reconverte o arquivo que mudou — rodar de novo com
+nada alterado não reescreve nada. `--force` reconverte tudo; `--dry-run` só
+lista. Erro num arquivo não para o resto: sai no resumo do fim.
+
+%(gerado)s
+"""
+import argparse
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from _motor import (_data_dir_padrao, _resumo, convert_daily,  # noqa: F401
+                        convert_datasets, convert_holidays, convert_refdata,
+                        data_de_corte)
+except ModuleNotFoundError as e:
+    if e.name != '_motor':
+        raise
+    sys.exit('falta o _motor.py ao lado deste script: copie a pasta '
+             'scripts/standalone INTEIRA')
 
 
 def main(argv=None):
@@ -421,16 +451,17 @@ def main(argv=None):
     if not os.path.isdir(destino):
         os.makedirs(destino)
 
-    gerados = []
+    motor = (_MOTOR_CAB % {'gerado': _GERADO}) + corpo + _MOTOR_CLI
+    io.open(os.path.join(destino, '_motor.py'), 'w', encoding='utf-8').write(motor)
+    gerados = [('_motor.py', motor.count('\n'))]
     for (arq, titulo, resumo, doc, label, arg_only, main_corpo,
          tem_janela) in _variantes():
-        cab = _CAB % {'titulo': titulo, 'resumo': resumo, 'arquivo': arq,
-                      'escopo_doc': doc}
-        rod = _RODAPE % {'arg_only': arg_only, 'escopo_label': label,
-                         'arg_meses': _ARG_MESES if tem_janela else '',
-                         'linha_janela': _LINHA_JANELA if tem_janela else '',
-                         'corpo_main': main_corpo.rstrip('\n')}
-        conteudo = cab + corpo + rod
+        conteudo = _CAB % {'titulo': titulo, 'resumo': resumo, 'arquivo': arq,
+                           'escopo_doc': doc, 'gerado': _GERADO,
+                           'arg_only': arg_only, 'escopo_label': label,
+                           'arg_meses': _ARG_MESES if tem_janela else '',
+                           'linha_janela': _LINHA_JANELA if tem_janela else '',
+                           'corpo_main': main_corpo.rstrip('\n')}
         io.open(os.path.join(destino, arq), 'w', encoding='utf-8').write(conteudo)
         gerados.append((arq, conteudo.count('\n')))
 

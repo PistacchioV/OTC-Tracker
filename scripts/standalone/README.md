@@ -1,8 +1,12 @@
 # Conversores standalone — JSON → DuckDB
 
-Estes scripts materializam os JSONs do OTC Tracker como bancos DuckDB. Eles são
-**autocontidos**: rodam em qualquer máquina, sem o código da aplicação por
-perto e sem acesso ao `config.py`.
+Estes scripts materializam os JSONs do OTC Tracker como bancos DuckDB. A pasta é
+**autocontida**: roda em qualquer máquina, sem o código da aplicação por perto e
+sem acesso ao `config.py`.
+
+O motor mora **uma vez** no `_motor.py`; cada fatia numerada é só o escopo e a
+linha de comando dela, importando de lá. **Copie a pasta inteira** — uma fatia
+sozinha, sem o `_motor.py` ao lado, não roda.
 
 ```
 pip install duckdb
@@ -46,6 +50,7 @@ Uma pasta que a sua instância não tenha vira um aviso e a fatia sai limpa.
 
 | Arquivo | O que converte |
 |---|---|
+| `_motor.py` | não se roda: é o motor que todas as fatias importam — vai junto |
 | `00_completo.py` | tudo — cadastros + todos os blocos de `cache/` |
 | `01_cadastros.py` | o RESTO dos cadastros — calendários, RefData/CPD e os JSONs da raiz. É o complemento das quatro fatias abaixo: pasta de cadastro NOVA cai aqui |
 | `01_1_mappings.py` | `mappings/` — os 43 cadastros do /mapping, um banco cada |

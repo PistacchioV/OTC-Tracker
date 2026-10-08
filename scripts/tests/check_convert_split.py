@@ -87,7 +87,9 @@ esperado += ['02_%d_%s.py' % (i, _slug(f))
 esperado.append('99_outros.py')
 
 for pasta, nome in ((CONVERT, 'scripts/convert'), (STANDALONE, 'scripts/standalone')):
-    achados = sorted(f for f in os.listdir(pasta) if f.endswith('.py'))
+    # O `_motor.py` do standalone é o corpo compartilhado, não uma fatia.
+    achados = sorted(f for f in os.listdir(pasta)
+                     if f.endswith('.py') and f != '_motor.py')
     check('%s tem uma fatia por bloco do motor' % nome, achados, sorted(esperado))
 
 # E as do `convert/` são BYTE A BYTE o que o gerador produz — elas são geradas
