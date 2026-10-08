@@ -26,7 +26,7 @@ set "CURRENT_VERSION_FILE=%SHARE_ROOT%\link.txt"
 
 REM --- O que sobe -------------------------------------------------------------
 set "DEPLOY_DIRS=pages static templates __pycache__"
-set "DEPLOY_FILES=__init__.py config.py db.sqlite3 db.sqlite3.lock requirements.txt run.py"
+set "DEPLOY_FILES=__init__.py config.py requirements.txt run.py"
 
 REM --- O que fica de fora -----------------------------------------------------
 REM  Por CAMINHO COMPLETO, de proposito: um /XD data casaria com QUALQUER pasta
@@ -73,8 +73,7 @@ if exist "%TARGET_PATH%\" (
 )
 
 REM --- Confere a lista contra a origem ANTES de copiar -------------------------
-REM  Item listado que sumiu da origem nao derruba o deploy (o db.sqlite3.lock,
-REM  por exemplo, so existe com a aplicacao rodando), mas tem de aparecer: a
+REM  Item listado que sumiu da origem nao derruba o deploy, mas tem de aparecer: a
 REM  falha silenciosa aqui e uma versao no share sem uma pasta inteira.
 set "MISSING="
 for %%D in (%DEPLOY_DIRS%) do (

@@ -29,7 +29,7 @@ REM                   versao. Sem esta passada propria, texto novo de tela
 REM                   chegava com o hotfix e aparecia em ingles/sem traducao.
 REM    __pycache__  - bytecode velho ao lado de fonte novo e ruido. O Python
 REM                   recompila o modulo alterado sozinho na primeira subida.
-REM    requirements.txt e os db.sqlite3 - dependencia nova nao e correcao
+REM    requirements.txt - dependencia nova nao e correcao
 REM                   pontual: o snapshot de instalacao do start-otc-tracker.bat
 REM                   e por VERSAO, entao so uma versao nova dispara o pip. O
 REM                   script avisa quando o requirements mudou.
@@ -41,7 +41,7 @@ REM ============================================================================
 set "SHARE_ROOT=\\NAWEST.ad.jpmorganchase.com\LAC\BRA\intra\Confirmation\Derivativos\OTC Tracker\Application"
 set "SOURCE_ROOT=%~dp0apps"
 
-REM Mesma lista branca do deploy, menos os bancos e o requirements.
+REM Mesma lista branca do deploy, menos o requirements e o __pycache__.
 set "DEPLOY_DIRS=pages static templates"
 set "DEPLOY_FILES=__init__.py config.py run.py"
 set "EXCLUDE_DIR=%SOURCE_ROOT%\static\data"

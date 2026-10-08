@@ -5,12 +5,9 @@
 
 # --- Web framework ------------------------------------------------------------
 Flask>=2.3
-Flask-SQLAlchemy>=3.0
-SQLAlchemy>=2.0
 Werkzeug>=2.3
 Jinja2>=3.1
-Flask-Migrate>=4.0        # importado no run.py (Migrate(app, db)) - sem ele o app nao sobe
-flask-minify>=0.42        # importado no run.py (Minify) - idem
+flask-minify>=0.42        # importado no run.py (Minify) - sem ele o app nao sobe
 python-dotenv>=1.0        # run.py chama load_dotenv() antes de tudo
 
 # --- Data processing / Excel & CSV --------------------------------------------
@@ -27,20 +24,14 @@ requests>=2.31            # Athena getTrades, relatorio EOD da Recon FXO, BCB/Ya
 # --- PDF ----------------------------------------------------------------------
 reportlab>=4.0            # replicas dos documentos Word; import tardio (sem a lib o e-mail sai sem anexo)
 
-# --- Charts (Settlement Forecast e-mail) --------------------------------------
-matplotlib>=3.7
-seaborn>=0.13
-
 # --- Web Push (VAPID) ---------------------------------------------------------
 cryptography>=42.0
 
 # --- Date utilities -----------------------------------------------------------
 python-dateutil>=2.8      # dateutil.relativedelta
 
-# --- Fuzzy matching (comitente recon; either backend works) -------------------
-rapidfuzz>=3.0            # preferred, no C-extension build headaches
-# fuzzywuzzy>=0.18        # alternative backend (imported first, optional)
-# python-Levenshtein>=0.21 # speeds up fuzzywuzzy
+# --- Fuzzy matching (comitente recon) -----------------------------------------
+rapidfuzz>=3.0
 
 # --- Internal / vendored utility ----------------------------------------------
 # awmpy                   # private/internal - not on PyPI; install from internal artifact repo
@@ -63,11 +54,6 @@ pywin32>=306; sys_platform == "win32"
 # 401 no endpoint `/adfs/oauth2/authorize/wia` — um erro que nao fala de pacote
 # nenhum e custa uma tarde para ligar a uma dependencia ausente.
 requests-negotiate-sspi>=0.5.2; sys_platform == "win32"
-
-# Relational database drivers - only needed when DB_ENGINE is set
-# (falls back to SQLite otherwise). Uncomment the one you use:
-# PyMySQL>=1.1            # DB_ENGINE=mysql+pymysql
-# psycopg2-binary>=2.9    # DB_ENGINE=postgresql+psycopg2
 
 # --- Production WSGI server (recommended) -------------------------------------
 gunicorn>=21.2; sys_platform != "win32"

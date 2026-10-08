@@ -5,15 +5,9 @@ import logging
 import secrets
 
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
 from importlib import import_module
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-
-db = SQLAlchemy()
-
-def register_extensions(app):
-    db.init_app(app)
 
 apps = ('pages',)
 
@@ -21,35 +15,6 @@ def register_blueprints(app):
     for module_name in apps:
         module = import_module('apps.{}.routes'.format(module_name))
         app.register_blueprint(module.blueprint)
-
-
-def configure_database(app):
-    """Configure database initialization and teardown."""
-    
-    # Initialize database tables on app startup (not per request)
-    with app.app_context():
-        try:
-            db.create_all()
-            app.logger.info('Database tables created successfully')
-        except Exception as e:
-            app.logger.error(f'Database initialization error: {str(e)}')
-            
-            # Only fallback to SQLite in development mode
-            if app.config.get('DEBUG', False):
-                basedir = os.path.abspath(os.path.dirname(__file__))
-                fallback_uri = 'sqlite:///' + os.path.join(basedir, 'db.sqlite3')
-                app.config['SQLALCHEMY_DATABASE_URI'] = fallback_uri
-                
-                app.logger.warning('Fallback to SQLite in development mode')
-                db.create_all()
-            else:
-                # In production, don't fallback - raise the error
-                raise
-
-    @app.teardown_appcontext
-    def shutdown_session(exception=None):
-        """Clean up database session."""
-        db.session.remove()
 
 
 # O que o código exige do `config.py` para subir. A lista é curta de propósito:
@@ -503,7 +468,5 @@ def create_app(config):
     _seed_data_dir(app)
     _warn_wal_pendente()
 
-    register_extensions(app)
     register_blueprints(app)
-    configure_database(app)
     return app
