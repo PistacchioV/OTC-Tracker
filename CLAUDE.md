@@ -1466,6 +1466,21 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   (`DOLAR DOS EUA`) ou código Sisbacen (`220`): quem traduz é o cadastro
   `currency-base` (`_moeda_iso`), e coluna vazia cai na `Moeda` do ativo no
   Index B3.
+- **NDF Calculator: QUATRO contas, escolhidas pelo tipo do termo** (mesa,
+  08/10/2026, §629; `queries.calcular_ndf`). MOEDA com BRL no par: fixing =
+  PTAX do vencimento − offset; na ASIÁTICA, a média ARITMÉTICA da PTAX de cada
+  data de verificação − offset. MOEDA sem BRL (cross): `nocional × (fix − fwd)
+  × PTAX da moeda BASE` (vencimento − offset), e o fixing em branco é a
+  paridade base ÷ cotada dos dois boletins do dia. MERCADORIA com strike em
+  USD: `qtd × (preço − strike) × PTAX da Data de Fixing da Moeda` — a data
+  REAL, sem offset. MERCADORIA com strike em REAIS (`Taxa a Termo em Reais` =
+  `S` na posição — é uma FLAG, não um número): a conta é em reais e não leva
+  PTAX no fim, mas o preço do Quotes é USD e vai a reais ANTES da diferença,
+  pela MÉDIA da PTAX na janela de verificação (a confirmação
+  `ndf-comm-strike-brl`). Multiplicar a diferença pela PTAX converteria o strike
+  em reais de novo. Média com um dia sem PTAX é erro dizendo QUAL dia. A série
+  sai de UMA chamada ao BCB (`cambio.ptax_periodo`), e a memória xlsx escreve
+  cada dia com a média por fórmula.
 - **Option Calculator: a contraparte NÃO é o `Nome simplificado` da posição**
   (§513 — ele é apelido de conta: `JPMORGANBM`, `INTRAGLAWTONFDO`). Conta
   GUARDA-CHUVA (a 73760.10-2; quem diz é o `b3-accounts` pelo TIPO, nunca o
