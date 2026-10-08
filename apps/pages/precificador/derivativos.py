@@ -28,6 +28,15 @@ As três contas, como a mesa as faz:
                        payoff é de quem é TITULAR; o prêmio é pago pelo titular
                        ao lançador. O resultado é o do BANCO.
 
+  Termo de MERCADORIA  O nocional é QUANTIDADE e o preço é em moeda estrangeira
+                       (USD). Strike em USD: a diferença vai a reais pela PTAX
+                       de UMA data — Qtd × (Preço − Forward) × PTAX. Strike em
+                       REAIS (a `Taxa a Termo em Reais` = S da posição): quem
+                       vai a reais é o PREÇO, pela MÉDIA da PTAX na janela de
+                       verificação — Qtd × (Preço × PTAX média − Forward R$).
+                       São as duas confirmações da casa (`ndf-comm-strike-usd`
+                       e `ndf-comm-strike-brl`).
+
 **Nocional fixo em reais**: o contrato é em moeda estrangeira na B3, então o
 valor em reais se divide pela taxa a termo (o mesmo tratamento do §488).
 
@@ -104,30 +113,39 @@ class LiquidacaoNDF:
     liquido_cliente: Optional[float]  # o que o cliente recebe, líquido de IR
     isento: bool = False
     paridade: float = 1.0            # termo de MERCADORIA: o preço é em ME, a paridade leva a reais
+    forward_em_reais: bool = False   # mercadoria com strike em R$: a paridade converte o PREÇO
+    fixing_em_reais: Optional[float] = None
 
 
 def liquidar_ndf(nocional, taxa_termo, fixing, posicao, fixo_em_reais=False, isento_ir=False,
-                 paridade=1.0):
+                 paridade=1.0, forward_em_reais=False):
     if not taxa_termo or taxa_termo <= 0:
         raise ErroDerivativo('the forward rate must be greater than zero')
     if not fixing or fixing <= 0:
         raise ErroDerivativo('the fixing must be greater than zero')
     me = nocional_me(nocional, taxa_termo, fixo_em_reais)
     s = _sinal(posicao)
-    dif = float(fixing) - float(taxa_termo)
     # No termo de MERCADORIA o nocional é QUANTIDADE e o preço é em moeda
     # estrangeira: a paridade leva a diferença a reais. No termo de moeda ela é 1.
+    # Com o strike em REAIS a diferença já nasce em reais, e o que se converte é
+    # o PREÇO — multiplicar a diferença pela PTAX converteria o strike também.
     par = float(paridade or 1.0)
     if par <= 0:
         raise ErroDerivativo('the FX rate must be greater than zero')
-    liq = round(me * dif * s * par, 2)
+    fix_brl = float(fixing) * par if forward_em_reais else None
+    if forward_em_reais:
+        dif = fix_brl - float(taxa_termo)
+        liq = round(me * dif * s, 2)
+    else:
+        dif = float(fixing) - float(taxa_termo)
+        liq = round(me * dif * s * par, 2)
     # O imposto é sobre o ganho do CLIENTE: só quando o banco paga.
     ir = 0.0 if (isento_ir or liq >= 0) else round(abs(liq) * ALIQUOTA_IR_TERMO, 2)
     return LiquidacaoNDF(
         nocional_me=me, taxa_termo=float(taxa_termo), fixing=float(fixing), diferenca=dif,
         sinal=s, liquidacao=liq, direcao=_quem(liq), ir=ir,
         liquido_cliente=(round(abs(liq) - ir, 2) if liq < 0 else None), isento=bool(isento_ir),
-        paridade=par)
+        paridade=par, forward_em_reais=bool(forward_em_reais), fixing_em_reais=fix_brl)
 
 
 # ── Recompra (unwind) de NDF ─────────────────────────────────────────────────

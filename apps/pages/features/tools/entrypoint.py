@@ -157,8 +157,11 @@ def tools_ndf_calculator():
         'pages/tools-ndf-calculator.html', 'tools-ndf-calculator',
         {'moeda': 'USD', 'nocional': '1,000,000.00', 'taxa_termo': '', 'fixing': '',
          'vencimento': hoje.isoformat(), 'ptax_offset': '1', 'posicao': derivativos.COMPRADO,
-         'fixo_em_reais': '', 'isento_ir': ''},
-        queries.calcular_ndf, moedas=_moedas_estrangeiras(), posicoes=derivativos.POSICOES)
+         'fixo_em_reais': '', 'isento_ir': '', 'produto': 'moeda',
+         'moeda_cotada': liquidacao.SEM_CONVERSAO, 'datas_asiaticas': '', 'forward_em_reais': '',
+         'fixing_moeda_data': '', 'ptax_inicio': '', 'ptax_fim': ''},
+        queries.calcular_ndf, moedas=_moedas_estrangeiras(), cotadas=liquidacao.MOEDAS,
+        posicoes=derivativos.POSICOES)
 
 
 @blueprint.route('/tools/unwind-ndf-calculator', methods=['GET', 'POST'])

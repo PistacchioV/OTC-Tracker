@@ -281,7 +281,9 @@ def main():
                    'Codigo da Contraparte': '73760.10-2', 'Nome da Contraparte': 'BANCO J.P. MORGAN S/A',
                    'CPF/CNPJ da Contraparte': 'USINA ALTO ALEGRE SA', 'Simbolo da Moeda': 'USD',
                    'Classe do Ativo Subjacente': 'TAXAS DE CAMBIO', 'Data de Emissao': '04/11/2025',
-                   'Data de Vencimento': '30/09/2026', 'Data de Fixing da Moeda': '29/09/2026',
+                   # FUTURO de verdade: com 30/09/2026 o teste passou a falhar quando a
+                   # data chegou (o prefill foi buscar a PTAX real do fixing)
+                   'Data de Vencimento': '30/09/2036', 'Data de Fixing da Moeda': '29/09/2036',
                    'Valor Base no registro': '587,224.31', 'Valor Antecipado': '155,652.49',
                    'Taxa Forward': '5.374', 'Descricao da posicao do Participante': 'VENDEDOR'}),
         ndf_row(**{'Contrato': '26C09999999', 'Codigo da Contraparte': '73760.10-2',
@@ -320,13 +322,13 @@ def main():
         check('a taxa `5.374` e 5,374 — tres casas NAO sao milhar numa taxa', f['taxa_termo'], '5.3740')
         check('moeda, vencimento, lado e o D-1 contado pelas duas datas',
               (f['moeda'], f['vencimento'], f['posicao'], f['ptax_offset']),
-              ('USD', '2026-09-30', D.VENDIDO, '1'))
+              ('USD', '2036-09-30', D.VENDIDO, '1'))
         check('emissao e classe do ativo vao para a tela', (f['data_emissao'], f['classe']),
               ('2025-11-04', 'TAXAS DE CAMBIO'))
         check('a isencao de IR sai do cadastro, pelo nome do CLIENTE', f['isento_ir'], True)
         check('e a nota diz quanto ja foi recomprado',
               [n['code'] for n in d['notes']], ['unwound_before'])
-        # O vencimento da fixture (30/09/2026) ainda nao chegou: o fixing fica em
+        # O vencimento da fixture (30/09/2036) ainda nao chegou: o fixing fica em
         # BRANCO. Com a data do fixing ja passada, a PTAX vem no CAMPO.
         check('fixing no futuro: campo em branco, sem marca', (f['fixing'], f['fixing_auto']), ('', ''))
         _venc = LINHAS_NDF[0][NDF_COLS.index('Data de Vencimento')]
@@ -367,7 +369,7 @@ def main():
         uf = u['fields']
         check('recompra: o contrato ORIGINAL — strike, base e o ja recomprado',
               (uf['strike'], uf['nocional_original'], uf['ja_recomprado'], uf['vencimento'], uf['posicao']),
-              ('5.3740', '587224.31', '155652.49', '2026-09-30', D.VENDIDO))
+              ('5.3740', '587224.31', '155652.49', '2036-09-30', D.VENDIDO))
         check('o nocional nasce com o SALDO (recompra total), marcado como aproximacao',
               (uf['nocional'], u['assumed']), ('431571.82', ['nocional']))
         check('as taxas do NEGOCIO ficam para a mesa, sinalizadas',
@@ -590,7 +592,8 @@ def main():
             h = cl.post('/tools/ndf-calculator', data={
                 'posicao': 'comprado', 'moeda': 'USD', 'nocional': '100000', 'taxa_termo': '0.696',
                 'fixing': '0.74', 'vencimento': '2026-09-18', 'ptax_offset': '1',
-                'classe': 'COMMODITIES', 'ativo': 'CTZ6', 'paridade': '', 'paridade_auto': ''}).data.decode('utf-8')
+                'classe': 'COMMODITIES', 'ativo': 'CTZ6', 'paridade': '', 'paridade_auto': '',
+                'fixing_moeda_data': '2026-09-17'}).data.decode('utf-8')
             # 100.000 x (0,74 - 0,696) x 5,4 = 23.760,00
             check('a conta: quantidade x (preco - termo) x paridade, em reais',
                   ('23,760.00' in h, 'id="paridade" name="paridade" value="5.4000"' in h,
@@ -606,6 +609,105 @@ def main():
             queries._ptax_do_fixing = _ptax_real2
             SUBJ.clear()
             LINHAS_NDF.pop()
+
+        print('\n== 8c. as quatro contas do NDF (mesa, 08/10/2026) ==')
+        from apps.pages.precificador import cambio as _cb
+        _periodo_real, _fix_real = _cb.ptax_periodo, queries._ptax_do_fixing
+        TAB = {'USD': {date(2026, 9, d): 5.0 + d / 100.0 for d in range(1, 31)},
+               'EUR': {date(2026, 9, d): 6.0 + d / 100.0 for d in range(1, 31)}}
+        pedidos = []
+
+        def _periodo(moeda, ini, fim):
+            pedidos.append((moeda, ini, fim))
+            return [_cb.Ptax(data=d, compra=v, venda=v, moeda=moeda)
+                    for d, v in sorted(TAB[moeda].items()) if ini <= d <= fim and d.weekday() < 5]
+        _cb.ptax_periodo = _periodo
+        datas_fix = []
+        queries._ptax_do_fixing = lambda moeda, fim, n: (datas_fix.append((moeda, fim, n))
+                                                         or (5.4, date(2026, 9, 17), ''))
+        try:
+            # motor: strike em REAIS converte o PRECO, nao a diferenca
+            rb = D.liquidar_ndf(1000.0, 400.0, 70.0, D.COMPRADO, paridade=5.5, forward_em_reais=True)
+            check('mercadoria strike BRL: qtd x (preco x PTAX - strike), sem PTAX no fim',
+                  (rb.liquidacao, rb.fixing_em_reais, rb.diferenca), (-15000.0, 385.0, -15.0))
+            base = {'posicao': 'comprado', 'moeda': 'USD', 'nocional': '1000', 'taxa_termo': '400',
+                    'fixing': '70', 'vencimento': '2026-09-18', 'produto': 'mercadoria',
+                    'forward_em_reais': '1', 'ptax_inicio': '2026-09-14', 'ptax_fim': '2026-09-16'}
+            c = queries.calcular_ndf(base)
+            # PTAX 5,14 · 5,15 · 5,16 -> media 5,15; 70 x 5,15 = 360,50; (360,50 - 400) x 1000
+            check('strike BRL: a paridade e a MEDIA da PTAX da janela (dias uteis), o fixing em reais',
+                  (round(c['r'].paridade, 8), c['r'].liquidacao, len(c['serie_paridade'])),
+                  (5.15, -39500.0, 3))
+            check('... e a nota diz a janela', 'average of 3 days' in c['paridade_nota'])
+            # strike em USD: a PTAX da Data de Fixing da Moeda, SEM offset
+            datas_fix[:] = []
+            c = queries.calcular_ndf(dict(base, forward_em_reais='', fixing_moeda_data='2026-09-17',
+                                          taxa_termo='65', ptax_offset='3'))
+            check('strike USD: qtd x (preco - strike) x PTAX da data de fixing da moeda, offset 0',
+                  (c['r'].liquidacao, datas_fix), (27000.0, [('USD', '2026-09-17', 0)]))
+            try:
+                queries.calcular_ndf(dict(base, forward_em_reais='', fixing_moeda_data=''))
+                check('strike USD sem a data de fixing da moeda e recusado', False)
+            except Exception as exc:
+                check('strike USD sem a data de fixing da moeda e recusado', 'FX fixing date' in str(exc))
+            # moeda com BRL, ASIATICA: media da PTAX de cada data - offset
+            moe = {'posicao': 'comprado', 'moeda': 'USD', 'nocional': '1000000', 'taxa_termo': '5.0',
+                   'vencimento': '2026-09-30', 'ptax_offset': '1', 'produto': 'moeda',
+                   'moeda_cotada': 'BRL', 'datas_asiaticas': '15/09/2026\n16/09/2026\n17/09/2026'}
+            c = queries.calcular_ndf(moe)
+            # D-1: 14, 15, 16 -> 5,14 · 5,15 · 5,16 -> 5,15
+            check('asiatica: o fixing e a media aritmetica da PTAX de cada data menos o offset',
+                  (round(c['r'].fixing, 8), [d for d, _v in c['serie_fixing']], c['r'].liquidacao),
+                  (5.15, [date(2026, 9, 14), date(2026, 9, 15), date(2026, 9, 16)], 150000.0))
+            # cross: x PTAX da moeda BASE; fixing em branco = PTAX base / PTAX cotada
+            c = queries.calcular_ndf(dict(moe, moeda='EUR', moeda_cotada='USD', datas_asiaticas='',
+                                          taxa_termo='1.15', vencimento='2026-09-18'))
+            fx = (6.0 + 17 / 100.0) / (5.0 + 17 / 100.0)
+            check('cross: o fixing e a paridade base / cotada do dia, e a liquidacao x PTAX da BASE',
+                  (round(c['r'].fixing, 8), c['r'].paridade, c['cross'],
+                   c['r'].liquidacao), (round(fx, 8), 5.4, True,
+                                        round(1000000 * (fx - 1.15) * 5.4, 2)))
+            h = cl.post('/tools/ndf-calculator', data=dict(moe, moeda='EUR', moeda_cotada='USD',
+                        datas_asiaticas='', taxa_termo='1.15', vencimento='2026-09-18')).data.decode('utf-8')
+            check('a tela do cross mostra a paridade e esconde o fixo em reais',
+                  ('data-tl-show="mercadoria cross" >' in h or 'data-tl-show="mercadoria cross"  >' in h,
+                   'data-tl-show="brlpair" hidden' in h), (True, True))
+            h = cl.post('/tools/ndf-calculator', data=base).data.decode('utf-8')
+            check('a tela do strike BRL: a janela aparece e a formula converte o preco',
+                  ('-39,500.00' in h or '39,500.00' in h, 'Fixing in BRL' in h,
+                   'data-tl-show="brl" hidden' in h), (True, True, False))
+            # prefill: Taxa a Termo em Reais = S
+            LINHAS_NDF.append(ndf_row(**{
+                'Contrato': '26C05550001', 'Codigo da Contraparte': '04880.00-6',
+                'Nome da Contraparte': 'COFCO INTERNATIONAL BRASIL SA', 'Simbolo da Moeda': 'USD',
+                'Classe do Ativo Subjacente': 'COMMODITIES', 'Codigo do Ativo Subjacente': 'CTZ6',
+                'Data de Vencimento': '18/09/2026', 'Data de Fixing do Ativo Subjacente': '16/09/2026',
+                'Valor Base no registro': '100,000.00', 'Taxa Forward': '3.80',
+                'Taxa a Termo em Reais': 'S', 'Descricao da posicao do Participante': 'COMPRADOR'}))
+            try:
+                pf = queries.ndf_prefill('26C05550001')['fields']
+                check('prefill: strike em reais pela flag, janela pelas datas do preco, PTAX media',
+                      (pf['produto'], pf['forward_em_reais'], pf['ptax_inicio'], pf['ptax_fim'],
+                       pf['paridade'], pf['paridade_auto']),
+                      ('mercadoria', True, '2026-09-16', '2026-09-16', '5.1600', '1'))
+            finally:
+                LINHAS_NDF.pop()
+            # memoria: o cache e o do motor nos casos novos
+            import openpyxl as _ox
+            c = queries.calcular_ndf(base)
+            conteudo, _n = queries.memoria_ndf(base)
+            wv = _ox.load_workbook(io.BytesIO(conteudo), data_only=True).active
+            liq = [r[1].value for r in wv.iter_rows(min_col=1, max_col=2)
+                   if r[0].value == 'Liquidação (resultado do banco)'][0]
+            check('memoria do strike BRL: o cache e o numero do motor', liq, c['r'].liquidacao)
+            conteudo, _n = queries.memoria_ndf(moe)
+            wv = _ox.load_workbook(io.BytesIO(conteudo), data_only=True).active
+            liq = [r[1].value for r in wv.iter_rows(min_col=1, max_col=2)
+                   if r[0].value == 'Liquidação (resultado do banco)'][0]
+            check('memoria da asiatica: a media por formula da o numero do motor',
+                  liq, queries.calcular_ndf(moe)['r'].liquidacao)
+        finally:
+            _cb.ptax_periodo, queries._ptax_do_fixing = _periodo_real, _fix_real
 
         print('\n== 9. o endpoint e as tres telas ==')
         R._mapping_rows = _o[4]

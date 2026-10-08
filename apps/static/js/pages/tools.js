@@ -38,6 +38,9 @@
           n_parity_failed: 'the PTAX of the FX rate could not be fetched — {motivo}',
           n_quoted_in_cents: '{ativo} is quoted in CENTS in the B3 Index (conversion factor 0.01): the Quotes prices were multiplied by 0.01',
           n_parity_ptax: 'FX rate: PTAX {moeda} of {data} (BCB, ask)',
+          n_parity_ptax_avg: 'FX rate: {texto} (BCB, ask)',
+          n_fixing_ptax_avg: 'fixing: {texto} (BCB, ask)',
+          f_fixing_moeda_data: 'currency fixing date', f_ptax_fim: 'PTAX window',
           f_paridade: 'FX rate',
           n_cpty_short_name: 'the account {conta} is not in the Reference Data — showing the position short name ({apelido})',
           n_fixing_ptax: 'fixing: PTAX {moeda} of {data} (BCB, ask)',
@@ -105,6 +108,9 @@
           n_parity_failed: 'não foi possível buscar a PTAX da paridade — {motivo}',
           n_quoted_in_cents: '{ativo} é cotado em CENTAVOS no Index B3 (fator de conversão 0,01): os preços do Quotes foram multiplicados por 0,01',
           n_parity_ptax: 'paridade: PTAX {moeda} de {data} (BCB, venda)',
+          n_parity_ptax_avg: 'paridade: {texto} (BCB, venda)',
+          n_fixing_ptax_avg: 'fixing: {texto} (BCB, venda)',
+          f_fixing_moeda_data: 'data de fixing da moeda', f_ptax_fim: 'janela da PTAX',
           f_paridade: 'FX rate',
           n_cpty_short_name: 'a conta {conta} não está no Reference Data — mostrando o apelido da posição ({apelido})',
           n_fixing_ptax: 'fixing: PTAX {moeda} de {data} (BCB, venda)',
@@ -172,6 +178,9 @@
           n_parity_failed: 'no se pudo obtener la PTAX de la paridad — {motivo}',
           n_quoted_in_cents: '{ativo} cotiza en CENTAVOS en el Index B3 (factor de conversión 0,01): los precios de Quotes se multiplicaron por 0,01',
           n_parity_ptax: 'paridad: PTAX {moeda} del {data} (BCB, venta)',
+          n_parity_ptax_avg: 'paridad: {texto} (BCB, venta)',
+          n_fixing_ptax_avg: 'fixing: {texto} (BCB, venta)',
+          f_fixing_moeda_data: 'fecha de fixing de la moneda', f_ptax_fim: 'ventana de la PTAX',
           f_paridade: 'FX rate',
           n_cpty_short_name: 'la cuenta {conta} no está en el Reference Data — mostrando el apodo de la posición ({apelido})',
           n_fixing_ptax: 'fixing: PTAX {moeda} del {data} (BCB, venta)',
@@ -901,6 +910,27 @@
     });
   });
 
+  // ── NDF: termo de MOEDA × MERCADORIA, o cross e o strike em reais ───────
+  // O estado é um conjunto de marcas e cada campo diz em que marcas aparece
+  // (`data-tl-show`); o servidor desenha a MESMA conta no primeiro render.
+  var ndfModo = (function () {
+    var sel = document.getElementById('produto');
+    if (!sel || !document.getElementById('tl-ndf-commodity')) return function () {};
+    var cot = document.getElementById('moeda_cotada'), brl = document.getElementById('forward_em_reais');
+    function aplicar() {
+      var merc = sel.value === 'mercadoria', est = {};
+      est[merc ? 'mercadoria' : 'moeda'] = true;
+      if (merc) est[brl && brl.checked ? 'brl' : 'usd'] = true;
+      else est[cot && cot.value && cot.value !== 'BRL' ? 'cross' : 'brlpair'] = true;
+      page.querySelectorAll('[data-tl-show]').forEach(function (el) {
+        el.hidden = !el.getAttribute('data-tl-show').split(/\s+/).some(function (k) { return est[k]; });
+      });
+    }
+    [sel, cot, brl].forEach(function (el) { if (el) el.addEventListener('change', aplicar); });
+    aplicar();
+    return aplicar;
+  })();
+
   // ── Recompra: os dias úteis aparecem assim que as duas datas existem ─────
   // Contados pelo SERVIDOR (ANBIMA), no campo em branco ou marcado como
   // automático; digitar apaga a marca (o bloco acima) e aí vale o digitado.
@@ -986,19 +1016,15 @@
       ['fixing_auto_nota', 'paridade_auto_nota'].forEach(function (id) {
         var el = document.getElementById(id); if (el) el.textContent = '';
       });
-      // NDF: o bloco do termo de MERCADORIA (paridade + ativo) segue a classe
-      var merc = document.getElementById('tl-ndf-commodity');
-      if (merc) merc.hidden = !/commodit/i.test((d.fields || {}).classe || '');
-      (d.notes || []).forEach(function (n) {
-        if (n.code !== 'parity_ptax') return;
-        var np = document.getElementById('paridade_auto_nota');
-        if (np) np.textContent = 'PTAX ' + n.params.moeda + ' ' + n.params.data;
-      });
+      // NDF: moeda × mercadoria, cross e strike em reais seguem o que veio
+      ndfModo();
       // a taxa que veio da PTAX diz de que dia é, embaixo do próprio campo
       (d.notes || []).forEach(function (n) {
-        if (n.code !== 'fixing_ptax') return;
-        var nota = document.getElementById('fixing_auto_nota');
-        if (nota) nota.textContent = 'PTAX ' + n.params.moeda + ' ' + n.params.data;
+        var alvo = { parity_ptax: 'paridade_auto_nota', parity_ptax_avg: 'paridade_auto_nota',
+                     fixing_ptax: 'fixing_auto_nota', fixing_ptax_avg: 'fixing_auto_nota' }[n.code];
+        var nota = alvo && document.getElementById(alvo);
+        if (!nota) return;
+        nota.textContent = n.params.texto || ('PTAX ' + n.params.moeda + ' ' + n.params.data);
       });
       (d.missing || []).forEach(function (n) { mark(n, 'tl-missing'); marcados.push(n); });
       (d.assumed || []).forEach(function (n) { mark(n, 'tl-assumed'); marcados.push(n); });
