@@ -120,8 +120,8 @@ OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_<nome>.py
 ### Ciclo do request
 
 `run.py` lê `DEBUG` → `DebugConfig`/`ProductionConfig` (`apps/config.py`) →
-`create_app()` (`apps/__init__.py`) registra extensões e importa
-`apps.pages.routes`. **Um único blueprint** (`pages_blueprint`) é dono de todas
+`create_app()` (`apps/__init__.py`) configura a camada `database_access`,
+semeia o `DATA_DIR` e importa `apps.pages.routes`. **Um único blueprint** (`pages_blueprint`) é dono de todas
 as rotas. `create_app` confere `_REQUIRED_CONFIG_NAMES` antes dos blueprints e
 recusa subir se o `config.py` ficou para trás num pull (§9).
 
@@ -138,7 +138,7 @@ recusa subir se o `config.py` ficou para trás num pull (§9).
 | `manual_conf.py` · `cgd_docs.py` · `otc_tickets.py` | donos dos bancos da esteira, do Onboarding e do store de tickets |
 | `athena_api.py` · `otc_boxparse.py` · `otc_boxscan.py` · `otc_emails.py` · `webpush.py` | Athena (SSO Kerberos), parser do recap, varredura do box, e-mails, push |
 | `recon_fxo.py` · `recon_cgd.py` · `recon_payrec.py` · `recon_comitente.py` · `recon_conf_matching.py` | motores das recons |
-| `confirmation_pdfs.py` · `forecast_charts.py` · `quotes.py` · `precificador/` | PDFs em reportlab, gráficos, cotações, motor de mercado das Tools (puro, sem Flask) |
+| `confirmation_pdfs.py` · `quotes.py` · `precificador/` | PDFs em reportlab, cotações, motor de mercado das Tools (puro, sem Flask) |
 
 Templates: `layouts/base.html` → `layouts/vertical.html` (o único layout) →
 `pages/*.html`. `partials/sidenav.html` é o único menu.
@@ -513,8 +513,9 @@ da subida e NÃO liga o farol; os caminhos do espelho são dinâmicos.
 - **O calendário ANBIMA em memória acompanha o mtime do `anbima.json`**
   (`_anbima_stamp`): feriado cadastrado vale no request seguinte. Calendário
   FIXADO à mão (teste com mtime `None`) nunca é recarregado.
-- **SQLite** (`apps/db.sqlite3`) não é usado pela lógica; `create_all()` roda
-  uma vez na subida.
+- **Não há ORM**: SQLAlchemy/Flask-Migrate saíram (08/10/2026, §627) — nada os usava.
+  O único SQLite que sobra é o banco de comitentes, pelo `sqlite_read`/
+  `sqlite_write` da `database_access`.
 
 > **`.wal.checkpoint`/`.wal.recovery` ao lado de um `.db` é o LIMBO de
 > checkpoint do DuckDB (§442)**: um checkpoint começou (o `.wal` bateu os
@@ -2726,9 +2727,22 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   roda do share, mas desde 21/09/2026 é VERSIONADO (§518) — fora do repo ele
   ficava fora da revisão e do `check_bat_blocks.py`, e foi por isso que a linha
   do §322 nunca chegou nele. Copie o do repositório por cima do que está no
-  share; o que a instância executa é o de lá. **Todo `ds` do `.bat` leva
-  `call`**: `ds` é script do shell, e um `.bat` que chama outro sem `call`
-  entrega o controle de vez — o pipe da versão antiga escondia isso.
+  share; o que a instância executa é o de lá, e o `otc-tracker.ico` vai junto,
+  na mesma pasta.
+- **O `start-otc-tracker.bat` sobe com DUPLO CLIQUE, sem DevShell** (§628): um
+  Python 3.12 PRÓPRIO em `%LOCALAPPDATA%\OTC-Tracker\python312` (ou o 3.12 que
+  o usuário já tem, pelo `HKCU`), instalado sem admin a partir de
+  `Application\installers\` ou do python.org, e só se o instalador for
+  ASSINADO; `PIP_INDEX_URL` no Artifactory; o retrato do requirements DENTRO da
+  pasta do Python; o navegador abre quando o servidor RESPONDE; e atalhos com
+  o `otc-tracker.ico` no Desktop e na pasta `Application` (alvo `cmd.exe /c`,
+  para poder FIXAR; uma vez por máquina e por lançador, `atalho <nome>.ok`). O
+  `.bat` não tem ícone próprio — o Windows desenha um só para todo `.bat`, e
+  `.exe` não roda na máquina do JPM —, por isso o atalho. O e-mail de versão
+  nova e o card falam em duplo clique (`check_app_version`). **O
+  `start-otc-tracker_naeast.bat` é só um LANÇADOR** dele (`OTC_NOME`,
+  `OTC_LAUNCHER`, `OTC_ESPELHO_LOCAL=1`): a lógica é uma, e os dois `.bat` vão
+  juntos para a mesma pasta.
 - **A subida de ~12 min é o BYTECODE recompilado pelo SMB** (§524). O
   `new-otc-deploy.bat` cria uma pasta de versão NOVA a cada deploy e o
   `start-otc-tracker.bat` chaveia o cache pela versão
@@ -2741,8 +2755,9 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   (robocopy `/MIR` + `pushd` no espelho, ~45 MB e ~770 arquivos, `static\data`
   já fora): na instância, **11m49s → 63s**. SÓ O CÓDIGO se move — `DATA_DIR`,
   `DATABASE_DIR` e `SHARED_DRIVE_ROOT` são UNC absolutos no `config.py`, não
-  relativos ao diretório atual. Hoje isso vive no `start-otc-tracker_naeast.bat`
-  (para MEDIR), e o §524 lista o que falta promover. **O código de saída do
+  relativos ao diretório atual. Hoje é a sub-rotina `:espelha` do
+  `start-otc-tracker.bat`, ligada pelo lançador `start-otc-tracker_naeast.bat`
+  (§628), e o §524 lista o que falta para virar o padrão. **O código de saída do
   robocopy é um BITMASK**: 0–7 é sucesso, 8+ é falha — `if errorlevel 1`
   abortaria em toda cópia bem-sucedida. E **`/COPY:DAT` PRESERVA o timestamp da
   origem**: data de arquivo no share não diz quando o deploy rodou (foi o que
@@ -2759,8 +2774,6 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   outro módulo entra na lista.
 - Cada pessoa roda a própria instância sobre o MESMO `db/` do share — é por
   isso que toda disputa de arquivo entre "instâncias vizinhas" existe.
-- `flask_login`, `flask_wtf`, `flask_migrate` estão no requirements e não são
-  usados.
 
 ---
 
@@ -2784,7 +2797,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 | `slim_duckdb.py [--db-dir] [--only cache] [--dry-run]` | emagrece os bancos de arquivo-dia JÁ existentes para a forma do §437 (lista só `_seq`/`_raw`, objeto só `__raw`), copiando do PRÓPRIO banco e trocando o arquivo; com o app PARADO; idempotente; RECUSA banco em limbo de checkpoint (vai pelo recover); o `_manifest` é recriado pelo SCHEMA e não por `AS SELECT` — o CTAS deixa a PRIMARY KEY para trás e o banco vira somente-leitura (§443) |
 | `recover_duckdb_wal.py [--db-dir] [--only] [--work-dir] [--dry-run] [--no-slim] [--all] [--descartar-wal]` | tira do LIMBO de checkpoint (§442: `.wal.checkpoint`/`.wal.recovery` ao lado, ou `.wal` > 16 MB) copiando `.db` + WALs para um disco LOCAL, abrindo em escrita + `CHECKPOINT`, emagrecendo e trocando no share; o que substituiu vai para `db/_recuperado/<carimbo>/` (apague depois de conferir); TODAS as instâncias paradas, mesma versão de duckdb (banco preso por processo VIVO é PULADO com `EM USO`, sem tocar em nada — `--lock-seconds` regula a espera e `--insistir N` fica tentando os pulados, porque a trava do vizinho vai e volta); a cópia local perde o somente-leitura herdado do share, a pasta de `--work-dir` é PROVADA (renome) antes de qualquer cópia e o `.wal.recovery` — que É a fusão do `.wal` com o `.wal.checkpoint`, e o destino que o `MoveFileW` do DuckDB recusa — não vai para a cópia local quando os dois estão lá; rename negado na abertura da cópia faz o script FUNDIR os dois WALs à mão, por cópia, e abrir de novo (§444); `--only` aceita um `.db` só, e `--descartar-wal` é o WAL que NÃO REPLAYA — segue com o `.db` sozinho, perdendo o que veio depois do último checkpoint (§447) |
 | `export_duckdb_to_json.py` | o ROLLBACK: reconstrói do banco os JSONs com diferença (`--dry-run`, `--force`, `--only`); `check_export_rollback.py` prova que cada forma volta exata |
-| `scripts/standalone/` (40, GERADOS por `build_duckdb_standalone.py`) | os mesmos conversores para máquina sem o código (`pip install duckdb` só) — nunca editar à mão |
+| `scripts/standalone/` (GERADOS por `build_duckdb_standalone.py`) | os mesmos conversores para máquina sem o código (`pip install duckdb` só): o motor UMA vez no `_motor.py` e uma casca por fatia — entrega-se a PASTA; nunca editar à mão |
 | `build_sop_docx.py` | SOP e Guia em Word a partir do `.md` |
 | `fix_asian_dates_xlsx.py <xlsx> [--dry-run] [--feriados CAL=arq] [--calendario IPE]` | conserta as datas da Média Asiática de um Excel do Live Position Option numa aba NOVA (§537): mesmo mês → reordena; dois meses → o mês com MAIS datas inteiro, dia útil a dia útil no calendário do Holidays **do ATIVO da linha** (`Ativo subjacente / Moeda base`: `CO1-2` → IPE, `USD` → ANBIMA, §595; ativo fora da lista NÃO é ajustado e vai para o log; planilha sem a coluna usa o `--calendario`); empate fica e vai para o log; data em fim de semana ou feriado do calendário do ativo é REMOVIDA antes de decidir (a mesa, 29/09/2026), e o ano de toda data precisa ter feriado no calendário. Calendário sem feriado no ano PARA — sem feriado, dia útil vira dia de semana |
 | `diag_ndfsum_account.py [AAAA-MM-DD]` | DIAGNÓSTICO da coluna Account do Settlement Summary: nome da linha → SPN no Reference Data → registro do Counterparty Details → defaults → conta, dizendo onde a cadeia quebra (§436) |
@@ -2794,7 +2807,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (183 scripts)
+### `scripts/tests/` (187 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
