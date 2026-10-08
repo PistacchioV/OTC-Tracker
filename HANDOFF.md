@@ -25991,3 +25991,50 @@ o alvo do atalho dele) e `OTC_ESPELHO_LOCAL=1`, e chama o `start-otc-tracker.bat
 da mesma pasta. O espelho do §524 virou a sub-rotina `:espelha` do principal —
 `src-teste` e `pycache-teste` como antes —, então os dois sobem com a MESMA
 instalação do Python e das dependências, e cada um tem o seu atalho.
+
+---
+
+## §629 — NDF Calculator: as quatro contas (moeda, cross, mercadoria USD e BRL) (2026-10-08)
+
+**O pedido.** A calculadora tratava o termo de mercadoria de um jeito só:
+`qtd × (preço − strike) × PTAX`, com a PTAX do vencimento − offset, e o modo só
+ligava quando a busca pelo B3 ID trazia a classe. A mesa ditou as regras:
+
+| Termo | Conta | PTAX |
+|---|---|---|
+| Moeda, BRL no par | `N × (fix − fwd)` | fixing = PTAX do vencimento − offset; asiática = média aritmética da PTAX de cada data − offset |
+| Moeda, sem BRL (cross) | `N × (fix − fwd) × PTAX base` | PTAX da moeda BASE no vencimento − offset; fixing em branco = base ÷ cotada no dia |
+| Mercadoria, strike USD | `qtd × (preço − strike) × PTAX` | a `Data de Fixing da Moeda` da posição, a data REAL, sem offset |
+| Mercadoria, strike BRL | `qtd × (preço × PTAX − strike)` | média da PTAX na janela de verificação |
+
+**O que estava errado no strike em reais.** A posição marca com
+`Taxa a Termo em Reais = S` (o campo 55 do TER, que o gerador escreve quando
+`StrikeCurrency = BRL`). A conta é em reais e "não leva PTAX". Mas o preço vem
+do Quotes em USD, então quem vai a reais é o PREÇO. Pela fórmula antiga, a
+diferença inteira era multiplicada pela PTAX, e com ela o strike, que já está
+em reais. A janela da média é a mesma da confirmação `ndf-comm-strike-brl`
+(`FixingStartDate`…`FixingEndDate`, a janela do preço).
+O prefill a tira das datas de verificação do preço.
+
+**O que mudou.**
+- Motor: `liquidar_ndf(..., forward_em_reais=)`.
+- `cambio.ptax_periodo`: a série numa chamada só. `ptax_moeda` passou a usar o
+  mesmo `_fechamentos`.
+- `queries.calcular_ndf` faz as quatro contas, e `ndf_prefill` lê a flag, a
+  moeda cotada, a data de fixing da moeda e o bloco da asiática.
+- Tela: seletor Moeda/Mercadoria, moeda cotada, datas da asiática, data de
+  fixing da moeda e a janela da PTAX. Cada campo diz em que estado aparece por
+  `data-tl-show`, e o `tools.js` (`ndfModo`) refaz a mesma conta que o
+  servidor faz no primeiro render.
+- A memória xlsx escreve cada PTAX da série e a média por fórmula.
+
+**Suposição da mesa.** A conversão do cross é pela PTAX da moeda BASE, sem
+dividir pelo fixing (resposta da mesa, 08/10/2026). Se aparecer um aviso do
+Athena que não bata, o lugar é o ramo `cross` do `calcular_ndf`.
+
+`check_tools_calculators.py` §8c prende as quatro contas, o prefill da flag e o
+cache da memória. Junto, a asserção "e a nota diz quanto já foi recomprado" (§7)
+voltou a passar. Ela falhava desde 01/10/2026: a fixture usava 30/09/2026 como
+vencimento FUTURO, e quando a data chegou o prefill foi buscar a PTAX real do
+fixing. O vencimento da fixture foi para 30/09/2036.
+

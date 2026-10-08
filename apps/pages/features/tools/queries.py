@@ -1026,13 +1026,113 @@ def _inteiro(form, campo, padrao):
         raise domain.ErroFormulario('{campo}: a whole number of business days', campo=campo)
 
 
+def _e_termo_de_mercadoria(form):
+    """O termo é de MERCADORIA? O seletor da tela manda; sem ele (tela antiga,
+    formulário montado à mão), a classe do ativo que a posição trouxe."""
+    produto = str(form.get('produto') or '').strip().lower()
+    if produto in ('moeda', 'mercadoria'):
+        return produto == 'mercadoria'
+    return _e_mercadoria(form.get('classe') or '')
+
+
+def _datas_do_form(form, campo, rotulo):
+    """As datas de uma lista digitada (uma por linha, ou separadas por `;`/`,`),
+    em ordem e sem repetição."""
+    brutos = [b.strip() for b in str(form.get(campo) or '').replace(';', '\n').replace(',', '\n')
+              .split('\n') if b.strip()]
+    try:
+        return sorted({para_data(b) for b in brutos})
+    except ErroDeDado:
+        raise domain.ErroFormulario('{rotulo}: one date per line, dd/mm/yyyy', rotulo=rotulo)
+
+
+def _ptax_nos_dias(moeda, dias, rotulo):
+    """{dia: (venda, dia do boletim)} da PTAX de VENDA em cada dia pedido — UMA
+    chamada ao BCB para a janela inteira. Vale o boletim do dia ou, sem ele (o
+    feriado que o ANBIMA não previu), o último antes dele, até dez dias.
+
+    Dia no FUTURO, ou sem boletim, é erro dizendo QUAL: média com uma PTAX a
+    menos não é a média do contrato, e a conta fecharia consigo mesma."""
+    from apps.pages.precificador import cambio
+    moeda = str(moeda or '').upper()
+    if moeda not in liquidacao.MOEDAS_AUTOMATICAS:
+        raise domain.ErroFormulario('{rotulo}: {moeda} is not published in the BCB bulletin — '
+                                    'type the rate', rotulo=rotulo, moeda=moeda or '(blank)')
+    futuros = [d for d in dias if d > date.today()]
+    if futuros:
+        raise domain.ErroFormulario(
+            '{rotulo}: the fixing date ({quando}) is still in the future — there is no PTAX '
+            'for it yet, type the rate', rotulo=rotulo, quando='{:%d/%m/%Y}'.format(futuros[0]))
+    try:
+        serie = cambio.ptax_periodo(moeda, min(dias) - timedelta(days=10), max(dias))
+    except Exception as exc:                                # noqa: BLE001
+        _R().log.warning('[tools] PTAX %s de %s a %s falhou: %s', moeda, min(dias), max(dias), exc)
+        raise domain.ErroFormulario('{rotulo}: type it in — {motivo}', rotulo=rotulo, motivo=str(exc))
+    boletins = sorted(((p.data, p.venda) for p in serie), reverse=True)
+    achados, sem = {}, []
+    for d in dias:
+        b = next(((dia, v) for dia, v in boletins if dia <= d and (d - dia).days <= 10), None)
+        if b is None:
+            sem.append(d)
+        else:
+            achados[d] = (b[1], b[0])
+    if sem:
+        raise domain.ErroFormulario('{rotulo}: no PTAX {moeda} published for {datas} — type it in',
+                                    rotulo=rotulo, moeda=moeda,
+                                    datas=', '.join('{:%d/%m/%Y}'.format(d) for d in sem[:6]))
+    return achados
+
+
+def _media_ptax(moeda, dias, rotulo, divisora=None):
+    """`(média, série, nota)` da PTAX de venda de `moeda` nos `dias` — média
+    ARITMÉTICA simples. Com `divisora`, cada dia é a PARIDADE moeda ÷ divisora
+    (o cross pelos dois boletins do mesmo dia). `série` = [(dia, valor)]."""
+    base = _ptax_nos_dias(moeda, dias, rotulo)
+    cot = _ptax_nos_dias(divisora, dias, rotulo) if divisora else None
+    serie = [(d, base[d][0] / cot[d][0] if cot else base[d][0]) for d in dias]
+    media = sum(v for _d, v in serie) / len(serie)
+    par = '{}/{}'.format(moeda, divisora) if divisora else str(moeda).upper()
+    if len(dias) == 1:
+        nota = 'PTAX {} {:%d/%m/%Y}'.format(par, dias[0])
+    else:
+        nota = 'PTAX {} average of {} days, {:%d/%m/%Y} to {:%d/%m/%Y}'.format(par, len(dias), dias[0], dias[-1])
+    return media, serie, nota
+
+
+def _menos_offset(dias, n):
+    cal = calendario.calendario_anbima()
+    return sorted({cal.workday(d, -n) if n else d for d in dias})
+
+
+def _automatico(form, campo):
+    """O campo veio em branco ou marcado como automático? (então se BUSCA)"""
+    return (not str(form.get(campo) or '').strip()
+            or str(form.get(campo + '_auto') or '').strip() == '1')
+
+
 def calcular_ndf(form):
+    """As quatro contas do NDF Calculator (mesa, 08/10/2026):
+
+    - MOEDA com BRL no par: fixing = PTAX da moeda no vencimento − offset; na
+      ASIÁTICA, a média aritmética da PTAX de cada data de verificação − offset.
+    - MOEDA sem BRL (o cross): Nocional × (fix − fwd) × PTAX da moeda BASE
+      contra o real (no vencimento − offset); o fixing em branco é a paridade
+      dos dois boletins do BCB (base ÷ cotada) no mesmo dia.
+    - MERCADORIA, strike em USD: Qtd × (preço − strike) × PTAX da `Data de
+      Fixing da Moeda` do ativo — a data REAL, sem offset.
+    - MERCADORIA, strike em REAIS: a conta é em reais, mas o preço do Quotes é
+      em USD — ele vai a reais pela MÉDIA da PTAX na janela de verificação (a
+      confirmação `ndf-comm-strike-brl`) antes da diferença."""
     from apps.pages.precificador import derivativos
     moeda = (form.get('moeda') or 'USD').strip().upper()
+    cotada = (form.get('moeda_cotada') or liquidacao.SEM_CONVERSAO).strip().upper()
     vencimento = para_data(form.get('vencimento') or '')
     offset = _inteiro(form, 'ptax_offset', 1)
-    mercadoria = _e_mercadoria(form.get('classe') or '')
-    paridade, nota_par, update = 1.0, '', {}
+    mercadoria = _e_termo_de_mercadoria(form)
+    forward_brl = mercadoria and domain.ligado(form, 'forward_em_reais')
+    cross = (not mercadoria) and cotada != liquidacao.SEM_CONVERSAO
+    paridade, nota_par, serie_par, serie_fix, update = 1.0, '', [], [], {}
+    nota = ''
     if mercadoria:
         # O fixing é o PREÇO do ativo (do Quotes, pelo B3 ID) — a PTAX aqui
         # seria a cotação da moeda no lugar do preço da mercadoria. Em branco é
@@ -1042,21 +1142,60 @@ def calcular_ndf(form):
             raise domain.ErroFormulario(
                 'fixing: for a commodity forward it is the PRICE of the underlying — pull it '
                 'with the B3 ID (it comes from Quotes) or type it in')
-        fixing, nota = domain.decimal(bruto, 'fixing'), ''
-        paridade, nota_par = _ptax_ou_digitado(form, 'paridade', 'FX rate', moeda,
-                                               vencimento.isoformat(), offset)
+        fixing = domain.decimal(bruto, 'fixing')
+        if not _automatico(form, 'paridade'):
+            paridade = domain.decimal(form.get('paridade'), 'FX rate')
+        elif forward_brl:
+            fim = domain.texto_data(form, 'ptax_fim')
+            if fim is None:
+                raise domain.ErroFormulario(
+                    'PTAX window: the price is in USD and the strike in BRL — give the last '
+                    'verification date (and the first, for an average) or type the FX rate')
+            ini = domain.texto_data(form, 'ptax_inicio') or fim
+            if ini > fim:
+                raise domain.ErroFormulario('PTAX window: the first date is after the last one')
+            cal = calendario.calendario_anbima()
+            dias = [ini + timedelta(days=k) for k in range((fim - ini).days + 1)]
+            dias = [d for d in dias if cal.eh_dia_util(d)] or [fim]
+            paridade, serie_par, nota_par = _media_ptax(moeda, dias, 'FX rate')
+        else:
+            quando = domain.texto_data(form, 'fixing_moeda_data')
+            if quando is None:
+                raise domain.ErroFormulario(
+                    'FX fixing date: the PTAX of a commodity forward is the one of the '
+                    'currency fixing date of the underlying (no offset) — give it or type the FX rate')
+            paridade, nota_par = _ptax_ou_digitado(form, 'paridade', 'FX rate', moeda,
+                                                   quando.isoformat(), 0)
         update = _de_volta_ao_campo('paridade', paridade, nota_par)
     else:
-        fixing, nota = _ptax_ou_digitado(form, 'fixing', 'fixing', moeda, vencimento.isoformat(), offset)
+        asiaticas = _datas_do_form(form, 'datas_asiaticas', 'Asian dates')
+        if not _automatico(form, 'fixing'):
+            fixing = domain.decimal(form.get('fixing'), 'fixing')
+        elif asiaticas:
+            fixing, serie_fix, nota = _media_ptax(moeda, _menos_offset(asiaticas, offset), 'fixing',
+                                                  divisora=cotada if cross else None)
+        elif cross:
+            dia = _menos_offset([vencimento], offset)
+            fixing, serie_fix, nota = _media_ptax(moeda, dia, 'fixing', divisora=cotada)
+        else:
+            fixing, nota = _ptax_ou_digitado(form, 'fixing', 'fixing', moeda, vencimento.isoformat(), offset)
         update = _de_volta_ao_campo('fixing', fixing, nota)
+        if cross:
+            # o cross leva a diferença a reais pela PTAX da moeda BASE (mesa)
+            paridade, nota_par = _ptax_ou_digitado(form, 'paridade', 'FX rate', moeda,
+                                                   vencimento.isoformat(), offset)
+            update.update(_de_volta_ao_campo('paridade', paridade, nota_par))
     r = derivativos.liquidar_ndf(
-        nocional=domain.numero_do_form(form, 'nocional', 'notional'),
+        nocional=domain.numero_do_form(form, 'nocional', 'quantity' if mercadoria else 'notional'),
         taxa_termo=domain.numero_do_form(form, 'taxa_termo', 'forward rate'),
         fixing=fixing, posicao=form.get('posicao') or '',
-        fixo_em_reais=domain.ligado(form, 'fixo_em_reais'),
-        isento_ir=domain.ligado(form, 'isento_ir'), paridade=paridade)
-    return {'r': r, 'moeda': moeda, 'vencimento': vencimento, 'fixing_nota': nota,
-            'paridade_nota': nota_par, 'mercadoria': mercadoria, 'form_update': update}
+        fixo_em_reais=(not mercadoria) and (not cross) and domain.ligado(form, 'fixo_em_reais'),
+        isento_ir=domain.ligado(form, 'isento_ir'), paridade=paridade,
+        forward_em_reais=forward_brl)
+    return {'r': r, 'moeda': moeda, 'cotada': cotada, 'vencimento': vencimento,
+            'fixing_nota': nota, 'paridade_nota': nota_par, 'mercadoria': mercadoria,
+            'cross': cross, 'forward_em_reais': forward_brl, 'serie_fixing': serie_fix,
+            'serie_paridade': serie_par, 'form_update': update}
 
 
 def calcular_unwind_ndf(form):
@@ -1272,6 +1411,13 @@ def _ndf_da_posicao(b3_id):
         'taxa': (_num_tela(cel.get('Taxa Forward'), taxa=True)
                  or _num_tela(cel.get('Taxa a Termo em Reais'), taxa=True)),
         'vencimento': venc, 'offset': offset,
+        # `Taxa a Termo em Reais` é uma FLAG (`S`/vazio — o campo 55 do TER): o
+        # strike da mercadoria está em R$ por unidade
+        'taxa_em_reais': str(cel.get('Taxa a Termo em Reais') or '').strip().upper() == 'S',
+        'fix_moeda': fix,
+        'cotada': _moeda_iso(cel.get('Codigo Sisbacen da Moeda Cotada', '')),
+        'asiatica': any(domain.norm(c).startswith('media asiatica (data)') and _data_tela(v)
+                        for c, v in cel.items()),
     }, fonte
 
 
@@ -1319,13 +1465,34 @@ def ndf_prefill(b3_id):
     # BCB, D-n do vencimento); no futuro fica em branco — ainda não existe.
     campos['fixing'], campos['fixing_auto'] = '', ''
     campos['paridade'], campos['paridade_auto'], campos['ativo'] = '', '', pos['ativo']
+    merc = _e_mercadoria(pos['classe'])
+    cotada = pos['cotada'] or liquidacao.SEM_CONVERSAO
+    campos['produto'] = 'mercadoria' if merc else 'moeda'
+    campos['moeda_cotada'] = cotada if not merc else liquidacao.SEM_CONVERSAO
+    campos['forward_em_reais'] = bool(merc and pos['taxa_em_reais'])
+    campos['fixing_moeda_data'] = pos['fix_moeda'] or '' if merc else ''
+    campos['ptax_inicio'], campos['ptax_fim'], campos['datas_asiaticas'] = '', '', ''
+    n = int(pos['offset']) if pos['offset'] is not None else 1
     nota_fix = None
     notas_merc = []
-    if _e_mercadoria(pos['classe']):
+
+    def _busca(campo, calc):
+        """Busca já no prefill o que a conta vai usar — só quando todas as datas
+        passaram; o erro vira nota e o campo fica em branco e sinalizado."""
+        cod = 'parity' if campo == 'paridade' else campo
+        try:
+            valor, _serie, nota = calc()
+        except domain.ErroFormulario as exc:
+            falt.append(campo)
+            return {'code': cod + '_failed', 'params': {'motivo': str(exc)}}
+        campos[campo], campos[campo + '_auto'] = domain.fx8(valor), '1'
+        return {'code': cod + '_ptax_avg', 'params': {'texto': nota}}
+
+    if merc:
         # Termo de MERCADORIA: o nocional é QUANTIDADE, o fixing é o PREÇO do
         # ativo — do Quotes, × 0,01 quando o Index B3 diz que ele é cotado em
-        # centavos —, e a PARIDADE (a PTAX) leva a diferença a reais. Na
-        # asiática o fixing é a média da série; série pela metade não é média.
+        # centavos —, e a PARIDADE (a PTAX) leva a reais. Na asiática o fixing
+        # é a média da série; série pela metade não é média.
         precos, sem, fonte_q, erro_q = _fixings_do_quotes(pos['classe'], pos['ativo'], pos['datas_ativo'])
         if precos and not sem:
             campos['fixing'] = domain.fx8(sum(p for _d, p, _dia in precos) / len(precos))
@@ -1339,29 +1506,55 @@ def ndf_prefill(b3_id):
             notas_merc.append({'code': 'fixings_missing', 'params': {
                 'n': len(sem), 'motivo': erro_q,
                 'datas': ', '.join('{:%d/%m/%Y}'.format(d) for d in sem[:6])}})
-        if pos['vencimento'] and campos['moeda']:
-            n = int(pos['offset']) if pos['offset'] is not None else 1
-            alvo = para_data(pos['vencimento'])
-            quando = calendario.calendario_anbima().workday(alvo, -n) if n else alvo
-            if quando <= date.today():
+        if campos['forward_em_reais']:
+            # strike em R$: o preço (USD) vai a reais pela MÉDIA da PTAX na janela
+            # de verificação — a mesma janela do preço (confirmação ndf-comm-strike-brl)
+            datas = pos['datas_ativo']
+            if datas:
+                campos['ptax_inicio'], campos['ptax_fim'] = datas[0].isoformat(), datas[-1].isoformat()
+                if campos['moeda'] and datas[-1] <= date.today():
+                    cal = calendario.calendario_anbima()
+                    dias = [d for d in (datas[0] + timedelta(days=k)
+                                        for k in range((datas[-1] - datas[0]).days + 1))
+                            if cal.eh_dia_util(d)] or [datas[-1]]
+                    notas_merc.append(_busca('paridade', lambda: _media_ptax(campos['moeda'], dias, 'FX rate')))
+            else:
+                falt.append('ptax_fim')
+        elif not pos['fix_moeda']:
+            falt.append('fixing_moeda_data')
+        elif campos['moeda'] and para_data(pos['fix_moeda']) <= date.today():
+            # strike em USD: a PTAX da Data de Fixing da Moeda, a data REAL
+            valor, quando, erro = _ptax_do_fixing(campos['moeda'], pos['fix_moeda'], 0)
+            if valor is not None:
+                campos['paridade'], campos['paridade_auto'] = domain.fx8(valor), '1'
+                notas_merc.append({'code': 'parity_ptax', 'params': {
+                    'moeda': campos['moeda'], 'data': '{:%d/%m/%Y}'.format(quando)}})
+            else:
+                notas_merc.append({'code': 'parity_failed', 'params': {'motivo': erro}})
+    elif pos['vencimento'] and campos['moeda']:
+        cross = cotada != liquidacao.SEM_CONVERSAO
+        venc = para_data(pos['vencimento'])
+        if pos['asiatica']:
+            campos['datas_asiaticas'] = '\n'.join('{:%d/%m/%Y}'.format(d) for d in pos['datas_ativo'])
+        dias = _menos_offset(pos['datas_ativo'] if pos['asiatica'] else [venc], n)
+        if dias and dias[-1] <= date.today():
+            if pos['asiatica'] or cross:
+                nota_fix = _busca('fixing', lambda: _media_ptax(
+                    campos['moeda'], dias, 'fixing', divisora=cotada if cross else None))
+            else:
                 valor, quando, erro = _ptax_do_fixing(campos['moeda'], pos['vencimento'], n)
                 if valor is not None:
-                    campos['paridade'], campos['paridade_auto'] = domain.fx8(valor), '1'
-                    notas_merc.append({'code': 'parity_ptax', 'params': {
-                        'moeda': campos['moeda'], 'data': '{:%d/%m/%Y}'.format(quando)}})
-    elif pos['vencimento'] and campos['moeda']:
-        n = int(pos['offset']) if pos['offset'] is not None else 1
-        alvo = para_data(pos['vencimento'])
-        quando = calendario.calendario_anbima().workday(alvo, -n) if n else alvo
-        if quando <= date.today():
-            valor, quando, erro = _ptax_do_fixing(campos['moeda'], pos['vencimento'], n)
-            if valor is not None:
-                campos['fixing'], campos['fixing_auto'] = domain.fx8(valor), '1'
-                nota_fix = {'code': 'fixing_ptax', 'params': {
-                    'moeda': campos['moeda'], 'data': '{:%d/%m/%Y}'.format(quando)}}
-            else:
+                    campos['fixing'], campos['fixing_auto'] = domain.fx8(valor), '1'
+                    nota_fix = {'code': 'fixing_ptax', 'params': {
+                        'moeda': campos['moeda'], 'data': '{:%d/%m/%Y}'.format(quando)}}
+                else:
+                    nota_fix = {'code': 'fixing_failed', 'params': {'motivo': erro}}
+            if not campos['fixing'] and 'fixing' not in falt:
                 falt.append('fixing')
-                nota_fix = {'code': 'fixing_failed', 'params': {'motivo': erro}}
+            if cross:
+                # o cross vai a reais pela PTAX da moeda BASE (vencimento − offset)
+                notas_merc.append(_busca('paridade', lambda: _media_ptax(
+                    campos['moeda'], _menos_offset([venc], n), 'FX rate')))
     campos.update(_do_contrato(pos))
     notas = ([nota_fix] if nota_fix else []) + notas_merc
     if pos['antecipado']:
@@ -1733,7 +1926,9 @@ def memoria_ndf(form):
         nocional_informado=_num_opcional(form, 'nocional'),
         fixo_em_reais=domain.ligado(form, 'fixo_em_reais'),
         fixing_nota=c.get('fixing_nota') or '', paridade_nota=c.get('paridade_nota') or '',
-        ativo=str(form.get('ativo') or '').strip() if c.get('mercadoria') else '')
+        ativo=str(form.get('ativo') or '').strip() if c.get('mercadoria') else '',
+        mercadoria=c['mercadoria'], cotada=c['cotada'], serie_fixing=c['serie_fixing'],
+        serie_paridade=c['serie_paridade'])
     return conteudo, domain.nome_memoria(cetip, cpty, c['vencimento'], produto='NDF')
 
 

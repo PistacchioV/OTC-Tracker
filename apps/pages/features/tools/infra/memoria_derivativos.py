@@ -81,10 +81,20 @@ def _devedora(f, resultado_ref, direcao, contraparte):
 
 # ── NDF no vencimento ────────────────────────────────────────────────────────
 
+def _media(f, rotulo, serie):
+    """Cada dia da série numa linha e a média ARITMÉTICA por fórmula — a soma
+    explícita dividida pela contagem (o avaliador não conhece AVERAGE)."""
+    refs = [f.campo('{} {:%d/%m/%Y}'.format(rotulo, d), v, TAXA_FMT) for d, v in serie]
+    return '=({})/{}'.format('+'.join(refs), len(refs))
+
+
 def ndf(r, moeda, vencimento, cetip_id='', contraparte='', classe='', emissao=None,
         nocional_informado=None, fixo_em_reais=False, fixing_nota='', paridade_nota='',
-        ativo='', emitido_em=None):
-    mercadoria = r.paridade != 1.0 or 'commodit' in (classe or '').lower()
+        ativo='', emitido_em=None, mercadoria=None, cotada='BRL', serie_fixing=None,
+        serie_paridade=None):
+    if mercadoria is None:
+        mercadoria = r.paridade != 1.0 or 'commodit' in (classe or '').lower()
+    cross = (not mercadoria) and (cotada or 'BRL') != 'BRL'
     wb, ws, f = _abrir('Liquidação de termo{} em {:%d/%m/%Y}'.format(
         ' de mercadoria' if mercadoria else ' de moeda', vencimento))
     _identificacao(f, cetip_id, contraparte, classe, emissao)
@@ -97,24 +107,48 @@ def ndf(r, moeda, vencimento, cetip_id='', contraparte='', classe='', emissao=No
             nota='na moeda estrangeira' if not mercadoria else 'na mercadoria')
     sinal = f.campo('Sinal da posição', int(r.sinal), _mx.INT_FMT,
                     nota='+1 com o banco comprado, −1 com o banco vendido')
-    f.campo('Moeda', moeda)
+    if cross:
+        f.campo('Moeda base', moeda)
+        f.campo('Moeda cotada', cotada)
+    else:
+        f.campo('Moeda', moeda)
     informado = nocional_informado if nocional_informado is not None else r.nocional_me
-    noc = f.campo('Quantidade' if mercadoria else 'Nocional informado', informado, _mx.MOEDA_FMT)
-    fixo = f.campo('Nocional fixo em reais', bool(fixo_em_reais),
-                   nota='na B3 o contrato é em moeda estrangeira: o valor em reais divide pela taxa a termo')
-    termo = f.campo('Preço a termo' if mercadoria else 'Taxa a termo', r.taxa_termo, TAXA_FMT)
-    me = f.campo('Quantidade apurada' if mercadoria else 'Nocional em moeda estrangeira',
-                 '=IF({x},{n}/{t},{n})'.format(x=fixo, n=noc, t=termo), _mx.MOEDA_FMT)
-    fixing = f.campo('Preço de fixing' if mercadoria else 'Fixing', r.fixing, TAXA_FMT,
-                     nota=fixing_nota or ('preço do ativo no fixing' if mercadoria else 'taxa informada'))
+    if mercadoria or cross:
+        me = f.campo('Quantidade' if mercadoria else 'Nocional', informado, _mx.MOEDA_FMT)
+    else:
+        noc = f.campo('Nocional informado', informado, _mx.MOEDA_FMT)
+        fixo = f.campo('Nocional fixo em reais', bool(fixo_em_reais),
+                       nota='na B3 o contrato é em moeda estrangeira: o valor em reais divide pela taxa a termo')
+    termo = f.campo('Preço a termo' if mercadoria else 'Taxa a termo', r.taxa_termo, TAXA_FMT,
+                    nota='em reais' if r.forward_em_reais else None)
+    if not (mercadoria or cross):
+        me = f.campo('Nocional em moeda estrangeira',
+                     '=IF({x},{n}/{t},{n})'.format(x=fixo, n=noc, t=termo), _mx.MOEDA_FMT)
+    if serie_fixing and len(serie_fixing) > 1:
+        f.secao('Fixing — média aritmética')
+        fixing = f.campo('Fixing', _media(f, 'PTAX' if not cross else 'Paridade', serie_fixing),
+                         TAXA_FMT, nota=fixing_nota)
+    else:
+        fixing = f.campo('Preço de fixing' if mercadoria else 'Fixing', r.fixing, TAXA_FMT,
+                         nota=fixing_nota or ('preço do ativo no fixing' if mercadoria else 'taxa informada'))
     par = None
-    if mercadoria:
-        par = f.campo('Paridade para reais', r.paridade, TAXA_FMT,
-                      nota=paridade_nota or 'taxa informada')
+    if mercadoria or cross:
+        rot = 'Paridade para reais' if mercadoria else 'Cotação {}/BRL'.format(moeda)
+        if serie_paridade and len(serie_paridade) > 1:
+            f.secao('PTAX — média aritmética')
+            par = f.campo(rot, _media(f, 'PTAX', serie_paridade), TAXA_FMT, nota=paridade_nota)
+        else:
+            par = f.campo(rot, r.paridade, TAXA_FMT, nota=paridade_nota or 'taxa informada')
 
     f.secao('Apuração')
-    dif = f.campo('Fixing − termo', '={}-{}'.format(fixing, termo), TAXA_FMT)
-    expr = '{m}*{d}*{s}'.format(m=me, d=dif, s=sinal) + ('*{}'.format(par) if par else '')
+    if r.forward_em_reais:
+        # strike em reais: o PREÇO vai a reais, e a diferença já nasce em reais
+        fix_brl = f.campo('Preço de fixing em reais', '={}*{}'.format(fixing, par), TAXA_FMT)
+        dif = f.campo('Fixing em reais − termo', '={}-{}'.format(fix_brl, termo), TAXA_FMT)
+        expr = '{m}*{d}*{s}'.format(m=me, d=dif, s=sinal)
+    else:
+        dif = f.campo('Fixing − termo', '={}-{}'.format(fixing, termo), TAXA_FMT)
+        expr = '{m}*{d}*{s}'.format(m=me, d=dif, s=sinal) + ('*{}'.format(par) if par else '')
     liq = f.campo('Liquidação (resultado do banco)', '=ROUND({},2)'.format(expr), _mx.MOEDA_FMT,
                   nota='positivo, o banco recebe; negativo, o banco paga', destaque=True)
     _devedora(f, liq, r.direcao, contraparte)
