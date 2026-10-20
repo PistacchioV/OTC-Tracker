@@ -227,7 +227,7 @@ O tempo focado soma no *Focused today* e no anel *Focus*. Enquanto você está e
 |---|---|
 | **Profile** | A sua foto (ou as suas iniciais, sem foto cadastrada), nome, e-mail, mesa e SID — vêm do cadastro (3.7) e não se editam aqui |
 | **Notifications** | Liga e desliga os avisos do sino que são **para você**: *Task assigned* (uma tarefa foi passada a você), *Comments* (comentaram numa tarefa sua), *Initiative lead* (você virou líder de uma iniciativa), *Due dates* (às 08:00 do dia em que uma tarefa sua vence) e *Focus finished* (fim de uma sessão de foco) |
-| **Appearance** | **Theme** (*Light · Dark · Auto* — *Auto* segue o Windows), **Wallpaper** (dez papéis de parede; cada miniatura mostra a parede no tema escolhido), **Accent** (a cor de destaque dos botões e seleções), **Glass** (*Clear* mostra mais o papel de parede; *Tinted* é o padrão) e **Reduce transparency** (superfícies sólidas, sem vidro). O sistema liga *Reduce transparency* sozinho em máquina sem placa de vídeo ou com os **Efeitos de transparência** do Windows desligados; **desligar o botão vale sempre**, mesmo nesses casos |
+| **Appearance** | **Theme** (*Light · Dark · Auto* — *Auto* segue o Windows), **Wallpaper** (dez papéis de parede; cada miniatura mostra a parede no tema escolhido), **Accent** (a cor de destaque dos botões e seleções), **Glass** (*Clear* mostra mais o papel de parede; *Tinted* é o padrão) e **Reduce transparency** (superfícies sólidas, sem vidro, e a troca de página sem as animações de entrada — o modo das máquinas sem placa de vídeo, onde elas pesam). O sistema liga *Reduce transparency* sozinho em máquina sem placa de vídeo ou com os **Efeitos de transparência** do Windows desligados; **desligar o botão vale sempre**, mesmo nesses casos |
 | **Focus** | A duração da **sessão**, da **pausa** e a **meta diária** de foco, com **−** e **+**. **Start** começa uma sessão agora |
 | **Data** | **Export my tasks as CSV** baixa as suas tarefas, uma por linha. **Reset to defaults** volta aparência, avisos e foco ao original |
 
@@ -403,9 +403,11 @@ São quadrados coloridos de canto arredondado, sempre na mesma ordem e sempre co
 
 **Toda data na tela é `dd/mm/aaaa`** — dia, mês e ano, nesta ordem, sempre.
 
-1. Clique no campo de data. Um calendário abre logo abaixo.
-2. Navegue pelos meses com as setas do calendário, ou digite a data direto no campo.
-3. Clique no dia. O calendário fecha e o campo fica preenchido.
+1. Clique no campo de data. Um calendário abre logo abaixo, e a data que já estava no campo fica **selecionada inteira**.
+2. Para escolher, navegue pelos meses com as setas do calendário e clique no dia. O calendário fecha e o campo fica preenchido.
+3. Para **digitar**, digite **só os números** — as barras se escrevem sozinhas (`14102026` vira `14/10/2026`). O calendário **acompanha**: com o dia e o mês ele vai para aquele mês, e com a data inteira ele a marca.
+
+> Data que não existe (`31/02/2026`) ou digitada pela metade **volta à última data válida** quando você sai do campo — nunca vira outro dia sem você ver.
 
 > Isso vale inclusive no Windows com o sistema em inglês: o sistema **não** usa o calendário nativo do navegador justamente para que `03/04` nunca seja lido como 3 de abril de um lado e 4 de março do outro.
 
@@ -685,6 +687,8 @@ A recompra aparece no **Intraday Monitor** (capítulo 5.1) como *Unwind NDF FX*,
 **As recompras dos demais produtos já importam, conferem e enviam.** Arraste para o dropzone a **planilha** da recompra ou o **e-mail** com a tabela colada do Excel no corpo (as mesmas colunas da planilha). A tela casa cada linha com o Live Position — pelo B3 ID, ou, sem ele, pelas características quando há **um** candidato só —, preenche o que a planilha deixou em branco, confere o resultado (coluna **Check**, os mesmos três estados da 5.10) e monta o arquivo de antecipação da B3 para o Batch Conecta; o **Mapping B3 ID** vira a linha para **Success** quando o retorno da B3 chega (5.10). **COE e DCE** não têm arquivo de antecipação na B3: ali a recompra fecha em *Imported*/*Approved*.
 
 **A recompra de NDF de Commodities segue o ciclo completo da de moeda (5.10):** entra no Pending Confirmation e na esteira no import, gera o **Termo de Resilição** pelo Confirmations Monitor, vai para a **Intrag › Unwind** no import quando a outra ponta é um fundo nosso, e aparece no Other Products e no Pay/Rec (como **COMM TER**). No B2B com o Lawton o Send grava **os dois arquivos** — a visão do Banco e a do Lawton. O e-mail de recompra de commodities tem um leitor próprio (uma tabela por perna). No Termo de Resilição da recompra de commodities, **Valor Base Liquidado** e **Novo Valor Base** saem só com o número (a quantidade), sem o código da mercadoria. Swap, Options, COE e DCE **ainda não** têm Termo, esteira nem Intrag.
+
+**A recompra de opção de Commodities também lê o e-mail da mesa** (o *INTERNAL JPMorgan Trade Recap … Unwind*): arraste o e-mail inteiro para o dropzone. Ele traz uma tabela por perna — **Client** (a operação com o cliente) e **Banco** (o B2B Banco × Lawton) — e **não traz o B3 ID**: a coluna *Contract* dele (`27-Mar`) é o mês do futuro, não o contrato da B3. A tela acha cada operação no Live Position pelas características (strike, quantidade original, Call/Put), e cada perna só casa com o seu tipo de contrato — a perna Client com o contrato do cliente, a Banco com o B2B. Quando mais de um contrato serve, o nome do cliente e as datas da opção desempatam; se ainda sobrar mais de um, a linha fica sem B3 ID e o aviso pede que você o preencha. A quantidade sai em **unidades** da mercadoria (a da B3), e os números ficam os do e-mail: o prêmio em USD por unidade e a paridade na coluna **FX Rate**. O sinal é o do banco (na perna Client, *Client Sells* = o banco paga; no B2B, o contrário).
 
 **New Deals › Swap › Cashflow** importa o Deal Ticket e gera os arquivos da B3; **New Deals › Options › EDG** ainda só abre a grade.
 
