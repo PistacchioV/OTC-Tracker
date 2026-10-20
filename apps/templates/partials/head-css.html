@@ -22,7 +22,10 @@
     if (p.glass === 'clear') r.setAttribute('data-glass', 'clear');
     var fx = '', auto = null;
     try { fx = localStorage.getItem('__OTC_TRACKER_FX__') || ''; auto = sessionStorage.getItem('__OTC_FX_AUTO__'); } catch (e) {}
-    if (fx === 'reduced' || (fx !== 'full' && auto === '1')) r.classList.add('is-solid');
+    // automático = sem GPU (sonda do otc.js, memoizada na sessão) OU o sistema
+    // pedindo menos transparência; 'full'/'reduced' gravados vencem os dois
+    var lessGlass = !!(window.matchMedia && matchMedia('(prefers-reduced-transparency: reduce)').matches);
+    if (fx === 'reduced' || (fx !== 'full' && (auto === '1' || lessGlass))) r.classList.add('is-solid');
     // Troca de PÁGINA como a do Pane (§632): a View Transition entre documentos
     // (`@view-transition` no otc.scss) segura barra lateral, barra do topo e papel
     // de parede no lugar e esmaece só o conteúdo; a classe dá os nomes às três

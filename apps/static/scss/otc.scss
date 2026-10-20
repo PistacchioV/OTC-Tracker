@@ -110,8 +110,9 @@ $table-cell-padding-x-sm: .45rem;
   --otc-r-pill: 999px;
 
   // espaço
-  --otc-inset: 14px;                                   // moldura até a borda da janela
+  --otc-inset: 10px;                                   // moldura até a borda da janela
   --otc-gutter: clamp(14px, 1.4vw + 6px, 32px);
+  --otc-side-gap: 18px;                                // do menu lateral até o conteúdo
   --otc-gap: clamp(12px, .6vw + 8px, 20px);
   --otc-pad: calc(var(--otc-gap) + 4px);
   --otc-side-w: 252px;
@@ -750,14 +751,16 @@ html.otc-vt-nav::view-transition-new(root) { animation: none; }
 
 // ── 5. Casca ────────────────────────────────────────────────────────────────
 // 5a. A moldura. Menu lateral fixo à esquerda, barra do topo fixa à direita,
-// conteúdo rolando por baixo dos dois.
+// conteúdo rolando por baixo dos dois. O menu é preso na BORDA da janela, e o
+// conteúdo começa logo depois dele, em qualquer largura: centrada em 1840px, a
+// casca deixava o menu longe da borda numa tela larga, e o "desafixar" (que o
+// recolhe pela própria largura) só o encostava na borda — continuava na tela.
 .wrapper { position: relative; min-height: 100vh; }
 .content-page {
+  --otc-content-l: calc(var(--otc-inset) + var(--otc-side-w) + var(--otc-side-gap));
   position: relative;
   min-height: 100vh;
-  padding: var(--otc-inset) var(--otc-gutter) 48px calc(var(--otc-inset) + var(--otc-side-w) + var(--otc-gutter));
-  max-width: 1840px;
-  margin: 0 auto;
+  padding: var(--otc-inset) var(--otc-gutter) 64px var(--otc-content-l);
   transition: padding-left var(--otc-dur-base) var(--otc-ease);
 }
 .content-page > .container-fluid,
@@ -772,7 +775,7 @@ html.otc-vt-nav::view-transition-new(root) { animation: none; }
   z-index: 30;
   top: var(--otc-inset);
   bottom: var(--otc-inset);
-  left: max(var(--otc-inset), calc((100vw - 1840px) / 2 + var(--otc-inset)));
+  left: var(--otc-inset);
   width: var(--otc-side-w);
   display: flex;
   flex-direction: column;
@@ -974,16 +977,16 @@ body:not(.otc-nav-unpinned) .otc-pin-btn { color: var(--otc-accent-ink) !importa
   pointer-events: none;
   transition: opacity var(--otc-dur-base) var(--otc-ease);
 }
-body.otc-nav-unpinned .sidenav-menu { translate: calc(-100% - 2 * var(--otc-inset)) 0; }
-body.otc-nav-unpinned .content-page { padding-left: var(--otc-gutter); }
+body.otc-nav-unpinned .sidenav-menu { translate: calc(-100% - var(--otc-inset) - 24px) 0; }
+body.otc-nav-unpinned .content-page { --otc-content-l: var(--otc-gutter); }
 body.otc-nav-unpinned.otc-nav-open .sidenav-menu { translate: 0 0; }
 body.otc-nav-open .otc-nav-backdrop { opacity: 1; pointer-events: auto; }
 .otc-menu-btn { display: none !important; }
 body.otc-nav-unpinned .otc-menu-btn { display: inline-grid !important; }
 
 @media (max-width: 1199.98px) {
-  .sidenav-menu { translate: calc(-100% - 2 * var(--otc-inset)) 0; }
-  .content-page { padding-left: var(--otc-gutter); }
+  .sidenav-menu { translate: calc(-100% - var(--otc-inset) - 24px) 0; }
+  .content-page { --otc-content-l: var(--otc-gutter); }
   body.otc-nav-open .sidenav-menu { translate: 0 0; }
   .otc-menu-btn { display: inline-grid !important; }
   .otc-pin-btn { display: none !important; }
@@ -994,7 +997,7 @@ body.otc-nav-unpinned .otc-menu-btn { display: inline-grid !important; }
   position: fixed;
   z-index: 40;
   top: var(--otc-inset);
-  right: max(var(--otc-gutter), calc((100vw - 1840px) / 2 + var(--otc-gutter)));
+  right: var(--otc-gutter);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1217,8 +1220,16 @@ body.otc-nav-unpinned .otc-menu-btn { display: inline-grid !important; }
 .otc-stat.is-flash { animation: otc-stat-ring 1s var(--otc-ease) both; }
 .otc-stat.is-flash .otc-stat__value { animation: otc-stat-flash 1s var(--otc-ease) both; }
 
+// o rodapé fica SEMPRE no pé da página: na tela curta, no fim da janela (o
+// `.content-page` tem 100vh no mínimo); na longa, depois do conteúdo — o
+// espaço dele é o `padding-bottom` da casca
 .footer {
-  margin-top: 32px;
+  position: absolute;
+  left: var(--otc-content-l);
+  right: var(--otc-gutter);
+  bottom: 18px;
+  margin: 0;
+  transition: left var(--otc-dur-base) var(--otc-ease);
   padding: 0;
   background: none;
   border: 0;
@@ -1229,7 +1240,7 @@ body.otc-nav-unpinned .otc-menu-btn { display: inline-grid !important; }
 // 5e. Ilha: os toasts do sino aparecem como a cápsula PRETA abaixo da barra
 #otc-toast-container {
   top: calc(var(--otc-inset) + 72px) !important;
-  right: max(var(--otc-gutter), calc((100vw - 1840px) / 2 + var(--otc-gutter))) !important;
+  right: var(--otc-gutter) !important;
   padding: 0 !important;
   z-index: 1095;
 }
@@ -1314,7 +1325,10 @@ body.otc-nav-unpinned .otc-menu-btn { display: inline-grid !important; }
   &.is-on::after { width: 12px; height: 7px; border-radius: 0; background: none; border: 2px solid #fff; border-top: 0; border-right: 0; rotate: -45deg; translate: 0 -2px; }
 }
 .otc-walls { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; }
-.otc-wall {
+// o botão de cada parede é `-swatch`: `.otc-wall` é a CAMADA do papel de parede
+// (§1, fixa em tela cheia), e com o mesmo nome os dez botões saíam da gaveta
+// e se empilhavam como uma faixa no meio da página
+.otc-wall-swatch {
   border: 0; background: transparent; padding: 0; text-align: center;
   color: var(--otc-text-2); font: 600 13px/1.3 var(--otc-font);
   .art {
@@ -3513,15 +3527,11 @@ $cc-total: '.otc-stat--total, [class*="-widget--total"], [class*="-stat--total"]
   *, *::before, *::after { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
 }
 :root.is-solid[data-bs-theme="dark"] { --otc-glass: #1c1c20; --otc-glass-chrome: #1c1c20; --otc-glass-thick: #222228; }
-@media (prefers-reduced-transparency: reduce) {
-  :root:not(.is-glass-forced) {
-    --otc-glass: var(--otc-solid);
-    --otc-glass-chrome: var(--otc-solid);
-    --otc-glass-thick: var(--otc-solid);
-    --otc-blur: none;
-    --otc-blur-thick: none;
-  }
-}
+// O "reduzir transparência" do SISTEMA (Windows sem "Efeitos de
+// transparência", comum nas máquinas do JPM) NÃO é regra de CSS aqui: é um
+// dos sinais do modo AUTOMÁTICO (head-css.html e o `decideSolid` do otc.js),
+// e vira a mesma `is-solid`. Como `@media` ele deixava tudo sólido com o
+// switch "Reduce transparency" DESLIGADO, sem nada que o desfizesse.
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 1ms !important;
