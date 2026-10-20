@@ -8,12 +8,7 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
 <link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet"/>
 <style>
-{# Só o que é DESTA tela (e da gêmea Accrual — mesmo bloco nas duas): o cabeçalho de seção, os contadores por LOB e o pulso quando a contagem muda, a dropzone do arquivo (vai pelo id: a classe `.acc-drop` cai na lista de MENUS do tema), a barra de data com os botões pílula, o cartão de cada LOB com a barra de ferramentas própria e as larguras fixas da tabela. Placas, tabela, squircle das ações, badges, campos e Export vêm do tema. #}
-/* ── Cabeçalho de seção ──────────────────────────────────────────────── */
-.acc-sec-label { font-size: .72rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--otc-accent-ink); margin-bottom: .25rem; }
-.acc-sec-title { font: 700 1.35rem/1.2 var(--otc-font-display); letter-spacing: -.015em; color: var(--otc-text); margin: 0; }
-.acc-sec-desc  { font-size: .86rem; color: var(--otc-text-2); margin: .25rem 0 0; max-width: 760px; }
-
+{# Só o que é DESTA tela (e da gêmea Accrual — mesmo bloco nas duas): os contadores por LOB e o pulso quando a contagem muda, a dropzone do arquivo (vai pelo id: a classe `.acc-drop` cai na lista de MENUS do tema), a barra de data com os botões pílula, o cartão de cada LOB com a barra de ferramentas própria e as larguras fixas da tabela. Placas, tabela, squircle das ações, badges, campos e Export vêm do tema. #}
 /* ── Contadores por LOB (a placa é do tema) ──────────────────────────── */
 .acc-stat { position: relative; display: flex; align-items: center; gap: .95rem; }
 .acc-stat__icon {
@@ -137,13 +132,22 @@ table.dt-acc tbody tr.acc-row-sel td { background: var(--otc-accent-soft) !impor
 {% endblock extra_css %}
 
 {% block page_content %}
-<div class="container-fluid py-3">
+<div class="container-fluid">
 
-    <!-- Header -->
-    <div class="mb-3">
-        <p class="acc-sec-label" data-lang="mtm-label">MtM</p>
-        <h1 class="acc-sec-title" data-lang="mtm-title">Swap Mark-to-Market by Line of Business</h1>
-        <p class="acc-sec-desc" data-lang="mtm-desc">Load the mark-to-market position for each book (COE, CEM, EDG, Hybrids and Commodities) from the regulatory MTM folder.</p>
+    {# Cabeçalho padrão (título grande, subtítulo, breadcrumb do menu); o
+       ladrilho de ícone vem sozinho do item do menu lateral. #}
+    <div class="page-title-head">
+        <div class="flex-grow-1">
+            <h4 data-lang="mtm-title">Swap MtM</h4>
+            <p class="otc-page-sub" data-lang="mtm-desc">Load the mark-to-market position for each book (COE, CEM, EDG, Hybrids and Commodities) from the regulatory MTM folder.</p>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="javascript: void(0);">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="javascript: void(0);" data-lang="regulatory-title">Regulatory</a></li>
+                <li class="breadcrumb-item active" data-lang="nav-mtm">MtM</li>
+            </ol>
+        </div>
     </div>
 
     <!-- Count widgets -->

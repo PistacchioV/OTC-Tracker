@@ -51,6 +51,7 @@ var PAGE_URL = {
     'Intrag Swap': '/intrag-swap',
     'Intrag Unwind': '/intrag-unwind',
     'Support': '/tickets-list',
+    'Projects': '/projects',
     'Other Products Summary': '/other-products-summary',
     'NDF Summary': '/ndf-summary',
     'Operations B3': '/operations-b3',

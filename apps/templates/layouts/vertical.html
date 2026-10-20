@@ -21,6 +21,41 @@
 
         {% block page_content %}{% endblock page_content %}
 
+        {# O ladrilho de ícone do título é o MESMO ícone da tela no menu
+           lateral (o item de submenu sem ícone herda o do grupo). Fica aqui,
+           síncrono logo depois do conteúdo, e não no otc.js: no rodapé o
+           título já teria sido pintado sem ele e pularia para a direita.
+           Tela que já desenha o próprio ícone (`-product-icon`, `<i class="ti">`
+           no h4) fica como está. #}
+        <script>
+        (function () {
+            var head = document.querySelector('.content-page .page-title-head');
+            if (!head || head.querySelector('[class*="-product-icon"], h4 > i.ti:first-child, h5 > i.ti:first-child')) return;
+            var h = head.querySelector('h4, h5');
+            var link = document.querySelector('.side-nav a.side-nav-link[href="' + location.pathname + '"]');
+            if (!h) return;
+            var glyph = null;
+            for (var li = link && link.closest('.side-nav-item'); li && !glyph; li = li.parentElement && li.parentElement.closest('.side-nav-item')) {
+                var a = li.querySelector(':scope > a.side-nav-link .menu-icon > :first-child');
+                if (a) glyph = a.cloneNode(true);
+            }
+            // fora do menu (o Profile): o ícone do item no menu do usuário
+            var alt = glyph ? null : document.querySelector('a.dropdown-item[href="' + location.pathname + '"] > i');
+            if (alt) glyph = alt.cloneNode(true);
+            if (!glyph) return;
+            var block = h;
+            while (block.parentElement && block.parentElement !== head) block = block.parentElement;
+            var row = document.createElement('div');
+            row.className = 'd-flex align-items-center gap-3 flex-grow-1';
+            var tile = document.createElement('div');
+            tile.className = 'otc-page-product-icon';
+            tile.appendChild(glyph);
+            head.insertBefore(row, block);
+            row.appendChild(tile);
+            row.appendChild(block);
+        })();
+        </script>
+
         {% include 'partials/footer.html' %}
 
     </div>

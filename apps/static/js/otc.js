@@ -284,12 +284,21 @@
   function labelOf(n) { return n.textEl ? n.textEl.textContent.trim() : (n.a ? n.a.textContent.trim() : ''); }
   function langOf(n) { return n.textEl ? n.textEl.getAttribute('data-lang') : null; }
   function curPath() { return (window.location.pathname || '/').replace(/\/+$/, '') || '/'; }
-  function findActive(nodes) {
-    var p = curPath();
+  function findActive(nodes, p) {
+    p = p || curPath();
     for (var i = 0; i < nodes.length; i++) {
       var n = nodes[i];
       if (n.kind === 'leaf' && n.href && n.href === p) return n;
-      if (n.kind === 'branch') { var f = findActive(n.children); if (f) return f; }
+      if (n.kind === 'branch') { var f = findActive(n.children, p); if (f) return f; }
+    }
+    // Subpágina fora do menu (`/projects/PRJ-0001`): acende o item-pai do
+    // caminho (`/projects`), subindo um segmento por vez.
+    if (p === curPath()) {
+      var up = p;
+      while ((up = up.replace(/\/[^\/]*$/, '')) && up !== '') {
+        var g = findActive(nodes, up);
+        if (g) return g;
+      }
     }
     return null;
   }
@@ -523,16 +532,17 @@
     }).catch(function () { fn(); });
   }
 
-  // ── Atalhos fixados (a seção "Pinned"), por usuário ──────────────────────
-  // Mesma chave e mesmo teto dos atalhos do topo antigo: o que cada pessoa
-  // escolheu continua escolhido.
-  var PIN_MAX = 10;
-  var PIN_DEFAULTS = ['/dashboard', '/live-position-ndf', '/pending-confirmation', '/reconciliation-payrec', '/reference-data'];
-  var PIN_HUES = ['var(--otc-blue)', 'var(--otc-purple)', 'var(--otc-green)', 'var(--otc-orange)', 'var(--otc-pink)', 'var(--otc-teal)', 'var(--otc-indigo)', 'var(--otc-yellow)'];
+  // ── Projetos fixados (a seção "Pinned"), por usuário ─────────────────────
+  // Só PROJETOS — a estrela do card e da página do projeto fixa aqui. As
+  // páginas fixadas saíram (pedido de 19/10/2026): o menu já as alcança, e a
+  // lista de páginas não ficava bem no desenho. Mora no navegador (chave por
+  // SID) com o nome e a cor de cada um, e a lista e a página do projeto a
+  // ATUALIZAM ao carregar (`otcPins.sync`): renomeado se corrige, apagado sai.
+  var PIN_COLORS = ['blue', 'purple', 'pink', 'orange', 'green', 'teal', 'indigo', 'yellow'];
   function pinKey() {
     var box = doc.querySelector('.otc-pinned[data-sid]');
     var sid = box ? (box.getAttribute('data-sid') || '').trim().toUpperCase() : '';
-    return 'otc_topnav_' + (sid || 'anon');
+    return 'otc_pinned_projects_' + (sid || 'anon');
   }
   function leaves() {
     var out = [];
@@ -547,93 +557,57 @@
     return out.filter(function (o) { if (seen[o.href]) return false; seen[o.href] = 1; return true; });
   }
   function isAllowed(h) { return !Nav.allowed || Nav.allowed[h] === 1; }
-  function pinLoad() {
-    try { var v = JSON.parse(localStorage.getItem(pinKey()) || 'null'); if (Array.isArray(v)) return v; } catch (e) {}
-    return PIN_DEFAULTS.slice();
+  function pinList() {
+    try {
+      var v = JSON.parse(localStorage.getItem(pinKey()) || '[]');
+      if (Array.isArray(v)) return v.filter(function (o) { return o && o.id; });
+    } catch (e) {}
+    return [];
   }
-  function pinDisplay(o) {
-    // rótulo genérico ("Main", "Summary", "NDF") precisa do grupo pai
-    var g = /^(main|summary|ndf|option|options|swap|overview|detail|list)$/i;
-    var parent = o.node.parent;
-    if (/^main$/i.test(o.label) && parent) return [{ text: labelOf(parent), lang: langOf(parent) }];
-    if (g.test(o.label) && parent) return [{ text: labelOf(parent), lang: langOf(parent) }, { text: o.label, lang: o.lang }];
-    return [{ text: o.label, lang: o.lang }];
+  function pinSave(list) {
+    try { localStorage.setItem(pinKey(), JSON.stringify(list)); } catch (e) {}
+    renderPinned();
+  }
+  function pinEntry(p) {
+    return { id: String(p.id), name: String(p.name || p.id), color: PIN_COLORS.indexOf(p.color) !== -1 ? p.color : 'blue' };
   }
   function renderPinned() {
     var box = doc.querySelector('.otc-pinned');
     if (!box) return;
-    var map = {};
-    leaves().forEach(function (o) { map[o.href] = o; });
-    var chosen = pinLoad().filter(function (h) { return map[h] && isAllowed(h); });
-    if (!chosen.length) chosen = PIN_DEFAULTS.filter(function (h) { return map[h] && isAllowed(h); });
+    var list = pinList();
+    var label = doc.querySelector('[data-otc-pinned-label]');
+    if (label) label.style.display = list.length ? '' : 'none';
+    box.style.display = list.length ? '' : 'none';
     var p = curPath();
-    box.innerHTML = chosen.map(function (h, i) {
-      var inner = pinDisplay(map[h]).map(function (d) {
-        return '<span' + (d.lang ? ' data-lang="' + esc(d.lang) + '"' : '') + '>' + esc(d.text) + '</span>';
-      }).join(' ');
-      return '<a href="' + esc(h) + '" style="--pin-hue:' + PIN_HUES[i % PIN_HUES.length] + '"' + (p === h ? ' class="is-active"' : '') + '>' + inner + '</a>';
+    box.innerHTML = list.map(function (o) {
+      var h = '/projects/' + encodeURIComponent(o.id);
+      var c = PIN_COLORS.indexOf(o.color) !== -1 ? o.color : 'blue';
+      return '<a href="' + esc(h) + '" style="--pin-hue:var(--otc-' + c + ')"' + (p === h ? ' class="is-active"' : '') + '><span>' + esc(o.name) + '</span></a>';
     }).join('');
   }
-  function openPinEditor() {
-    var current = pinLoad();
-    var groups = {};
-    var order = [];
-    leaves().forEach(function (o) {
-      if (!isAllowed(o.href)) return;
-      var g = o.trail[0] || labelOf(o.node);
-      if (!groups[g]) { groups[g] = []; order.push(g); }
-      groups[g].push(o);
-    });
-    var body = order.map(function (g) {
-      return '<div class="otc-set-group"><div class="otc-set-group__title">' + esc(g) + '</div>' +
-        groups[g].map(function (o) {
-          var lbl = o.trail.slice(1).concat([o.label]).join(' › ');
-          return '<label class="d-flex align-items-center gap-2 py-1" style="cursor:pointer">' +
-            '<input class="form-check-input m-0" type="checkbox" value="' + esc(o.href) + '"' + (current.indexOf(o.href) !== -1 ? ' checked' : '') + '>' +
-            '<span>' + esc(lbl) + '</span></label>';
-        }).join('') + '</div>';
-    }).join('');
-    var el = doc.createElement('div');
-    el.className = 'modal fade';
-    el.tabIndex = -1;
-    el.innerHTML =
-      '<div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content liquid-glass">' +
-      '<div class="modal-header py-2"><h5 class="modal-title fs-6" data-lang="vr-cfg-title">Customize menu</h5>' +
-      '<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>' +
-      '<div class="modal-body"><p class="text-muted fs-sm" data-lang="vr-cfg-hint">Choose which shortcuts appear at the top (max {max}).</p>' + body + '</div>' +
-      '<div class="modal-footer py-2"><button type="button" class="btn btn-sm btn-secondary me-auto" data-act="reset" data-lang="vr-cfg-reset">Default</button>' +
-      '<span class="text-muted fs-sm" data-count></span>' +
-      '<button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" data-lang="vr-cfg-cancel">Cancel</button>' +
-      '<button type="button" class="btn btn-sm btn-success" data-act="save" data-lang="vr-cfg-save">Save</button></div>' +
-      '</div></div>';
-    doc.body.appendChild(el);
-    var fixMax = function () { var h = el.querySelector('[data-lang="vr-cfg-hint"]'); if (h) h.textContent = h.textContent.replace(/\{max\}/g, PIN_MAX).replace(/\b\d+\b/, PIN_MAX); };
-    var sync = function () {
-      var n = el.querySelectorAll('input:checked').length;
-      $$('input[type=checkbox]', el).forEach(function (cb) { if (!cb.checked) cb.disabled = n >= PIN_MAX; });
-      el.querySelector('[data-count]').textContent = n + '/' + PIN_MAX;
-    };
-    el.addEventListener('change', sync);
-    el.querySelector('[data-act="reset"]').addEventListener('click', function () {
-      $$('input[type=checkbox]', el).forEach(function (cb) { cb.checked = PIN_DEFAULTS.indexOf(cb.value) !== -1; });
-      sync();
-    });
-    el.querySelector('[data-act="save"]').addEventListener('click', function () {
-      var chosen = leaves().map(function (o) { return o.href; }).filter(function (h) {
-        var cb = el.querySelector('input[value="' + h + '"]');
-        return cb && cb.checked;
+  window.otcPins = {
+    has: function (id) { return pinList().some(function (o) { return o.id === String(id); }); },
+    // fixa ou solta; devolve o estado NOVO (true = fixado)
+    toggle: function (p) {
+      var list = pinList(), id = String(p.id), i = -1;
+      list.forEach(function (o, k) { if (o.id === id) i = k; });
+      if (i !== -1) list.splice(i, 1); else list.push(pinEntry(p));
+      pinSave(list);
+      return i === -1;
+    },
+    // `projects` = os que a tela acabou de ler; `complete` = é a lista INTEIRA
+    // (a página Projects), e aí o fixado que não veio é projeto apagado.
+    sync: function (projects, complete) {
+      var by = {};
+      (projects || []).forEach(function (p) { by[String(p.id)] = p; });
+      var list = pinList(), out = [];
+      list.forEach(function (o) {
+        if (by[o.id]) out.push(pinEntry(by[o.id]));
+        else if (!complete) out.push(o);
       });
-      try { localStorage.setItem(pinKey(), JSON.stringify(chosen)); } catch (e) {}
-      renderPinned();
-      if (window.otcI18n) window.otcI18n.applyTranslations();
-      bootstrap.Modal.getInstance(el).hide();
-    });
-    el.addEventListener('hidden.bs.modal', function () { el.remove(); });
-    sync();
-    fixMax();
-    if (window.otcI18n) window.otcI18n.applyTranslations().then(fixMax);
-    new bootstrap.Modal(el).show();
-  }
+      if (JSON.stringify(out) !== JSON.stringify(list)) pinSave(out);
+    }
+  };
 
   // ── Gaveta: fixado (padrão) ou sobre o conteúdo ──────────────────────────
   var PIN_NAV_KEY = 'otc_nav_pinned';
@@ -645,6 +619,10 @@
     var unpinned = false;
     try { unpinned = localStorage.getItem(PIN_NAV_KEY) === '0'; } catch (e) {}
     body.classList.toggle('otc-nav-unpinned', unpinned);
+    var pinState = function () {
+      $$('[data-otc-pin]').forEach(function (b) { b.setAttribute('aria-pressed', body.classList.contains('otc-nav-unpinned') ? 'false' : 'true'); });
+    };
+    pinState();
     var close = function () { body.classList.remove('otc-nav-open'); };
     $$('[data-otc-menu]').forEach(function (b) { b.addEventListener('click', function () { body.classList.toggle('otc-nav-open'); }); });
     $$('[data-otc-pin]').forEach(function (b) {
@@ -652,6 +630,7 @@
         var now = !body.classList.contains('otc-nav-unpinned');
         body.classList.toggle('otc-nav-unpinned', now);
         body.classList.remove('otc-nav-open');
+        pinState();
         try { localStorage.setItem(PIN_NAV_KEY, now ? '0' : '1'); } catch (e) {}
       });
     });
@@ -666,7 +645,7 @@
   }
 
   // ==========================================================================
-  // 4. Paleta de comandos (⌘K / Ctrl+K)
+  // 4. Paleta de comandos (Ctrl+K; no Mac também ⌘K)
   // ==========================================================================
   var Pal = null;
   function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
@@ -676,7 +655,7 @@
     el.innerHTML =
       '<div class="otc-palette__scrim"></div>' +
       '<div class="otc-palette__box" role="dialog" aria-modal="true">' +
-        '<div class="otc-palette__bar"><i data-lucide="search"></i><input type="text" autocomplete="off" spellcheck="false"><kbd>esc</kbd></div>' +
+        '<div class="otc-palette__bar"><i data-lucide="search"></i><input type="text" autocomplete="off" spellcheck="false"><kbd>Esc</kbd></div>' +
         '<div class="otc-palette__list" role="listbox"></div>' +
       '</div>';
     doc.body.appendChild(el);
@@ -922,7 +901,7 @@
   // ==========================================================================
   // 9. Entrada da página: gotas em sequência, título letra a letra
   // ==========================================================================
-  var SURFACE_SEL = '.card, .tl-card, .cp-card, .otc-stat, div[class*="-widget"]:not([class*="__"]):not(.row), div[class*="-panel"]:not([class*="__"]):not(.row):not(.tab-pane), .page-title-head + .row > [class*="col"] > :not(.card):not(.row)';
+  var SURFACE_SEL = '.card, .tl-card, .cp-card, .otc-stat, .acc-stat, .ob-stat, div[class*="-widget"]:not([class*="__"]):not(.row), div[class*="-panel"]:not([class*="__"]):not(.row):not(.tab-pane), .page-title-head + .row > [class*="col"] > :not(.card):not(.row)';
   function initEntrance() {
     if (REDUCED_MOTION) return;
     var page = doc.querySelector('.content-page');
@@ -978,16 +957,20 @@
   }
 
   // ==========================================================================
-  // 9b. Ladrilhos de número (`.otc-stat`): o valor CONTA até o novo (do zero na
-  // primeira vez) e, quando muda, o ladrilho pisca no destaque por 1s — o
-  // "flash" do Pane. Vale para toda página: quem preenche só troca o texto do
-  // `.otc-stat__value`. O texto final é sempre o que a página escreveu (a
-  // formatação dela), a contagem só passa pelos inteiros no caminho.
+  // 9b. Cards de contagem: o valor CONTA até o novo (do zero na primeira vez)
+  // e, quando muda, o card pisca no destaque por 1s — o "flash" do Pane. Vale
+  // para o `.otc-stat` do KPI e para os cards de número de TODA tela (os
+  // `*-widget__value`, Accrual/MtM, Tracking Docs, recons — pedido de
+  // 19/10/2026): quem preenche só troca o texto. O texto final é sempre o que
+  // a página escreveu (a formatação dela), a contagem só passa pelos inteiros
+  // no caminho. Valor com casa decimal, moeda ou % não conta (só pisca).
   // ==========================================================================
+  var STAT_VALUES = '.otc-stat__value, .otc-legend__value[id], [class*="-widget__value"], .acc-stat__value, .ob-stat__n, .widget-val';
+  var STAT_TILES = '.otc-stat, div[class*="-widget"]:not([class*="__"]), .acc-stat, .ob-stat, .recon-widget';
   function statNumber(txt) {
-    return /^-?[\d.,\s]+$/.test(txt) ? parseFloat(txt.replace(/[^\d-]/g, '')) : NaN;
+    return /^-?\d{1,3}(,\d{3})*$|^-?\d+$/.test(txt) ? parseFloat(txt.replace(/[^\d-]/g, '')) : NaN;
   }
-  function animateStat(el) {
+  function animateStat(el, quiet) {
     var txt = (el.textContent || '').trim();
     if (txt === el.__otcFrame || txt === el.__otcText) return;   // escrita nossa
     var prev = el.__otcVal, to = statNumber(txt);
@@ -996,7 +979,9 @@
     var anim = (el.__otcAnim || 0) + 1;
     el.__otcAnim = anim;
     if (!isFinite(to)) return;                    // traço do placeholder, texto
-    var tile = el.closest('.otc-stat');
+    // A PRIMEIRA carga não pisca: o card que nasce com "0" e recebe o número
+    // do dia não "mudou" — só o que muda depois pisca.
+    var tile = quiet ? null : el.closest(STAT_TILES);
     if (tile && prev !== undefined && prev !== to) {
       tile.classList.remove('is-flash');
       void tile.offsetWidth;                      // reinicia a animação
@@ -1016,10 +1001,15 @@
     requestAnimationFrame(frame);
   }
   function initStats() {
-    $$('.otc-stat__value, .otc-legend__value[id]').forEach(function (el) {
-      new MutationObserver(function () { animateStat(el); })
-        .observe(el, { childList: true, characterData: true, subtree: true });
-      animateStat(el);
+    $$(STAT_VALUES).forEach(function (el) {
+      if (el.__otcStat) return;
+      el.__otcStat = true;
+      new MutationObserver(function () {
+        var first = !el.__otcSeen;
+        if (first && !(el.textContent || '').trim().match(/^[-–—\s]*$/)) el.__otcSeen = true;
+        animateStat(el, first);
+      }).observe(el, { childList: true, characterData: true, subtree: true });
+      animateStat(el, true);
     });
     doc.addEventListener('animationend', function (e) {
       if (e.animationName === 'otc-stat-ring') e.target.classList.remove('is-flash');
@@ -1254,7 +1244,6 @@
     initDrawer();
     initFullscreen();
     $$('[data-otc-palette]').forEach(function (b) { b.addEventListener('click', openPalette); });
-    $$('[data-otc-pin-edit]').forEach(function (b) { b.addEventListener('click', openPinEditor); });
 
     buildNav();
     renderPinned();

@@ -1,0 +1,262 @@
+/* project-detail.js — a página de UM projeto: contadores, visão geral (Lead,
+   status, linha do tempo, pessoas), marcos, atividade, burn-up e as tarefas por
+   status. Toda escrita devolve o projeto inteiro e a página se redesenha dele. */
+(function () {
+  'use strict';
+  var P = window.OtcPj;
+  var t = P.t, esc = P.esc;
+  var root = document.getElementById('pjd-page');
+  var PID = root.getAttribute('data-project');
+  var state = { p: null, canDelete: false, showDone: false, chart: null };
+
+  function $(id) { return document.getElementById(id); }
+  function url(extra) { return '/api/projects/' + encodeURIComponent(PID) + (extra || ''); }
+
+  function load() {
+    return P.api('GET', url()).then(function (d) {
+      P.setMeta(d);
+      state.canDelete = !!d.can_delete;
+      render(d.project);
+    }).catch(function (e) {
+      var box = $('pjd-load-error');
+      box.textContent = P.errText(e);
+      box.classList.remove('d-none');
+    });
+  }
+  function apply(d) { render(d.project); return d; }
+  function send(method, extra, body) { return P.api(method, url(extra), body).then(apply).catch(P.fail); }
+
+  // ── desenho ─────────────────────────────────────────────────────────────
+  function render(p) {
+    state.p = p;
+    var hue = P.colorVar(p.color);
+    root.style.setProperty('--hue', hue);
+    document.title = p.name + ' | OTC Tracker';
+    $('pjd-name').textContent = p.name;
+    $('pjd-crumb').textContent = p.name;
+    $('pjd-desc').textContent = p.description || '';
+    var icon = $('pjd-icon');
+    icon.style.setProperty('--hue', hue);
+    if (icon.getAttribute('data-icon') !== p.icon) {
+      icon.setAttribute('data-icon', p.icon);
+      icon.innerHTML = '<i data-lucide="' + esc(p.icon) + '"></i>';
+    }
+    if (window.otcPins) window.otcPins.sync([p], false);
+    renderPin();
+
+    $('pjd-n-progress').textContent = p.progress + '%';
+    $('pjd-n-open').textContent = p.open_tasks;
+    $('pjd-n-done').textContent = p.tasks_done;
+    var dl = p.days_left;
+    var late = dl !== null && dl < 0 && p.status !== 'Concluded';
+    $('pjd-days-label').textContent = late ? t('overdue') : t('days_left');
+    $('pjd-n-days').textContent = dl === null ? '—' : (late ? -dl : Math.max(dl, 0));
+    $('pjd-days-tile').style.setProperty('--hue', late ? 'var(--otc-danger)' : 'var(--otc-orange)');
+
+    $('pjd-lead').innerHTML = p.lead_sid ? P.avatar(p.lead_sid, p.lead_name, 'sm') + '<span>' + esc(p.lead_name || p.lead_sid) + '</span>' : '<span class="text-muted">—</span>';
+    $('pjd-status').innerHTML = P.chip(P.tStatus(p.status), P.STATUS_HUE[p.status] || 'var(--otc-text-3)');
+    renderTimeline(p);
+    renderPeople(p);
+    renderMilestones(p);
+    renderActivity(p);
+    renderTasks(p);
+    renderChart(p);
+    P.icons(root);
+  }
+
+  function renderPin() {
+    var on = window.otcPins && window.otcPins.has(PID);
+    var b = $('pjd-pin');
+    b.classList.toggle('is-pinned', !!on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    $('pjd-pin-label').textContent = on ? t('pinned') : t('pin_short');
+    var ic = b.querySelector('svg, i');
+    if (ic) { ic.style.color = on ? 'var(--otc-yellow)' : ''; ic.style.fill = on ? 'currentColor' : 'none'; }
+  }
+
+  // Linha do tempo: do início à data-alvo, com os marcos e o "Today".
+  function renderTimeline(p) {
+    $('pjd-start').textContent = P.fmtDate(p.start_date) || '—';
+    $('pjd-due').textContent = P.fmtDate(p.due_date) || '—';
+    var a = P.parse(p.start_date), b = P.parse(p.due_date), h = P.parse(P.isoToday());
+    var tl = $('pjd-timeline');
+    if (!a || !b || b <= a) { tl.innerHTML = ''; tl.style.display = 'none'; return; }
+    tl.style.display = '';
+    var span = b - a;
+    var pos = function (d) { return Math.max(0, Math.min(100, (d - a) / span * 100)); };
+    var html = '<div class="pjd-timeline__bar" style="width:' + pos(h) + '%"></div>';
+    (p.milestones || []).forEach(function (m) {
+      var d = P.parse(m.date);
+      if (!d) return;
+      html += '<span class="pjd-timeline__dot' + (m.done ? ' is-done' : '') + '" style="left:' + pos(d) + '%" title="' + esc(m.title) + '"></span>';
+    });
+    if (h >= a && h <= b) html += '<span class="pjd-timeline__today" style="left:' + pos(h) + '%"><span>' + esc(t('today')) + '</span></span>';
+    tl.innerHTML = html;
+  }
+
+  function renderPeople(p) {
+    var ppl = p.people || [];
+    $('pjd-people-n').textContent = ppl.length;
+    $('pjd-people').innerHTML = ppl.map(function (x) {
+      var sub = [x.is_lead ? t('lead') : '', x.position || '', x.open_tasks ? t('n_open', { n: x.open_tasks }) : '']
+        .filter(Boolean).join(' · ');
+      return '<div class="pjd-person">' + P.avatar(x.sid, x.name, 'lg') + '<div class="min-w-0"><b>' + esc(x.name) + '</b><small>' + esc(sub) + '</small></div></div>';
+    }).join('') || '<div class="text-muted">—</div>';
+  }
+
+  function renderMilestones(p) {
+    var ms = p.milestones || [];
+    var done = ms.filter(function (m) { return m.done; }).length;
+    $('pjd-ms-sub').textContent = ms.length ? t('ms_reached_n', { n: done, total: ms.length }) : t('no_ms');
+    $('pjd-ms').innerHTML = ms.map(function (m) {
+      var when = m.done ? (P.fmtShort(m.date) || '') + (m.date ? ' · ' : '') + t('ms_done')
+                        : (m.date ? P.fmtShort(m.date) + ' · ' + P.inDays(m.date) : t('no_date'));
+      var next = !m.done && m.id === p.next_milestone_id;
+      return '<li class="' + (m.done ? 'is-done' : '') + '" data-ms="' + esc(m.id) + '">' +
+        '<button type="button" class="pjd-ms__check" data-ms-toggle aria-pressed="' + (m.done ? 'true' : 'false') + '" title="' +
+          esc(m.done ? t('reopen') : t('complete')) + '"><i data-lucide="check"></i></button>' +
+        '<div class="pjd-ms__body"><div class="pjd-ms__title">' + esc(m.title) + '</div><div class="pjd-ms__date">' + esc(when) + '</div></div>' +
+        (next ? '<span class="otc-count">' + esc(t('next')) + '</span>' : '') +
+        '<button type="button" class="pjd-ms__del" data-ms-del aria-label="' + esc(t('del')) + '"><i data-lucide="x"></i></button>' +
+      '</li>';
+    }).join('');
+  }
+
+  function renderActivity(p) {
+    var acts = (p.activity || []).slice(0, 12);
+    $('pjd-activity').innerHTML = acts.map(function (a) {
+      return '<li>' + P.avatar(a.sid, a.name, 'sm') + '<div><p>' + P.activityText(a) + '</p><small>' + esc(P.ago(a.at)) + '</small></div></li>';
+    }).join('') || '<li class="text-muted">—</li>';
+  }
+
+  var ORDER = ['To do', 'In progress', 'In review', 'Done'];
+  function renderTasks(p) {
+    var tasks = p.tasks || [];
+    $('pjd-tasks-sub').textContent = t('open_done', { open: p.open_tasks, done: p.tasks_done });
+    if (!tasks.length) {
+      $('pjd-tasks').innerHTML = '<div class="pj-empty py-4"><i data-lucide="list-checks"></i><p class="mb-0">' + esc(t('no_tasks')) + '</p></div>';
+      return;
+    }
+    $('pjd-tasks').innerHTML = ORDER.map(function (st) {
+      var grp = tasks.filter(function (x) { return x.status === st; });
+      if (!grp.length) return '';
+      var isDone = st === 'Done';
+      var head = '<div class="pjd-tgroup__head"><span class="pj-dot" style="--hue:' + P.TASK_HUE[st] + '"></span>' + esc(P.tTask(st)) +
+        ' <span class="otc-count">' + grp.length + '</span>' +
+        (isDone ? '<a href="#" class="ms-auto small" data-toggle-done>' + esc(state.showDone ? t('hide') : t('show')) + '</a>' : '') + '</div>';
+      if (isDone && !state.showDone) return '<div class="pjd-tgroup">' + head + '</div>';
+      return '<div class="pjd-tgroup">' + head + '<div class="pjd-tlist">' + grp.map(taskRow).join('') + '</div></div>';
+    }).join('');
+  }
+  function taskRow(x) {
+    var d = P.due(x.due, x.status === 'Done');
+    return '<button type="button" class="pjd-trow' + (x.status === 'Done' ? ' is-done' : '') + '" data-task="' + esc(x.id) + '">' +
+      '<span class="pjd-trow__title">' + esc(x.title) + '</span>' +
+      P.prioBadge(x.priority) +
+      (d ? '<span class="pj-meta ' + d.cls + '">' + esc(d.text) + '</span>' : '') +
+      (x.assignee_sid ? P.avatar(x.assignee_sid, x.assignee_name, 'sm') : '') +
+    '</button>';
+  }
+
+  // Burn-up: as duas séries do servidor; as cores saem dos tokens na hora (o
+  // tema escuro troca o --otc-text-2).
+  function renderChart(p) {
+    var cv = $('pjd-burnup');
+    if (!window.Chart || !cv) return;
+    var cs = getComputedStyle(document.documentElement);
+    var hue = cs.getPropertyValue('--otc-' + (p.color || 'blue')).trim() || '#2f7cf6';
+    var txt = cs.getPropertyValue('--otc-text-2').trim() || '#666';
+    var sep = cs.getPropertyValue('--otc-sep').trim() || 'rgba(0,0,0,.1)';
+    var b = p.burnup || { labels: [], done: [], total: [] };
+    var labels = b.labels.map(P.fmtShort);
+    if (state.chart) { state.chart.destroy(); state.chart = null; }
+    state.chart = new Chart(cv, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: t('done'), data: b.done, borderColor: hue, backgroundColor: hue + '33', fill: true, tension: .35, pointRadius: 0, borderWidth: 2.5 },
+          { label: t('total'), data: b.total, borderColor: txt, borderDash: [5, 5], fill: false, tension: .35, pointRadius: 0, borderWidth: 1.5 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: { duration: 600 },
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'top', align: 'start', labels: { color: txt, boxWidth: 14, boxHeight: 2, usePointStyle: false } } },
+        scales: {
+          x: { ticks: { color: txt, maxTicksLimit: 7, maxRotation: 0 }, grid: { display: false } },
+          y: { beginAtZero: true, ticks: { color: txt, precision: 0 }, grid: { color: sep } }
+        }
+      }
+    });
+  }
+
+  // ── ações ───────────────────────────────────────────────────────────────
+  function openTask(id) {
+    var x = (state.p.tasks || []).filter(function (k) { return k.id === id; })[0];
+    if (!x) return;
+    P.openTaskDrawer({ task: x, project: { id: state.p.id, name: state.p.name, color: state.p.color }, onChange: render });
+  }
+
+  function wire() {
+    $('pjd-edit').addEventListener('click', function () {
+      P.openProjectModal({
+        mode: 'edit', project: state.p, canDelete: state.canDelete,
+        onSaved: function (d) { render(d.project); P.toast(t('saved')); },
+        onDeleted: function () {
+          if (window.otcPins && window.otcPins.has(PID)) window.otcPins.toggle({ id: PID });
+          window.location.href = '/projects';
+        }
+      });
+    });
+    $('pjd-pin').addEventListener('click', function () {
+      if (window.otcPins && state.p) { window.otcPins.toggle(state.p); renderPin(); }
+    });
+    $('pjd-add-task').addEventListener('click', function () {
+      P.openTaskModal({ projects: [state.p], projectId: PID, fixedProject: true, onSaved: render });
+    });
+    $('pjd-tasks').addEventListener('click', function (e) {
+      if (e.target.closest('[data-toggle-done]')) { e.preventDefault(); state.showDone = !state.showDone; renderTasks(state.p); P.icons(root); return; }
+      var r = e.target.closest('[data-task]');
+      if (r) openTask(r.getAttribute('data-task'));
+    });
+    $('pjd-ms').addEventListener('click', function (e) {
+      var li = e.target.closest('[data-ms]');
+      if (!li) return;
+      var id = li.getAttribute('data-ms');
+      var m = (state.p.milestones || []).filter(function (k) { return k.id === id; })[0];
+      if (!m) return;
+      if (e.target.closest('[data-ms-toggle]')) {
+        var novo = !m.done;
+        send('PATCH', '/milestones/' + encodeURIComponent(id), { done: novo }).then(function (d) {
+          if (d && novo) P.toast(t('ms_reached', { m: m.title }), function () {
+            send('PATCH', '/milestones/' + encodeURIComponent(id), { done: false });
+          });
+        });
+      } else if (e.target.closest('[data-ms-del]')) {
+        send('DELETE', '/milestones/' + encodeURIComponent(id));
+      }
+    });
+    var msTitle = $('pjd-ms-title'), msDate = $('pjd-ms-date');
+    if (window.otcDateField) window.otcDateField(msDate);
+    var addMs = function () {
+      if (!msTitle.value.trim()) { msTitle.focus(); return; }
+      var v = String(msDate.value || '').trim();
+      var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v);
+      send('POST', '/milestones', { title: msTitle.value, date: m ? m[3] + '-' + m[2] + '-' + m[1] : v }).then(function (d) {
+        if (!d) return;
+        msTitle.value = '';
+        msDate.value = '';
+        if (msDate._flatpickr) msDate._flatpickr.clear(false);
+      });
+    };
+    $('pjd-ms-add').addEventListener('click', addMs);
+    msTitle.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addMs(); } });
+    // o tema escuro/claro troca as cores do gráfico
+    new MutationObserver(function () { if (state.p) renderChart(state.p); })
+      .observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme', 'data-accent'] });
+  }
+
+  wire();
+  load();
+})();

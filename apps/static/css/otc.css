@@ -14102,6 +14102,16 @@ html.otc-theme-switching *::after {
   gap: 2px;
 }
 
+.otc-pin-btn {
+  border-radius: 10px;
+  transition: background-color var(--otc-dur-fast) var(--otc-ease), color var(--otc-dur-fast) var(--otc-ease);
+}
+
+body:not(.otc-nav-unpinned) .otc-pin-btn {
+  color: var(--otc-accent-ink) !important;
+  background: var(--otc-accent-soft) !important;
+}
+
 .otc-side__scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -19301,6 +19311,10 @@ table.dataTable.dtr-inline.collapsed > tbody > tr > td.dtr-control::before {
   scale: 0.9;
 }
 
+.swal2-icon.swal2-success :is([class^=swal2-success-circular-line], .swal2-success-fix) {
+  background: transparent !important;
+}
+
 .swal2-timer-progress-bar {
   background: var(--otc-accent-ink) !important;
 }
@@ -20554,24 +20568,53 @@ html .fc .fc-list-empty {
   color: var(--otc-text);
 }
 
-.content-page [class*=-widget--total] {
-  background: linear-gradient(135deg, var(--otc-accent) 0%, var(--otc-indigo) 100%) !important;
+.content-page :is(.otc-stat--total, [class*=-widget--total], [class*=-stat--total], .ops-recon--total, .widget-total, .fxo-w-total) {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--otc-accent) 74%, #050816) 0%, color-mix(in srgb, var(--otc-indigo) 58%, #050816) 100%) !important;
+  border-left-color: color-mix(in srgb, var(--otc-indigo) 55%, #fff) !important;
   color: #fff;
 }
-.content-page [class*=-widget--total] :is([class*=__title], [class*=__value], [class*=__label], [class*=sub-val]) {
+.content-page :is(.otc-stat--total, [class*=-widget--total], [class*=-stat--total], .ops-recon--total, .widget-total, .fxo-w-total) :is([class*=__title], [class*=__value], [class*=__label], [class*=__n], [class*=__l], [class*=sub-val],
+.widget-lbl, .widget-val, .ops-recon-side, .ops-num, [data-recon-b3c], [data-recon-intc]) {
   color: #fff !important;
 }
-.content-page [class*=-widget--total] [class*=__icon] {
+.content-page :is(.otc-stat--total, [class*=-widget--total], [class*=-stat--total], .ops-recon--total, .widget-total, .fxo-w-total) :is([class*=__icon], [class*=__ico], .widget-icon) {
   background: rgba(255, 255, 255, 0.18) !important;
   color: #fff !important;
+  box-shadow: none !important;
 }
-.content-page [class*=-widget--total] [class*=__sub]:not([class*=__subs]) {
-  color: rgba(255, 255, 255, 0.85) !important;
+.content-page :is(.otc-stat--total, [class*=-widget--total], [class*=-stat--total], .ops-recon--total, .widget-total, .fxo-w-total) :is([class*=__sub]:not([class*=__subs]), .ops-recon-hdr) {
+  color: rgba(255, 255, 255, 0.8) !important;
 }
-.content-page [class*=-widget--total] [class*=__subs] {
+.content-page :is(.otc-stat--total, [class*=-widget--total], [class*=-stat--total], .ops-recon--total, .widget-total, .fxo-w-total) [class*=__subs] {
   border-top-color: rgba(255, 255, 255, 0.25) !important;
 }
+@media (hover: hover) and (pointer: fine) {
+  .content-page :is(.otc-stat--total, [class*=-widget--total], [class*=-stat--total], .ops-recon--total, .widget-total, .fxo-w-total):hover .otc-stat__value {
+    color: #fff !important;
+  }
+}
 
+.content-page :is(div[class*=-widget]:not([class*=__]):has([class*=-widget__value]), .acc-stat, .ob-stat, .recon-widget, .fxo-widget) {
+  transition: translate 320ms var(--otc-ease-out), box-shadow 320ms var(--otc-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .content-page :is(div[class*=-widget]:not([class*=__]):has([class*=-widget__value]), .acc-stat, .ob-stat, .recon-widget, .fxo-widget):hover {
+    translate: 0 -3px;
+    box-shadow: var(--otc-depth), 0 16px 30px -16px var(--hue, var(--otc-accent-ink));
+  }
+}
+.content-page :is(div[class*=-widget]:not([class*=__]):has([class*=-widget__value]), .acc-stat, .ob-stat, .recon-widget, .fxo-widget).is-flash {
+  animation: otc-stat-ring 1s var(--otc-ease) both;
+}
+.content-page :is(div[class*=-widget]:not([class*=__]):has([class*=-widget__value]), .acc-stat, .ob-stat, .recon-widget, .fxo-widget).is-flash :is([class*=__value], [class*=__n], .widget-val) {
+  animation: otc-stat-flash 1s var(--otc-ease) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content-page :is(div[class*=-widget], .acc-stat, .ob-stat, .recon-widget, .fxo-widget):hover {
+    translate: none;
+  }
+}
 .widget-lbl {
   font: 560 12.5px/1.4 var(--otc-font);
   color: var(--otc-text-2);
