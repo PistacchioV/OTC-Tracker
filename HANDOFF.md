@@ -26931,3 +26931,37 @@ Sent, o avião na ponta do preenchimento, o Sent aparecendo; seção nova com os
 três ícones que giram a 1,2 s. Conferido em tira de quadros (pílula e quadrado,
 claro e escuro) e, nas telas reais, o Run do Control Panel e o refresh da
 Intraday Monitor a 1,2 s.
+
+## §645 — Save CETIP Files: o sistema com hífen no envelope da Return (2026-10-20)
+
+**"Alguns arquivos que têm um padrão levemente diferente, mas que são da
+reference date em questão, não foram movidos para a pasta source."** A captura
+da Return mostrava, da data 261019, os de depositário e de cadastro ainda lá
+depois do Save:
+
+    73760_CETIP21-DEP_261019_SP_AFREGISTRADO_73760009_DCONCILIACAO_AF_REGISTRADO….zip.S10563992
+    73760_CETIP21-SAP_261019_SP_DDADOS_CADASTRAIS.txt.zip.S10563981
+    73760_CETIP21-SAP_261019_SP_ATUALIZACAO-CADASTRAL.txt.zip.S10560821
+
+**Causa.** O `_CETIP_ENVELOPE` (§643) aceitava no SISTEMA só letra e dígito
+(`[A-Za-z0-9]+`), e esses chegam com HÍFEN (`CETIP21-DEP`, `CETIP21-SAP`). O
+nome não era lido como envelope, e quem traz da Return
+(`_cetip_trazer_do_retorno`) só pega o que é envelope do 73760 e da data: os
+arquivos ficavam na Return sem erro nenhum, nem na contagem dos "não pedidos".
+A captura do §643 só tinha `73760_CETIP_…`, e o hífen não apareceu ali.
+
+**Correção.** O sistema aceita partes separadas por hífen
+(`[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*`). O nome antigo deles fica
+`CETIP21-DEP_261019_AFREGISTRADO_…`, então uma linha do `cetip-files` com esse
+SOURCE (`CETIP21-SAP_YYMMDD_DDADOS_CADASTRAIS`) casa. Hoje o cadastro não pede
+nenhum deles: vão para a pasta de origem do dia, saem da Return e entram na
+contagem dos que não estão no cadastro. Para que algum vá também ao destino, a
+mesa cadastra a linha no /mapping.
+
+**Na instância.** Depois do pull + restart, rodar de novo o Save de 19/10 traz
+os que ficaram na Return. O Save também manda o e-mail do OTC de novo.
+
+**Guarda.** `check_cetip_return.py`: os sete nomes da captura como envelope (o
+`CETIP21-DEP` desmontado, o nome antigo do `CETIP21-SAP`, uma linha de cadastro
+com hífen casando), e na rodada um DEP e um SAP da data saindo da Return para a
+origem, contados como não pedidos.

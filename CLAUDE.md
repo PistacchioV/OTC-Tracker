@@ -2812,7 +2812,9 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 ### Save CETIP Files
 
 - **Os crus chegam na Return do Batch Conecta, compactados e num ENVELOPE**
-  (20/10/2026, §643): `73760_CETIP_261019_SP_<arquivo>[.txt].zip.S<seq>`. A
+  (20/10/2026, §643): `73760_CETIP_261019_SP_<arquivo>[.txt].zip.S<seq>`. O
+  SISTEMA pode ter HÍFEN (`CETIP21-DEP`, `CETIP21-SAP`, §645) — sem ele no
+  `_CETIP_ENVELOPE`, esses arquivos nem eram vistos e ficavam na Return. A
   rotina compara pelo nome ANTIGO (`domain._cetip_nome_legado`: sem o
   participante, o `_SP`, o `.zip` e a sequência), então o cadastro
   `cetip-files` vale como está e o SOURCE aceita as duas grafias. Ela TRAZ os
