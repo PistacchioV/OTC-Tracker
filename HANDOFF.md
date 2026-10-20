@@ -26324,3 +26324,83 @@ do Pane (menu fixo, a pílula da barra, o login sem sessão, a página do
 projeto e a gaveta da tarefa).
 
 **Guardas.** `check_user_home.py` (novo) e os de sempre verdes.
+
+## §633 — Varredura da atualização do Pane; Projects vira Initiatives, com categoria (2026-10-20)
+
+**A varredura.** As 191 baterias de teste, rodadas antes e depois: as sete
+que falham (`check_b3_pattern`, `check_export_advanced`,
+`check_lp_counterparty_name`, `check_mt300`, `check_ndf_advice`,
+`check_req_cache`, `check_swap_advice`) falham IGUAL no código de antes da
+atualização (`510a7c4f`, lendo os mesmos dados) — são de dado local e de
+dívida antiga, nenhuma é regressão; no `check_swap_advice` a atualização até
+consertou duas. As 99 telas do menu abertas no claro/inglês e no
+escuro/português: nenhum erro de JS, nenhuma rolagem horizontal, nenhuma placa
+branca nem texto escuro sobre fundo escuro no escuro. Os 404 que aparecem são
+antigos (a foto `<sid>.jpg` da barra, que cai nas iniciais; o
+`dataTables.bootstrap5.min.css` que nunca esteve no repositório; os cinco
+links do Regulatory sem página; calendários do Holidays sem arquivo local).
+Os fluxos novos usados de verdade no Chrome: o arrasto do Tasks com a pílula e
+o Undo, o do Intraday Monitor, a Settings gravando e voltando, o Sync e a ilha
+de foco, a navegação por clique e as seis telas a 390 px. O Chromium do
+Playwright não dispara o `dragstart` do arrasto NATIVO (Intraday Monitor,
+Confirmations Monitor) — teste com `channel='chrome'`, como o `pagereveal`.
+
+**O que estava quebrado** (achado lendo o código, conferido um a um):
+
+- **O arrasto confiava na coluna que a TELA mandava.** Confirmations Monitor
+  e Intraday Monitor conferiam a permissão contra o `from` do request e
+  gravavam sobre o estado REAL. O Monitor não se atualiza sozinho: um card
+  velho em Legal de uma confirmação já Ok, arrastado para OTC, passava na
+  conferência e REABRIA a confirmação (limpando OTC, MO, FO e o envio); um MO
+  com o card em MO de uma linha que voltou a Pending OTC assinava o OTC.
+  Agora toda linha do card tem de estar onde a tela diz — 409 `stale_card`,
+  nada gravado (para o admin também no Confirmations Monitor: reabrir um Ok
+  por engano é destrutivo). No Intraday Monitor a mesa é conferida contra o
+  estado calculado (`_intraday_snapshot`).
+- **O Undo da pílula do Intraday Monitor nunca funcionava para a mesa**: ele
+  manda `to='auto'`, que era só do admin — a mesa via "sua mesa só move um
+  passo à frente". Agora quem fez o ajuste o desfaz (o `↺ auto` aparece para
+  ele também); o de outra pessoa continua sendo do admin. As quatro frases do
+  arrasto (`im-move-*`, `im-manual`, `im-auto-tip`) não tinham o `<span>`
+  escondido de onde o `t()` desta tela lê, e saíam sempre em inglês; e um 503
+  que não vem como JSON deixava a promessa rejeitada calada.
+- **O Sync podia gravar a agenda de OUTRA pessoa.** Quando a caixa do e-mail
+  cadastrado não abria, o código caía no calendário padrão do perfil do
+  Outlook da máquina — e o link do e-mail aponta para a máquina de quem o
+  mandou. Agora só vale se o perfil é de quem clicou (endereço inteiro ou a
+  parte antes do `@`, por causa de `jpmorgan.com` × `jpmchase.com`); fora
+  disso, `calendar_not_accessible`.
+- **O CSV das minhas tarefas abria título como fórmula** (`=HYPERLINK(...)`
+  de uma tarefa criada por outra pessoa) e a coluna de subtarefas `1/3` virava
+  3 de janeiro no Excel.
+- **O "vence hoje" das 08:00 se perdia no dia** em que a leitura dos projetos
+  falhava: o dia era reservado antes e nunca devolvido.
+- **O arrasto do Tasks ficava preso** sem `pointerup` (Alt+Tab, o lembrete do
+  Outlook): o clone seguia o mouse e o próximo clique soltava a tarefa numa
+  coluna qualquer.
+- **A ilha de foco encerrava duas vezes**: o `adopt` da User Home apagava a
+  marca do encerramento em voo, e um `end` que falhou (share ocupado) deixava
+  no servidor um foco vencido que voltava a virar ilha — segunda pílula,
+  segunda notificação, segunda pausa. Duas abas no mesmo segundo também
+  encerravam as duas (agora o Web Locks escolhe uma). O "drift" do relógio que
+  a revisão apontou não acumula (cada adopt substitui o fim).
+- **A trava do armazém da User Home era uma só** para todo mundo, presa
+  durante a gravação.
+- **A tela de Lock ficava em inglês**: com a sessão travada, o
+  `/static/data/translations/...` (o `static_data_file`) também voltava para o
+  lock, e o I18nManager lia HTML como JSON. Já era assim antes do Pane. Só as
+  traduções passam; RefData e cadastros seguem fechados (`check_screen_lock.py`,
+  novo).
+
+**Initiatives** (mesa, 20/10/2026). O Projects passa a se chamar Initiatives
+NA TELA — menu, título, "New initiative", "Initiatives Pinned", modal, gaveta,
+Tasks, User Home, Settings, o Calendar do Holidays e o sino. Rota, API, ids e
+código seguem `projects`: o `Page_Access` grava a URL. A iniciativa ganhou
+CATEGORIA, lista fechada — Process Review, Tech Issue, Projects, B3 -
+Improvements, Stomp/Red —, obrigatória ao criar, com chip no cartão e na
+página, e a lista filtra por ela (os contadores do topo acompanham). As cinco
+iniciativas fictícias da dev ganharam categoria pela API.
+
+**Guardas.** `check_screen_lock.py` (novo); `check_mc_move.py` §6,
+`check_intraday_monitor.py` §4h, `check_user_home.py` §4b/§7b/§8/§8c e
+`check_projects.py` (categoria e os nomes novos do sino) acrescentados.

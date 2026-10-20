@@ -8,7 +8,10 @@ concluídas) e as preferências da Settings.
      "focus": {"running": {...} | null, "sessions": [...]},
      "settings": {...}}
 
-Ler → alterar → gravar dentro de `_lock`, como o store do Projects. Ausente é
+Ler → alterar → gravar dentro da trava do SID (`_lock_of`): o documento é de
+uma pessoa só, e uma trava única fazia a gravação de um (segundos no share)
+segurar a Home de todo mundo — inclusive a presença dos colegas e o
+`_user_wants` do sino, que leem o documento dos outros. Ausente é
 o documento vazio; ocupado/ilegível SOBE (lido como vazio, o `mutate`
 gravaria só a mudança nova por cima do resto, §436).
 """
@@ -16,7 +19,17 @@ import os
 import re
 import threading
 
-_lock = threading.RLock()
+_locks = {}
+_locks_guard = threading.Lock()
+
+
+def _lock_of(sid):
+    sid = str(sid or '').strip().upper()
+    with _locks_guard:
+        lk = _locks.get(sid)
+        if lk is None:
+            lk = _locks[sid] = threading.RLock()
+        return lk
 
 # O teste aponta para um tmp trocando este atributo; None = resolver na CHAMADA
 # (o import não toca no `DATA_DIR`, §522).
@@ -70,7 +83,7 @@ def _read(sid):
 
 
 def load(sid):
-    with _lock:
+    with _lock_of(sid):
         return _read(sid)
 
 
@@ -95,7 +108,7 @@ def load_many(sids):
 
 def mutate(sid, fn):
     from apps.pages import data_store
-    with _lock:
+    with _lock_of(sid):
         data = _read(sid)
         result = fn(data)
         data_store.write(path(sid), data)

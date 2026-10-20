@@ -24,15 +24,15 @@
       rings_tasks: 'Tasks', rings_focus: 'Focus', rings_meet: 'Meetings',
       no_sync: 'Sync your Outlook calendar to see your meetings here.', no_more: 'No more meetings today.',
       synced: 'Outlook · synced {when}', never: 'Outlook · not synced yet', sync: 'Sync',
-      sync_ok: 'Calendar synced: {n} events', sync_fail: 'Sync failed', outlook_unavailable: 'The Sync needs Outlook on this machine (Windows).',
+      sync_ok: 'Calendar synced: {n} events', sync_fail: 'Sync failed', outlook_unavailable: 'The Sync needs Outlook on this machine (Windows).', calendar_not_accessible: 'The Outlook on this machine belongs to someone else, and your calendar did not open through it. Sync from your own OTC Tracker.',
       ready: 'Ready', focusing: 'Focusing', paused: 'Paused', on_break: 'Break',
       just_focus: 'No task — just focus', start: 'Start focus', pause: 'Pause', resume: 'Resume', end: 'End',
       focused: '{h} · {n} sessions', focused1: '{h} · 1 session',
-      no_tasks: 'Nothing due today. Nice.', no_access: 'Tasks and projects appear here for whoever has Projects or Tasks.',
+      no_tasks: 'Nothing due today. Nice.', no_access: 'Tasks and initiatives appear here for whoever has Initiatives or Tasks.',
       done_lbl: 'Done', reopened: 'Reopened',
       finished: 'finished so far', vs_last: 'vs last week',
-      no_projects: 'You are not in any project yet.', due: 'due {d}', no_due: 'no target date',
-      no_team: 'Nobody shares a project with you yet.', no_act: 'No activity yet.',
+      no_projects: 'You are not in any initiative yet.', due: 'due {d}', no_due: 'no target date',
+      no_team: 'Nobody shares an initiative with you yet.', no_act: 'No activity yet.',
       in_focus: 'In focus · until {t}', in_meeting: 'In a meeting · until {t}', available: 'Available',
       e_title: 'Something went wrong'
     },
@@ -43,15 +43,15 @@
       rings_tasks: 'Tarefas', rings_focus: 'Foco', rings_meet: 'Reuniões',
       no_sync: 'Sincronize o calendário do Outlook para ver suas reuniões aqui.', no_more: 'Sem mais reuniões hoje.',
       synced: 'Outlook · sincronizado {when}', never: 'Outlook · ainda não sincronizado', sync: 'Sincronizar',
-      sync_ok: 'Calendário sincronizado: {n} eventos', sync_fail: 'Falha ao sincronizar', outlook_unavailable: 'O Sync precisa do Outlook desta máquina (Windows).',
+      sync_ok: 'Calendário sincronizado: {n} eventos', sync_fail: 'Falha ao sincronizar', outlook_unavailable: 'O Sync precisa do Outlook desta máquina (Windows).', calendar_not_accessible: 'O Outlook desta máquina é de outra pessoa, e o seu calendário não abriu por ele. Sincronize pelo seu próprio OTC Tracker.',
       ready: 'Pronto', focusing: 'Focando', paused: 'Pausado', on_break: 'Pausa',
       just_focus: 'Sem tarefa — só foco', start: 'Iniciar foco', pause: 'Pausar', resume: 'Retomar', end: 'Encerrar',
       focused: '{h} · {n} sessões', focused1: '{h} · 1 sessão',
-      no_tasks: 'Nada vence hoje. Ótimo.', no_access: 'Tarefas e projetos aparecem aqui para quem tem o Projects ou o Tasks.',
+      no_tasks: 'Nada vence hoje. Ótimo.', no_access: 'Tarefas e iniciativas aparecem aqui para quem tem o Initiatives ou o Tasks.',
       done_lbl: 'Concluída', reopened: 'Reaberta',
       finished: 'concluídas até agora', vs_last: 'vs semana passada',
-      no_projects: 'Você ainda não está em nenhum projeto.', due: 'prazo {d}', no_due: 'sem data-alvo',
-      no_team: 'Ninguém divide um projeto com você ainda.', no_act: 'Nenhuma atividade ainda.',
+      no_projects: 'Você ainda não está em nenhuma iniciativa.', due: 'prazo {d}', no_due: 'sem data-alvo',
+      no_team: 'Ninguém divide uma iniciativa com você ainda.', no_act: 'Nenhuma atividade ainda.',
       in_focus: 'Em foco · até {t}', in_meeting: 'Em reunião · até {t}', available: 'Disponível',
       e_title: 'Algo deu errado'
     },
@@ -62,15 +62,15 @@
       rings_tasks: 'Tareas', rings_focus: 'Foco', rings_meet: 'Reuniones',
       no_sync: 'Sincronice el calendario de Outlook para ver sus reuniones aquí.', no_more: 'No hay más reuniones hoy.',
       synced: 'Outlook · sincronizado {when}', never: 'Outlook · aún no sincronizado', sync: 'Sincronizar',
-      sync_ok: 'Calendario sincronizado: {n} eventos', sync_fail: 'Error al sincronizar', outlook_unavailable: 'El Sync necesita Outlook en esta máquina (Windows).',
+      sync_ok: 'Calendario sincronizado: {n} eventos', sync_fail: 'Error al sincronizar', outlook_unavailable: 'El Sync necesita Outlook en esta máquina (Windows).', calendar_not_accessible: 'El Outlook de esta máquina es de otra persona, y su calendario no se abrió por él. Sincronice desde su propio OTC Tracker.',
       ready: 'Listo', focusing: 'Enfocado', paused: 'En pausa', on_break: 'Pausa',
       just_focus: 'Sin tarea — solo foco', start: 'Iniciar foco', pause: 'Pausar', resume: 'Reanudar', end: 'Terminar',
       focused: '{h} · {n} sesiones', focused1: '{h} · 1 sesión',
-      no_tasks: 'Nada vence hoy. Bien.', no_access: 'Tareas y proyectos aparecen aquí para quien tiene Projects o Tasks.',
+      no_tasks: 'Nada vence hoy. Bien.', no_access: 'Tareas e iniciativas aparecen aquí para quien tiene Initiatives o Tasks.',
       done_lbl: 'Hecha', reopened: 'Reabierta',
       finished: 'terminadas hasta ahora', vs_last: 'vs semana pasada',
-      no_projects: 'Aún no está en ningún proyecto.', due: 'vence {d}', no_due: 'sin fecha objetivo',
-      no_team: 'Nadie comparte un proyecto con usted todavía.', no_act: 'Sin actividad todavía.',
+      no_projects: 'Aún no está en ninguna iniciativa.', due: 'vence {d}', no_due: 'sin fecha objetivo',
+      no_team: 'Nadie comparte una iniciativa con usted todavía.', no_act: 'Sin actividad todavía.',
       in_focus: 'En foco · hasta {t}', in_meeting: 'En reunión · hasta {t}', available: 'Disponible',
       e_title: 'Algo salió mal'
     }
@@ -383,7 +383,7 @@
       if (window.otcToast) window.otcToast(t('sync_ok', { n: d.events }));
       return load();
     }).catch(function (e) {
-      if (window.Swal) Swal.fire({ icon: 'warning', title: t('sync_fail'), text: e.code === 'outlook_unavailable' ? t('outlook_unavailable') : P.errText(e) });
+      if (window.Swal) Swal.fire({ icon: 'warning', title: t('sync_fail'), text: (e.code === 'outlook_unavailable' || e.code === 'calendar_not_accessible') ? t(e.code) : P.errText(e) });
     }).then(function () { b.disabled = false; b.classList.remove('is-busy'); });
   }
 

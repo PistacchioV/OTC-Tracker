@@ -122,7 +122,8 @@ def api_intraday_monitor():
         snap['prev'] = {'error': '{}: {}'.format(type(e).__name__, e)}
     # quem arrasta o quê (§632)
     snap['me'] = {'desk': str(session.get('user_role') or '').strip().upper(),
-                  'is_admin': bool(_R()._session_is_admin())}
+                  'is_admin': bool(_R()._session_is_admin()),
+                  'sid': str(session.get('user_sid') or '').strip().upper()}
     return jsonify({'success': True, **snap})
 
 
@@ -133,8 +134,12 @@ def api_intraday_monitor():
 # Intrag), cujo estado é a contagem: travada, ela não arrastava e não dizia
 # por quê, e a mesa lia o quadro como quebrado (20/10/2026). O ajuste é dela,
 # com quem/quando no card e o "↺ auto" para voltar. As tarefas do Monitor são
-# do OTC Ops (BO): a mesa anda um passo à frente; admin e master põem
-# qualquer estado, ou `auto` para devolver ao cálculo.
+# do OTC Ops (BO): a mesa anda um passo à frente e devolve ao cálculo
+# (`auto`, o Undo da pílula e o "↺ auto") o ajuste que ELA fez; admin e master
+# põem qualquer estado e desfazem o de qualquer um. O passo da mesa é conferido
+# contra o estado REAL da tarefa, não contra o `from` da tela: o quadro se
+# atualiza a cada minuto, e um card velho em `todo` de uma tarefa já `done`
+# viraria `in_progress` — um ajuste que a mesa nem consegue desfazer.
 _IM_NEXT = {'todo': ('in_progress',), 'in_progress': ('done',), 'late': ('done',)}
 _IM_DESK = ('BO',)
 
@@ -155,13 +160,27 @@ def api_intraday_override():
     if para not in task_runs.OVERRIDE_STATES + ('auto',):
         return jsonify({'success': False, 'code': 'bad_state'}), 400
     R = _R()
+    ref = _ref_da((body.get('date') or '').strip())
+    dia = ref.date() if hasattr(ref, 'date') else ref
     if not R._session_is_admin():
         desk = str(session.get('user_role') or '').strip().upper()
-        if desk not in _IM_DESK or para not in _IM_NEXT.get(de, ()):
-            return jsonify({'success': False, 'code': 'move_not_allowed',
-                            'message': 'Your desk can only move a task one step forward.'}), 403
-    dia = _ref_da((body.get('date') or '').strip())
-    dia = dia.date() if hasattr(dia, 'date') else dia
+        nega = jsonify({'success': False, 'code': 'move_not_allowed',
+                        'message': 'Your desk can only move a task one step forward.'}), 403
+        if desk not in _IM_DESK:
+            return nega
+        if para == 'auto':
+            meu = str(session.get('user_sid') or '').strip().upper()
+            aj = task_runs.overrides_of(dia).get(task) or {}
+            if not aj or str(aj.get('sid') or '').strip().upper() != meu:
+                return nega
+        else:
+            if para not in _IM_NEXT.get(de, ()):
+                return nega
+            real = next((t.get('state') for t in queries._intraday_snapshot(ref)['tasks']
+                         if t['id'] == task), None)
+            if real != de:
+                return jsonify({'success': False, 'code': 'stale_card', 'state': real,
+                                'message': 'The board was out of date: the task is now {}.'.format(real)}), 409
     reg = task_runs.set_override(dia, task, para, session.get('user_sid', ''), session.get('user_name', ''))
     return jsonify({'success': True, 'override': reg})
 

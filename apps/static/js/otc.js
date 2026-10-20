@@ -962,12 +962,35 @@
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(b)
     }).then(function (r) { return r.json().then(function (d) { if (!r.ok || d.success === false) { var e = new Error(d.text || 'HTTP ' + r.status); e.code = d.code; throw e; } return d; }); });
   }
-  // o estado do SERVIDOR vira o da ilha (a User Home chama ao carregar)
+  // o estado do SERVIDOR vira o da ilha (a User Home chama ao carregar e a
+  // cada minuto). Três cuidados: (1) foco que o servidor ainda tem como em
+  // curso mas já VENCEU é resto de um `end` que falhou (o share ocupado) — é
+  // encerrado calado, sem virar ilha de novo, senão o "Foco concluído", a
+  // notificação e a pausa saíam uma segunda vez; (2) durante um encerramento
+  // em voo a marca `finishing` é mantida, senão a próxima volta da ilha
+  // encerrava de novo; (3) o fim já conhecido fica se o do servidor só difere
+  // pela latência do request (a contagem não pula a cada minuto).
   function fAdopt(srv) {
     var cur = fRead();
     if (!srv) { if (cur && cur.kind === 'focus') fWrite(null); return; }
-    fWrite({ kind: 'focus', total: (srv.minutes || 25) * 60, title: srv.task_title || '',
-             left: srv.paused ? srv.remaining : null, ends: srv.paused ? null : Date.now() + srv.remaining * 1000 });
+    if (!srv.paused && !(srv.remaining > 0)) {
+      if (cur && cur.kind === 'focus' && cur.left == null) {
+        // a ilha ainda conta este foco: quem encerra é ela (pílula e pausa)
+        if (fLeft(cur) > 0) { cur.ends = Date.now(); fWrite(cur); }
+        fFinish(fRead());
+        return;
+      }
+      if (cur && cur.kind === 'focus') fWrite(null);
+      fPost('end').catch(function () {});
+      return;
+    }
+    var ends = srv.paused ? null : Date.now() + srv.remaining * 1000;
+    var mesmo = cur && cur.kind === 'focus' && (cur.left == null) === !srv.paused;
+    if (mesmo && ends && cur.ends && Math.abs(cur.ends - ends) < 5000) ends = cur.ends;
+    var st = { kind: 'focus', total: (srv.minutes || 25) * 60, title: srv.task_title || '',
+               left: srv.paused ? srv.remaining : null, ends: ends };
+    if (mesmo && cur.finishing) st.finishing = cur.finishing;
+    fWrite(st);
   }
   var otcFocus = {
     state: fRead, left: function () { return fLeft(fRead()); }, prefs: fPrefs, adopt: fAdopt,
@@ -1003,7 +1026,20 @@
     fIsland.title = st.title || '';
   }
   function fFinish(st) {
-    // uma aba só encerra: a primeira marca o estado, as outras veem a marca
+    // Uma aba só encerra. O Web Locks é o que garante isso entre abas que
+    // batem no MESMO segundo (ler-marcar no localStorage não é atômico); sem
+    // ele fica a marca `finishing`, relida dentro da trava.
+    if (navigator.locks && navigator.locks.request) {
+      navigator.locks.request('otc-focus-finish', { ifAvailable: true }, function (lock) {
+        if (!lock) return;
+        var agora = fRead();
+        if (agora && agora.kind === 'focus' && agora.left == null && fLeft(agora) <= 0) fFinishNow(agora);
+      });
+      return;
+    }
+    fFinishNow(st);
+  }
+  function fFinishNow(st) {
     if (st.finishing && Date.now() - st.finishing < 15000) return;
     st.finishing = Date.now();
     try { localStorage.setItem(FOCUS_KEY, JSON.stringify(st)); } catch (e) {}

@@ -23,6 +23,13 @@ DEFAULT_PRIORITY = 'Medium'
 COLORS = ['blue', 'purple', 'pink', 'orange', 'green', 'teal', 'indigo', 'yellow']
 ICONS = ['folder', 'rocket', 'leaf', 'flame', 'layout-grid', 'chart-column', 'sparkles', 'workflow']
 
+# A CATEGORIA da iniciativa (mesa, 20/10/2026 — o Projects virou Initiatives
+# na tela e "Projects" é uma das categorias). Lista fechada, gravada em inglês
+# como o status e traduzida na tela (`cat_<valor>`). Criar exige; iniciativa
+# de antes não tem e aparece sem categoria até alguém editá-la — e aí a
+# edição pede uma.
+CATEGORIES = ['Process Review', 'Tech Issue', 'Projects', 'B3 - Improvements', 'Stomp/Red']
+
 # Quem pode liderar (e receber tarefa): a mesa do OTC — BO e Admin (pedido de
 # 19/10/2026). O master é admin para todo efeito.
 LEAD_ROLES = ('BO', 'ADMIN', 'MASTER')
@@ -109,7 +116,7 @@ def validate_project(data, people, current=None):
     if not partial or 'name' in data:
         out['name'] = clean_text(data.get('name'), MAX_NAME)
         if not out['name']:
-            raise ProjectError('name_required', 'Give the project a name.')
+            raise ProjectError('name_required', 'Give the initiative a name.')
     if not partial or 'description' in data:
         out['description'] = clean_block(data.get('description'), MAX_DESCRIPTION)
     if not partial or 'lead_sid' in data:
@@ -118,6 +125,10 @@ def validate_project(data, people, current=None):
             out['lead_sid'], out['lead_name'] = sid, current.get('lead_name', '')
         else:
             out['lead_sid'], out['lead_name'] = _person(sid, people, 'lead', True)
+    if not partial or 'category' in data:
+        if not str(data.get('category') or '').strip():
+            raise ProjectError('category_required', 'Choose the category.')
+        out['category'] = _choice(data.get('category'), CATEGORIES, None, 'category')
     if not partial or 'status' in data:
         out['status'] = _choice(data.get('status'), STATUSES, DEFAULT_STATUS, 'status')
     if not partial or 'color' in data:
@@ -285,6 +296,7 @@ def summary(project):
         'name': project.get('name', ''),
         'description': project.get('description', ''),
         'status': project.get('status', DEFAULT_STATUS),
+        'category': project.get('category', ''),
         'color': project.get('color', COLORS[0]),
         'icon': project.get('icon', ICONS[0]),
         'lead_sid': project.get('lead_sid', ''),

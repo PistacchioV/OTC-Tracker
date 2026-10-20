@@ -83,6 +83,7 @@ def _body():
 def _meta(me, people):
     return {'statuses': domain.STATUSES, 'task_statuses': domain.TASK_STATUSES,
             'priorities': domain.PRIORITIES, 'colors': domain.COLORS, 'icons': domain.ICONS,
+            'categories': domain.CATEGORIES,
             'people': people, 'me': {'sid': me['sid'], 'name': me['name']},
             'today': _today().isoformat()}
 
@@ -154,7 +155,7 @@ def api_project_get(project_id):
     me = _actor()
     p = queries.get(project_id)
     if p is None:
-        return _err('project_not_found', 'Project not found.', 404)
+        return _err('project_not_found', 'Initiative not found.', 404)
     people = queries.eligible(me)
     out = {'success': True, 'project': queries.detail(p, _today()),
            'can_delete': domain.can_delete(p, me['sid'], _is_admin())}

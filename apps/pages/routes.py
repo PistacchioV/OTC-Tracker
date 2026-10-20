@@ -393,6 +393,15 @@ def enforce_screen_lock():
         return
     if request.endpoint in _LOCK_ALLOWED_ENDPOINTS:
         return
+    # As traduções saem pelo `static_data_file` (o `/static/data/...` vence o
+    # `static` embutido) e a própria tela travada as pede: barradas aqui, o
+    # I18nManager lia a página do lock como JSON e o Lock ficava em inglês para
+    # quem usa o app em português/espanhol. Só elas — RefData e cadastros que
+    # a mesma rota serve continuam fechados com a tela travada.
+    if (request.endpoint == 'pages_blueprint.static_data_file'
+            and str((request.view_args or {}).get('filename') or '').startswith('translations/')
+            and '..' not in str((request.view_args or {}).get('filename') or '')):
+        return
     return redirect(url_for('pages_blueprint.lock_screen_page'))
 
 

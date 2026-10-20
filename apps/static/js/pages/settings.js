@@ -16,7 +16,7 @@
       name: 'Name', email: 'Email', role: 'Desk', sid: 'SID',
       n_task_assigned: 'Task assigned', n_task_assigned_s: 'When a task is given to you',
       n_task_comment: 'Comments', n_task_comment_s: 'When someone comments on your task',
-      n_project_lead: 'Project lead', n_project_lead_s: 'When you are made lead of a project',
+      n_project_lead: 'Initiative lead', n_project_lead_s: 'When you are made lead of an initiative',
       n_due_dates: 'Due dates', n_due_dates_s: 'The morning a task of yours is due (08:00)',
       n_focus_finished: 'Focus finished', n_focus_finished_s: 'When a session ends',
       session: 'Session', break_: 'Break', goal: 'Daily goal', min: 'min', shorter: 'Shorter', longer: 'Longer',
@@ -26,13 +26,12 @@
       reset_ok: 'Back to defaults', reset: 'Reset', cancel: 'Cancel',
       walls: { ash: 'Ash', sand: 'Sand', sage: 'Sage', aurora: 'Aurora', smoke: 'Smoke', tide: 'Tide', bloom: 'Bloom', ember: 'Ember', grove: 'Grove', dusk: 'Dusk' },
       accents: { blue: 'Blue', purple: 'Purple', pink: 'Pink', orange: 'Orange', green: 'Green', graphite: 'Graphite' },
-      e_out_of_range: 'Between {min} and {max}.'
     },
     br: {
       name: 'Nome', email: 'E-mail', role: 'Mesa', sid: 'SID',
       n_task_assigned: 'Tarefa atribuída', n_task_assigned_s: 'Quando uma tarefa é passada para você',
       n_task_comment: 'Comentários', n_task_comment_s: 'Quando alguém comenta na sua tarefa',
-      n_project_lead: 'Líder de projeto', n_project_lead_s: 'Quando você vira líder de um projeto',
+      n_project_lead: 'Líder de iniciativa', n_project_lead_s: 'Quando você vira líder de uma iniciativa',
       n_due_dates: 'Prazos', n_due_dates_s: 'Na manhã em que uma tarefa sua vence (08:00)',
       n_focus_finished: 'Fim do foco', n_focus_finished_s: 'Quando uma sessão termina',
       session: 'Sessão', break_: 'Pausa', goal: 'Meta diária', min: 'min', shorter: 'Menos', longer: 'Mais',
@@ -42,13 +41,12 @@
       reset_ok: 'De volta ao padrão', reset: 'Voltar', cancel: 'Cancelar',
       walls: { ash: 'Cinza', sand: 'Areia', sage: 'Sálvia', aurora: 'Aurora', smoke: 'Fumaça', tide: 'Maré', bloom: 'Flor', ember: 'Brasa', grove: 'Bosque', dusk: 'Crepúsculo' },
       accents: { blue: 'Azul', purple: 'Roxo', pink: 'Rosa', orange: 'Laranja', green: 'Verde', graphite: 'Grafite' },
-      e_out_of_range: 'Entre {min} e {max}.'
     },
     es: {
       name: 'Nombre', email: 'Correo', role: 'Mesa', sid: 'SID',
       n_task_assigned: 'Tarea asignada', n_task_assigned_s: 'Cuando le asignan una tarea',
       n_task_comment: 'Comentarios', n_task_comment_s: 'Cuando alguien comenta su tarea',
-      n_project_lead: 'Líder de proyecto', n_project_lead_s: 'Cuando lo nombran líder de un proyecto',
+      n_project_lead: 'Líder de iniciativa', n_project_lead_s: 'Cuando lo nombran líder de una iniciativa',
       n_due_dates: 'Vencimientos', n_due_dates_s: 'La mañana en que vence una tarea suya (08:00)',
       n_focus_finished: 'Fin del foco', n_focus_finished_s: 'Cuando termina una sesión',
       session: 'Sesión', break_: 'Pausa', goal: 'Meta diaria', min: 'min', shorter: 'Menos', longer: 'Más',
@@ -58,7 +56,6 @@
       reset_ok: 'Valores originales restaurados', reset: 'Restaurar', cancel: 'Cancelar',
       walls: { ash: 'Ceniza', sand: 'Arena', sage: 'Salvia', aurora: 'Aurora', smoke: 'Humo', tide: 'Marea', bloom: 'Flor', ember: 'Brasa', grove: 'Bosque', dusk: 'Ocaso' },
       accents: { blue: 'Azul', purple: 'Violeta', pink: 'Rosa', orange: 'Naranja', green: 'Verde', graphite: 'Grafito' },
-      e_out_of_range: 'Entre {min} y {max}.'
     }
   };
   function t(k, p) {

@@ -142,29 +142,49 @@ def _claim(slot):
                                R._DAILY_METRIC_DIR, slot, 16, 'user-home-due')
 
 
+def _release(slot):
+    import os
+    R = _routes()
+    R._release_daily_slot(os.path.join(R._DAILY_METRIC_DIR, 'user_home_due_sent.json'), slot, 'user-home-due')
+
+
 _started = False
 _started_lock = threading.Lock()
 
 
+def run_once(agora):
+    """Uma volta do laço: `None` fora da hora (ou com o dia já reservado),
+    senão quantas pessoas foram avisadas. Às 08:00 BRT (ou na primeira volta
+    depois, no mesmo dia) reserva o dia no claim em disco — a instância
+    vizinha não manda o mesmo aviso — e dispara. Se a leitura dos projetos
+    falha (banco ocupado no share), o dia é DEVOLVIDO: reservado e não
+    enviado, ninguém tentaria de novo até amanhã. Devolver não duplica: cada
+    envio tem o seu `try`, então só a leitura — antes de qualquer envio —
+    chega aqui."""
+    if agora.hour < DUE_HOUR or agora.weekday() >= 5:
+        return None
+    slot = 'due-%s' % agora.date().isoformat()
+    R = _routes()
+    with R._app_context():
+        if not _claim(slot):
+            return None
+        try:
+            return due_digest(agora.date().isoformat())
+        except Exception:
+            _release(slot)
+            raise
+
+
 def scheduler_loop():
-    """Confere a cada 5 min; às 08:00 BRT (ou na primeira volta depois, no
-    mesmo dia) reserva o dia no claim em disco — a instância vizinha não manda
-    o mesmo aviso — e dispara."""
+    """Confere a cada 5 min (`run_once`)."""
     while True:
         time.sleep(300)
-        R = _routes()
         try:
-            agora = R._br_now()
-            if agora.hour < DUE_HOUR or agora.weekday() >= 5:
-                continue
-            slot = 'due-%s' % agora.date().isoformat()
-            with R._app_context():
-                if not _claim(slot):
-                    continue
-                n = due_digest(agora.date().isoformat())
-            log.info('[user-home] aviso "vence hoje": %d pessoa(s)', n)
+            n = run_once(_routes()._br_now())
+            if n is not None:
+                log.info('[user-home] aviso "vence hoje": %d pessoa(s)', n)
         except Exception:                                # noqa: BLE001
-            log.warning('[user-home] laço do aviso "vence hoje" falhou', exc_info=True)
+            log.warning('[user-home] laço do aviso "vence hoje" falhou (o dia foi devolvido)', exc_info=True)
 
 
 def start_scheduler():

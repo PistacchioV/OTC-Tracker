@@ -14,7 +14,7 @@
        `-product-icon`, o layout não põe o seu. #}
     <div class="page-title-head">
         <div class="d-flex align-items-center gap-3 flex-grow-1">
-            <a href="/projects" class="pjd-back" aria-label="Back to projects" title="Projects"><i data-lucide="chevron-left"></i></a>
+            <a href="/projects" class="pjd-back" aria-label="Back to initiatives" title="Initiatives"><i data-lucide="chevron-left"></i></a>
             <div class="pjd-product-icon" id="pjd-icon" style="--hue: var(--otc-{{ project_color }})"><i data-lucide="{{ project_icon }}"></i></div>
             <div class="min-w-0">
                 <h4 id="pjd-name">{{ project_name }}</h4>
@@ -25,7 +25,7 @@
             <ol class="breadcrumb m-0 py-0">
                 <li class="breadcrumb-item"><a href="javascript: void(0);">OTC Tracker</a></li>
                 <li class="breadcrumb-item"><a href="javascript: void(0);" data-lang="nav-intraday">Intraday</a></li>
-                <li class="breadcrumb-item"><a href="/projects" data-lang="projects">Projects</a></li>
+                <li class="breadcrumb-item"><a href="/projects" data-lang="projects">Initiatives</a></li>
                 <li class="breadcrumb-item active" id="pjd-crumb">{{ project_name }}</li>
             </ol>
         </div>
@@ -72,6 +72,7 @@
                 <div class="pjd-boxes">
                     <div class="pjd-box"><span class="pj-label" data-lang="pj-f-lead">Lead</span><div class="pjd-box__val" id="pjd-lead"></div></div>
                     <div class="pjd-box"><span class="pj-label" data-lang="pj-f-status">Status</span><div class="pjd-box__val" id="pjd-status"></div></div>
+                    <div class="pjd-box pjd-box--wide"><span class="pj-label" data-lang="pj-f-category">Category</span><div class="pjd-box__val" id="pjd-category"></div></div>
                 </div>
                 <div id="pjd-timeline-wrap">
                     <div class="pjd-timeline" id="pjd-timeline"></div>

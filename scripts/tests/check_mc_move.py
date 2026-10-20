@@ -152,5 +152,36 @@ check('chave que não existe: 404', st, 404)
 anon = app.test_client()
 check('sem sessão: 401', anon.post('/api/manual-confirmation/move', json={}).status_code, 401)
 
+print('\n== 6. quadro DESATUALIZADO: a coluna real manda, não a da tela ==')
+# A tela não se atualiza sozinha. A permissão era conferida contra o `from`
+# do request e a gravação agia sobre a coluna REAL: um card velho reabria uma
+# confirmação Ok ou assinava a etapa de outra mesa.
+novo('Z1')
+M.save_changes(M.find_row('Z1'), dict(M.find_row('Z1'), **{'Data Callback': hoje}))
+como('ADMIN')
+mover(['Z1'], 'OTC', 'OK')
+check('Z1 está Ok', M.find_row('Z1')['Pending'], M.STATUS_OK)
+antes = dict(M.find_row('Z1'))
+como('BO')
+st, d = mover(['Z1'], 'LEGAL', 'OTC')
+check('BO com o card velho em Legal: 409 stale_card', (st, d.get('code'), d.get('stage')), (409, 'stale_card', 'OK'))
+check('   e NADA foi reaberto', {k: M.find_row('Z1').get(k) for k in ('Pending', 'Conferido OTC', 'VALIDADO p/ MO', M.SENT_COLUMN)},
+      {k: antes.get(k) for k in ('Pending', 'Conferido OTC', 'VALIDADO p/ MO', M.SENT_COLUMN)})
+como('ADMIN')
+st, d = mover(['Z1'], 'FEPWEB', 'OTC')
+check('o admin com o card velho também: 409 (reabrir um Ok por engano é destrutivo)', (st, d.get('code')), (409, 'stale_card'))
+novo('Z2')                                                    # em Pending OTC
+como('MO')
+st, d = mover(['Z2'], 'MO', 'FEPWEB')
+check('MO com o card velho em MO numa linha em Pending OTC: 409', (st, d.get('code'), d.get('stage')), (409, 'stale_card', 'OTC'))
+check('   e o OTC NÃO foi assinado por um MO', M.find_row('Z2').get('Conferido OTC') or '', '')
+como('BO')
+mover(['Z2'], 'OTC', 'MO')
+st, d = mover(['Z2'], 'OTC', 'MO')
+check('o mesmo passo de novo (segunda aba): 409, não assina duas vezes', (st, d.get('code')), (409, 'stale_card'))
+novo('Z3')
+st, d = mover(['Z3', 'Z2'], 'OTC', 'MO')
+check('card com várias chaves e UMA fora do lugar: nada é gravado', (st, M.find_row('Z3')['Pending']), (409, M.PENDING_OTC))
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

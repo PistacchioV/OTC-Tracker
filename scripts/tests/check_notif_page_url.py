@@ -90,8 +90,9 @@ print('\n== 3. um rotulo por pagina ==')
 # sino carrega o rotulo antigo para sempre, entao ele fica nos mapas ao lado
 # do novo — 'File Interface' e o rotulo historico do File Interpreter
 # (a pagina mudou de /file-interface para /file-interpreter em 2026-08-21),
-# e 'Holidays Calendar' o do Calendar (o nome mudou em 2026-10-20; a URL nao).
-LEGACY_ALIASES = {'File Interface', 'Holidays Calendar'}
+# e 'Holidays Calendar' o do Calendar (o nome mudou em 2026-10-20; a URL nao),
+# e 'Projects' o das Initiatives (o nome mudou em 2026-10-20, §633; a URL nao).
+LEGACY_ALIASES = {'File Interface', 'Holidays Calendar', 'Projects'}
 vals = [u for k, u in PY.items() if k not in LEGACY_ALIASES]
 dupes = sorted({u for u in vals if vals.count(u) > 1})
 check('nenhum destino repetido (fora aliases legados)', dupes, [])

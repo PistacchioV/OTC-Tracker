@@ -7,7 +7,7 @@
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content liquid-glass">
             <div class="modal-header py-2">
-                <h5 class="modal-title fs-6"><i class="ti ti-folder me-1"></i><span id="pjm-title">New project</span></h5>
+                <h5 class="modal-title fs-6"><i class="ti ti-folder me-1"></i><span id="pjm-title">New initiative</span></h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
@@ -19,6 +19,10 @@
                     <div class="col-12">
                         <label class="form-label fs-xs text-muted mb-1" for="pjm-desc" data-lang="pj-f-desc">What is it for?</label>
                         <textarea class="form-control" id="pjm-desc" rows="3" maxlength="600" data-lang-placeholder="pj-ph-desc" placeholder="One or two sentences the whole team can repeat."></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjm-category" data-lang="pj-f-category">Category</label>
+                        <select class="form-select" id="pjm-category"></select>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label fs-xs text-muted mb-1" for="pjm-lead" data-lang="pj-f-lead">Lead</label>
@@ -47,7 +51,7 @@
                 </div>
             </div>
             <div class="modal-footer py-2">
-                <button type="button" class="btn btn-sm btn-outline-danger me-auto d-none" id="pjm-delete" title="Delete project"><i class="ti ti-trash"></i></button>
+                <button type="button" class="btn btn-sm btn-outline-danger me-auto d-none" id="pjm-delete" title="Delete initiative"><i class="ti ti-trash"></i></button>
                 <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
                 <button type="button" class="btn btn-sm btn-success" id="pjm-save" title="Save"><i class="ti ti-device-floppy"></i></button>
             </div>
