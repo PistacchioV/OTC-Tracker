@@ -1395,19 +1395,21 @@ def _asset_v(rel_path):
     Falha (arquivo ausente) devolve '0': pior caso o cache não é invalidado,
     que é o comportamento de hoje — nunca uma página quebrada.
     """
-    # Fora do DEBUG o token fica em memória pela vida do processo: a instância
-    # roda sem reloader, então estático novo só chega com restart — e o restart
-    # zera este dicionário. Sem isso eram 3 a 11 `stat` por página, cada um uma
-    # ida ao share quando o código roda de lá. No DEBUG (dev) segue o stat, para
-    # quem edita o JS ver o token mudar sem reiniciar.
-    debug = bool(current_app.debug) if has_app_context() else False
-    if not debug and rel_path in _ASSET_V_MEMO:
+    # Fora do `flask run` da dev o token fica em memória pela vida do processo:
+    # a instância roda sem reloader, então estático novo só chega com restart —
+    # e o restart zera este dicionário. Sem isso eram 3 a 11 `stat` por página,
+    # cada um uma ida ao share quando o código roda de lá. A pergunta é o
+    # `OTC_LIVE_RELOAD`, NÃO o DEBUG: a instância roda com o DebugConfig, e
+    # pelo DEBUG esta memória nunca valeu lá. Na dev segue o stat, para quem
+    # edita o JS ver o token mudar sem reiniciar.
+    live = bool(current_app.config.get('OTC_LIVE_RELOAD')) if has_app_context() else False
+    if not live and rel_path in _ASSET_V_MEMO:
         return _ASSET_V_MEMO[rel_path]
     try:
         v = str(int(_store.getmtime(os.path.join(_STATIC_DIR, rel_path))))
     except Exception:
         return '0'          # falha não fica guardada: o arquivo pode aparecer
-    if not debug:
+    if not live:
         _ASSET_V_MEMO[rel_path] = v
     return v
 
@@ -1418,6 +1420,34 @@ _ASSET_V_MEMO = {}
 @blueprint.app_context_processor
 def _inject_asset_v():
     return {'asset_v': _asset_v}
+
+
+@blueprint.after_app_request
+def _cache_versioned_static(response):
+    """Estático pedido com o token ATUAL (`?v=` igual ao `asset_v` do arquivo)
+    fica no cache do navegador sem revalidar: a URL só muda quando o arquivo
+    muda, então ela nunca aponta para conteúdo velho.
+
+    Sem isso cada página revalidava todo estático (`SEND_FILE_MAX_AGE_DEFAULT`
+    0 no DEBUG, e a instância roda com ele): um request por arquivo, cada um um
+    `stat` no share quando o código roda de lá. Token escrito à mão
+    (`?v=20260924a`) nunca bate com o carimbo e segue revalidando — é a
+    proteção do §170 contra o token que alguém esqueceu de trocar."""
+    try:
+        if request.endpoint != 'static' or response.status_code not in (200, 304):
+            return response
+        token = request.args.get('v')
+        nome = (request.view_args or {}).get('filename') or ''
+        if not token or not nome or token != _asset_v(nome):
+            return response
+        response.cache_control.no_cache = None
+        response.cache_control.public = True
+        response.cache_control.max_age = 31536000
+        response.cache_control.immutable = True
+        response.expires = None
+    except Exception:                                       # noqa: BLE001
+        pass
+    return response
 
 
 def render_email_template(code, recipient_name):

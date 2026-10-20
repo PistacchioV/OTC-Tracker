@@ -939,8 +939,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   se vê). Sem ela o parse frouxo do flatpickr lê `2208/2026` como uma data
   QUALQUER, sem erro nenhum. A data INTEIRA vai ao picker na hora
   (`setDate`) — o código em volta lê o ISO do input original, e ele só nasceria
-  no blur: clicar direto no botão exportaria o intervalo anterior. A mesma
-  regra da Quotes (§508) mora aqui no HELPER, não na página.
+  no blur: clicar direto no botão exportaria o intervalo anterior. O clique
+  SELECIONA a data inteira, e o calendário ACOMPANHA a digitação (dia e mês →
+  vai ao mês; data inteira e real → marca); `31/02` e texto pela metade voltam
+  à última data válida ao sair do campo — o parse frouxo do flatpickr os lia
+  como outra data (§636). A mesma regra da Quotes (§508) mora aqui no HELPER,
+  não na página.
   `check_export_padrao.py` §5.
 
 ### Layout e vidro
@@ -1026,7 +1030,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   Mac (que não manda o sinal) não se via. Sem blur, alfa não é material:
   superfícies viram cor SÓLIDA (§11 do SCSS); token do modo vai como
   `:root.is-solid` (+ o par escuro). Valide forçando `'reduced'`, e o sinal do
-  Windows pelo CDP (`Emulation.setEmulatedMedia`).
+  Windows pelo CDP (`Emulation.setEmulatedMedia`). **O modo opaco é também
+  MOVIMENTO leve** (§636): sem View Transition entre páginas, entrada em
+  esmaecer curto sem cascata, título parado — por software era o segundo e
+  meio de cada troca de página. A refração do vidro exige GPU em QUALQUER modo
+  (`weakGpu()`, a mesma sonda) e roda no tempo ocioso. Meça custo de casca com
+  o Chrome sem GPU (`--disable-gpu`) e a CPU desacelerada pelo CDP.
 - **Card de contagem tem a animação do KPI em TODA tela** (§631): o `otc.js`
   (`initStats`) faz contar e piscar todo `.otc-stat__value`,
   `*-widget__value`, `.acc-stat__value`, `.ob-stat__n` e `.widget-val`, e o
@@ -2469,6 +2478,10 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 - **A API vale para `/projects` OU `/tasks`** (`entrypoint._can_see`): a Tasks
   move as tarefas dos projetos. A página `/projects/<id>` confere na rota —
   o `enforce_page_access` não a vê (não está no menu).
+- **Os modais esperam as listas da página** (`afterMeta`, §636): Lead,
+  responsável e ícone vêm na resposta da página, que no JP leva segundos, e o
+  menu do tema não abre `<select>` vazio. Página nova que abre estes modais
+  chama `P.setMeta` no sucesso e `P.metaFailed()` na falha.
 - Toda escrita devolve o PROJETO inteiro; a tela se redesenha dele. Atividade
   e erro saem ESTRUTURADOS (`kind`/`code` + params), traduzidos no
   `projects-common.js`. Chave de tradução das telas é `pj-*`/`tsk-*` — `tk-*`
@@ -2907,6 +2920,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   o WinInet da macro da mesa (§450); a Quotes ainda não tem essa queda.
 - **A instância roda sem reloader**: pull que tocou `.py` ou template exige
   restart. Mapping pela tela é a exceção.
+- **A instância roda com o DebugConfig** (o ProductionConfig exige cookie
+  seguro e ela é HTTP). Por isso o que é só da DEV pergunta
+  `app.config['OTC_LIVE_RELOAD']` (DEBUG **e** o `flask run`, que marca
+  `FLASK_RUN_FROM_CLI`), nunca o DEBUG: recarga de template e o `stat` do
+  `asset_v` por DEBUG eram ~17 idas ao share por página (§636).
+  Estático com o token atual (`asset_v`) sai imutável no cache; token escrito
+  à mão segue revalidando.
 - **`PYTHONPYCACHEPREFIX` no `.bat`** apontando para `%LOCALAPPDATA%` (nunca
   `%TEMP%`, nunca `PYTHONDONTWRITEBYTECODE`): sem isso a subida fica minutos
   gravando `__pycache__` no share sem imprimir nada. O `start-otc-tracker.bat`
@@ -2993,7 +3013,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (192 scripts)
+### `scripts/tests/` (193 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
@@ -3002,7 +3022,7 @@ correspondente depois de mexer no módulo**, com
 `OTC_SHARED_DRIVE_ROOT=/tmp/otc-share`. Vários sobem o app e trocam atributos
 no `routes` (por isso a regra de import atrasado do §3). Os que MEDEM em vez
 de conferir texto: `check_stat_por_linha`, `check_duck_gate`,
-`check_daycache` §8, `check_db_read_path`. `check_boxparse` precisa do `jsc`.
+`check_daycache` §8, `check_db_read_path`, `check_page_switch` §1. `check_boxparse` precisa do `jsc`.
 
 ---
 

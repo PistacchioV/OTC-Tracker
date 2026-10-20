@@ -21,6 +21,7 @@
       var tid = new URLSearchParams(window.location.search).get('task');
       if (tid && !state.openedFromLink) { state.openedFromLink = true; openTask(tid); }
     }).catch(function (e) {
+      P.metaFailed();
       var box = $('pjd-load-error');
       box.textContent = P.errText(e);
       box.classList.remove('d-none');

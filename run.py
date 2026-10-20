@@ -32,17 +32,16 @@ except KeyError:
 
 app = create_app(app_config)
 
-# Disable all caching in development
+# Disable all caching in development. A recarga de template é decidida no
+# `create_app` (`OTC_LIVE_RELOAD`: só no `flask run`) — repetida aqui por DEBUG,
+# ela voltava a valer na instância, que roda com o DebugConfig pelo waitress.
 if DEBUG:
-    # Disable template caching
     app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
-    app.config['TEMPLATES_AUTO_RELOAD'] = True
-    app.jinja_env.cache = {}
 
     app.logger.info('DEBUG            = ' + str(DEBUG))
     app.logger.info('Page Compression = FALSE')
     app.logger.info('ASSETS_ROOT      = ' + app_config.ASSETS_ROOT )
-    app.logger.info('Template Cache   = DISABLED')
+    app.logger.info('Template Cache   = ' + ('DISABLED' if app.config.get('OTC_LIVE_RELOAD') else 'ENABLED'))
 
 if __name__ == "__main__":
     # A porta sai do `routes.APP_PORT` — a MESMA que os botões de e-mail usam.

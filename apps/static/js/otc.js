@@ -149,6 +149,19 @@
       return /swiftshader|llvmpipe|software|basic render/i.test(String(r || ''));
     } catch (e) { return true; }
   }
+  // A sonda de WebGL custa: memoizada por sessão (o <head> lê a mesma chave
+  // para não piscar vidro na página seguinte). Vale para TODO modo — a
+  // refração (3c) também pergunta, porque com 'full' numa máquina sem GPU o
+  // filtro SVG de cada placa é rasterizado por software a cada quadro.
+  function weakGpu() {
+    var cached = null;
+    try { cached = sessionStorage.getItem('__OTC_FX_AUTO__'); } catch (e) {}
+    if (cached === null) {
+      cached = softwareGl() ? '1' : '0';
+      try { sessionStorage.setItem('__OTC_FX_AUTO__', cached); } catch (e) {}
+    }
+    return cached === '1';
+  }
   function decideSolid() {
     var pref = String(otcUI.fx() || 'auto').toLowerCase();
     var ua = navigator.userAgent || '';
@@ -157,17 +170,9 @@
     if (pref === 'reduced') solid = true;
     else if (pref === 'full') solid = false;
     else {
-      // a sonda de WebGL custa: memoizada por sessão (o <head> lê a mesma
-      // chave para não piscar vidro na página seguinte)
-      var cached = null;
-      try { cached = sessionStorage.getItem('__OTC_FX_AUTO__'); } catch (e) {}
-      if (cached === null) {
-        cached = (fxWin || softwareGl()) ? '1' : '0';
-        try { sessionStorage.setItem('__OTC_FX_AUTO__', cached); } catch (e) {}
-      }
       // o sistema pedindo menos transparência também liga (e é o switch que o
       // desliga: 'full' vence)
-      solid = cached === '1' || !!(mqLessGlass && mqLessGlass.matches);
+      solid = (fxWin || weakGpu()) || !!(mqLessGlass && mqLessGlass.matches);
     }
     root.classList.toggle('is-solid', solid);
     return solid;
@@ -195,11 +200,14 @@
   };
   I18nManager.prototype.loadTranslations = function () {
     var l = this.selectedLanguage, self = this;
-    if (this._cache[l]) return Promise.resolve(this._cache[l]);
-    return fetch(this.langPath + l + '.json')
+    // guarda a PROMESSA, não o resultado: o init, o retorno do /api/me/access
+    // e a página pedem ao mesmo tempo, e com o cache cheio só na resposta
+    // eram três downloads do mesmo arquivo — no JP, do share
+    if (this._cache[l]) return this._cache[l];
+    this._cache[l] = fetch(this.langPath + l + '.json')
       .then(function (r) { if (!r.ok) throw new Error('Failed to load ' + l + '.json'); return r.json(); })
-      .then(function (j) { self._cache[l] = j; return j; })
-      .catch(function (err) { console.error('Translation load error:', err); return {}; });
+      .catch(function (err) { console.error('Translation load error:', err); delete self._cache[l]; return {}; });
+    return this._cache[l];
   };
   I18nManager.prototype.applyTranslations = function () {
     return this.loadTranslations().then(function (tr) {
@@ -743,7 +751,9 @@
     doc.addEventListener('keydown', function (e) {
       var sel = e.target.closest && e.target.closest('select');
       if (SM) {
-        if (e.key === 'Escape' || e.key === 'Tab') { smClose(); if (e.key === 'Escape') e.preventDefault(); return; }
+        // o Escape fecha só o MENU: o modal em volta o ouve no próprio elemento,
+        // não olha o `preventDefault`, e fechava junto (o formulário perdido)
+        if (e.key === 'Escape' || e.key === 'Tab') { smClose(); if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); } return; }
         if (e.key === 'ArrowDown') { e.preventDefault(); smMark(SM.k + 1); return; }
         if (e.key === 'ArrowUp') { e.preventDefault(); smMark(SM.k - 1); return; }
         if (e.key === 'Enter' || e.key === ' ') {
@@ -763,6 +773,15 @@
     window.addEventListener('scroll', function (e) { if (SM && !SM.m.contains(e.target)) smClose(); }, true);
     window.addEventListener('resize', smClose);
     window.addEventListener('blur', smClose);
+    // O calendário de um campo DENTRO de modal mora no <body>, fora dele, e o
+    // focus trap do Bootstrap devolvia ao modal todo foco que entrasse ali: o
+    // ANO do flatpickr não se digitava, o clique nele ia parar no X do modal.
+    // O foco que entra num calendário não chega ao trap (captura na janela,
+    // antes do listener dele no document).
+    window.addEventListener('focusin', function (e) {
+      var t = e.target;
+      if (t && t.closest && t.closest('.flatpickr-calendar, .daterangepicker') && doc.querySelector('.modal.show')) e.stopImmediatePropagation();
+    }, true);
   }
 
   // ==========================================================================
@@ -776,12 +795,12 @@
   // url(#…)`. O fundo aparece através da placa e entorta nas bordas. Só no
   // Chromium (Chrome/Edge: é onde `backdrop-filter: url()` existe); no modo
   // opaco e nos outros navegadores fica o desfoque do tema (pedido 20/10/2026).
-  var LG = { n: 0, svg: null, ro: null, on: false };
+  var LG = { n: 0, svg: null, ro: null, on: false, queue: [], busy: false };
   var LG_SEL = '.sidenav-menu, .otc-toolbar, .content-page .card:not(.card .card), .content-page div[class*="-panel"]:not([class*="__"]):not(.tab-pane)';
   var LG_MAX = 28;
   function lgSupported() {
     var ua = navigator.userAgent || '';
-    return /Chrome\//.test(ua) && !/Firefox\//.test(ua);
+    return /Chrome\//.test(ua) && !/Firefox\//.test(ua) && !weakGpu();
   }
   function lgMap(w, h, r, pad, bezel) {
     var W = w + 2 * pad, H = h + 2 * pad;
@@ -865,7 +884,25 @@
       var ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
       return rb.width * rb.height - ra.width * ra.height;
     });
-    els.slice(0, LG_MAX).forEach(lgApply);
+    // Em FATIAS, no tempo ocioso: cada mapa é um laço por pixel + um PNG, e
+    // as 28 placas de uma vez seguravam a thread na hora em que a página nova
+    // monta a tabela (~0,3 s por troca com a CPU 6× mais lenta). O vidro
+    // comum já está na placa; a refração chega logo depois.
+    LG.queue = els.slice(0, LG_MAX);
+    if (!LG.busy) { LG.busy = true; lgIdle(lgRun); }
+  }
+  function lgIdle(fn) {
+    if (window.requestIdleCallback) window.requestIdleCallback(fn, { timeout: 1000 });
+    else setTimeout(fn, 32);
+  }
+  function lgRun(dl) {
+    var t0 = Date.now();
+    do {
+      var el = LG.queue.shift();
+      if (el && el.isConnected) lgApply(el);
+    } while (LG.queue.length && (dl && !dl.didTimeout ? dl.timeRemaining() > 6 : Date.now() - t0 < 8));
+    if (LG.queue.length) lgIdle(lgRun);
+    else LG.busy = false;
   }
   function initLiquidGlass() {
     if (!lgSupported()) return;
@@ -884,7 +921,7 @@
     var page = doc.querySelector('.content-page');
     if (page && window.MutationObserver) new MutationObserver(again).observe(page, { childList: true, subtree: true });
     new MutationObserver(again).observe(root, { attributes: true, attributeFilter: ['class'] });
-    setTimeout(lgScan, 60);
+    lgIdle(lgScan);
   }
 
   // ==========================================================================
@@ -1366,7 +1403,9 @@
     all.forEach(function (el) {
       var top = el.getBoundingClientRect().top;
       if (top < vh || !io) {
-        el.style.setProperty('--otc-i', Math.min(i++, 12));
+        // até 6 degraus: com 12 a placa de baixo ficava recortada 0,7 s antes
+        // de começar a entrar — tempo em que a página parece não ter chegado
+        el.style.setProperty('--otc-i', Math.min(i++, 6));
         el.classList.add('otc-enter');
       } else io.observe(el);
       el.addEventListener('animationend', function done(ev) {
@@ -1377,7 +1416,9 @@
     });
   }
   function splitTitle() {
-    if (REDUCED_MOTION) return;
+    // no modo opaco (sem GPU) o título entra parado: a cascata letra a letra
+    // era parte do segundo que a troca de página levava nas máquinas do JPM
+    if (REDUCED_MOTION || root.classList.contains('is-solid')) return;
     var h = doc.querySelector('.content-page .page-title-head h4, .content-page .page-title-head h5');
     if (!h || h.children.length || h.__otcSplit) return;
     var txt = h.textContent;
@@ -1393,6 +1434,9 @@
         return '<span class="otc-title-char" style="--otc-c:' + (c++) + '">' + esc(ch) + '</span>';
       }).join('') + '</span>';
     }).join('');
+    // a cascata cabe em ~0,3 s qualquer que seja o título: a 28 ms por letra,
+    // "Confirmations Monitor" levava 1,1 s para assentar
+    h.style.setProperty('--otc-cstep', Math.min(28, Math.round(320 / Math.max(c, 1))) + 'ms');
   }
 
   // ==========================================================================

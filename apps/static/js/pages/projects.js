@@ -21,6 +21,7 @@
       if (window.otcPins) window.otcPins.sync(state.projects, true);
       render();
     }).catch(function (e) {
+      P.metaFailed();
       var box = $('pj-load-error');
       box.textContent = P.errText(e);
       box.classList.remove('d-none');

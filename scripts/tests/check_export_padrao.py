@@ -187,11 +187,21 @@ check('  o helper expoe a mascara', 'window.otcDateMask = dateMask;' in XA, True
 check('  e a aplica ao campo VISIVEL', 'if (fp && fp.altInput) dateMask(fp.altInput, fp);' in XA, True)
 # So a data inteira e escolha: escrever no picker no meio da digitacao faria o
 # campo pular para um dia que ninguem pediu.
-check('  so a data INTEIRA e escrita no picker',
-      "if (d.length === 8 && fp) fp.setDate(txt, true, 'd/m/Y');" in XA, True)
+check('  so a data INTEIRA e REAL e escrita no picker',
+      "if (d.length === 8 && dataReal(dia, mes, ano)) { fp.setDate(txt, true, 'd/m/Y'); return; }" in XA, True)
 # Completada, ela vale na hora: o codigo em volta le o ISO do input original, e
 # ele so nasceria no blur — clicar direto no Run exportaria o intervalo anterior.
 check('  o ISO nao espera o blur', 'fp.setDate(txt' in XA, True)
+# O calendario ACOMPANHA a digitacao (mesa, 20/10/2026): dia e mes levam ao mes,
+# sem escolher nada; e o clique seleciona a data inteira, como na Quotes (§508).
+check('  dia e mes levam o calendario ao mes', 'fp.jumpToDate(new Date(' in XA, True)
+check('  o clique seleciona a data inteira',
+      "inp.addEventListener('focus', selAll);" in XA and "inp.addEventListener('click', selAll);" in XA, True)
+# 31/02 nao e data: o parse frouxo do flatpickr a leria como 03/03 ao sair do
+# campo (no blur E no clique fora, que ele rele antes do blur).
+check('  data impossivel/pela metade volta a ultima valida',
+      "inp.addEventListener('blur', restaura, true);" in XA
+      and "window.addEventListener('mousedown', foraDoCampo, true);" in XA, True)
 
 print()
 if fails:

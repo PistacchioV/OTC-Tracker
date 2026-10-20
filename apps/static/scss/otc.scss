@@ -738,6 +738,14 @@ html.otc-vt-nav::view-transition-new(root) { animation: none; }
   animation: otc-drop-in var(--otc-dur-enter) var(--otc-ease-out) backwards;
   animation-delay: calc(var(--otc-i, 0) * var(--otc-stagger));
 }
+// No modo opaco (máquina sem GPU) a gota vira um esmaecer curto e de uma vez:
+// o `clip-path` animado repinta a placa inteira a cada quadro, e por software
+// isso, com a cascata, era o segundo e meio que cada troca de página levava
+// nas máquinas do JPM (medido com a CPU 6× mais lenta e sem GPU).
+:root.is-solid .otc-enter {
+  animation: otc-fade-in var(--otc-dur-fast) var(--otc-ease-out) backwards;
+  animation-delay: 0s;
+}
 .otc-enter-soft {
   animation: otc-rise-in 420ms var(--otc-ease-out) backwards;
   animation-delay: calc(300ms + var(--otc-i, 0) * 50ms);
@@ -745,7 +753,7 @@ html.otc-vt-nav::view-transition-new(root) { animation: none; }
 .otc-title-char {
   display: inline-block;
   animation: otc-char-in 520ms var(--otc-ease-out) backwards;
-  animation-delay: calc(var(--otc-c, 0) * 28ms);
+  animation-delay: calc(var(--otc-c, 0) * var(--otc-cstep, 28ms));
   white-space: pre;
 }
 .otc-title-clip { display: inline-block; overflow: hidden; vertical-align: bottom; padding-bottom: .08em; margin-bottom: -.08em; }
@@ -2855,11 +2863,18 @@ table.dataTable.dtr-inline.collapsed > tbody > tr > td.dtr-control::before { bac
   backdrop-filter: var(--otc-blur-thick);
   box-shadow: var(--otc-depth) !important;
   border: 0 !important;
+  // O respiro vai POR FORA da largura: o flatpickr fixa 307,875px no
+  // calendário E na grade dos dias, e com o `border-box` dele os 8px de cada
+  // lado saíam da grade — a coluna do sábado ficava cortada na borda.
+  box-sizing: content-box;
   padding: 8px;
   color: var(--otc-text);
   &::before, &::after { display: none; }
   &.open { animation: otc-pop-in 320ms var(--otc-ease-out) both; }
   .flatpickr-months .flatpickr-month, .flatpickr-current-month, .flatpickr-monthDropdown-months, .numInputWrapper input, .flatpickr-weekday { color: var(--otc-text) !important; fill: var(--otc-text) !important; background: transparent !important; }
+  // A lista dos meses é o <select> NATIVO: com o fundo transparente acima, a
+  // janela do Windows pintava os nomes brancos sobre branco no tema escuro.
+  .flatpickr-monthDropdown-months option { background-color: var(--otc-menu-bg) !important; color: var(--otc-text) !important; }
   .flatpickr-weekday { color: var(--otc-text-2) !important; font-weight: 650; font-size: 11.5px; text-transform: uppercase; }
   .flatpickr-prev-month, .flatpickr-next-month { color: var(--otc-text-2) !important; fill: var(--otc-text-2) !important; border-radius: 50%; &:hover { background: var(--otc-fill); svg { fill: var(--otc-text) !important; } } }
   .flatpickr-day {

@@ -241,6 +241,27 @@
     ['today', 'people', 'me', 'statuses', 'task_statuses', 'priorities', 'colors', 'icons', 'categories'].forEach(function (k) {
       if (d && d[k] !== undefined) meta[k] = d[k];
     });
+    metaArrived();
+  }
+  // Os modais só abrem com as listas CARREGADAS: Lead, responsável e ícone
+  // saem da mesma resposta da página, e no JP (o banco no share) ela leva
+  // segundos — o "New initiative" clicado antes dela abria o Lead e o Icon sem
+  // opção nenhuma, e o menu deles não abria. O clique fica guardado (um por
+  // modal) e o cursor diz que está esperando; a página que não conseguiu
+  // carregar chama `metaFailed` e o modal abre com o que houver.
+  var metaReady = false, metaWaiting = {};
+  function metaArrived() {
+    metaReady = true;
+    var fila = metaWaiting;
+    metaWaiting = {};
+    document.documentElement.style.removeProperty('cursor');
+    Object.keys(fila).forEach(function (k) { fila[k](); });
+  }
+  function afterMeta(key, fn) {
+    if (metaReady) return false;
+    metaWaiting[key] = fn;
+    document.documentElement.style.cursor = 'progress';
+    return true;
   }
   function isoToday() {
     if (meta.today) return meta.today;
@@ -392,6 +413,7 @@
   // ── Modal do projeto (novo e edição) ────────────────────────────────────
   var Pm = { el: null, opts: null };
   function openProjectModal(opts) {
+    if (afterMeta('project', function () { openProjectModal(opts); })) return;
     var el = Pm.el || (Pm.el = document.getElementById('pj-project-modal'));
     if (!el) return;
     Pm.opts = opts;
@@ -450,6 +472,7 @@
   // ── Modal "New task" ────────────────────────────────────────────────────
   var Tm = { el: null, opts: null };
   function openTaskModal(opts) {
+    if (afterMeta('task', function () { openTaskModal(opts); })) return;
     var el = Tm.el || (Tm.el = document.getElementById('pj-task-modal'));
     if (!el) return;
     Tm.opts = opts;
@@ -506,6 +529,7 @@
     return api(method, url, body).then(function (d) { drawerApply(d.project); return d; }).catch(function (e) { fail(e); renderDrawer(); });
   }
   function openTaskDrawer(opts) {
+    if (afterMeta('drawer', function () { openTaskDrawer(opts); })) return;
     var el = drawerEl();
     if (!el) return;
     Dr.project = opts.project; Dr.task = opts.task; Dr.onChange = opts.onChange;
@@ -640,7 +664,7 @@
     t: t, tStatus: tStatus, tTask: tTask, tPrio: tPrio, tCat: tCat, categories: categories, catChip: catChip,
     CATEGORY_HUE: CATEGORY_HUE, esc: esc, colorVar: colorVar,
     STATUS_HUE: STATUS_HUE, TASK_HUE: TASK_HUE, icons: icons, api: api, fail: fail, toast: toast,
-    errText: errText, confirmDelete: confirmDelete, meta: meta, setMeta: setMeta, isoToday: isoToday,
+    errText: errText, confirmDelete: confirmDelete, meta: meta, setMeta: setMeta, metaFailed: metaArrived, isoToday: isoToday,
     parse: parse, diffDays: diffDays, fmtDate: fmtDate, fmtShort: fmtShort, due: due, inDays: inDays, ago: ago,
     avatar: avatar, avatars: avatars, personName: personName, prioBadge: prioBadge, chip: chip,
     openProjectModal: openProjectModal, openTaskModal: openTaskModal, openTaskDrawer: openTaskDrawer,

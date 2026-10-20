@@ -427,12 +427,18 @@ def create_app(config):
     # bypass 2FA.
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
-    # Configure templates for environment
-    if not app.config.get('DEBUG', False):
-        # Production settings
+    # Recarga de template e token de estático pelo DISCO só no servidor de
+    # desenvolvimento (`flask run`, que marca FLASK_RUN_FROM_CLI), não em todo
+    # DEBUG: a instância do time sobe pelo waitress COM o DebugConfig (o
+    # ProductionConfig exige cookie seguro e ela é HTTP), e com o código no
+    # share cada template conferido e cada `asset_v` é um `stat` pela rede —
+    # ~17 por página, ~1 s a 50 ms cada, antes de qualquer dado. Lá o template
+    # e o estático só mudam com restart, e a conferência não compra nada.
+    app.config['OTC_LIVE_RELOAD'] = bool(
+        app.config.get('DEBUG', False) and os.environ.get('FLASK_RUN_FROM_CLI') == 'true')
+    if not app.config['OTC_LIVE_RELOAD']:
         app.config['TEMPLATES_AUTO_RELOAD'] = False
     else:
-        # Development settings - force templates to reload
         app.config['TEMPLATES_AUTO_RELOAD'] = True
         app.jinja_env.auto_reload = True
         app.jinja_env.cache = {}
