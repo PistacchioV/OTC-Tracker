@@ -85,6 +85,15 @@ check('sessão MO não entra na lista', [p['sid'] for p in d['people']], ['A2222
 dev = client_for('A000000', 'Dev User', 'ADMIN')
 st, d = call(dev, 'get', '/api/projects')
 check('admin fora do cadastro entra (a dev, o master)', 'A000000' in [p['sid'] for p in d['people']], True)
+# a foto: a mesma `images/users/<sid>.jpg` da barra, só quando o arquivo existe
+# (é dela que o avatar de Lead, responsável, comentário e atividade sai)
+USERS.append({'sid': 'E930179', 'name': 'Com Foto', 'position': '', 'role': 'BO', 'status': 'ACTIVE'})
+fotos = {p['sid']: p['photo'] for p in call(bia, 'get', '/api/projects')[1]['people']}
+USERS.pop()
+check('quem tem o arquivo leva a foto', fotos.get('E930179'), '/static/images/users/e930179.jpg')
+check('quem não tem leva vazio (ficam as iniciais)', fotos.get('B111111'), '')
+check('o avatar acha a foto pelo SID na lista de pessoas',
+      'photo = photoOf(sid, name)' in open('apps/static/js/pages/projects-common.js', encoding='utf-8').read(), True)
 
 print('\n== 2. criação ==')
 st, d = call(bia, 'post', '/api/projects', {'name': '  Recon  revamp ', 'description': 'Faster recons',

@@ -305,20 +305,34 @@ $table-cell-padding-x-sm: .45rem;
 // radial-gradient deixava metade da tela na base quase branca, e no tema
 // claro o vidro inteiro saía LEITOSO (nada de cor atrás para ele refratar).
 // Lisos (Ash, o padrão, Sand, Sage): as fitas na cor da base, sem contorno.
-:root {
+// A MESMA paleta vale para a MINIATURA de cada parede (`[data-art="<parede>"]`,
+// na gaveta de Aparência e na Settings), nas duas versões de tema: escritas à
+// mão, as miniaturas tinham uma versão só (escura em sete das dez) e a gaveta
+// do tema claro parecia estar no escuro (§634). O desenho é o `--w-art`.
+:root, [data-art] {
   --w-b1: #e4e4e7; --w-b2: #e4e4e7;
   --w-a: var(--w-b1); --w-a2: var(--w-b1); --w-b: var(--w-b1); --w-b2c: var(--w-b1);
   --w-c: var(--w-b1); --w-c2: var(--w-b1); --w-d: var(--w-b1); --w-d2: var(--w-b1);
   --w-line: 0;
 }
-[data-bs-theme="dark"] { --w-b1: #232428; --w-b2: #232428; }
+[data-bs-theme="dark"], [data-bs-theme="dark"] [data-art] { --w-b1: #232428; --w-b2: #232428; }
+// a miniatura: as formas do SVG em gradiente — fita `a` no alto à esquerda,
+// `d` no alto à direita, as ondas `b` e `c` embaixo, sobre a base diagonal
+[data-art] {
+  --w-art:
+    radial-gradient(120% 55% at 30% 112%, var(--w-c) 0 36%, transparent 37%),
+    radial-gradient(160% 75% at 50% 122%, var(--w-b) 0 48%, var(--w-b2c) 57%, transparent 58%),
+    radial-gradient(60% 75% at 106% -10%, var(--w-d) 0 44%, var(--w-d2) 54%, transparent 55%),
+    radial-gradient(105% 70% at -8% -18%, var(--w-a) 0 50%, var(--w-a2) 62%, transparent 63%),
+    linear-gradient(135deg, var(--w-b1), var(--w-b2));
+}
 
 @each $wall, $lb1, $lb2, $db1, $db2 in (
   (sand, #f6e4d2, #f6e4d2, #3a2a1e, #3a2a1e),
   (sage, #dde9dc, #dde9dc, #1f2c23, #1f2c23)
 ) {
-  :root[data-wall="#{$wall}"] { --w-b1: #{$lb1}; --w-b2: #{$lb2}; }
-  :root[data-wall="#{$wall}"][data-bs-theme="dark"] { --w-b1: #{$db1}; --w-b2: #{$db2}; }
+  :root[data-wall="#{$wall}"], [data-art="#{$wall}"] { --w-b1: #{$lb1}; --w-b2: #{$lb2}; }
+  :root[data-wall="#{$wall}"][data-bs-theme="dark"], [data-bs-theme="dark"] [data-art="#{$wall}"] { --w-b1: #{$db1}; --w-b2: #{$db2}; }
 }
 
 // (parede, claro: base 1/2 + fitas a/a2 b/b2 c/c2 d/d2, (contorno, -); escuro: idem)
@@ -345,13 +359,13 @@ $table-cell-padding-x-sm: .45rem;
     (#e6e7ef, #eee3eb, #9aa0bf, #6c7396, #c9a3c2, #98799f, #a89cd8, #7a6eb7, #e5caae, #be9b80), (1, 1),
     (#0f1016, #17121c, #3d425e, #22253a, #5c3b58, #3a2440, #4a4180, #2c2650, #6a5440, #3e3024), (1, 1))
 ) {
-  :root[data-wall="#{$wall}"] {
+  :root[data-wall="#{$wall}"], [data-art="#{$wall}"] {
     --w-b1: #{nth($l, 1)}; --w-b2: #{nth($l, 2)};
     --w-a: #{nth($l, 3)}; --w-a2: #{nth($l, 4)}; --w-b: #{nth($l, 5)}; --w-b2c: #{nth($l, 6)};
     --w-c: #{nth($l, 7)}; --w-c2: #{nth($l, 8)}; --w-d: #{nth($l, 9)}; --w-d2: #{nth($l, 10)};
     --w-line: #{nth($lo, 1)};
   }
-  :root[data-wall="#{$wall}"][data-bs-theme="dark"] {
+  :root[data-wall="#{$wall}"][data-bs-theme="dark"], [data-bs-theme="dark"] [data-art="#{$wall}"] {
     --w-b1: #{nth($d, 1)}; --w-b2: #{nth($d, 2)};
     --w-a: #{nth($d, 3)}; --w-a2: #{nth($d, 4)}; --w-b: #{nth($d, 5)}; --w-b2c: #{nth($d, 6)};
     --w-c: #{nth($d, 7)}; --w-c2: #{nth($d, 8)}; --w-d: #{nth($d, 9)}; --w-d2: #{nth($d, 10)};
@@ -1336,7 +1350,7 @@ body.otc-nav-unpinned .otc-menu-btn { display: inline-grid !important; }
     height: 78px;
     margin-bottom: 6px;
     border-radius: 16px;
-    background: var(--art);
+    background: var(--w-art);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .10), var(--otc-shadow);
     outline: 2px solid transparent;
     outline-offset: 3px;
