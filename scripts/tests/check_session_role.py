@@ -47,8 +47,8 @@ c.execute("""CREATE TABLE users (
         SID VARCHAR PRIMARY KEY, Name VARCHAR, Email VARCHAR,
         Role_Description VARCHAR, Position VARCHAR, Role VARCHAR,
         Status VARCHAR, IP_Address VARCHAR, Page_Access VARCHAR DEFAULT '')""")
-c.execute("INSERT INTO users (SID, Name, Email, Role, Status, Page_Access) "
-          "VALUES ('A111111', 'Fulana', 'f@x', 'ADMIN', 'Active', '')")
+c.execute("INSERT INTO users (SID, Name, Email, Role, Status, Page_Access, Position) "
+          "VALUES ('A111111', 'Fulana', 'f@x', 'ADMIN', 'Active', '', 'VP')")
 c.execute("INSERT INTO users (SID, Name, Email, Role, Status, Page_Access) "
           "VALUES ('B222222', 'Sicrano', 's@x', 'MO', 'Active', "
           "'[\"/dashboard\", \"/new-deals-ndf-vanilla\"]')")
@@ -89,7 +89,9 @@ print('== 1. a leitura traz as duas colunas ==')
 check('a linha responde papel e allowlist',
       A._read_user_authz('B222222')[0::2], (True, 'MO'))
 check('   e o SID sem linha devolve None (nao "")',
-      A._read_user_authz('Z999999'), (False, set(), None))
+      A._read_user_authz('Z999999'), (False, set(), None, None))
+check('a mesma leitura traz o cargo (Position)', A._read_user_authz('A111111')[3], 'VP')
+check('   e cargo vazio no cadastro e \'\', nao None', A._read_user_authz('B222222')[3], '')
 check('o papel vem NORMALIZADO em maiuscula', A._get_user_role('A111111'), 'ADMIN')
 check('   e o cache devolve a mesma resposta', A._get_user_role('A111111'), 'ADMIN')
 check('a allowlist antiga continua saindo por `_read_page_access`',
@@ -109,6 +111,8 @@ def cliente(sid, papel):
         s['user_name'] = sid
         s['user_email'] = sid + '@x'
         s['user_role'] = papel
+        # o cargo como o cadastro o tem (o refresh so grava quando MUDA)
+        s['user_position'] = {'A111111': 'VP'}.get(sid, '')
         # sessao ja carimbada com o IP do test client (`enforce_session_ip`):
         # sem isso o carimbo do primeiro request gravaria na sessao
         s['session_ip'] = '127.0.0.1'
@@ -174,6 +178,58 @@ set_role('B222222', 'FO')
 r = cl_b.get('/users-profile')
 check('   e papel diferente reemite', 
       any(h[0].lower() == 'set-cookie' for h in r.headers.items()), True)
+
+
+print('\n== 2b. o cargo do rodape do menu ==')
+# A queixa: o rodape do sidenav dizia "Associate" para todo mundo (a chave de
+# traducao `user-role` sobrescrevia o texto) -- e a sessao nem tinha o cargo.
+
+
+def set_position(sid, cargo):
+    con = duckdb.connect(DB)
+    con.execute("UPDATE users SET Position = ? WHERE SID = ?", [cargo, sid])
+    con.close()
+    A._page_access_forget(sid)
+
+
+def cargo_da_sessao(cl):
+    cl.get('/users-profile')
+    with cl.session_transaction() as s:
+        return s.get('user_position')
+
+
+set_role('A111111', 'BO')
+cl = cliente('A111111', 'BO')
+with cl.session_transaction() as s:
+    s.pop('user_position')            # a sessao aberta antes do cargo existir
+check('sessao antiga, sem cargo, ganha o do cadastro', cargo_da_sessao(cl), 'VP')
+set_position('A111111', 'ED')
+check('   e a promocao feita na tela alcanca a sessao logada', cargo_da_sessao(cl), 'ED')
+_real = A._get_user_position
+try:
+    A._get_user_position = lambda sid: None
+    check('banco mudo NAO apaga o cargo', cargo_da_sessao(cl), 'ED')
+finally:
+    A._get_user_position = _real
+_sids = A._MASTER_SIDS
+try:
+    A._MASTER_SIDS = {'A111111'}
+    set_position('A111111', 'MD')
+    cl_master = cliente('A111111', 'MASTER')
+    check('o master tambem tem o cargo em dia (e rotulo, nao permissao)',
+          cargo_da_sessao(cl_master), 'MD')
+finally:
+    A._MASTER_SIDS = _sids
+    set_position('A111111', 'VP')
+with app.test_request_context('/'):
+    from flask import session as _s
+    _s['authenticated'] = True
+    _s['user_name'] = 'Fulana'
+    _s['user_role'] = 'BO'
+    _s['user_position'] = 'VP'
+    html = R.render_template('partials/sidenav.html')
+check('o sidenav mostra o cargo, sem a chave de traducao por cima',
+      'otc-side__role">VP<' in html and 'data-lang="user-role"' not in html, True)
 
 
 print('\n== 3. o efeito de ponta: a mesa volta a assinar ==')
