@@ -781,6 +781,10 @@ html.otc-theme-switching *::after { transition: none !important; }
 }
 .otc-brand__word { font: 700 21px/1 var(--otc-font-display); letter-spacing: -.02em; }
 .otc-side__tools { margin-left: auto; display: flex; gap: 2px; }
+// O botão de fixar o menu DIZ o estado: fixo (o padrão) é o botão aceso, na
+// cor do destaque; solto (sobre o conteúdo) volta ao cinza dos outros.
+.otc-pin-btn { border-radius: 10px; transition: background-color var(--otc-dur-fast) var(--otc-ease), color var(--otc-dur-fast) var(--otc-ease); }
+body:not(.otc-nav-unpinned) .otc-pin-btn { color: var(--otc-accent-ink) !important; background: var(--otc-accent-soft) !important; }
 .otc-side__scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -2719,6 +2723,10 @@ table.dataTable.dtr-inline.collapsed > tbody > tr > td.dtr-control::before { bac
 .swal2-validation-message { background: color-mix(in srgb, var(--otc-danger) 12%, transparent) !important; color: var(--otc-text) !important; border-radius: var(--otc-r-md); }
 .swal2-close { color: var(--otc-text-3) !important; border-radius: 50%; &:hover { color: var(--otc-text) !important; background: var(--otc-fill) !important; } }
 .swal2-icon { border-width: 3px !important; scale: .9; }
+// O ícone de sucesso esconde pedaços do anel durante a animação com três
+// MÁSCARAS pintadas na cor sólida do popup. Sobre o vidro elas apareciam como
+// um disco claro (ou escuro) deslocado para a esquerda do check.
+.swal2-icon.swal2-success :is([class^="swal2-success-circular-line"], .swal2-success-fix) { background: transparent !important; }
 .swal2-timer-progress-bar { background: var(--otc-accent-ink) !important; }
 
 // flatpickr
@@ -3120,18 +3128,45 @@ html .fc {
 :where(.content-page) [class*="-widget__title"] {
   margin: 0; font-size: .82rem; font-weight: 700; letter-spacing: -.2px; color: var(--otc-text);
 }
-// o ladrilho TOTAL (`x-widget--total`, Cockpit, Other Publisher, Live
-// Position, Cognos…): gradiente do destaque e texto branco. Modificador `--`
-// continua na família estrutural (o `-widget-` excluído é o do FILHO).
+// O card de TOTAL, em TODA tela (pedido de 19/10/2026): o mesmo movimento
+// dos outros cards de contagem, mas PREENCHIDO e mais escuro — é o número que
+// a mesa confere primeiro. Uma regra só para os desenhos que existem: o
+// `.otc-stat--total` (KPI, Tasks…) e os `*-widget--total`/`*-stat--total` das
+// telas de posição e liquidação, o `.ops-recon--total` dos Summaries e os
+// totais das recons (`.widget-total`, `.fxo-w-total`). Tela nova marca o seu
+// card com um desses modificadores e não escreve cor nenhuma.
 // (o texto vai com !important: a regra de layout da página tem id e pinta o
 // título com `--otc-text`)
-.content-page [class*="-widget--total"] {
-  background: linear-gradient(135deg, var(--otc-accent) 0%, var(--otc-indigo) 100%) !important;
+.content-page :is(.otc-stat--total, [class*="-widget--total"], [class*="-stat--total"], .ops-recon--total, .widget-total, .fxo-w-total) {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--otc-accent) 74%, #050816) 0%,
+                                      color-mix(in srgb, var(--otc-indigo) 58%, #050816) 100%) !important;
+  border-left-color: color-mix(in srgb, var(--otc-indigo) 55%, #fff) !important;
   color: #fff;
-  :is([class*="__title"], [class*="__value"], [class*="__label"], [class*="sub-val"]) { color: #fff !important; }
-  [class*="__icon"] { background: rgba(255, 255, 255, .18) !important; color: #fff !important; }
-  [class*="__sub"]:not([class*="__subs"]) { color: rgba(255, 255, 255, .85) !important; }
+  :is([class*="__title"], [class*="__value"], [class*="__label"], [class*="__n"], [class*="__l"], [class*="sub-val"],
+      .widget-lbl, .widget-val, .ops-recon-side, .ops-num, [data-recon-b3c], [data-recon-intc]) { color: #fff !important; }
+  :is([class*="__icon"], [class*="__ico"], .widget-icon) { background: rgba(255, 255, 255, .18) !important; color: #fff !important; box-shadow: none !important; }
+  :is([class*="__sub"]:not([class*="__subs"]), .ops-recon-hdr) { color: rgba(255, 255, 255, .8) !important; }
   [class*="__subs"] { border-top-color: rgba(255, 255, 255, .25) !important; }
+  @media (hover: hover) and (pointer: fine) {
+    &:hover .otc-stat__value { color: #fff !important; }
+  }
+}
+
+// A animação do card de contagem do KPI vale para os de TODA tela: sobe 3px
+// e ganha a sombra na cor dele no hover, e pisca (anel + número) quando o
+// número MUDA — quem marca o `is-flash` e faz o número contar é o otc.js
+// (`initStats`). Os cards de número são os `*-widget` com `__value`, e os
+// desenhos próprios de contagem (Accrual/MtM, Tracking Docs, recons).
+.content-page :is(div[class*="-widget"]:not([class*="__"]):has([class*="-widget__value"]), .acc-stat, .ob-stat, .recon-widget, .fxo-widget) {
+  transition: translate 320ms var(--otc-ease-out), box-shadow 320ms var(--otc-ease-out);
+  @media (hover: hover) and (pointer: fine) {
+    &:hover { translate: 0 -3px; box-shadow: var(--otc-depth), 0 16px 30px -16px var(--hue, var(--otc-accent-ink)); }
+  }
+  &.is-flash { animation: otc-stat-ring 1s var(--otc-ease) both; }
+  &.is-flash :is([class*="__value"], [class*="__n"], .widget-val) { animation: otc-stat-flash 1s var(--otc-ease) both; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .content-page :is(div[class*="-widget"], .acc-stat, .ob-stat, .recon-widget, .fxo-widget):hover { translate: none; }
 }
 .widget-lbl { font: 560 12.5px/1.4 var(--otc-font); color: var(--otc-text-2); }
 .widget-val { font: 800 23px/1.1 var(--otc-font-display); letter-spacing: -.02em; color: var(--otc-text); font-variant-numeric: tabular-nums; }

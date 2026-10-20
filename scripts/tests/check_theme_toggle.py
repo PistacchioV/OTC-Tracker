@@ -92,5 +92,12 @@ for dp, dn, fn in os.walk('apps/templates'):
                     volta.append('%s -> %s' % (f, g))
 check('nenhum template carrega as camadas removidas', volta, [])
 
+print('\n== 5. o ícone do título vem do menu lateral ==')
+LAYOUT = read('apps/templates/layouts/vertical.html')
+check('o layout copia o ícone do item do menu para o título',
+      '.menu-icon > :first-child' in LAYOUT and 'otc-page-product-icon' in LAYOUT, True)
+check('e o faz logo depois do conteúdo, antes do rodapé',
+      0 <= LAYOUT.find('endblock page_content') < LAYOUT.find('otc-page-product-icon') < LAYOUT.find("partials/footer.html"), True)
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

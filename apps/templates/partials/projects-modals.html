@@ -1,0 +1,147 @@
+{# As três peças de edição do Intraday (Projects, página do projeto, Tasks): o
+   modal do projeto, o modal "New task" e a gaveta da tarefa. Quem as preenche
+   e grava é o `projects-common.js` (OtcPj.openProjectModal / openTaskModal /
+   openTaskDrawer). Modais no padrão da casa (liquid-glass, §7). #}
+
+<div class="modal fade" id="pj-project-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content liquid-glass">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fs-6"><i class="ti ti-folder me-1"></i><span id="pjm-title" data-lang="pj-new">New project</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjm-name" data-lang="pj-f-name">Name</label>
+                        <input type="text" class="form-control" id="pjm-name" maxlength="120" autocomplete="off" data-lang-placeholder="pj-ph-name" placeholder="e.g. Recon automation">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjm-desc" data-lang="pj-f-desc">What is it for?</label>
+                        <textarea class="form-control" id="pjm-desc" rows="3" maxlength="600" data-lang-placeholder="pj-ph-desc" placeholder="One or two sentences the whole team can repeat."></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjm-lead" data-lang="pj-f-lead">Lead</label>
+                        <select class="form-select" id="pjm-lead"></select>
+                    </div>
+                    <div class="col-md-6 d-none" id="pjm-status-wrap">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjm-status" data-lang="pj-f-status">Status</label>
+                        <select class="form-select" id="pjm-status"></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjm-color" data-lang="pj-f-color">Colour</label>
+                        <select class="form-select" id="pjm-color"></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjm-icon" data-lang="pj-f-icon">Icon</label>
+                        <select class="form-select" id="pjm-icon"></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjm-start" data-lang="pj-f-start">Start date</label>
+                        <input type="text" class="form-control otc-datefield" id="pjm-start" placeholder="dd/mm/yyyy" autocomplete="off">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjm-due" data-lang="pj-f-due">Target date</label>
+                        <input type="text" class="form-control otc-datefield" id="pjm-due" placeholder="dd/mm/yyyy" autocomplete="off">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-outline-danger me-auto d-none" id="pjm-delete" title="Delete project"><i class="ti ti-trash"></i></button>
+                <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+                <button type="button" class="btn btn-sm btn-success" id="pjm-save" title="Save"><i class="ti ti-device-floppy"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="pj-task-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content liquid-glass">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fs-6"><i class="ti ti-checkbox me-1"></i><span data-lang="tsk-new">New task</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjtm-title" data-lang="pj-f-title">Title</label>
+                        <input type="text" class="form-control" id="pjtm-title" maxlength="200" autocomplete="off" data-lang-placeholder="pj-ph-task" placeholder="What needs doing?">
+                    </div>
+                    <div class="col-md-6" id="pjtm-project-wrap">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjtm-project" data-lang="pj-f-project">Project</label>
+                        <select class="form-select" id="pjtm-project"></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjtm-assignee" data-lang="pj-f-assignee">Assignee</label>
+                        <select class="form-select" id="pjtm-assignee"></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjtm-priority" data-lang="pj-f-priority">Priority</label>
+                        <select class="form-select" id="pjtm-priority"></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjtm-status" data-lang="pj-f-status">Status</label>
+                        <select class="form-select" id="pjtm-status"></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjtm-due" data-lang="pj-f-taskdue">Due</label>
+                        <input type="text" class="form-control otc-datefield" id="pjtm-due" placeholder="dd/mm/yyyy" autocomplete="off">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjtm-estimate" data-lang="pj-f-estimate">Estimate (hours)</label>
+                        <input type="text" class="form-control" id="pjtm-estimate" inputmode="decimal" autocomplete="off">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+                <button type="button" class="btn btn-sm btn-success" id="pjtm-save" title="Save"><i class="ti ti-device-floppy"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="offcanvas offcanvas-end pj-drawer" tabindex="-1" id="pj-task-drawer" aria-label="Task">
+    <div class="offcanvas-header">
+        <div class="pj-drawer__chips">
+            <a class="otc-chip" id="pjt-project" href="#"></a>
+            <span id="pjt-prio-badge"></span>
+        </div>
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <input type="text" class="pj-drawer__title" id="pjt-title" maxlength="200" aria-label="Title" autocomplete="off">
+        <div class="nav nav-pills" id="pjt-status" data-otc-seg role="tablist">
+            <a class="nav-link" href="#" data-status="To do">To do</a>
+            <a class="nav-link" href="#" data-status="In progress">In progress</a>
+            <a class="nav-link" href="#" data-status="In review">In review</a>
+            <a class="nav-link" href="#" data-status="Done">Done</a>
+        </div>
+        <div class="pj-drawer__boxes">
+            <div class="pjd-box"><span class="pj-label" data-lang="pj-f-assignee">Assignee</span><select class="form-select" id="pjt-assignee"></select></div>
+            <div class="pjd-box"><span class="pj-label" data-lang="pj-f-taskdue">Due</span><input type="text" class="form-control otc-datefield" id="pjt-due" placeholder="dd/mm/yyyy" autocomplete="off"></div>
+            <div class="pjd-box"><span class="pj-label" data-lang="pj-f-priority">Priority</span><select class="form-select" id="pjt-priority"></select></div>
+            <div class="pjd-box"><span class="pj-label" data-lang="pj-f-estimate">Estimate (hours)</span><input type="text" class="form-control" id="pjt-estimate" inputmode="decimal" autocomplete="off"></div>
+        </div>
+
+        <div class="pj-h"><span data-lang="pj-subtasks">Subtasks</span><span class="otc-count" id="pjt-sub-count">0/0</span></div>
+        <ul class="pj-sub" id="pjt-subs"></ul>
+        <div class="pj-inline-add">
+            <input type="text" class="form-control" id="pjt-sub-input" maxlength="200" data-lang-placeholder="pj-ph-subtask" placeholder="Add a subtask" autocomplete="off">
+            <button type="button" class="btn btn-secondary rounded-pill" id="pjt-sub-add" data-lang="pj-add">Add</button>
+        </div>
+
+        <div class="pj-h"><span data-lang="pj-comments">Comments</span></div>
+        <ul class="pj-comments" id="pjt-comments"></ul>
+        <div class="pj-inline-add">
+            <input type="text" class="form-control" id="pjt-comment-input" maxlength="2000" data-lang-placeholder="pj-ph-comment" placeholder="Write a comment" autocomplete="off">
+            <button type="button" class="btn btn-secondary rounded-pill" id="pjt-comment-post" data-lang="pj-post">Post</button>
+        </div>
+
+        <div class="pj-drawer__foot">
+            <button type="button" class="btn btn-primary rounded-pill d-inline-flex align-items-center gap-2" id="pjt-done"></button>
+            <button type="button" class="btn btn-icon btn-outline-danger rounded-circle btn-icon-del" id="pjt-delete" title="Delete task" aria-label="Delete task"><i class="ti ti-trash"></i></button>
+        </div>
+    </div>
+</div>

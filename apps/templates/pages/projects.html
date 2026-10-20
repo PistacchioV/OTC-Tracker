@@ -1,0 +1,79 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Projects{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
+{% include 'partials/projects-assets-css.html' %}
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="pj-page" class="container-fluid">
+
+    <div class="page-title-head">
+        <div class="flex-grow-1">
+            <h4 data-lang="projects">Projects</h4>
+            <p class="otc-page-sub" id="pj-sub">&nbsp;</p>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="javascript: void(0);">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="javascript: void(0);" data-lang="nav-intraday">Intraday</a></li>
+                <li class="breadcrumb-item active" data-lang="projects">Projects</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="otc-page-bar">
+        <div class="otc-stats">
+            <div class="otc-stat" style="--hue: var(--otc-green)">
+                <span class="otc-stat__label" data-lang="pj-st-ongoing">On going</span>
+                <span class="otc-stat__value" id="pj-n-ongoing">–</span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-orange)">
+                <span class="otc-stat__label" data-lang="pj-st-onhold">On hold</span>
+                <span class="otc-stat__value" id="pj-n-onhold">–</span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-teal)">
+                <span class="otc-stat__label" data-lang="pj-st-concluded">Concluded</span>
+                <span class="otc-stat__value" id="pj-n-concluded">–</span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-purple)">
+                <span class="otc-stat__label" data-lang="pj-st-due-month">Due this month</span>
+                <span class="otc-stat__value" id="pj-n-month">–</span>
+            </div>
+        </div>
+        <div class="otc-page-actions">
+            <div class="nav nav-pills" id="pj-filter" data-otc-seg role="tablist">
+                <a class="nav-link active" href="#" data-status="" data-lang="pj-f-all">All</a>
+                <a class="nav-link" href="#" data-status="On going" data-lang="pj-st-ongoing">On going</a>
+                <a class="nav-link" href="#" data-status="On hold" data-lang="pj-st-onhold">On hold</a>
+                <a class="nav-link" href="#" data-status="Concluded" data-lang="pj-st-concluded">Concluded</a>
+            </div>
+            <button type="button" class="btn btn-primary rounded-pill d-inline-flex align-items-center gap-2" id="pj-new">
+                <i data-lucide="plus"></i><span data-lang="pj-new">New project</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="pj-load-error" class="alert alert-danger d-none"></div>
+    <div class="pj-grid" id="pj-grid"></div>
+    <div class="pj-empty d-none" id="pj-empty">
+        <i data-lucide="folder-kanban"></i>
+        <p class="mb-1 fw-semibold" id="pj-empty-title" data-lang="pj-empty">No projects yet</p>
+        <p class="mb-0" id="pj-empty-sub" data-lang="pj-empty-sub">Create the first one with New project.</p>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block modal %}
+{% include 'partials/projects-modals.html' %}
+{% endblock modal %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/projects-common.js?v={{ asset_v('js/pages/projects-common.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/projects.js?v={{ asset_v('js/pages/projects.js') }}"></script>
+{% endblock extra_javascript %}

@@ -1,6 +1,6 @@
 {# ============================================================================
    PARTIAL: topbar.html — a barra do topo: uma pílula de vidro à direita
-   (busca ⌘K · tema · idioma · sino · aparência · usuário). A pintura está no
+   (busca Ctrl+K · tema · idioma · sino · aparência · usuário). A pintura está no
    otc.scss (seção 5c); os ids do sino, do idioma e do usuário são contrato
    dos scripts abaixo e do I18nManager — não renomear.
    ============================================================================ #}
@@ -13,7 +13,8 @@
         <button type="button" class="otc-search" data-otc-palette aria-label="Search pages">
             <i data-lucide="search"></i>
             <span data-lang="otc-search">Search</span>
-            <kbd>⌘K</kbd>
+            {# Ctrl+K, e não ⌘K: a mesa é Windows. No Mac o atalho também aceita Ctrl. #}
+            <kbd>Ctrl+K</kbd>
         </button>
 
         <button type="button" class="otc-tbtn" id="otc-theme-btn" aria-label="Toggle light / dark theme" title="Light / dark">
@@ -231,7 +232,10 @@
                 'VCP Factors Sent':  { icon: 'send',         color: 'bg-success' },
                 'TED Release Sent':  { icon: 'send',         color: 'bg-success' },
                 'New Ticket':        { icon: 'life-buoy',    color: 'bg-primary' },
-                'Ticket Updated':    { icon: 'life-buoy',    color: 'bg-info'    }
+                'Ticket Updated':    { icon: 'life-buoy',    color: 'bg-info'    },
+                'Project Lead':      { icon: 'folder-kanban', color: 'bg-primary' },
+                'Task Assigned':     { icon: 'list-checks',  color: 'bg-primary' },
+                'Task Comment':      { icon: 'message-square', color: 'bg-info'  }
             };
 
             var PAGE_URL = {
@@ -282,6 +286,7 @@
                 'Unwind DCE Swap':     '/unwinds/dce/swap',
                 'Swap VCP':            '/other-products-swap-vcp',
                 'Support':             '/tickets-list',
+                'Projects':            '/projects',
                 'Other Products Summary': '/other-products-summary',
                 'NDF Summary':            '/ndf-summary',
                 'Operations B3':          '/operations-b3',

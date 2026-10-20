@@ -6,9 +6,9 @@
    Item novo de menu entra AQUI, com `href` e `data-lang` — os guardas leem
    esta árvore (check_soc_layers, check_notif_page_url…).
 
-   Em cima: a marca e os botões (fixar / fechar a gaveta). Depois: os atalhos
-   "Pinned" do usuário (chave otc_topnav_<SID>, editáveis) e o menu. Embaixo:
-   o usuário, com o menu de conta.
+   Em cima: a marca e os botões (fixar / fechar a gaveta). Depois: os
+   PROJETOS fixados do usuário (chave otc_pinned_projects_<SID>, pela estrela
+   do Projects) e o menu. Embaixo: o usuário, com o menu de conta.
    ============================================================================ #}
 {% set _sid  = session.get('user_sid',  '') %}
 {% set _name = session.get('user_name', '') %}
@@ -30,13 +30,11 @@
 
     <div class="otc-side__scroll">
 
-        <div class="otc-side__label">
+        {# Só PROJETOS fixados (a estrela do Projects); vazia, a seção some. #}
+        <div class="otc-side__label" data-otc-pinned-label style="display:none">
             <span data-lang="otc-pinned">Pinned</span>
-            <button type="button" class="btn btn-ghost-secondary btn-icon btn-sm" data-otc-pin-edit title="Customize" aria-label="Customize pinned pages">
-                <i data-lucide="sliders-horizontal"></i>
-            </button>
         </div>
-        <nav class="otc-pinned" data-sid="{{ _sid }}" aria-label="Pinned pages"></nav>
+        <nav class="otc-pinned" data-sid="{{ _sid }}" aria-label="Pinned projects" style="display:none"></nav>
 
                 <ul class="side-nav">
                     <li class="side-nav-title mt-2" data-lang="menu-title">Main</li>
@@ -56,10 +54,39 @@
                                         <span class="menu-text" data-lang="dashboard-one">KPI</span>
                                     </a>
                                 </li>
-                                <!-- As tarefas do dia (ex-New Deals Monitor, §567) -->
+                            </ul>
+                        </div>
+                    </li>
+
+                    <!-- Intraday: o trabalho do dia do time — os projetos, as tarefas e o
+                         Monitor (as tarefas da rotina, ex-New Deals Monitor, §567). Os
+                         itens levam ícone PRÓPRIO: o drill-down não o desenha, mas é dele
+                         que sai o ladrilho do título da página (layouts/vertical.html). -->
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarIntraday" aria-expanded="false"
+                           aria-controls="sidebarIntraday" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="calendar-clock"></i></span>
+                            <span class="menu-text" data-lang="nav-intraday">Intraday</span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarIntraday">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/projects" class="side-nav-link">
+                                        <span class="menu-icon"><i data-lucide="folder-kanban"></i></span>
+                                        <span class="menu-text" data-lang="projects">Projects</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/tasks" class="side-nav-link">
+                                        <span class="menu-icon"><i data-lucide="square-kanban"></i></span>
+                                        <span class="menu-text" data-lang="tasks">Tasks</span>
+                                    </a>
+                                </li>
                                 <li class="side-nav-item">
                                     <a href="/intraday-monitor" class="side-nav-link">
-                                        <span class="menu-text" data-lang="dashboard-intraday">Intraday Monitor</span>
+                                        <span class="menu-icon"><i data-lucide="activity"></i></span>
+                                        <span class="menu-text" data-lang="nav-intraday-monitor">Monitor</span>
                                     </a>
                                 </li>
                             </ul>

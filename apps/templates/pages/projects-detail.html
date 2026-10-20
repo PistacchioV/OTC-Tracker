@@ -1,0 +1,135 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}{{ project_name }}{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
+{% include 'partials/projects-assets-css.html' %}
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="pjd-page" class="container-fluid" data-project="{{ project_id }}">
+
+    {# O ladrilho é o do PROJETO (cor e ícone dele), não o do menu: por ter um
+       `-product-icon`, o layout não põe o seu. #}
+    <div class="page-title-head">
+        <div class="d-flex align-items-center gap-3 flex-grow-1">
+            <a href="/projects" class="pjd-back" aria-label="Back to projects" title="Projects"><i data-lucide="chevron-left"></i></a>
+            <div class="pjd-product-icon" id="pjd-icon" style="--hue: var(--otc-{{ project_color }})"><i data-lucide="{{ project_icon }}"></i></div>
+            <div class="min-w-0">
+                <h4 id="pjd-name">{{ project_name }}</h4>
+                <p class="otc-page-sub" id="pjd-desc">&nbsp;</p>
+            </div>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="javascript: void(0);">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="javascript: void(0);" data-lang="nav-intraday">Intraday</a></li>
+                <li class="breadcrumb-item"><a href="/projects" data-lang="projects">Projects</a></li>
+                <li class="breadcrumb-item active" id="pjd-crumb">{{ project_name }}</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="otc-page-bar">
+        <div class="otc-stats">
+            <div class="otc-stat" style="--hue: var(--otc-{{ project_color }})">
+                <span class="otc-stat__label" data-lang="pj-progress">Progress</span>
+                <span class="otc-stat__value" id="pjd-n-progress">–</span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-blue)">
+                <span class="otc-stat__label" data-lang="pj-open-tasks">Open tasks</span>
+                <span class="otc-stat__value" id="pjd-n-open">–</span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-green)">
+                <span class="otc-stat__label" data-lang="pj-done">Done</span>
+                <span class="otc-stat__value" id="pjd-n-done">–</span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-orange)" id="pjd-days-tile">
+                <span class="otc-stat__label" id="pjd-days-label" data-lang="pj-days-left">Days left</span>
+                <span class="otc-stat__value" id="pjd-n-days">–</span>
+            </div>
+        </div>
+        <div class="otc-page-actions">
+            <button type="button" class="btn btn-secondary rounded-pill d-inline-flex align-items-center gap-2" id="pjd-pin">
+                <i data-lucide="star"></i><span id="pjd-pin-label" data-lang="pj-pin">Pin</span>
+            </button>
+            <button type="button" class="btn btn-secondary rounded-pill d-inline-flex align-items-center gap-2" id="pjd-edit">
+                <i data-lucide="pencil"></i><span data-lang="pj-edit">Edit</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="pjd-load-error" class="alert alert-danger d-none"></div>
+
+    <div class="pjd-grid">
+        <div class="pjd-col">
+            <div class="pjd-sec-panel">
+                <div class="pjd-sec-head"><h5 class="pj-sec-title" data-lang="pj-overview">Overview</h5></div>
+                <div class="pjd-boxes">
+                    <div class="pjd-box"><span class="pj-label" data-lang="pj-f-lead">Lead</span><div class="pjd-box__val" id="pjd-lead"></div></div>
+                    <div class="pjd-box"><span class="pj-label" data-lang="pj-f-status">Status</span><div class="pjd-box__val" id="pjd-status"></div></div>
+                </div>
+                <div id="pjd-timeline-wrap">
+                    <div class="pjd-timeline" id="pjd-timeline"></div>
+                    <div class="pjd-timeline-ends">
+                        <div><span class="pj-label" data-lang="pj-started">Started</span><b id="pjd-start"></b></div>
+                        <div><span class="pj-label" data-lang="pj-f-due">Target date</span><b id="pjd-due"></b></div>
+                    </div>
+                </div>
+                <div class="pj-h mt-4"><span><span data-lang="pj-people">People</span> <span class="otc-count ms-1" id="pjd-people-n">0</span></span></div>
+                <div class="pjd-people mt-2" id="pjd-people"></div>
+            </div>
+
+            <div class="pjd-sec-panel">
+                <div class="pjd-sec-head">
+                    <div><h5 class="pj-sec-title" data-lang="pj-milestones">Milestones</h5><p class="pj-sec-sub" id="pjd-ms-sub"></p></div>
+                </div>
+                <ul class="pjd-ms" id="pjd-ms"></ul>
+                <div class="pjd-ms-add">
+                    <input type="text" class="form-control" id="pjd-ms-title" maxlength="200" data-lang-placeholder="pj-ph-ms" placeholder="New milestone" autocomplete="off">
+                    <input type="text" class="form-control otc-datefield pjd-ms-date" id="pjd-ms-date" placeholder="dd/mm/yyyy" autocomplete="off">
+                    <button type="button" class="btn btn-secondary rounded-pill" id="pjd-ms-add" data-lang="pj-add">Add</button>
+                </div>
+            </div>
+
+            <div class="pjd-sec-panel">
+                <div class="pjd-sec-head"><h5 class="pj-sec-title" data-lang="pj-activity">Recent activity</h5></div>
+                <ul class="pjd-act" id="pjd-activity"></ul>
+            </div>
+        </div>
+
+        <div class="pjd-col">
+            <div class="pjd-sec-panel">
+                <div class="pjd-sec-head">
+                    <div><h5 class="pj-sec-title" data-lang="pj-burnup">Burn-up</h5><p class="pj-sec-sub" data-lang="pj-burnup-sub">Tasks done against the total, over the project’s life</p></div>
+                </div>
+                <div class="pjd-chart"><canvas id="pjd-burnup"></canvas></div>
+            </div>
+
+            <div class="pjd-sec-panel">
+                <div class="pjd-sec-head">
+                    <div><h5 class="pj-sec-title" data-lang="tasks">Tasks</h5><p class="pj-sec-sub" id="pjd-tasks-sub"></p></div>
+                    <button type="button" class="btn btn-primary rounded-pill d-inline-flex align-items-center gap-2" id="pjd-add-task">
+                        <i data-lucide="plus"></i><span data-lang="pj-add-task">Add task</span>
+                    </button>
+                </div>
+                <div id="pjd-tasks"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block modal %}
+{% include 'partials/projects-modals.html' %}
+{% endblock modal %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/chartjs/chart.umd.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/projects-common.js?v={{ asset_v('js/pages/projects-common.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/project-detail.js?v={{ asset_v('js/pages/project-detail.js') }}"></script>
+{% endblock extra_javascript %}
