@@ -105,3 +105,50 @@ def record(task, sid='', name='', ref='', summary=None, event='run', now=None):
         log.warning('[task-runs] não registrou %s (%s)', task, path, exc_info=True)
         return None
     return reg
+
+
+# ── Ajuste MANUAL do estado de uma tarefa (§632) ───────────────────────────────
+# Arrastar o card do Intraday Monitor grava aqui o estado que a pessoa disse,
+# com quem e quando; o snapshot do dia o aplica POR CIMA do automático (a recon
+# que rodou, o End process). Tarefa de ZONA não entra: o estado dela é contagem.
+# Um arquivo-dia ao lado do registro de execuções, pelo mesmo funil.
+OVERRIDE_STATES = ('todo', 'in_progress', 'late', 'done')
+
+
+def overrides_path(day):
+    return data_write('cache', 'intraday-monitor', day.strftime('%Y'), day.strftime('%m'),
+                      day.strftime('%Y%m%d') + '_task-overrides.json')
+
+
+def overrides_of(day):
+    """{task: {state, sid, name, at, time}} do dia. Leitura tolerante (a tela)."""
+    try:
+        data = _store.read(overrides_path(day))
+    except FileNotFoundError:
+        return {}
+    except Exception:                                       # noqa: BLE001
+        log.warning('[task-runs] ajustes manuais ilegíveis (%s)', day, exc_info=True)
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def set_override(day, task, state, sid='', name='', now=None):
+    """Grava (ou, com `state` vazio/'auto', apaga) o ajuste de `task` em `day`.
+    Leitura ESTRITA sob a trava: lido como vazio, o banco ocupado faria este
+    ajuste apagar os das outras tarefas do dia (§548)."""
+    now = now or _br_now()
+    path = overrides_path(day)
+    with _jc._cache_lock:
+        try:
+            atual = _store.read(path)
+        except FileNotFoundError:
+            atual = {}
+        atual = dict(atual) if isinstance(atual, dict) else {}
+        if state in OVERRIDE_STATES:
+            atual[str(task)] = {'state': state, 'sid': str(sid or ''), 'name': str(name or ''),
+                                'at': now.strftime('%Y-%m-%dT%H:%M:%S'), 'time': now.strftime('%H:%M')}
+        else:
+            atual.pop(str(task), None)
+        _jc._atomic_write_json(path, atual)
+    return atual.get(str(task))
+

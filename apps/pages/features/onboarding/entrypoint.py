@@ -51,7 +51,11 @@ def onboarding_tracking_docs():
 def api_onboarding_overview():
     if not session.get('authenticated'):
         return _nao_autenticado()
-    return jsonify({'success': True, **queries.overview()})
+    from apps.pages import routes
+    # quem arrasta o quê (§632): admin/master qualquer card; as mesas, a sua
+    me = {'desk': str(session.get('user_role') or '').strip().upper(),
+          'is_admin': bool(routes._session_is_admin())}
+    return jsonify({'success': True, 'me': me, **queries.overview()})
 
 
 @blueprint.route('/api/onboarding/docs')
@@ -171,6 +175,16 @@ def api_onboarding_docs_stamp():
         if acao == 'mo':
             return jsonify({'success': True,
                             'values': commands.stamp_mo(rid, sid, gen=_gen(payload))})
+        if acao == 'unstamp':
+            # voltar uma etapa é de admin/master (arrastar o card para trás)
+            from apps.pages import routes
+            if not routes._session_is_admin():
+                return jsonify({'success': False, 'error': 'not_allowed'}), 403
+            etapa = str(payload.get('stage') or '').strip().lower()
+            if etapa not in ('legal', 'otc'):
+                return jsonify({'success': False, 'error': 'unknown_stage'}), 400
+            return jsonify({'success': True,
+                            'values': commands.unstamp(rid, etapa, gen=_gen(payload))})
     except _recusas() as exc:
         return _recusa_gen(exc)
     except Exception as exc:                                  # pragma: no cover

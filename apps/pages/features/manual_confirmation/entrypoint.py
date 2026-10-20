@@ -104,6 +104,9 @@ def api_mc_monitor():
         payload['can_validate']['LEGAL'] = payload['can_validate'][_mc.STAGE_OTC]
         payload['can_validate']['FEPWEB'] = payload['can_validate'][_mc.STAGE_OTC]
         payload['stage_role'] = dict(_R()._MC_STAGE_ROLE)
+        # Arrastar o card (§632): admin e master movem qualquer etapa, para
+        # qualquer coluna; as mesas, só a SUA etapa e um passo à frente.
+        payload['is_admin'] = bool(_R()._session_is_admin())
         return jsonify(payload)
     except Exception as e:
         _R().log.error('[manual-conf] monitor: %s', e)
@@ -635,6 +638,131 @@ def api_mc_validate():
                          # esteira inteira — é dele o documento.
                          target_role=_R()._mc_notify_roles(rows))
     return jsonify({'success': True, 'row': rows[0], 'rows': rows})
+
+# ── Arrastar o card entre as colunas do Monitor (§632) ─────────────────────
+# Soltar o card na coluna seguinte ASSINA a etapa — a mesma validação da tela do
+# documento (`mark_validated`: SLA vencido pede justificativa, MO/FO só depois do
+# OTC), o mesmo release do Legal e o mesmo envio do FepWeb (callback antes). A
+# mesa só move a etapa DELA, e só um passo à frente. Admin e master movem
+# qualquer card para qualquer coluna (pedido da mesa, 20/10/2026): para trás é
+# reabrir (Pending Legal, ou limpar as validações da etapa de destino em diante)
+# e pular etapas assina as do meio. A trava do Validate pelo documento continua
+# a de sempre: o admin assina pelo documento só como OTC.
+_MC_COLS = ('LEGAL', 'OTC', 'MO', 'FO', 'FEPWEB', 'OK')
+_MC_RANK = {'LEGAL': 0, 'OTC': 1, 'MO': 2, 'FO': 2, 'MO/FO': 2, 'FEPWEB': 3, 'OK': 4}
+# o próximo passo de cada coluna, para quem não é admin
+_MC_NEXT = {'LEGAL': ('OTC',), 'OTC': ('MO', 'FO', 'FEPWEB'), 'MO': ('FEPWEB',),
+            'FO': ('FEPWEB',), 'FEPWEB': ('OK',)}
+
+
+class _CallbackRequired(Exception):
+    pass
+
+
+def _mc_col(row, rules):
+    from apps.pages import manual_conf as _mc
+    st = _mc.pending_stage(row, rules)
+    return {_mc.PENDING_LEGAL: 'LEGAL', _mc.PENDING_OTC: 'OTC', _mc.PENDING_MO: 'MO',
+            _mc.PENDING_FO: 'FO', _mc.PENDING_MOFO: 'MO/FO', _mc.PENDING_FEPWEB: 'FEPWEB',
+            _mc.STATUS_OK: 'OK'}.get(st, '')
+
+
+def _mc_move_one(row, src, dst, sid, comment, admin, rules):
+    """Leva UMA linha de `src` para `dst`. Devolve a linha gravada (ou None)."""
+    from apps.pages import manual_conf as _mc
+    from apps.pages.platform import manual_confirmation as _pmc
+    key = str(row.get(_mc.KEY_COLUMN, '') or '').strip()
+    cur = _mc_col(row, rules)
+    if dst == 'LEGAL':                                    # hold do jurídico (só admin chega aqui)
+        return _mc.save_changes(row, dict(row, Pending=_mc.PENDING_LEGAL))
+    if _MC_RANK.get(dst, 0) < _MC_RANK.get(cur, 0):       # para trás: reabrir (só admin)
+        depois = dict(row, Pending='')
+        limpar = {'OTC': (_mc.STAGE_OTC, _mc.STAGE_MO, _mc.STAGE_FO), 'MO': (_mc.STAGE_MO,),
+                  'FO': (_mc.STAGE_FO,), 'FEPWEB': ()}.get(dst, ())
+        for st in limpar:
+            for col in _mc.STAGE_COLUMNS[st]:
+                depois[col] = ''
+        depois[_mc.SENT_COLUMN] = ''
+        return _mc.save_changes(row, depois)
+    out = row
+    for _ in range(6):                                    # para frente: etapa a etapa
+        cur = _mc_col(out, rules)
+        if cur == dst or (dst in ('MO', 'FO') and cur == 'MO/FO') or _MC_RANK.get(cur, 9) >= _MC_RANK.get(dst, 0):
+            break
+        if cur == 'LEGAL':
+            out = _mc.save_changes(out, dict(out, Pending='')) or _mc.find_row(key)
+        elif cur == 'OTC':
+            out = _mc.mark_validated(key, _mc.STAGE_OTC, sid, comment)
+        elif cur in ('MO', 'FO', 'MO/FO'):
+            if admin:
+                etapas = {'MO': (_mc.STAGE_MO,), 'FO': (_mc.STAGE_FO,),
+                          'MO/FO': (_mc.STAGE_MO, _mc.STAGE_FO)}[cur]
+            else:
+                etapas = (src,)                           # a mesa assina só a SUA
+            for st in etapas:
+                out = _mc.mark_validated(key, st, sid, comment) or out
+        elif cur == 'FEPWEB':
+            if not _mc._filled(out, 'Data Callback') and not _pmc._mc_row_is_mgt(out):
+                raise _CallbackRequired(key)
+            depois = dict(out)
+            depois[_mc.SENT_COLUMN] = datetime.now().strftime('%d/%m/%Y')
+            out = _mc.save_changes(out, depois) or _mc.find_row(key)
+        if out is None or not admin:
+            break                                         # a mesa anda UM passo
+    return out
+
+
+@blueprint.route('/api/manual-confirmation/move', methods=['POST'])
+def api_mc_move():
+    """Soltar o card noutra coluna do Monitor. Corpo: {keys, from, to, comment?}."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    from apps.pages import manual_conf as _mc
+    payload = request.get_json(silent=True) or {}
+    keys = [str(k).strip() for k in (payload.get('keys') or []) if str(k or '').strip()]
+    src = str(payload.get('from') or '').strip().upper()
+    dst = str(payload.get('to') or '').strip().upper()
+    if src not in _MC_COLS or dst not in _MC_COLS or src == dst or not keys:
+        return jsonify({'success': False, 'code': 'bad_move', 'message': 'Invalid move.'}), 400
+    R = _R()
+    admin = bool(R._session_is_admin())
+    if not admin:
+        dona = {'LEGAL': _mc.STAGE_OTC, 'OTC': _mc.STAGE_OTC, 'FEPWEB': _mc.STAGE_OTC,
+                'MO': _mc.STAGE_MO, 'FO': _mc.STAGE_FO}.get(src)
+        if dst not in _MC_NEXT.get(src, ()) or not dona or not R._mc_can_validate(dona):
+            return jsonify({'success': False, 'code': 'move_not_allowed',
+                            'message': 'Your desk can only move its own stage, one step forward.'}), 403
+    comment = str(payload.get('comment') or '').strip()
+    rules = _mc.validation_rules()
+    sid = session.get('user_sid', '')
+    saved = []
+    for k in keys:
+        row = _mc.find_row(k)
+        if row is None:
+            continue
+        try:
+            r = _mc_move_one(row, src, dst, sid, comment, admin, rules)
+        except _mc.SlaCommentRequired as exc:
+            return jsonify({'success': False, 'code': 'sla_comment_required', 'sla_comment_required': True,
+                            'stage': str(exc), 'message': 'Late validation: give the reason for the delay.'}), 409
+        except _mc.StageNotPending as exc:
+            return jsonify({'success': False, 'code': 'stage_not_pending', 'key': str(exc),
+                            'message': '{}: the OTC validation must come first.'.format(exc)}), 409
+        except _CallbackRequired as exc:
+            return jsonify({'success': False, 'code': 'callback_required', 'callback_required': True,
+                            'key': str(exc), 'message': 'Callback pending: fill the Callback Date first.'}), 409
+        if r is not None:
+            saved.append(r)
+    if not saved:
+        return jsonify({'success': False, 'code': 'not_found', 'message': 'Confirmation not found.'}), 404
+    R._mc_pc_sync(saved)
+    R._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                           'Manual Confirmation', 'Confirmation',
+                           'Moved {} → {} · {}{}'.format(src, dst, saved[0].get('Cliente', '') or keys[0],
+                                                       ' (%d ops)' % len(saved) if len(saved) > 1 else ''),
+                           target_role=R._mc_notify_roles(saved))
+    return jsonify({'success': True, 'rows': saved})
+
 
 @blueprint.route('/api/manual-confirmation/reject', methods=['POST'])
 def api_mc_reject():

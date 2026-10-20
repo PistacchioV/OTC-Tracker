@@ -377,6 +377,14 @@
 @media (prefers-reduced-motion: reduce) {
     #ndm-page .ndm-row, #ndm-page .ndm-zero-toggle .ndm-caret { transition: none; }
 }
+/* Arrastar o card de tarefa (§632) */
+#ndm-page .im-task[draggable="true"] { cursor: grab; }
+#ndm-page .im-task.is-dragging { opacity: .35; }
+#ndm-page #im-board.is-dragging .im-col.is-forbidden { opacity: .45; }
+#ndm-page #im-board .im-col.is-over { box-shadow: var(--otc-depth), 0 0 0 2px var(--otc-accent-ink) !important; }
+#ndm-page .im-task-manual { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: .72rem; font-weight: 650; color: var(--otc-accent-ink); }
+#ndm-page .im-auto { margin-left: auto; border: 0; background: var(--otc-fill); color: var(--otc-text-2); border-radius: var(--otc-r-pill); padding: 1px 8px; font-size: .7rem; font-weight: 650; }
+#ndm-page .im-auto:hover { color: var(--otc-text); background: var(--otc-fill-2, var(--otc-fill)); }
 </style>
 {% endblock extra_css %}
 
@@ -408,7 +416,7 @@
 
     <!-- KPIs -->
     <div class="im-kpis mb-3" id="im-kpis">
-        <div class="im-panel im-kpi" data-k="due" style="--i:0">
+        <div class="im-panel im-kpi im-kpi--total" data-k="due" style="--i:0">
             <span class="im-micro" data-lang="im-k-due">Due today</span><b>—</b><small></small></div>
         <div class="im-panel im-kpi" data-k="done" style="--i:1">
             <span class="im-micro" data-lang="im-k-done">Completed</span><b>—</b><small></small></div>
@@ -905,9 +913,37 @@
                                      esc(t('im-ended', 'End of day')) + (tk.ended_at ? ' ' + esc(tk.ended_at) : '') +
                                      '</span>' : '');
     }
+    // ── Arrastar o card de tarefa (§632) ─────────────────────────────────
+    // Soltar noutra coluna grava um AJUSTE MANUAL do dia (quem/quando) que vale
+    // por cima do estado calculado. Zona não se move (é contagem). A mesa (BO)
+    // anda um passo à frente; admin e master, qualquer coluna — e o "↺ auto" do
+    // card devolve ao cálculo. O quadro não se redesenha no meio do arrasto.
+    var IM_ME = {}, IMDRAG = null;
+    var IM_NEXT = { todo: ['in_progress'], in_progress: ['done'], late: ['done'] };
+    function imPode(tk) { return tk.kind !== 'zone' && !!(IM_ME.is_admin || IM_ME.desk === 'BO'); }
+    function imAceita(from, to) {
+        if (!from || !to || from === to) return false;
+        return IM_ME.is_admin ? true : (IM_NEXT[from] || []).indexOf(to) !== -1;
+    }
+    function imAjusta(task, from, to) {
+        return fetch('/api/intraday-monitor/override', {
+            method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: refAtual, task: task, from: from, to: to })
+        }).then(function (r) { return r.json(); }).then(function (j) {
+            if (j.success && to !== 'auto' && window.otcToast) {
+                var nome = (document.querySelector('#im-board .im-task[data-task="' + task + '"] .im-task-name') || {}).textContent || task;
+                window.otcToast(t('im-k-' + to, ESTADO_TXT[to]) + ': ' + nome, { undo: function () { imAjusta(task, '', 'auto'); } });
+            }
+            if (!j.success && window.Swal) Swal.fire({ icon: 'error', title: t('im-move-fail', 'Not moved'),
+                text: j.code === 'move_not_allowed' ? t('im-move-denied', 'Your desk can only move a task one step forward.')
+                    : (j.code === 'zone_not_movable' ? t('im-zone-fixed', 'Zone tasks follow the count and cannot be moved.') : (j.message || '')) });
+            emVoo = null; load();
+        });
+    }
     function cartao(tk, i) {
         var link = tk.url || '#';
-        return '<a class="im-task" href="' + esc(link) + '" style="--i:' + i + ';--im-c:var(--im-' +
+        return '<a class="im-task' + (tk.manual ? ' is-manual' : '') + '" href="' + esc(link) + '" draggable="' + (imPode(tk) ? 'true' : 'false') + '"' +
+                   ' data-task="' + esc(tk.id) + '" data-state="' + esc(tk.state) + '" style="--i:' + i + ';--im-c:var(--im-' +
                    (tk.state === 'in_progress' ? 'prog' : tk.state) + ')">' +
                  '<span class="im-task-head">' +
                    '<span class="im-task-ico"><i class="ti ' + esc(tk.icon) + '"></i></span>' +
@@ -917,6 +953,10 @@
                  '<span class="im-task-due">' + prazoTxt(tk) + '</span>' +
                  '<span class="im-meter"><i style="width:' + (tk.progress || 0) + '%"></i></span>' +
                  '<span class="im-task-meta d-block">' + metaTxt(tk) + '</span>' +
+                 (tk.manual ? '<span class="im-task-manual"><i class="ti ti-hand-finger"></i>' + esc(t('im-manual', 'Manual')) +
+                    ' · ' + esc(tk.manual.by || '') + (tk.manual.time ? ' ' + esc(tk.manual.time) : '') +
+                    (IM_ME.is_admin ? ' <button type="button" class="im-auto" data-auto="' + esc(tk.id) + '" title="' +
+                        esc(t('im-auto-tip', 'Back to the automatic state')) + '">↺ auto</button>' : '') + '</span>' : '') +
                '</a>';
     }
 
@@ -1079,6 +1119,7 @@
     }
 
     function desenha(snap) {
+        IM_ME = snap.me || {};
         desenhaKpis(snap.kpis);
         desenhaPrev(snap.prev);
         desenhaQuadro(snap.tasks);
@@ -1148,9 +1189,55 @@
     // Atualiza sozinho a cada minuto — o que a mesa roda em outra aba aparece
     // aqui sem recarregar. Aba escondida não consulta (volta a consultar ao
     // reaparecer, na hora).
+    document.addEventListener('dragstart', function (e) {
+        var a = e.target.closest && e.target.closest('#im-board .im-task[draggable="true"]');
+        if (!a) return;
+        IMDRAG = { task: a.getAttribute('data-task'), from: a.getAttribute('data-state'), el: a };
+        try { e.dataTransfer.setData('text/plain', IMDRAG.task); e.dataTransfer.effectAllowed = 'move'; } catch (er) {}
+        setTimeout(function () {
+            if (!IMDRAG) return;
+            a.classList.add('is-dragging');
+            document.getElementById('im-board').classList.add('is-dragging');
+            document.querySelectorAll('#im-board .im-col').forEach(function (c) {
+                c.classList.toggle('is-forbidden', !imAceita(IMDRAG.from, c.getAttribute('data-s')));
+            });
+        }, 0);
+    });
+    function imLimpa() {
+        IMDRAG = null;
+        var b = document.getElementById('im-board');
+        if (b) b.classList.remove('is-dragging');
+        document.querySelectorAll('#im-board .is-over, #im-board .is-forbidden, #im-board .is-dragging')
+            .forEach(function (x) { x.classList.remove('is-over', 'is-forbidden', 'is-dragging'); });
+    }
+    document.addEventListener('dragend', function () { if (IMDRAG) imLimpa(); });
+    document.addEventListener('dragover', function (e) {
+        if (!IMDRAG) return;
+        var c = e.target.closest && e.target.closest('#im-board .im-col');
+        if (!c || !imAceita(IMDRAG.from, c.getAttribute('data-s'))) return;
+        e.preventDefault();
+        document.querySelectorAll('#im-board .im-col.is-over').forEach(function (x) { if (x !== c) x.classList.remove('is-over'); });
+        c.classList.add('is-over');
+    });
+    document.addEventListener('drop', function (e) {
+        if (!IMDRAG) return;
+        var c = e.target.closest && e.target.closest('#im-board .im-col');
+        var d = IMDRAG;
+        imLimpa();
+        if (!c || !imAceita(d.from, c.getAttribute('data-s'))) return;
+        e.preventDefault();
+        imAjusta(d.task, d.from, c.getAttribute('data-s'));
+    });
+    document.addEventListener('click', function (e) {
+        var b = e.target.closest && e.target.closest('#im-board .im-auto');
+        if (!b) return;
+        e.preventDefault(); e.stopPropagation();
+        imAjusta(b.getAttribute('data-auto'), '', 'auto');
+    });
+
     function agenda() {
         clearInterval(timer);
-        timer = setInterval(function () { if (!document.hidden) load(); }, 60000);
+        timer = setInterval(function () { if (!document.hidden && !IMDRAG) load(); }, 60000);
     }
     document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
 

@@ -138,6 +138,15 @@
 #ob-otc-modal .ob-req-drop.is-invalid,
 #ob-otc-modal .form-control.is-invalid { border-color: var(--otc-danger); }
 #ob-otc-modal .ob-otc-file-name { font-size: .72rem; font-weight: 600; word-break: break-all; }
+/* Arrastar o card (§632): a mesa que aceita acende, a que não aceita apaga; a
+   faixa do Complete aparece só durante o arrastar. */
+#ob-monitor .ob-item[draggable="true"] { cursor: grab; }
+#ob-monitor .ob-item.is-dragging { opacity: .35; }
+#ob-monitor.is-dragging .ob-card.is-forbidden { opacity: .45; }
+#ob-monitor .ob-card.is-over { box-shadow: var(--otc-depth), 0 0 0 2px var(--otc-accent-ink) !important; }
+#ob-monitor .ob-donezone { display: none; margin-top: var(--otc-gap, 18px); padding: 18px; border-radius: var(--otc-r-xl); border: 2px dashed color-mix(in srgb, var(--otc-green) 60%, transparent); background: color-mix(in srgb, var(--otc-green) 10%, transparent); color: var(--otc-text-2); text-align: center; font-weight: 650; }
+#ob-monitor.is-dragging .ob-donezone.is-allowed { display: block; }
+#ob-monitor .ob-donezone.is-over { background: color-mix(in srgb, var(--otc-green) 22%, transparent); color: var(--otc-text); }
 </style>
 {% endblock extra_css %}
 
@@ -166,6 +175,7 @@
     <div id="ob-dbline" class="mb-2"></div>
 
     <div class="row g-3" id="ob-cards"></div>
+    <div class="ob-donezone" id="ob-donezone" data-stage="DONE"><i class="ti ti-circle-check me-1"></i><span data-lang="ob-drop-done">Drop here: Complete (CEM MO)</span></div>
 
 </div>
 
@@ -244,7 +254,7 @@
               docs: 'document(s)', days: 'business day(s)', noage: 'no request date',
               derived: 'derived', requested: 'Requested',
               attach: 'Attach Taxonomy (Excel or PDF)', uploading: 'Uploading…',
-              taxDone: 'Taxonomy attached', otcDone: 'Signed CGD registered',
+              taxDone: 'Taxonomy attached', otcDone: 'Signed CGD registered', dropDone: 'Drop here: Complete (CEM MO)', taxAsk: 'Attach the Taxonomy to send it to CEM MO', chooseFile: 'Choose file', cancel: 'Cancel', reopenTitle: 'Reopen this stage?', reopenText: 'The stamp is cleared and the document goes back to the queue.', reopenGo: 'Reopen', moveDenied: 'Your desk can only move its own stage, one step forward.', completeAsk: 'Complete this document?', completeGo: 'Complete',
               download: 'Download', complete: 'Complete',
               missing: 'Fill in the file, the two dates and the B3 ID.',
               moTitle: 'Conclude this document?',
@@ -260,7 +270,7 @@
               docs: 'documento(s)', days: 'dia(s) útil(eis)', noage: 'sem data de solicitação',
               derived: 'derivado', requested: 'Solicitado',
               attach: 'Anexar Taxonomy (Excel ou PDF)', uploading: 'Enviando…',
-              taxDone: 'Taxonomy anexado', otcDone: 'CGD abonado registrado',
+              taxDone: 'Taxonomy anexado', otcDone: 'CGD abonado registrado', dropDone: 'Solte aqui: Complete (CEM MO)', taxAsk: 'Anexe o Taxonomy para enviá-lo ao CEM MO', chooseFile: 'Escolher arquivo', cancel: 'Cancelar', reopenTitle: 'Reabrir esta etapa?', reopenText: 'O carimbo é limpo e o documento volta para a fila.', reopenGo: 'Reabrir', moveDenied: 'Sua mesa só move a etapa dela, um passo à frente.', completeAsk: 'Concluir este documento?', completeGo: 'Concluir',
               download: 'Download', complete: 'Concluir',
               missing: 'Preencha o arquivo, as duas datas e o B3 ID.',
               moTitle: 'Concluir este documento?',
@@ -276,7 +286,7 @@
               docs: 'documento(s)', days: 'día(s) hábil(es)', noage: 'sin fecha de solicitud',
               derived: 'derivado', requested: 'Solicitado',
               attach: 'Adjuntar Taxonomy (Excel o PDF)', uploading: 'Enviando…',
-              taxDone: 'Taxonomy adjuntado', otcDone: 'CGD firmado registrado',
+              taxDone: 'Taxonomy adjuntado', otcDone: 'CGD firmado registrado', dropDone: 'Suelte aquí: Complete (CEM MO)', taxAsk: 'Adjunte el Taxonomy para enviarlo a CEM MO', chooseFile: 'Elegir archivo', cancel: 'Cancelar', reopenTitle: '¿Reabrir esta etapa?', reopenText: 'El sello se borra y el documento vuelve a la cola.', reopenGo: 'Reabrir', moveDenied: 'Su mesa solo mueve su propia etapa, un paso adelante.', completeAsk: '¿Concluir este documento?', completeGo: 'Concluir',
               download: 'Download', complete: 'Concluir',
               missing: 'Complete el archivo, las dos fechas y el B3 ID.',
               moTitle: '¿Concluir este documento?',
@@ -361,7 +371,10 @@
             ? ' data-id="' + esc(it.id) + '" data-client="' + esc(contraparte(it.client)) +
               '" data-le="' + esc(it.legal_entity) + '" data-cli-full="' + esc(it.client) + '"'
             : '';
-        return '<div class="ob-item' + (stage === 'OTC' ? ' ob-otc-item' : '') + '"' + attrs + '>' +
+        var arr = ' draggable="' + (podeArrastar(stage) ? 'true' : 'false') + '" data-stage="' + esc(stage) + '"' +
+                  (stage === 'OTC' ? '' : ' data-id="' + esc(it.id) + '" data-client="' + esc(contraparte(it.client)) +
+                                          '" data-le="' + esc(it.legal_entity) + '"');
+        return '<div class="ob-item' + (stage === 'OTC' ? ' ob-otc-item' : '') + '"' + attrs + arr + '>' +
             '<div class="ob-item__top">' +
               '<span class="ob-item__cli" title="' + esc(it.client) + '">' + esc(it.client || '—') + '</span>' +
               '<span class="ob-item__age ' + ageClass(it.aging) + '">' + idade + '</span>' +
@@ -382,7 +395,7 @@
             : '<div class="ob-empty">' + esc(t('empty')) + '</div>';
         // Três mesas: `xl-4` para as três caberem numa linha só.
         return '<div class="col-12 col-md-6 col-xl-4">' +
-            '<div class="ob-card ' + skin.cls + '">' +
+            '<div class="ob-card ' + skin.cls + '" data-stage="' + esc(c.stage) + '">' +
               '<div class="ob-card__head">' +
                 '<span class="ob-card__ico"><i class="ti ' + skin.icon + '"></i></span>' +
                 '<div>' +
@@ -409,6 +422,7 @@
                 // recusa se a lista foi reimportada depois deste load (o `_id`
                 // já seria de outro documento).
                 GEN = j.gen;
+                ME = j.me || {};
                 // Os chips de contagem MORAM no Track Docs (pedido 2026-09-01):
                 // aqui ficam só as três filas das mesas.
                 // Banco ausente é um estado, não um erro: a tela diz o que
@@ -476,6 +490,97 @@
         }
     }
 
+    // ── Arrastar o card entre as mesas (§632) ──────────────────────────────
+    // Soltar na etapa seguinte ABRE o formulário dela (o upload do Taxonomy, o
+    // modal do abonado, o Complete) — o carimbo sai quando ele é salvo, pelo
+    // caminho de sempre. A mesa arrasta só a etapa dela (Legal e OTC: BO; CEM
+    // MO: MO), um passo à frente; admin e master arrastam qualquer card, e para
+    // TRÁS é reabrir (limpa o carimbo da etapa de destino).
+    var ME = {}, OBDRAG = null;
+    var DESK = { 'Legal': 'BO', 'OTC': 'BO', 'CEM MO': 'MO' };
+    var OBNEXT = { 'Legal': ['CEM MO'], 'OTC': ['CEM MO'], 'CEM MO': ['DONE'] };
+    function podeArrastar(stage) {
+        return !!(ME.is_admin || (ME.desk && DESK[stage] === ME.desk));
+    }
+    function aceitaOb(from, to) {
+        if (!from || !to || from === to) return false;
+        if (ME.is_admin) return true;
+        return podeArrastar(from) && (OBNEXT[from] || []).indexOf(to) !== -1;
+    }
+    function limpaOb() {
+        OBDRAG = null;
+        var root = document.getElementById('ob-monitor');
+        if (root) root.classList.remove('is-dragging');
+        document.querySelectorAll('#ob-monitor .is-over, #ob-monitor .is-forbidden, #ob-monitor .is-allowed, #ob-monitor .ob-item.is-dragging')
+            .forEach(function (x) { x.classList.remove('is-over', 'is-forbidden', 'is-allowed', 'is-dragging'); });
+    }
+    function soltaOb(item, from, to) {
+        var id = item.getAttribute('data-id');
+        if (to === 'Legal' || to === 'OTC') {                      // para trás: só o admin chega aqui
+            if (!window.Swal) return;
+            Swal.fire({ icon: 'question', title: t('reopenTitle'), text: t('reopenText'), showCancelButton: true,
+                        confirmButtonText: t('reopenGo'), cancelButtonText: t('cancel') }).then(function (r) {
+                if (!r.isConfirmed) return;
+                carimba({ id: id, action: 'unstamp', stage: to === 'Legal' ? 'legal' : 'otc' })
+                    .then(function () { load(); }).catch(function (e) { falha(t('moveDenied'), e); load(); });
+            });
+            return;
+        }
+        if (to === 'DONE') {
+            var bt = item.querySelector('.ob-mo-done');
+            if (bt) { bt.click(); return; }                         // o Complete de sempre (confirma e carimba)
+            if (!window.Swal) return;
+            Swal.fire({ icon: 'question', title: t('completeAsk'), showCancelButton: true,
+                        confirmButtonText: t('completeGo'), cancelButtonText: t('cancel') }).then(function (r) {
+                if (r.isConfirmed) carimba({ id: id, action: 'mo' }).then(function () { load(); }).catch(function (e) { falha(t('upFailed'), e); load(); });
+            });
+            return;
+        }
+        if (from === 'OTC') { abreOtc(item); return; }              // o modal do abonado
+        if (from === 'Legal') {                                     // o upload do Taxonomy
+            var fi = item.querySelector('.ob-tax-file');
+            if (!fi || !window.Swal) return;
+            Swal.fire({ icon: 'info', title: t('taxAsk'), showCancelButton: true,
+                        confirmButtonText: t('chooseFile'), cancelButtonText: t('cancel') }).then(function (r) {
+                if (r.isConfirmed) fi.click();
+            });
+        }
+    }
+    document.addEventListener('dragstart', function (e) {
+        var it = e.target.closest && e.target.closest('#ob-monitor .ob-item[draggable="true"]');
+        if (!it) return;
+        OBDRAG = { el: it, from: it.getAttribute('data-stage') };
+        try { e.dataTransfer.setData('text/plain', it.getAttribute('data-id') || ''); e.dataTransfer.effectAllowed = 'move'; } catch (er) {}
+        setTimeout(function () {
+            if (!OBDRAG) return;
+            it.classList.add('is-dragging');
+            document.getElementById('ob-monitor').classList.add('is-dragging');
+            document.querySelectorAll('#ob-monitor .ob-card[data-stage]').forEach(function (c) {
+                c.classList.toggle('is-forbidden', !aceitaOb(OBDRAG.from, c.getAttribute('data-stage')));
+            });
+            var dz = document.getElementById('ob-donezone');
+            if (dz) dz.classList.toggle('is-allowed', aceitaOb(OBDRAG.from, 'DONE'));
+        }, 0);
+    });
+    document.addEventListener('dragend', function () { if (OBDRAG) limpaOb(); });
+    document.addEventListener('dragover', function (e) {
+        if (!OBDRAG) return;
+        var c = e.target.closest && e.target.closest('#ob-monitor .ob-card[data-stage], #ob-donezone');
+        if (!c || !aceitaOb(OBDRAG.from, c.getAttribute('data-stage'))) return;
+        e.preventDefault();
+        document.querySelectorAll('#ob-monitor .is-over').forEach(function (x) { if (x !== c) x.classList.remove('is-over'); });
+        c.classList.add('is-over');
+    });
+    document.addEventListener('drop', function (e) {
+        if (!OBDRAG) return;
+        var c = e.target.closest && e.target.closest('#ob-monitor .ob-card[data-stage], #ob-donezone');
+        var d = OBDRAG;
+        if (!c || !aceitaOb(d.from, c.getAttribute('data-stage'))) { limpaOb(); return; }
+        e.preventDefault();
+        limpaOb();
+        soltaOb(d.el, d.from, c.getAttribute('data-stage'));
+    });
+
     // ── Legal: o dropzone do Taxonomy ──────────────────────────────────────
     // Delegado no documento: os itens são reescritos a cada load().
     function taxUpload(label, arq) {
@@ -503,6 +608,7 @@
         document.addEventListener(ev, function (e) {
             var d = e.target.closest && e.target.closest('.ob-tax-drop');
             if (!d) { return; }
+            if (OBDRAG) { return; }                     // arrasto de CARD, não de arquivo
             e.preventDefault(); e.stopPropagation();
             d.classList.add('is-over');
         });
@@ -514,6 +620,7 @@
     document.addEventListener('drop', function (e) {
         var d = e.target.closest && e.target.closest('.ob-tax-drop');
         if (!d) { return; }
+        if (OBDRAG) { return; }
         e.preventDefault(); e.stopPropagation();
         d.classList.remove('is-over');
         var dt = e.dataTransfer;

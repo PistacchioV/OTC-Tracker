@@ -88,6 +88,18 @@ def stamp_otc(row_id, sid, issue_date, signature_date, b3_id, gen=None):
     return valores
 
 
+def unstamp(row_id, stage, gen=None):
+    """Arrastar para TRÁS na Overview (§632, só admin/master): limpa o carimbo
+    da etapa e o documento volta para a fila dela. `legal` limpa o Taxonomy,
+    `otc` o OTC - STAMP (os campos do abonado ficam: são o registro do que foi
+    feito, e o próximo carimbo os reescreve)."""
+    coluna = {'legal': cgd_docs.LEGAL_STAMP, 'otc': cgd_docs.OTC_STAMP}.get(str(stage or '').lower())
+    if not coluna:
+        raise ValueError('unknown stage: %r' % stage)
+    _gravou(cgd_docs.update_row(row_id, {coluna: ''}, gen=gen), row_id)
+    return {coluna: ''}
+
+
 def stamp_mo(row_id, sid, gen=None):
     """CEM MO conferiu abonado + taxonomy: fecha a esteira. O documento sai das
     filas pelo `Status = Active`, e o `Conclusion - Stamp` é o que PARA o aging
