@@ -50,6 +50,9 @@
 .swal2-popup.hc-swal-popup { max-width: 380px !important; }
 .swal2-popup.hc-swal-popup .swal2-html-container { margin: 0 !important; padding: 0 !important; text-align: left !important; overflow: visible !important; }
 .swal2-popup.hc-swal-popup .swal2-actions { margin-top: 18px !important; padding: 0 !important; }
+/* O X fica ACIMA do conteúdo: o html-container vem depois no DOM, sem margem,
+   e a linha do logo cobria o botão — o clique caía nela e o popup não fechava. */
+.swal2-popup.hc-swal-popup .swal2-close { position: relative; z-index: 2; }
 .hc-swal-enter { animation: otc-drop-in 520ms var(--otc-ease-out) both !important; }
 .hc-swal-exit { animation: otc-swal-out 200ms var(--otc-ease-in) forwards !important; }
 

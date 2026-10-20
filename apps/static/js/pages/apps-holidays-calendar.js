@@ -174,10 +174,10 @@ class CalendarSchedule {
             const holidayName = info.event.extendedProps.holidayName || info.event.extendedProps.description;
             const date = hcDataExtenso(info.event.start);
             
-            // Detectar tema para adaptar logo
-            const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark'
-                        || document.documentElement.classList.contains('dark')
-                        || window.matchMedia('(prefers-color-scheme: dark)').matches;
+            // Tema do APP, não do sistema: o <head> já resolve o "auto" no
+            // data-bs-theme. Com o macOS em dark e o app em claro, o
+            // prefers-color-scheme punha o logo branco sobre o vidro claro.
+            const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
             const logoSrc  = isDark ? '/static/images/logo-sm.png' : '/static/images/logo-sm-black.png';
             const calColor = HC_CAL_COLORS[calendar] || '#0066cc';
             const divider  = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
