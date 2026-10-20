@@ -18,7 +18,8 @@ entrega. O que este teste prende:
      só então os apaga da Return. Na Return ficam o retorno do Batch Conecta, o
      arquivo de outro dia e o de outro participante;
   4. duas entregas do mesmo arquivo: vale a de sequência maior;
-  5. o arquivo que o cadastro não pede fica guardado na origem e é contado;
+  5. o arquivo que o cadastro não pede fica guardado na origem e é contado —
+     inclusive o do sistema com HÍFEN (`CETIP21-DEP`, `CETIP21-SAP`);
   6. o que não se copiou para a origem FICA na Return (é o único exemplar);
   7. reprocessar o dia, com a Return já vazia, lê da origem.
 
@@ -93,6 +94,24 @@ check('o de outro participante NÃO perde o envelope (não casaria com a linha d
       CD._cetip_nome_legado('04880_CETIP21_261019_SP_DPOSICAO-SWAP.zip.S2'),
       '04880_CETIP21_261019_SP_DPOSICAO-SWAP.zip.S2')
 check('o retorno do Batch Conecta não está no envelope', CD._cetip_envelope('RET_20261019.txt'), None)
+# O sistema com HÍFEN (a captura da mesa, 20/10/2026): depositário e cadastro.
+DEP = '73760_CETIP21-DEP_261019_SP_AFREGISTRADO_73760009_DCONCILIACAO_AF_REGISTRADO.txt.zip.S10563992'
+SAP = '73760_CETIP21-SAP_261019_SP_DDADOS_CADASTRAIS.txt.zip.S10563981'
+env = CD._cetip_envelope(DEP)
+check('o sistema com hífen também é envelope (CETIP21-DEP)',
+      env and (env['participante'], env['sistema'], env['data'], env['seq']),
+      ('73760', 'CETIP21-DEP', '261019', 10563992))
+check('e o nome antigo dele', CD._cetip_nome_legado(SAP), 'CETIP21-SAP_261019_DDADOS_CADASTRAIS.txt')
+check('os da captura, todos no envelope', [n for n in (
+      DEP, SAP,
+      '73760_CETIP21-DEP_261019_SP_AFDEPOSITADO_73760009_DCONCILIACAO_AF_DEPOSITADO.txt.zip.S10563986',
+      '73760_CETIP21-DEP_261019_SP_CINVESTIDOR_33172537000198_DSTOTAIS_CINVEST.txt.zip.S10562358',
+      '73760_CETIP21-SAP_261019_SP_DCUSTODIANTEPORCONTA.txt.zip.S10561933',
+      '73760_CETIP21-SAP_261019_SP_ATUALIZACAO-CADASTRAL.txt.zip.S10560821',
+      '73760_CETIP21_261020_SP_DMOVIMENTO_C21-16H30.txt.zip.S10575237')
+      if not CD._cetip_envelope(n)], [])
+m = CD._cetip_make_matcher('CETIP21-SAP_YYMMDD_DDADOS_CADASTRAIS', 't')
+check('e uma linha do cadastro com o hífen casa com ele', m(SAP.lower()), True)
 nao_casam = []
 for linha in R._CETIP_FILES_SEED:
     m = CD._cetip_make_matcher(linha['SOURCE'], linha['TYPE'])
@@ -133,6 +152,8 @@ swap_novo = envelope('CETIP21_%s_DPOSICAO-SWAP.txt' % DREF, 200)
 fora = envelope('CETIP_%s_CADASTROIMPEDIDOSNEGOCIAR.txt' % DREF, 300)
 dois = envelope('CETIP21_%s_DFLUXO_SWAP.txt' % DREF, 400)
 outro_dia = envelope('CETIP21_260911_DPOSICAO-SWAP.txt', 500)
+dep = envelope('CETIP21-DEP_%s_AFREGISTRADO_73760009_DCONCILIACAO_AF_REGISTRADO.txt' % DREF, 800)
+sap = envelope('CETIP21-SAP_%s_DDADOS_CADASTRAIS.txt' % DREF, 900)
 outro_part = '04880_CETIP21_%s_SP_DPOSICAO-SWAP.txt.zip.S600' % DREF
 retorno_bc = 'RET_%s.txt' % REF.strftime('%Y%m%d')
 zipa(os.path.join(ret, swap_velho), [('CETIP21_%s_DPOSICAO-SWAP.txt' % DREF, '1;VELHO\n')])
@@ -140,6 +161,8 @@ zipa(os.path.join(ret, swap_novo), [('CETIP21_%s_DPOSICAO-SWAP.txt' % DREF, '1;N
 zipa(os.path.join(ret, fora), [('x.txt', 'impedidos\n')])
 zipa(os.path.join(ret, dois), [('a.txt', 'a\n'), ('b.txt', 'b\n')])
 zipa(os.path.join(ret, outro_dia), [('y.txt', 'amanha\n')])
+zipa(os.path.join(ret, dep), [('d.txt', 'dep\n')])
+zipa(os.path.join(ret, sap), [('s.txt', 'sap\n')])
 zipa(os.path.join(ret, outro_part), [('z.txt', 'mgt\n')])
 io.open(os.path.join(ret, retorno_bc), 'w').write('1;26C0;0014;EXECUCAO OK;TER  10014\n')
 bytes_novo = open(os.path.join(ret, swap_novo), 'rb').read()
@@ -162,18 +185,18 @@ try:
           [s['src'] for s in d.get('saved', []) if 'SWAP Position' in s['type']], [swap_novo])
     na_origem = sorted(os.listdir(d_src)) if os.path.isdir(d_src) else []
     check('a origem do dia guarda os crus da DATA, com o nome como chegaram',
-          na_origem, sorted([swap_velho, swap_novo, fora, dois]))
+          na_origem, sorted([swap_velho, swap_novo, fora, dois, dep, sap]))
     check('byte a byte (o zip, não o conteúdo)', open(os.path.join(d_src, swap_novo), 'rb').read(),
           bytes_novo)
     check('na Return ficam o retorno do Batch Conecta, o de outro dia e o de outro participante',
           sorted(os.listdir(ret)), sorted([retorno_bc, outro_dia, outro_part]))
     check('a resposta diz o que saiu da Return', sorted(d.get('from_return') or []),
-          sorted([swap_velho, swap_novo, fora, dois]))
+          sorted([swap_velho, swap_novo, fora, dois, dep, sap]))
     check('o zip com dois arquivos é erro com o motivo, sem chutar qual',
           [e['file'] for e in d.get('errors', []) if 'expected exactly one' in e.get('error', '')],
           [dois])
-    check('o arquivo que o cadastro não pede fica na origem e é contado',
-          d.get('unmatched'), [fora])
+    check('o arquivo que o cadastro não pede fica na origem e é contado (o do hífen também)',
+          sorted(d.get('unmatched') or []), sorted([fora, dep, sap]))
     check('e a mensagem diz as duas coisas',
           ('moved from the Return folder' in d.get('message', ''),
            'not in the CETIP Files mapping' in d.get('message', '')), (True, True))

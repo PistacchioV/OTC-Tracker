@@ -178,9 +178,14 @@ _CETIP_DATE_TOKEN = 'YYMMDD'
 # Só o participante do BANCO entra: os nomes de destino do cadastro são
 # `73760_YYMMDD_…`, e um arquivo de outro participante casaria com a mesma
 # linha e gravaria por cima do arquivo do banco.
+#
+# O SISTEMA pode ter HÍFEN (mesa, 20/10/2026): os arquivos de depositário e
+# de cadastro chegam como `73760_CETIP21-DEP_261019_SP_AFREGISTRADO_…` e
+# `73760_CETIP21-SAP_261019_SP_DDADOS_CADASTRAIS.txt.zip.S…`. Com só letra e
+# dígito ali, eles nem eram lidos como envelope e ficavam na Return, calados.
 _CETIP_PARTICIPANTE = '73760'
 _CETIP_ENVELOPE = re.compile(
-    r'^(?P<part>\d{5})_(?P<sis>[A-Za-z0-9]+)_(?P<data>\d{6}|YYMMDD)_SP_(?P<nome>.+?)'
+    r'^(?P<part>\d{5})_(?P<sis>[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)_(?P<data>\d{6}|YYMMDD)_SP_(?P<nome>.+?)'
     r'(?P<zip>\.zip)?(?:\.S(?P<seq>\d+))?$', re.I)
 
 
