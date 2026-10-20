@@ -52,6 +52,7 @@ var PAGE_URL = {
     'Intrag Unwind': '/intrag-unwind',
     'Support': '/tickets-list',
     'Projects': '/projects',
+    'Initiatives': '/projects',
     'User Home': '/user-home',
     'Other Products Summary': '/other-products-summary',
     'NDF Summary': '/ndf-summary',

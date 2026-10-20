@@ -89,7 +89,8 @@ check('admin fora do cadastro entra (a dev, o master)', 'A000000' in [p['sid'] f
 print('\n== 2. criação ==')
 st, d = call(bia, 'post', '/api/projects', {'name': '  Recon  revamp ', 'description': 'Faster recons',
                                             'lead_sid': 'A222222', 'color': 'purple', 'icon': 'rocket',
-                                            'due_date': '31/12/2026', 'status': 'On hold'})
+                                            'due_date': '31/12/2026', 'status': 'On hold',
+                                            'category': 'process review'})
 check('POST 200', st, 200)
 P1 = d['project']['id']
 check('id sequencial', P1, 'PRJ-0001')
@@ -97,8 +98,13 @@ check('nome limpo', d['project']['name'], 'Recon revamp')
 check('data dd/mm vira ISO', d['project']['due_date'], '2026-12-31')
 check('status escolhido', d['project']['status'], 'On hold')
 check('início = hoje quando não vem', d['project']['start_date'], R._br_now().date().isoformat())
+check('categoria pela lista fechada (sem caixa)', d['project']['category'], 'Process Review')
+# desde 20/10/2026 a tela diz Initiatives — o sino grava os nomes novos
 check('Lead avisado no sino', [(n['action'], n['sid'], n['page']) for n in NOTIFS],
-      [('Project Lead', 'A222222', 'Projects')])
+      [('Initiative Lead', 'A222222', 'Initiatives')])
+check('   e a página nova está nos três mapas',
+      all("'Initiatives'" in open(p_, encoding='utf-8').read() for p_ in
+          ('apps/pages/platform/notifications.py', 'apps/templates/partials/topbar.html', 'apps/static/js/sw-push.js')), True)
 
 st, d = call(bia, 'post', '/api/projects', {'name': 'X', 'lead_sid': 'M333333'})
 check('Lead MO recusado', (st, d.get('code')), (400, 'not_eligible'))
@@ -108,16 +114,31 @@ st, d = call(bia, 'post', '/api/projects', {'name': '', 'lead_sid': 'B111111'})
 check('sem nome -> name_required', (st, d.get('code')), (400, 'name_required'))
 st, d = call(bia, 'post', '/api/projects', {'name': 'X'})
 check('sem Lead -> lead_required', (st, d.get('code')), (400, 'lead_required'))
-st, d = call(bia, 'post', '/api/projects', {'name': 'X', 'lead_sid': 'B111111', 'color': 'red;}'})
+st, d = call(bia, 'post', '/api/projects', {'name': 'X', 'lead_sid': 'B111111'})
+check('sem categoria -> category_required', (st, d.get('code')), (400, 'category_required'))
+st, d = call(bia, 'post', '/api/projects', {'name': 'X', 'lead_sid': 'B111111', 'category': 'Marketing'})
+check('categoria fora da lista recusada', (st, d.get('code'), d.get('params')), (400, 'bad_choice', {'field': 'category'}))
+st, d = call(bia, 'post', '/api/projects', {'name': 'X', 'lead_sid': 'B111111', 'category': 'Projects', 'color': 'red;}'})
 check('cor fora da lista recusada', (st, d.get('code'), d.get('params')), (400, 'bad_choice', {'field': 'color'}))
-st, d = call(bia, 'post', '/api/projects', {'name': 'X', 'lead_sid': 'B111111',
+st, d = call(bia, 'post', '/api/projects', {'name': 'X', 'lead_sid': 'B111111', 'category': 'Projects',
                                             'start_date': '2026-10-10', 'due_date': '2026-10-01'})
 check('alvo antes do início', d.get('code'), 'due_before_start')
 
-st, d = call(bia, 'post', '/api/projects', {'name': 'Second', 'lead_sid': 'B111111'})
+st, d = call(bia, 'post', '/api/projects', {'name': 'Second', 'lead_sid': 'B111111', 'category': 'Stomp/Red'})
 P2 = d['project']['id']
 check('segundo id', P2, 'PRJ-0002')
 check('Lead = quem criou: sem aviso', len(NOTIFS), 1)
+st, d = call(bia, 'get', '/api/projects')
+check('o cartão da lista traz a categoria', sorted((p['id'], p['category']) for p in d['projects']),
+      [('PRJ-0001', 'Process Review'), ('PRJ-0002', 'Stomp/Red')])
+check('o meta traz a lista fechada', d.get('categories'),
+      ['Process Review', 'Tech Issue', 'Projects', 'B3 - Improvements', 'Stomp/Red'])
+st, d = call(bia, 'patch', '/api/projects/%s' % P2, {'category': 'B3 - Improvements'})
+check('editar troca a categoria', (st, d['project']['category']), (200, 'B3 - Improvements'))
+st, d = call(bia, 'patch', '/api/projects/%s' % P2, {'category': ''})
+check('editar não apaga a categoria', (st, d.get('code')), (400, 'category_required'))
+st, d = call(bia, 'patch', '/api/projects/%s' % P2, {'name': 'Second'})
+check('editar SEM mexer na categoria passa (a de antes não tem)', st, 200)
 
 print('\n== 3. tarefas, progresso e o sino ==')
 st, d = call(bia, 'post', '/api/projects/%s/tasks' % P1, {'title': 'Map columns', 'assignee_sid': 'B111111',
@@ -254,7 +275,7 @@ st, d = call(bia, 'delete', '/api/projects/%s' % P1)
 check('Lead apaga', st, 200)
 st, d = call(bia, 'get', '/api/projects')
 check('lista vazia de novo', d['projects'], [])
-st, d = call(bia, 'post', '/api/projects', {'name': 'Third', 'lead_sid': 'B111111'})
+st, d = call(bia, 'post', '/api/projects', {'name': 'Third', 'lead_sid': 'B111111', 'category': 'Tech Issue'})
 check('id não reaproveita apagado', d['project']['id'], 'PRJ-0003')
 anon = app.test_client()
 st, d = call(anon, 'get', '/api/projects')

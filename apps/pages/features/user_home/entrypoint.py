@@ -92,6 +92,9 @@ def api_user_home_sync():
         n = commands.sync(_me(), _now())
     except outlook.OutlookUnavailable as e:
         return _err('outlook_unavailable', 'The Sync needs Outlook on this machine: %s' % e, 503)
+    except outlook.CalendarNotAccessible:
+        return _err('calendar_not_accessible',
+                    "The Outlook on this machine belongs to someone else and your calendar did not open through it.", 409)
     return jsonify({'success': True, 'events': n})
 
 
@@ -165,17 +168,26 @@ def api_settings_export_tasks():
                 linhas.append((p, t))
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=';', lineterminator='\r\n')
-    w.writerow(['Project', 'Task', 'Status', 'Priority', 'Due', 'Estimate (h)', 'Subtasks done',
+    w.writerow(['Initiative', 'Task', 'Status', 'Priority', 'Due', 'Estimate (h)', 'Subtasks done',
                 'Created', 'Done at'])
 
     def dmy(iso):
         iso = str(iso or '')[:10]
         return '%s/%s/%s' % (iso[8:10], iso[5:7], iso[:4]) if len(iso) == 10 else ''
+
+    def texto(v):
+        # Título e nome são digitados por QUALQUER um que cria a tarefa para
+        # mim: começando por = + - @ o Excel os abre como FÓRMULA
+        # (`=HYPERLINK(...)`). O apóstrofo os mantém texto (OWASP, CSV
+        # injection).
+        v = str(v or '')
+        return "'" + v if v[:1] in ('=', '+', '-', '@', '\t', '\r') else v
     for p, t in linhas:
         subs = t.get('subtasks') or []
-        w.writerow([p.get('name', ''), t.get('title', ''), t.get('status', ''), t.get('priority', ''),
+        # "1 of 3", não "1/3": o Excel lê `1/3` como DATA (3 de janeiro)
+        w.writerow([texto(p.get('name', '')), texto(t.get('title', '')), t.get('status', ''), t.get('priority', ''),
                     dmy(t.get('due')), t.get('estimate') if t.get('estimate') is not None else '',
-                    '%d/%d' % (sum(1 for s in subs if s.get('done')), len(subs)) if subs else '',
+                    '%d of %d' % (sum(1 for s in subs if s.get('done')), len(subs)) if subs else '',
                     dmy(t.get('created_at')), dmy(t.get('done_at'))])
     nome = 'My Tasks - %s - %s.csv' % (me['name'] or me['sid'], _now()[:10].replace('-', ''))
     return Response('\ufeff' + buf.getvalue(), mimetype='text/csv; charset=utf-8',

@@ -58,6 +58,7 @@
 
     $('pjd-lead').innerHTML = p.lead_sid ? P.avatar(p.lead_sid, p.lead_name, 'sm') + '<span>' + esc(p.lead_name || p.lead_sid) + '</span>' : '<span class="text-muted">—</span>';
     $('pjd-status').innerHTML = P.chip(P.tStatus(p.status), P.STATUS_HUE[p.status] || 'var(--otc-text-3)');
+    $('pjd-category').innerHTML = p.category ? P.catChip(p.category) : '<span class="text-muted">' + esc(P.tCat('')) + '</span>';
     renderTimeline(p);
     renderPeople(p);
     renderMilestones(p);

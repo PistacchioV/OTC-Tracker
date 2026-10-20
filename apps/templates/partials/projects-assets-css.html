@@ -59,6 +59,11 @@
 .pj-card__ttl { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .pj-card__name { font: 680 17px/1.25 var(--otc-font-display); color: var(--otc-text); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .pj-card__name:hover { color: var(--otc-text); }
+.pj-card__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+/* a categoria da iniciativa: o chip da casa com a etiqueta */
+.otc-chip.pj-cat { gap: 4px; }
+.otc-chip.pj-cat::before { display: none; }
+.otc-chip.pj-cat svg { width: 12px; height: 12px; flex: none; color: var(--chip); }
 .pj-card__desc { margin: 0; color: var(--otc-text-2); font-size: 14px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 3em; }
 .pj-card__ms { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: var(--otc-r-md, 16px); background: var(--otc-fill); }
 .pj-card__ms-label { font: 600 11.5px/1.3 var(--otc-font); color: var(--otc-text-2); }
@@ -82,6 +87,8 @@
 .pjd-sec-panel { padding: 20px; }
 .pjd-sec-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .pjd-boxes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* a categoria tem a linha inteira: "B3 - Improvements" não cabe num terço */
+.pjd-box--wide { grid-column: 1 / -1; }
 .pjd-box { padding: 10px 14px; border-radius: var(--otc-r-md, 16px); background: var(--otc-fill); min-width: 0; }
 .pjd-box .pj-label { display: block; margin-bottom: 6px; }
 .pjd-box__val { display: flex; align-items: center; gap: 8px; font: 650 14.5px/1.2 var(--otc-font); color: var(--otc-text); min-width: 0; }

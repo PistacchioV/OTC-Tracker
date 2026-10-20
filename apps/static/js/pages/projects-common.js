@@ -29,33 +29,36 @@
       just_now: 'just now', min_ago: '{n} min ago', h_ago: '{n} h ago', d_ago: '{n} d ago',
       wd: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
       unassigned: 'Unassigned', no_date: 'No date', none: '—',
-      new_project: 'New project', edit_project: 'Edit project', new_task: 'New task',
+      new_project: 'New initiative', edit_project: 'Edit initiative', new_task: 'New task',
       saved: 'Saved', deleted: 'Deleted', undo: 'Undo', cancel: 'Cancel', del: 'Delete',
-      del_task_q: 'Delete this task?', del_project_q: 'Delete this project?',
+      del_task_q: 'Delete this task?', del_project_q: 'Delete this initiative?',
       del_project_txt: 'Its tasks, milestones and comments go with it. This cannot be undone.',
       del_task_txt: 'Its subtasks and comments go with it.',
       ms_reached: 'Milestone reached: {m}', mark_done: 'Mark done', reopen: 'Reopen',
       no_comments: 'No comments yet.', no_subtasks: 'No subtasks yet.',
-      none_status: 'No projects with this status', all_ms: 'Every milestone met', done_proj: 'Project concluded',
+      none_status: 'No initiatives with this status', none_filter: 'No initiatives match these filters', all_ms: 'Every milestone met', done_proj: 'Initiative concluded',
       next_ms: 'Next milestone', no_ms: 'No milestones yet', pin: 'Pin to the sidebar', pin_short: 'Pin', pinned: 'Pinned',
       n_tasks: '{done}/{total} tasks', overdue: 'Overdue', days_left: 'Days left', n_open: '{n} open',
       ms_reached_n: '{n} of {total} reached', ms_done: 'Done', complete: 'Complete', next: 'Next',
       open_done: '{open} open · {done} done', no_tasks: 'No tasks yet — add the first one.', hide: 'Hide', show: 'Show',
-      done: 'Done', total: 'Total', open_across: '{n} open across {m} projects', all_projects: 'All projects',
+      done: 'Done', total: 'Total', open_across: '{n} open across {m} initiatives', all_projects: 'All initiatives',
       any_priority: 'Any priority', add_to: 'Add a task to {col}', move_to: 'Move to {col}', open_task: 'Open task',
       move_or_open: 'Move or open “{task}”', n_on_board: '{n} on the board', up_target: 'Target date', up_milestone: 'Milestone', up_empty: 'Nothing coming up.',
       lead: 'Lead',
-      a_created: '{who} created the project', a_status: '{who} set the status to {status}',
-      a_edited: '{who} edited the project', a_task_added: '{who} added “{task}”',
+      'cat_Process Review': 'Process Review', 'cat_Tech Issue': 'Tech Issue', 'cat_Projects': 'Projects',
+      'cat_B3 - Improvements': 'B3 - Improvements', 'cat_Stomp/Red': 'Stomp/Red',
+      category: 'Category', all_categories: 'All categories', no_category: 'No category', choose_category: 'Choose…',
+      a_created: '{who} created the initiative', a_status: '{who} set the status to {status}',
+      a_edited: '{who} edited the initiative', a_task_added: '{who} added “{task}”',
       a_task_done: '{who} completed “{task}”', a_task_moved: '{who} moved “{task}” to {status}',
       a_task_deleted: '{who} deleted “{task}”', a_commented: '{who} commented on “{task}”',
       a_milestone_added: '{who} added the milestone “{milestone}”',
       a_milestone_done: '{who} reached “{milestone}”', a_milestone_reopened: '{who} reopened “{milestone}”',
-      e_name_required: 'Give the project a name.', e_lead_required: 'Choose the lead.',
-      e_not_eligible: 'This person cannot be chosen.', e_bad_choice: 'Invalid value in {field}.',
+      e_name_required: 'Give the initiative a name.', e_lead_required: 'Choose the lead.', e_category_required: 'Choose the category.',
+      e_not_eligible: 'This person cannot be chosen.', e_bad_choice: 'Invalid value in {field}.', e_bad_number: 'Type a number.', e_out_of_range: 'Between {min} and {max}.', e_bad_action: 'Unknown action.',
       e_bad_date: 'Invalid date.', e_due_before_start: 'The target date is before the start date.',
       e_title_required: 'Give it a title.', e_bad_estimate: 'The estimate must be a number of hours.',
-      e_comment_required: 'Write the comment first.', e_project_not_found: 'Project not found.',
+      e_comment_required: 'Write the comment first.', e_project_not_found: 'Initiative not found.',
       e_task_not_found: 'Task not found — it may have been deleted.', e_milestone_not_found: 'Milestone not found.',
       e_subtask_not_found: 'Subtask not found.', e_not_allowed: 'You are not allowed to do this.',
       e_generic: 'Could not save. Try again.', e_title: 'Not saved'
@@ -74,33 +77,36 @@
       just_now: 'agora', min_ago: 'há {n} min', h_ago: 'há {n} h', d_ago: 'há {n} d',
       wd: ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'],
       unassigned: 'Sem responsável', no_date: 'Sem data', none: '—',
-      new_project: 'Novo projeto', edit_project: 'Editar projeto', new_task: 'Nova tarefa',
+      new_project: 'Nova iniciativa', edit_project: 'Editar iniciativa', new_task: 'Nova tarefa',
       saved: 'Salvo', deleted: 'Apagado', undo: 'Desfazer', cancel: 'Cancelar', del: 'Apagar',
-      del_task_q: 'Apagar esta tarefa?', del_project_q: 'Apagar este projeto?',
+      del_task_q: 'Apagar esta tarefa?', del_project_q: 'Apagar esta iniciativa?',
       del_project_txt: 'As tarefas, os marcos e os comentários vão junto. Não dá para desfazer.',
       del_task_txt: 'As subtarefas e os comentários vão junto.',
       ms_reached: 'Marco atingido: {m}', mark_done: 'Concluir', reopen: 'Reabrir',
       no_comments: 'Nenhum comentário ainda.', no_subtasks: 'Nenhuma subtarefa ainda.',
-      none_status: 'Nenhum projeto com este status', all_ms: 'Todos os marcos atingidos', done_proj: 'Projeto concluído',
+      none_status: 'Nenhuma iniciativa com este status', none_filter: 'Nenhuma iniciativa com estes filtros', all_ms: 'Todos os marcos atingidos', done_proj: 'Iniciativa concluída',
       next_ms: 'Próximo marco', no_ms: 'Nenhum marco ainda', pin: 'Fixar na barra lateral', pin_short: 'Fixar', pinned: 'Fixado',
       n_tasks: '{done}/{total} tarefas', overdue: 'Atrasado', days_left: 'Dias restantes', n_open: '{n} em aberto',
       ms_reached_n: '{n} de {total} atingidos', ms_done: 'Concluído', complete: 'Concluir', next: 'Próximo',
       open_done: '{open} em aberto · {done} concluídas', no_tasks: 'Nenhuma tarefa ainda — adicione a primeira.', hide: 'Ocultar', show: 'Mostrar',
-      done: 'Concluídas', total: 'Total', open_across: '{n} em aberto em {m} projetos', all_projects: 'Todos os projetos',
+      done: 'Concluídas', total: 'Total', open_across: '{n} em aberto em {m} iniciativas', all_projects: 'Todas as iniciativas',
       any_priority: 'Qualquer prioridade', add_to: 'Adicionar tarefa em {col}', move_to: 'Mover para {col}', open_task: 'Abrir tarefa',
       move_or_open: 'Mover ou abrir “{task}”', n_on_board: '{n} no quadro', up_target: 'Data-alvo', up_milestone: 'Marco', up_empty: 'Nada pela frente.',
       lead: 'Líder',
-      a_created: '{who} criou o projeto', a_status: '{who} mudou o status para {status}',
-      a_edited: '{who} editou o projeto', a_task_added: '{who} adicionou “{task}”',
+      'cat_Process Review': 'Revisão de Processo', 'cat_Tech Issue': 'Tech Issue', 'cat_Projects': 'Projects',
+      'cat_B3 - Improvements': 'B3 - Improvements', 'cat_Stomp/Red': 'Stomp/Red',
+      category: 'Categoria', all_categories: 'Todas as categorias', no_category: 'Sem categoria', choose_category: 'Escolha…',
+      a_created: '{who} criou a iniciativa', a_status: '{who} mudou o status para {status}',
+      a_edited: '{who} editou a iniciativa', a_task_added: '{who} adicionou “{task}”',
       a_task_done: '{who} concluiu “{task}”', a_task_moved: '{who} moveu “{task}” para {status}',
       a_task_deleted: '{who} apagou “{task}”', a_commented: '{who} comentou em “{task}”',
       a_milestone_added: '{who} adicionou o marco “{milestone}”',
       a_milestone_done: '{who} atingiu “{milestone}”', a_milestone_reopened: '{who} reabriu “{milestone}”',
-      e_name_required: 'Dê um nome ao projeto.', e_lead_required: 'Escolha o líder.',
-      e_not_eligible: 'Esta pessoa não pode ser escolhida.', e_bad_choice: 'Valor inválido em {field}.',
+      e_name_required: 'Dê um nome à iniciativa.', e_lead_required: 'Escolha o líder.', e_category_required: 'Escolha a categoria.',
+      e_not_eligible: 'Esta pessoa não pode ser escolhida.', e_bad_choice: 'Valor inválido em {field}.', e_bad_number: 'Digite um número.', e_out_of_range: 'Entre {min} e {max}.', e_bad_action: 'Ação desconhecida.',
       e_bad_date: 'Data inválida.', e_due_before_start: 'A data-alvo é anterior ao início.',
       e_title_required: 'Dê um título.', e_bad_estimate: 'A estimativa deve ser um número de horas.',
-      e_comment_required: 'Escreva o comentário primeiro.', e_project_not_found: 'Projeto não encontrado.',
+      e_comment_required: 'Escreva o comentário primeiro.', e_project_not_found: 'Iniciativa não encontrada.',
       e_task_not_found: 'Tarefa não encontrada — pode ter sido apagada.', e_milestone_not_found: 'Marco não encontrado.',
       e_subtask_not_found: 'Subtarefa não encontrada.', e_not_allowed: 'Você não tem permissão para isso.',
       e_generic: 'Não foi possível salvar. Tente de novo.', e_title: 'Não salvo'
@@ -119,33 +125,36 @@
       just_now: 'ahora', min_ago: 'hace {n} min', h_ago: 'hace {n} h', d_ago: 'hace {n} d',
       wd: ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'],
       unassigned: 'Sin responsable', no_date: 'Sin fecha', none: '—',
-      new_project: 'Nuevo proyecto', edit_project: 'Editar proyecto', new_task: 'Nueva tarea',
+      new_project: 'Nueva iniciativa', edit_project: 'Editar iniciativa', new_task: 'Nueva tarea',
       saved: 'Guardado', deleted: 'Eliminado', undo: 'Deshacer', cancel: 'Cancelar', del: 'Eliminar',
-      del_task_q: '¿Eliminar esta tarea?', del_project_q: '¿Eliminar este proyecto?',
-      del_project_txt: 'Sus tareas, hitos y comentarios se van con él. No se puede deshacer.',
+      del_task_q: '¿Eliminar esta tarea?', del_project_q: '¿Eliminar esta iniciativa?',
+      del_project_txt: 'Sus tareas, hitos y comentarios se van con ella. No se puede deshacer.',
       del_task_txt: 'Sus subtareas y comentarios se van con ella.',
       ms_reached: 'Hito alcanzado: {m}', mark_done: 'Marcar hecha', reopen: 'Reabrir',
       no_comments: 'Aún no hay comentarios.', no_subtasks: 'Aún no hay subtareas.',
-      none_status: 'Ningún proyecto con este estado', all_ms: 'Todos los hitos alcanzados', done_proj: 'Proyecto concluido',
+      none_status: 'Ninguna iniciativa con este estado', none_filter: 'Ninguna iniciativa con estos filtros', all_ms: 'Todos los hitos alcanzados', done_proj: 'Iniciativa concluida',
       next_ms: 'Próximo hito', no_ms: 'Aún no hay hitos', pin: 'Fijar en la barra lateral', pin_short: 'Fijar', pinned: 'Fijado',
       n_tasks: '{done}/{total} tareas', overdue: 'Atrasado', days_left: 'Días restantes', n_open: '{n} abiertas',
       ms_reached_n: '{n} de {total} alcanzados', ms_done: 'Hecho', complete: 'Completar', next: 'Próximo',
       open_done: '{open} abiertas · {done} hechas', no_tasks: 'Aún no hay tareas — agrega la primera.', hide: 'Ocultar', show: 'Mostrar',
-      done: 'Hechas', total: 'Total', open_across: '{n} abiertas en {m} proyectos', all_projects: 'Todos los proyectos',
+      done: 'Hechas', total: 'Total', open_across: '{n} abiertas en {m} iniciativas', all_projects: 'Todas las iniciativas',
       any_priority: 'Cualquier prioridad', add_to: 'Agregar tarea en {col}', move_to: 'Mover a {col}', open_task: 'Abrir tarea',
       move_or_open: 'Mover o abrir “{task}”', n_on_board: '{n} en el tablero', up_target: 'Fecha objetivo', up_milestone: 'Hito', up_empty: 'Nada por delante.',
       lead: 'Líder',
-      a_created: '{who} creó el proyecto', a_status: '{who} cambió el estado a {status}',
-      a_edited: '{who} editó el proyecto', a_task_added: '{who} agregó “{task}”',
+      'cat_Process Review': 'Revisión de Proceso', 'cat_Tech Issue': 'Tech Issue', 'cat_Projects': 'Projects',
+      'cat_B3 - Improvements': 'B3 - Improvements', 'cat_Stomp/Red': 'Stomp/Red',
+      category: 'Categoría', all_categories: 'Todas las categorías', no_category: 'Sin categoría', choose_category: 'Elija…',
+      a_created: '{who} creó la iniciativa', a_status: '{who} cambió el estado a {status}',
+      a_edited: '{who} editó la iniciativa', a_task_added: '{who} agregó “{task}”',
       a_task_done: '{who} completó “{task}”', a_task_moved: '{who} movió “{task}” a {status}',
       a_task_deleted: '{who} eliminó “{task}”', a_commented: '{who} comentó en “{task}”',
       a_milestone_added: '{who} agregó el hito “{milestone}”',
       a_milestone_done: '{who} alcanzó “{milestone}”', a_milestone_reopened: '{who} reabrió “{milestone}”',
-      e_name_required: 'Ponle un nombre al proyecto.', e_lead_required: 'Elige el líder.',
-      e_not_eligible: 'Esta persona no se puede elegir.', e_bad_choice: 'Valor inválido en {field}.',
+      e_name_required: 'Ponle un nombre a la iniciativa.', e_lead_required: 'Elige el líder.', e_category_required: 'Elige la categoría.',
+      e_not_eligible: 'Esta persona no se puede elegir.', e_bad_choice: 'Valor inválido en {field}.', e_bad_number: 'Escriba un número.', e_out_of_range: 'Entre {min} y {max}.', e_bad_action: 'Acción desconocida.',
       e_bad_date: 'Fecha inválida.', e_due_before_start: 'La fecha objetivo es anterior al inicio.',
       e_title_required: 'Ponle un título.', e_bad_estimate: 'La estimación debe ser un número de horas.',
-      e_comment_required: 'Escribe el comentario primero.', e_project_not_found: 'Proyecto no encontrado.',
+      e_comment_required: 'Escribe el comentario primero.', e_project_not_found: 'Iniciativa no encontrada.',
       e_task_not_found: 'Tarea no encontrada — puede haber sido eliminada.', e_milestone_not_found: 'Hito no encontrado.',
       e_subtask_not_found: 'Subtarea no encontrada.', e_not_allowed: 'No tienes permiso para hacer esto.',
       e_generic: 'No se pudo guardar. Inténtalo de nuevo.', e_title: 'No guardado'
@@ -164,6 +173,7 @@
   function tStatus(v) { return t('st_' + v); }
   function tTask(v) { return t('ts_' + v); }
   function tPrio(v) { return t('pr_' + v); }
+  function tCat(v) { return v ? t('cat_' + v) : t('no_category'); }
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -174,6 +184,10 @@
   var COLORS = ['blue', 'purple', 'pink', 'orange', 'green', 'teal', 'indigo', 'yellow'];
   function colorVar(c) { return 'var(--otc-' + (COLORS.indexOf(c) !== -1 ? c : 'blue') + ')'; }
   var STATUS_HUE = { 'On going': 'var(--otc-green)', 'On hold': 'var(--otc-orange)', 'Concluded': 'var(--otc-teal)' };
+  // A categoria da iniciativa (lista fechada do servidor, `domain.CATEGORIES`)
+  var CATEGORIES = ['Process Review', 'Tech Issue', 'Projects', 'B3 - Improvements', 'Stomp/Red'];
+  var CATEGORY_HUE = { 'Process Review': 'var(--otc-blue)', 'Tech Issue': 'var(--otc-orange)', 'Projects': 'var(--otc-purple)',
+                       'B3 - Improvements': 'var(--otc-teal)', 'Stomp/Red': 'var(--otc-danger)' };
   var TASK_HUE = { 'To do': 'var(--otc-text-3)', 'In progress': 'var(--otc-blue)', 'In review': 'var(--otc-purple)', 'Done': 'var(--otc-green)' };
 
   function icons(root) {
@@ -224,7 +238,7 @@
   // restantes); o relógio da máquina só vale enquanto ele não chegou.
   var meta = { today: null, people: [], me: {} };
   function setMeta(d) {
-    ['today', 'people', 'me', 'statuses', 'task_statuses', 'priorities', 'colors', 'icons'].forEach(function (k) {
+    ['today', 'people', 'me', 'statuses', 'task_statuses', 'priorities', 'colors', 'icons', 'categories'].forEach(function (k) {
       if (d && d[k] !== undefined) meta[k] = d[k];
     });
   }
@@ -317,6 +331,11 @@
   function chip(text, hue, extra) {
     return '<span class="otc-chip' + (extra ? ' ' + extra : '') + '" style="--chip:' + hue + '"><span>' + esc(text) + '</span></span>';
   }
+  function categories() { return meta.categories || CATEGORIES; }
+  function catChip(v) {
+    if (!v) return '';
+    return '<span class="otc-chip pj-cat" style="--chip:' + (CATEGORY_HUE[v] || 'var(--otc-text-3)') + '"><i data-lucide="tag"></i><span>' + esc(tCat(v)) + '</span></span>';
+  }
 
   // ── Selects ─────────────────────────────────────────────────────────────
   function fillSelect(sel, items, value, opts) {
@@ -367,6 +386,8 @@
     el.querySelector('#pjm-desc').value = p.description || '';
     fillSelect(el.querySelector('#pjm-lead'), peopleItems(), p.lead_sid || (meta.me && meta.me.sid) || '',
                { keep: p.lead_name });
+    fillSelect(el.querySelector('#pjm-category'), categories().map(function (c) { return { value: c, label: tCat(c) }; }), p.category || '',
+               { blank: t('choose_category') });
     fillSelect(el.querySelector('#pjm-status'), (meta.statuses || []).map(function (s) { return { value: s, label: tStatus(s) }; }), p.status || 'On going');
     fillSelect(el.querySelector('#pjm-color'), (meta.colors || COLORS).map(function (c) { return { value: c, label: t('co_' + c) }; }), p.color || 'blue');
     fillSelect(el.querySelector('#pjm-icon'), (meta.icons || []).map(function (c) { return { value: c, label: t('ic_' + c) }; }), p.icon || 'folder');
@@ -388,6 +409,7 @@
     var el = Pm.el, o = Pm.opts, edit = o.mode === 'edit';
     var body = {
       name: el.querySelector('#pjm-name').value, description: el.querySelector('#pjm-desc').value,
+      category: el.querySelector('#pjm-category').value,
       lead_sid: el.querySelector('#pjm-lead').value, color: el.querySelector('#pjm-color').value,
       icon: el.querySelector('#pjm-icon').value, start_date: readDate(el.querySelector('#pjm-start')),
       due_date: readDate(el.querySelector('#pjm-due'))
@@ -599,7 +621,8 @@
   }
 
   window.OtcPj = {
-    t: t, tStatus: tStatus, tTask: tTask, tPrio: tPrio, esc: esc, colorVar: colorVar,
+    t: t, tStatus: tStatus, tTask: tTask, tPrio: tPrio, tCat: tCat, categories: categories, catChip: catChip,
+    CATEGORY_HUE: CATEGORY_HUE, esc: esc, colorVar: colorVar,
     STATUS_HUE: STATUS_HUE, TASK_HUE: TASK_HUE, icons: icons, api: api, fail: fail, toast: toast,
     errText: errText, confirmDelete: confirmDelete, meta: meta, setMeta: setMeta, isoToday: isoToday,
     parse: parse, diffDays: diffDays, fmtDate: fmtDate, fmtShort: fmtShort, due: due, inDays: inDays, ago: ago,

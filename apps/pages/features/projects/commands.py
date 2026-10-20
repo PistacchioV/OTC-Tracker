@@ -14,9 +14,15 @@ from apps.pages.features.projects.infra import store
 
 log = logging.getLogger('otc_tracker')
 
-PAGE = 'Projects'
+# Desde 20/10/2026 a tela diz INITIATIVES: o sino grava a página e o aviso
+# com os nomes novos (os três mapas de página têm os dois — o aviso antigo,
+# já gravado como 'Projects'/'Project Lead', continua indo para o lugar certo).
+# A chave da preferência segue `project_lead`: é o que a Settings já gravou.
+PAGE = 'Initiatives'
+LEAD_ACTION = 'Initiative Lead'
 # o aviso → a chave da preferência na Settings (`user_home.domain.NOTIFY_KEYS`)
-_PREF_KEY = {'Project Lead': 'project_lead', 'Task Assigned': 'task_assigned', 'Task Comment': 'task_comment'}
+_PREF_KEY = {LEAD_ACTION: 'project_lead', 'Project Lead': 'project_lead',
+             'Task Assigned': 'task_assigned', 'Task Comment': 'task_comment'}
 
 
 def _notify(actor, target_sid, action, detail):
@@ -40,7 +46,7 @@ def _notify(actor, target_sid, action, detail):
 def _project(data, project_id):
     p = store.find(data, project_id)
     if p is None:
-        raise domain.NotFound('project_not_found', 'Project not found.')
+        raise domain.NotFound('project_not_found', 'Initiative not found.')
     return p
 
 
@@ -74,7 +80,7 @@ def create_project(actor, data, people):
         return p
     p = store.mutate(go)
     log.info('[projects] %s criado por %s', p['id'], actor['sid'])
-    _notify(actor, p['lead_sid'], 'Project Lead', p['name'])
+    _notify(actor, p['lead_sid'], LEAD_ACTION, p['name'])
     return p
 
 
@@ -92,7 +98,7 @@ def update_project(actor, project_id, data, people):
         return p, antes
     p, antes = store.mutate(go)
     if p.get('lead_sid') != antes['lead_sid']:
-        _notify(actor, p['lead_sid'], 'Project Lead', p['name'])
+        _notify(actor, p['lead_sid'], LEAD_ACTION, p['name'])
     return p
 
 

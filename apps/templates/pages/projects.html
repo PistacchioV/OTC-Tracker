@@ -1,6 +1,6 @@
 {% extends 'layouts/vertical.html' %}
 
-{% block title %}Projects{% endblock title %}
+{% block title %}Initiatives{% endblock title %}
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
@@ -12,14 +12,14 @@
 
     <div class="page-title-head">
         <div class="flex-grow-1">
-            <h4 data-lang="projects">Projects</h4>
+            <h4 data-lang="projects">Initiatives</h4>
             <p class="otc-page-sub" id="pj-sub">&nbsp;</p>
         </div>
         <div class="text-end">
             <ol class="breadcrumb m-0 py-0">
                 <li class="breadcrumb-item"><a href="javascript: void(0);">OTC Tracker</a></li>
                 <li class="breadcrumb-item"><a href="javascript: void(0);" data-lang="nav-intraday">Intraday</a></li>
-                <li class="breadcrumb-item active" data-lang="projects">Projects</li>
+                <li class="breadcrumb-item active" data-lang="projects">Initiatives</li>
             </ol>
         </div>
     </div>
@@ -44,6 +44,12 @@
             </div>
         </div>
         <div class="otc-page-actions">
+            <div class="dropdown">
+                <button type="button" class="btn btn-chip" id="pj-f-cat" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i data-lucide="tag"></i><span id="pj-f-cat-label">All categories</span><i data-lucide="chevron-down"></i>
+                </button>
+                <div class="dropdown-menu dropdown-menu-end tk-menu" id="pj-menu-cat"></div>
+            </div>
             <div class="nav nav-pills" id="pj-filter" data-otc-seg role="tablist">
                 <a class="nav-link active" href="#" data-status="" data-lang="pj-f-all">All</a>
                 <a class="nav-link" href="#" data-status="On going" data-lang="pj-st-ongoing">On going</a>
@@ -51,7 +57,7 @@
                 <a class="nav-link" href="#" data-status="Concluded" data-lang="pj-st-concluded">Concluded</a>
             </div>
             <button type="button" class="btn btn-primary rounded-pill d-inline-flex align-items-center gap-2" id="pj-new">
-                <i data-lucide="plus"></i><span data-lang="pj-new">New project</span>
+                <i data-lucide="plus"></i><span data-lang="pj-new">New initiative</span>
             </button>
         </div>
     </div>
@@ -60,8 +66,8 @@
     <div class="pj-grid" id="pj-grid"></div>
     <div class="pj-empty d-none" id="pj-empty">
         <i data-lucide="folder-kanban"></i>
-        <p class="mb-1 fw-semibold" id="pj-empty-title" data-lang="pj-empty">No projects yet</p>
-        <p class="mb-0" id="pj-empty-sub" data-lang="pj-empty-sub">Create the first one with New project.</p>
+        <p class="mb-1 fw-semibold" id="pj-empty-title" data-lang="pj-empty">No initiatives yet</p>
+        <p class="mb-0" id="pj-empty-sub" data-lang="pj-empty-sub">Create the first one with New initiative.</p>
     </div>
 </div>
 {% endblock page_content %}
