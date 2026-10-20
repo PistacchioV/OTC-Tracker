@@ -17,6 +17,9 @@
       P.setMeta(d);
       state.canDelete = !!d.can_delete;
       render(d.project);
+      // `?task=t3` (o clique na tarefa do Calendar): abre a tarefa na gaveta
+      var tid = new URLSearchParams(window.location.search).get('task');
+      if (tid && !state.openedFromLink) { state.openedFromLink = true; openTask(tid); }
     }).catch(function (e) {
       var box = $('pjd-load-error');
       box.textContent = P.errText(e);
@@ -59,6 +62,7 @@
     renderPeople(p);
     renderMilestones(p);
     renderActivity(p);
+    renderUpcoming(p);
     renderTasks(p);
     renderChart(p);
     P.icons(root);
@@ -127,6 +131,31 @@
     $('pjd-activity').innerHTML = acts.map(function (a) {
       return '<li>' + P.avatar(a.sid, a.name, 'sm') + '<div><p>' + P.activityText(a) + '</p><small>' + esc(P.ago(a.at)) + '</small></div></li>';
     }).join('') || '<li class="text-muted">—</li>';
+  }
+
+  // Coming up: os marcos em aberto pela data (atrasado primeiro, em vermelho)
+  // e a data-alvo do projeto no fim — os eventos do projeto, os mesmos do Calendar.
+  function renderUpcoming(p) {
+    var lang = 'en';
+    try { lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) {}
+    var loc = { br: 'pt-BR', es: 'es-ES' }[lang] || 'en-US';
+    var mes = function (d) { return new Intl.DateTimeFormat(loc, { month: 'short' }).format(d).replace('.', ''); };
+    var itens = (p.milestones || []).filter(function (m) { return !m.done && m.date; })
+      .map(function (m) { return { date: m.date, title: m.title, kind: 'milestone' }; });
+    if (p.due_date && p.status !== 'Concluded') itens.push({ date: p.due_date, title: p.name, kind: 'target' });
+    itens.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+    $('pjd-up').innerHTML = itens.slice(0, 6).map(function (x) {
+      var d = P.parse(x.date), n = P.diffDays(x.date), late = n !== null && n < 0;
+      var quando = n === 0 ? t('today') : (n === 1 ? t('tomorrow') : t('wd')[d.getDay()] + ', ' + P.fmtShort(x.date));
+      var resto = late ? (n === -1 ? t('day_late') : t('days_late', { n: -n })) : P.inDays(x.date);
+      var tipo = x.kind === 'target' ? t('up_target') : t('up_milestone');
+      return '<li class="' + (late ? 'is-late' : '') + '">' +
+        '<span class="pjd-up__date"><small>' + esc(mes(d)) + '</small><b>' + d.getDate() + '</b></span>' +
+        '<span class="pjd-up__body"><b>' + esc((x.kind === 'target' ? '⚑ ' : '') + x.title) + '</b>' +
+          '<small>' + esc(quando) + (n > 1 ? ' · ' + esc(resto) : '') + (late ? ' · ' + esc(resto) : '') + ' · ' + esc(tipo) + '</small></span>' +
+        (x.kind === 'target' && p.lead_sid ? P.avatar(p.lead_sid, p.lead_name, 'sm') : '') +
+      '</li>';
+    }).join('') || '<li class="text-muted">' + esc(t('up_empty')) + '</li>';
   }
 
   var ORDER = ['To do', 'In progress', 'In review', 'Done'];

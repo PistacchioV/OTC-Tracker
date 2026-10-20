@@ -29,7 +29,9 @@ log = logging.getLogger('otc_tracker')
 # Pages everyone can always reach regardless of configuration. The dashboards are
 # NOT here — they are grantable like any other page (Main › Dashboards). '/users-profile'
 # stays open so a fully-restricted user always has a safe landing (no redirect loop).
-_ALWAYS_ALLOWED_PATHS = {'/users-profile', '/page-access'}
+# '/user-home' and '/settings' are PERSONAL (each user sees only their own document):
+# there is nothing to grant (§632).
+_ALWAYS_ALLOWED_PATHS = {'/users-profile', '/page-access', '/user-home', '/settings'}
 
 
 def _load_nav_urls():

@@ -216,6 +216,23 @@ st, d = call(bia, 'patch', '/api/projects/%s/tasks/%s' % (P1, t2['id']), {'statu
 check('quem só tem a Tasks também move a tarefa', st, 200)
 R._user_can_access_page = real_tasks
 
+print('\n== 8c. as datas vão para o Calendar ==')
+st, d = call(bia, 'get', '/api/projects/calendar')
+kinds = sorted({(e['kind'], e['title']) for e in d['events'] if e['project_id'] == P1})
+check('alvo do projeto, marcos e tarefa EM ABERTO com prazo', kinds,
+      [('milestone', 'Go live'), ('milestone', 'Spec signed'), ('project', 'Recon revamp'), ('task', 'Map columns')])
+check('marco feito vai marcado', [e['done'] for e in d['events'] if e.get('title') == 'Spec signed'], [True])
+evs = domain.calendar_events([{'id': 'X', 'name': 'N', 'due_date': '', 'tasks': [
+    {'id': 't1', 'title': 'Aberta', 'due': '2026-11-01', 'status': 'To do'},
+    {'id': 't2', 'title': 'Feita', 'due': '2026-11-02', 'status': 'Done'},
+    {'id': 't3', 'title': 'Sem prazo', 'due': '', 'status': 'To do'}]}])
+check('tarefa feita e tarefa sem prazo ficam fora', [e['title'] for e in evs], ['Aberta'])
+real_cal = R._user_can_access_page
+R._user_can_access_page = lambda url: False
+st, d = call(bia, 'get', '/api/projects/calendar')
+check('sem Projects/Tasks: lista vazia, não 403 (o Calendar abre igual)', (st, d.get('events')), (200, []))
+R._user_can_access_page = real_cal
+
 print('\n== 9. acesso e quem apaga ==')
 st, d = call(mo, 'delete', '/api/projects/%s' % P1)
 check('MO que não é Lead nem criador não apaga', (st, d.get('code')), (403, 'not_allowed'))

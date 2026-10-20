@@ -314,3 +314,28 @@ def push_activity(project, event):
     log.append(event)
     if len(log) > MAX_ACTIVITY:
         del log[:len(log) - MAX_ACTIVITY]
+
+
+def calendar_events(projects):
+    """As datas dos projetos para o Calendar: a data-alvo do projeto, os marcos
+    e o prazo das tarefas EM ABERTO (tarefa feita não ocupa o dia de ninguém).
+    Derivadas na leitura — o calendário nunca guarda cópia, e a data mudada
+    no projeto aparece lá na próxima carga."""
+    out = []
+    for p in projects or []:
+        base = {'project_id': p['id'], 'project_name': p.get('name', ''),
+                'color': p.get('color', COLORS[0])}
+        if p.get('due_date'):
+            out.append(dict(base, kind='project', date=p['due_date'], title=p.get('name', ''),
+                            status=p.get('status', DEFAULT_STATUS)))
+        for m in p.get('milestones') or []:
+            if m.get('date'):
+                out.append(dict(base, kind='milestone', date=m['date'], title=m.get('title', ''),
+                                id=m.get('id', ''), done=bool(m.get('done'))))
+        for t in p.get('tasks') or []:
+            if t.get('due') and t.get('status') != DONE:
+                out.append(dict(base, kind='task', date=t['due'], title=t.get('title', ''),
+                                id=t.get('id', ''), status=t.get('status', ''),
+                                priority=t.get('priority', ''), assignee_name=t.get('assignee_name', '')))
+    out.sort(key=lambda e: (e['date'], e['project_name'].lower(), e['kind']))
+    return out

@@ -46,13 +46,16 @@
                 <span class="otc-stat__value" id="pjd-n-done">–</span>
             </div>
             <div class="otc-stat" style="--hue: var(--otc-orange)" id="pjd-days-tile">
-                <span class="otc-stat__label" id="pjd-days-label" data-lang="pj-days-left">Days left</span>
+                <span class="otc-stat__label" id="pjd-days-label">Days left</span>
                 <span class="otc-stat__value" id="pjd-n-days">–</span>
             </div>
         </div>
         <div class="otc-page-actions">
+            {# O rótulo do Pin e o do contador de dias são escritos pelo JS (no
+               idioma, pelo `_TRANS`): com `data-lang` o tradutor do app, que roda
+               DEPOIS no load, trocava "Pinned" por "Pin" e "Overdue" por "Days left". #}
             <button type="button" class="btn btn-secondary rounded-pill d-inline-flex align-items-center gap-2" id="pjd-pin">
-                <i data-lucide="star"></i><span id="pjd-pin-label" data-lang="pj-pin">Pin</span>
+                <i data-lucide="star"></i><span id="pjd-pin-label">Pin</span>
             </button>
             <button type="button" class="btn btn-secondary rounded-pill d-inline-flex align-items-center gap-2" id="pjd-edit">
                 <i data-lucide="pencil"></i><span data-lang="pj-edit">Edit</span>
@@ -91,6 +94,16 @@
                     <input type="text" class="form-control otc-datefield pjd-ms-date" id="pjd-ms-date" placeholder="dd/mm/yyyy" autocomplete="off">
                     <button type="button" class="btn btn-secondary rounded-pill" id="pjd-ms-add" data-lang="pj-add">Add</button>
                 </div>
+            </div>
+
+            {# Coming up: os marcos em aberto (os EVENTOS do projeto) pela data,
+               e a data-alvo no fim — o que também vai para o Calendar. #}
+            <div class="pjd-sec-panel">
+                <div class="pjd-sec-head">
+                    <h5 class="pj-sec-title" data-lang="pj-coming-up">Coming up</h5>
+                    <a href="/holidays-calendar" class="pjd-link" data-lang="holidays-calendar">Calendar</a>
+                </div>
+                <ul class="pjd-up" id="pjd-up"></ul>
             </div>
 
             <div class="pjd-sec-panel">

@@ -97,6 +97,7 @@
     $('tk-n-open').textContent = open;
     $('tk-n-week').textContent = week;
     $('tk-n-overdue').textContent = late;
+    $('tk-n-overdue').closest('.otc-stat').classList.toggle('is-alert', late > 0);   // atraso em vermelho, como no Pane
     $('tk-n-doneweek').textContent = doneWeek;
     $('tk-sub').textContent = t('open_across', { n: open, m: Object.keys(projs).length });
     $('tk-no-projects').classList.toggle('d-none', state.projects.length > 0);
@@ -148,7 +149,7 @@
     var menu = COLS.filter(function (c) { return c !== x.status; }).map(function (c) {
       return '<button type="button" class="dropdown-item" data-move="' + esc(c) + '"><span class="pj-dot" style="--hue:' + P.TASK_HUE[c] + '"></span>' + esc(t('move_to', { col: P.tTask(c) })) + '</button>';
     }).join('') + '<div class="dropdown-divider"></div><button type="button" class="dropdown-item" data-open-task><i data-lucide="panel-right-open"></i>' + esc(t('open_task')) + '</button>';
-    return '<div class="tk-card" draggable="true" data-task="' + esc(x.id) + '" data-project="' + esc(x.project_id) + '" style="--hue:' + hue + '">' +
+    return '<div class="tk-card" data-task="' + esc(x.id) + '" data-project="' + esc(x.project_id) + '" style="--hue:' + hue + '">' +
       '<div class="tk-card__top">' + P.chip(x.project_name, hue) + P.prioBadge(x.priority) +
         '<div class="dropdown ms-auto"><button type="button" class="tk-card__more" data-bs-toggle="dropdown" aria-expanded="false" aria-label="' + esc(t('move_or_open', { task: x.title })) + '"><i data-lucide="more-horizontal"></i></button>' +
         '<div class="dropdown-menu dropdown-menu-end tk-menu">' + menu + '</div></div></div>' +
@@ -204,14 +205,18 @@
   function findTask(pid, tid) {
     return state.tasks.filter(function (x) { return x.project_id === pid && x.id === tid; })[0];
   }
-  function move(pid, tid, status) {
+  function move(pid, tid, status, quiet) {
     var x = findTask(pid, tid);
     if (!x || x.status === status) return;
-    var antes = x.status;
+    var antes = x.status, titulo = x.title;
     x.status = status;                                   // otimista: o card já está lá
     renderAll();
     P.api('PATCH', '/api/projects/' + encodeURIComponent(pid) + '/tasks/' + encodeURIComponent(tid), { status: status })
-      .then(function (d) { applyProject(d.project); })
+      .then(function (d) {
+        applyProject(d.project);
+        // o aviso do Pane: "Done: <tarefa>" com o Undo que devolve à coluna de antes
+        if (!quiet && window.otcToast) window.otcToast(P.tTask(status) + ': ' + titulo, { undo: function () { move(pid, tid, antes, true); } });
+      })
       .catch(function (e) { x.status = antes; renderAll(); P.fail(e); });
   }
   function openTask(pid, tid) {
@@ -225,57 +230,138 @@
     P.openTaskModal({ projects: abertos.length ? abertos : state.projects, projectId: state.project || '', status: status || 'To do', onSaved: applyProject });
   }
 
-  // Arrastar e soltar (HTML5): o card vai para a coluna em que cair. Dentro da
-  // mesma coluna não há ordem manual — a ordem é a do prazo. No toque (sem
-  // drag nativo), o menu "…" do card faz o mesmo.
-  var drag = { pid: null, tid: null, from: null };
+  // Arrastar e soltar — o do Pane, com o mouse (pointer events, não o drag
+  // nativo): o card LEVANTA (inclinado, com sombra) e segue o ponteiro, e na
+  // coluna embaixo dele ABRE-SE O ESPAÇO onde ele vai cair, empurrando os
+  // vizinhos com animação. Soltar fora de uma coluna devolve o card. Dentro da
+  // mesma coluna não há ordem manual — a ordem é a do prazo. No toque, o menu
+  // "…" do card faz o mesmo.
+  var drag = null;
+  var GAP = 10;                                          // o `gap` da .tk-col__list
   function wireDnD() {
     var board = $('tk-board');
-    board.addEventListener('dragstart', function (e) {
+    board.addEventListener('pointerdown', function (e) {
+      if (e.pointerType !== 'mouse' || e.button !== 0) return;
       var c = e.target.closest('.tk-card');
-      if (!c) return;
-      drag.pid = c.getAttribute('data-project'); drag.tid = c.getAttribute('data-task');
-      drag.from = c.closest('[data-col]').getAttribute('data-col');
-      e.dataTransfer.effectAllowed = 'move';
-      try { e.dataTransfer.setData('text/plain', drag.tid); } catch (er) {}
-      setTimeout(function () { c.classList.add('is-dragging'); }, 0);
+      if (!c || e.target.closest('button, a, input, .dropdown-menu')) return;
+      var r = c.getBoundingClientRect();
+      drag = { card: c, pid: c.getAttribute('data-project'), tid: c.getAttribute('data-task'),
+        from: c.closest('[data-col]').getAttribute('data-col'),
+        x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY,
+        dx: e.clientX - r.left, dy: e.clientY - r.top, w: r.width, h: r.height, on: false };
     });
-    board.addEventListener('dragend', function (e) {
-      var c = e.target.closest('.tk-card');
-      if (c) c.classList.remove('is-dragging');
-      clearOver();
-      drag.pid = drag.tid = drag.from = null;
-    });
-    board.addEventListener('dragover', function (e) {
-      var col = e.target.closest('[data-col]');
-      if (!col || !drag.tid) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      if (!col.classList.contains('is-over')) {
-        clearOver();
-        col.classList.add('is-over');
-        if (col.getAttribute('data-col') !== drag.from) {
-          var g = document.createElement('div'); g.className = 'tk-drop-ghost';
-          col.querySelector('.tk-col__list').prepend(g);
-        }
+    document.addEventListener('pointermove', function (e) {
+      if (!drag) return;
+      drag.x = e.clientX; drag.y = e.clientY;
+      if (!drag.on) {
+        if (Math.abs(e.clientX - drag.x0) + Math.abs(e.clientY - drag.y0) < 6) return;
+        liftCard();
       }
-    });
-    board.addEventListener('dragleave', function (e) {
-      var col = e.target.closest('[data-col]');
-      if (col && !col.contains(e.relatedTarget)) { col.classList.remove('is-over'); var g = col.querySelector('.tk-drop-ghost'); if (g) g.remove(); }
-    });
-    board.addEventListener('drop', function (e) {
-      var col = e.target.closest('[data-col]');
-      if (!col || !drag.tid) return;
       e.preventDefault();
-      var st = col.getAttribute('data-col'), pid = drag.pid, tid = drag.tid;
-      clearOver();
-      move(pid, tid, st);
+      follow();
+      placeGap();
     });
+    document.addEventListener('pointerup', function () { if (drag) dropCard(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && drag && drag.on) { drag.cancel = true; dropCard(); } });
+    // o clique que encerra um arrasto não abre o card
+    board.addEventListener('click', function (e) {
+      if (board._swallow) { board._swallow = false; e.stopPropagation(); e.preventDefault(); }
+    }, true);
   }
-  function clearOver() {
-    Array.prototype.forEach.call(document.querySelectorAll('.tk-col-panel.is-over'), function (c) { c.classList.remove('is-over'); });
-    Array.prototype.forEach.call(document.querySelectorAll('.tk-drop-ghost'), function (g) { g.remove(); });
+  function liftCard() {
+    drag.on = true;
+    var f = drag.card.cloneNode(true);
+    f.classList.add('tk-card--float');
+    f.style.width = drag.w + 'px'; f.style.height = drag.h + 'px';
+    document.body.appendChild(f);
+    drag.float = f;
+    // o espaço nasce NO LUGAR do card, com a altura dele: nada pula na origem
+    var ph = document.createElement('div');
+    ph.className = 'tk-drop-ghost';
+    ph.style.height = drag.h + 'px';
+    drag.card.after(ph);
+    drag.card.classList.add('is-lifted');
+    drag.ph = ph;
+    document.body.classList.add('tk-is-dragging');
+    autoScroll();
+  }
+  function follow() {
+    drag.float.style.translate = (drag.x - drag.dx) + 'px ' + (drag.y - drag.dy) + 'px';
+  }
+  function colAt(x, y) {
+    var el = document.elementFromPoint(x, y);
+    return el ? el.closest('#tk-board [data-col]') : null;
+  }
+  // a posição de inserção: antes do primeiro card cujo MEIO está abaixo do ponteiro
+  function placeGap() {
+    var col = colAt(drag.x, drag.y);
+    Array.prototype.forEach.call(document.querySelectorAll('.tk-col-panel.is-over'), function (c) { if (c !== col) c.classList.remove('is-over'); });
+    if (!col) return;
+    col.classList.add('is-over');
+    var list = col.querySelector('.tk-col__list');
+    var cards = Array.prototype.filter.call(list.children, function (n) { return n.classList.contains('tk-card') && !n.classList.contains('is-lifted'); });
+    var before = null;
+    for (var i = 0; i < cards.length; i++) {
+      var r = cards[i].getBoundingClientRect();
+      if (drag.y < r.top + r.height / 2) { before = cards[i]; break; }
+    }
+    var cur = drag.ph;
+    if (cur.parentNode === list) {
+      var nxt = cur.nextElementSibling;
+      while (nxt && (nxt.classList.contains('is-lifted') || nxt.classList.contains('is-closing'))) nxt = nxt.nextElementSibling;
+      if (nxt === before) return;                         // já está no lugar
+    }
+    // o espaço antigo FECHA e o novo ABRE — os vizinhos deslizam junto
+    closeGap(cur);
+    var ph = document.createElement('div');
+    ph.className = 'tk-drop-ghost';
+    ph.style.height = drag.h + 'px';
+    list.insertBefore(ph, before);
+    ph.animate([{ height: '0px', marginBottom: (-GAP) + 'px', opacity: 0 }, { height: drag.h + 'px', marginBottom: '0px', opacity: 1 }],
+      { duration: 240, easing: 'cubic-bezier(.2,.9,.25,1)' });
+    drag.ph = ph;
+  }
+  function closeGap(ph) {
+    if (!ph || !ph.parentNode) return;
+    ph.classList.add('is-closing');
+    var h = ph.getBoundingClientRect().height;
+    var an = ph.animate([{ height: h + 'px', marginBottom: '0px', opacity: 1 }, { height: '0px', marginBottom: (-GAP) + 'px', opacity: 0 }],
+      { duration: 200, easing: 'cubic-bezier(.3,.7,.3,1)' });
+    an.onfinish = function () { ph.remove(); };
+  }
+  function autoScroll() {
+    if (!drag || !drag.on) return;
+    var edge = 70, vh = window.innerHeight, v = 0;
+    if (drag.y < edge) v = -Math.ceil((edge - drag.y) / 5);
+    else if (drag.y > vh - edge) v = Math.ceil((drag.y - (vh - edge)) / 5);
+    if (v) { window.scrollBy({ top: v, behavior: 'instant' }); placeGap(); }
+    requestAnimationFrame(autoScroll);
+  }
+  function dropCard() {
+    var d = drag;
+    drag = null;
+    if (!d.on) return;                                   // foi só um clique
+    $('tk-board')._swallow = true;
+    setTimeout(function () { $('tk-board')._swallow = false; }, 0);
+    document.body.classList.remove('tk-is-dragging');
+    var col = d.cancel ? null : colAt(d.x, d.y);
+    var to = col ? col.getAttribute('data-col') : d.from;
+    // o card POUSA no espaço aberto (ou volta para o lugar dele)
+    var alvo = (col && d.ph && d.ph.parentNode) ? d.ph : d.card.nextElementSibling;
+    if (!col) { closeGap(d.ph); alvo = d.card; d.card.classList.remove('is-lifted'); d.card.style.visibility = 'hidden'; }
+    var r = (alvo && alvo.getBoundingClientRect) ? alvo.getBoundingClientRect() : d.card.getBoundingClientRect();
+    d.float.classList.add('is-landing');
+    d.float.style.translate = r.left + 'px ' + r.top + 'px';
+    setTimeout(function () {
+      d.float.remove();
+      Array.prototype.forEach.call(document.querySelectorAll('.tk-col-panel.is-over'), function (c) { c.classList.remove('is-over'); });
+      if (to !== d.from) move(d.pid, d.tid, to);
+      else {
+        Array.prototype.forEach.call(document.querySelectorAll('#tk-board .tk-drop-ghost'), function (g) { g.remove(); });
+        d.card.classList.remove('is-lifted');
+        d.card.style.visibility = '';
+      }
+    }, 210);
   }
 
   function wire() {

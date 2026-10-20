@@ -15113,3 +15113,33 @@ from apps.pages.features.swap_strategy import entrypoint as _f_swap_strategy    
 from apps.pages.features.unwinds import entrypoint as _f_unwinds                # noqa: E402,F401
 _schedule_on_start('unwind-boxscan', _f_unwinds.start_scheduler)
 from apps.pages.features.projects import entrypoint as _f_projects            # noqa: E402,F401
+
+
+# A User Home lê o trabalho dos projetos por AQUI — feature não importa feature
+# (CLAUDE.md §3), o mesmo desenho do `_swap_bullet_engine`. E o Projects
+# pergunta por aqui se a pessoa quer o aviso (as preferências da Settings).
+def _projects_doc():
+    from apps.pages.features.projects.infra import store as _pj_store
+    return _pj_store.load()
+
+
+def _projects_directory():
+    from apps.pages.features.projects import queries as _pj_queries
+    return _pj_queries.directory()
+
+
+def _projects_meta(me):
+    from apps.pages.features.projects import domain as _pj_domain, queries as _pj_queries
+    return {'statuses': _pj_domain.STATUSES, 'task_statuses': _pj_domain.TASK_STATUSES,
+            'priorities': _pj_domain.PRIORITIES, 'colors': _pj_domain.COLORS, 'icons': _pj_domain.ICONS,
+            'people': _pj_queries.eligible(me), 'me': {'sid': me['sid'], 'name': me['name']},
+            'today': _br_now().date().isoformat()}
+
+
+def _user_wants(sid, key):
+    from apps.pages.features.user_home import queries as _uh_queries
+    return _uh_queries.wants(sid, key)
+
+
+from apps.pages.features.user_home import entrypoint as _f_user_home          # noqa: E402,F401
+_schedule_on_start('user-home-due', _f_user_home.commands.start_scheduler)

@@ -104,6 +104,6 @@ def api_holidays_calendar_create():
 
     routes._create_notification(
         session.get('user_sid', ''), session.get('user_name', ''),
-        'Holiday Calendar', 'Holidays Calendar',
+        'Holiday Calendar', 'Calendar',
         '{} · {} holiday(s) imported'.format(nome, len(feriados)))
     return jsonify({'ok': True, 'calendar': linha, 'total': len(feriados)})

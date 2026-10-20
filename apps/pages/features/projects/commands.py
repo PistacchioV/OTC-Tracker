@@ -15,6 +15,8 @@ from apps.pages.features.projects.infra import store
 log = logging.getLogger('otc_tracker')
 
 PAGE = 'Projects'
+# o aviso → a chave da preferência na Settings (`user_home.domain.NOTIFY_KEYS`)
+_PREF_KEY = {'Project Lead': 'project_lead', 'Task Assigned': 'task_assigned', 'Task Comment': 'task_comment'}
 
 
 def _notify(actor, target_sid, action, detail):
@@ -25,6 +27,10 @@ def _notify(actor, target_sid, action, detail):
         return
     try:
         from apps.pages import routes
+        # quem desligou o aviso na Settings não recebe (§632)
+        chave = _PREF_KEY.get(action)
+        if chave and not routes._user_wants(target_sid, chave):
+            return
         routes._create_notification(actor['sid'], actor['name'], action, PAGE, detail,
                                     target_sid=target_sid)
     except Exception:                                    # noqa: BLE001

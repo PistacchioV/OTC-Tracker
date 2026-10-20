@@ -160,6 +160,16 @@
 #mc-monitor .mc-age-2 { color: var(--otc-danger); }
 
 #mc-monitor .mc-empty { padding: 1.6rem 1rem; text-align: center; font-size: .75rem; color: var(--otc-text-2); }
+/* Arrastar o card (§632): a coluna que aceita acende, a que não aceita apaga, e
+   a faixa do Ok (a esteira não tem coluna Ok) aparece só durante o arrastar. */
+#mc-monitor .mc-item[draggable="true"] { cursor: grab; }
+#mc-monitor .mc-item.is-dragging { opacity: .35; }
+#mc-monitor.is-dragging .mc-card { transition: opacity var(--otc-dur-fast) var(--otc-ease), box-shadow var(--otc-dur-fast) var(--otc-ease); }
+#mc-monitor.is-dragging .mc-card.is-forbidden { opacity: .45; }
+#mc-monitor .mc-card.is-over { box-shadow: var(--otc-depth), 0 0 0 2px var(--otc-accent-ink) !important; }
+#mc-monitor .mc-okzone { display: none; margin-top: var(--otc-gap, 18px); padding: 18px; border-radius: var(--otc-r-xl); border: 2px dashed color-mix(in srgb, var(--otc-green) 60%, transparent); background: color-mix(in srgb, var(--otc-green) 10%, transparent); color: var(--otc-text-2); text-align: center; font-weight: 650; }
+#mc-monitor.is-dragging .mc-okzone.is-allowed { display: block; }
+#mc-monitor .mc-okzone.is-over { background: color-mix(in srgb, var(--otc-green) 22%, transparent); color: var(--otc-text); }
 </style>
 {% endblock %}
 
@@ -183,6 +193,7 @@
     <div class="alert alert-warning d-none" id="mc-warnings"></div>
 
     <div class="row g-3" id="mc-cards"></div>
+    <div class="mc-okzone" id="mc-okzone" data-stage="OK"><i class="ti ti-circle-check me-1"></i><span data-lang="mc-drop-ok">Drop here: sent to the client (Ok)</span></div>
 </div>
 
 {% endblock %}
@@ -236,7 +247,7 @@
               fepDone: 'Marked as sent',
               actGo: 'Yes, proceed', actNo: 'Cancel',
               warnMissing: 'No validation rule registered for: {p}. Until then these confirmations go through OTC and MO.',
-              failTitle: 'Could not load the queue',
+              moveDone: 'Moved', notAllowed: 'Your desk can only move its own stage, one step forward.', slaAskTitle: 'Late validation', slaAskText: 'Give the reason for the delay — it goes to the comment of the stage.', moveFail: 'Not moved', failTitle: 'Could not load the queue',
               failText: 'Refresh the page; if it persists the server may be restarting.' },
         br: { ops: 'op(s)', opsLong: 'operação(ões)', none: '—',
               slaOk: 'faltam {n}d', slaWarn: 'vence amanhã', slaToday: 'vence hoje',
@@ -265,7 +276,7 @@
               fepDone: 'Marcado como enviado',
               actGo: 'Sim, seguir', actNo: 'Cancelar',
               warnMissing: 'Sem cadastro de validação para: {p}. Enquanto isso essas confirmações seguem por OTC e MO.',
-              failTitle: 'Não foi possível carregar a esteira',
+              moveDone: 'Movido', notAllowed: 'Sua mesa só move a etapa dela, um passo à frente.', slaAskTitle: 'Validação fora do prazo', slaAskText: 'Informe o motivo do atraso — ele vai para o comentário da etapa.', moveFail: 'Não movido', failTitle: 'Não foi possível carregar a esteira',
               failText: 'Atualize a página; se persistir, o servidor pode estar reiniciando.' },
         es: { ops: 'op(s)', opsLong: 'operación(es)', none: '—',
               slaOk: 'faltan {n}d', slaWarn: 'vence mañana', slaToday: 'vence hoy',
@@ -294,7 +305,7 @@
               fepDone: 'Marcado como enviado',
               actGo: 'Sí, seguir', actNo: 'Cancelar',
               warnMissing: 'Sin registro de validación para: {p}. Mientras tanto estas confirmaciones siguen por OTC y MO.',
-              failTitle: 'No se pudo cargar la cola',
+              moveDone: 'Movido', notAllowed: 'Su mesa solo mueve su propia etapa, un paso adelante.', slaAskTitle: 'Validación fuera de plazo', slaAskText: 'Indique el motivo del retraso — va al comentario de la etapa.', moveFail: 'No movido', failTitle: 'No se pudo cargar la cola',
               failText: 'Actualice la página; si persiste, el servidor puede estar reiniciando.' }
     };
     function t(k, vars) {
@@ -320,7 +331,76 @@
     // Preenchidos pelo payload do Monitor (ver `load`). Nulos até a 1ª resposta:
     // nesse estado o botão nasce como Validar, que é o comportamento de sempre —
     // e quem não pode assinar esbarra no endpoint, não numa tela adivinhando.
-    var CAN_VALIDATE = null, STAGE_ROLE = null;
+    var CAN_VALIDATE = null, STAGE_ROLE = null, IS_ADMIN = false;
+
+    // ── Arrastar o card entre as colunas (§632) ─────────────────────────
+    // Soltar na coluna seguinte ASSINA a etapa (a mesma validação do documento,
+    // no servidor). A mesa arrasta só a etapa dela, um passo à frente; admin e
+    // master, qualquer card para qualquer coluna (para trás é reabrir). Quem
+    // decide de verdade é o /move — a tela só acende onde dá para soltar.
+    var NEXT = { LEGAL: ['OTC'], OTC: ['MO', 'FO', 'FEPWEB'], MO: ['FEPWEB'], FO: ['FEPWEB'], FEPWEB: ['OK'] };
+    function podeArrastar(stage) {
+        return IS_ADMIN || !!(CAN_VALIDATE && CAN_VALIDATE[stage]);
+    }
+    function aceita(from, to) {
+        if (!from || !to || from === to) return false;
+        if (IS_ADMIN) return true;
+        return (NEXT[from] || []).indexOf(to) !== -1 && podeArrastar(from);
+    }
+    var DRAG = null;
+    function limpaArrasto() {
+        $('#mc-monitor').removeClass('is-dragging');
+        $('#mc-monitor .is-over, #mc-monitor .is-forbidden, #mc-monitor .is-allowed, #mc-monitor .is-dragging').removeClass('is-over is-forbidden is-allowed is-dragging');
+    }
+    function mover(keys, from, to, comment) {
+        return fetch('/api/manual-confirmation/move', {
+            method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keys: keys, from: from, to: to, comment: comment || '' })
+        }).then(function (r) { return r.json().then(function (d) { return { st: r.status, d: d }; }); })
+          .then(function (res) {
+            var d = res.d || {};
+            if (d.success) { if (window.otcToast) window.otcToast(t('moveDone') + ': ' + from + ' → ' + to + ((d.rows && d.rows[0] && d.rows[0].Cliente) ? ' · ' + d.rows[0].Cliente : '')); load(); return; }
+            if (d.code === 'sla_comment_required' && window.Swal) {
+                return Swal.fire({ title: t('slaAskTitle'), text: t('slaAskText'), input: 'textarea', showCancelButton: true,
+                                   confirmButtonText: t('actGo'), cancelButtonText: t('actNo'),
+                                   inputValidator: function (v) { return (v || '').trim() ? null : t('slaAskText'); } })
+                    .then(function (r) { if (r.isConfirmed) return mover(keys, from, to, r.value); load(); });
+            }
+            var msg = d.code === 'callback_required' ? t('noCbBlockTitle')
+                    : d.code === 'move_not_allowed' ? t('notAllowed') : (d.message || ('HTTP ' + res.st));
+            if (window.Swal) Swal.fire({ icon: 'error', title: t('moveFail'), text: msg });
+            load();
+        }).catch(function () { if (window.Swal) Swal.fire({ icon: 'error', title: t('moveFail') }); load(); });
+    }
+    $(document).on('dragstart', '#mc-monitor .mc-item[draggable="true"]', function (e) {
+        var it = this;
+        DRAG = { from: it.getAttribute('data-stage'), keys: (it.getAttribute('data-keys') || '').split(',').filter(Boolean) };
+        try { e.originalEvent.dataTransfer.setData('text/plain', DRAG.keys.join(',')); e.originalEvent.dataTransfer.effectAllowed = 'move'; } catch (er) {}
+        setTimeout(function () {
+            it.classList.add('is-dragging');
+            $('#mc-monitor').addClass('is-dragging');
+            $('#mc-monitor .mc-card').each(function () { $(this).toggleClass('is-forbidden', !aceita(DRAG.from, this.getAttribute('data-stage'))); });
+            $('#mc-okzone').toggleClass('is-allowed', aceita(DRAG.from, 'OK'));
+        }, 0);
+    });
+    $(document).on('dragend', '#mc-monitor .mc-item', function () { DRAG = null; limpaArrasto(); });
+    $(document).on('dragover', '#mc-monitor .mc-card, #mc-okzone', function (e) {
+        if (!DRAG || !aceita(DRAG.from, this.getAttribute('data-stage'))) return;
+        e.preventDefault();
+        $('#mc-monitor .is-over').not(this).removeClass('is-over');
+        this.classList.add('is-over');
+    });
+    $(document).on('dragleave', '#mc-monitor .mc-card, #mc-okzone', function (e) {
+        if (!this.contains(e.originalEvent.relatedTarget)) this.classList.remove('is-over');
+    });
+    $(document).on('drop', '#mc-monitor .mc-card, #mc-okzone', function (e) {
+        if (!DRAG) return;
+        var to = this.getAttribute('data-stage');
+        if (!aceita(DRAG.from, to)) return;
+        e.preventDefault();
+        var d = DRAG; DRAG = null; limpaArrasto();
+        mover(d.keys, d.from, to);
+    });
 
     function item(it, stage) {
         // `Tipo` é o produto no nome do Confirmation Type do Electronic Inventory
@@ -389,7 +469,9 @@
               (semCb > 1 ? ' (' + semCb + ')' : '') + '</span>'
             : '';
 
-        return '<div class="mc-item ' + slaCls + (semCb ? ' mc-item--nocb' : '') + '">' +
+        return '<div class="mc-item ' + slaCls + (semCb ? ' mc-item--nocb' : '') + '"' +
+            ' draggable="' + (podeArrastar(stage) ? 'true' : 'false') + '" data-stage="' + esc(stage) + '"' +
+            ' data-keys="' + esc((it.keys || []).join(',')) + '">' +
             '<div class="mc-item__top">' +
                 '<span class="mc-item__cli">' + esc(it.Cliente || t('none')) + '</span>' +
                 '<span class="mc-item__age ' + ageClass(age) + '">' +
@@ -646,7 +728,7 @@
         // `col-xl` sem número: as CINCO etapas lado a lado (12/5 não fecha em
         // coluna inteira, então a largura é o flex igualitário do Bootstrap).
         return '<div class="col-12 col-md-6 col-xl">' +
-            '<div class="mc-card ' + st.cls + '">' +
+            '<div class="mc-card ' + st.cls + '" data-stage="' + esc(c.stage) + '">' +
               '<div class="mc-card__head">' +
                 '<span class="mc-card__ico"><i class="ti ' + st.icon + '"></i></span>' +
                 '<div>' +
@@ -682,7 +764,9 @@
                 // botão só reflete a decisão — a trava está no endpoint.
                 CAN_VALIDATE = j.can_validate || null;
                 STAGE_ROLE = j.stage_role || null;
+                IS_ADMIN = !!j.is_admin;
                 $('#mc-cards').html((j.cards || []).map(card).join(''));
+                $('#mc-cards .mc-item a, #mc-cards .mc-item img').attr('draggable', 'false');
                 loadDocs();
                 // O servidor manda só a LISTA de produtos sem cadastro; a frase
                 // é montada aqui, no idioma da aplicação.

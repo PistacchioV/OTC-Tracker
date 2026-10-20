@@ -72,9 +72,54 @@ DATA_EPS = [
     '/api/new-deals/monitor',
 ]
 
-# Tema das capturas (o guia é DARK desde o StreamFlow). O config.js lê a chave
-# do localStorage no load e escreve o data-bs-theme — não há parâmetro de URL.
-THEME = os.environ.get('SOP_THEME', 'dark')
+# Aparência das capturas. Desde o rebranding no visual do Pane (§630) o guia é
+# CLARO sobre o papel de parede Aurora (o padrão de quem abre é o Ash, cinza,
+# que nos prints apagava o vidro). O `<head>` lê `__OTC_TRACKER_UI__` antes do
+# primeiro paint (partials/head-css.html) — não há parâmetro de URL.
+THEME = os.environ.get('SOP_THEME', 'light')
+WALL = os.environ.get('SOP_WALL', 'aurora')
+# O Chromium headless não tem GPU: sem `full` o otc.js liga o modo OPACO
+# (`is-solid`) e o print sai sem vidro nenhum (§7, Modo opaco).
+SEED_JS = ("try { localStorage.setItem('__OTC_TRACKER_UI__', JSON.stringify("
+           "{theme: '%s', wall: '%s', accent: 'blue', glass: 'tinted'}));"
+           " localStorage.setItem('__OTC_TRACKER_FX__', 'full');"
+           " localStorage.setItem('__OTC_TRACKER_LANG__', 'en'); } catch (e) {}" % (THEME, WALL))
+# Relógio do NAVEGADOR nos prints (o do servidor é o do launcher): as telas que
+# contam "em 20 min", "há 1 h" e o dia de hoje saem coerentes entre si.
+CLOCK = os.environ.get('SOP_CLOCK', '2026-10-20T10:40:05')
+# PNG de 3200 px com 2x é grande demais para o Word: reduz a 1920 de largura e
+# quantiza (256 cores + dither) — sem banding visível e ~1/5 do tamanho (§401).
+SHRINK = os.environ.get('SOP_SHRINK', '1') != '0'
+
+
+def shrink(path):
+    if not SHRINK:
+        return
+    try:
+        from PIL import Image
+        im = Image.open(path).convert('RGB')
+        if im.width > 1920:
+            im = im.resize((1920, round(im.height * 1920 / im.width)), Image.LANCZOS)
+        im = im.quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.FLOYDSTEINBERG)
+        im.save(path, optimize=True)
+    except Exception as e:                                   # noqa: BLE001
+        print('     (sem shrink: %s)' % str(e)[:60])
+
+
+def new_context(browser, logged=True):
+    """Contexto com a aparência e o relógio das capturas."""
+    from datetime import datetime
+    ctx = browser.new_context(viewport={'width': 1600, 'height': 1000}, device_scale_factor=2)
+    ctx.add_init_script(SEED_JS)
+    return ctx
+
+
+def install_clock(pg):
+    from datetime import datetime
+    try:
+        pg.clock.install(time=datetime.fromisoformat(CLOCK))
+    except Exception as e:                                   # noqa: BLE001
+        print('     (sem relógio fixo: %s)' % str(e)[:60])
 
 # Teto da altura do print (px de CSS). O painel inicial passa dos 2600 e o
 # último gráfico (Settlements by Entity) saía cortado: SOP_MAX_H=3200 para ele.
@@ -154,21 +199,10 @@ def main():
         if chrome:
             launch['executable_path'] = chrome
         b = p.chromium.launch(**launch)
-        ctx = b.new_context(viewport={'width': 1600, 'height': 1000}, device_scale_factor=2)
-        # O tema não tem parâmetro de URL: o config.js lê esta chave no load.
-        # Semeada ANTES de navegar, toda página já abre no tema pedido. O
-        # objeto vai COMPLETO de propósito: o isInvalidConfig do config.js
-        # descarta config sem skin/layout/sidenav como estruturalmente
-        # inválida — um seed parcial cai no default CLARO em silêncio.
-        ctx.add_init_script(
-            "localStorage.setItem('__OTCTRACKER_CONFIG__', JSON.stringify("
-            "{skin: 'default', monochrome: false, theme: '%s',"
-            " layout: {position: 'fixed', dir: 'ltr'},"
-            " topbar: {color: '%s'}, menu: {color: '%s'},"
-            " sidenav: {size: 'default', user: false}}));"
-            % (THEME, THEME, THEME))
+        ctx = new_context(b)
         ctx.route('**/api/**', handle_api)
         pg = ctx.new_page()
+        install_clock(pg)
         pg.set_default_timeout(18000)
         pg.goto(BASE + LOGIN, wait_until='commit')
         pg.wait_for_timeout(1200)
@@ -176,7 +210,9 @@ def main():
             name = route.strip('/').replace('/', '_')
             try:
                 resp = pg.goto(BASE + route, wait_until='domcontentloaded')
-                pg.wait_for_timeout(2200)
+                # a entrada em gotas (§9 do otc.js) e a contagem dos números
+                # precisam terminar antes do clique da câmera
+                pg.wait_for_timeout(int(os.environ.get('SOP_WAIT_MS') or 3200))
                 code = resp.status if resp else 0
                 if code == 200:
                     # NUNCA full_page=True: o rodapé é FIXO e o compositor o
@@ -188,6 +224,7 @@ def main():
                     pg.set_viewport_size({'width': 1600, 'height': h})
                     pg.wait_for_timeout(600)
                     pg.screenshot(path=os.path.join(OUT, name + '.png'))
+                    shrink(os.path.join(OUT, name + '.png'))
                     pg.set_viewport_size({'width': 1600, 'height': 1000})
                     ok.append((route, code))
                     print('OK  ', code, name)

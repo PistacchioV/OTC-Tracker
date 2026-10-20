@@ -204,7 +204,7 @@ check('   o datetime do Excel virou ISO', feriados[0]['date'], '2026-05-01')
 check('   e o texto tambem', feriados[1]['date'], '2026-09-07')
 check('   com o calendario carimbado', feriados[0]['calendar'], 'NOVA MESA')
 check('o aviso do sino saiu', len(NOTIFS), 1)
-check('   com a pagina certa', NOTIFS[0]['page'], 'Holidays Calendar')
+check('   com a pagina certa', NOTIFS[0]['page'], 'Calendar')
 
 print('\n== 6. e ele passa a ser um calendario como os outros ==')
 _cache_limpo()

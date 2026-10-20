@@ -120,7 +120,50 @@ def api_intraday_monitor():
         # e o resto continua.
         _R().log.warning('[intraday-monitor] pendências de D-1 falharam', exc_info=True)
         snap['prev'] = {'error': '{}: {}'.format(type(e).__name__, e)}
+    # quem arrasta o quê (§632)
+    snap['me'] = {'desk': str(session.get('user_role') or '').strip().upper(),
+                  'is_admin': bool(_R()._session_is_admin())}
     return jsonify({'success': True, **snap})
+
+
+# ── Arrastar o card de tarefa (§632) ───────────────────────────────────────────
+# O estado de cada tarefa é CALCULADO (a recon rodou, o End process); soltar o
+# card noutra coluna grava um ajuste manual do dia, com quem e quando, que vale
+# por cima. Tarefa de zona não se move (o estado dela é a contagem). As tarefas
+# do Monitor são do OTC Ops (BO): a mesa anda um passo à frente; admin e master
+# põem qualquer estado, ou `auto` para devolver ao cálculo.
+_IM_NEXT = {'todo': ('in_progress',), 'in_progress': ('done',), 'late': ('done',)}
+_IM_DESK = ('BO',)
+
+
+@blueprint.route('/api/intraday-monitor/override', methods=['POST'])
+def api_intraday_override():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    from apps.pages.features.deals_monitor import domain as _dom
+    from apps.pages.platform import task_runs
+    body = request.get_json(silent=True) or {}
+    task = str(body.get('task') or '').strip()
+    de = str(body.get('from') or '').strip()
+    para = str(body.get('to') or '').strip()
+    tdef = next((t for t in _dom.TASKS if t['id'] == task), None)
+    if tdef is None:
+        return jsonify({'success': False, 'code': 'unknown_task'}), 400
+    if tdef.get('kind') == 'zone':
+        return jsonify({'success': False, 'code': 'zone_not_movable',
+                        'message': 'Zone tasks follow the count and cannot be moved.'}), 400
+    if para not in task_runs.OVERRIDE_STATES + ('auto',):
+        return jsonify({'success': False, 'code': 'bad_state'}), 400
+    R = _R()
+    if not R._session_is_admin():
+        desk = str(session.get('user_role') or '').strip().upper()
+        if desk not in _IM_DESK or para not in _IM_NEXT.get(de, ()):
+            return jsonify({'success': False, 'code': 'move_not_allowed',
+                            'message': 'Your desk can only move a task one step forward.'}), 403
+    dia = _ref_da((body.get('date') or '').strip())
+    dia = dia.date() if hasattr(dia, 'date') else dia
+    reg = task_runs.set_override(dia, task, para, session.get('user_sid', ''), session.get('user_name', ''))
+    return jsonify({'success': True, 'override': reg})
 
 
 @blueprint.route('/api/control-panel/intraday-tasks', methods=['GET', 'POST'])

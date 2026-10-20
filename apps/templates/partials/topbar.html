@@ -235,7 +235,8 @@
                 'Ticket Updated':    { icon: 'life-buoy',    color: 'bg-info'    },
                 'Project Lead':      { icon: 'folder-kanban', color: 'bg-primary' },
                 'Task Assigned':     { icon: 'list-checks',  color: 'bg-primary' },
-                'Task Comment':      { icon: 'message-square', color: 'bg-info'  }
+                'Task Comment':      { icon: 'message-square', color: 'bg-info'  },
+                'Due Today':         { icon: 'calendar-clock', color: 'bg-warning' }
             };
 
             var PAGE_URL = {
@@ -287,6 +288,7 @@
                 'Swap VCP':            '/other-products-swap-vcp',
                 'Support':             '/tickets-list',
                 'Projects':            '/projects',
+                'User Home':           '/user-home',
                 'Other Products Summary': '/other-products-summary',
                 'NDF Summary':            '/ndf-summary',
                 'Operations B3':          '/operations-b3',
@@ -297,7 +299,8 @@
                 'File Interface':         '/file-interpreter',
                 'File Interpreter':       '/file-interpreter',
                 'Mapping':                '/mapping',
-                'Holidays Calendar':      '/holidays-calendar'
+                'Holidays Calendar':      '/holidays-calendar',
+                'Calendar':               '/holidays-calendar'
             };
             // New Deals pages whose Trade Date filter accepts a ?tradedate= deep-link.
             var NEW_DEALS_PAGES = {
@@ -809,6 +812,11 @@
                 <span class="tm-on"><i class="me-1 fs-lg align-middle" data-lucide="bell-ring"></i></span>
                 <span class="tm-off d-none text-danger"><i class="me-1 fs-lg align-middle" data-lucide="bell-off"></i></span>
                 <span class="align-middle">Notifications</span>
+              </a>
+              <!-- Settings -->
+              <a class="dropdown-item" href="/settings">
+                <i class="me-1 fs-lg align-middle" data-lucide="settings"></i>
+                <span class="align-middle" data-lang="nav-settings">Settings</span>
               </a>
               <!-- Support -->
               <a class="dropdown-item" href="/tickets-list">

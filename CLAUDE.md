@@ -1026,6 +1026,22 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 - **A seção Pinned da barra é só de PROJETOS** (§631): `window.otcPins`
   (`has`/`toggle`/`sync`), chave `otc_pinned_projects_<SID>`. Não há mais
   página fixada nem editor.
+- **O aviso de AÇÃO é a pílula preta do Pane** (§632): `window.otcToast(msg,
+  { undo })` (otc.js §3d) — "Done: <tarefa>" com Undo, abaixo da barra. Swal
+  é para erro e confirmação, não para dizer que algo deu certo.
+- **O foco é a ILHA** (`window.otcFocus`, otc.js §3e): estado no localStorage,
+  servidor avisado a cada passo (`/api/user-home/focus`). Tela nova que inicia
+  foco chama `otcFocus.start`, nunca conta tempo por conta própria.
+- **O papel de parede é o SVG do Pane** (`partials/wallpaper.html`, cores em
+  `--w-*` no otc.scss §2b, sem bolhas). O "leitoso" do claro era ele, não o
+  vidro (§632) — antes de mexer em alfa de vidro, MEÇA o pixel atrás da placa.
+- **Troca de página é View Transition entre documentos** (§632): os nomes da
+  barra lateral, do topo e do papel de parede só existem durante a navegação
+  (`otc-vt-nav`, posta pelo `pageswap`/`pagereveal` do `head-css.html`, que
+  tem de ouvir antes do primeiro paint). O Chromium do Playwright não dispara
+  o `pagereveal`: teste a transição com `channel='chrome'`. O menu pré-busca
+  o HTML da tela no hover (Speculation Rules) — link de AÇÃO (logout, lock,
+  download, API) fica fora da lista.
 - Cor só de tema claro precisa do par `[data-bs-theme=dark]`.
 
 ---
@@ -2415,6 +2431,32 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `projects-common.js`. Chave de tradução das telas é `pj-*`/`tsk-*` — `tk-*`
   é do Support Center.
 
+### Intraday › User Home e Settings (§632)
+
+- **Um documento por USUÁRIO** (`user-home/<SID>.json`, `features/user_home`):
+  eventos do Outlook, foco e as preferências da Settings. As duas páginas são
+  pessoais e estão no `_ALWAYS_ALLOWED_PATHS`.
+- **Os projetos chegam pelo `routes`** (`_projects_doc`/`_projects_directory`/
+  `_projects_meta`) e o Projects pergunta pelo `_user_wants(sid, chave)` antes
+  de tocar o sino de UMA pessoa — aviso pessoal novo entra no
+  `domain.DEFAULT_SETTINGS['notify']` e no `_PREF_KEY` do Projects.
+- **Sync = Outlook da máquina pelo COM**, substituindo o gravado; o filtro do
+  `Restrict` tenta `mm/dd` e `dd/mm` e confere cada item pela data real.
+  **Reunião é ZOOM** (link do Local ou do corpo; o Join abre `zoommtg://`).
+  O colega vê "em reunião até…", NUNCA o assunto.
+- **"Vence hoje" às 08:00** (`user-home-due`, claim diário em disco).
+- `check_user_home.py`.
+
+### Arrastar entre colunas (§632)
+
+- **Confirmations Monitor** (`/api/manual-confirmation/move`): soltar é ASSINAR
+  a etapa pelas mesmas funções da tela do documento; a mesa move só a SUA
+  etapa, um passo; admin/master qualquer coluna (para trás reabre).
+  **Onboarding Overview**: soltar abre o formulário da etapa. **Intraday
+  Monitor**: ajuste manual registrado (`task_runs.set_override`). Nenhum
+  arrasto grava por um caminho próprio — vai pela regra que o botão já usa.
+  `check_mc_move.py`.
+
 ### Pending Confirmation
 
 - **O Dashboard (`/dashboard-pending-confirmation`, Pending Confirmation ›
@@ -2887,7 +2929,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (188 scripts)
+### `scripts/tests/` (189 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

@@ -23,6 +23,17 @@
     var fx = '', auto = null;
     try { fx = localStorage.getItem('__OTC_TRACKER_FX__') || ''; auto = sessionStorage.getItem('__OTC_FX_AUTO__'); } catch (e) {}
     if (fx === 'reduced' || (fx !== 'full' && auto === '1')) r.classList.add('is-solid');
+    // Troca de PÁGINA como a do Pane (§632): a View Transition entre documentos
+    // (`@view-transition` no otc.scss) segura barra lateral, barra do topo e papel
+    // de parede no lugar e esmaece só o conteúdo; a classe dá os nomes às três
+    // só durante a navegação (na troca de tema elas cruzam com o resto). O
+    // `pagereveal` tem de estar ouvindo ANTES do primeiro paint — por isso aqui.
+    addEventListener('pageswap', function (e) { if (e.viewTransition) r.classList.add('otc-vt-nav'); });
+    addEventListener('pagereveal', function (e) {
+        if (!e.viewTransition) return;
+        r.classList.add('otc-vt-nav');
+        e.viewTransition.finished.finally(function () { r.classList.remove('otc-vt-nav'); });
+    });
 })();
 </script>
 <link href="{{ config.ASSETS_ROOT }}/css/vendors.min.css" rel="stylesheet" type="text/css">

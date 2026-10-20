@@ -1,0 +1,208 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Settings{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
+{% include 'partials/projects-assets-css.html' %}
+<style>
+/* Settings (§632) — a do Pane: o perfil, a aparência do app e quando ele avisa.
+   Aparência é a mesma API da gaveta (`otcUI`, data-*-pick); o resto grava em
+   `/api/settings` (o documento do usuário). */
+#st-page .st-layout { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 1100px) { #st-page .st-layout { grid-template-columns: minmax(0, 1fr); } #st-page .st-nav-panel { position: static; } }
+#st-page .st-nav-panel { position: sticky; top: 96px; padding: 12px; border-radius: var(--otc-r-panel, 28px); }
+#st-page .st-me { display: flex; align-items: center; gap: 12px; padding: 8px 8px 14px; border-bottom: 1px solid var(--otc-sep); margin-bottom: 8px; }
+#st-page .st-me b { display: block; font: 650 15px/1.2 var(--otc-font); color: var(--otc-text); }
+#st-page .st-me small { font-size: 13px; color: var(--otc-text-2); }
+#st-page .st-nav { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+#st-page .st-nav a { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-radius: 16px; color: var(--otc-text); text-decoration: none; font: 600 15px/1 var(--otc-font); }
+#st-page .st-nav a:hover { background: var(--otc-fill-hover); }
+#st-page .st-nav a.is-on { background: var(--otc-glass-thick); box-shadow: var(--otc-shadow), var(--otc-inner-hl); }
+#st-page .st-nav a .ms-auto { color: var(--otc-text-3); width: 16px; height: 16px; }
+#st-page .st-nav a.is-on .ms-auto { color: var(--otc-accent-ink); }
+#st-page .st-ico { width: 30px; height: 30px; border-radius: 9px; flex: none; display: grid; place-items: center; color: #fff;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--hue) 78%, #fff), var(--hue)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35); }
+#st-page .st-ico svg { width: 16px; height: 16px; }
+#st-page .st-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+@media (max-width: 1280px) { #st-page .st-grid { grid-template-columns: minmax(0, 1fr); } }
+#st-page .st-wide { grid-column: 1 / -1; }
+#st-page [class*="-panel"].st-card { padding: 20px; scroll-margin-top: 96px; }
+#st-page .st-card > .pj-sec-sub { margin-bottom: 10px; }
+#st-page .st-row { display: flex; align-items: center; gap: 14px; padding: 13px 0; border-top: 1px solid var(--otc-sep); }
+#st-page .st-row:first-of-type { border-top: 0; }
+#st-page .st-row__txt { flex: 1; min-width: 0; }
+#st-page .st-row__txt b { display: block; font: 650 15px/1.25 var(--otc-font); color: var(--otc-text); }
+#st-page .st-row__txt small { font-size: 13px; color: var(--otc-text-2); }
+#st-page .st-row__val { font-size: 15px; color: var(--otc-text-2); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
+#st-page .st-row .form-check-input { width: 50px; height: 30px; margin: 0; cursor: pointer; }
+#st-page .st-profile { display: flex; align-items: center; gap: 18px; padding: 6px 0 16px; }
+#st-page .st-profile .pj-av { width: 92px; height: 92px; font-size: 30px; position: relative; }
+#st-page .st-avwrap { position: relative; }
+#st-page .st-avwrap::after { content: ""; position: absolute; right: 4px; bottom: 4px; width: 18px; height: 18px; border-radius: 50%; background: var(--otc-green); box-shadow: 0 0 0 3px var(--otc-solid); }
+#st-page .st-profile h3 { font: 700 26px/1.15 var(--otc-font-display); letter-spacing: -.02em; margin: 0; color: var(--otc-text); }
+#st-page .st-profile .st-pos { font: 600 15px/1.4 var(--otc-font); color: var(--otc-text-2); }
+#st-page .st-profile .st-mail { font-size: 14px; color: var(--otc-text-2); }
+#st-page .st-block { padding: 14px 0; border-top: 1px solid var(--otc-sep); }
+#st-page .st-block:first-of-type { border-top: 0; }
+#st-page .st-block__head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+#st-page .st-walls { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 900px) { #st-page .st-walls { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+#st-page .st-wall { border: 0; background: none; padding: 0; display: flex; flex-direction: column; gap: 8px; align-items: stretch; font: 600 13px/1 var(--otc-font); color: var(--otc-text-2); }
+#st-page .st-wall__art { position: relative; aspect-ratio: 138 / 104; border-radius: 16px; background: var(--art); overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .10), var(--otc-shadow); outline: 2.5px solid transparent; outline-offset: 3px;
+  transition: outline-color var(--otc-dur-base) var(--otc-ease); }
+#st-page .st-wall__art i { position: absolute; border: 1.4px solid rgba(255, 255, 255, .45); background: rgba(255, 255, 255, .08); border-radius: 6px; }
+#st-page .st-wall__art i:nth-child(1) { left: 8%; top: 10%; width: 16%; height: 80%; }
+#st-page .st-wall__art i:nth-child(2) { left: 31%; top: 10%; width: 61%; height: 38%; }
+#st-page .st-wall__art i:nth-child(3) { left: 31%; top: 57%; width: 33%; height: 13%; border-radius: 999px; }
+#st-page .st-wall.is-on .st-wall__art { outline-color: var(--otc-accent-ink); }
+#st-page .st-wall.is-on .st-wall__art::after { content: ""; position: absolute; right: 8px; bottom: 8px; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--otc-accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 14px no-repeat; }
+#st-page .st-wall.is-on { color: var(--otc-text); }
+#st-page .st-accents .otc-swatch { width: 34px; height: 34px; }
+#st-page .st-step { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 12px 14px; border-radius: 20px; background: var(--otc-fill); }
+#st-page .st-step span.pj-label { display: block; margin-bottom: 6px; }
+#st-page .st-step b { font: 700 34px/1 var(--otc-font-display); letter-spacing: -.03em; color: var(--otc-text); font-variant-numeric: tabular-nums; }
+#st-page .st-step small { font: 600 14px/1 var(--otc-font); color: var(--otc-text-2); margin-left: 3px; }
+#st-page .st-step button { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 0; display: grid; place-items: center; background: var(--otc-glass-thick); color: var(--otc-accent-ink); box-shadow: var(--otc-shadow), var(--otc-inner-hl); }
+#st-page .st-step button:disabled { opacity: .45; }
+/* os contadores quebram em duas colunas no cartão estreito (a meta diária desce) */
+#st-page .st-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 12px; margin-bottom: 6px; }
+#st-page .st-action { display: flex; align-items: center; gap: 14px; width: 100%; padding: 13px 4px; border: 0; border-top: 1px solid var(--otc-sep); background: none; text-align: left; border-radius: 14px; color: inherit; text-decoration: none; }
+#st-page .st-action:first-of-type { border-top: 0; }
+#st-page .st-action:hover { background: var(--otc-fill-hover); }
+#st-page .st-action.is-danger b { color: var(--otc-danger); }
+#st-page .st-action > svg:last-child { width: 18px; height: 18px; color: var(--otc-text-3); }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="st-page" class="container-fluid">
+
+    <div class="page-title-head">
+        <div class="flex-grow-1">
+            <h4 data-lang="nav-settings">Settings</h4>
+            <p class="otc-page-sub" data-lang="st-sub">Your profile, the look of the OTC Tracker, and when it nudges you</p>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="javascript: void(0);">OTC Tracker</a></li>
+                <li class="breadcrumb-item active" data-lang="nav-settings">Settings</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="st-layout">
+        <div class="st-nav-panel">
+            <div class="st-me" id="st-me"></div>
+            <ul class="st-nav" id="st-nav">
+                <li><a href="#st-profile" class="is-on"><span class="st-ico" style="--hue: var(--otc-blue)"><i data-lucide="user-round"></i></span><span data-lang="st-profile">Profile</span><i data-lucide="chevron-right" class="ms-auto"></i></a></li>
+                <li><a href="#st-notify"><span class="st-ico" style="--hue: var(--otc-pink)"><i data-lucide="bell"></i></span><span data-lang="st-notifications">Notifications</span><i data-lucide="chevron-right" class="ms-auto"></i></a></li>
+                <li><a href="#st-look"><span class="st-ico" style="--hue: var(--otc-purple)"><i data-lucide="palette"></i></span><span data-lang="st-appearance">Appearance</span><i data-lucide="chevron-right" class="ms-auto"></i></a></li>
+                <li><a href="#st-focus"><span class="st-ico" style="--hue: var(--otc-orange)"><i data-lucide="timer"></i></span><span data-lang="st-focus">Focus</span><i data-lucide="chevron-right" class="ms-auto"></i></a></li>
+                <li><a href="#st-data"><span class="st-ico" style="--hue: var(--otc-teal)"><i data-lucide="layers"></i></span><span data-lang="st-data">Data</span><i data-lucide="chevron-right" class="ms-auto"></i></a></li>
+            </ul>
+        </div>
+
+        <div class="st-grid">
+            <div class="st-card st-profile-panel" id="st-profile">
+                <h5 class="pj-sec-title" data-lang="st-profile">Profile</h5>
+                <p class="pj-sec-sub" data-lang="st-profile-sub">How the desk sees you</p>
+                <div class="st-profile" id="st-profile-head"></div>
+                <div id="st-profile-rows"></div>
+            </div>
+
+            <div class="st-card st-notify-panel" id="st-notify">
+                <h5 class="pj-sec-title" data-lang="st-notifications">Notifications</h5>
+                <p class="pj-sec-sub" data-lang="st-notify-sub">What the OTC Tracker taps you on the shoulder for</p>
+                <div id="st-notify-rows"></div>
+            </div>
+
+            <div class="st-card st-look-panel st-wide" id="st-look">
+                <h5 class="pj-sec-title" data-lang="st-appearance">Appearance</h5>
+                <p class="pj-sec-sub" data-lang="st-look-sub">The whole app re-tints through its glass</p>
+
+                <div class="st-block">
+                    <div class="st-block__head">
+                        <span class="st-ico" style="--hue: var(--otc-indigo)"><i data-lucide="moon"></i></span>
+                        <div class="st-row__txt"><b data-lang="st-theme">Theme</b><small data-lang="st-theme-sub">Auto follows your system</small></div>
+                        <nav class="nav nav-pills" data-otc-seg>
+                            <button type="button" class="nav-link" data-theme-pick="light"><i data-lucide="sun"></i> <span data-lang="otc-light">Light</span></button>
+                            <button type="button" class="nav-link" data-theme-pick="dark"><i data-lucide="moon"></i> <span data-lang="otc-dark">Dark</span></button>
+                            <button type="button" class="nav-link" data-theme-pick="auto"><i data-lucide="sun-moon"></i> <span data-lang="otc-auto">Auto</span></button>
+                        </nav>
+                    </div>
+                </div>
+
+                <div class="st-block">
+                    <div class="st-block__head">
+                        <span class="st-ico" style="--hue: var(--otc-pink)"><i data-lucide="droplet"></i></span>
+                        <div class="st-row__txt"><b data-lang="st-wallpaper">Wallpaper</b><small id="st-wall-name"></small></div>
+                    </div>
+                    <div class="st-walls" id="st-walls"></div>
+                </div>
+
+                <div class="st-block">
+                    <div class="st-block__head">
+                        <span class="st-ico" style="--hue: var(--otc-orange)"><i data-lucide="palette"></i></span>
+                        <div class="st-row__txt"><b data-lang="st-accent">Accent</b><small id="st-accent-name"></small></div>
+                    </div>
+                    <div class="otc-swatches st-accents" data-otc-accents></div>
+                </div>
+
+                <div class="st-block">
+                    <div class="st-block__head">
+                        <span class="st-ico" style="--hue: var(--otc-blue)"><i data-lucide="layers"></i></span>
+                        <div class="st-row__txt"><b data-lang="st-glass">Glass</b><small data-lang="st-glass-sub">Clear shows more of the wallpaper</small></div>
+                        <nav class="nav nav-pills" data-otc-seg>
+                            <button type="button" class="nav-link" data-glass-pick="clear" data-lang="otc-clear">Clear</button>
+                            <button type="button" class="nav-link" data-glass-pick="tinted" data-lang="otc-tinted">Tinted</button>
+                        </nav>
+                    </div>
+                </div>
+
+                <div class="st-block">
+                    <div class="st-block__head mb-0">
+                        <span class="st-ico" style="--hue: var(--otc-green)"><i data-lucide="shield"></i></span>
+                        <div class="st-row__txt"><b data-lang="st-reduce">Reduce transparency</b><small data-lang="st-reduce-sub">Solid surfaces, no frost</small></div>
+                        <div class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" role="switch" data-otc-solid aria-label="Reduce transparency"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="st-card st-focus-panel" id="st-focus">
+                <h5 class="pj-sec-title" data-lang="st-focus">Focus</h5>
+                <p class="pj-sec-sub" data-lang="st-focus-sub">The timer the island keeps</p>
+                <div class="st-steps" id="st-steps"></div>
+                <div class="st-row">
+                    <span class="st-ico" style="--hue: var(--otc-orange)"><i data-lucide="play"></i></span>
+                    <div class="st-row__txt"><b data-lang="st-start-now">Start a session now</b><small id="st-start-sub"></small></div>
+                    <button type="button" class="btn btn-primary rounded-pill d-inline-flex align-items-center gap-2" id="st-start"><i data-lucide="play"></i><span data-lang="st-start">Start</span></button>
+                </div>
+            </div>
+
+            <div class="st-card st-data-panel" id="st-data">
+                <h5 class="pj-sec-title" data-lang="st-data">Data</h5>
+                <p class="pj-sec-sub" data-lang="st-data-sub">What is yours in the OTC Tracker</p>
+                <a class="st-action" id="st-export" href="/api/settings/export-tasks">
+                    <span class="st-ico" style="--hue: var(--otc-green)"><i data-lucide="download"></i></span>
+                    <span class="st-row__txt"><b data-lang="st-export">Export my tasks as CSV</b><small id="st-export-sub"></small></span>
+                    <i data-lucide="chevron-right"></i>
+                </a>
+                <button type="button" class="st-action is-danger" id="st-reset">
+                    <span class="st-ico" style="--hue: var(--otc-danger)"><i data-lucide="rotate-ccw"></i></span>
+                    <span class="st-row__txt"><b data-lang="st-reset">Reset to defaults</b><small data-lang="st-reset-sub">Look, notifications and focus back to the original</small></span>
+                    <i data-lucide="chevron-right"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/projects-common.js?v={{ asset_v('js/pages/projects-common.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/settings.js?v={{ asset_v('js/pages/settings.js') }}"></script>
+{% endblock extra_javascript %}

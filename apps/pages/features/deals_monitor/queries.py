@@ -495,6 +495,7 @@ def _intraday_snapshot(ref):
     feriados = set(_R()._anbima_holidays() or ())
     feriado = dia.strftime('%Y-%m-%d') in feriados
     cfg = domain.task_config(persistence._load_intraday_tasks())
+    ajustes = task_runs.overrides_of(dia)                   # arrastar o card (§632)
 
     cards, conf_cards = _ndm_monitor_snapshot(ref)
     zonas = _zone_totals(cards, conf_cards)
@@ -574,6 +575,13 @@ def _intraday_snapshot(ref):
                 item['progress'] = 100 if feito else 0
                 est = domain.avalia(c, dia, agora, feriado, feito, False, feito_em)
         item.update(est)
+        # O ajuste MANUAL do dia vale por cima do automático (zona não: é contagem)
+        aj = ajustes.get(t['id']) if t.get('kind') != 'zone' else None
+        if aj and aj.get('state') in task_runs.OVERRIDE_STATES:
+            item['auto_state'] = item.get('state')
+            item['state'] = aj['state']
+            item['manual'] = {'by': aj.get('name') or aj.get('sid'), 'sid': aj.get('sid'), 'time': aj.get('time')}
+            item['progress'] = {'done': 100, 'todo': 0}.get(aj['state'], max(item.get('progress') or 0, 50))
         tarefas.append(item)
 
     devidas = [x for x in tarefas if x['due']]
