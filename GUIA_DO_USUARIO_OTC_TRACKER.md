@@ -399,6 +399,8 @@ São quadrados coloridos de canto arredondado, sempre na mesma ordem e sempre co
 | **Save** | Verde | disquete | Grava a edição em curso |
 | **Cancel** | Cinza | × | Descarta a edição em curso |
 
+> **O Send mostra o envio acontecendo.** Ao clicar no **Send** da linha — ou no **Send** da barra, que envia as linhas marcadas —, o avião decola e o botão vai ficando verde enquanto o sistema envia; ele fica **verde com "Sent"** só quando o servidor confirma. Se der erro, o botão treme em vermelho e volta à cor normal. Fora disso ele fica azul, como sempre.
+
 ### 4.11. Datas
 
 **Toda data na tela é `dd/mm/aaaa`** — dia, mês e ano, nesta ordem, sempre.
@@ -1868,7 +1870,7 @@ Os cartões estão em **cinco seções**, e o que agrupa não é o que a rotina 
 
 | Cartão | O que faz | Quando roda sozinho |
 |---|---|---|
-| **Save CETIP Files** | Salva os arquivos da CETIP na pasta do dia e manda o e-mail para o OTC. Dois deles não são posição e atualizam uma base: o `INDEXADORESSWAP_VCP` atualiza os indexadores de swap e o `CADASTROCURVASMOEDASFEEDERDOMINIOS` atualiza o cadastro de domínios — este último vai **anexo** no e-mail | Ao longo do pregão |
+| **Save CETIP Files** | Salva os arquivos da CETIP na pasta do dia e manda o e-mail para o OTC. **Os arquivos chegam sozinhos na pasta `Batch Conecta › Return`** (compactados, com nome começando por `73760_`): a rotina pega os da data, guarda os originais na pasta de origem do dia, salva no destino os que o cadastro *CETIP Files* pede e tira todos eles da Return. Os retornos de registro do Batch Conecta, que ficam na mesma pasta, não são tocados. O resultado diz quantos vieram da Return e quantos ficaram só na origem por não estarem no cadastro. Dois deles não são posição e atualizam uma base: o `INDEXADORESSWAP_VCP` atualiza os indexadores de swap e o `CADASTROCURVASMOEDASFEEDERDOMINIOS` atualiza o cadastro de domínios — este último vai **anexo** no e-mail | Ao longo do pregão |
 | **Intraday Monitor — Tasks & Pending Action** | Define os dias e o horário limite de cada tarefa do Intraday Monitor (5.1) e manda o e-mail *Pending Action - Intraday Monitor* com as tarefas e os produtos em aberto. Recon nova aparece aqui sozinha | 19:00 e 19:30 (horário de Brasília) |
 | **Confirmations Escalation** | Cobra por e-mail o que está parado na esteira de confirmação — sete listas, uma por destinatário | Segundas e quintas; feriado **rola** para o próximo dia útil |
 | **Save Daily Settlement Files** | Salva os arquivos de liquidação do dia. O arquivo de **Operações** da B3 é reconhecido pelo **Participante** da linha 3 (célula A3): `JPMORGANBM` entra como **Operações JPM** e `MORGANBC` como **Operações MGT** — não é preciso renomear o arquivo da MGT. O aviso do fim da rotina diz, em cada arquivo de operações, o Participante lido | Fim do dia |

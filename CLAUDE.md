@@ -1022,7 +1022,10 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   DELE** (mesa, 20/10/2026, §641): o Send da linha é o `btn-primary` da regra
   dos botões de ação, e o voo, o verde do "Sent" e o vermelho do erro correm
   por cima da cor padrão — a cápsula escura com avião limão destoava das outras
-  três ações. Não se reimplementa por página.
+  três ações. **O Send EM LOTE da barra também voa** (§642): classe
+  `otc-send-batch` no botão — a animação sem a pílula do `.btn-send` —, e
+  tela nova com Send em lote a põe; `check_send_contrail.py` varre as telas.
+  Não se reimplementa por página.
 - **A aparência vai para o `<html>` ANTES do primeiro paint** (script
   síncrono do `partials/head-css.html`): `data-bs-theme`, `data-accent`,
   `data-wall`, `data-glass` e a classe `is-solid`, lidos de
@@ -2801,6 +2804,18 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 
 ### Save CETIP Files
 
+- **Os crus chegam na Return do Batch Conecta, compactados e num ENVELOPE**
+  (20/10/2026, §643): `73760_CETIP_261019_SP_<arquivo>[.txt].zip.S<seq>`. A
+  rotina compara pelo nome ANTIGO (`domain._cetip_nome_legado`: sem o
+  participante, o `_SP`, o `.zip` e a sequência), então o cadastro
+  `cetip-files` vale como está e o SOURCE aceita as duas grafias. Ela TRAZ os
+  da data para a pasta de origem do dia (byte a byte, nome como chegou), abre o
+  zip num temporário (`_cetip_texto_cru`: um arquivo só, senão erro), salva no
+  destino como sempre e só então APAGA da Return o que já está na origem — o
+  que não se copiou fica lá. A Return é a mesma dos Mapping B3 ID: só se toca no
+  envelope do participante 73760 e da data (retorno de registro, outro dia,
+  outro participante ficam). Duas entregas do mesmo arquivo: vale a sequência
+  maior. Reprocessar um dia lê da origem. `check_cetip_return.py`.
 - **O catálogo de comportamento casa pelo nome entre PARÊNTESES do TYPE**
   (`_cetip_behaviour_for`): o prefixo do rótulo é descrição e é digitado na
   tela. Junção pelo rótulo inteiro deixa a linha SEM comportamento — o arquivo
@@ -3043,7 +3058,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (195 scripts)
+### `scripts/tests/` (197 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

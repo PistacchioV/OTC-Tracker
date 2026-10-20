@@ -26806,3 +26806,86 @@ brilho de gel do botão (`--ins-gradient`) e o canto do squircle
 e no "Sent" o próprio botão vira verde (`--otc-gel`), porque o `overflow`
 corta o preenchimento na borda de dentro e sobrava um fio azul em volta.
 Conferido no Chromium nos dois temas e no modo opaco.
+
+## §642 — O Send em lote também voa (2026-10-20)
+
+**"O botão de send em lote está com animação também?"** Não estava: o
+Contrail só armava o Send da linha (`.btn-row-send`, `.acc-act-send`) e as
+classes de pílula `.btn-send`/`.otc-send`, que nenhuma tela usa. O Send da
+barra — o que aparece com as linhas marcadas — tinha só o afundar de gel de
+todo botão. São 19: os `btnSend*` das Intrag (NDF, Option, Swap, Unwind e os
+três DCE), dos catálogos de New Deals e de Unwinds, do Swap Bullet e da NDF
+FX; o Send que o JS do New Deals cria nas seis telas de NDF/Opção; o *Send
+selected* do Swap VCP e o Send em lote do Other Publisher.
+
+Eles ganham a classe **`otc-send-batch`**, que entra no `SEND_SEL` do otc.js e
+no bloco da animação do SCSS, mas NÃO na regra da pílula (largura mínima,
+rótulo em caixa alta): a barra fica com a cara de hoje, e o avião decola, o
+verde avança e o botão vira **SENT** quando o servidor confirma. Duas coisas
+para isso funcionar em botão com rótulo: o `decorate` passa a tratar como
+rótulo também o rótulo que a página pôs num ELEMENTO (`<span data-lang>`, o
+contador de linhas marcadas do Swap VCP) — marcando o nó com a classe, sem
+trocá-lo, porque a página segue atualizando o contador por id; e no "Sent" o
+fundo do botão vai a verde também quando ele não é gel (o `btn-light` do New
+Deals, o `btn-soft-primary` do Other Publisher). Nenhuma tela reescreve o
+botão durante o envio, então a animação não briga com spinner de página.
+O `data-table-confirm-selected` do Pending Confirmation é um Confirm (check),
+não Send, e fica de fora.
+
+**Guarda.** `check_send_contrail.py` (novo): o SCSS sem pintura em repouso e
+o lote fora da pílula, o `SEND_SEL`, toda tela com Send em lote levando a
+classe (tela nova cai aqui), e no Chromium o repouso na cor do `btn-primary`,
+o rótulo sumindo no voo e o verde no Sent, nos dois temas. Conferido também na
+tela da recompra de NDF FX com a linha marcada.
+
+## §643 — Save CETIP Files lê os crus da Return do Batch Conecta (2026-10-20)
+
+**"Os arquivos da B3 para salvar no Control Panel estão chegando
+automaticamente na pasta Return. Aponte para pegar lá, salvar os necessários
+na pasta destino, os crus na pasta origem, e deletar da Return — o padrão dos
+nomes mudou."** A rotina lia os crus já descompactados de `ARQUIVOS
+CETIP\AAAA\mm. Mês\dd`. Agora a B3 os entrega na Return, compactados e num
+ENVELOPE: `73760_CETIP_261019_SP_CADASTROCURVASMOEDASFEEDERDOMINIOS.txt.zip.S10567296`
+é o nome antigo (`CETIP_261019_CADASTROCURVASMOEDASFEEDERDOMINIOS.txt`) com o
+participante na frente, `_SP` depois da data, `.zip` e a sequência da entrega.
+
+**O nome.** Em vez de reescrever o cadastro `cetip-files` (que é da mesa), a
+rotina compara pelo nome ANTIGO (`domain._cetip_nome_legado`): o envelope sai
+e as linhas valem como estão — e o SOURCE pode ser digitado nas duas grafias,
+porque o padrão passa pela mesma função. Só o envelope do participante 73760
+perde o envelope: os destinos do cadastro são `73760_YYMMDD_…`, e um arquivo de
+outro participante casaria com a linha do banco e gravaria por cima dele. A
+exceção é o cadastro de ativos subjacentes: chega como
+`…_COE_ATIVOS_SUBJACENTES`, e a linha da mesa (`CETIP_YYMMDD_COE`) não casaria
+mais — o `_cetip_files_upgrade` leva ESSA linha, só se estiver exatamente
+assim, ao nome que chega.
+
+**O fluxo** (`entrypoint`, stage `save`): (1) traz da Return
+(`CETIP_RETURN_PATH`, padrão o `CONECTA_RETURN_PATH` do bloco de ambiente) os
+crus da DATA para a pasta de origem do dia, byte a byte e com o nome como
+chegaram (`persistence._cetip_trazer_do_retorno`; cópia com outro tamanho é
+erro); (2) processa a origem como sempre, abrindo o zip num temporário
+(`_cetip_texto_cru` — um arquivo dentro, senão erro dizendo quais); (3) só
+então APAGA da Return o que já está guardado na origem. O que não se copiou
+fica na Return: é o único exemplar. A Return é a mesma de onde os Mapping B3 ID
+leem o retorno do Batch Conecta, então só se toca no arquivo no envelope do
+banco e da data — retorno de registro, arquivo de outro dia e de outro
+participante ficam onde estão. Duas entregas do mesmo arquivo na data: vale a
+de sequência maior (a outra fica guardada na origem). O arquivo que o cadastro
+não pede (a B3 manda muitos) fica guardado na origem e a rodada diz quantos
+são — é por esse número que se acha um arquivo cujo nome mudou e parou de
+casar. Reprocessar um dia, com a Return já limpa, lê da origem.
+
+**O que não se viu daqui.** A captura mostra só os arquivos `73760_CETIP_…`; os
+de `CETIP21_`, `OPC_`, `TER_` e `SIC_` foram presumidos no mesmo envelope, e o
+conteúdo do zip, igual ao cru de antes. O primeiro Save na instância confirma:
+linha do cadastro que não casar aparece como *Not found* no e-mail e o arquivo
+fica entre os "não pedidos" da rodada.
+
+**Guarda.** `check_cetip_return.py` (novo): o envelope e o nome antigo, toda
+linha do seed casando com o seu arquivo no envelope, o SOURCE nas duas grafias,
+o outro participante de fora, o upgrade do COE, a rodada inteira em tmp
+(origem byte a byte, destino em CRLF, a sequência maior, a Return só com o que
+não é da rodada, o zip com dois arquivos, o não pedido contado, a cópia que
+falha ficando, o reprocessamento pela origem). `check_cetip_bacc`,
+`check_cetip_dominio`, `check_cetip_json_export` e `check_cetip_subj` verdes.
