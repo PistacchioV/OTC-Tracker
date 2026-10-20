@@ -394,6 +394,16 @@ Intrag › Unwind quando a outra ponta é fundo nosso, Other Products e Pay/Rec
 Lawton). No Termo de Resilição de commodities, Valor Base Liquidado e Novo
 Valor Base saem só com a quantidade, sem o código da mercadoria. Swap, Options, COE e DCE ainda não têm Termo, esteira nem Intrag.
 
+A de **Options Commodities** lê o e-mail da mesa (*INTERNAL JPMorgan Trade
+Recap … Unwind*), uma tabela por perna: **Client** (a operação com o cliente) e
+**Banco** (o B2B Banco × Lawton). O e-mail não traz o B3 ID — a coluna
+*Contract* é o mês do futuro —, e cada perna é achada no Live Position pelas
+características (strike, quantidade original, Call/Put), só entre os contratos
+do seu tipo; nome do cliente e datas da opção desempatam, e mais de um
+candidato deixa a linha sem B3 ID, avisando. Quantidade em unidades da
+mercadoria; prêmio em USD por unidade e a paridade na coluna **FX Rate**, como
+vieram no e-mail; sinal do banco (no B2B, o contrário da perna Client).
+
 **New Deals › Swap › Cashflow** importa o Deal Ticket e gera os arquivos da B3;
 **New Deals › Options › EDG** ainda só abre a grade.
 
