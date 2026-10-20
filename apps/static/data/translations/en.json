@@ -9,7 +9,6 @@
   "nd-box-complete-msg": "{0} deal(s) imported from {1} email(s) in the box.<br><small class=\"text-muted\">{2} email(s) moved to New deals &gt; B2Bs Automatic.</small>",
   "nd-box-error-title": "Box scan error",
   "nd-box-cancel-note": "<br><br><small class=\"text-warning\"><strong>{0} cancellation email(s) deleted from the box.</strong></small>",
-  "user-role": "Associate",
   "menu-title": "Navigation",
   "dashboards": "Dashboards",
   "dashboard-one": "KPI",

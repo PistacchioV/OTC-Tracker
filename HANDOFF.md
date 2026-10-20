@@ -26485,3 +26485,42 @@ para a gaveta e para a Settings, onde o traço do mini app ganhou a versão do
 claro. Conferido no Chromium: as dez miniaturas com a base da parede no tema
 atual, nos dois temas, na troca com a gaveta aberta e na Settings.
 
+
+## §635 — O cargo do cadastro no rodapé do menu; a tabela de Roles à esquerda (2026-10-20)
+
+**"Associate" para todo mundo.** O rodapé do sidenav (o bloco com foto, nome e
+cargo) desenhava `{{ _role }}` num `<span data-lang="user-role">`, e o
+I18nManager troca na carga todo texto com `data-lang` pelo valor da chave:
+`"Associate"` em en/br e `"Director de arte"` no es — restos do tema comprado.
+O que o servidor escrevia nunca aparecia. E mesmo sem a chave ele estaria
+errado: o que ia ali era o PAPEL (`BO`, `ADMIN`), e o cargo (`Position`, a
+coluna da tela Users › Roles) nunca entrava na sessão. A chave saiu do span e
+dos três JSONs, e o rodapé mostra o cargo, caindo no papel quando o cadastro
+não tem um.
+
+**O cargo chega a quem já está logado.** A sessão não expira (§552), então
+gravar o `user_position` só no `_set_session` deixaria toda sessão aberta sem
+ele — e a promoção feita na tela só apareceria no próximo login, que pode não
+vir. Ele vem na MESMA leitura por SID que já atualiza o papel
+(`_read_user_authz` passou a `SELECT Page_Access, Role, Position` e a tupla do
+cache ganhou o quarto item; `_get_user_position`), e o `refresh_session_role`
+o carimba com as regras do papel: `None` não mexe, só grava quando muda. Ao
+contrário do papel, vale também para o master (é rótulo, não permissão). E o
+`update_user_role_status` agora esquece o cache por SID depois do commit: papel
+e cargo editados na tela valem no request seguinte, não em até 30 s.
+
+**A tabela de Users › Roles é a única alinhada à esquerda** (mesa,
+20/10/2026). Ela não é DataTable (é a `data-table` do tema comprado), então
+declarava a própria centralização no `<style>` da página; th e td passaram a
+`left`, e a coluna Actions perdeu o `text-center`/`justify-content-center`
+próprios. O `check_table_center.py` cobrava centro em toda tabela solta: ele
+ganhou a lista `A_ESQUERDA`, com esta tela só, e a seção 1b cobra que ela siga
+declarando `left` em th E td — a exceção troca de lado, não sai da regra.
+
+**Guardas.** `check_session_role.py` §2b: sessão antiga sem cargo ganha o do
+cadastro, a promoção alcança a sessão logada, banco mudo não apaga, o master
+também tem o cargo em dia, e o sidenav renderizado mostra o cargo sem a chave
+de tradução por cima (reprova o template de antes). `check_db_read_path`,
+`check_unlocked_reads`, `check_session_ip`, `check_app_version`,
+`check_notif_sid`, `check_intraday_monitor`, `check_soc_layers`,
+`check_theme_toggle` e `check_four_eyes` seguem verdes.

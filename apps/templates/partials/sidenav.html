@@ -13,6 +13,8 @@
 {% set _sid  = session.get('user_sid',  '') %}
 {% set _name = session.get('user_name', '') %}
 {% set _role = session.get('user_role', '') %}
+{# O cargo do CADASTRO (Users › Roles, coluna Position); sem cargo, o papel. #}
+{% set _position = session.get('user_position', '') %}
 {% set _initials = (_name.split()[0][0] + _name.split()[-1][0]) | upper if _name and _name.split()|length > 1 else (_name[0] | upper if _name else '?') %}
 <aside class="sidenav-menu" aria-label="Main navigation">
 
@@ -1050,7 +1052,7 @@
             </span>
             <span class="otc-side__who">
                 <span class="otc-side__name">{{ _name or 'User' }}</span>
-                <span class="otc-side__role" data-lang="user-role">{{ _role or 'N/A' }}</span>
+                <span class="otc-side__role">{{ _position or _role or 'N/A' }}</span>
             </span>
             <i data-lucide="chevrons-up-down"></i>
         </a>

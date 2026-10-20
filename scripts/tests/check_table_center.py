@@ -68,6 +68,14 @@ CLONE = re.compile(r'dt-scroll-head|dataTables_scrollHead', re.I)
 # de todas, e quem quiser isentar alguma precisa escrever o nome aqui.
 DEMO_DO_TEMA = ()
 
+# A UNICA tabela do app alinhada a ESQUERDA (mesa, 20/10/2026): a de Users ›
+# Roles, um cadastro de pessoas lido como lista. Nao e isencao da regra: ela
+# troca de lado, e a secao 1b cobra que siga declarando `left` em th E td --
+# senao a lista vira um lugar onde tela de verdade se esconde. Tela nova nao
+# entra aqui sem a mesa pedir.
+A_ESQUERDA = ('users-roles.html',)
+LEFT = re.compile(r'text-align\s*:\s*left', re.I)
+
 falhas = []
 
 
@@ -98,12 +106,13 @@ def generico(sel):
     return th, td
 
 
-def analisa(src):
-    """(centraliza_th, centraliza_td, clones_fracos)."""
+def analisa(src, alinha=CENTER):
+    """(centraliza_th, centraliza_td, clones_fracos) -- ou, com `alinha=LEFT`,
+    se th e td declaram a esquerda."""
     th = td = False
     fracos = []
     for sel, decls in regras(src):
-        if CENTER.search(decls):
+        if alinha.search(decls):
             a, b = generico(sel)
             th, td = th or a, td or b
         if CLONE.search(sel) and re.search(r'\bth\b', sel) and '#' not in sel:
@@ -157,7 +166,7 @@ check('ha telas com <thead> para conferir (o guarda nao perdeu o alvo)',
 
 sem_regra = []
 for nome, src in alvos:
-    if nome in DEMO_DO_TEMA:
+    if nome in DEMO_DO_TEMA or nome in A_ESQUERDA:
         continue
     if DATATABLE.search(src) or any(DATATABLE.search(js) for js in _js_da_pagina(src)):
         continue                      # a regra do tema alcanca
@@ -182,6 +191,16 @@ for nome in ainda_demo:
         sobrando.append(nome)
 check('as excecoes do tema seguem sem a regra (senao saem da lista): %r'
       % (sobrando or 'nenhuma sobrando',), not sobrando)
+
+
+print('\n== 1b. a tabela alinhada a esquerda continua a esquerda ==')
+for nome in A_ESQUERDA:
+    caminho = os.path.join(PAGES, nome)
+    if not os.path.exists(caminho):
+        check('%s existe (senao sai de A_ESQUERDA)' % nome, False)
+        continue
+    th, td, _ = analisa(io.open(caminho, encoding='utf-8').read(), alinha=LEFT)
+    check('%s declara text-align: left em th E td' % nome, th and td)
 
 
 print('\n== 2. o clone do cabecalho (scrollX) vence o plugin ==')

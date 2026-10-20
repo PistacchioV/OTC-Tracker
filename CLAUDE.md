@@ -621,7 +621,9 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   `start-otc-tracker.bat`; sem versão o envio é recusado; destinatário é quem
   está `Active`.
 - **`refresh_session_role`** (`before_request` próprio): o papel do cadastro
-  alcança quem já está logado em até 30 s, pela mesma leitura da allowlist.
+  alcança quem já está logado em até 30 s, pela mesma leitura da allowlist —
+  e o CARGO também (`Position` → `user_position`, o que o rodapé do sidenav
+  mostra; a tela Users esquece o cache ao gravar, então ali vale na hora).
   `None` não mexe (banco mudo não rebaixa a mesa); `''` mexe (é revogação);
   master não é tocado; só grava quando muda. `check_session_role.py`.
 - **Support Center: a unidade de visibilidade é a MESA** (`requester_role`
@@ -759,7 +761,9 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   id da tabela clonada); a tela declara só a LARGURA das colunas. Tabela que
   NÃO é DataTable continua declarando a sua. `table-centered` não existe em
   CSS nenhum. `check_table_center.py` cobra a regra no tema e a das tabelas
-  soltas nas telas.
+  soltas nas telas. **A ÚNICA exceção é a tabela de Users › Roles, alinhada à
+  ESQUERDA** (mesa, 20/10/2026): o guarda a tem em `A_ESQUERDA` e cobra o
+  `left` nela; tela nova não entra lá sem a mesa pedir.
 - **Filtro é o FUNIL "de Excel" no cabeçalho** (mesa, 29/09/2026; §591):
   `static/js/excel-filter.js`, carregado pelo `base.html` DEPOIS dos scripts
   da página, liga-se SOZINHO a toda DataTable (as que existem e as que nascem

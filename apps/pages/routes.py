@@ -520,6 +520,7 @@ _read_page_access = _pf_authz._read_page_access
 _get_user_authz = _pf_authz._get_user_authz
 _read_user_authz = _pf_authz._read_user_authz
 _get_user_role = _pf_authz._get_user_role
+_get_user_position = _pf_authz._get_user_position
 _set_page_access = _pf_authz._set_page_access
 _MASTER_SIDS = _pf_authz._MASTER_SIDS
 _session_is_master = _pf_authz._session_is_master
@@ -1055,6 +1056,9 @@ def update_user_role_status(sid, role, status, position=None):
         conn.commit()
     finally:
         conn.close()
+    # DEPOIS do commit (a regra do `_set_page_access`): papel e cargo novos
+    # alcançam a sessão logada no request seguinte, não daqui a um TTL.
+    _page_access_forget(sid)
 
 
 def save_verification_code(sid, code):
@@ -1634,6 +1638,9 @@ def _set_session(user):
     session['user_email'] = user["Email"]
     # Master is pinned by SID and outranks every stored role.
     session['user_role'] = 'MASTER' if (user["SID"] or '').strip().upper() in _MASTER_SIDS else user["Role"]
+    # O cargo do cadastro (Associate, VP…): é o que o rodapé do menu mostra. O
+    # `refresh_session_role` o mantém em dia depois do login.
+    session['user_position'] = (user.get("Position") or '').strip()
     session['session_ip'] = get_client_ip()
     # A freshly established session is never locked.
     session.pop('locked', None)
