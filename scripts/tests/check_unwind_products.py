@@ -344,8 +344,8 @@ def main():
     print('\n== 6. Send, duplicatas, enviada nao se apaga ==')
     st, j = _post(pg_ndf['api'] + '/send-conecta', {'items': [{'id': rid_ndf}], 'date': '2026-09-21'})
     check('send 200 grava no Batch Conecta', st == 200 and j['count'] == 1
-          and j['files'][0]['filename'] == 'UNWIND_NDF_COMMODITIES_BANCO.txt', (st, j))
-    escrito = io.open(os.path.join(R.CONECTA_NEW_PATH, 'UNWIND_NDF_COMMODITIES_BANCO.txt'),
+          and j['files'][0]['filename'] == '73760009.UNWIND_NDF_COMMODITIES_BANCO.txt', (st, j))
+    escrito = io.open(os.path.join(R.CONECTA_NEW_PATH, '73760009.UNWIND_NDF_COMMODITIES_BANCO.txt'),
                       encoding='utf-8').read().split('\n')
     check('header + um registro de 133', len(escrito) == 2 and len(escrito[1]) == 133)
     linha = [e for e in PQ.entries(pg_ndf, '2026-09-21') if e['_id'] == rid_ndf][0]

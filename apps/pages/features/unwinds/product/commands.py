@@ -502,7 +502,7 @@ def enviar(page, items, sid='', download=False, date_str=''):
             continue
         for f in fs:
             g = grupos.setdefault(f['file_name'], {'header': f['header'], 'records': [],
-                                                   'count': 0})
+                                                   'count': 0, 'view': f['view']})
             g['records'].extend(f['records'])
             g['count'] += 1
         alvos.append((fp, rid))
@@ -516,11 +516,19 @@ def enviar(page, items, sid='', download=False, date_str=''):
         return {'files': [{'filename': n, 'count': g['count'],
                            'content': '\n'.join([g['header']] + g['records'])}
                           for n, g in grupos.items()], 'count': total}
+    # Na New o nome leva a conta da visão na frente (§646), todos calculados
+    # antes do primeiro arquivo.
+    nomes = {}
+    for nome, g in grupos.items():
+        try:
+            nomes[nome] = _R()._conecta_file_name(g['view'], nome)
+        except ValueError as exc:
+            raise domain.Recusa('unwind_no_own_account', str(exc), 422, visao=g['view'])
     out_dir = _R().CONECTA_NEW_PATH
     os.makedirs(out_dir, exist_ok=True)
     gerados = []
     for nome, g in grupos.items():
-        destino = _R()._unique_filepath(out_dir, nome)
+        destino = _R()._unique_filepath(out_dir, nomes[nome])
         with open(destino, 'w', encoding=FILE_ENCODING) as fh:
             fh.write('\n'.join([g['header']] + g['records']))
         gerados.append({'filename': os.path.basename(destino), 'count': g['count']})

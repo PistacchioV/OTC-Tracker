@@ -402,6 +402,8 @@ São quadrados coloridos de canto arredondado, sempre na mesma ordem e sempre co
 > **O Send mostra o envio acontecendo.** Ao clicar no **Send** da linha — ou no **Send** da barra, que envia as linhas marcadas —, o rótulo some e o avião atravessa o botão na ponta de uma faixa mais clara, enquanto o sistema envia. **"Sent"** (ou um ✓, no botão da linha) só aparece quando o servidor confirma; depois a faixa recua e o botão volta ao normal. Se der erro, o botão treme e volta. O botão continua **azul** o tempo todo.
 >
 > **Os ícones que giram** (o de carregamento dos botões *Run*, o *Refresh* das telas que se atualizam) dão uma volta a cada pouco mais de um segundo. Girando, querem dizer só "trabalhando" — o resultado vem na mensagem de cada rotina.
+>
+> **Os arquivos que o Send grava na pasta `Batch Conecta › New` começam pela conta da visão**, um ponto e o nome de sempre: `73760009.TCO_BANCO.txt` (Banco), `04880006.…` (MGT), `00041007.…` (Lawton), `85398005.…` (Atacama). A conta vem do cadastro **B3 Accounts** (a conta própria de cada entidade): sem ela cadastrada o Send recusa, dizendo qual entidade falta, e nenhum arquivo é gravado. Nas Opções (FXO e Commodities), as linhas da visão do Lawton saem num arquivo próprio (`00041007.FXO_Lawton.txt`), separadas das do Banco. O arquivo baixado pelo preview continua com o nome sem a conta.
 
 ### 4.11. Datas
 

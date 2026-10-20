@@ -204,13 +204,17 @@ def api_ndfop_send():
         return jsonify({'success': False, 'error': _R()._NDFOP_FI_ERROR}), 500
     files = []
     try:
+        # Na New o nome leva a conta da visão na frente (§646), os dois
+        # calculados antes do primeiro arquivo.
+        nome_banco = _R()._conecta_file_name('JPM', 'TAXA_BANCO.txt')
+        nome_lawton = _R()._conecta_file_name('LAWTON', 'TAXA_LAWTON.txt') if lawton_lines else ''
         os.makedirs(_R().CONECTA_NEW_PATH, exist_ok=True)
-        fp = _R()._unique_filepath(_R().CONECTA_NEW_PATH, 'TAXA_BANCO.txt')
+        fp = _R()._unique_filepath(_R().CONECTA_NEW_PATH, nome_banco)
         with open(fp, 'w', encoding='utf-8') as fh:
             fh.write('\n'.join([banco_header] + banco_lines))
         files.append({'filename': os.path.basename(fp), 'count': len(banco_lines)})
         if lawton_lines:
-            fp = _R()._unique_filepath(_R().CONECTA_NEW_PATH, 'TAXA_LAWTON.txt')
+            fp = _R()._unique_filepath(_R().CONECTA_NEW_PATH, nome_lawton)
             with open(fp, 'w', encoding='utf-8') as fh:
                 fh.write('\n'.join([lawton_header] + lawton_lines))
             files.append({'filename': os.path.basename(fp), 'count': len(lawton_lines)})

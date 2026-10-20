@@ -196,12 +196,12 @@ def main():
 
     print('\n== 5. o Send escreve o arquivo e vira Sent ==')
     out = commands.send([{'athena_id': 'STP-XE-10G5U5X-0-0', 'ref_date': '2026-09-10'}], sid='T000000')
-    check('um arquivo gravado', out['count'] == 1 and out['files'][0]['filename'] == 'UNWIND_BANCO.txt')
-    escrito = io.open(os.path.join(R.CONECTA_NEW_PATH, 'UNWIND_BANCO.txt'), encoding='utf-8').read().split('\n')
+    check('um arquivo gravado', out['count'] == 1 and out['files'][0]['filename'] == '73760009.UNWIND_BANCO.txt')
+    escrito = io.open(os.path.join(R.CONECTA_NEW_PATH, '73760009.UNWIND_BANCO.txt'), encoding='utf-8').read().split('\n')
     check('header + um registro', len(escrito) == 2 and len(escrito[1]) == 133)
     check('e o registro e o mesmo do preview', escrito[1] == rec)
     _f, l4, i4 = queries.find('STP-XE-10G5U5X-0-0', '2026-09-10')
-    check('a linha virou Sent', l4[i4]['Status'] == 'Sent' and l4[i4]['SentFiles'] == ['UNWIND_BANCO.txt'])
+    check('a linha virou Sent', l4[i4]['Status'] == 'Sent' and l4[i4]['SentFiles'] == ['73760009.UNWIND_BANCO.txt'])
     try:
         commands.delete('STP-XE-10G5U5X-0-0', '2026-09-10')
         check('linha enviada NAO se apaga', False)
@@ -231,7 +231,7 @@ def main():
         check('o Send recusa o lote dizendo o que falta',
               'Nothing sent' in str(exc) and 'Contrato' in str(exc), str(exc))
     check('e nada foi escrito por cima',
-          len(io.open(os.path.join(R.CONECTA_NEW_PATH, 'UNWIND_BANCO.txt'), encoding='utf-8').read().split('\n')) == 2)
+          len(io.open(os.path.join(R.CONECTA_NEW_PATH, '73760009.UNWIND_BANCO.txt'), encoding='utf-8').read().split('\n')) == 2)
 
     print('\n== 7. o rotulo do sino tem destino nos TRES mapas (§8) ==')
     # O `check_notif_page_url` casa por LITERAL e nao ve o rotulo que vai numa

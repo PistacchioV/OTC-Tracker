@@ -96,17 +96,29 @@ def _mtm_generate_coe(rows, ymd):
     return {'MtM_BANCO-COE': f}
 
 
+def _mtm_new_name(fname, fdata):
+    """O nome do arquivo na New do Batch Conecta: a conta da visão na frente
+    (§646) — `73760009.MtM_BANCO-EDG.txt`. Na pasta do MtM do dia ele fica
+    como sempre foi."""
+    return _R()._conecta_file_name(fdata['view'], fname + '.txt')
+
+
 def _mtm_write_gen_files(files, ymd):
     """Write each file (.txt, Latin-1, CRLF) to CONECTA_NEW_PATH and the day's MTM
-    source folder. Returns list of written paths (best-effort)."""
-    dests = [_R().CONECTA_NEW_PATH, persistence._mtm_source_dir(ymd)]
+    source folder. Returns list of written paths (best-effort).
+
+    Os nomes da New (com a conta da visão, §646) são calculados ANTES do
+    primeiro arquivo: visão sem conta própria no `b3-accounts` levanta
+    ValueError e nada é gravado."""
+    nova, fonte = _R().CONECTA_NEW_PATH, persistence._mtm_source_dir(ymd)
+    nomes = {fname: _mtm_new_name(fname, fdata) for fname, fdata in files.items()}
     written = []
     for fname, fdata in files.items():
         content = '\r\n'.join(domain._mtm_file_lines(fdata)) + '\r\n'
-        for d in dests:
+        for d in (nova, fonte):
             try:
                 os.makedirs(d, exist_ok=True)
-                path = os.path.join(d, fname + '.txt')
+                path = os.path.join(d, nomes[fname] if d == nova else fname + '.txt')
                 with open(path, 'w', encoding='latin-1', newline='') as fh:
                     fh.write(content)
                 written.append(path)

@@ -338,7 +338,8 @@ def send(items, sid='', download=False):
             # O cabeçalho de cada arquivo é o mesmo para todos os deals do
             # grupo (mesmo layout, mesmo participante, mesma data): o grupo é
             # o NOME, e os registros de cada deal entram em sequência.
-            g = grupos.setdefault(f['file_name'], {'header': f['header'], 'records': [], 'count': 0})
+            g = grupos.setdefault(f['file_name'], {'header': f['header'], 'records': [], 'count': 0,
+                                                   'le_pair': f['le_pair']})
             g['records'].extend(f['records'])
             g['count'] += 1 if f['kind'] == 'swap' else 0
         alvos.append((deal_id, deal.get('TradeDate') or td))
@@ -352,11 +353,14 @@ def send(items, sid='', download=False):
             gerados.append({'filename': nome, 'count': g['count'],
                             'content': '\n'.join([g['header']] + g['records'])})
         return {'files': gerados, 'count': len(alvos)}
+    # Na New o nome leva a conta da visão na frente (§646), todos calculados
+    # antes do primeiro arquivo.
+    nomes = {nome: _R()._conecta_file_name(g['le_pair'], nome) for nome, g in grupos.items()}
     out_dir = _R().CONECTA_NEW_PATH
     os.makedirs(out_dir, exist_ok=True)
     with _R()._cache_lock:
         for nome, g in grupos.items():
-            path = _R()._unique_filepath(out_dir, nome)
+            path = _R()._unique_filepath(out_dir, nomes[nome])
             # cp1252, NUNCA utf-8: o travessão (–) da denominação VCP é UM byte
             # em cp1252 e TRÊS em utf-8 — o Conecta lê byte a byte (§480).
             with open(path, 'w', encoding=FILE_ENCODING, errors='replace') as fh:

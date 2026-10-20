@@ -26965,3 +26965,67 @@ os que ficaram na Return. O Save também manda o e-mail do OTC de novo.
 `CETIP21-DEP` desmontado, o nome antigo do `CETIP21-SAP`, uma linha de cadastro
 com hífen casando), e na rodada um DEP e um SAP da data saindo da Return para a
 origem, contados como não pedidos.
+
+## §646 — A conta da visão no nome dos arquivos da New do Batch Conecta (2026-10-20)
+
+**"Nos arquivos gerados para registro, na pasta New, precisa colocar o número
+da conta no início: visão Banco `73760009.nomedoarquivo.txt`, MGT `04880006.`,
+Lawton `00041007.`, Atacama `85398005.`"** O nome passa a ser `<conta>.<nome de
+sempre>` em TODO arquivo gravado na `CONECTA_NEW_PATH`.
+
+**A conta não está no código.** São as contas `OWN` de cada LE no
+`b3-accounts` (73760.00-9, 04880.00-6, 00041.00-7, 85398.00-5), só os dígitos.
+Três funções no `routes.py`, ao lado do `_b3_participant_name`:
+`_b3_view_le` (a LE em qualquer vocabulário dos geradores — `JPM`, o balde
+`BANCO`, o par `MGT x CLI` pela perna da esquerda, a visão `atacama` do swap),
+`_b3_own_account` e `_conecta_file_name(visão, nome)`, que LEVANTA nomeando a
+LE quando ela não tem conta própria cadastrada: arquivo sem a conta no nome não
+é mandado pelo Conecta.
+
+**Onde a visão já estava.** Cada gerador sabia de quem era o arquivo:
+- New Deals Termo (NDF Commodities, Vanilla, FWD Start, Other Publisher) pelo
+  BALDE;
+- Opções (FXO, Commodities) pelo par `_opc_le_pair`;
+- Swap Bullet/Cashflow pelo `le_pair` de cada arquivo;
+- as duas telas de recompra pela visão da conta da parte;
+- Taxa do Other Publisher (Banco/Lawton), MtM e Accrual/VCP pela visão
+  (`BANCO`/`LAWTON`/`ATACAMA`).
+
+Em todos, os nomes da New são calculados ANTES do primeiro arquivo (`nomes =
+{…}`): visão sem conta recusa o lote inteiro, sem gravar nenhum arquivo. O
+download do preview continua com o nome do documento, sem a conta.
+
+**As Opções juntavam duas visões num arquivo.** O `FXO_Banco.txt` e o
+`OPC_Banco.txt` levavam as linhas do Banco E as do Lawton: nenhuma variante do
+`opcoes-flexiveis-vcp` tem `file_name`, e o nome padrão era um só. Com a
+conta no nome, isso não cabe: o arquivo agora é por visão (a chave do
+`out_files` é `(visão, nome)`), e o do Lawton se chama `FXO_Lawton.txt` /
+`OPC_Lawton.txt` (`_opc_default_name`). O header continua o do template base
+(`Entidade que gerou o Arquivo` Fixed `JPMORGANBM`, também na variante do
+Lawton): se a B3 pedir o do Lawton no arquivo dele, é o header da variante
+`LAWTON x JPM` que muda, e o gerador passaria a montar o header por arquivo.
+
+**O MtM grava em dois lugares.** Na New o nome leva a conta; na pasta do MtM do
+dia fica como era (`_mtm_new_name`). O anexo do e-mail de validação e o resumo
+dele passam a dizer o nome da New. O Accrual/VCP copia para a evidência com o
+nome da New (a cópia é do arquivo enviado).
+
+**Recusa na tela.** As recompras do catálogo dizem `unwind_no_own_account`
+(com a visão, nas três línguas). Os outros geradores respondem com o texto da
+exceção, como já faziam com o Participante faltando: dívida do §486.
+
+**Ponto a confirmar.** O MtM de COE sai na visão Banco (`73760009.`), mas a
+linha leva a conta do EMISSOR, 73760.40-1, que não está no `b3-accounts`. Se o
+Conecta quiser o arquivo do COE sob a conta de emissor, é um caso à parte.
+
+**Guarda.** `check_conecta_file_name.py` (novo): a conta das quatro entidades
+pelos três vocabulários, a conta editada no cadastro valendo, a recusa
+nomeando a LE, o Opt FXO saindo em dois arquivos (Banco e Lawton) com a parte
+certa em cada um, o download sem a conta, a recusa sem nenhum arquivo gravado,
+e a varredura por AST de quem lê o `CONECTA_NEW_PATH`. Atualizados para o nome
+novo: `check_swap_bullet`, `check_swap_cashflow`, `check_swap_vcp_factors`,
+`check_mtm_api`, `check_unwind_page`, `check_unwind_products`. Os Termos de
+New Deals conferidos à parte com as operações do cache da dev
+(`00041007.FWDSTART_LAWTON.txt`, `73760009.FWDSTART_BANCO.txt`,
+`73760009.OTHERPUBLISHER_BANCO.txt`, `73760009.TCO_BANCO.txt`).
+

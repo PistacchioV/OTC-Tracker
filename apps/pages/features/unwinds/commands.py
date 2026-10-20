@@ -598,7 +598,8 @@ def send(items, sid='', download=False, ref_date=''):
         except ValueError as exc:
             problemas.append(aid + ': ' + str(exc))
             continue
-        g = grupos.setdefault(f['file_name'], {'header': f['header'], 'records': [], 'count': 0})
+        g = grupos.setdefault(f['file_name'], {'header': f['header'], 'records': [], 'count': 0,
+                                               'view': f['view']})
         g['records'].extend(f['records'])
         g['count'] += 1
         alvos.append((aid, fp, idx))
@@ -612,10 +613,13 @@ def send(items, sid='', download=False, ref_date=''):
             gerados.append({'filename': nome, 'count': g['count'],
                             'content': '\n'.join([g['header']] + g['records'])})
         return {'files': gerados, 'count': sum(g['count'] for g in grupos.values())}
+    # Na New o nome leva a conta da visão na frente (§646), todos calculados
+    # antes do primeiro arquivo.
+    nomes = {nome: _R()._conecta_file_name(g['view'], nome) for nome, g in grupos.items()}
     out_dir = _R().CONECTA_NEW_PATH
     os.makedirs(out_dir, exist_ok=True)
     for nome, g in grupos.items():
-        destino = _R()._unique_filepath(out_dir, nome)
+        destino = _R()._unique_filepath(out_dir, nomes[nome])
         with open(destino, 'w', encoding=FILE_ENCODING) as fh:
             fh.write('\n'.join([g['header']] + g['records']))
         gerados.append({'filename': os.path.basename(destino), 'count': g['count']})

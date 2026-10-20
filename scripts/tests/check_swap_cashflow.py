@@ -376,18 +376,19 @@ def _main(R, app, catalog, bullet, bullet_q, commands, domain, entrypoint, queri
                         sid='F666666')
     nomes = sorted(x['filename'] for x in out['files'])
     check('nove arquivos: contrato, cronograma e prêmio × Cliente/Banco/Atacama, com CF e a LOB no nome',
-          nomes == sorted(['SWAP_CF_CEM_CLIENTE.txt', 'SWAP_CF_CEM_BANCO.txt', 'SWAP_CF_CEM_ATACAMA.txt',
-                           'FLUXO_SWAP_CF_CEM_CLIENTE.txt', 'FLUXO_SWAP_CF_CEM_BANCO.txt', 'FLUXO_SWAP_CF_CEM_ATACAMA.txt',
-                           'PREMIO_SWAP_CF_CEM_CLIENTE.txt', 'PREMIO_SWAP_CF_CEM_BANCO.txt',
-                           'PREMIO_SWAP_CF_CEM_ATACAMA.txt']), nomes)
-    brut = io.open(os.path.join(R.CONECTA_NEW_PATH, 'SWAP_CF_CEM_BANCO.txt'), 'rb').read().split(b'\n')
+          nomes == sorted(['73760009.SWAP_CF_CEM_CLIENTE.txt', '73760009.SWAP_CF_CEM_BANCO.txt',
+                           '85398005.SWAP_CF_CEM_ATACAMA.txt', '73760009.FLUXO_SWAP_CF_CEM_CLIENTE.txt',
+                           '73760009.FLUXO_SWAP_CF_CEM_BANCO.txt', '85398005.FLUXO_SWAP_CF_CEM_ATACAMA.txt',
+                           '73760009.PREMIO_SWAP_CF_CEM_CLIENTE.txt', '73760009.PREMIO_SWAP_CF_CEM_BANCO.txt',
+                           '85398005.PREMIO_SWAP_CF_CEM_ATACAMA.txt']), nomes)
+    brut = io.open(os.path.join(R.CONECTA_NEW_PATH, '73760009.SWAP_CF_CEM_BANCO.txt'), 'rb').read().split(b'\n')
     check('contrato do Banco: 2021 BYTES em cp1252 (o travessão da denominação VCP em um byte)',
           len(brut) == 2 and len(brut[1]) == 2021 and b'\x96' in brut[1] and b'\xe2\x80\x93' not in brut[1])
-    fl_txt = io.open(os.path.join(R.CONECTA_NEW_PATH, 'FLUXO_SWAP_CF_CEM_ATACAMA.txt'), encoding='cp1252').read().split('\n')
+    fl_txt = io.open(os.path.join(R.CONECTA_NEW_PATH, '85398005.FLUXO_SWAP_CF_CEM_ATACAMA.txt'), encoding='cp1252').read().split('\n')
     check('cronograma da Atacama: header INTRAGATACAMAFDO + registro + 3 fluxos', len(fl_txt) == 5
           and 'INTRAGATACAMAFDO' in fl_txt[0] and len(fl_txt[1]) == 62)
     _f, l5, i5 = queries.find(cli['_id'], '2026-09-16')
-    check('vira Sent com os arquivos anotados', l5[i5]['Status'] == 'Sent' and 'SWAP_CF_CEM_CLIENTE.txt' in l5[i5]['SentFiles'])
+    check('vira Sent com os arquivos anotados', l5[i5]['Status'] == 'Sent' and '73760009.SWAP_CF_CEM_CLIENTE.txt' in l5[i5]['SentFiles'])
 
     print('== 6b. B3 ID = mapeamento → Pending Confirmation (cliente) / Intrag Swap (B2B) ==')
     calls, intrag = [], []
