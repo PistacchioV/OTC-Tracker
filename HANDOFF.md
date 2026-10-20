@@ -26206,3 +26206,117 @@ busca dizia `⌘K`: a mesa é Windows — `Ctrl+K` (o atalho aceita os dois).
 subtarefas, comentários, marcos, progresso, burn-up, sino, acesso e quem
 apaga) e `check_theme_toggle` §5 (o layout copia o ícone do menu, antes do
 rodapé).
+
+## §632 — User Home, Settings, o papel de parede do Pane, a troca de página e o arrastar dos monitores (2026-10-20)
+
+**User Home** (`/user-home`, Intraday › User Home; `features/user_home/`). A
+Home do Pane para UMA pessoa: saudação, Done today · Focus today · Overdue, os
+três anéis do dia (tarefas · foco · reuniões), *Up next* (a próxima reunião em
+destaque, com Join), o FOCO, *My tasks* (vencem hoje ou atrasadas, e as
+concluídas hoje), *This week* (o que o TIME concluiu, dia a dia, contra a
+semana passada), os meus projetos e *Right now* (Team · Activity).
+- **Um documento por usuário** no armazém, `user-home/<SID>.json` (eventos do
+  Outlook, foco, preferências da Settings), ler → alterar → gravar no
+  `store.mutate`; ausente é o vazio, ocupado SOBE (§436).
+- **Feature não importa feature**: os projetos chegam por acessores no
+  `routes.py` (`_projects_doc`, `_projects_directory`, `_projects_meta`), o
+  desenho do `_swap_bullet_engine`; e o Projects pergunta pelo `_user_wants`
+  se a pessoa quer o aviso.
+- **Sync** = o calendário do Outlook da MÁQUINA pelo COM (o `_win32` do box
+  scan), pela caixa do e-mail da sessão (`GetSharedDefaultFolder`) ou o
+  calendário padrão, de hoje até +8 dias, SUBSTITUINDO o que estava gravado.
+  O filtro de data do `Restrict` é texto no formato do Windows de quem roda:
+  tenta-se `mm/dd` e `dd/mm` e todo item é conferido de novo pela data REAL.
+  Cancelada não entra; recorrência tem teto (400). Fora do Windows: 503
+  `outlook_unavailable`, frase traduzida na tela.
+- **Reunião é por ZOOM** (mesa): o link `https://…zoom.us/j/…` sai do Local
+  ou do corpo do convite, e o Join/Next abre o APLICATIVO
+  (`domain.zoom_app` → `zoommtg://…/join?action=join&confno=…&pwd=…`), com o
+  https de reserva.
+- **Privacidade**: o colega vê "em reunião, até 11:45" — nunca o assunto.
+- **O foco é a ILHA do tema** (`window.otcFocus`, otc.js §3e): a pílula preta
+  sob a barra, em qualquer tela, contando pelo localStorage (acompanha as abas
+  pelo `storage`); o servidor é avisado de cada passo
+  (`/api/user-home/focus`: start · pause · resume · end) e só o tempo FOCADO
+  de verdade vira sessão (menos de 1 min não é sessão). Acabou: toast, a
+  notificação do sistema (se ligada e permitida) e a PAUSA da Settings em
+  verde. Uma aba só encerra (marca `finishing` no estado).
+- **"Vence hoje" às 08:00** (`commands.due_digest`, laço `user-home-due`,
+  claim diário em disco — a instância vizinha não repete): um aviso no sino de
+  quem tem tarefa aberta vencendo no dia, página `User Home` (três mapas).
+
+**Settings** (`/settings`, Main › Settings e o menu do usuário). A do Pane:
+Profile (do cadastro, só leitura), Notifications (cinco avisos pessoais —
+tarefa atribuída, comentário, líder, prazo, fim do foco — e o Projects CALA
+o que a pessoa desligou), Appearance (a MESMA API da gaveta: `otcUI` e os
+`data-*-pick`; o `initAppearance` agora preenche TODAS as listas da página),
+Focus (sessão, pausa e meta diária, com faixa validada no servidor) e Data
+(o CSV das minhas tarefas — `;` + BOM — e o reset). `/user-home` e
+`/settings` entraram no `_ALWAYS_ALLOWED_PATHS`: são pessoais.
+
+**O "leitoso" do modo claro não era o vidro** — tokens, recorte e lente eram
+os do Pane, medidos. Era o PAPEL DE PAREDE: o nosso era um arremedo em
+radial-gradient que deixava metade da tela na base quase branca (ao lado da
+barra lateral, Pane (155,170,242) × nosso (220,225,251)). Agora é o SVG do
+Pane (`partials/wallpaper.html`, no `base.html`) com as cores dele, valor a
+valor, nas dez paredes e nos dois temas — sem as bolhas (pedido da mesa).
+
+**Troca de página.** O Pane é uma página só: a casca nunca recarrega. Aqui o
+clique trocava o documento inteiro, a barra lateral e o topo piscavam e a tela
+ficava parada até a nova chegar. Agora é View Transition ENTRE documentos
+(`@view-transition`): `pageswap`/`pagereveal` no `head-css.html` (tem de
+ouvir ANTES do primeiro paint) dão nome à barra lateral, ao topo e ao papel de
+parede SÓ durante a navegação — na troca de tema eles cruzam com o resto —, a
+casca fica no lugar, o conteúdo velho sai em 170 ms e o novo entra pelas gotas
+do §9. E o HTML da tela é pré-buscado ao parar o mouse num link do menu
+(Speculation Rules, `moderate`; nunca logout/lock/API). **Armadilha de teste:
+o Chromium do Playwright não dispara o `pagereveal`** — no Google Chrome
+(`channel='chrome'`) dispara e a transição roda; teste a transição por ele.
+
+**Arrastar os cards.**
+- **Tasks**: pointer events no lugar do drag nativo — o card LEVANTA
+  (inclinado, com sombra), segue o mouse e, na coluna de baixo, ABRE-SE o
+  espaço onde ele cai (Web Animations, a altura do card, os vizinhos deslizam);
+  fora de coluna ele volta; o clique que encerra um arrasto não abre a gaveta.
+- **Confirmations Monitor** (`POST /api/manual-confirmation/move`): soltar na
+  coluna seguinte ASSINA a etapa pelas funções da tela do documento; a mesa
+  move só a etapa DELA e um passo; admin/master qualquer coluna (para trás é
+  reabrir — limpa as validações dali em diante). SLA vencido pede o motivo,
+  FepWeb → Ok sem callback é 409. `check_mc_move.py`.
+- **Onboarding Overview**: soltar abre o FORMULÁRIO da etapa (Taxonomy, o modal
+  do OTC, o Complete do MO); para trás é do admin (`unstamp`).
+- **Intraday Monitor**: ajuste MANUAL registrado
+  (`task_runs.set_override`, `…_task-overrides.json`), com o "↺ auto" de volta.
+- **O aviso de ação** é a pílula preta do Pane (`window.otcToast(msg, {undo})`,
+  otc.js §3d) — "Done: <tarefa>" com Undo — nas três telas e na Tasks.
+
+**Os outros pedidos do lote.** Calendar (o Holidays Calendar renomeado) mostra
+a data-alvo dos projetos, os marcos e o prazo das tarefas em aberto (chave
+*Projects and tasks*; `Holidays Calendar` ficou como alias no sino). Card
+*Coming up* na página do projeto. Ícones dos cards de contagem no estilo do
+Comitente (recons, Track Confirmations, Track Docs…). Clear Filters com o
+`ti-filter-off` em toda tela. Lista do `<select>` sempre ABAIXO do campo, na
+largura dele (otc.js §3b). Lente de refração do Pane (SVG `feDisplacementMap`)
+na barra lateral, no topo e nas placas grandes, só no Chromium (otc.js §3c).
+Rótulos do menu inteiros, sem "…". *Projects Pinned*. A gaveta da tarefa no
+vidro da aparência escolhida (`--otc-glass-slab`). O deploy copia as
+traduções.
+
+**Dados fictícios da dev, para os prints do guia** (fora do repositório,
+`scratchpad/seed/seed_guide.py` e `seed_home.py`): 7 usuários
+(`@example.com`), 5 projetos com tarefas, subtarefas, comentários, marcos e
+atividade espalhados desde agosto, reuniões "sincronizadas" e a presença dos
+colegas. Os prints saem de um launcher com o `_br_now` FIXO em 20/10/2026
+10:40 e o relógio do navegador no mesmo instante (`SOP_CLOCK`).
+
+**Guia do Usuário 2.5.** Os prints foram refeitos no visual do Pane (claro,
+papel de parede Aurora — `SOP_THEME`/`SOP_WALL`), e o texto ganhou a casca
+nova (§2.1, §3.4, §3.5), User Home (§3.8), Settings (§3.9), o aviso de ação
+(§4.13), Calendar (§13.5), Projects e Tasks (§17.3, §17.4). O
+`capture_screens.py` semeia `__OTC_TRACKER_UI__`/`__OTC_TRACKER_FX__='full'`
+(sem o `full` o headless liga o modo opaco e o print sai sem vidro), fixa o
+relógio e reduz/quantiza o PNG; o `capture_extras.py` foi refeito para a casca
+do Pane (menu fixo, a pílula da barra, o login sem sessão, a página do
+projeto e a gaveta da tarefa).
+
+**Guardas.** `check_user_home.py` (novo) e os de sempre verdes.
