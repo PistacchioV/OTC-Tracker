@@ -26458,3 +26458,30 @@ tem recebe vazio, e a Settings a passa aos dois avatares). `check_theme_toggle`,
 `check_projects`, `check_soc_layers`, `check_summary_glow`, `check_table_center`,
 `check_screen_lock` e `check_notif_page_url` seguem verdes.
 
+**A foto também nas Initiatives** (mesa, 20/10/2026). Lead, pessoas,
+responsáveis das tarefas, comentários e atividade — nas Initiatives, na
+página da iniciativa, na Tasks e na User Home — chamavam o `avatar()` sem foto
+e mostravam só as iniciais. Cada pessoa do `queries.eligible` leva agora a
+`photo`, e o `avatar()` a acha sozinho pelo SID na lista de pessoas (plano B:
+o nome exato, porque os participantes da próxima reunião vêm do Outlook por
+nome). Quem diz se há foto é `platform/user_photos.url`, que a Settings
+também passou a usar: a pasta é LISTADA uma vez por minuto (memo de processo),
+nunca um `stat` por pessoa — com o código no share, seriam idas à rede por
+avatar. Foto nova aparece em até um minuto, sem restart (medido: 45 s).
+Conferido no navegador com fotos sintéticas para os SIDs fictícios da dev
+(apagadas depois): foto em quem tem, iniciais em quem não tem, nas quatro
+telas. `check_projects.py` §1 cobra a `photo` na lista.
+
+**A gaveta de Aparência no tema claro parecia escura** (mesa, 20/10/2026). O
+fundo dela já seguia o tema; as MINIATURAS das paredes não: eram gradientes
+escritos à mão no `otc.js` (`WALLS`), uma versão só, escura em sete das dez
+(Aurora, Smoke, Tide, Bloom, Ember, Grove, Dusk) e com Ash/Sand/Sage claras no
+escuro — no claro, a Aurora é azul-claro e a Ember pêssego. Agora a paleta do
+§2b vale também para `[data-art="<parede>"]`, nas duas versões de tema, e a
+miniatura é o `--w-art` (as formas do SVG em gradiente: fita `a` no alto à
+esquerda, `d` à direita, as ondas `b`/`c` embaixo) — uma fonte só para a parede
+e a miniatura, e a troca de tema com a gaveta aberta troca as miniaturas. Vale
+para a gaveta e para a Settings, onde o traço do mini app ganhou a versão do
+claro. Conferido no Chromium: as dez miniaturas com a base da parede no tema
+atual, nos dois temas, na troca com a gaveta aberta e na Settings.
+

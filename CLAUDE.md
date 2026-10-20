@@ -1043,7 +1043,10 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   vidro (§632) — antes de mexer em alfa de vidro, MEÇA o pixel atrás da placa.
   **`.otc-wall` é a CAMADA** (fixa em tela cheia); o botão de cada parede na
   gaveta é `.otc-wall-swatch` (§634: com o mesmo nome, os dez botões saíam da
-  gaveta e viravam uma faixa no meio da página).
+  gaveta e viravam uma faixa no meio da página). **A miniatura de cada parede
+  é `data-art="<parede>"` + `background: var(--w-art)`**: a MESMA paleta do
+  §2b, no tema atual — gradiente escrito à mão tinha uma versão só e a gaveta
+  do claro parecia escura. Parede nova entra só no §2b (e na lista `WALLS`).
 - **A casca é presa na BORDA ESQUERDA, sem centralizar** (§634): menu a
   `--otc-inset` (10px) da borda, conteúdo a `--otc-side-gap` (18px) dele
   (`--otc-content-l`, que o desafixar zera para o `--otc-gutter`), barra do
@@ -2452,6 +2455,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   apagado nunca volta (o projeto fixado na barra de alguém abriria outro).
 - **Lead e responsável = usuários Active com papel BO ou ADMIN**, mais a
   própria sessão BO/Admin/master (`queries.eligible`). Regra da mesa.
+- **O avatar mostra a FOTO** (`images/users/<sid>.jpg`, a mesma da barra) de
+  quem a tem (§634): cada pessoa do `eligible` leva `photo`, e o `avatar()` do
+  `projects-common.js` a acha pelo SID (plano B: o nome exato — os
+  participantes da reunião vêm do Outlook por nome) — tela nova não passa
+  nada. Quem responde é `platform/user_photos.url`, que LISTA a pasta uma vez
+  por minuto: um `stat` por pessoa, com o código no share, é uma ida à rede
+  por avatar.
 - **A API vale para `/projects` OU `/tasks`** (`entrypoint._can_see`): a Tasks
   move as tarefas dos projetos. A página `/projects/<id>` confere na rota —
   o `enforce_page_access` não a vê (não está no menu).
