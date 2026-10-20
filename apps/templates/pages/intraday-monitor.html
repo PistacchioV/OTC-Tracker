@@ -4,336 +4,43 @@
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
+{# Só o que é DESTA tela (o desenho do Intraday Monitor, CLAUDE.md §8): em cima,
+   as tarefas do dia no desenho do Pulse — KPIs com micro-rótulo e barra de
+   estado, o quadro por estado, o anel, a atividade e a linha do tempo dos
+   prazos —, com as QUATRO cores de estado numa definição só (--im-*, que o JS
+   também lê para o anel); embaixo, o detalhe por produto × status: uma TABELA
+   por zona com PESO — resumo em número grande, fio de gradiente no topo,
+   contagens em PASTILHAS (--st-fg/--st-bg por status, a mesma cor da barra de
+   composição) e o dia parado numa pílula que diz. Placas dos painéis, campo de
+   data, daterangepicker e entrada são do tema (otc.scss). #}
 <style>
-/* ============================================================================
-   Intraday Monitor (ex-New Deals Monitor, §567) — as tarefas do dia em cima,
-   no desenho do Pulse (KPI com micro-rótulo, quadro por estado, anel de
-   progresso, linha do tempo dos prazos, atividade) sobre os tokens da casa; o
-   detalhe por produto × status embaixo, como sempre foi.
-   Camada visual: tokens --ins-* (tema) e --vr-* (visual-refresh). Nunca --bs-*.
-   ============================================================================ */
-#ndm-page { --ndm-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
-
-/* Respiro entre a última seção (Swaps) e o rodapé da página */
-#ndmZones { padding-bottom: 2.5rem; }
-
-/* Reference-date bar (mesmo padrão do NDF Summary: daterangepicker dd/mm/yyyy) */
-#ndm-page .ndm-datewrap { position: relative; width: 168px; }
-#ndm-page .ndm-datewrap input {
-    width: 100%; border: 1px solid var(--ins-border-color); border-radius: 10px;
-    padding: .35rem 2.2rem .35rem .75rem; font-size: .85rem; font-weight: 600;
-    color: var(--ins-body-color); background: var(--ins-secondary-bg, #fff); cursor: pointer;
-}
-#ndm-page .ndm-cal-btn {
-    position: absolute; top: 0; right: 0; bottom: 0; width: 36px;
-    display: inline-flex; align-items: center; justify-content: center;
-    color: var(--ins-secondary-color); cursor: pointer;
-}
-
-
-/* ── A TABELA ───────────────────────────────────────────────────────────────
-   O desenho anterior era um cartão por produto: 34 cartões, quase todos
-   zerados, repetindo "No operations imported for this date." e ocupando 2.900px
-   de rolagem para dizer que o dia estava parado. A pergunta da tela é uma só —
-   o que ainda precisa de ação, e onde —, e ela se responde comparando produtos:
-   é leitura de TABELA. Uma linha por produto, as contagens por status em
-   colunas ALINHADAS entre si (num cartão, cada chip fica onde couber), e o dia
-   inteiro numa tela. */
-#ndm-page .ndm-zone {
-    position: relative; overflow: hidden;
-    background: var(--vr-card-bg, var(--ins-secondary-bg));
-    border: 1px solid var(--vr-card-border, var(--ins-border-color));
-    border-radius: var(--vr-card-radius, 18px);
-    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
-    padding: 1.05rem 1.15rem 1.15rem;
-    margin-bottom: 1.25rem;
-}
-/* O fio do gradiente da casa no topo: sem ele as três zonas são três lajotas
-   brancas idênticas, e num dia parado a tela inteira é só isso. */
-#ndm-page .ndm-zone::before {
-    content: ''; position: absolute; inset: 0 0 auto; height: 3px;
-    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
-    opacity: .9;
-}
-/* Zona sem movimento não precisa da altura de uma com tabela. */
-#ndm-page .ndm-zone.is-empty { padding-bottom: .5rem; }
-#ndm-page .ndm-zone.is-empty .ndm-zone-head { margin-bottom: .25rem; }
-
-#ndm-page .ndm-zone-head {
-    display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
-    margin-bottom: .85rem;
-}
-#ndm-page .ndm-zone-id { display: flex; flex-direction: column; gap: .1rem; min-width: 0; }
-#ndm-page .ndm-zone-meta {
-    font-size: .72rem; font-weight: 600; letter-spacing: .02em;
-    color: var(--ins-secondary-color);
-}
-#ndm-page .ndm-zone-meta b { color: var(--ins-body-color); font-variant-numeric: tabular-nums; }
-
-/* O resumo da zona vira NÚMERO, não uma frase cinza de .78rem jogada à direita:
-   é a resposta da tela, e era o que menos pesava nela. */
-#ndm-page .ndm-zone-stats { margin-left: auto; display: flex; align-items: stretch; gap: .5rem; }
-#ndm-page .ndm-stat {
-    min-width: 88px; padding: .35rem .7rem; border-radius: 12px; text-align: right;
-    display: flex; flex-direction: column; justify-content: center; gap: .02rem;
-    background: var(--ins-tertiary-bg, rgba(15, 23, 42, .045));
-}
-#ndm-page .ndm-stat b {
-    font-size: 1.3rem; line-height: 1.15; font-weight: 800;
-    font-variant-numeric: tabular-nums; color: var(--ins-body-color);
-}
-#ndm-page .ndm-stat span {
-    font-size: .63rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-    color: var(--ins-secondary-color);
-}
-#ndm-page .ndm-stat.is-open { background: rgba(247, 184, 75, .18); }
-#ndm-page .ndm-stat.is-open b    { color: #b45309; }
-#ndm-page .ndm-stat.is-open span { color: #8a6100; }
-#ndm-page .ndm-stat.is-clear { background: rgba(26, 138, 74, .14); }
-#ndm-page .ndm-stat.is-clear b    { color: #1a8a4a; }
-#ndm-page .ndm-stat.is-clear span { color: #1a8a4a; }
-[data-bs-theme=dark] #ndm-page .ndm-stat.is-open  b,
-[data-bs-theme=dark] #ndm-page .ndm-stat.is-open  span { color: #ffd54f; }
-[data-bs-theme=dark] #ndm-page .ndm-stat.is-clear b,
-[data-bs-theme=dark] #ndm-page .ndm-stat.is-clear span { color: #7ed6a2; }
-
-/* Dia parado: uma pílula que DIZ, em vez de meia tela de branco. */
-#ndm-page .ndm-zone-quiet {
-    margin-left: auto; display: inline-flex; align-items: center; gap: .4rem;
-    font-size: .76rem; font-weight: 700; color: #1a8a4a;
-    background: rgba(26, 138, 74, .12); padding: .35rem .8rem; border-radius: 999px;
-}
-[data-bs-theme=dark] #ndm-page .ndm-zone-quiet { color: #7ed6a2; background: rgba(126, 214, 162, .14); }
-
-/* A composição do dia numa barra: é a forma da zona antes de ler número nenhum,
-   e as cores são as MESMAS das colunas — a tabela é a legenda dela. */
-#ndm-page .ndm-prog {
-    display: flex; height: 6px; border-radius: 999px; overflow: hidden;
-    background: var(--ins-tertiary-bg, rgba(15, 23, 42, .07));
-    margin-bottom: .9rem;
-}
-#ndm-page .ndm-prog i { display: block; height: 100%; background: currentColor; }
-
-/* Nove colunas não cabem num telefone. Quem rola de lado é a TABELA, nunca a
-   página: com a página rolando, o menu e o cabeçalho saem da tela junto e a
-   pessoa perde a referência de onde está. */
-#ndm-page .ndm-tbl-wrap { overflow-x: auto; }
-#ndm-page .ndm-tbl { width: 100%; border-collapse: collapse; min-width: 540px; }
-/* O nome do produto fica com a sobra e as colunas de número são ESTREITAS e
-   fixas: espalhadas pela largura da tela, elas obrigam a percorrer meio metro
-   de branco para ler uma linha. */
-/* A coluna da composição fica FORA desta regra de propósito: ela é quem recebe
-   a sobra da largura, e com 78px a barra nascia do tamanho de uma pastilha. */
-#ndm-page .ndm-tbl th:not(:first-child):not(.ndm-c-mix),
-#ndm-page .ndm-tbl td:not(:first-child):not(.ndm-c-mix) { width: 78px; }
-#ndm-page .ndm-tbl th:last-child, #ndm-page .ndm-tbl td:last-child { width: 28px; }
-#ndm-page .ndm-tbl th {
-    font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
-    color: var(--ins-secondary-color, #8a8a8f);
-    padding: .35rem .5rem; text-align: center; white-space: nowrap;
-    border-bottom: 1px solid var(--ins-border-color, rgba(0,0,0,.1));
-}
-#ndm-page .ndm-tbl th:first-child { text-align: left; }
-#ndm-page .ndm-tbl td {
-    padding: .42rem .5rem; font-size: .82rem; text-align: center; white-space: nowrap;
-    font-variant-numeric: tabular-nums;
-    border-bottom: 1px solid var(--ins-border-color, rgba(0,0,0,.06));
-}
-#ndm-page .ndm-tbl tbody tr:last-child td { border-bottom: 0; }
-/* A coluna da composição pede toda a sobra, e sem um piso aqui o navegador
-   espreme o nome do produto até ele quebrar em duas linhas (e as etiquetas de
-   entidade empilharem uma sobre a outra). */
-#ndm-page .ndm-tbl th:first-child,
-#ndm-page .ndm-tbl td:first-child { text-align: left; white-space: nowrap; min-width: 220px; }
-
-/* A linha inteira é o link da página do produto. O <a> está no nome (é ele que
-   o teclado alcança); o clique no resto da linha é conveniência. */
-#ndm-page .ndm-row { transition: background-color 140ms var(--ndm-ease); }
-#ndm-page .ndm-row.is-clickable { cursor: pointer; }
-/* O traço à esquerda diz QUAL linha está sob o cursor numa grade de nove
-   colunas — só o fundo mais claro se perde na varredura horizontal. */
-#ndm-page .ndm-row td:first-child { box-shadow: inset 2px 0 0 transparent; }
-@media (hover: hover) and (pointer: fine) {
-    #ndm-page .ndm-row.is-clickable:hover { background: var(--ins-tertiary-bg, rgba(0,102,204,.05)); }
-    #ndm-page .ndm-row.is-clickable:hover td:first-child { box-shadow: inset 2px 0 0 #0066cc; }
-}
-#ndm-page .ndm-prod { display: flex; align-items: center; gap: .55rem; }
-#ndm-page .ndm-prod-ico {
-    width: 28px; height: 28px; flex: 0 0 auto; border-radius: 9px;
-    display: inline-flex; align-items: center; justify-content: center;
-    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
-    color: #fff; font-size: .95rem;
-    box-shadow: 0 3px 8px rgba(94, 92, 230, .25);
-}
-#ndm-page .ndm-prod-name { font-weight: 600; color: var(--ins-body-color); text-decoration: none; }
-#ndm-page .ndm-prod-name:hover { text-decoration: underline; }
-/* A quebra por entidade e os grupos da confirmação viram etiquetas: soltos e
-   separados por ponto, eles pareciam continuação do nome do produto. */
-#ndm-page .ndm-prod-les { display: block; margin-top: .15rem; white-space: nowrap; }
-#ndm-page .ndm-le-pill {
-    display: inline-block; margin-right: .25rem;
-    font-size: .62rem; font-weight: 700; letter-spacing: .03em;
-    padding: .05rem .38rem; border-radius: 6px;
-    background: var(--ins-tertiary-bg, #eef0f4); color: var(--ins-secondary-color);
-}
-#ndm-page .ndm-le-pill b { color: var(--ins-body-color); font-variant-numeric: tabular-nums; }
-
-/* Número por status. Zero não é número aqui: é ausência, e escrevê-lo 150 vezes
-   afogava os poucos que importam — vira um ponto apagado. O que é número vira
-   PASTILHA: um dígito colorido solto na célula se perde no branco da linha.
-   Cada status carrega o par cor/fundo em variáveis, e a mesma cor pinta a
-   barra de composição da zona. */
-#ndm-page .ndm-tbl .ndm-nil { color: var(--ins-border-color, #c9ced6); }
-#ndm-page .ndm-tbl .ndm-n {
-    display: inline-block; min-width: 2.15rem; padding: .14rem .42rem;
-    border-radius: 8px; font-weight: 700; font-size: .8rem; line-height: 1.25;
-    color: var(--st-fg, var(--ins-body-color));
-    background: var(--st-bg, var(--ins-tertiary-bg, rgba(15, 23, 42, .06)));
-}
-#ndm-page .st-new         { --st-fg: #1d7ea8; --st-bg: rgba(29, 126, 168, .13); }
-#ndm-page .st-pending     { --st-fg: #8a6100; --st-bg: rgba(214, 158, 46, .18); }
-#ndm-page .st-generated   { --st-fg: #7c3aed; --st-bg: rgba(124, 58, 237, .13); }
-#ndm-page .st-approved    { --st-fg: #5e5ce6; --st-bg: rgba(94, 92, 230, .13); }
-#ndm-page .st-sent        { --st-fg: #0066cc; --st-bg: rgba(0, 102, 204, .12); }
-#ndm-page .st-success,
-#ndm-page .st-ok          { --st-fg: #1a8a4a; --st-bg: rgba(26, 138, 74, .14); }
-#ndm-page .st-pending-otc { --st-fg: #0066cc; --st-bg: rgba(0, 102, 204, .12); }
-#ndm-page .st-pending-mo,
-#ndm-page .st-pending-mo-fo { --st-fg: #8a6100; --st-bg: rgba(214, 158, 46, .18); }
-#ndm-page .st-pending-fo  { --st-fg: #1d7ea8; --st-bg: rgba(29, 126, 168, .13); }
-/* A operação que vai para a Intrag e ainda não tem o espelho (§567) */
-#ndm-page .st-awaiting-b3-id { --st-fg: #9f1239; --st-bg: rgba(225, 29, 72, .11); }
-[data-bs-theme=dark] #ndm-page .st-awaiting-b3-id { --st-fg: #fda4af; --st-bg: rgba(253, 164, 175, .15); }
-[data-bs-theme=dark] #ndm-page .st-new         { --st-fg: #7fd4f2; --st-bg: rgba(127, 212, 242, .16); }
-[data-bs-theme=dark] #ndm-page .st-pending     { --st-fg: #ffd54f; --st-bg: rgba(255, 213, 79, .16); }
-[data-bs-theme=dark] #ndm-page .st-generated   { --st-fg: #c4b5fd; --st-bg: rgba(196, 181, 253, .16); }
-[data-bs-theme=dark] #ndm-page .st-approved    { --st-fg: #a5a3ff; --st-bg: rgba(165, 163, 255, .16); }
-[data-bs-theme=dark] #ndm-page .st-sent        { --st-fg: #7db4f5; --st-bg: rgba(125, 180, 245, .16); }
-[data-bs-theme=dark] #ndm-page .st-success,
-[data-bs-theme=dark] #ndm-page .st-ok          { --st-fg: #7ed6a2; --st-bg: rgba(126, 214, 162, .16); }
-[data-bs-theme=dark] #ndm-page .st-pending-otc { --st-fg: #7db4f5; --st-bg: rgba(125, 180, 245, .16); }
-[data-bs-theme=dark] #ndm-page .st-pending-mo,
-[data-bs-theme=dark] #ndm-page .st-pending-mo-fo { --st-fg: #ffd54f; --st-bg: rgba(255, 213, 79, .16); }
-[data-bs-theme=dark] #ndm-page .st-pending-fo  { --st-fg: #7fd4f2; --st-bg: rgba(127, 212, 242, .16); }
-
-/* As barras de composição herdam a MESMA variável de cor das pastilhas. */
-#ndm-page .ndm-prog i, #ndm-page .ndm-mix i { color: var(--st-fg, var(--ins-secondary-color)); }
-
-/* O vão entre o nome do produto e as colunas de número era meio metro de branco
-   numa tela larga (o nome fica com toda a sobra). Quem fica com a sobra agora é
-   a composição da LINHA: a mesma leitura da barra da zona, produto a produto —
-   dá para ver a forma do dia de cada um sem ler dígito nenhum. */
-#ndm-page .ndm-tbl .ndm-c-mix { width: 100%; padding: .42rem 1.15rem; }
-#ndm-page .ndm-mix {
-    display: flex; height: 5px; min-width: 60px; border-radius: 999px; overflow: hidden;
-    background: var(--ins-tertiary-bg, rgba(15, 23, 42, .07));
-}
-#ndm-page .ndm-mix i { display: block; height: 100%; background: currentColor; }
-/* Numa tela estreita a composição da linha é a primeira coisa a sair: ela vive
-   da sobra de largura, e ali não há sobra — o que tem de caber é o nome do
-   produto e as contagens. A barra da ZONA continua, que é a mesma leitura. */
-@media (max-width: 900px) {
-    #ndm-page .ndm-tbl .ndm-c-mix { display: none; }
-}
-
-/* As duas colunas que resumem a linha, separadas do detalhe por uma régua: a
-   pendência é a resposta da tela, e a coluna inteira leva uma faixa de cor —
-   é onde o olho tem de cair primeiro. */
-#ndm-page .ndm-tbl .ndm-c-pend {
-    border-left: 1px solid var(--ins-border-color, rgba(0,0,0,.1));
-    background: rgba(247, 184, 75, .06);
-}
-[data-bs-theme=dark] #ndm-page .ndm-tbl .ndm-c-pend { background: rgba(247, 184, 75, .05); }
-#ndm-page .ndm-pend-n {
-    display: inline-block; font-weight: 800; font-size: .88rem; color: #b45309;
-    min-width: 2.15rem; padding: .14rem .42rem; line-height: 1.25;
-    border-radius: 8px; background: rgba(247, 184, 75, .22);
-}
-#ndm-page .ndm-total-n { font-weight: 700; color: var(--ins-body-color); }
-[data-bs-theme=dark] #ndm-page .ndm-pend-n { color: #ffd54f; background: rgba(247, 184, 75, .18); }
-
-#ndm-page .ndm-go { color: var(--ins-secondary-color); display: inline-flex; }
-#ndm-page .ndm-row.is-clickable:hover .ndm-go { color: #0066cc; }
-
-/* Linha de família (NDF / Options / Swaps) dentro da zona */
-#ndm-page .ndm-fam td {
-    padding: .7rem .5rem .3rem; border-bottom: 0;
-    font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-    color: var(--ins-secondary-color, #8a8a8f); text-align: left;
-}
-#ndm-page .ndm-tbl tr:first-child.ndm-fam td { padding-top: .2rem; }
-
-/* Os zerados: recolhidos atrás de uma linha que DIZ quantos são. Sumir sem
-   dizer faria "sem movimento" e "produto que não existe" virarem a mesma coisa
-   na tela. */
-#ndm-page .ndm-zero-toggle td {
-    padding: .5rem; text-align: left; border-bottom: 0;
-    font-size: .76rem; font-weight: 600; color: var(--ins-secondary-color); cursor: pointer;
-    user-select: none;
-}
-#ndm-page .ndm-zero-toggle:hover td { color: #0066cc; }
-#ndm-page .ndm-zero-toggle .ndm-caret { transition: transform 180ms var(--ndm-ease); display: inline-block; }
-#ndm-page .ndm-zone.is-open .ndm-zero-toggle .ndm-caret { transform: rotate(90deg); }
-#ndm-page tr.is-zero { display: none; }
-#ndm-page .ndm-zone.is-open tr.is-zero { display: table-row; }
-#ndm-page tr.is-zero td:first-child { color: var(--ins-secondary-color); }
-#ndm-page tr.is-zero .ndm-prod-ico { opacity: .45; filter: grayscale(1); }
-#ndm-page .ndm-soon-pill {
-    font-size: .62rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
-    padding: .1rem .45rem; border-radius: 999px; margin-left: .4rem;
-    background: var(--ins-tertiary-bg, #eef0f4); color: var(--ins-secondary-color);
-}
-#ndm-page .ndm-zone-empty { font-size: .8rem; color: var(--ins-secondary-color); padding: .4rem .5rem; }
-
-/* Entrada: as zonas aparecem em cascata (uma por vez, não 34 cartões) */
-@media (prefers-reduced-motion: no-preference) {
-    /* Só no PRIMEIRO desenho: as zonas são redesenhadas a cada 60 s (§567) */
-    #ndm-page.is-first .ndm-zone { opacity: 0; transform: translateY(10px); animation: ndmIn 380ms var(--ndm-ease) both; }
-    #ndm-page.is-first .ndm-zone:nth-child(2) { animation-delay:  60ms; }
-    #ndm-page.is-first .ndm-zone:nth-child(3) { animation-delay: 120ms; }
-    #ndm-page.is-first .ndm-zone:nth-child(4) { animation-delay: 180ms; }
-    @keyframes ndmIn { to { opacity: 1; transform: none; } }
-}
-
-/* ══ O PAINEL DAS TAREFAS (§567) ═════════════════════════════════════════════
-   As cores de ESTADO são quatro e valem em todo lugar da página — KPI, coluna
-   do quadro, barra, anel, marco da linha do tempo. Uma definição só: o anel e
-   a coluna com tons diferentes para "atrasada" fariam a pessoa se perguntar se
-   são a mesma coisa. */
+/* As cores de ESTADO são quatro e valem em todo lugar da página — KPI, coluna
+   do quadro, barra, anel, marco da linha do tempo. Uma definição só (o JS lê
+   --im-done/prog/todo/late/line para pintar o anel). */
 #ndm-page {
-    --im-done: #0f9f6e; --im-prog: #0284c7; --im-todo: #64748b; --im-late: #e11d48;
-    --im-surface: var(--vr-card-bg, var(--ins-secondary-bg));
-    --im-line: var(--vr-card-border, var(--ins-border-color));
+    --im-done: var(--otc-green); --im-prog: var(--otc-blue); --im-todo: var(--otc-text-3); --im-late: var(--otc-danger);
+    --im-surface: var(--otc-menu-bg);
+    --im-line: var(--otc-sep);
+    --im-grad: linear-gradient(100deg, var(--otc-blue), var(--otc-indigo) 50%, var(--otc-purple) 80%, var(--otc-pink));
+    --im-amber: color-mix(in srgb, var(--otc-yellow) 75%, var(--otc-text));
 }
-[data-bs-theme=dark] #ndm-page {
-    --im-done: #34d399; --im-prog: #38bdf8; --im-todo: #94a3b8; --im-late: #fb7185;
-}
-#ndm-page .im-panel {
-    background: var(--im-surface); border: 1px solid var(--im-line);
-    border-radius: var(--vr-card-radius, 18px); box-shadow: var(--vr-card-shadow);
-    padding: 1rem 1.1rem;
-}
+
+/* Respiro entre a última seção e o rodapé da página */
+#ndmZones { padding-bottom: 2.5rem; }
+#ndm-page .ndm-datewrap { width: 168px; }
+
+/* ══ O PAINEL DAS TAREFAS (§567) ═════════════════════════════════════════════ */
+#ndm-page .im-panel { padding: 1rem 1.1rem; }
 /* micro-rótulo do Pulse: caixa alta, espaçado, pequeno */
 #ndm-page .im-micro {
     font-size: .66rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
-    color: var(--ins-secondary-color);
+    color: var(--otc-text-2);
 }
-#ndm-page .im-h { font-size: .9rem; font-weight: 700; margin: 0; color: var(--ins-body-color); }
+#ndm-page .im-h { font: 650 .95rem/1.3 var(--otc-font); margin: 0; color: var(--otc-text); }
 
 /* Barra de ferramentas: data, atualização, última leitura */
 #ndm-page .im-bar { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
-#ndm-page .im-live { display: inline-flex; align-items: center; gap: .4rem; font-size: .74rem;
-    color: var(--ins-secondary-color); font-variant-numeric: tabular-nums; }
-#ndm-page .im-live i { width: 8px; height: 8px; border-radius: 99px; background: var(--im-done);
-    box-shadow: 0 0 0 0 color-mix(in oklab, var(--im-done) 55%, transparent); }
-@media (prefers-reduced-motion: no-preference) {
-    #ndm-page .im-live i { animation: sf-pulse 2.4s ease-out infinite; }
-}
-#ndm-page .im-refresh { width: 34px; height: 34px; padding: 0; border-radius: 10px !important;
-    display: inline-flex; align-items: center; justify-content: center; }
-#ndm-page .im-refresh.is-busy i { animation: im-spin .6s linear infinite; }
-#ndm-page #im-updated.is-fail { color: var(--im-late, #d63939); font-weight: 600; }
-@keyframes im-spin { to { transform: rotate(360deg); } }
+#ndm-page #im-updated.is-fail { color: var(--im-late); font-weight: 600; }
 
 /* ── KPIs ── */
 #ndm-page .im-kpis { display: grid; gap: .9rem; grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(0, 1.6fr); }
@@ -341,82 +48,78 @@
                                 #ndm-page .im-kpi[data-k="prev"] { grid-column: 1 / -1; } }
 @media (max-width: 1199.98px) { #ndm-page .im-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 575.98px)  { #ndm-page .im-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-#ndm-page .im-kpi { position: relative; overflow: hidden; }
-#ndm-page .im-kpi b { display: block; margin-top: .45rem; font-size: 1.9rem; line-height: 1;
-    font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ins-body-color); }
-#ndm-page .im-kpi small { display: block; margin-top: .45rem; font-size: .74rem; color: var(--ins-secondary-color); }
+#ndm-page .im-kpi { overflow: hidden; }
+#ndm-page .im-kpi b { display: block; margin-top: .45rem; font: 900 1.9rem/1 var(--otc-font-display);
+    letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--otc-text); }
+#ndm-page .im-kpi small { display: block; margin-top: .45rem; font-size: .74rem; color: var(--otc-text-2); }
 #ndm-page .im-kpi::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
-    background: var(--im-accent, transparent); opacity: .85; }
+    background: var(--im-accent, transparent); opacity: .85; z-index: 2; }
 #ndm-page .im-kpi[data-k="done"]        { --im-accent: var(--im-done); }
 #ndm-page .im-kpi[data-k="in_progress"] { --im-accent: var(--im-prog); }
 #ndm-page .im-kpi[data-k="todo"]        { --im-accent: var(--im-todo); }
 #ndm-page .im-kpi[data-k="late"]        { --im-accent: var(--im-late); }
-#ndm-page .im-kpi[data-k="due"]         { --im-accent: var(--vr-grad); }
-#ndm-page .im-kpi[data-k="due"]::after  { background: var(--vr-grad); }
+#ndm-page .im-kpi[data-k="due"]::after  { background: var(--im-grad); }
 #ndm-page .im-kpi[data-k="late"].is-hot b { color: var(--im-late); }
 /* D-1: o que ficou do dia útil anterior, item a item e clicável */
 #ndm-page .im-kpi[data-k="prev"] { --im-accent: var(--im-late); display: flex; flex-direction: column; }
 #ndm-page .im-kpi[data-k="prev"].is-clear { --im-accent: var(--im-done); }
 #ndm-page .im-kpi[data-k="prev"] .im-prev-top { display: flex; align-items: baseline; gap: .6rem; }
-#ndm-page .im-kpi[data-k="prev"] .im-prev-top b { margin-top: .45rem; }
 #ndm-page .im-kpi[data-k="prev"].is-hot .im-prev-top b { color: var(--im-late); }
 #ndm-page .im-prev-list { margin-top: .5rem; display: flex; flex-direction: column; gap: .15rem;
     max-height: 104px; overflow-y: auto; }
 #ndm-page .im-prev-item { display: flex; align-items: center; gap: .45rem; font-size: .74rem; line-height: 1.3;
-    padding: .2rem .35rem; border-radius: 8px; color: var(--ins-body-color); text-decoration: none; }
+    padding: .2rem .35rem; border-radius: var(--otc-r-xs); color: var(--otc-text); text-decoration: none; }
 #ndm-page a.im-prev-item:hover { background: color-mix(in oklab, var(--im-late) 10%, transparent); }
 #ndm-page .im-prev-item i.im-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 99px; background: var(--im-late); }
 #ndm-page .im-prev-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#ndm-page .im-prev-item em { font-style: normal; color: var(--ins-secondary-color); }
+#ndm-page .im-prev-item em { font-style: normal; color: var(--otc-text-2); }
 #ndm-page .im-prev-item b { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--im-late); }
-#ndm-page .im-prev-item .ti-chevron-right { color: var(--ins-secondary-color); font-size: .85rem; }
-#ndm-page .im-kpi .im-micro { color: color-mix(in oklab, var(--im-accent, var(--ins-secondary-color)) 70%, var(--ins-secondary-color)); }
-#ndm-page .im-kpi[data-k="due"] .im-micro { color: var(--ins-secondary-color); }
+#ndm-page .im-prev-item .ti-chevron-right { color: var(--otc-text-2); font-size: .85rem; }
+#ndm-page .im-kpi .im-micro { color: color-mix(in oklab, var(--im-accent, var(--otc-text-2)) 70%, var(--otc-text-2)); }
+#ndm-page .im-kpi[data-k="due"] .im-micro { color: var(--otc-text-2); }
 
 /* ── Quadro por estado (o kanban do Pulse) ── */
 #ndm-page .im-board { display: grid; gap: .8rem; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 @media (max-width: 1399.98px) { #ndm-page .im-board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 575.98px)  { #ndm-page .im-board { grid-template-columns: 1fr; } }
-#ndm-page .im-col { border-radius: 16px; padding: .75rem; border: 1px solid var(--im-line);
-    background: color-mix(in oklab, var(--im-c) 4%, var(--im-surface)); min-height: 120px; }
+#ndm-page .im-col { border-radius: var(--otc-r-lg); padding: .75rem; min-height: 120px;
+    background: color-mix(in oklab, var(--im-c) 6%, transparent); box-shadow: inset 0 0 0 1px var(--im-line); }
 #ndm-page .im-col[data-s="todo"]        { --im-c: var(--im-todo); }
 #ndm-page .im-col[data-s="in_progress"] { --im-c: var(--im-prog); }
 #ndm-page .im-col[data-s="late"]        { --im-c: var(--im-late); }
 #ndm-page .im-col[data-s="done"]        { --im-c: var(--im-done); }
-#ndm-page .im-col[data-s="late"].has-items { border-color: color-mix(in oklab, var(--im-late) 35%, var(--im-line)); }
+#ndm-page .im-col[data-s="late"].has-items { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--im-late) 40%, var(--im-line)); }
 #ndm-page .im-col-head { display: flex; align-items: center; gap: .45rem; margin-bottom: .65rem; }
 #ndm-page .im-col-head .im-dot { width: 8px; height: 8px; border-radius: 99px; background: var(--im-c); }
 #ndm-page .im-col-head .im-h { font-size: .8rem; }
 #ndm-page .im-count { margin-left: auto; font-size: .72rem; font-weight: 700; padding: .1rem .5rem;
-    border-radius: 999px; background: color-mix(in oklab, var(--im-c) 14%, transparent); color: var(--im-c); }
-#ndm-page .im-col-empty { font-size: .74rem; color: var(--ins-secondary-color); padding: .5rem .25rem; }
+    border-radius: var(--otc-r-pill); background: color-mix(in oklab, var(--im-c) 14%, transparent); color: var(--im-c); }
+#ndm-page .im-col-empty { font-size: .74rem; color: var(--otc-text-2); padding: .5rem .25rem; }
 #ndm-page .im-list { display: flex; flex-direction: column; gap: .5rem; }
 
-#ndm-page .im-task { display: block; text-decoration: none; color: inherit; border-radius: 13px;
+#ndm-page .im-task { display: block; text-decoration: none; color: inherit; border-radius: var(--otc-r-md);
     padding: .7rem .75rem; background: var(--im-surface); border: 1px solid var(--im-line);
-    transition: border-color 160ms var(--sf-ease-out, ease-out), box-shadow 160ms var(--sf-ease-out, ease-out),
-                transform 160ms var(--sf-ease-out, ease-out); }
+    transition: border-color var(--otc-dur-fast) var(--otc-ease-out), box-shadow var(--otc-dur-fast) var(--otc-ease-out); }
 @media (hover: hover) and (pointer: fine) {
     #ndm-page .im-task:hover { border-color: color-mix(in oklab, var(--im-c) 45%, var(--im-line));
-        box-shadow: 0 8px 22px -12px color-mix(in oklab, var(--im-c) 60%, transparent); transform: translateY(-1px); }
+        box-shadow: 0 8px 22px -12px color-mix(in oklab, var(--im-c) 60%, transparent); }
 }
-#ndm-page .im-task:active { transform: scale(.98); }
 #ndm-page .im-task-head { display: flex; align-items: center; gap: .55rem; }
-#ndm-page .im-task-ico { width: 30px; height: 30px; flex: 0 0 auto; border-radius: 9px; display: inline-flex;
-    align-items: center; justify-content: center; color: #fff; font-size: 1rem; background: var(--vr-grad); }
+#ndm-page .im-task-ico { width: 30px; height: 30px; flex: 0 0 auto; border-radius: 30%; display: inline-flex;
+    align-items: center; justify-content: center; color: #fff; font-size: 1rem; background: var(--im-grad); }
 #ndm-page .im-task-name { font-size: .84rem; font-weight: 700; line-height: 1.2; min-width: 0; }
-#ndm-page .im-task-go { margin-left: auto; color: var(--ins-secondary-color); font-size: .95rem; }
+#ndm-page .im-task-go { margin-left: auto; color: var(--otc-text-2); font-size: .95rem; }
 #ndm-page .im-task-due { margin-top: .5rem; display: flex; align-items: center; gap: .35rem; flex-wrap: wrap;
-    font-size: .72rem; color: var(--ins-secondary-color); font-variant-numeric: tabular-nums; }
+    font-size: .72rem; color: var(--otc-text-2); font-variant-numeric: tabular-nums; }
 #ndm-page .im-task-due .is-late { color: var(--im-late); font-weight: 700; }
 #ndm-page .im-meter { margin-top: .5rem; height: 6px; border-radius: 99px; overflow: hidden;
     background: color-mix(in oklab, var(--im-c) 14%, transparent); }
 #ndm-page .im-meter i { display: block; height: 100%; border-radius: 99px; background: var(--im-c);
-    transition: width 420ms var(--sf-ease-out, ease-out); }
-#ndm-page .im-task-meta { margin-top: .45rem; font-size: .72rem; color: var(--ins-secondary-color); line-height: 1.35; }
-#ndm-page .im-task-meta b { color: var(--ins-body-color); font-variant-numeric: tabular-nums; }
+    transition: width 420ms var(--otc-ease-out); }
+#ndm-page .im-task-meta { margin-top: .45rem; font-size: .72rem; color: var(--otc-text-2); line-height: 1.35; }
+#ndm-page .im-task-meta b { color: var(--otc-text); font-variant-numeric: tabular-nums; }
 #ndm-page .im-tag { display: inline-flex; align-items: center; gap: .2rem; font-size: .64rem; font-weight: 700;
-    letter-spacing: .04em; text-transform: uppercase; padding: .1rem .45rem; border-radius: 999px;
+    letter-spacing: .04em; text-transform: uppercase; padding: .1rem .45rem; border-radius: var(--otc-r-pill);
     background: color-mix(in oklab, var(--im-t, var(--im-todo)) 14%, transparent); color: var(--im-t, var(--im-todo)); }
 #ndm-page .im-tag.is-done { --im-t: var(--im-done); }
 #ndm-page .im-tag.is-late { --im-t: var(--im-late); }
@@ -426,39 +129,39 @@
 #ndm-page .im-ring canvas { position: absolute; inset: 0; }
 #ndm-page .im-ring-mid { position: absolute; inset: 0; display: flex; flex-direction: column;
     align-items: center; justify-content: center; pointer-events: none; }
-#ndm-page .im-ring-mid b { font-size: 2.2rem; font-weight: 800; letter-spacing: -.03em; line-height: 1;
-    font-variant-numeric: tabular-nums; color: var(--ins-body-color); }
+#ndm-page .im-ring-mid b { font: 900 2.2rem/1 var(--otc-font-display); letter-spacing: -.03em;
+    font-variant-numeric: tabular-nums; color: var(--otc-text); }
 #ndm-page .im-ring-mid span { margin-top: .3rem; font-size: .66rem; font-weight: 700; letter-spacing: .12em;
-    text-transform: uppercase; color: var(--ins-secondary-color); }
+    text-transform: uppercase; color: var(--otc-text-2); }
 #ndm-page .im-legend { display: grid; grid-template-columns: 1fr 1fr; gap: .3rem .8rem; margin-top: .6rem;
-    font-size: .74rem; color: var(--ins-secondary-color); }
+    font-size: .74rem; color: var(--otc-text-2); }
 #ndm-page .im-legend span { display: flex; align-items: center; gap: .4rem; }
 #ndm-page .im-legend i { width: 8px; height: 8px; border-radius: 99px; background: var(--im-c); }
-#ndm-page .im-legend b { margin-left: auto; color: var(--ins-body-color); font-variant-numeric: tabular-nums; }
+#ndm-page .im-legend b { margin-left: auto; color: var(--otc-text); font-variant-numeric: tabular-nums; }
 #ndm-page .im-avg { margin-top: .75rem; }
-#ndm-page .im-avg .im-meter { --im-c: var(--vr-accent-2); }
+#ndm-page .im-avg .im-meter { --im-c: var(--otc-indigo); }
 
 #ndm-page .im-feed { display: flex; flex-direction: column; gap: .6rem; max-height: 250px; overflow-y: auto; }
 #ndm-page .im-feed-item { display: flex; gap: .55rem; font-size: .76rem; line-height: 1.4; }
 #ndm-page .im-feed-item i { margin-top: .35rem; width: 8px; height: 8px; flex: 0 0 auto; border-radius: 99px;
     background: var(--im-c, var(--im-prog)); }
-#ndm-page .im-feed-item time { margin-left: auto; padding-left: .5rem; color: var(--ins-secondary-color);
+#ndm-page .im-feed-item time { margin-left: auto; padding-left: .5rem; color: var(--otc-text-2);
     font-variant-numeric: tabular-nums; white-space: nowrap; }
-#ndm-page .im-feed-empty { font-size: .76rem; color: var(--ins-secondary-color); }
+#ndm-page .im-feed-empty { font-size: .76rem; color: var(--otc-text-2); }
 
 /* ── Linha do tempo dos prazos (os marcos do Pulse) ── */
 #ndm-page .im-tl { position: relative; height: 92px; margin: .4rem .6rem 0; }
 #ndm-page .im-tl-axis { position: absolute; left: 0; right: 0; top: 34px; height: 2px; border-radius: 2px;
     background: var(--im-line); }
 #ndm-page .im-tl-fill { position: absolute; left: 0; top: 34px; height: 2px; border-radius: 2px;
-    background: var(--vr-grad); }
+    background: var(--im-grad); }
 #ndm-page .im-tl-hour { position: absolute; top: 44px; transform: translateX(-50%); font-size: .64rem;
-    color: var(--ins-secondary-color); font-variant-numeric: tabular-nums; }
+    color: var(--otc-text-2); font-variant-numeric: tabular-nums; }
 /* termina NA régua: descendo até as horas, riscava o rótulo da hora cheia */
 #ndm-page .im-tl-now { position: absolute; top: 18px; height: 20px; width: 2px; margin-left: -1px;
-    background: var(--vr-accent-2); border-radius: 2px; }
+    background: var(--otc-indigo); border-radius: 2px; }
 #ndm-page .im-tl-now span { position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
-    font-size: .62rem; font-weight: 700; color: var(--vr-accent-2); white-space: nowrap; }
+    font-size: .62rem; font-weight: 700; color: var(--otc-indigo); white-space: nowrap; }
 #ndm-page .im-tl-mark { position: absolute; top: 26px; width: 18px; height: 18px; margin-left: -9px; border-radius: 99px;
     border: 2px solid var(--im-c); background: var(--im-surface); cursor: default; }
 #ndm-page .im-tl-mark.is-done { background: var(--im-c); }
@@ -466,55 +169,213 @@
    em hora cheia escrevia por cima do "20:00" do eixo */
 #ndm-page .im-tl-mark b { position: absolute; top: 38px; left: 50%; transform: translateX(-50%);
     font-size: .64rem; font-weight: 700; color: var(--im-c); white-space: nowrap; font-variant-numeric: tabular-nums; }
-#ndm-page .im-offday { font-size: .74rem; color: var(--ins-secondary-color); }
-#ndm-page .im-offday b { color: var(--ins-body-color); font-weight: 600; }
-
-/* Entrada: só no PRIMEIRO desenho (a atualização de 60 s não pisca a tela) */
-@media (prefers-reduced-motion: no-preference) {
-    #ndm-page.is-first .im-kpi, #ndm-page.is-first .im-task {
-        animation: im-in 320ms var(--sf-ease-out, ease-out) both; animation-delay: calc(var(--i, 0) * 35ms);
-    }
-    @keyframes im-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-}
+#ndm-page .im-offday { font-size: .74rem; color: var(--otc-text-2); }
+#ndm-page .im-offday b { color: var(--otc-text); font-weight: 600; }
 #ndm-page .im-section-title { display: flex; align-items: baseline; gap: .6rem; margin: 1.6rem 0 .8rem; }
 
-/* daterangepicker fora do #ndm-page (anexa no body) — fundo sólido + seleção azul */
-.daterangepicker { z-index: 1090; border-radius: 12px; border: 1px solid var(--ins-border-color);
-    box-shadow: 0 8px 28px rgba(0, 0, 0, .18); background: #fff; }
-.daterangepicker td.active, .daterangepicker td.active:hover { background-color: #0066cc; }
-[data-bs-theme=dark] .daterangepicker { background: #2b2f3a; color: var(--ins-body-color); }
-[data-bs-theme=dark] .daterangepicker .calendar-table { background: transparent; border: 0; }
-[data-bs-theme=dark] .daterangepicker td.available:hover,
-[data-bs-theme=dark] .daterangepicker th.available:hover { background: #3a3f4d; }
-[data-bs-theme=dark] .daterangepicker td.off, [data-bs-theme=dark] .daterangepicker td.off:hover { background: transparent; color: #6c757d; }
-[data-bs-theme=dark] .daterangepicker:after { border-bottom-color: #2b2f3a; }
-[data-bs-theme=dark] .daterangepicker .calendar-table th,
-[data-bs-theme=dark] .daterangepicker .calendar-table td { color: var(--ins-body-color); }
-
-/* ── Zonas (B3 × Intrag) e subgrupos (NDF / Options / Swaps) ─────────────── */
-#ndm-page .ndm-zone-title {
-    font-size: 1rem; font-weight: 700; margin: 0; color: var(--ins-body-color);
+/* ══ O DETALHE: uma TABELA por zona ═════════════════════════════════════════
+   A pergunta da tela é uma só — o que ainda precisa de ação, e onde —, e ela se
+   responde comparando produtos: uma linha por produto, as contagens por status
+   em colunas ALINHADAS, e o dia inteiro numa tela. A zona é placa de vidro
+   (tokens do tema) com o fio do gradiente no topo: sem ele as três zonas são
+   três lajotas idênticas, e num dia parado a tela inteira é só isso. */
+#ndm-page .ndm-zone {
+    position: relative; overflow: hidden;
+    border-radius: var(--otc-r-xl);
+    background-color: var(--otc-glass);
+    -webkit-backdrop-filter: var(--otc-blur);
+    backdrop-filter: var(--otc-blur);
+    box-shadow: var(--otc-depth);
+    padding: 1.05rem 1.15rem 1.15rem;
+    margin-bottom: var(--otc-gap);
 }
+#ndm-page .ndm-zone::before {
+    content: ''; position: absolute; inset: 0 0 auto; height: 3px;
+    background: var(--im-grad); opacity: .9;
+}
+/* Zona sem movimento não precisa da altura de uma com tabela. */
+#ndm-page .ndm-zone.is-empty { padding-bottom: .5rem; }
+#ndm-page .ndm-zone.is-empty .ndm-zone-head { margin-bottom: .25rem; }
+
+#ndm-page .ndm-zone-head { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: .85rem; }
+#ndm-page .ndm-zone-id { display: flex; flex-direction: column; gap: .1rem; min-width: 0; }
+#ndm-page .ndm-zone-title { font: 650 1rem/1.3 var(--otc-font); margin: 0; color: var(--otc-text); }
+#ndm-page .ndm-zone-meta { font-size: .72rem; font-weight: 600; letter-spacing: .02em; color: var(--otc-text-2); }
+#ndm-page .ndm-zone-meta b { color: var(--otc-text); font-variant-numeric: tabular-nums; }
 #ndm-page .ndm-zone-ico {
-    width: 36px; height: 36px; flex: 0 0 auto; border-radius: 11px;
+    width: 36px; height: 36px; flex: 0 0 auto; border-radius: 30%;
     display: inline-flex; align-items: center; justify-content: center; color: #fff;
-    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
-    box-shadow: 0 5px 14px rgba(94, 92, 230, .3);
-    transition: transform 260ms var(--ndm-ease), box-shadow .2s var(--ndm-ease);
+    background: var(--im-grad);
 }
 #ndm-page .ndm-zone-ico i { font-size: 19px; }
 #ndm-page .ndm-zone-ico svg { width: 19px; height: 19px; display: block; fill: currentColor; }
-/* Hover: o ícone da zona com a animação padrão da casa */
-@media (hover: hover) and (pointer: fine) {
-    #ndm-page .ndm-zone-head:hover .ndm-zone-ico {
-        transform: scale(1.08) rotate(-4deg);
-        box-shadow: 0 9px 22px rgba(94, 92, 230, .4);
-    }
+
+/* O resumo da zona vira NÚMERO, não uma frase cinza: é a resposta da tela.
+   Aberto em âmbar, zerado em verde, importado em neutro. */
+#ndm-page .ndm-zone-stats { margin-left: auto; display: flex; align-items: stretch; gap: .5rem; }
+#ndm-page .ndm-stat {
+    min-width: 88px; padding: .35rem .7rem; border-radius: var(--otc-r-md); text-align: right;
+    display: flex; flex-direction: column; justify-content: center; gap: .02rem;
+    background: var(--otc-fill);
 }
+#ndm-page .ndm-stat b { font: 800 1.3rem/1.15 var(--otc-font-display); font-variant-numeric: tabular-nums; color: var(--otc-text); }
+#ndm-page .ndm-stat span { font-size: .63rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--otc-text-2); }
+#ndm-page .ndm-stat.is-open { background: color-mix(in srgb, var(--otc-yellow) 18%, transparent); }
+#ndm-page .ndm-stat.is-open :is(b, span) { color: var(--im-amber); }
+#ndm-page .ndm-stat.is-clear { background: color-mix(in srgb, var(--otc-green) 14%, transparent); }
+#ndm-page .ndm-stat.is-clear :is(b, span) { color: var(--otc-green); }
+
+/* Dia parado: uma pílula que DIZ, em vez de meia tela de branco. */
+#ndm-page .ndm-zone-quiet {
+    margin-left: auto; display: inline-flex; align-items: center; gap: .4rem;
+    font-size: .76rem; font-weight: 700; color: var(--otc-green);
+    background: color-mix(in srgb, var(--otc-green) 13%, transparent); padding: .35rem .8rem; border-radius: var(--otc-r-pill);
+}
+
+/* A composição do dia numa barra: é a forma da zona antes de ler número nenhum,
+   e as cores são as MESMAS das colunas — a tabela é a legenda dela. */
+#ndm-page .ndm-prog {
+    display: flex; height: 6px; border-radius: 999px; overflow: hidden;
+    background: var(--otc-fill); margin-bottom: .9rem;
+}
+#ndm-page .ndm-prog i { display: block; height: 100%; background: currentColor; }
+
+/* Quem rola de lado é a TABELA, nunca a página. */
+#ndm-page .ndm-tbl-wrap { overflow-x: auto; }
+#ndm-page .ndm-tbl { width: 100%; border-collapse: collapse; min-width: 540px; }
+/* O nome do produto fica com a sobra e as colunas de número são ESTREITAS e
+   fixas. A coluna da composição fica FORA da regra: é ela que recebe a sobra. */
+#ndm-page .ndm-tbl th:not(:first-child):not(.ndm-c-mix),
+#ndm-page .ndm-tbl td:not(:first-child):not(.ndm-c-mix) { width: 78px; }
+#ndm-page .ndm-tbl th:last-child, #ndm-page .ndm-tbl td:last-child { width: 28px; }
+#ndm-page .ndm-tbl th {
+    font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--otc-text-2);
+    padding: .35rem .5rem; text-align: center; vertical-align: middle; white-space: nowrap;
+    border-bottom: 1px solid var(--otc-sep);
+}
+#ndm-page .ndm-tbl td {
+    padding: .42rem .5rem; font-size: .82rem; text-align: center; vertical-align: middle; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    border-bottom: 1px solid var(--otc-sep);
+}
+#ndm-page .ndm-tbl tbody tr:last-child td { border-bottom: 0; }
+/* Piso no nome do produto: sem ele a composição o espreme até quebrar. */
+#ndm-page .ndm-tbl th:first-child,
+#ndm-page .ndm-tbl td:first-child { text-align: left; white-space: nowrap; min-width: 220px; }
+
+/* A linha inteira é o link da página do produto; o traço à esquerda diz QUAL
+   linha está sob o cursor numa grade de nove colunas. */
+#ndm-page .ndm-row { transition: background-color var(--otc-dur-fast) var(--otc-ease); }
+#ndm-page .ndm-row.is-clickable { cursor: pointer; }
+#ndm-page .ndm-row td:first-child { box-shadow: inset 2px 0 0 transparent; }
+@media (hover: hover) and (pointer: fine) {
+    #ndm-page .ndm-row.is-clickable:hover { background: var(--otc-row-hover); }
+    #ndm-page .ndm-row.is-clickable:hover td:first-child { box-shadow: inset 2px 0 0 var(--otc-accent-ink); }
+}
+#ndm-page .ndm-prod { display: flex; align-items: center; gap: .55rem; }
+#ndm-page .ndm-prod-ico {
+    width: 28px; height: 28px; flex: 0 0 auto; border-radius: 30%;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--im-grad); color: #fff; font-size: .95rem;
+}
+#ndm-page .ndm-prod-name { font-weight: 600; color: var(--otc-text); text-decoration: none; }
+#ndm-page .ndm-prod-name:hover { text-decoration: underline; }
+/* A quebra por entidade e os grupos da confirmação viram etiquetas. */
+#ndm-page .ndm-prod-les { display: block; margin-top: .15rem; white-space: nowrap; }
+#ndm-page .ndm-le-pill,
+#ndm-page .ndm-soon-pill {
+    display: inline-block; margin-right: .25rem;
+    font-size: .62rem; font-weight: 700; letter-spacing: .03em;
+    padding: .05rem .38rem; border-radius: var(--otc-r-xs);
+    background: var(--otc-fill); color: var(--otc-text-2);
+}
+#ndm-page .ndm-le-pill b { color: var(--otc-text); font-variant-numeric: tabular-nums; }
+#ndm-page .ndm-soon-pill { text-transform: uppercase; letter-spacing: .04em; padding: .1rem .45rem; border-radius: var(--otc-r-pill); margin: 0 0 0 .4rem; }
+
+/* Número por status. Zero não é número aqui: é ausência (um ponto apagado). O
+   que é número vira PASTILHA. Cada status carrega a cor em --st-fg e o fundo
+   em --st-bg, e a mesma cor pinta a barra de composição. */
+#ndm-page .ndm-tbl .ndm-nil { color: var(--otc-text-3); opacity: .55; }
+#ndm-page .ndm-tbl .ndm-n {
+    display: inline-block; min-width: 2.15rem; padding: .14rem .42rem;
+    border-radius: var(--otc-r-xs); font-weight: 700; font-size: .8rem; line-height: 1.25;
+    color: var(--st-fg, var(--otc-text));
+    background: var(--st-bg, var(--otc-fill));
+}
+#ndm-page .st-new           { --st-fg: var(--otc-teal); }
+#ndm-page .st-pending,
+#ndm-page .st-pending-mo,
+#ndm-page .st-pending-mo-fo { --st-fg: var(--im-amber); --st-bg: color-mix(in srgb, var(--otc-yellow) 18%, transparent); }
+#ndm-page .st-generated     { --st-fg: var(--otc-purple); }
+#ndm-page .st-approved      { --st-fg: var(--otc-indigo); }
+#ndm-page .st-sent,
+#ndm-page .st-pending-otc   { --st-fg: var(--otc-blue); }
+#ndm-page .st-success,
+#ndm-page .st-ok            { --st-fg: var(--otc-green); }
+#ndm-page .st-pending-fo    { --st-fg: var(--otc-teal); }
+/* A operação que vai para a Intrag e ainda não tem o espelho (§567) */
+#ndm-page .st-awaiting-b3-id { --st-fg: color-mix(in srgb, var(--otc-danger) 70%, var(--otc-pink)); }
+#ndm-page :is(.st-new, .st-generated, .st-approved, .st-sent, .st-pending-otc, .st-success, .st-ok,
+              .st-pending-fo, .st-awaiting-b3-id) { --st-bg: color-mix(in srgb, var(--st-fg) 14%, transparent); }
+
+/* As barras de composição herdam a MESMA variável de cor das pastilhas. */
+#ndm-page .ndm-prog i, #ndm-page .ndm-mix i { color: var(--st-fg, var(--otc-text-3)); }
+
+/* O vão entre o nome e as colunas de número é a composição da LINHA: a mesma
+   leitura da barra da zona, produto a produto. */
+#ndm-page .ndm-tbl .ndm-c-mix { width: 100%; padding: .42rem 1.15rem; }
+#ndm-page .ndm-mix {
+    display: flex; height: 5px; min-width: 60px; border-radius: 999px; overflow: hidden;
+    background: var(--otc-fill);
+}
+#ndm-page .ndm-mix i { display: block; height: 100%; background: currentColor; }
+/* Numa tela estreita a composição da linha é a primeira coisa a sair. */
+@media (max-width: 900px) {
+    #ndm-page .ndm-tbl .ndm-c-mix { display: none; }
+}
+
+/* As duas colunas que resumem a linha, separadas do detalhe por uma régua: a
+   pendência é a resposta da tela, e a coluna inteira leva uma faixa de cor. */
+#ndm-page .ndm-tbl .ndm-c-pend {
+    border-left: 1px solid var(--otc-sep);
+    background: color-mix(in srgb, var(--otc-yellow) 6%, transparent);
+}
+#ndm-page .ndm-pend-n {
+    display: inline-block; font-weight: 800; font-size: .88rem; color: var(--im-amber);
+    min-width: 2.15rem; padding: .14rem .42rem; line-height: 1.25;
+    border-radius: var(--otc-r-xs); background: color-mix(in srgb, var(--otc-yellow) 22%, transparent);
+}
+#ndm-page .ndm-total-n { font-weight: 700; color: var(--otc-text); }
+
+#ndm-page .ndm-go { color: var(--otc-text-2); display: inline-flex; }
+#ndm-page .ndm-row.is-clickable:hover .ndm-go { color: var(--otc-accent-ink); }
+
+/* Linha de família (NDF / Options / Swaps) dentro da zona */
+#ndm-page .ndm-fam td {
+    padding: .7rem .5rem .3rem; border-bottom: 0;
+    font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--otc-text-2); text-align: left;
+}
+#ndm-page .ndm-tbl tr:first-child.ndm-fam td { padding-top: .2rem; }
+
+/* Os zerados: recolhidos atrás de uma linha que DIZ quantos são. */
+#ndm-page .ndm-zero-toggle td {
+    padding: .5rem; text-align: left; border-bottom: 0;
+    font-size: .76rem; font-weight: 600; color: var(--otc-text-2); cursor: pointer;
+    user-select: none;
+}
+#ndm-page .ndm-zero-toggle:hover td { color: var(--otc-accent-ink); }
+#ndm-page .ndm-zero-toggle .ndm-caret { transition: transform var(--otc-dur-fast) var(--otc-ease); display: inline-block; }
+#ndm-page .ndm-zone.is-open .ndm-zero-toggle .ndm-caret { transform: rotate(90deg); }
+#ndm-page tr.is-zero { display: none; }
+#ndm-page .ndm-zone.is-open tr.is-zero { display: table-row; }
+#ndm-page tr.is-zero td:first-child { color: var(--otc-text-2); }
+#ndm-page tr.is-zero .ndm-prod-ico { opacity: .45; filter: grayscale(1); }
+#ndm-page .ndm-zone-empty { font-size: .8rem; color: var(--otc-text-2); padding: .4rem .5rem; }
+
 @media (prefers-reduced-motion: reduce) {
-    #ndm-page .ndm-zone-ico, #ndm-page .ndm-row,
-    #ndm-page .ndm-zero-toggle .ndm-caret { transition: none; }
-    #ndm-page .ndm-zone-head:hover .ndm-zone-ico { transform: none; }
+    #ndm-page .ndm-row, #ndm-page .ndm-zero-toggle .ndm-caret { transition: none; }
 }
 </style>
 {% endblock extra_css %}
@@ -532,8 +393,8 @@
             Every task due today and how far it has gone — registration, confirmations, Intrag and the reconciliations.
         </p>
         <div class="im-bar">
-            <span class="im-live"><i></i><span id="im-updated">—</span></span>
-            <button type="button" class="btn btn-sm btn-soft-primary im-refresh" id="im-refresh"
+            <span class="im-live otc-live"><i></i><span id="im-updated">—</span></span>
+            <button type="button" class="btn btn-sm btn-soft-primary btn-icon im-refresh" id="im-refresh"
                     data-bs-toggle="tooltip" title="Refresh now">
                 <i class="ti ti-refresh"></i>
             </button>
@@ -1067,10 +928,10 @@
             el.querySelector('small').innerHTML = sub || '';
         }
         poe('due', num(k.due), esc(t('im-k-due-sub', 'tasks scheduled for the date')));
-        poe('done', num(k.done), '<span style="color:var(--im-done)">' + k.pct + '%</span> ' + esc(t('im-k-done-sub', 'of the day')));
+        poe('done', num(k.done), '<span class="text-success">' + k.pct + '%</span> ' + esc(t('im-k-done-sub', 'of the day')));
         poe('in_progress', num(k.in_progress), esc(t('im-k-prog-sub', 'started, still open')));
         poe('todo', num(k.todo), esc(t('im-k-todo-sub', 'not started')));
-        poe('late', num(k.late), k.late ? '<span style="color:var(--im-late)">' + esc(t('im-k-late-sub', 'past the deadline')) + '</span>'
+        poe('late', num(k.late), k.late ? '<span class="text-danger">' + esc(t('im-k-late-sub', 'past the deadline')) + '</span>'
                                          : esc(t('im-k-late-none', 'nothing overdue')));
         box.querySelector('[data-k="late"]').classList.toggle('is-hot', k.late > 0);
     }
@@ -1204,7 +1065,7 @@
         card.classList.toggle('is-hot', itens.length > 0);
         card.classList.toggle('is-clear', !itens.length);
         sub.innerHTML = itens.length ? esc(t('im-prev-sub', 'items left open')) :
-                        '<span style="color:var(--im-done)">' + esc(t('im-prev-none', 'nothing left behind')) + '</span>';
+                        '<span class="text-success">' + esc(t('im-prev-none', 'nothing left behind')) + '</span>';
         box.innerHTML = itens.map(function (it) {
             var nome = it.task ? t('im-task-' + it.task, it.label) : it.label;
             var zona = it.zone ? ' <em>· ' + esc(t('im-zone-' + it.zone.toLowerCase(), it.zone)) + '</em>' : '';

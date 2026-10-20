@@ -4,211 +4,139 @@
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
+{# Só o que é DESTA tela: as filas lado a lado (uma coluna por mesa da esteira
+   do CGD, com a fila rolando dentro — o desenho do Confirmations Monitor), o
+   chip de cor de cada mesa, o aging que acende, o badge da etapa (com a marca
+   de etapa DERIVADA) e os dropzones da fila e do modal do OTC. A coluna não é
+   `.card` (lista rolável e botões dentro): a placa é pintada aqui com os
+   tokens do vidro do tema. #}
 <style>
-/* ============================================================================
-   Onboarding · Overview — uma fila por mesa da esteira do CGD.
-   O desenho é o do Confirmations Monitor: cartão neutro com moldura e sombra
-   suave, chip de ícone no gradiente, total à direita em dígitos de largura fixa.
-   Camada visual: tokens --ins-* (tema) e --vr-* (visual-refresh). Nunca --bs-*.
-
-   O cartão NÃO é um `.card` do Bootstrap, é um <div> com classe própria — sobre
-   um `.card` o tema redeclara fundo, borda, raio e cor DEPOIS deste <style>
-   (extra_css vem antes do head-css) e cada propriedade precisaria de !important.
-   ============================================================================ */
-#ob-monitor { --ob-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); padding-bottom: .9rem; }
-
-/* As TRÊS mesas lado a lado. `min-width:0` mantém as colunas iguais: flex item
-   tem min-width:auto, e uma razão social comprida alargaria o card dela às
-   custas das vizinhas — dentro, quem resolve é o ellipsis dos itens. */
+#ob-monitor { padding-bottom: .9rem; }
+/* `min-width:0` mantém as colunas iguais: uma razão social comprida alargaria
+   o card dela às custas das vizinhas. */
 #ob-cards > [class*="col"] { min-width: 0; }
 
 #ob-monitor .ob-card {
     height: 100%;
-    background: var(--vr-card-bg, var(--ins-secondary-bg));
-    border: 1px solid var(--vr-card-border, var(--ins-border-color));
-    border-radius: var(--vr-card-radius, 18px);
-    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
     display: flex; flex-direction: column; overflow: hidden;
-    transition: box-shadow 260ms var(--ob-ease), border-color 260ms var(--ob-ease);
+    border-radius: var(--otc-r-xl);
+    background-color: var(--otc-glass);
+    -webkit-backdrop-filter: var(--otc-blur);
+    backdrop-filter: var(--otc-blur);
+    box-shadow: var(--otc-depth);
 }
-@media (hover: hover) and (pointer: fine) {
-    #ob-monitor .ob-card:hover {
-        box-shadow: var(--vr-card-shadow-hover, 0 18px 40px rgba(94, 92, 230, .14));
-        border-color: rgba(0, 102, 204, .28);
-    }
-    #ob-monitor .ob-card:hover .ob-card__ico {
-        transform: scale(1.1) rotate(-4deg);
-        box-shadow: 0 8px 20px rgba(94, 92, 230, .38);
-    }
-}
-#ob-monitor .ob-card__head {
-    display: flex; align-items: center; gap: .75rem;
-    padding: 1.05rem 1.15rem .85rem;
-}
-/* Header da coluna num marinho mais fundo que o corpo (pedido 2026-09-01):
-   um degrau ESCURO sobre o vidro, com fio de luz embaixo separando da fila. */
+#ob-monitor .ob-card__head { display: flex; align-items: center; gap: .75rem; padding: 1.05rem 1.15rem .85rem; }
+/* No escuro o cabeçalho da coluna é um degrau mais FUNDO que a fila (pedido da
+   mesa), com o fio separando os dois. */
 [data-bs-theme=dark] #ob-monitor .ob-card__head {
-    background: rgba(6, 16, 38, 0.58);
-    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--otc-solid) 55%, transparent);
+    box-shadow: inset 0 -1px 0 var(--otc-sep);
 }
 #ob-monitor .ob-card__ico {
-    width: 42px; height: 42px; flex: 0 0 auto; border-radius: 12px;
+    width: 42px; height: 42px; flex: 0 0 auto; border-radius: 30%;
     display: inline-flex; align-items: center; justify-content: center;
     color: #fff; font-size: 1.25rem;
-    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
-    box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
-    transition: transform 260ms var(--ob-ease), box-shadow 260ms var(--ob-ease);
+    background: linear-gradient(135deg, var(--otc-blue), var(--otc-purple));
 }
-/* A mesa é a cor do CHIP, não a do cartão: cartão inteiro tingido briga com a
-   lista dentro dele e some no tema escuro. */
-#ob-monitor .ob-c-bank   .ob-card__ico { background: linear-gradient(100deg, #0d7ea8, #4a849b); box-shadow: 0 4px 12px rgba(13,126,168,.28); }
-#ob-monitor .ob-c-legal  .ob-card__ico { background: linear-gradient(100deg, #6d4c41, #a1887f); box-shadow: 0 4px 12px rgba(109,76,65,.28); }
-#ob-monitor .ob-c-otc    .ob-card__ico { background: linear-gradient(100deg, #0066cc, #5e5ce6); box-shadow: 0 4px 12px rgba(0,102,204,.28); }
-#ob-monitor .ob-c-mo     .ob-card__ico { background: linear-gradient(100deg, #b07500, #f7b84b); box-shadow: 0 4px 12px rgba(176,117,0,.28); }
+/* A mesa é a cor do CHIP, não a do cartão. */
+#ob-monitor .ob-c-bank  .ob-card__ico { background: linear-gradient(135deg, var(--otc-teal), var(--otc-blue)); }
+#ob-monitor .ob-c-legal .ob-card__ico { background: linear-gradient(135deg, #6d4c41, #a1887f); }
+#ob-monitor .ob-c-otc   .ob-card__ico { background: linear-gradient(135deg, var(--otc-blue), var(--otc-indigo)); }
+#ob-monitor .ob-c-mo    .ob-card__ico { background: linear-gradient(135deg, var(--otc-orange), var(--otc-yellow)); }
 
-#ob-monitor .ob-card__title { font-size: .95rem; font-weight: 700; letter-spacing: -.01em; margin: 0; color: var(--ins-body-color); }
-#ob-monitor .ob-card__sub { font-size: .68rem; color: var(--ins-secondary-color); margin: 0; }
+#ob-monitor .ob-card__title { font: 700 .95rem/1.25 var(--otc-font); letter-spacing: -.01em; margin: 0; color: var(--otc-text); }
+#ob-monitor .ob-card__sub { font-size: .68rem; color: var(--otc-text-2); margin: 0; }
 #ob-monitor .ob-card__val {
-    margin-left: auto; font-size: 1.45rem; font-weight: 800; letter-spacing: -.02em;
-    font-variant-numeric: tabular-nums; color: var(--ins-body-color);
+    margin-left: auto; font: 800 1.45rem/1.1 var(--otc-font-display); letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums; color: var(--otc-text);
 }
 
 /* ── A fila ──────────────────────────────────────────────────────────────
-   Rolagem interna: um card com 60 documentos não pode empurrar os outros dois
-   para fora da tela — as três mesas se leem lado a lado. O `flex:1 1 auto` faz
-   a fila ocupar o cartão inteiro, senão o card mais vazio mostra uma faixa do
-   fundo embaixo da lista. */
+   Rolagem interna: um card com 60 documentos não empurra os outros para fora
+   da tela. `flex:1 1 auto` faz a fila ocupar o cartão inteiro. */
 #ob-monitor .ob-list {
-    /* Liquid glass (pedido 2026-09-01, espelho do Confirmations Monitor —
-       HANDOFF §390): o terciário OPACO cobria o cartão de vidro e a coluna
-       lia chapada. Degrau translúcido, SEM blur próprio (dentro da raiz de
-       backdrop do cartão o desfoque do filho não amostra nada, §7). */
-    background: rgba(255, 255, 255, 0.28);
     flex: 1 1 auto; min-height: 22rem;
     max-height: calc(100vh - 23rem); overflow-y: auto; padding: .5rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.40);
-}
-[data-bs-theme=dark] #ob-monitor .ob-list {
-    background: transparent;   /* corpo = a MESMA superfície do chip de stat */
-    border-top-color: rgba(255, 255, 255, 0.10);
-}
-/* No escuro o cartão sobe para a receita do modal liquid-glass, com um par
-   :hover próprio (a regra empata com a de hover da página e venceria por
-   ordem). */
-[data-bs-theme=dark] #ob-monitor .ob-card {
-    /* O vidro é o MESMO dos chips de stat (pedido 2026-09-01: "igual
-       da primeira imagem"): fundo no token, borda hairline e o blur
-       estrutural do streamflow — nada de inset nem borda viva. O que
-       mantém a coluna glassy é a fila TRANSLÚCIDA por cima. */
-    /* blur BAIXO e alfa ABAIXO do token, de propósito (pedidos: "aumentar o
-       nível de translúcido" ×2): o desfoque alto homogeneíza o fundo e o véu
-       branco soma — com 5px e 2,5% a estrutura da página atravessa. */
-    background: rgba(255, 255, 255, 0.025);
-    border-color: var(--vr-card-border);
-    backdrop-filter: blur(5px) saturate(170%);
-    -webkit-backdrop-filter: blur(5px) saturate(170%);
-    box-shadow: var(--vr-card-shadow);
-}
-/* O item afunda no vidro em tom MARINHO (pedido da mesa), como no Monitor. */
-[data-bs-theme=dark] #ob-monitor .ob-item {
-    background: rgba(9, 26, 61, 0.70);
-    border-color: rgba(255, 255, 255, 0.10);
+    border-top: 1px solid var(--otc-sep);
 }
 #ob-monitor .ob-item {
-    background: var(--vr-card-bg, var(--ins-secondary-bg));
-    border: 1px solid var(--ins-border-color);
-    border-radius: 12px; padding: .8rem .9rem; margin-bottom: .5rem;
-    transition: border-color 200ms var(--ob-ease), box-shadow 200ms var(--ob-ease);
+    background: var(--otc-menu-bg);
+    border: 1px solid var(--otc-sep);
+    border-radius: var(--otc-r-md); padding: .8rem .9rem; margin-bottom: .5rem;
+    transition: border-color var(--otc-dur-fast) var(--otc-ease);
 }
 #ob-monitor .ob-item:last-child { margin-bottom: 0; }
 @media (hover: hover) and (pointer: fine) {
-    #ob-monitor .ob-item:hover {
-        border-color: var(--vr-accent-1, #0066cc);
-        box-shadow: 0 4px 14px rgba(15, 23, 42, .07);
-    }
+    #ob-monitor .ob-item:hover { border-color: var(--otc-accent-ink); }
 }
 #ob-monitor .ob-item__top { display: flex; align-items: baseline; gap: .4rem; }
-#ob-monitor .ob-item__cli { font-size: .9rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ins-body-color); }
-#ob-monitor .ob-item__age { margin-left: auto; font-size: .74rem; font-weight: 800; flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--ins-secondary-color); }
+#ob-monitor .ob-item__cli { font-size: .9rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--otc-text); }
+#ob-monitor .ob-item__age { margin-left: auto; font-size: .74rem; font-weight: 800; flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--otc-text-2); }
 /* O aging alto é a única cor da fila: pintar o que está no prazo é pintar quase
    tudo, e aí o vermelho some no meio. */
-#ob-monitor .ob-item__age.ob-late { color: var(--ins-danger, #d93025); }
-#ob-monitor .ob-item__age.ob-warn { color: #b07500; }
-#ob-monitor .ob-item__meta { font-size: .74rem; color: var(--ins-secondary-color); margin-top: .15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ob-monitor .ob-item__age.ob-late { color: var(--otc-danger); }
+#ob-monitor .ob-item__age.ob-warn { color: color-mix(in srgb, var(--otc-yellow) 55%, var(--otc-orange)); }
+#ob-monitor .ob-item__meta { font-size: .74rem; color: var(--otc-text-2); margin-top: .15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #ob-monitor .ob-item__foot { display: flex; align-items: center; gap: .35rem; margin-top: .45rem; flex-wrap: wrap; }
 
-/* O status é badge pill com gradiente — o padrão da casa em toda tabela. */
+/* O status é badge pill — a cor diz a mesa em que o CGD está. */
 .ob-badge {
-    display: inline-block; padding: .18rem .55rem; border-radius: 999px;
+    display: inline-block; padding: .18rem .55rem; border-radius: var(--otc-r-pill);
     font-size: .66rem; font-weight: 700; letter-spacing: .01em; color: #fff;
     white-space: nowrap; line-height: 1.35;
 }
-.ob-badge--active  { background-image: linear-gradient(100deg, #1a7f37, #34c759); }
-.ob-badge--bank    { background-image: linear-gradient(100deg, #0d7ea8, #4a849b); }
-.ob-badge--legal   { background-image: linear-gradient(100deg, #6d4c41, #a1887f); }
-.ob-badge--otc     { background-image: linear-gradient(100deg, #0066cc, #5e5ce6); }
-.ob-badge--mo      { background-image: linear-gradient(100deg, #b07500, #f7b84b); }
-.ob-badge--wait    { background-image: linear-gradient(100deg, #4a5568, #94a3b8); }
-.ob-badge--danger  { background-image: linear-gradient(100deg, #b3261e, #ff453a); }
+.ob-badge--active  { background-image: linear-gradient(135deg, var(--otc-green), color-mix(in srgb, var(--otc-green) 70%, #fff)); }
+.ob-badge--bank    { background-image: linear-gradient(135deg, var(--otc-teal), var(--otc-blue)); }
+.ob-badge--legal   { background-image: linear-gradient(135deg, #6d4c41, #a1887f); }
+.ob-badge--otc     { background-image: linear-gradient(135deg, var(--otc-blue), var(--otc-indigo)); }
+.ob-badge--mo      { background-image: linear-gradient(135deg, var(--otc-orange), var(--otc-yellow)); }
+.ob-badge--wait    { background: var(--otc-fill-2); color: var(--otc-text-2); }
+.ob-badge--danger  { background-image: linear-gradient(135deg, var(--otc-danger), color-mix(in srgb, var(--otc-danger) 70%, var(--otc-pink))); }
 /* A etapa DERIVADA (sem cadastro no /mapping) sai marcada: quem lê precisa
    saber que o app deduziu pelos carimbos, e não que alguém cadastrou. */
-.ob-badge--derived { background-image: none; background: transparent; color: var(--ins-secondary-color); border: 1px dashed var(--ins-border-color); }
+.ob-badge--derived { background-image: none; background: transparent; color: var(--otc-text-2); border: 1px dashed var(--otc-sep); }
 
-#ob-monitor .ob-empty { padding: 2.2rem 1rem; text-align: center; color: var(--ins-secondary-color); font-size: .82rem; }
-
-#ob-monitor #ob-dbline { font-size: .7rem; color: var(--ins-secondary-color); }
+#ob-monitor .ob-empty { padding: 2.2rem 1rem; text-align: center; color: var(--otc-text-2); font-size: .82rem; }
+#ob-monitor #ob-dbline { font-size: .7rem; color: var(--otc-text-2); }
 
 /* ── As ações da fila ────────────────────────────────────────────────────
    Legal anexa o Taxonomy num dropzone compacto; OTC abre o modal no clique;
    CEM MO tem os dois botões (download e conclusão). */
+#ob-monitor .ob-item-drop,
+#ob-otc-modal .ob-req-drop {
+    border: 1.5px dashed var(--otc-sep); border-radius: var(--otc-r-sm);
+    background: var(--otc-fill); color: var(--otc-text-2); cursor: pointer;
+    transition: border-color var(--otc-dur-fast) var(--otc-ease), background-color var(--otc-dur-fast) var(--otc-ease);
+}
+#ob-monitor .ob-item-drop:hover, #ob-monitor .ob-item-drop.is-over,
+#ob-otc-modal .ob-req-drop:hover, #ob-otc-modal .ob-req-drop.is-over {
+    border-color: var(--otc-accent-ink); background: var(--otc-accent-soft);
+}
+#ob-monitor .ob-item-drop i, #ob-otc-modal .ob-req-drop i { color: var(--otc-accent-ink); }
 #ob-monitor .ob-item-drop {
     display: flex; align-items: center; justify-content: center; gap: .4rem;
-    width: 100%; margin: .5rem 0 0; padding: .45rem .6rem; cursor: pointer;
-    font-size: .72rem; color: var(--ins-secondary-color);
-    border: 1.5px dashed var(--ins-border-color, #ced4da); border-radius: 8px;
-    background: var(--ins-tertiary-bg, #f8f9fa);
-    transition: border-color .15s ease, background .15s ease;
+    width: 100%; margin: .5rem 0 0; padding: .45rem .6rem; font-size: .72rem;
 }
-#ob-monitor .ob-item-drop i { font-size: .95rem; color: var(--vr-primary, #0066cc); }
-#ob-monitor .ob-item-drop:hover,
-#ob-monitor .ob-item-drop.is-over {
-    border-color: var(--vr-primary, #0066cc);
-    background: color-mix(in srgb, var(--vr-primary, #0066cc) 8%, transparent);
-}
+#ob-monitor .ob-item-drop i { font-size: .95rem; }
 #ob-monitor .ob-item-drop.is-busy { opacity: .55; pointer-events: none; }
 #ob-monitor .ob-c-otc .ob-item { cursor: pointer; }
 #ob-monitor .ob-item__act { display: flex; gap: .4rem; margin-top: .5rem; }
-#ob-monitor .ob-item__act .btn {
-    font-size: .7rem; padding: .22rem .55rem; line-height: 1.35;
-    border-radius: 8px; flex: 1 1 auto;
-}
+#ob-monitor .ob-item__act .btn { font-size: .7rem; padding: .22rem .55rem; line-height: 1.35; flex: 1 1 auto; }
 
-#ob-monitor .ob-empty { padding: 2.2rem 1rem; text-align: center; color: var(--ins-secondary-color); font-size: .82rem; }
-
-/* O modal do OTC segue o padrão da casa (liquid-glass, header py-2, fs-6);
-   o dropzone é o MESMO desenho do New Request. */
-#ob-otc-modal .ob-otc-hint { font-size: .7rem; color: var(--ins-secondary-color); margin-bottom: .3rem; }
+/* O dropzone do modal do OTC é o MESMO desenho do New Request. */
+#ob-otc-modal .ob-otc-hint { font-size: .7rem; color: var(--otc-text-2); margin-bottom: .3rem; }
 #ob-otc-modal .ob-req-drop {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: .3rem; width: 100%; min-height: 84px; cursor: pointer; margin: 0;
-    padding: .8rem 1rem; text-align: center;
-    border: 1.5px dashed var(--ins-border-color, #ced4da);
-    border-radius: 10px; background: var(--ins-tertiary-bg, #f8f9fa);
-    transition: border-color .15s ease, background .15s ease;
+    gap: .3rem; width: 100%; min-height: 84px; margin: 0; padding: .8rem 1rem; text-align: center;
 }
-#ob-otc-modal .ob-req-drop i { font-size: 1.35rem; color: var(--vr-primary, #0066cc); }
-#ob-otc-modal .ob-req-drop:hover,
-#ob-otc-modal .ob-req-drop.is-over {
-    border-color: var(--vr-primary, #0066cc);
-    background: color-mix(in srgb, var(--vr-primary, #0066cc) 8%, transparent);
-}
+#ob-otc-modal .ob-req-drop i { font-size: 1.35rem; }
 #ob-otc-modal .ob-req-drop.has-file {
-    border-style: solid; border-color: var(--ins-success, #198754);
-    background: color-mix(in srgb, var(--ins-success, #198754) 8%, transparent);
+    border-style: solid; border-color: var(--otc-green);
+    background: color-mix(in srgb, var(--otc-green) 10%, transparent);
 }
-#ob-otc-modal .ob-req-drop.has-file i { color: var(--ins-success, #198754); }
+#ob-otc-modal .ob-req-drop.has-file i { color: var(--otc-green); }
 #ob-otc-modal .ob-req-drop.is-invalid,
-#ob-otc-modal .form-control.is-invalid { border-color: var(--ins-danger, #d93025); }
+#ob-otc-modal .form-control.is-invalid { border-color: var(--otc-danger); }
 #ob-otc-modal .ob-otc-file-name { font-size: .72rem; font-weight: 600; word-break: break-all; }
 </style>
 {% endblock extra_css %}

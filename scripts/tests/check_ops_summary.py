@@ -446,8 +446,18 @@ for cls in ('ops-row-act', 'ops-row-del', 'ops-row-confirm'):
     check('a classe %s existe nas duas' % cls, (cls in HTML) and (cls in NDF), True)
 # O botao de acao e um quadrado arredondado de tamanho TRAVADO — sem os
 # min/max uma regra do tema deixa Confirm e Delete de tamanhos diferentes.
-for prop in ('min-width: 32px', 'max-width: 32px', 'border-radius: 10px !important'):
-    check('o botao de acao trava "%s"' % prop, prop in HTML, True)
+# Desde o rebranding (19/10/2026) o desenho do botão de linha mora no TEMA
+# (`otc.scss`, regra `table td .btn.<classe>`), não no <style> da página.
+_SCSS = read('apps/static/scss/otc.scss')
+def _theme_block(sel):
+    i = _SCSS.find(sel)
+    if i < 0:
+        return ''
+    a = _SCSS.find('{', i)
+    return _SCSS[a:_SCSS.find('}', a)]
+_ACT = _theme_block('table td .btn.ops-row-act')
+for prop in ('min-width: 32px !important', 'max-width: 32px !important', 'border-radius: 10px !important'):
+    check('o botao de acao trava "%s"' % prop, prop in _ACT, True)
 check('Trade Level usa badge, nao <select>', 'statusBadge(r.status' in HTML, True)
 check('Settlement Summary usa a pill New/Generated/Sent', 'statusPill(r.status' in HTML, True)
 for state, cls in (('Sent', 'text-bg-primary'), ('Generated', 'text-bg-success'), ('New', 'text-bg-info')):

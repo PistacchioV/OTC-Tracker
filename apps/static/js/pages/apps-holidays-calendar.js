@@ -83,28 +83,19 @@ function hcHexToRgb(hex) {
 }
 
 /**
- * CSS dos calendários criados pela tela. Os onze de sempre têm as classes
- * escritas no `<style>` da página; um calendário novo não teria como ter, e é
- * por isso que a regra dele nasce aqui, a partir da cor do registro — as MESMAS
- * cinco regras dos built-in (pill, borda do evento, ponto e link da list view e
- * a cor do pill do dayGrid), com o mesmo fundo a 15% de opacidade.
+ * CSS dos calendários criados pela tela. Os onze de sempre saem da classe
+ * `bg-X-subtle` (o mapa de cores do `<style>` da página); um calendário novo
+ * não teria como ter regra, e é por isso que ela nasce aqui, a partir da cor do
+ * registro. Só o matiz (`--hc-c`): pílula, barrinha da grade e ponto da lista
+ * são as MESMAS regras dos built-in, que leem esta variável.
  */
 function hcInjectCalendarCss(calendars) {
     const partes = [];
     calendars.forEach(function (c) {
         const cls = String(c.class || '').trim();
-        if (!/^hc-cal-[a-z0-9_-]+$/.test(cls)) return;   // built-in: CSS já existe
-        const rgb = hcHexToRgb(c.color);
-        if (!rgb) return;
-        const hex = c.color;
-        partes.push(
-            '.' + cls + '{background-color:rgba(' + rgb + ',.15)!important;color:' + hex + '!important}' +
-            '.fc-event.' + cls + '{border-color:' + hex + '!important}' +
-            '.fc-event.' + cls + ' .fc-event-title{color:' + hex + '!important}' +
-            '.fc-list-event.' + cls + ' .fc-list-event-dot{border-color:' + hex + '!important}' +
-            '.fc-list-event.' + cls + ' .fc-list-event-title a,.fc-list-event.' + cls + ' a{color:' + hex + '!important}' +
-            '.fc-daygrid-event.' + cls + '{color:' + hex + '!important}'
-        );
+        if (!/^hc-cal-[a-z0-9_-]+$/.test(cls)) return;   // built-in: o mapa da página
+        if (!hcHexToRgb(c.color)) return;
+        partes.push(':is(.fc-event,.fc-list-event,.external-event).' + cls + '{--hc-c:' + c.color + '}');
     });
     let tag = document.getElementById('hc-cal-styles');
     if (!tag) {
@@ -356,9 +347,11 @@ class CalendarSchedule {
             buttonIcons: false,
             initialView: 'dayGridMonth',
             handleWindowResize: true,
-            height: window.innerHeight - 240,
+            // a grade cresce com o conteúdo: altura fixa cortava a 6ª semana
+            height: 'auto',
             headerToolbar: {
-                left: 'prev,next today',
+                // ‹ Today › numa pílula só (um grupo de botões do FC)
+                left: 'prev,today,next',
                 center: 'title',
                 right: 'multiMonthYear,dayGridMonth,timeGridWeek,timeGridDay,listMonth'
             },
@@ -370,7 +363,9 @@ class CalendarSchedule {
                     duration: { years: 1 },
                     buttonText: 'Year',
                     multiMonthMaxColumns: 3,  // 3 meses por linha
-                    multiMonthMinWidth: 350
+                    multiMonthMinWidth: 280,  // dois meses lado a lado no card (o painel da lista fica ao lado)
+                    // no ano compacto, só a contagem ("+2 more" não cabe e saía cortado)
+                    moreLinkContent: function (arg) { return '+' + arg.num; }
                 }
             },
             

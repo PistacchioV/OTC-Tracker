@@ -8,142 +8,26 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
 <style>
-#cog-page {
-    --cog-hairline: rgba(0,0,0,.08);
-    --cog-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-}
-[data-bs-theme="dark"] #cog-page { --cog-hairline: rgba(255,255,255,.10); }
-
-/* ── Widgets ────────────────────────────────────────────────────────────── */
+{# Só o que é DESTA tela: os widgets de contagem, o Total em destaque, os
+   dígitos de largura fixa nas colunas de valor e a largura das colunas. Vidro,
+   campo de data, toolbar, tabela, botões de linha, modal e Export vêm do tema. #}
 #cog-page .cog-widgets .col { display: flex; margin-bottom: .5rem; }
-#cog-page .cog-widget {
-    flex: 1; border: 1px solid var(--cog-hairline); border-radius: 14px; padding: 1rem 1.1rem;
-    background: var(--ins-secondary-bg, #fff);
-    transition: transform 220ms var(--cog-ease-out), box-shadow 220ms var(--cog-ease-out);
-}
-@media (hover: hover) and (pointer: fine) {
-    #cog-page .cog-widget:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
-}
-#cog-page .cog-widget__head { display: flex; align-items: center; gap: .6rem; }
-#cog-page .cog-widget__icon {
-    width: 40px; height: 40px; border-radius: 11px; display: inline-flex; align-items: center;
-    justify-content: center; font-size: 1.2rem; flex-shrink: 0;
-}
-#cog-page .cog-widget__title { font-size: .8rem; font-weight: 700; letter-spacing: -.2px; margin: 0; text-transform: uppercase; }
-#cog-page .cog-widget__value { font-size: 1.8rem; font-weight: 700; line-height: 1; margin-left: auto; letter-spacing: -1px; }
-#cog-page .cog-widget--total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0; }
-#cog-page .cog-widget--total .cog-widget__title,
-#cog-page .cog-widget--total .cog-widget__value { color: #fff; }
-#cog-page .cog-widget--total .cog-widget__icon { background: rgba(255,255,255,.18); color: #fff; }
+#cog-page .cog-widget { flex: 1; padding: 1rem 1.1rem; }
 
-/* ── Reference date picker + Import ─────────────────────────────────────── */
-#cog-page .cog-datewrap { position: relative; width: 170px; }
-#cog-page .cog-datewrap input {
-    width: 100%; border: 1px solid var(--bs-border-color); border-radius: 10px;
-    padding: .3rem 2.1rem .3rem .7rem; font-size: .85rem; font-weight: 600;
-    color: var(--bs-body-color); background: var(--bs-secondary-bg, #fff); cursor: pointer;
-    transition: border-color 0.16s var(--cog-ease-out), box-shadow 0.16s var(--cog-ease-out);
-}
-#cog-page .cog-datewrap input:focus { outline: none; border-color: var(--bs-primary); box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), .18); }
-#cog-page .cog-cal-btn {
-    position: absolute; top: 0; right: 0; bottom: 0; width: 34px; display: inline-flex;
-    align-items: center; justify-content: center; color: var(--bs-secondary-color); cursor: pointer;
-}
-#cog-page .btn:active { transform: scale(0.97); }
-
-/* Respiro entre a barra de ferramentas e o cabeçalho da tabela. O `mb-2` da
-   barra sozinho encostava os botões na primeira linha do <thead>, e as duas
-   faixas liam como uma só — o `Add row` parecia parte do cabeçalho. */
+#cog-page .cog-widget__icon { width: 40px; height: 40px; font-size: 1.2rem; }
+#cog-page .cog-widget__title { font-size: .8rem; text-transform: uppercase; }
+#cog-page .cog-widget__value { font-size: 1.8rem; font-weight: 700; line-height: 1; margin-left: auto; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+/* o Total é a placa cheia do destaque (fora da família de vidro: `--total`) */
+/* respiro entre a barra de ferramentas e o cabeçalho da tabela */
 #cog-page .card-body > .table-responsive { padding-top: .85rem; }
-/* Row action buttons — solid circular (project standard, matches Intrag). */
-#cog-table td .btn-sm.rounded-circle { width: 32px; height: 32px; flex: 0 0 32px; padding: 0;
-  min-width: 32px; max-width: 32px;
-  font-size: 1rem; display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 10px !important; box-sizing: border-box; } /* squircle padrão (spec .ops-row-act) */
-/* Toolbar buttons — compact project standard (matches .ops-toolbar): keeps Add row,
-   Columns, Export and Clear filters uniform instead of the taller btn-sm default. */
-#cog-page .cog-toolbar .btn {
-    padding: .26rem .6rem; font-size: .72rem; font-weight: 600; border-radius: 8px; line-height: 1.2;
-}
-#cog-page .cog-toolbar .btn i { font-size: .95em; }
-/* Add-row button — press feedback + hover lift (Emil) */
-#cog-page .cog-addrow-btn { transition: transform 150ms var(--cog-ease-out), box-shadow 150ms var(--cog-ease-out); }
-@media (hover: hover) and (pointer: fine) {
-    #cog-page .cog-addrow-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,102,204,.28); }
-}
-/* Add-row modal — centered (not origin-aware): scale 0.96 + opacity, strong ease-out ~200ms */
-.cog-add-modal .modal-content { border-radius: 16px; }
-.cog-add-modal.fade .modal-dialog {
-    transform: scale(0.96); opacity: 0;
-    transition: transform 200ms var(--cog-ease-out), opacity 200ms var(--cog-ease-out);
-}
-.cog-add-modal.show .modal-dialog { transform: scale(1); opacity: 1; }
-.cog-add-modal .form-control:focus { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,.15); }
-@media (prefers-reduced-motion: reduce) {
-    #cog-page .cog-addrow-btn { transition: none; }
-    #cog-page .cog-addrow-btn:hover { transform: none; }
-    .cog-add-modal.fade .modal-dialog { transition: opacity 150ms ease; transform: none; }
-}
-
-/* ── Table ──────────────────────────────────────────────────────────────── */
-#cog-table thead th {
-    white-space: nowrap; text-overflow: ellipsis; padding: 8px 12px;
-    text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
-}
-#cog-table tbody td { white-space: nowrap; font-size: 0.74rem; text-align: center; vertical-align: middle; }
-/* Colunas de valor (#,##0.00): dígitos de largura fixa, para os milhares se
-   alinharem de uma linha para a outra e a comparação visual valer. */
+/* colunas de valor (#,##0.00): dígitos de largura fixa, os milhares se alinham */
 #cog-table tbody td.cog-num { font-variant-numeric: tabular-nums; }
 
-/* Control columns fixed; the 37 FXO data columns share a generic min-width.
-   nth-child(1)=checkbox (2)=actions (3)=Status (4+)=dados (_COG_COLUMNS). */
-  #cog-table th:nth-child(1), #cog-table td:nth-child(1) { min-width: 38px; width: 38px; }   /* checkbox */
-  #cog-table th:nth-child(2), #cog-table td:nth-child(2) { min-width: 64px; width: 64px; }   /* actions */
-  #cog-table th:nth-child(3), #cog-table td:nth-child(3) { min-width: 90px; width: 90px; }   /* Status */
-  #cog-table th:nth-child(n+4), #cog-table td:nth-child(n+4) { min-width: 130px; }            /* FXO data cols */
-
-/* Per-column filter row — New Deals style (subtle rounded inputs, Action Blue focus). */
-#cog-table thead tr.cog-th-filter th { padding: .3rem .4rem .5rem; border-top: 1px solid var(--cog-hairline); }
-#cog-table thead tr.cog-th-filter input.cog-col-filter {
-    width: 100%; min-width: 90px; height: 30px; font-size: .72rem; font-weight: 400;
-    text-align: center; padding: 3px 9px; border: 1px solid var(--cog-hairline); border-radius: 8px;
-    background: var(--bs-tertiary-bg, #f8f9fa); color: var(--ins-body-color);
-    transition: border-color 150ms var(--cog-ease-out), box-shadow 150ms var(--cog-ease-out),
-                background-color 150ms var(--cog-ease-out);
-}
-#cog-table thead tr.cog-th-filter input.cog-col-filter::placeholder { color: var(--ins-secondary-color); opacity: .8; }
-@media (hover: hover) and (pointer: fine) {
-    #cog-table thead tr.cog-th-filter input.cog-col-filter:hover { border-color: rgba(0,102,204,.35); }
-}
-#cog-table thead tr.cog-th-filter input.cog-col-filter:focus {
-    outline: none; border-color: #0066cc; background: var(--ins-secondary-bg, #fff);
-    box-shadow: 0 0 0 3px rgba(0,102,204,.15);
-}
-#cog-table thead tr.cog-th-filter input.cog-col-filter.cog-has-val {
-    border-color: rgba(0,102,204,.55); background: rgba(0,102,204,.06); font-weight: 500;
-}
-@media (prefers-reduced-motion: reduce) {
-    #cog-page * { transition: none !important; animation: none !important; }
-    #cog-page .btn:active { transform: none; }
-}
-
-/* Export collection dropdown — solid background (project standard, NOT scoped). */
-.dt-button-collection {
-    z-index: 2000; background: #fff !important; border: 1px solid rgba(0,0,0,.15) !important;
-    box-shadow: 0 4px 16px rgba(0,0,0,.18) !important; border-radius: .375rem !important;
-    padding: .25rem 0 !important; opacity: 1 !important;
-}
-[data-bs-theme="dark"] .dt-button-collection { background: #2b2f3a !important; border-color: rgba(255,255,255,.15) !important; }
-.dt-button-collection .dt-button, .dt-button-collection .dropdown-item {
-    display: flex; align-items: center; background: transparent !important; color: #212529 !important;
-    border: none !important; width: 100% !important; text-align: left !important;
-    padding: .4rem 1rem !important; font-size: .84rem !important; opacity: 1 !important;
-}
-[data-bs-theme="dark"] .dt-button-collection .dt-button,
-[data-bs-theme="dark"] .dt-button-collection .dropdown-item { color: #dee2e6 !important; }
-.dt-button-collection .dt-button:hover, .dt-button-collection .dropdown-item:hover {
-    background: rgba(13,110,253,.08) !important; color: #0d6efd !important;
-}
+/* Largura das colunas: as de controle fixas; as 37 de dados do FXO no piso. */
+#cog-table th:nth-child(1), #cog-table td:nth-child(1) { min-width: 38px; width: 38px; } /* checkbox */
+#cog-table th:nth-child(2), #cog-table td:nth-child(2) { min-width: 64px; width: 64px; } /* actions */
+#cog-table th:nth-child(3), #cog-table td:nth-child(3) { min-width: 90px; width: 90px; } /* Status */
+#cog-table th:nth-child(n+4), #cog-table td:nth-child(n+4) { min-width: 130px; } /* dados do FXO */
 </style>
 {% endblock extra_css %}
 
@@ -249,7 +133,7 @@
                 </div>
             </div>
             <div class="table-responsive">
-                <table id="cog-table" class="table table-sm table-hover table-striped table-centered mb-0" style="width:100%">
+                <table id="cog-table" data-otc-datatable class="table table-sm table-hover table-striped table-centered mb-0" style="width:100%">
                     <thead><tr id="cog-head"></tr></thead>
                     <tbody></tbody>
                 </table>

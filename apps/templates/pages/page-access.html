@@ -3,131 +3,84 @@
 {% block title %}Page Access{% endblock title %}
 
 {% block extra_css %}
+{# Só o que é DESTA tela: a lista de usuários, o selo do papel, o cabeçalho do
+   editor, a busca e o "clonar acesso" com ícone dentro, os blocos/seções do
+   menu com a grade de páginas e os avisos. Placa, botões, entrada e foco são
+   do tema. #}
 <style>
-  #pa-page { --pa-line: rgba(0,0,0,.08); --pa-blue: #0066cc; --pa-ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
-  [data-bs-theme="dark"] #pa-page { --pa-line: rgba(255,255,255,.10); }
-
-  /* Entrance (staggered, transform+opacity only) */
-  @keyframes pa-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-
-  /* ── Users panel ─────────────────────────────────────────── */
+  /* ── Users panel ── */
   #pa-page .pa-users { max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
-  #pa-page .pa-user { position: relative; text-align: left; border: 1px solid var(--pa-line); background: var(--ins-secondary-bg, #fff);
-      border-radius: 12px; padding: 9px 12px; cursor: pointer; display: flex; align-items: center; gap: 10px;
-      transition: transform 160ms var(--pa-ease-out), border-color 160ms var(--pa-ease-out), background-color 160ms var(--pa-ease-out);
-      animation: pa-rise 300ms var(--pa-ease-out) both; }
-  #pa-page .pa-user:active { transform: scale(0.985); }
-  #pa-page .pa-user.active { border-color: var(--pa-blue); background: rgba(0,102,204,.09); box-shadow: inset 3px 0 0 var(--pa-blue); }
-  #pa-page .pa-users .pa-user:nth-child(1){animation-delay:0ms} #pa-page .pa-users .pa-user:nth-child(2){animation-delay:35ms}
-  #pa-page .pa-users .pa-user:nth-child(3){animation-delay:70ms} #pa-page .pa-users .pa-user:nth-child(4){animation-delay:105ms}
-  #pa-page .pa-users .pa-user:nth-child(5){animation-delay:140ms} #pa-page .pa-users .pa-user:nth-child(n+6){animation-delay:170ms}
-  @media (hover:hover) and (pointer:fine) {
-    #pa-page .pa-user:hover { border-color: var(--pa-blue); background: rgba(0,102,204,.045); transform: translateY(-1px); }
-    #pa-page .pa-item:hover span { color: var(--pa-blue); }
-  }
+  #pa-page .pa-user { position: relative; text-align: left; border: 0; background: var(--otc-fill-hover); color: var(--otc-text);
+      border-radius: var(--otc-r-md); padding: 9px 12px; cursor: pointer; display: flex; align-items: center; gap: 10px;
+      transition: background-color var(--otc-dur-fast) var(--otc-ease), box-shadow var(--otc-dur-fast) var(--otc-ease); }
+  #pa-page .pa-user:hover { background: var(--otc-fill); }
+  #pa-page .pa-user.active { background: var(--otc-accent-soft); box-shadow: inset 3px 0 0 var(--otc-accent-ink); }
+  #pa-page .pa-user:focus-visible { outline: 0; box-shadow: 0 0 0 2px var(--otc-accent-ink); }
+  #pa-page .pa-item:hover span { color: var(--otc-accent-ink); }
   #pa-page .pa-avatar { position: relative; overflow: hidden; flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%;
       display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: .78rem;
-      background: rgba(0,102,204,.12); color: var(--pa-blue); }
+      background: var(--otc-accent-soft); color: var(--otc-accent-ink); }
   #pa-page .pa-avatar .pa-avatar-txt { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
   #pa-page .pa-avatar .pa-avatar-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   #pa-page .pa-user-meta { min-width: 0; display: flex; flex-direction: column; }
   #pa-page .pa-user-name { font-weight: 600; font-size: .86rem; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #pa-page .pa-user-sub { font-size: .72rem; color: var(--bs-secondary-color); }
+  #pa-page .pa-user-sub { font-size: .72rem; color: var(--otc-text-3); }
 
-  /* ── Role badge ──────────────────────────────────────────── */
+  /* ── Role badge ── */
   #pa-page .pa-role { font-size: .62rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
-      padding: 1px 7px; border-radius: 50rem; background: var(--bs-tertiary-bg); color: var(--bs-secondary-color); }
-  #pa-page .pa-role.is-admin { background: rgba(0,102,204,.14); color: var(--pa-blue); }
+      padding: 1px 7px; border-radius: var(--otc-r-pill); background: var(--otc-fill); color: var(--otc-text-2); }
+  #pa-page .pa-role.is-admin { background: var(--otc-accent-soft); color: var(--otc-accent-ink); }
 
-  /* ── Editor header ───────────────────────────────────────── */
+  /* ── Editor header ── */
   #pa-page .pa-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   #pa-page .pa-head .pa-avatar { width: 42px; height: 42px; font-size: .9rem; }
-  #pa-page .pa-summary { font-size: .74rem; font-weight: 600; color: var(--pa-blue); background: rgba(0,102,204,.10);
-      border-radius: 50rem; padding: 3px 11px; }
-  #pa-page .pa-summary.is-full { color: #1b5e20; background: #e8f5e9; }
-  [data-bs-theme="dark"] #pa-page .pa-summary.is-full { color: #a5d6a7; background: rgba(76,175,80,.18); }
+  #pa-page .pa-summary { font-size: .74rem; font-weight: 600; color: var(--otc-accent-ink); background: var(--otc-accent-soft); padding: 3px 11px; }
+  #pa-page .pa-summary.is-full { color: var(--otc-green); background: color-mix(in srgb, var(--otc-green) 16%, transparent); }
 
-  /* ── Toolbar ─────────────────────────────────────────────── */
+  /* ── Toolbar: busca e clonar acesso, com o ícone DENTRO do campo ── */
   #pa-page .pa-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 0 4px; }
-  /* Compact, uniform toolbar buttons (Save was oversized vs. the rest). */
-  #pa-page .pa-toolbar .btn { padding: .3rem .72rem !important; font-size: .78rem !important; font-weight: 600 !important;
-      line-height: 1.35 !important; border-radius: 8px !important; }
-  #pa-page .pa-toolbar .btn i { font-size: .9rem; }
   #pa-page .pa-search { position: relative; flex: 1; min-width: 180px; display: flex; align-items: center; }
   #pa-page .pa-search input { width: 100%; padding-left: 30px; }
-  /* Lucide swaps the <i data-lucide> for an <svg>, so target both and keep it
-     vertically centered inside the field (not floating above it). */
   #pa-page .pa-search i, #pa-page .pa-search svg { position: absolute; left: 9px; top: 50%;
-      transform: translateY(-50%); width: 15px; height: 15px; color: var(--bs-secondary-color);
-      pointer-events: none; }
-  /* Clone-access control */
+      transform: translateY(-50%); width: 15px; height: 15px; color: var(--otc-text-3); pointer-events: none; z-index: 2; }
   #pa-page .pa-clone { position: relative; display: flex; align-items: center; }
   #pa-page .pa-clone select { padding-left: 30px; max-width: 220px; font-size: .8rem; }
   #pa-page .pa-clone i, #pa-page .pa-clone svg { position: absolute; left: 9px; top: 50%;
-      transform: translateY(-50%); width: 15px; height: 15px; color: var(--pa-blue); pointer-events: none; }
+      transform: translateY(-50%); width: 15px; height: 15px; color: var(--otc-accent-ink); pointer-events: none; z-index: 2; }
 
-  /* ── Block (top-level menu group) ────────────────────────── */
-  #pa-page .pa-block { border: 1px solid var(--pa-line); border-radius: 14px; margin-bottom: 16px; overflow: hidden;
-      animation: pa-rise 260ms var(--pa-ease-out) both; }
-  #pa-page .pa-block:nth-child(1){animation-delay:0ms} #pa-page .pa-block:nth-child(2){animation-delay:40ms}
-  #pa-page .pa-block:nth-child(3){animation-delay:80ms} #pa-page .pa-block:nth-child(4){animation-delay:120ms}
-  #pa-page .pa-block:nth-child(n+5){animation-delay:150ms}
+  /* ── Block (grupo do menu) ── */
+  #pa-page .pa-block { border-radius: var(--otc-r-inner); margin-bottom: 16px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--otc-sep); }
   #pa-page .pa-block__head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
-      padding: 11px 15px; background: rgba(0,102,204,.06); border-bottom: 1px solid var(--pa-line); }
-  [data-bs-theme="dark"] #pa-page .pa-block__head { background: rgba(0,102,204,.12); }
-  #pa-page .pa-block__title { font-size: .8rem; font-weight: 800; letter-spacing: .02em; color: var(--bs-body-color);
-      display: flex; align-items: center; }
-  #pa-page .pa-block__count { font-size: .68rem; font-weight: 700; color: var(--pa-blue); background: var(--ins-secondary-bg,#fff);
-      border: 1px solid var(--pa-line); border-radius: 50rem; padding: 1px 8px; margin-left: 9px; }
+      padding: 11px 15px; background: var(--otc-accent-soft); border-bottom: 1px solid var(--otc-sep); }
+  #pa-page .pa-block__title { font-size: .8rem; font-weight: 800; letter-spacing: .02em; color: var(--otc-text); display: flex; align-items: center; }
+  #pa-page .pa-block__count { font-size: .68rem; font-weight: 700; color: var(--otc-accent-ink); background: var(--otc-fill);
+      border-radius: var(--otc-r-pill); padding: 1px 8px; margin-left: 9px; }
   #pa-page .pa-block__body { padding: 12px; display: flex; flex-direction: column; gap: 0; }
-  #pa-page .pa-block__body .pa-sec { animation: none; margin-bottom: 10px; }
+  #pa-page .pa-block__body .pa-sec { margin-bottom: 10px; }
   #pa-page .pa-block__body .pa-sec:last-child { margin-bottom: 0; }
-  /* A block that wraps a single section drops the inner section chrome (the block
-     head already carries the title + toggle). */
   #pa-page .pa-block--solo .pa-block__body { padding: 0; }
-  #pa-page .pa-block--solo .pa-sec { border: 0; border-radius: 0; margin: 0; }
+  #pa-page .pa-block--solo .pa-sec { box-shadow: none; border-radius: 0; margin: 0; }
   #pa-page .pa-block--solo .pa-sec__head { display: none; }
 
-  /* ── Section cards ───────────────────────────────────────── */
-  #pa-page .pa-sec { border: 1px solid var(--pa-line); border-radius: 12px; margin-bottom: 12px; overflow: hidden;
-      animation: pa-rise 260ms var(--pa-ease-out) both; }
-  #pa-page .pa-sec:nth-child(1){animation-delay:0ms} #pa-page .pa-sec:nth-child(2){animation-delay:40ms}
-  #pa-page .pa-sec:nth-child(3){animation-delay:80ms} #pa-page .pa-sec:nth-child(4){animation-delay:120ms}
-  #pa-page .pa-sec:nth-child(5){animation-delay:160ms} #pa-page .pa-sec:nth-child(n+6){animation-delay:190ms}
+  /* ── Seções ── */
+  #pa-page .pa-sec { border-radius: var(--otc-r-md); margin-bottom: 12px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--otc-sep); }
   #pa-page .pa-sec__head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
-      padding: 9px 14px; background: var(--bs-tertiary-bg); border-bottom: 1px solid var(--pa-line); }
-  #pa-page .pa-sec__title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--bs-secondary-color); }
+      padding: 9px 14px; background: var(--otc-fill-hover); border-bottom: 1px solid var(--otc-sep); }
+  #pa-page .pa-sec__title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--otc-text-2); }
   #pa-page .pa-sec__crumb { font-weight: 600; opacity: .6; }
-  #pa-page .pa-sec__leaf { color: var(--bs-body-color); }
-  #pa-page .pa-sec__count { font-size: .68rem; font-weight: 600; color: var(--bs-secondary-color); background: var(--ins-secondary-bg,#fff);
-      border: 1px solid var(--pa-line); border-radius: 50rem; padding: 1px 8px; margin-left: 8px; }
+  #pa-page .pa-sec__leaf { color: var(--otc-text); }
+  #pa-page .pa-sec__count { font-size: .68rem; font-weight: 600; color: var(--otc-text-2); background: var(--otc-fill);
+      border-radius: var(--otc-r-pill); padding: 1px 8px; margin-left: 8px; }
   #pa-page .pa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 2px 20px; padding: 10px 14px; }
   #pa-page .pa-item { display: flex; align-items: center; gap: 9px; font-size: .83rem; padding: 4px 0; margin: 0; cursor: pointer; }
   #pa-page .pa-item .form-check-input { margin: 0; cursor: pointer; flex-shrink: 0; }
-  #pa-page .pa-item .form-check-input:checked { background-color: var(--pa-blue); border-color: var(--pa-blue); }
   #pa-page .pa-item span { line-height: 1.25; }
 
-  #pa-page .pa-note { font-size: .78rem; border-radius: 10px; padding: 9px 13px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
-  #pa-page .pa-note--info { background: #e3f2fd; color: #0d47a1; }
-  #pa-page .pa-note--admin { background: #fff8e1; color: #7b5e00; }
-  [data-bs-theme="dark"] #pa-page .pa-note--info { background: rgba(33,150,243,.18); color: #90caf9; }
-  [data-bs-theme="dark"] #pa-page .pa-note--admin { background: rgba(255,193,7,.18); color: #ffd54f; }
-  #pa-page .pa-empty { text-align: center; color: var(--bs-secondary-color); padding: 60px 20px; }
-  #pa-page #pa-note { animation: pa-rise 240ms var(--pa-ease-out) both; }
-
-  /* Press feedback (Emil): buttons + toggles feel responsive */
-  #pa-page .btn { transition: transform 150ms var(--pa-ease-out), box-shadow 150ms var(--pa-ease-out); }
-  #pa-page .btn:active { transform: scale(0.97); }
-  #pa-page .form-check-input { transition: background-color 150ms var(--pa-ease-out), border-color 150ms var(--pa-ease-out); }
-  /* Focus: Action Blue ring */
-  #pa-page .pa-user:focus-visible, #pa-page input:focus-visible, #pa-page .form-check-input:focus-visible {
-      outline: none; border-color: var(--pa-blue); box-shadow: 0 0 0 3px rgba(0,102,204,.18); }
-
-  @media (prefers-reduced-motion: reduce) {
-    #pa-page .pa-user, #pa-page .pa-sec, #pa-page #pa-note { animation: none !important; }
-    #pa-page *, #pa-page .btn, #pa-page .form-check-input { transition: none !important; }
-    #pa-page .pa-user:active, #pa-page .btn:active { transform: none; }
-  }
+  /* ── Avisos ── */
+  #pa-page .pa-note { font-size: .78rem; border-radius: var(--otc-r-md); padding: 9px 13px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; color: var(--otc-text); }
+  #pa-page .pa-note--info { background: var(--otc-accent-soft); }
+  #pa-page .pa-note--admin { background: color-mix(in srgb, var(--otc-yellow) 18%, transparent); }
+  #pa-page .pa-empty { text-align: center; color: var(--otc-text-3); padding: 60px 20px; }
 </style>
 {% endblock extra_css %}
 

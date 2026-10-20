@@ -4,278 +4,98 @@
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
+{# Só o que é DESTA tela: o rail dos templates (categorias, ponto "vivo",
+   variante), os chips de metadados e de página, os blocos "lego" com a cor
+   de cada bloco, a grade de campos (não é DataTable: a centralização e a
+   linha de filtro — o único filtro dela — são daqui), as origens, os pickers,
+   o builder e a fórmula do Calculated. Placa, botões e modais são do tema. #}
 <style>
-    #fi-page { --fi-ease: cubic-bezier(0.22, 1, 0.36, 1); }
-    #fi-page .fi-page-icon {
-        width: 44px; height: 44px; border-radius: 12px;
-        background: rgba(0, 102, 204, 0.1);
-        display: flex; align-items: center; justify-content: center;
-        flex-shrink: 0; color: #0066cc;
-        transition: transform .25s var(--fi-ease);
-    }
-    #fi-page .page-title-head:hover .fi-page-icon { transform: scale(1.1) rotate(-4deg); }
-
-    /* Rail esquerdo — mesmo desenho do Mapping / Electronic Inventory */
-    #fi-page .fi-cat-title {
-        font-size: .68rem; font-weight: 700; text-transform: uppercase;
-        letter-spacing: .04em; color: var(--ins-secondary-color);
-        margin: .9rem 0 .3rem .25rem;
-    }
+    /* ── Rail esquerdo — mesmo desenho do Mapping / Electronic Inventory ── */
+    #fi-page .fi-cat-title { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--otc-text-3); margin: .9rem 0 .3rem .25rem; }
     #fi-page .fi-cat-title:first-child { margin-top: 0; }
-    #fi-page .fi-tpl-item {
-        display: flex; align-items: center; gap: .6rem;
-        padding: .55rem .7rem; border-radius: 10px; cursor: pointer;
-        color: var(--ins-body-color); text-decoration: none;
-        border: 1px solid transparent; min-width: 0;
-        transition: background-color .18s var(--fi-ease), border-color .18s var(--fi-ease), color .18s var(--fi-ease);
-    }
-    #fi-page .fi-tpl-item .fi-tpl-name {
-        font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    #fi-page .fi-tpl-item .fi-tpl-dot {
-        width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
-        background: var(--ins-secondary-bg); border: 1px solid var(--ins-border-color);
-    }
-    #fi-page .fi-tpl-item.is-live .fi-tpl-dot { background: #2ecc71; border-color: #2ecc71; }
-    #fi-page .fi-tpl-item .fi-tpl-badge {
-        margin-left: auto; font-size: .65rem; font-weight: 600; flex: 0 0 auto;
-        background: var(--ins-secondary-bg); color: var(--ins-secondary-color);
-        padding: .1rem .45rem; border-radius: 999px;
-    }
-    #fi-page .fi-tpl-item.is-active {
-        background: rgba(0, 102, 204, .10); border-color: rgba(0, 102, 204, .22);
-        color: #0066cc; font-weight: 600;
-    }
-    #fi-page .fi-tpl-item.is-active .fi-tpl-badge { background: #0066cc; color: #fff; }
-    [data-bs-theme=dark] #fi-page .fi-tpl-item.is-active { color: #6ea8fe; background: rgba(41,151,255,.14); border-color: rgba(41,151,255,.30); }
-    [data-bs-theme=dark] #fi-page .fi-tpl-item.is-active .fi-tpl-badge { background: #2997ff; }
-    #fi-page .fi-rail-hint { font-size: .72rem; color: var(--ins-secondary-color); }
+    #fi-page .fi-cat-title.fi-cat-sub { font-size: .62rem; opacity: .75; margin-top: .55rem; padding-left: .6rem; }
+    #fi-page .fi-tpl-item { display: flex; align-items: center; gap: .6rem; color: var(--otc-text); text-decoration: none; min-width: 0; }
+    #fi-page .fi-tpl-item .fi-tpl-name { font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #fi-page .fi-tpl-item .fi-tpl-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--otc-fill); box-shadow: inset 0 0 0 1px var(--otc-sep); }
+    #fi-page .fi-tpl-item.is-live .fi-tpl-dot { background: var(--otc-green); box-shadow: none; }
+    #fi-page .fi-tpl-item .fi-tpl-badge { margin-left: auto; font-size: .65rem; font-weight: 600; flex: 0 0 auto; background: var(--otc-fill); color: var(--otc-text-2); padding: .1rem .45rem; border-radius: var(--otc-r-pill); }
+    #fi-page .fi-tpl-item.is-active .fi-tpl-badge { background: rgba(255,255,255,.22); color: #fff; }
+    #fi-page .fi-rail-hint { font-size: .72rem; color: var(--otc-text-3); }
+    /* variante por par de pernas: indentada sob o base, com o par (MGT x JPM) */
+    #fi-page .fi-tpl-item.fi-tpl-variant { margin-left: 16px; }
+    #fi-page .fi-tpl-item .fi-tpl-pair { margin-left: auto; font-size: .62rem; font-weight: 700; flex: 0 0 auto; background: color-mix(in srgb, var(--otc-purple) 16%, transparent); color: var(--otc-purple); padding: .1rem .45rem; border-radius: var(--otc-r-pill); white-space: nowrap; }
+    #fi-page .fi-tpl-item.is-active .fi-tpl-pair { background: rgba(255,255,255,.22); color: #fff; }
 
-    /* Toolbar — dimensionamento padrão do app */
-    #fi-page .btn-toolbar-all {
-        font-size: .75rem !important; padding: .25rem .6rem !important;
-        height: auto !important; line-height: 1.4 !important; white-space: nowrap !important;
-        transition: transform 100ms ease-out;
-    }
-    #fi-page .btn-toolbar-all:active { transform: scale(.96) !important; }
-    @media (hover: hover) and (pointer: fine) {
-        #fi-page .btn-toolbar-all:hover { transform: translateY(-1px); }
-    }
-
-    /* Chips de metadados do template */
-    #fi-page .fi-meta-chip {
-        display: inline-flex; align-items: center; gap: .35rem;
-        font-size: .72rem; font-weight: 600;
-        background: var(--ins-secondary-bg); color: var(--ins-body-color);
-        border: 1px solid var(--ins-border-color);
-        padding: .2rem .6rem; border-radius: 999px;
-    }
+    /* ── Chips de metadados e de página ── */
+    #fi-page .fi-meta-chip { display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 600; background: var(--otc-fill); color: var(--otc-text); padding: .2rem .6rem; border-radius: var(--otc-r-pill); }
     #fi-page .fi-meta-chip i { font-size: .85rem; opacity: .75; }
-    #fi-page .fi-meta-chip .fi-meta-k { color: var(--ins-secondary-color); font-weight: 500; }
-    #fi-page a.fi-page-chip {
-        display: inline-flex; align-items: center; gap: .35rem;
-        font-size: .72rem; font-weight: 600; text-decoration: none;
-        background: rgba(0, 102, 204, .08); color: #0066cc;
-        border: 1px solid rgba(0, 102, 204, .20);
-        padding: .2rem .6rem; border-radius: 999px;
-        transition: background-color .15s var(--fi-ease), transform .15s var(--fi-ease);
-    }
-    @media (hover: hover) and (pointer: fine) {
-        #fi-page a.fi-page-chip:hover { background: rgba(0, 102, 204, .16); transform: translateY(-1px); }
-    }
-    [data-bs-theme=dark] #fi-page a.fi-page-chip { color: #6ea8fe; background: rgba(41,151,255,.12); border-color: rgba(41,151,255,.28); }
-    #fi-page a.fi-page-chip.is-here {
-        background: #0066cc; color: #fff; border-color: #0066cc;
-    }
-    [data-bs-theme=dark] #fi-page a.fi-page-chip.is-here { background: #2997ff; color: #fff; border-color: #2997ff; }
-    #fi-page .fi-cat-title.fi-cat-sub {
-        font-size: .62rem; opacity: .75; margin-top: .55rem; padding-left: .6rem;
-    }
+    #fi-page .fi-meta-chip .fi-meta-k { color: var(--otc-text-2); font-weight: 500; }
+    #fi-page a.fi-page-chip { display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 600; text-decoration: none; background: var(--otc-accent-soft); color: var(--otc-accent-ink); padding: .2rem .6rem; border-radius: var(--otc-r-pill); transition: background-color var(--otc-dur-fast) var(--otc-ease); }
+    #fi-page a.fi-page-chip:hover { background: color-mix(in srgb, var(--otc-accent) 26%, transparent); }
+    #fi-page a.fi-page-chip.is-here { background: var(--otc-accent); color: #fff; }
 
-    /* ── Os blocos "lego" ─────────────────────────────────────────────── */
-    /* Sem recuo: os blocos alinham com o card do template no topo
-       (2026-09-03). A espinha tracejada e o conector de encaixe saíram com o
-       margin-left de 38px que existia para eles — atrás de um card de largura
-       cheia, os dois viravam risco perdido. Os "studs" do cabeçalho ficam. */
+    /* ── Os blocos "lego": a cor do bloco na borda, nos studs e na contagem ── */
     #fi-page .fi-spine { position: relative; }
-    #fi-page .fi-block {
-        position: relative; margin-bottom: 1rem;
-        background: var(--vr-card-bg, var(--ins-secondary-bg));
-        border: 1px solid var(--ins-border-color); border-radius: 14px;
-        overflow: hidden;
-        opacity: 0; transform: translateY(8px);
-        animation: fiBlockIn 300ms var(--fi-ease) forwards;
-    }
-    @keyframes fiBlockIn { to { opacity: 1; transform: translateY(0); } }
-    @media (prefers-reduced-motion: reduce) {
-        #fi-page .fi-block { animation: fiFade 200ms ease forwards; transform: none; }
-        @keyframes fiFade { to { opacity: 1; } }
-    }
-    #fi-page .fi-block-head {
-        display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
-        padding: .65rem .9rem; border-bottom: 1px solid var(--ins-border-color);
-        border-left: 4px solid var(--fi-acc, #0066cc);
-    }
-    /* os "studs" do lego */
+    #fi-page .fi-block { position: relative; margin-bottom: 1rem; overflow: hidden; border-radius: var(--otc-r-xl); background: var(--otc-glass); -webkit-backdrop-filter: var(--otc-blur); backdrop-filter: var(--otc-blur); box-shadow: var(--otc-depth); }
+    #fi-page .fi-block-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; padding: .65rem .9rem; border-bottom: 1px solid var(--otc-sep); border-left: 4px solid var(--fi-acc, var(--otc-blue)); }
     #fi-page .fi-studs { display: inline-flex; gap: 4px; }
-    #fi-page .fi-studs span {
-        width: 9px; height: 9px; border-radius: 3px;
-        background: var(--fi-acc, #0066cc); opacity: .8;
-    }
+    #fi-page .fi-studs span { width: 9px; height: 9px; border-radius: 3px; background: var(--fi-acc, var(--otc-blue)); opacity: .8; }
     #fi-page .fi-block-title { font-size: .85rem; font-weight: 700; margin: 0; }
-    #fi-page .fi-block-note { font-size: .72rem; color: var(--ins-secondary-color); flex-basis: 100%; }
-    #fi-page .fi-block-count {
-        margin-left: auto; font-size: .68rem; font-weight: 600;
-        background: color-mix(in srgb, var(--fi-acc, #0066cc) 12%, transparent);
-        color: var(--fi-acc, #0066cc);
-        padding: .12rem .55rem; border-radius: 999px;
-    }
-    #fi-page .fi-acc-header   { --fi-acc: #0066cc; }
-    #fi-page .fi-acc-registro { --fi-acc: #2e9e5b; }
-    #fi-page .fi-acc-extra    { --fi-acc: #8957e5; }
-    #fi-page .fi-acc-footer   { --fi-acc: #8a94a6; }
-    [data-bs-theme=dark] #fi-page .fi-acc-header   { --fi-acc: #6ea8fe; }
-    [data-bs-theme=dark] #fi-page .fi-acc-registro { --fi-acc: #4cd07d; }
-    [data-bs-theme=dark] #fi-page .fi-acc-extra    { --fi-acc: #b197fc; }
+    #fi-page .fi-block-note { font-size: .72rem; color: var(--otc-text-3); flex-basis: 100%; }
+    #fi-page .fi-block-count { margin-left: auto; font-size: .68rem; font-weight: 600; background: color-mix(in srgb, var(--fi-acc, var(--otc-blue)) 14%, transparent); color: var(--fi-acc, var(--otc-blue)); padding: .12rem .55rem; border-radius: var(--otc-r-pill); }
+    #fi-page .fi-acc-header   { --fi-acc: var(--otc-blue); }
+    #fi-page .fi-acc-registro { --fi-acc: var(--otc-green); }
+    #fi-page .fi-acc-extra    { --fi-acc: var(--otc-purple); }
+    #fi-page .fi-acc-footer   { --fi-acc: var(--otc-text-3); }
 
-    /* Tabela de campos — padrão da casa (th/td centrados, fontes do padrão) */
+    /* ── Grade de campos (não é DataTable) ── */
     #fi-page .fi-block table.fi-fields { margin-bottom: 0; }
-    #fi-page .fi-block table.fi-fields thead th {
-        text-align: center !important; vertical-align: middle !important;
-        font-size: .7rem; white-space: normal;
-    }
-    #fi-page .fi-block table.fi-fields tbody td {
-        text-align: center; vertical-align: middle; font-size: .8rem;
-    }
-    #fi-page .fi-block table.fi-fields td.fi-col-num {
-        font-variant-numeric: tabular-nums; white-space: nowrap;
-    }
-    /* Descrição é prosa: mantém quebra e largura, mas centrada como o resto */
-    #fi-page .fi-block table.fi-fields td.fi-col-prose {
-        font-size: .75rem; min-width: 220px; max-width: 420px;
-    }
-    /* Linha de filtro por coluna — padrão da casa (12px/28px, centrado
-       pela regra estrutural do visual-refresh.css) */
+    #fi-page .fi-block table.fi-fields thead th { text-align: center !important; vertical-align: middle !important; font-size: .7rem; white-space: normal; }
+    #fi-page .fi-block table.fi-fields tbody td { text-align: center; vertical-align: middle; font-size: .8rem; }
+    #fi-page .fi-block table.fi-fields td.fi-col-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    #fi-page .fi-block table.fi-fields td.fi-col-prose { font-size: .75rem; min-width: 220px; max-width: 420px; }
     #fi-page .fi-block table.fi-fields thead th.fi-flt-cell { padding: .2rem .25rem; }
-    #fi-page .fi-block table.fi-fields thead th input.fi-flt {
-        font-size: 12px; height: 28px; width: 100%; min-width: 60px;
-        padding: .15rem .35rem;
-    }
-    #fi-page .fi-block table.fi-fields td.fi-col-content {
-        max-width: 200px; font-size: .75rem;
-    }
-    /* Texto de Content/Description QUEBRA dentro da própria célula: um token
-       comprido sem espaço (o nome de arquivo "AAAAMMDD_Cadastro_...") não tem
-       ponto de quebra natural e vazava por cima das colunas vizinhas. */
-    #fi-page .fi-block table.fi-fields td.fi-col-content,
-    #fi-page .fi-block table.fi-fields td.fi-col-prose {
-        white-space: normal; overflow-wrap: anywhere; word-break: break-word;
-    }
-    #fi-page .fi-fmt-hint { display: block; font-size: .65rem; color: var(--ins-secondary-color); }
-    #fi-page .fi-src-badge {
-        display: inline-block; font-size: .65rem; font-weight: 700;
-        padding: .1rem .5rem; border-radius: 999px; white-space: nowrap;
-    }
-    #fi-page .fi-src-fixed      { background: rgba(138,148,166,.16); color: #6c757d; }
-    #fi-page .fi-src-page       { background: rgba(0,102,204,.12);  color: #0066cc; }
-    #fi-page .fi-src-mapping    { background: rgba(46,158,91,.14);  color: #2e9e5b; }
-    #fi-page .fi-src-calculated { background: rgba(230,126,34,.14); color: #d35400; }
-    #fi-page .fi-src-manual     { background: rgba(137,87,229,.14); color: #8957e5; }
-    [data-bs-theme=dark] #fi-page .fi-src-page       { color: #6ea8fe; }
-    [data-bs-theme=dark] #fi-page .fi-src-mapping    { color: #4cd07d; }
-    [data-bs-theme=dark] #fi-page .fi-src-calculated { color: #f5a25c; }
-    [data-bs-theme=dark] #fi-page .fi-src-manual     { color: #b197fc; }
+    #fi-page .fi-block table.fi-fields thead th input.fi-flt { font-size: 12px; height: 28px; min-height: 28px; width: 100%; min-width: 60px; padding: .15rem .35rem; }
+    #fi-page .fi-block table.fi-fields td.fi-col-content { max-width: 200px; font-size: .75rem; }
+    /* Content/Description QUEBRAM na célula: um token comprido sem espaço
+       ("AAAAMMDD_Cadastro_...") vazava por cima das colunas vizinhas. */
+    #fi-page .fi-block table.fi-fields :is(td.fi-col-content, td.fi-col-prose) { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+    #fi-page .fi-fmt-hint { display: block; font-size: .65rem; color: var(--otc-text-3); }
 
-    /* Valor da origem: chip para coluna/mapping, monoespaçado para fixo,
-       nota em subtexto — a célula lê como seleção, não como frase. */
-    #fi-page .fi-src-chip {
-        display: inline-flex; align-items: center; gap: .3rem;
-        font-size: .72rem; font-weight: 600;
-        padding: .12rem .55rem; border-radius: 999px; white-space: nowrap;
-    }
+    /* ── Origem de cada campo ── */
+    #fi-page .fi-src-badge { display: inline-block; font-size: .65rem; font-weight: 700; padding: .1rem .5rem; border-radius: var(--otc-r-pill); white-space: nowrap; }
+    #fi-page .fi-src-chip { display: inline-flex; align-items: center; gap: .3rem; font-size: .72rem; font-weight: 600; padding: .12rem .55rem; border-radius: var(--otc-r-pill); white-space: nowrap; }
     #fi-page .fi-src-chip i { font-size: .8rem; }
-    #fi-page code.fi-src-value {
-        font-size: .75rem; font-variant-numeric: tabular-nums;
-        background: var(--ins-secondary-bg); color: var(--ins-body-color);
-        border: 1px solid var(--ins-border-color);
-        padding: .08rem .45rem; border-radius: 6px; white-space: pre;
-    }
-    #fi-page .fi-src-blank { font-size: .72rem; color: var(--ins-secondary-color); font-style: italic; }
-    #fi-page .fi-src-note {
-        display: block; font-size: .66rem; color: var(--ins-secondary-color);
-        margin: .15rem auto 0; max-width: 280px; white-space: normal;
-    }
+    #fi-page :is(.fi-src-badge, .fi-src-chip) { --fi-src: var(--otc-text-2); color: var(--fi-src); background: color-mix(in srgb, var(--fi-src) 14%, transparent); }
+    #fi-page .fi-src-page       { --fi-src: var(--otc-blue); }
+    #fi-page .fi-src-mapping    { --fi-src: var(--otc-green); }
+    #fi-page .fi-src-calculated { --fi-src: var(--otc-orange); }
+    #fi-page .fi-src-manual     { --fi-src: var(--otc-purple); }
+    #fi-page code.fi-src-value { font-size: .75rem; font-variant-numeric: tabular-nums; background: var(--otc-fill); color: var(--otc-text); padding: .08rem .45rem; border-radius: 6px; white-space: pre; }
+    #fi-page .fi-src-blank { font-size: .72rem; color: var(--otc-text-3); font-style: italic; }
+    #fi-page .fi-src-note { display: block; font-size: .66rem; color: var(--otc-text-3); margin: .15rem auto 0; max-width: 280px; white-space: normal; }
     #fi-page td.fi-col-srcd { text-align: center; min-width: 170px; }
 
     /* Edição inline das colunas de origem */
-    #fi-page .fi-src-input {
-        font-size: .72rem; padding: .15rem .4rem; height: 26px;
-        text-align: center;
-    }
-    /* Num <select> o padding acima comia o espaço da setinha do .form-select
-       (o caret é background na direita) e ela caía em cima do texto: devolve
-       o respiro à direita e alinha o texto à esquerda, para os dois não
-       disputarem o centro. */
-    #fi-page select.fi-src-input {
-        text-align: left;
-        padding-right: 1.6rem;
-        background-position: right .45rem center;
-    }
-    #fi-page td.fi-col-prose .fi-src-input,
-    #fi-page td.fi-col-srcd .fi-src-input { text-align: left; }
-    #fi-page input.fi-src-input.fi-src-value { font-family: var(--bs-font-monospace, monospace); }
+    #fi-page .fi-src-input { font-size: .72rem; padding: .15rem .4rem; height: 26px; min-height: 26px; text-align: center; }
+    /* no <select>, o respiro à direita é da setinha (o caret é background) */
+    #fi-page select.fi-src-input { text-align: left; padding-right: 1.6rem; background-position: right .45rem center; }
+    #fi-page td.fi-col-prose .fi-src-input, #fi-page td.fi-col-srcd .fi-src-input { text-align: left; }
+    #fi-page input.fi-src-input.fi-src-value { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 
-    /* Modais — pickers */
-    #fiPagePicker .fi-pick-item, #fiLinkPicker .fi-pick-item {
-        display: flex; align-items: center; gap: .5rem;
-        font-size: .78rem; padding: .3rem .5rem; border-radius: 8px; cursor: pointer;
-    }
-    #fiPagePicker .fi-pick-item:hover, #fiLinkPicker .fi-pick-item:hover { background: var(--ins-secondary-bg); }
-    #fi-page .fi-pick-wrap { max-height: 46vh; overflow: auto; border: 1px solid var(--ins-border-color); border-radius: 10px; padding: .4rem; }
-
-    /* Builder de template */
-    #fiBuilderBlocks .fi-b-block {
-        border: 1px solid var(--ins-border-color); border-radius: 12px;
-        padding: .7rem .8rem; margin-bottom: .8rem;
-    }
+    /* ── Modais: pickers, builder ── */
+    :is(#fiPagePicker, #fiLinkPicker) .fi-pick-item { display: flex; align-items: center; gap: .5rem; font-size: .78rem; padding: .3rem .5rem; border-radius: var(--otc-r-sm); cursor: pointer; }
+    :is(#fiPagePicker, #fiLinkPicker) .fi-pick-item:hover { background: var(--otc-fill-hover); }
+    #fi-page .fi-pick-wrap { max-height: 46vh; overflow: auto; box-shadow: inset 0 0 0 1px var(--otc-sep); border-radius: var(--otc-r-md); padding: .4rem; }
+    #fiBuilderBlocks .fi-b-block { box-shadow: inset 0 0 0 1px var(--otc-sep); border-radius: var(--otc-r-inner); padding: .7rem .8rem; margin-bottom: .8rem; }
     #fiBuilderBlocks table td { padding: .15rem; }
-    #fiBuilderBlocks .form-control { font-size: .72rem; padding: .15rem .35rem; height: 26px; }
-    #fiBuilderBlocks .fi-b-del {
-        width: 26px; height: 26px; min-width: 26px; max-width: 26px; padding: 0;
-        border-radius: 8px !important; display: inline-flex;
-        align-items: center; justify-content: center;
-    }
-    #fi-page .fi-empty {
-        text-align: center; color: var(--ins-secondary-color);
-        padding: 3rem 1rem; font-size: .85rem;
-    }
-
-    /* Botões do rodapé do modal de variante: o MESMO tamanho para todos.
-       min-width iguala a largura ("Close" e "Edit" têm textos diferentes) e
-       height/padding/font com !important seguram a ALTURA — regra de tema em
-       .btn deixava o Close mais alto que os irmãos. */
-    #fiTplViewModal .fi-vw-btn {
-        min-width: 104px;
-        height: 33px !important;
-        padding: .3rem .8rem !important;
-        font-size: .8rem !important;
-        line-height: 1.3 !important;
-        display: inline-flex; align-items: center; justify-content: center;
-    }
+    #fiBuilderBlocks .form-control { font-size: .72rem; padding: .15rem .35rem; height: 26px; min-height: 26px; }
+    #fiBuilderBlocks .fi-b-del { width: 26px; height: 26px; min-width: 26px; max-width: 26px; min-height: 26px; padding: 0; border-radius: 8px !important; display: inline-flex; align-items: center; justify-content: center; }
+    #fi-page .fi-empty { text-align: center; color: var(--otc-text-3); padding: 3rem 1rem; font-size: .85rem; }
 
     /* Builder de fórmula do Source Calculated (Edit Sources e modal) */
     #fi-page .fi-calc-wrap { display: inline-flex; flex-direction: column; gap: .25rem; min-width: 200px; }
     #fi-page .fi-calc-wrap .fi-ca-args { display: inline-flex; flex-direction: column; gap: .25rem; }
-
-    /* Variantes por par de pernas: item do rail indentado sob o base,
-       badge com o par (MGT x JPM). */
-    #fi-page .fi-tpl-item.fi-tpl-variant { margin-left: 16px; }
-    #fi-page .fi-tpl-item .fi-tpl-pair {
-        margin-left: auto; font-size: .62rem; font-weight: 700; flex: 0 0 auto;
-        background: rgba(137, 87, 229, .14); color: #8957e5;
-        padding: .1rem .45rem; border-radius: 999px; white-space: nowrap;
-    }
-    [data-bs-theme=dark] #fi-page .fi-tpl-item .fi-tpl-pair { color: #b197fc; }
 </style>
 {% endblock extra_css %}
 
@@ -284,7 +104,7 @@
 
     <div class="page-title-head d-flex align-items-center">
         <div class="d-flex align-items-center gap-3 flex-grow-1">
-            <div class="fi-page-icon"><i data-lucide="blocks"></i></div>
+            <div class="fi-product-icon"><i data-lucide="blocks"></i></div>
             <div>
                 <h4 class="fs-xl fw-bold m-0" data-lang="fi-title">File Interpreter</h4>
                 <!-- Não enumere aqui de que arquivos se trata (B3, Intrag, …)

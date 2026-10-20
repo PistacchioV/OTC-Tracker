@@ -8,415 +8,161 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet"/>
 <link href="{{ config.ASSETS_ROOT }}/plugins/select2/select2.min.css" rel="stylesheet"/>
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
+{# Só o que é DESTA tela: a largura de cada coluna (com o texto cortado em
+   "…" a partir da 3ª), a linha nova do Add Row e o diálogo de detalhes da
+   contraparte (duplo clique) — cabeçalho e rodapé fixos, zonas, contas com
+   maker/checker, CGD, contatos, os botões de cor semântica e o aviso de
+   "salvo". Tabela, toolbar, botões de linha, tooltips, Export e a moldura do
+   Swal são do tema. #}
 <style>
-    .btn-toolbar-all { font-size:0.75rem!important; padding:0.25rem 0.6rem!important; white-space:nowrap!important; }
-    .col-search-row th { padding:4px 6px; }
-    .col-search-row input { font-size:11px; height:26px; padding:2px 6px; }
-    /* Alinhamento centralizado — padrão New Deals (th e td, corpo e clone) */
-    #ref-data-table th { white-space:nowrap; font-size:0.7rem; text-transform:uppercase; padding:8px 10px; text-align:center !important; vertical-align:middle !important; }
-    #ref-data-table td { white-space:nowrap; font-size:0.8rem; text-align:center; vertical-align:middle; }
-    td.editing input, td.editing select { font-size:0.78rem; width:100%; box-sizing:border-box; }
-    td.editing .select2-container { width:100%!important; }
-    /* Ações de linha no squircle padrão do app (spec .ops-row-act): 32×32, raio 10,
-       colorido com tooltip colorido. */
-    /* min/max travam a ALTURA também: uma regra de tema com `min-height` em
-       `.btn` deixava um botão maior que o vizinho, e 32×34 não é squircle. */
-    .btn-act {
-        width:32px; height:32px;
-        min-width:32px; max-width:32px; min-height:32px; max-height:32px;
-        padding:0; flex:0 0 auto; box-sizing:border-box;
-        display:inline-flex; align-items:center; justify-content:center;
-        line-height:1; border-radius:10px !important;
-    }
-    /* `!important` porque o `.fs-13` do tema também é: enquanto o ícone
-       carregava aquela classe ele saía com 13 px onde o app usa 16. */
-    .btn-act > i { font-size:1rem !important; }
-    .edit-actions-wrap { display:flex; gap:4px; justify-content:center; }
-    /* Tooltips coloridos — mesma paleta do New Deals */
-    .tooltip-success .tooltip-inner { background-color:#198754; }
-    .tooltip-info    .tooltip-inner { background-color:#0dcaf0; color:#000; }
-    .tooltip-danger  .tooltip-inner { background-color:#dc3545; }
-    .tooltip-success.bs-tooltip-top .tooltip-arrow::before,
-    .tooltip-success.bs-tooltip-auto[data-popper-placement^="top"] .tooltip-arrow::before { border-top-color:#198754 !important; }
-    .tooltip-info.bs-tooltip-top .tooltip-arrow::before,
-    .tooltip-info.bs-tooltip-auto[data-popper-placement^="top"] .tooltip-arrow::before { border-top-color:#0dcaf0 !important; }
-    .tooltip-danger.bs-tooltip-top .tooltip-arrow::before,
-    .tooltip-danger.bs-tooltip-auto[data-popper-placement^="top"] .tooltip-arrow::before { border-top-color:#dc3545 !important; }
-    .pill-badge { font-size:0.68rem; }
-    .select2-dropdown { font-size:0.78rem; }
-    .new-row-edit td { background-color: rgba(0,102,204,0.06)!important; }
-    #ref-data-table .row-rd-check { cursor:pointer; }
-    .dt-scroll-head thead th,
-    .dt-scroll-headInner thead th,
-    .dataTables_scrollHeadInner thead th {
-        text-align: center !important;
-        vertical-align: middle !important;
-    }
+    #ref-data-table th { text-transform: uppercase; }
+    #ref-data-table :is(th, td):nth-child(n+3) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #ref-data-table :is(th, td):nth-child(-n+2) { overflow: visible; text-overflow: clip; }
+    #ref-data-table :is(th, td):nth-child(1) { width: 36px; min-width: 36px; } /* checkbox */
+    #ref-data-table :is(th, td):nth-child(2) { width: 110px; min-width: 110px; } /* Actions */
+    #ref-data-table :is(th, td):nth-child(3) { width: 110px; min-width: 110px; } /* Status */
+    #ref-data-table :is(th, td):nth-child(4) { width: 470px; min-width: 470px; } /* Counterparty */
+    #ref-data-table :is(th, td):nth-child(5) { width: 150px; min-width: 150px; } /* Economic Group */
+    #ref-data-table :is(th, td):nth-child(6) { width: 350px; min-width: 350px; } /* Banker */
+    #ref-data-table :is(th, td):nth-child(7) { width: 120px; min-width: 120px; } /* Signature Type */
+    #ref-data-table :is(th, td):nth-child(8) { width: 140px; min-width: 140px; } /* Tax ID */
+    #ref-data-table :is(th, td):nth-child(9) { width: 95px; min-width: 95px; } /* ECI */
+    #ref-data-table :is(th, td):nth-child(10) { width: 90px; min-width: 90px; } /* SPN */
+    #ref-data-table :is(th, td):nth-child(11) { width: 110px; min-width: 110px; } /* CASID */
+    #ref-data-table :is(th, td):nth-child(12) { width: 130px; min-width: 130px; } /* UCN */
+    #ref-data-table :is(th, td):nth-child(13) { width: 110px; min-width: 110px; } /* B3 Account */
+    #ref-data-table :is(th, td):nth-child(14) { width: 170px; min-width: 170px; } /* Commodities Acronym */
+    #ref-data-table :is(th, td):nth-child(15) { width: 150px; min-width: 150px; } /* FX Cash Acronym */
+    #ref-data-table .row-rd-check { cursor: pointer; }
+    .edit-actions-wrap { display: flex; gap: 4px; justify-content: center; }
+    .pill-badge { font-size: .68rem; }
+    .new-row-edit td { background-color: var(--otc-accent-soft) !important; }
 
-    /* ── FIX alinhamento scrollX: header clone × corpo ──
-       table-layout:fixed torna a largura do <col> autoritativa nas duas tabelas
-       (header + corpo), imune à diferença de padding/conteúdo. Cada largura é
-       definida 1× cobrindo #ref-data-table E o clone do header (.dt-scroll-head/
-       .dataTables_scrollHead) — o DataTables remove o id da tabela clonada. */
-    .dt-scroll-headInner table,
-    .dataTables_scrollHeadInner table,
-    .dt-scroll-body > table,
-    .dataTables_scrollBody > table { table-layout: fixed !important; }
-    /* Ellipsis só nas colunas de dados (a partir da 3ª). Checkbox (1) e Actions (2)
-       ficam de fora — text-overflow:ellipsis sobre um <input>/botões renderiza um
-       "…" indesejado e cortaria os botões. */
-    #ref-data-table th:nth-child(n+3), #ref-data-table td:nth-child(n+3),
-    .dt-scroll-head thead th:nth-child(n+3), .dataTables_scrollHead thead th:nth-child(n+3) {
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    /* Colunas de controle: conteúdo centralizado, sem clip/ellipsis. */
-    #ref-data-table th:nth-child(-n+2), #ref-data-table td:nth-child(-n+2) {
-        text-align: center; overflow: visible; text-overflow: clip;
-    }
-    /* Colunas específicas com larguras adequadas — um bloco por coluna */
-    /* nth-child(1)=checkbox (2)=Actions (3)=Status (4..15)=dados */
-    #ref-data-table th:nth-child(1),  #ref-data-table td:nth-child(1),
-    .dt-scroll-head thead th:nth-child(1),  .dataTables_scrollHead thead th:nth-child(1)  { width:36px;  min-width:36px;  }
-    #ref-data-table th:nth-child(2),  #ref-data-table td:nth-child(2),
-    .dt-scroll-head thead th:nth-child(2),  .dataTables_scrollHead thead th:nth-child(2)  { width:110px; min-width:110px; } /* Actions (ajuste o px aqui) */
-    #ref-data-table th:nth-child(3),  #ref-data-table td:nth-child(3),
-    .dt-scroll-head thead th:nth-child(3),  .dataTables_scrollHead thead th:nth-child(3)  { width:110px; min-width:110px; } /* Status */
-    #ref-data-table th:nth-child(4),  #ref-data-table td:nth-child(4),
-    .dt-scroll-head thead th:nth-child(4),  .dataTables_scrollHead thead th:nth-child(4)  { width:470px; min-width:470px; } /* Counterparty */
-    #ref-data-table th:nth-child(5),  #ref-data-table td:nth-child(5),
-    .dt-scroll-head thead th:nth-child(5),  .dataTables_scrollHead thead th:nth-child(5)  { width:150px; min-width:150px; } /* Economic Group */
-    #ref-data-table th:nth-child(6),  #ref-data-table td:nth-child(6),
-    .dt-scroll-head thead th:nth-child(6),  .dataTables_scrollHead thead th:nth-child(6)  { width:350px; min-width:350px; } /* Banker */
-    #ref-data-table th:nth-child(7),  #ref-data-table td:nth-child(7),
-    .dt-scroll-head thead th:nth-child(7),  .dataTables_scrollHead thead th:nth-child(7)  { width:120px; min-width:120px; } /* Signature Type */
-    #ref-data-table th:nth-child(8),  #ref-data-table td:nth-child(8),
-    .dt-scroll-head thead th:nth-child(8),  .dataTables_scrollHead thead th:nth-child(8)  { width:140px; min-width:140px; } /* Tax ID */
-    #ref-data-table th:nth-child(9),  #ref-data-table td:nth-child(9),
-    .dt-scroll-head thead th:nth-child(9),  .dataTables_scrollHead thead th:nth-child(9)  { width:95px;  min-width:95px;  } /* ECI */
-    #ref-data-table th:nth-child(10), #ref-data-table td:nth-child(10),
-    .dt-scroll-head thead th:nth-child(10), .dataTables_scrollHead thead th:nth-child(10) { width:90px;  min-width:90px;  } /* SPN */
-    #ref-data-table th:nth-child(11), #ref-data-table td:nth-child(11),
-    .dt-scroll-head thead th:nth-child(11), .dataTables_scrollHead thead th:nth-child(11) { width:110px; min-width:110px; } /* CASID */
-    #ref-data-table th:nth-child(12), #ref-data-table td:nth-child(12),
-    .dt-scroll-head thead th:nth-child(12), .dataTables_scrollHead thead th:nth-child(12) { width:130px; min-width:130px; } /* UCN */
-    #ref-data-table th:nth-child(13), #ref-data-table td:nth-child(13),
-    .dt-scroll-head thead th:nth-child(13), .dataTables_scrollHead thead th:nth-child(13) { width:110px; min-width:110px; } /* B3 Account */
-    #ref-data-table th:nth-child(14), #ref-data-table td:nth-child(14),
-    .dt-scroll-head thead th:nth-child(14), .dataTables_scrollHead thead th:nth-child(14) { width:170px; min-width:170px; } /* Commodities Acronym */
-    #ref-data-table th:nth-child(15), #ref-data-table td:nth-child(15),
-    .dt-scroll-head thead th:nth-child(15), .dataTables_scrollHead thead th:nth-child(15) { width:150px; min-width:150px; } /* FX Cash Acronym */
-    /* Export collection dropdown — fundo sólido e texto legível */
-    .dt-button-collection {
-        background: #fff !important;
-        border: 1px solid rgba(0,0,0,.15) !important;
-        box-shadow: 0 4px 16px rgba(0,0,0,.18) !important;
-        border-radius: 0.375rem !important;
-        padding: 0.25rem 0 !important;
-        opacity: 1 !important;
-    }
-    [data-bs-theme="dark"] .dt-button-collection {
-        background: #2b2f3a !important;
-        border-color: rgba(255,255,255,.15) !important;
-    }
-    .dt-button-collection .dt-button {
-        background: transparent !important;
-        color: #212529 !important;
-        border: none !important;
-        width: 100% !important;
-        text-align: left !important;
-        padding: 0.4rem 1rem !important;
-        font-size: 0.82rem !important;
-        opacity: 1 !important;
-    }
-    [data-bs-theme="dark"] .dt-button-collection .dt-button {
-        color: #dee2e6 !important;
-    }
-    .dt-button-collection .dt-button:hover,
-    .dt-button-collection .dt-button:focus {
-        background: rgba(13,110,253,.08) !important;
-        color: #0d6efd !important;
-    }
-    [data-bs-theme="dark"] .dt-button-collection .dt-button:hover {
-        background: rgba(255,255,255,.08) !important;
-        color: #6ea8fe !important;
-    }
-
-    /* ════════════════════════════════════════════════════════════════════
-       Counterparty details dialog (double-click) — liquid glass + editor
-       ════════════════════════════════════════════════════════════════════ */
-    .swal2-container.cp-glass-bg { backdrop-filter: blur(3px); }
-
-    .cp-glass {
-        position: relative;
-        border-radius: 1.125rem !important;
-        background: rgba(255, 255, 255, 0.62) !important;
-        backdrop-filter: blur(22px) saturate(180%);
-        -webkit-backdrop-filter: blur(22px) saturate(180%);
-        border: 1px solid rgba(255, 255, 255, 0.9) !important;
-        box-shadow:
-            0 24px 64px rgba(0,0,0,0.16),
-            0 6px 20px rgba(0,0,0,0.08),
-            inset 0 1.5px 0 rgba(255,255,255,0.95),
-            inset 1px 0 0 rgba(255,255,255,0.6) !important;
-        overflow: visible;   /* let select2 dropdown grow past the popup bottom */
-        padding: 0 !important;
-    }
-    .cp-glass::before {
-        content: '';
-        position: absolute; top: 0; left: 6%; right: 6%; height: 1.5px;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,.85) 25%, rgba(255,255,255,.98) 50%, rgba(255,255,255,.85) 75%, transparent);
-        pointer-events: none; z-index: 5;
-    }
-    [data-bs-theme="dark"] .cp-glass {
-        background: rgba(28, 30, 38, 0.72) !important;
-        border: 1px solid rgba(255,255,255,0.16) !important;
-        box-shadow:
-            0 32px 80px rgba(0,0,0,0.55),
-            0 8px 24px rgba(0,0,0,0.30),
-            inset 0 1.5px 0 rgba(255,255,255,0.45),
-            inset 1px 0 0 rgba(255,255,255,0.15) !important;
-    }
-
-    /* entrance / exit — modal stays centered (origin: center) */
-    @keyframes cpGlassIn  { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
-    @keyframes cpGlassOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.97); } }
-    .cp-glass.swal2-show { animation: cpGlassIn 200ms cubic-bezier(0.23,1,0.32,1); }
-    .cp-glass.swal2-hide { animation: cpGlassOut 140ms ease-out; }
-    @media (prefers-reduced-motion: reduce) {
-        .cp-glass.swal2-show, .cp-glass.swal2-hide { animation: none; }
-    }
-
-    /* fixed header + footer, scrolling body */
-    .cp-glass { max-height: 92vh; }
+    /* ── Diálogo da contraparte: a moldura de vidro é a do Swal do tema ── */
+    .swal2-popup.cp-glass { padding: 0 !important; overflow: visible; max-height: 92vh; }   /* o select2 passa da borda */
     .cp-glass .swal2-html-container {
-        margin: 0 !important;
-        max-height: 88vh;
-        overflow: hidden;
-        border-radius: 1.125rem;   /* keep content clipped to the rounded glass */
-        text-align: left;
-        display: flex !important;   /* beat SweetAlert2's inline display */
-        flex-direction: column;
-        min-height: 0;
+        margin: 0 !important; max-height: 88vh; overflow: hidden; border-radius: inherit; text-align: left;
+        display: flex !important; flex-direction: column; min-height: 0;   /* vence o display inline do Swal */
     }
+    .cp-head { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 18px 22px 12px; border-bottom: 1px solid var(--otc-sep); }
+    .cp-title { flex: 1 1 auto; min-width: 0; font-size: 1rem; font-weight: 700; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; color: var(--otc-text); }
+    .cp-spn { font-size: .72rem; font-weight: 500; color: var(--otc-text-3); margin-top: 2px; }
+    .cp-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px 22px 20px; color: var(--otc-text); }
+    .cp-footer { flex: 0 0 auto; display: flex; justify-content: flex-end; gap: 8px; padding: 12px 22px 18px; border-top: 1px solid var(--otc-sep); }
 
-    /* header: title only */
-    .cp-head {
-        flex: 0 0 auto;
-        display: flex; align-items: center; gap: 10px;
-        padding: 16px 20px 12px; border-bottom: 1px solid rgba(0,0,0,0.06);
-    }
-    [data-bs-theme="dark"] .cp-head { border-bottom-color: rgba(255,255,255,0.10); }
-    .cp-title { flex: 1 1 auto; min-width: 0; font-size: 1rem; font-weight: 700; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; }
-    .cp-spn { font-size: 0.72rem; font-weight: 500; color: var(--ins-secondary-color, #6c757d); margin-top: 2px; }
-
-    .cp-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px 20px 20px; }
-
-    /* footer: solid action buttons, right-aligned (red cancel/close · green save) */
-    .cp-footer {
-        flex: 0 0 auto;
-        display: flex; justify-content: flex-end; gap: 8px;
-        padding: 12px 20px 16px; border-top: 1px solid rgba(0,0,0,0.06);
-    }
-    [data-bs-theme="dark"] .cp-footer { border-top-color: rgba(255,255,255,0.10); }
-
+    /* botões de cor semântica: azul edita, verde salva/confirma, vermelho fecha/remove */
+    .cp-iconbtn, .cp-glass :is(.cp-okbtn, .cp-cxbtn, .cp-add-submit, .cp-add-cancel, .cp-editbtn), .cp-remove, .cp-addbtn { --cp-btn: var(--otc-blue); }
+    :is(.cp-iconbtn.is-save, .cp-glass .cp-okbtn, .cp-glass .cp-add-submit) { --cp-btn: var(--otc-green); }
+    :is(.cp-iconbtn.is-close, .cp-glass .cp-cxbtn, .cp-glass .cp-add-cancel, .cp-remove) { --cp-btn: var(--otc-danger); }
+    .cp-addbtn { --cp-btn: var(--otc-accent); }
     .cp-iconbtn {
-        flex: 0 0 auto; min-width: 44px; height: 34px; border-radius: 8px;
+        flex: 0 0 auto; min-width: 44px; height: 34px; border-radius: var(--otc-r-sm); border: 0; cursor: pointer; font-size: 1.05rem;
         display: inline-flex; align-items: center; justify-content: center;
-        border: 0; color: #fff; cursor: pointer; font-size: 1.05rem;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.18);
-        transition: transform 160ms cubic-bezier(0.23,1,0.32,1), filter 160ms ease;
     }
-    .cp-iconbtn i { color: #fff; }
-    .cp-iconbtn:hover { filter: brightness(1.07); }
-    .cp-iconbtn:active { transform: scale(0.93); }
-    .cp-iconbtn.is-edit  { background: #0d6efd; }
-    .cp-iconbtn.is-save  { background: #2e7d32; }
-    .cp-iconbtn.is-close { background: #d32f2f; }
+    .cp-iconbtn, .cp-glass :is(.cp-okbtn, .cp-cxbtn, .cp-add-submit, .cp-add-cancel, .cp-editbtn), .cp-remove, .cp-addbtn {
+        background: var(--cp-btn) !important; color: #fff !important; border: 0 !important;
+        transition: filter var(--otc-dur-fast) var(--otc-ease), scale var(--otc-dur-fast) var(--otc-ease);
+    }
+    :is(.cp-iconbtn, .cp-okbtn, .cp-cxbtn, .cp-add-submit, .cp-add-cancel, .cp-editbtn, .cp-remove, .cp-addbtn) i,
+    .cp-addbtn span { color: #fff !important; }
+    :is(.cp-iconbtn, .cp-okbtn, .cp-cxbtn, .cp-add-submit, .cp-add-cancel, .cp-editbtn, .cp-remove, .cp-addbtn):hover { filter: brightness(1.08); }
+    :is(.cp-iconbtn, .cp-okbtn, .cp-cxbtn, .cp-add-submit, .cp-add-cancel, .cp-remove, .cp-addbtn, .cp-date-btn):active { scale: .94; }
 
-    /* zone */
+    /* zonas */
     .cp-zone { margin-top: 16px; }
     .cp-zone:first-child { margin-top: 4px; }
     .cp-zone-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-    .cp-zone-title {
-        font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-        color: var(--ins-secondary-color, #6c757d); flex: 1 1 auto;
-    }
-    .cp-addbtn {
-        flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px;
-        font-size: 0.7rem; font-weight: 600; padding: 4px 10px; border-radius: 7px;
-        border: 1px solid #0d6efd; background: #0d6efd;
-        color: #fff; cursor: pointer;
-        transition: transform 160ms cubic-bezier(0.23,1,0.32,1), background 160ms ease, box-shadow 160ms ease;
-    }
-    .cp-addbtn i, .cp-addbtn span { color: #fff; }
-    .cp-addbtn:hover { background: #0b5ed7; border-color: #0b5ed7; box-shadow: 0 2px 8px rgba(13,110,253,0.35); }
-    .cp-addbtn:active { transform: scale(0.95); }
+    .cp-zone-title { font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--otc-text-3); flex: 1 1 auto; }
+    .cp-addbtn { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; font-size: .7rem; font-weight: 600; padding: 4px 10px; border-radius: var(--otc-r-pill); cursor: pointer; }
+    .cp-subzone-title { font-size: .66rem; font-weight: 700; letter-spacing: .05em; color: var(--otc-text-3); margin: 8px 0 4px; }
 
-    .cp-subzone-title { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.05em; color: var(--ins-secondary-color,#6c757d); opacity: 0.85; margin: 8px 0 4px; }
-
-    /* view-mode value lines */
-    .cp-kv { display: flex; gap: 8px; font-size: 0.84rem; padding: 3px 0; }
-    .cp-kv .cp-k { flex: 0 0 auto; min-width: 92px; font-weight: 600; color: var(--ins-secondary-color,#6c757d); }
+    /* linhas de valor (modo leitura) */
+    .cp-kv { display: flex; gap: 8px; font-size: .84rem; padding: 3px 0; }
+    .cp-kv .cp-k { flex: 0 0 auto; min-width: 92px; font-weight: 600; color: var(--otc-text-2); }
     .cp-kv .cp-v { flex: 1 1 auto; word-break: break-word; }
-    .cp-empty { font-size: 0.82rem; color: var(--ins-secondary-color,#6c757d); font-style: italic; }
-    .cp-card {
-        border: 1px solid rgba(0,0,0,0.07); border-radius: 10px; padding: 8px 12px; margin-bottom: 6px;
-        background: rgba(255,255,255,0.4); font-size: 0.84rem;
-    }
-    [data-bs-theme="dark"] .cp-card { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.10); }
+    .cp-empty { font-size: .82rem; color: var(--otc-text-3); font-style: italic; }
+    .cp-card, .cp-contact-card { border-radius: var(--otc-r-md); background: var(--otc-fill-hover); font-size: .84rem; }
+    .cp-card { padding: 8px 12px; margin-bottom: 6px; }
+    .cp-contact-card { padding: 10px; margin-bottom: 8px; }
 
-    /* banking accounts (maker/checker) */
-    .cp-acc-row {
-        display: flex; align-items: center; justify-content: space-between; gap: 8px;
-        border: 1px solid rgba(0,0,0,0.07); border-radius: 10px; padding: 7px 10px; margin-bottom: 6px;
-        background: rgba(255,255,255,0.4);
-    }
-    [data-bs-theme="dark"] .cp-acc-row { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.10); }
-    .cp-acc-main { font-size: 0.84rem; min-width: 0; }
+    /* contas (maker/checker) */
+    .cp-glass .cp-acc-row { justify-content: space-between; gap: 8px; border-radius: var(--otc-r-md); padding: 7px 10px; margin-bottom: 6px; background: var(--otc-fill-hover); }
+    .cp-glass .cp-acc-row.is-default { box-shadow: inset 3px 0 0 var(--otc-accent-ink); }
+    .cp-acc-main { font-size: .84rem; min-width: 0; }
     .cp-acc-main .badge { display: inline-block; margin-top: 6px; vertical-align: middle; }
-    /* CGD: date + status badge sit on the same line, vertically centred */
-    .cp-cgd-main { display: flex; align-items: center; gap: 8px; }
-    .cp-cgd-main .badge { margin-top: 0; }
-    /* Contact: name + status badge on the same line, vertically centred */
-    .cp-acc-namebadge { display: flex; align-items: center; gap: 8px; }
-    .cp-acc-namebadge .badge { margin-top: 0; }
+    .cp-cgd-main, .cp-acc-namebadge { display: flex; align-items: center; gap: 8px; }
+    .cp-cgd-main .badge, .cp-acc-namebadge .badge { margin-top: 0; }
     .cp-acc-chips { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
-    .cp-def-chip { display: inline-flex; align-items: center; gap: 3px; font-size: 0.64rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; letter-spacing: 0.02em; }
-    .cp-chip-pay  { background: rgba(13,110,253,0.16); color: #0d6efd; }
-    .cp-chip-rec  { background: rgba(13,202,240,0.20); color: #0aa2c0; }
-    .cp-chip-pend { background: rgba(255,193,7,0.20);  color: #b45309; }
-    [data-bs-theme="dark"] .cp-chip-pay  { color: #6ea8fe; }
-    [data-bs-theme="dark"] .cp-chip-rec  { color: #3dd5f3; }
-    [data-bs-theme="dark"] .cp-chip-pend { color: #ffda6a; }
-    .cp-acc-row.is-default { border-color: rgba(13,110,253,0.45); box-shadow: inset 3px 0 0 #0d6efd; }
-    /* PAY/RECEIVE default toggles — always solid + white text for visibility;
-       colour = selected default (blue PAY / teal RECEIVE), grey = not selected,
-       amber = pending approval. */
-    .cp-glass .cp-defbtn { color: #fff !important; border: none !important; font-weight: 700; letter-spacing: 0.02em; }
+    .cp-def-chip { display: inline-flex; align-items: center; gap: 3px; font-size: .64rem; font-weight: 700; padding: 2px 9px; border-radius: var(--otc-r-pill); letter-spacing: .02em; color: var(--cp-chip); background: color-mix(in srgb, var(--cp-chip) 16%, transparent); }
+    .cp-chip-pay  { --cp-chip: var(--otc-blue); }
+    .cp-chip-rec  { --cp-chip: var(--otc-teal); }
+    .cp-chip-pend { --cp-chip: var(--otc-orange); }
+    /* PAY/RECEIVE padrão: sólido com texto branco — azul PAY, teal RECEIVE,
+       cinza não escolhido, âmbar pendente de aprovação */
+    .cp-glass .cp-defbtn { color: #fff !important; border: none !important; font-weight: 700; letter-spacing: .02em; background: var(--cp-def, var(--otc-text-3)) !important; }
     .cp-glass .cp-defbtn i { color: #fff !important; }
-    .cp-glass .cp-defbtn-off     { background: #6b7280 !important; }
-    .cp-glass .cp-defbtn-off:hover { background: #565e6b !important; }
-    .cp-glass .cp-defbtn-pay-on  { background: #0d6efd !important; box-shadow: 0 0 0 2px rgba(13,110,253,0.35); }
-    .cp-glass .cp-defbtn-rec-on  { background: #0aa2c0 !important; box-shadow: 0 0 0 2px rgba(10,162,192,0.35); }
-    .cp-glass .cp-defbtn-pend    { background: #d39e00 !important; }
-    .cp-glass .cp-defbtn:disabled { opacity: 0.5; }
+    .cp-glass .cp-defbtn-pay-on { --cp-def: var(--otc-blue); box-shadow: 0 0 0 2px color-mix(in srgb, var(--otc-blue) 35%, transparent); }
+    .cp-glass .cp-defbtn-rec-on { --cp-def: var(--otc-teal); box-shadow: 0 0 0 2px color-mix(in srgb, var(--otc-teal) 35%, transparent); }
+    .cp-glass .cp-defbtn-pend   { --cp-def: var(--otc-orange); }
+    .cp-glass .cp-defbtn:disabled { opacity: .5; }
     .cp-acc-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
-    .cp-glass .btn-xs { padding: 2px 7px; font-size: 0.68rem; line-height: 1.3; border-radius: 7px !important; }
-    .cp-glass .btn-xs:active { transform: scale(0.94); }
-    .cp-def-pend { outline: 2px dashed rgba(255,193,7,0.8); outline-offset: 1px; }
-    .cp-def-banner {
-        display: flex; align-items: center; justify-content: space-between; gap: 8px;
-        font-size: 0.75rem; padding: 6px 10px; margin-bottom: 6px; border-radius: 8px;
-        background: rgba(255,193,7,0.14); border: 1px solid rgba(255,193,7,0.35);
-    }
-    .cp-acc-add { display: grid; grid-template-columns: minmax(0,1.6fr) minmax(0,0.7fr) minmax(0,1fr) auto auto; gap: 6px; align-items: center; margin-top: 8px; }
+    .cp-glass .btn-xs { padding: 2px 7px; min-height: 24px; font-size: .68rem; line-height: 1.3; border-radius: 7px !important; }
+    .cp-def-pend { outline: 2px dashed color-mix(in srgb, var(--otc-yellow) 80%, transparent); outline-offset: 1px; }
+    .cp-def-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: .75rem; padding: 6px 10px; margin-bottom: 6px; border-radius: var(--otc-r-sm); background: color-mix(in srgb, var(--otc-yellow) 16%, transparent); }
+    .cp-acc-add { display: grid; grid-template-columns: minmax(0,1.6fr) minmax(0,.7fr) minmax(0,1fr) auto auto; gap: 6px; align-items: center; margin-top: 8px; }
 
-    /* inline form confirm (green) / cancel (red) — solid, white centred icon */
-    .cp-glass .cp-okbtn, .cp-glass .cp-cxbtn,
-    .cp-glass .cp-add-submit, .cp-glass .cp-add-cancel {
-        display: inline-flex !important; align-items: center; justify-content: center;
-        width: 30px; height: 30px; padding: 0 !important; border: none !important;
-        border-radius: 7px; color: #fff !important;
-        transition: transform 140ms cubic-bezier(0.23,1,0.32,1), filter 140ms ease;
-    }
-    .cp-glass .cp-okbtn i, .cp-glass .cp-cxbtn i,
-    .cp-glass .cp-add-submit i, .cp-glass .cp-add-cancel i { color: #fff !important; margin: 0; }
-    .cp-glass .cp-okbtn, .cp-glass .cp-add-submit { background: #198754 !important; }
-    .cp-glass .cp-cxbtn, .cp-glass .cp-add-cancel { background: #dc3545 !important; }
-    .cp-glass .cp-okbtn:hover, .cp-glass .cp-add-submit:hover,
-    .cp-glass .cp-cxbtn:hover, .cp-glass .cp-add-cancel:hover { filter: brightness(0.92); }
-    .cp-glass .cp-okbtn:active, .cp-glass .cp-cxbtn:active,
-    .cp-glass .cp-add-submit:active, .cp-glass .cp-add-cancel:active { transform: scale(0.92); }
+    /* confirmar/cancelar do formulário em linha: 30×30, ícone branco */
+    .cp-glass :is(.cp-okbtn, .cp-cxbtn, .cp-add-submit, .cp-add-cancel) { display: inline-flex !important; align-items: center; justify-content: center; width: 30px; height: 30px; min-height: 30px; padding: 0 !important; border-radius: 7px; }
+    .cp-glass :is(.cp-okbtn, .cp-cxbtn, .cp-add-submit, .cp-add-cancel) i { margin: 0; }
 
-    /* neutral (blue) edit button on CGD / contact rows */
-    .cp-glass .cp-editbtn { background: #0d6efd !important; border: none !important; color: #fff !important; }
-    .cp-glass .cp-editbtn i { color: #fff !important; }
-    .cp-glass .cp-editbtn:hover { filter: brightness(0.92); }
-
-    /* inline CGD add/edit form */
+    /* formulários em linha (CGD, rede, contato, conta) */
     .cp-cgd-form { display: grid; grid-template-columns: 1fr 32px 30px 30px; gap: 6px; align-items: center; margin-bottom: 6px; }
     .cp-net-form { display: grid; grid-template-columns: 1fr 30px 30px; gap: 6px; align-items: center; margin-bottom: 6px; }
-    /* inline contact form action row */
     .cp-contact-form .cp-form-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
-
-    /* edit-mode rows */
     .cp-edit-row { display: grid; gap: 6px; align-items: center; margin-bottom: 6px; }
     .cp-edit-row.cp-cgd-row  { grid-template-columns: 1fr 32px 32px; }
-    .cp-edit-row.cp-bank-row { grid-template-columns: minmax(0,1.6fr) minmax(0,0.7fr) minmax(0,1fr) 32px; }
-    /* inline edit form for a banking account: bank / agency / account / save / cancel */
-    .cp-bank-editform { display: grid; grid-template-columns: minmax(0,1.5fr) minmax(0,0.7fr) minmax(0,1fr) 30px 30px; gap: 6px; align-items: center; width: 100%; }
+    .cp-edit-row.cp-bank-row { grid-template-columns: minmax(0,1.6fr) minmax(0,.7fr) minmax(0,1fr) 32px; }
+    .cp-bank-editform { display: grid; grid-template-columns: minmax(0,1.5fr) minmax(0,.7fr) minmax(0,1fr) 30px 30px; gap: 6px; align-items: center; width: 100%; }
 
-    /* CGD date field: text shows dd/mm/yyyy; calendar button overlays a native date input */
+    /* data do CGD: o texto mostra dd/mm/aaaa; o botão cobre um date nativo invisível */
     .cp-date-btn {
-        position: relative; width: 32px; height: 32px; border-radius: 8px;
-        display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
-        border: 1px solid rgba(0,0,0,0.10); background: rgba(255,255,255,0.55);
-        color: var(--ins-body-color,#343a40);
-        transition: transform 160ms cubic-bezier(0.23,1,0.32,1), background 160ms ease;
+        position: relative; width: 32px; height: 32px; border-radius: var(--otc-r-sm); cursor: pointer; border: 0;
+        display: inline-flex; align-items: center; justify-content: center;
+        background: var(--otc-fill); color: var(--otc-text);
+        transition: background-color var(--otc-dur-fast) var(--otc-ease), scale var(--otc-dur-fast) var(--otc-ease);
     }
-    .cp-date-btn:hover { background: rgba(255,255,255,0.9); }
-    .cp-date-btn:active { transform: scale(0.92); }
-    [data-bs-theme="dark"] .cp-date-btn { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.14); color: #e9ecef; }
-    .cp-date-btn .cp-cgd-picker {
-        position: absolute; inset: 0; width: 100%; height: 100%;
-        opacity: 0; cursor: pointer; border: 0; padding: 0;
-    }
+    .cp-date-btn:hover { background: var(--otc-fill-2); }
+    .cp-date-btn .cp-cgd-picker { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
     .cp-date-btn .cp-cgd-picker::-webkit-calendar-picker-indicator { width: 100%; height: 100%; cursor: pointer; }
 
-    /* Rules rendered as badges inside the contact card (select2 multi tags) */
-    .cp-glass .select2-container--default .select2-selection--multiple { border-radius: 8px; min-height: 31px; }
-    .cp-glass .select2-container--default .select2-selection--multiple .select2-selection__choice {
-        background: rgba(13,110,253,0.12); border: 1px solid rgba(13,110,253,0.30); color: #0d6efd;
-        border-radius: 999px; padding: 1px 8px; margin: 3px 4px 0 0; font-size: 0.72rem; font-weight: 600;
-    }
-    .cp-glass .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
-        color: #0d6efd; margin-right: 4px; border: 0; background: transparent;
-    }
-    [data-bs-theme="dark"] .cp-glass .select2-container--default .select2-selection--multiple .select2-selection__choice {
-        background: rgba(110,168,254,0.18); border-color: rgba(110,168,254,0.4); color: #9ec5fe;
-    }
-    .cp-contact-card { border: 1px solid rgba(0,0,0,0.08); border-radius: 10px; padding: 10px; margin-bottom: 8px; background: rgba(255,255,255,0.4); }
-    [data-bs-theme="dark"] .cp-contact-card { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.10); }
     .cp-contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
     .cp-contact-grid .cp-span2 { grid-column: 1 / -1; }
-    .cp-glass .form-control, .cp-glass .form-select { font-size: 0.8rem; }
-    .cp-glass .form-control-sm, .cp-glass .form-select-sm { font-size: 0.8rem; }
-    .cp-remove {
-        width: 32px; height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;
-        border: 1px solid #dc3545; background: #dc3545; color: #fff; cursor: pointer;
-        transition: transform 160ms cubic-bezier(0.23,1,0.32,1), background 160ms ease, box-shadow 160ms ease;
-    }
-    .cp-remove i { color: #fff; }
-    .cp-remove:hover { background: #bb2d3b; border-color: #bb2d3b; box-shadow: 0 2px 8px rgba(220,53,69,0.35); }
-    .cp-remove:active { transform: scale(0.92); }
+    .cp-glass :is(.form-control, .form-select, .form-control-sm, .form-select-sm) { font-size: .8rem; }
+    .cp-remove { width: 32px; height: 32px; border-radius: var(--otc-r-sm); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 
-    /* select2 inside the glass popup */
+    /* select2 dentro do diálogo */
     .cp-glass .select2-container { z-index: 2; }
-    .cp-glass .select2-selection { font-size: 0.8rem; min-height: 31px; }
-    .swal2-container .select2-dropdown { z-index: 2100; }
+    .cp-glass .select2-selection { font-size: .8rem; min-height: 31px; }
+    .swal2-container .select2-dropdown { z-index: 2100; font-size: .78rem; }
     .cp-glass .select2-selection--single { height: 31px; padding-top: 2px; }
     .cp-glass .select2-selection--single .select2-selection__rendered { line-height: 27px; }
 
     [data-mode="view"] .cp-edit-only { display: none !important; }
     [data-mode="edit"] .cp-view-only { display: none !important; }
 
-    /* transient "saved" note (Swal toasts would close the open dialog) */
+    /* aviso "salvo" passageiro (um toast do Swal fecharia o diálogo aberto) */
     .cp-toast {
-        position: absolute; top: 10px; left: 50%; z-index: 20;
-        display: inline-flex; align-items: center; gap: 6px;
-        padding: 6px 14px; border-radius: 999px; font-size: 0.78rem; font-weight: 600;
-        color: #0a8f4f; background: rgba(10,143,79,0.12); border: 1px solid rgba(10,143,79,0.28);
-        box-shadow: 0 6px 18px rgba(0,0,0,0.12);
-        opacity: 0; transform: translate(-50%, -6px) scale(0.96);
-        transition: opacity 180ms cubic-bezier(0.23,1,0.32,1), transform 180ms cubic-bezier(0.23,1,0.32,1);
+        position: absolute; top: 10px; left: 50%; z-index: 20; display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 14px; border-radius: var(--otc-r-pill); font-size: .78rem; font-weight: 600;
+        --cp-toast: var(--otc-green); color: var(--cp-toast); background: color-mix(in srgb, var(--cp-toast) 14%, var(--otc-menu-bg));
+        box-shadow: var(--otc-depth);
+        opacity: 0; translate: -50% -6px; scale: .96;
+        transition: opacity var(--otc-dur-fast) var(--otc-ease-out), translate var(--otc-dur-fast) var(--otc-ease-out), scale var(--otc-dur-fast) var(--otc-ease-out);
         pointer-events: none;
     }
-    .cp-toast.cp-toast-in { opacity: 1; transform: translate(-50%, 0) scale(1); }
-    .cp-toast.cp-toast-error { color: #c62828; background: rgba(198,40,40,0.12); border-color: rgba(198,40,40,0.30); }
-    .cp-toast.cp-toast-pending { color: var(--ins-secondary-color,#6c757d); background: rgba(108,117,125,0.12); border-color: rgba(108,117,125,0.28); }
-    /* Tabler webfont doesn't animate .ti-spin on its own — define keyframes. */
-    @keyframes cpSpin { to { transform: rotate(360deg); } }
-    .cp-toast .ti-spin { display: inline-block; animation: cpSpin 0.7s linear infinite; }
+    .cp-toast.cp-toast-in { opacity: 1; translate: -50% 0; scale: 1; }
+    .cp-toast.cp-toast-error { --cp-toast: var(--otc-danger); }
+    .cp-toast.cp-toast-pending { --cp-toast: var(--otc-text-2); }
 </style>
 {% endblock extra_css %}
 

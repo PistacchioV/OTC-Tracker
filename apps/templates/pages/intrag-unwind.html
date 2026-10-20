@@ -7,65 +7,20 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
+{# Só o que é DESTA tela: a largura de cada coluna (layout FIXO, para a largura
+   declarada valer no cabeçalho e no corpo do scrollX), o texto que passa
+   cortado em "…". Cabeçalho, células, filtro,
+   dropzone, toolbar, botões e a barra azul do card são do tema (otc.scss). #}
 <style>
-  @keyframes ti-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
-  i.ti-spin, .ti-spin, i.ti-loader-2 { display: inline-block !important; animation: ti-spin 0.8s linear infinite !important; }
-
-  .badge.badge-sent { background-color: #17a2b8 !important; color: #fff !important; }
-  .nd-deal-card { border-left: 3px solid #0066cc !important; }
-
-  div.dt-button-collection { opacity: 1 !important; background-color: var(--ins-dropdown-bg, var(--ins-secondary-bg, #fff)) !important; border: var(--ins-border-width, 1px) solid var(--ins-border-color, rgba(0,0,0,.1)) !important; border-radius: var(--ins-dropdown-border-radius, 0.6875rem) !important; box-shadow: 0 8px 24px rgba(0,0,0,.12) !important; }
-  div.dt-button-collection .dropdown-item { opacity: 1 !important; color: var(--ins-dropdown-link-color, var(--ins-body-color)) !important; }
-
-  .card-body { padding: 5px; }
-  .dt-scroll-head, .dataTables_scrollHead { padding-top: 8px; }
-  .dt-scroll-body thead, .dataTables_scrollBody thead { display: none !important; }
-  .dt-scroll-headInner table, .dataTables_scrollHeadInner table,
-  .dt-scroll-body > table, .dataTables_scrollBody > table { table-layout: fixed !important; }
-  /* Centralizada (§7): th .7rem, td .8rem; com scrollX o clone do cabeçalho
-     perde o id da tabela, por isso as mesmas regras com !important nos clones. */
-  #iuw-table th { white-space: normal; padding: 8px 10px; overflow: hidden; text-overflow: ellipsis; text-align: center !important; vertical-align: middle !important; font-size: 0.7rem; }
-  .dt-scroll-head thead th, .dt-scroll-headInner thead th,
-  .dataTables_scrollHead thead th, .dataTables_scrollHeadInner thead th { white-space: normal !important; overflow: hidden; text-overflow: ellipsis; text-align: center !important; vertical-align: middle !important; font-size: 0.7rem !important; }
-  #iuw-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8rem; text-align: center; vertical-align: middle; font-variant-numeric: tabular-nums; }
-  #iuw-table th, #iuw-table td,
-  #iuw-table_wrapper .dt-scroll-head thead th, #iuw-table_wrapper .dataTables_scrollHead thead th { width: 130px; min-width: 130px; }
-  #iuw-table th:nth-child(1), #iuw-table td:nth-child(1),
-  #iuw-table_wrapper .dt-scroll-head thead th:nth-child(1), #iuw-table_wrapper .dataTables_scrollHead thead th:nth-child(1) { width: 50px; min-width: 50px; }
-  #iuw-table th:nth-child(2), #iuw-table td:nth-child(2),
-  #iuw-table_wrapper .dt-scroll-head thead th:nth-child(2), #iuw-table_wrapper .dataTables_scrollHead thead th:nth-child(2) { width: 150px; min-width: 150px; }
-  #iuw-table th:nth-child(3), #iuw-table td:nth-child(3),
-  #iuw-table_wrapper .dt-scroll-head thead th:nth-child(3), #iuw-table_wrapper .dataTables_scrollHead thead th:nth-child(3) { width: 110px; min-width: 110px; }
-  /* A Situação é a coluna que a Intrag lê para saber o que fazer com o
-     contrato — cortá-la obriga a abrir a linha para ver o que já devia estar
-     na grade. */
-  #iuw-table th:nth-child(12), #iuw-table td:nth-child(12),
-  #iuw-table_wrapper .dt-scroll-head thead th:nth-child(12), #iuw-table_wrapper .dataTables_scrollHead thead th:nth-child(12) { width: 190px; min-width: 190px; }
-  /* Intrag ID — o numero que a Intrag devolve na boleta (Mapping Intrag ID). */
-  #iuw-table th:nth-child(4), #iuw-table td:nth-child(4),
-  #iuw-table_wrapper .dt-scroll-head thead th:nth-child(4), #iuw-table_wrapper .dataTables_scrollHead thead th:nth-child(4) { width: 140px; min-width: 140px; }
-
-  #iuw-table td .btn-sm.rounded-circle { width: 32px; height: 32px; padding: 0 !important; border-radius: 10px !important; display: inline-flex; align-items: center; justify-content: center; }
-  #iuw-table td .btn-sm.rounded-circle i { font-size: 1rem; }
-  /* Filtro inteligente — o mesmo das outras paginas de Intrag. */
-  .smart-filter-wrapper { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; padding: 4px 8px; min-height: 38px; background: var(--ins-secondary-bg, #fff); cursor: text; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
-  .smart-filter-wrapper:focus-within { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
-  .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .smart-filter-chip { display: inline-flex; align-items: center; gap: 5px; background: #6c757d; color: #fff; border-radius: 50rem; padding: 2px 8px; font-size: 10px; font-weight: 500; white-space: nowrap; }
-  .smart-filter-chip .sf-chip-remove { cursor: pointer; opacity: .75; font-size: 13px; line-height: 1; margin-left: 2px; }
-  .smart-filter-chip .sf-chip-remove:hover { opacity: 1; }
-  .smart-filter-input { border: none; outline: none; flex: 1; min-width: 200px; font-size: 0.82rem; background: transparent; padding: 2px 0; color: inherit; }
-  .smart-filter-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1055; background: var(--ins-secondary-bg, #fff); border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; box-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04); max-height: 240px; overflow-y: auto; display: none; padding: 4px 0; }
-  .smart-filter-dropdown li { padding: 6px 12px; cursor: pointer; font-size: 0.81rem; display: flex; align-items: center; gap: 8px; list-style: none; color: inherit; }
-  .smart-filter-dropdown li:hover, .smart-filter-dropdown li.sf-kbd-active { background: rgba(0,102,204,0.06); }
-  .sf-type-badge { font-size: 9px; padding: 1px 5px; border-radius: 50rem; text-transform: uppercase; font-weight: 600; color: #fff; opacity: .85; }
-  .sf-type-text   { background: #6c757d; }
-  .sf-type-date   { background: #0dcaf0; color: #000 !important; }
-  .sf-type-number { background: #ffc107; color: #000 !important; }
-  [data-bs-theme=dark] .smart-filter-wrapper { background: var(--ins-secondary-bg) !important; border-color: rgba(255,255,255,0.1) !important; }
-  [data-bs-theme=dark] .smart-filter-wrapper:focus-within { border-color: #0066cc !important; }
-  [data-bs-theme=dark] .smart-filter-dropdown { background: var(--ins-secondary-bg) !important; border-color: rgba(255,255,255,0.08) !important; box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06) !important; }
-  [data-bs-theme=dark] .smart-filter-dropdown li:hover, [data-bs-theme=dark] .smart-filter-dropdown li.sf-kbd-active { background: rgba(0,102,204,0.12) !important; }
+#iuw-table_wrapper .dt-scroll-headInner table,
+#iuw-table_wrapper .dt-scroll-body > table { table-layout: fixed !important; }
+#iuw-table td { overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+#iuw-table :is(th, td), #iuw-table_wrapper .dt-scroll-head th { width: 130px; min-width: 130px; } /* toda coluna de dado */
+#iuw-table :is(th, td):nth-child(1), #iuw-table_wrapper .dt-scroll-head th:nth-child(1) { width: 50px; min-width: 50px; }
+#iuw-table :is(th, td):nth-child(2), #iuw-table_wrapper .dt-scroll-head th:nth-child(2) { width: 150px; min-width: 150px; }
+#iuw-table :is(th, td):nth-child(3), #iuw-table_wrapper .dt-scroll-head th:nth-child(3) { width: 110px; min-width: 110px; }
+#iuw-table :is(th, td):nth-child(12), #iuw-table_wrapper .dt-scroll-head th:nth-child(12) { width: 190px; min-width: 190px; }
+#iuw-table :is(th, td):nth-child(4), #iuw-table_wrapper .dt-scroll-head th:nth-child(4) { width: 140px; min-width: 140px; }
 </style>
 {% endblock extra_css %}
 
@@ -74,7 +29,7 @@
     <div class="page-title-head d-flex align-items-center">
         <div class="flex-grow-1">
             <h4 class="fs-xl fw-bold m-0 d-flex align-items-center gap-2">
-                <i class="ti ti-rotate-2" style="color:#0066cc;font-size:22px;flex-shrink:0;"></i>
+                <i class="ti ti-rotate-2"></i>
                 <span data-lang="iuw-title">Intrag — Unwind</span>
             </h4>
         </div>

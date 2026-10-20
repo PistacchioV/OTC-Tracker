@@ -10,164 +10,77 @@
      looked broken). Same include the New Deals / Electronic Inventory pages use. -->
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
 <style>
-/* ── Apple/Emil tokens ─────────────────────────────────────── */
-#ops-page {
-    --ops-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-    --ops-blue: #0066cc;
-    --ops-hairline: #e0e0e0;
-}
-[data-bs-theme=dark] #ops-page { --ops-hairline: rgba(255,255,255,.09); }
-
-/* Reference-date bar (daterangepicker dd/mm/yyyy + calendar icon) */
-#ops-page .ops-datewrap { position: relative; max-width: 180px; }
-#ops-page .ops-datewrap input {
-    width: 100%;
-    border: 1px solid var(--ops-hairline);
-    border-radius: 10px;
-    padding: .42rem 2.1rem .42rem .7rem;
-    font-size: .85rem;
-    font-weight: 600;
-    color: var(--ins-body-color);
-    background: var(--ins-secondary-bg, #fff);
-    cursor: pointer;
-    transition: border-color 160ms var(--ops-ease-out), box-shadow 160ms var(--ops-ease-out);
-}
-#ops-page .ops-datewrap input:focus {
-    outline: none; border-color: var(--ops-blue);
-    box-shadow: 0 0 0 3px rgba(0,102,204,.18);
-}
-#ops-page .ops-cal-btn {
-    position: absolute; top: 0; right: 0; bottom: 0;
-    width: 34px; display: inline-flex; align-items: center; justify-content: center;
-    color: var(--ins-secondary-color, #8a8a8f); cursor: pointer;
-    transition: color 160ms var(--ops-ease-out), transform 160ms var(--ops-ease-out);
-}
-#ops-page .ops-cal-btn:hover { color: var(--ops-blue); }
-#ops-page .ops-cal-btn:active { transform: scale(0.9); }
-@media (prefers-reduced-motion: reduce) {
-    #ops-page .ops-datewrap input, #ops-page .ops-cal-btn { transition: none; }
-}
-
-/* ── Widgets ───────────────────────────────────────────────── */
+{# Só o que é DESTA tela: a grade dos cards de reconciliação (B3 × Internal), o card Total, a luz de fundo por estado (§181/§464), o estado de carga e a largura das colunas. Placa, botões, tabela, campo de data e linha de filtro vêm do tema. #}
+/* ── Cards de reconciliação ─────────────────────────────────── */
 .ops-widgets .col { display: flex; margin-bottom: .5rem; }
 .ops-widget {
     flex: 1;
-    border: 1px solid var(--ops-hairline);
-    border-radius: 14px;
     padding: 1rem 1.1rem;
-    background: var(--ins-secondary-bg, #fff);
-    /* border-color entra na transição junto com a sombra: a luz de fundo por
-       estado troca as duas, e sem isso a borda saltava enquanto o halo suavizava. */
-    transition: transform 220ms var(--ops-ease-out), box-shadow 220ms var(--ops-ease-out),
-                border-color 220ms var(--ops-ease-out);
+    transition: box-shadow var(--otc-dur-base) var(--otc-ease-out);
 }
-@media (hover: hover) and (pointer: fine) {
-    .ops-widget:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
-}
-.ops-widget__head { display: flex; align-items: center; gap: .6rem; margin-bottom: .55rem; }
-.ops-widget__icon {
-    width: 38px; height: 38px; border-radius: 10px;
-    display: inline-flex; align-items: center; justify-content: center; font-size: 1.15rem; flex-shrink: 0;
-}
-.ops-widget__title { font-size: .82rem; font-weight: 700; letter-spacing: -.2px; margin: 0; }
-.ops-widget__value { font-size: 1.7rem; font-weight: 700; line-height: 1; margin-left: auto; letter-spacing: -1px; }
-.ops-widget__subs { border-top: 1px dashed var(--ops-hairline); padding-top: .5rem; margin-top: .1rem; }
-.ops-widget__sub {
-    display: flex; align-items: center; gap: .35rem;
-    font-size: .74rem; color: var(--ins-secondary-color, #6e6e73); padding: .12rem 0;
-}
-.ops-widget__sub .ops-sub-val { margin-left: auto; font-weight: 700; color: var(--ins-body-color); }
-.ops-widget--soon { opacity: .6; }
+.ops-widget__head { margin-bottom: .7rem; }
 
-/* ── Reconciliation cards (B3 × Internal) ──────────────────── */
-.ops-recon .ops-widget__head { margin-bottom: .7rem; }
 /* Estado de carga do lote (ao lado do subtítulo): carregando / erro / IR parcial */
-.ops-load-state { display: inline-flex; align-items: center; gap: .35rem; min-height: 1.25rem;
-                  color: var(--ins-secondary-color, #6e6e73); }
+.ops-load-state { display: inline-flex; align-items: center; gap: .35rem; min-height: 1.25rem; color: var(--otc-text-2); }
 .ops-load-state.is-busy .spinner-border { width: .85rem; height: .85rem; border-width: .15em; }
-.ops-load-state.is-err  { color: #dc2626; }
-.ops-load-state.is-warn { color: #b45309; }
+.ops-load-state.is-err  { color: var(--otc-danger); }
+.ops-load-state.is-warn { color: color-mix(in srgb, var(--otc-yellow) 75%, var(--otc-text)); }
 .ops-load-state a { font-weight: 600; text-decoration: underline; color: inherit; }
-/* The matched pill sits where the big number used to; calm green when tied,
-   attention-amber ("Verificar") when not. Color only — these render on every
-   load, so no entrance animation of their own (the card stagger is enough). */
+
+/* A pílula do batimento: verde bateu, vermelho verificar (o formato é do tema). */
 .ops-recon-badge {
-    margin-left: auto; display: inline-flex; align-items: center; gap: .25rem;
-    font-size: .68rem; font-weight: 700; letter-spacing: .02em;
-    padding: .16rem .5rem; border-radius: 999px; white-space: nowrap;
-    background: var(--ins-tertiary-bg, #eef0f4); color: var(--ins-secondary-color, #6e6e73);
+    margin-left: auto; display: inline-flex; align-items: center; gap: .25rem; white-space: nowrap;
+    background: var(--otc-fill); color: var(--otc-text-2);
 }
-.ops-recon-badge.is-ok    { background: rgba(34,197,94,.16);  color: #16a34a; }
-.ops-recon-badge.is-check { background: rgba(239,68,68,.16);  color: #dc2626; }
-.ops-recon-grid {
-    border-top: 1px dashed var(--ops-hairline); padding-top: .55rem;
-    display: grid; row-gap: .18rem;
-}
-/* Fixed columns (not auto): the header and each data row are separate grids, so
-   auto columns sized independently and the OPS/VALUE labels drifted off their
-   numbers. Fixed widths make every grid share the same column geometry. */
+.ops-recon-badge.is-ok    { background: color-mix(in srgb, var(--otc-green) 16%, transparent);  color: var(--otc-green); }
+.ops-recon-badge.is-check { background: color-mix(in srgb, var(--otc-danger) 16%, transparent); color: var(--otc-danger); }
+.ops-recon-grid { border-top: 1px dashed var(--otc-sep); padding-top: .55rem; display: grid; row-gap: .18rem; }
+/* Colunas FIXAS (não auto): cabeçalho e linhas são grids separados, e com
+   colunas automáticas os rótulos OPS/VALUE saem de cima dos seus números. */
 .ops-recon-hdr, .ops-recon-row {
     display: grid; grid-template-columns: 1fr 2.75rem 7rem; column-gap: .6rem; align-items: baseline;
 }
 .ops-recon-hdr {
     font-size: .64rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
-    color: var(--ins-secondary-color, #8a8a8f); padding-bottom: .1rem;
+    color: var(--otc-text-3); padding-bottom: .1rem;
 }
-/* Right-align the OPS/VALUE headers so they sit over their right-aligned numbers. */
 .ops-recon-hdr span:nth-child(2), .ops-recon-hdr span:nth-child(3) { text-align: right; }
 .ops-recon-row { font-size: .8rem; padding: .1rem 0; }
-.ops-recon-row .ops-recon-side { font-weight: 600; color: var(--ins-secondary-color, #6e6e73); }
+.ops-recon-row .ops-recon-side { font-weight: 600; color: var(--otc-text-2); }
 .ops-recon-row [data-recon-b3c], .ops-recon-row [data-recon-intc] {
-    font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; color: var(--ins-body-color);
+    font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; color: var(--otc-text);
 }
-.ops-recon-row .ops-num { font-weight: 700; color: var(--ins-body-color); }
-/* Unmatched card gets a subtle amber ring — functional (scan the row of cards
-   and the odd one out pops), not decorative. O anel entra como VARIÁVEL porque
-   ele e a luz de fundo (mais abaixo) dividem a mesma propriedade: box-shadow não
-   se soma entre regras, a última declaração vence a lista inteira. */
+.ops-recon-row .ops-num { font-weight: 700; color: var(--otc-text); }
+/* O anel entra como VARIÁVEL porque ele e a luz de fundo (abaixo) dividem a
+   mesma propriedade: box-shadow não se soma entre regras. */
 .ops-recon               { --ops-ring: 0 0 0 0 rgba(0, 0, 0, 0); }   /* sem anel */
-.ops-recon.is-unmatched  { --ops-ring: inset 0 0 0 1px rgba(239, 68, 68, .5); }
+.ops-recon.is-unmatched  { --ops-ring: inset 0 0 0 1px color-mix(in srgb, var(--otc-danger) 50%, transparent); }
 
-/* Total card: dark gradient, so recon text/hairline go light. */
-.ops-recon--total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0; }
+/* Card Total: placa na cor de destaque, texto claro nos dois temas. */
+.ops-recon--total { background: linear-gradient(135deg, var(--otc-accent) 0%, var(--otc-indigo) 100%); }
 .ops-recon--total .ops-widget__title,
 .ops-recon--total .ops-recon-row,
 .ops-recon--total .ops-recon-row .ops-recon-side,
 .ops-recon--total .ops-recon-row [data-recon-b3c],
 .ops-recon--total .ops-recon-row [data-recon-intc],
 .ops-recon--total .ops-recon-row .ops-num { color: #fff; }
+.ops-recon--total .ops-widget__icon { background: rgba(255,255,255,.18); color: #fff; }
 .ops-recon--total .ops-recon-hdr { color: rgba(255,255,255,.75); }
 .ops-recon--total .ops-recon-grid { border-top-color: rgba(255,255,255,.28); }
 .ops-recon--total .ops-recon-badge { background: rgba(255,255,255,.2); color: #fff; }
-.ops-recon--total.is-unmatched { --ops-ring: inset 0 0 0 2px rgba(239, 68, 68, .9); }
+.ops-recon--total.is-unmatched { --ops-ring: inset 0 0 0 2px color-mix(in srgb, var(--otc-danger) 90%, transparent); }
 
-/* ── Luz de fundo por estado ────────────────────────────────────────────────
-   Mesma receita do New Deals Monitor: sombra em CAMADAS (contato + média +
-   halo largo), não um contorno chapado — o card parece flutuar sobre uma luz
-   verde (bateu) ou vermelha (verificar). A cor sai de `--ops-glow` ("r, g, b"),
-   escrita pelas duas classes de estado, então a receita fica num lugar só e o
-   mesmo `box-shadow` serve aos dois casos.
-   As classes vêm do JS junto com o badge — sem elas (antes do /data responder)
-   o card fica neutro de propósito: luz verde em card sem número é mentira.
-   O prefixo `#ops-page` NÃO é enfeite: `.ops-widget` casa com o seletor
-   ESTRUTURAL do tema (`div[class*="-widget"]:not([class*="__"]):not(.row)`,
-   especificidade 0,3,1), que também declara `box-shadow` e carrega DEPOIS do
-   `extra_css` da página. Sem o id (1,2,0 contra 0,3,1) a luz era calculada e
-   descartada: a classe entrava no card, o `--ops-glow` resolvia certo e o
-   `box-shadow` computado continuava o cinza do tema — as luzes simplesmente
-   não existiam nas duas telas. É o mesmo `#ndm-page` do New Deals Monitor.
-   Lá as cores são uma escala de progresso; aqui o estado é binário, então são
-   só duas: VERDE bateu, VERMELHO verificar.
-   O verde é o do badge (#16a34a) e não o #1a8a4a do gradiente da marca: sobre
-   fundo BRANCO o escuro vira um cinza-esverdeado que quase não se lê.
-   Este bloco é o padrão do tema CLARO e vale mais alto do que o escuro logo
-   abaixo — no branco a luz colorida se dissolve, no escuro ela já contrasta
-   sozinha e passar do ponto vira brilho de néon. */
+/* ── Luz de fundo por estado (§181, §464) ─────────────────────────────────
+   Sombra em CAMADAS (contato + média + halo) na cor de `--ops-glow`
+   ("r, g, b"), escrita pelas classes que o JS põe junto com o badge; sem elas
+   o card fica neutro. O prefixo `#ops-page` é o que vence o seletor
+   estrutural `-widget` do tema. O claro pesa mais que o escuro (no branco a
+   luz se dissolve). No Pane o card não sobe no hover (a antiga
+   `.ops-widget:hover` saiu): o hover colorido abaixo é só a luz. */
 #ops-page .ops-recon.is-ok    { --ops-glow:  22, 163,  74; }
 #ops-page .ops-recon.is-check { --ops-glow: 220,  38,  38; }
 #ops-page .ops-recon.is-ok,
 #ops-page .ops-recon.is-check {
-    border-color: rgba(var(--ops-glow), .42);
     box-shadow: var(--ops-ring),
                 0 2px 6px  rgba(var(--ops-glow), .20),
                 0 10px 24px rgba(var(--ops-glow), .34),
@@ -175,19 +88,14 @@
 }
 [data-bs-theme=dark] #ops-page .ops-recon.is-ok,
 [data-bs-theme=dark] #ops-page .ops-recon.is-check {
-    border-color: rgba(var(--ops-glow), .36);
     box-shadow: var(--ops-ring),
                 0 2px 6px  rgba(var(--ops-glow), .15),
                 0 10px 24px rgba(var(--ops-glow), .25),
                 0 22px 50px rgba(var(--ops-glow), .16);
 }
-/* Hover: o card já sobe 3px — a luz acompanha, mais espalhada e mais funda.
-   Precisa vir DEPOIS de `.ops-widget:hover`, que troca o box-shadow inteiro
-   por um cinza e apagaria a cor. */
 @media (hover: hover) and (pointer: fine) {
     #ops-page .ops-recon.is-ok:hover,
     #ops-page .ops-recon.is-check:hover {
-        border-color: rgba(var(--ops-glow), .52);
         box-shadow: var(--ops-ring),
                     0 4px 10px rgba(var(--ops-glow), .24),
                     0 18px 38px rgba(var(--ops-glow), .38),
@@ -195,7 +103,6 @@
     }
     [data-bs-theme=dark] #ops-page .ops-recon.is-ok:hover,
     [data-bs-theme=dark] #ops-page .ops-recon.is-check:hover {
-        border-color: rgba(var(--ops-glow), .44);
         box-shadow: var(--ops-ring),
                     0 4px 10px rgba(var(--ops-glow), .18),
                     0 18px 38px rgba(var(--ops-glow), .28),
@@ -203,102 +110,14 @@
     }
 }
 
-/* Staggered widget entrance */
-@keyframes opsWidgetIn { to { opacity: 1; transform: translateY(0); } }
-@media (prefers-reduced-motion: no-preference) {
-    .ops-widgets .col { opacity: 0; transform: translateY(8px); animation: opsWidgetIn 320ms var(--ops-ease-out) both; }
-    .ops-widgets .col:nth-child(1) { animation-delay: 0ms; }
-    .ops-widgets .col:nth-child(2) { animation-delay: 55ms; }
-    .ops-widgets .col:nth-child(3) { animation-delay: 110ms; }
-    .ops-widgets .col:nth-child(4) { animation-delay: 165ms; }
-}
-@media (prefers-reduced-motion: reduce) { .ops-widget:hover { transform: none; } }
-
-/* ── Table cards + toolbar ─────────────────────────────────── */
-#ops-page .ops-tcard .card-header { border-bottom: 1px dashed var(--ops-hairline); }
-#ops-page .ops-tcard .card-title { font-weight: 700; letter-spacing: -.2px; margin: 0; }
-/* align-items: center (e NAO o stretch padrao) e o que mantem TODO botao da
-   barra com a mesma altura: os filhos diretos (TEDs, Print Advice, Add row,
-   Delete) esticavam ate a altura da linha — ditada pelo <select> do "Show …
-   entries" — enquanto Export e Columns, que moram dentro de um wrapper
-   .dropdown (o do Columns e criado pelo JS), ficavam com a altura natural.
-   Botao novo dentro de dropdown entra certo por esta regra. */
+/* ── Barra de ferramentas dos cards de tabela ──────────────────
+   align-items: center mantém Export/Columns (dentro de .dropdown) na mesma
+   altura dos botões soltos. */
 .ops-toolbar { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; justify-content: flex-end; }
-/* O wrapper do dropdown nao pode esticar nem encolher o botao que carrega. */
 .ops-toolbar > .dropdown { display: inline-flex; align-items: center; }
-.ops-toolbar .btn {
-    padding: .26rem .6rem; font-size: .72rem; font-weight: 600; border-radius: 8px; line-height: 1.2;
-    transition: transform 140ms var(--ops-ease-out), background-color 140ms ease, box-shadow 140ms ease, filter 140ms ease;
-    /* min-height trava a altura como em .ops-row-act: as variantes solidas do
-       tema (.btn-info, .btn-danger, …) zeram a borda e as soft mantem 1px, o
-       que sozinho ja deixava Export/Add row/Delete 2px mais baixos que
-       Print Advice/TEDs/Columns. Botao novo entra com a mesma altura. */
-    min-height: 26px;
-    display: inline-flex; align-items: center; justify-content: center;
-}
-.ops-toolbar .btn i { font-size: .95em; }
-.ops-toolbar .btn:active { transform: scale(0.97); }
-@media (hover: hover) and (pointer: fine) {
-    .ops-toolbar .btn:hover { transform: translateY(-1px); box-shadow: 0 3px 12px rgba(0,0,0,.14); filter: brightness(1.03); }
-}
-/* Standard row-action button: fixed-size rounded square (the Delete button's
-   shape), so every action (Delete, Confirm, …) shares the exact same format
-   regardless of its icon. New row actions should reuse .ops-row-act. */
-#ops-page .ops-row-act {
-    /* min/max travam o tamanho: nenhuma regra do tema (min-width de .btn etc.)
-       pode deixar um botão de ação maior que o outro. */
-    width: 32px; height: 32px;
-    min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;
-    padding: 0; flex: 0 0 auto;
-    display: inline-flex; align-items: center; justify-content: center;
-    line-height: 1;
-    border-radius: 10px !important;   /* rounded square — NOT a circle */
-}
-#ops-page .ops-row-act > i { font-size: 1rem; }
-/* Page-wide press feedback: EVERY button compresses slightly while pressed.
-   This is the standard for all buttons on this page — new buttons get it for
-   free via the .btn class. */
-#ops-page .btn {
-    transition: transform 120ms var(--ops-ease-out), box-shadow 140ms ease;
-}
-#ops-page .btn:active { transform: scale(0.97); }
-/* Row action + status control feedback (press scale inherited from the page rule) */
-#ops-page .ops-row-del, #ops-page .ops-row-confirm, #ops-page .ops-status-sel {
-    transition: transform 140ms var(--ops-ease-out), box-shadow 140ms ease, border-color 140ms ease;
-}
-@media (hover: hover) and (pointer: fine) {
-    #ops-page .ops-row-del:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(220,53,69,.38); }
-    #ops-page .ops-row-confirm:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(25,135,84,.38); }
-}
-#ops-page .ops-row-confirm:disabled { opacity: .5; pointer-events: none; }
-@media (prefers-reduced-motion: reduce) {
-    #ops-page .btn, #ops-page .btn:active,
-    .ops-toolbar .btn:hover, .ops-toolbar .btn:active,
-    #ops-page .ops-row-del:hover, #ops-page .ops-row-del:active,
-    #ops-page .ops-row-confirm:hover, #ops-page .ops-row-confirm:active { transform: none; transition: none; }
-}
 
-#ops-page table.dataTable thead th { white-space: nowrap; text-align: center; font-size: .74rem; text-transform: uppercase; letter-spacing: .03em; }
-#ops-page table.dataTable td { white-space: nowrap; font-size: .82rem; text-align: center; vertical-align: middle; }
-#ops-page .ops-filter th { padding: 4px 6px; }
-#ops-page .ops-filter input {
-    width: 100%; border: 1px solid var(--ops-hairline); border-radius: 7px;
-    padding: 2px 6px; font-size: .74rem; font-weight: 400; background: var(--ins-tertiary-bg, #f6f7fb);
-    text-align: center;          /* centres the typed text AND the placeholder */
-}
-/* Largura mínima por coluna do Settlement Summary — é ela que LIGA o scroll
-   horizontal. O `scrollX: true` já estava no init, mas sozinho não rola nada:
-   sem mínimos a tabela se acomoda em 100% da largura do card, então a largura
-   de rolagem é igual à visível. O que "sumia" era o conteúdo dentro da célula
-   — Account (texto nowrap) e Observation (um <input> que só tem min-width 90px)
-   ficavam com o texto cortado. Com os mínimos a tabela ganha largura própria e
-   o .dt-scroll-body rola; o DataTables mantém cabeçalho e corpo alinhados. */
-/* Trade Level — as duas colunas de TAXA. O Forward Rate passou a mostrar todas
-   as casas que o SETTLEMENT.xlsx traz (antes eram 6 fixas) e o Fixing Rate segue
-   a mesma precisão. Sem largura mínima a coluna se acomoda e o número quebra no
-   meio — uma taxa partida em duas linhas é pior que uma arredondada, porque
-   parece um valor diferente. `nowrap` impede a quebra; o mínimo é o que dá à
-   tabela largura própria para o scrollX rolar de verdade. */
+/* ── Larguras de coluna: são elas que ligam o scrollX ──────────
+   Trade Level: as duas TAXAS (Forward/Fixing Rate) não quebram no meio. */
 #ops-trade-table th:nth-child(13), #ops-trade-table td:nth-child(13),
 #ops-trade-table th:nth-child(16), #ops-trade-table td:nth-child(16) {
     min-width: 165px; white-space: nowrap;
@@ -307,19 +126,13 @@
 #ops-summary-table th:nth-child(5),  #ops-summary-table td:nth-child(5)  { min-width: 130px; }  /* Receive */
 #ops-summary-table th:nth-child(6),  #ops-summary-table td:nth-child(6)  { min-width: 130px; }  /* Pay */
 #ops-summary-table th:nth-child(7),  #ops-summary-table td:nth-child(7)  { min-width: 130px; }  /* Settlement Net */
-/* Direction só carrega PAY/RECEIVE: continua a coluna estreita da linha. */
 #ops-summary-table th:nth-child(8),  #ops-summary-table td:nth-child(8)  { min-width: 96px;  }  /* Direction */
 #ops-summary-table th:nth-child(9),  #ops-summary-table td:nth-child(9)  { min-width: 210px; }  /* Account */
 #ops-summary-table th:nth-child(10), #ops-summary-table td:nth-child(10) { min-width: 230px; }  /* Observation */
 
-#ops-page .ops-cell-inp { border: 1px solid transparent; border-radius: 6px; padding: 1px 5px; font-size: .82rem; width: 100%; min-width: 90px; background: transparent; }
-#ops-page .ops-cell-inp:focus { outline: none; border-color: var(--ops-blue); background: var(--ins-secondary-bg,#fff); }
-/* Observation (Settlement Summary): a `td` já é centralizada, mas o texto vive
-   dentro de um <input> que ocupa 100% da célula e não herda o text-align do
-   pai. A regra vai na CLASSE, não no ponto de escrita: a célula é reescrita
-   pelo render da tabela e pelo save do próprio campo (ver §153). */
+#ops-page .ops-cell-inp { width: 100%; min-width: 90px; }
+/* Observation: o texto vive num <input> que não herda o text-align da td. */
 #ops-page .ops-obs-inp { text-align: center; }
-#ops-page .ops-status-sel { border: 1px solid var(--ops-hairline); border-radius: 999px; padding: 1px 8px; font-size: .72rem; font-weight: 600; }
 .ops-num { text-align: right; font-variant-numeric: tabular-nums; }
 </style>
 {% endblock extra_css %}
@@ -395,8 +208,8 @@
         <div class="col">
             <div class="ops-widget ops-recon ops-recon--total" data-cat="total">
                 <div class="ops-widget__head">
-                    <span class="ops-widget__icon" style="background: rgba(255,255,255,.18); color:#fff;"><i class="ti ti-sum"></i></span>
-                    <h3 class="ops-widget__title" data-lang="ndf-c-total" style="color:#fff;">Total</h3>
+                    <span class="ops-widget__icon"><i class="ti ti-sum"></i></span>
+                    <h3 class="ops-widget__title" data-lang="ndf-c-total">Total</h3>
                     <span class="ops-recon-badge" data-recon-badge></span>
                 </div>
                 <div class="ops-recon-grid">

@@ -44,7 +44,6 @@ def check(label, got, exp):
 # Tire-o daqui. Nasceu um novo fora do padrao? Ele aparece e o teste falha.
 FORA_DO_PADRAO = {
     'pages/calendar.html': 1,                 # tela de demonstracao do tema
-    'partials/topbar.html': 1,
 }
 
 atual = {}

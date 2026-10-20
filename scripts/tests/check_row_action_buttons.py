@@ -51,21 +51,16 @@ PAGES = {
 HTML = {nome: read(p) for nome, p in PAGES.items()}
 
 print('\n== 1. o squircle esta travado nos DOIS eixos ==')
+# Desde o rebranding (19/10/2026) a geometria e SO do tema (§8 confere a regra
+# `table td .btn.btn-act` do otc.scss). O que se cobra das paginas e nao
+# redeclarar o botao: uma regra `.btn-act {` no <style> voltaria a ser a deriva
+# que este guarda nasceu para pegar (32x34, icone de 13 px).
 for nome, h in HTML.items():
-    bloco = h.split('.btn-act {', 1)[1].split('}', 1)[0]
-    for prop in ('width:32px', 'height:32px',
-                 'min-width:32px', 'max-width:32px',
-                 'min-height:32px', 'max-height:32px',
-                 'padding:0', 'border-radius:10px !important'):
-        check('%s: .btn-act trava "%s"' % (nome, prop), prop in bloco, True)
-    # A borda do `.btn` entraria por fora dos 32 px sem isto.
-    check('%s: e conta a borda por dentro' % nome, 'box-sizing:border-box' in bloco, True)
+    check('%s: a pagina nao redeclara o .btn-act' % nome,
+          bool(re.search(r'(^|[\s,}])\.btn-act\s*\{', h)), False)
 
 print('\n== 2. o icone tem 1rem, e nao os 13 px do tema ==')
 for nome, h in HTML.items():
-    # `.fs-13` do tema e `!important`; a regra da pagina so vence com o dela.
-    check('%s: a regra do icone e !important' % nome,
-          bool(re.search(r'\.btn-act\s*>\s*i\s*\{\s*font-size:\s*1rem\s*!important', h)), True)
     # E o markup nao pode reintroduzir a classe.
     icones = re.findall(r'<i class="ti ti-[\w-]+[^"]*"></i>', h)
     check('%s: nenhum icone de acao carrega fs-13' % nome,
@@ -90,8 +85,9 @@ for nome, h in HTML.items():
         check('%s: usa %s' % (nome, cor), 'data-bs-custom-class="%s"' % cor in h, True)
         # O alinhamento em colunas varia entre as paginas, entao a busca e por
         # regex: o que importa e a regra existir, nao a largura do espaco.
-        check('%s: e o CSS de %s existe na pagina' % (nome, cor),
-              bool(re.search(r'\.%s\s+\.tooltip-inner' % cor, h)), True)
+        # A cor do balao e do tema (otc.scss §6g, um `@each` por cor).
+        check('%s: e o CSS de %s existe no tema' % (nome, cor),
+              bool(re.search(r'\.%s \.tooltip-inner' % cor, read('apps/static/css/otc.css'))), True)
     # `title=` num botao de acao volta a ser o balao cinza do navegador.
     acoes = re.findall(r'<button class="btn btn-\w+ btn-sm rounded-circle btn-act[^>]*>', h)
     check('%s: nenhum botao de acao com title=' % nome,
@@ -128,24 +124,24 @@ check('os quatro modais tem o par Cancel/danger + Save/success',
       sv, [('btn-danger', 'ti-x'), ('btn-success', 'ti-device-floppy')] * 4)
 
 print('\n== 8. o padrao vale para o APP INTEIRO (2026-09-04) ==')
-# A regra GLOBAL do visual-refresh.css e o que faz o squircle alcancar toda
+# A regra GLOBAL do tema (otc.scss, §6b) e o que faz o squircle alcancar toda
 # tabela — inclusive as que nao escrevem regra nenhuma (as quatro do swapchar).
 # Ela trava so a GEOMETRIA: `display` sem !important, senao venceria o .d-none
 # com que varias telas escondem um botao condicional.
-VR = read('apps/static/css/visual-refresh.css')
+VR = read('apps/static/scss/otc.scss')
 bloco = VR.split('table td .btn.btn-act {', 1)[1].split('}', 1)[0] if 'table td .btn.btn-act {' in VR else ''
 for prop in ('width: 32px !important', 'height: 32px !important',
              'min-width: 32px !important', 'max-width: 32px !important',
              'min-height: 32px !important', 'max-height: 32px !important',
              'padding: 0 !important', 'border-radius: 10px !important',
              'box-sizing: border-box !important'):
-    check('visual-refresh: a regra global trava "%s"' % prop, prop in bloco, True)
-check('visual-refresh: `display` NAO leva !important (o .d-none tem de vencer)',
+    check('otc.scss: a regra global trava "%s"' % prop, prop in bloco, True)
+check('otc.scss: `display` NAO leva !important (o .d-none tem de vencer)',
       'display: inline-flex;' in bloco and 'display: inline-flex !important' not in bloco, True)
-check('visual-refresh: alcanca as quatro familias de classe',
+check('otc.scss: alcanca as quatro familias de classe',
       all(sel in VR for sel in ('table td .btn.rounded-circle,', 'table td .btn.ops-row-act,',
                                 'table td .btn.sc-row-act,', 'table td .btn.btn-act {')), True)
-check('visual-refresh: o icone e 1rem !important',
+check('otc.scss: o icone e 1rem !important',
       bool(re.search(r'table td \.btn\.btn-act > i \{ font-size: 1rem !important', VR)), True)
 # E o markup de TODA celula de acao usa os icones canonicos: Edit e `ti-edit`
 # (nao `ti-pencil`), Confirm e `ti-check` (nao `ti-circle-check`), e nenhum

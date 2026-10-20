@@ -1,318 +1,43 @@
-<!-- ============================================================================
-    PARTIAL: sidenav-menu.html
-    DESCRIÇÃO: Menu lateral (sidenav) da aplicação OTC Tracker
-    
-    ESTRUTURA:
-      1. Logo/Marca - Exibe logotipo no topo (centralizado verticalmente)
-      2. Botões de controle - Toggle e fechar
-      3. Área do usuário - Avatar e dropdown de configurações
-      4. Menu de navegação - Links e submenus
-    
-    DEPENDÊNCIAS:
-      - config. ASSETS_ROOT:  Caminho base para assets
-      - Lucide Icons: Biblioteca de ícones
-      - Bootstrap 5: Collapse, Dropdown
-      - SimpleBar: Scroll customizado
-    
-    NOTA SOBRE O LOGO:
-      O tema OTC Tracker controla a visibilidade dos logos através de CSS: 
-      - . logo-light / .logo-dark: Controlado pelo tema (data-menu-color)
-      - .logo-lg / .logo-sm: Controlado pelo tamanho da sidebar (data-sidenav-size)
-      NÃO usar display: flex nos spans internos pois quebra essa lógica! 
-    ============================================================================ -->
-    <style>
-        /* ============================================================================
-           ÍCONE CUSTOMIZADO PARA B3
-           
-           DESCRIÇÃO: Estilização do ícone customizado B3 com SVG inline
-           
-           FUNCIONALIDADE:
-           - Exibe logo da B3 como ícone no menu lateral usando SVG inline
-           - Usa fill="currentColor" para herdar a cor do texto
-           - Suporta 4 temas: light, dark, gray, gradient
-           - Cor controlada pela propriedade CSS 'color' (como demais ícones)
-           
-           VANTAGENS:
-           - Cores herdadas automaticamente dos estilos do tema
-           - Não necessita CSS específico por tema
-           - Comportamento idêntico aos ícones Lucide Icons
-           ============================================================================ */
-        
-        .icon-b3 {
-          display: inline-block;
-          width: 20px;
-          height: 20px;
-          vertical-align: middle;
-          /* Herda a cor do elemento pai (.menu-icon ou .side-nav-link) */
-          color: inherit;
-          /* Redimensiona proporcional ao container */
-          background-size: contain;
-          
-          /* Previne repetição da imagem */
-          background-repeat: no-repeat;
-          
-          /* Centraliza a imagem no container */
-          background-position: center;
-          
-          /* Alinha verticalmente com o texto ao lado */
-          vertical-align: middle;
-          /* Previne que o ícone se redimensione em containers flex */
-          flex-shrink: 0;
-        }
-        
-        .icon-b3 svg {
-          width: 100%;
-          height: 100%;
-          display: block;
-          /* Garante que o fill do SVG use a cor herdada */
-          fill: currentColor;
-        }
-        .icon-intrag {
-          display: inline-block;
-          width: 20px;
-          height: 20px;
-          vertical-align: middle;
-          /* Herda a cor do elemento pai (.menu-icon ou .side-nav-link) */
-          color: inherit;
-          /* Redimensiona proporcional ao container */
-          background-size: contain;
-          
-          /* Previne repetição da imagem */
-          background-repeat: no-repeat;
-          
-          /* Centraliza a imagem no container */
-          background-position: center;
-          
-          /* Alinha verticalmente com o texto ao lado */
-          vertical-align: middle;
-          /* Previne que o ícone se redimensione em containers flex */
-          flex-shrink: 0;
-        }
-        
-        .icon-intrag svg {
-          width: 100%;
-          height: 100%;
-          display: block;
-          /* Garante que o fill do SVG use a cor herdada */
-          fill: currentColor;
-        }
+{# ============================================================================
+   PARTIAL: sidenav.html — o menu lateral (placa de vidro fixa à esquerda)
 
-        /* ============================================================================
-           DRILL-DOWN NAVIGATION (sidenav-drilldown.js)
-           Master → detail: clicar um item com subitens desliza o menu para mostrar
-           apenas aquele nível; breadcrumb no topo volta os níveis. Só o COMPORTAMENTO
-           muda — cada nível continua sendo um `ul.side-nav`, herdando 100% do tema.
-           Animação: transform/opacity (GPU), ease-out forte, ~240ms, interrompível.
-           ============================================================================ */
-        .sidenav-menu { --dd-ease: cubic-bezier(0.23, 1, 0.32, 1); }
+   A árvore `ul.side-nav` abaixo é a FONTE do menu: o otc.js a esconde e monta
+   o drill-down (um nível por vez, com a lente no item ativo) a partir dela.
+   Item novo de menu entra AQUI, com `href` e `data-lang` — os guardas leem
+   esta árvore (check_soc_layers, check_notif_page_url…).
 
-        /* Original theme accordion is hidden — drill-down runs in its own container. */
-        .side-nav.dd-source-hidden { display: none !important; }
+   Em cima: a marca e os botões (fixar / fechar a gaveta). Depois: os atalhos
+   "Pinned" do usuário (chave otc_topnav_<SID>, editáveis) e o menu. Embaixo:
+   o usuário, com o menu de conta.
+   ============================================================================ #}
+{% set _sid  = session.get('user_sid',  '') %}
+{% set _name = session.get('user_name', '') %}
+{% set _role = session.get('user_role', '') %}
+{% set _initials = (_name.split()[0][0] + _name.split()[-1][0]) | upper if _name and _name.split()|length > 1 else (_name[0] | upper if _name else '?') %}
+<aside class="sidenav-menu" aria-label="Main navigation">
 
-        /* Items with subitems: force a RIGHT chevron (theme default is chevron-down).
-           `rotate(-90deg)` turns the down glyph into a right one and overrides the
-           theme's -180deg active/expanded rotation, so it always points →. */
-        .dd-branch .menu-arrow { transform: rotate(-90deg) !important; }
-
-        /* Breadcrumb ------------------------------------------------------------- */
-        .dd-crumbs {
-          display: flex; flex-wrap: wrap; align-items: center; gap: .1rem .1rem;
-          padding: .55rem .9rem .3rem; margin-bottom: .1rem;
-          font-size: .7rem; line-height: 1.2;
-        }
-        .dd-crumbs.dd-at-root { display: none; }
-        /* Use the theme's sidenav item colour so the crumbs stay legible on BOTH
-           light and dark sidebars (inherit alone was near-invisible on dark). */
-        .dd-crumb {
-          appearance: none; background: none; border: 0;
-          color: var(--ins-sidenav-item-color, inherit); opacity: .8;
-          padding: .1rem .28rem; border-radius: 6px; font-weight: 600;
-          cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-          transition: opacity .16s var(--dd-ease), color .16s var(--dd-ease), background-color .16s var(--dd-ease), transform .12s var(--dd-ease);
-        }
-        button.dd-crumb:hover {
-          opacity: 1; color: var(--ins-sidenav-item-hover-color, var(--ins-sidenav-item-color, inherit));
-          background: rgba(128, 128, 128, .2);
-        }
-        button.dd-crumb:active { transform: scale(.96); }
-        .dd-crumb-active { opacity: 1; cursor: default; }
-        .dd-crumb-sep {
-          display: inline-flex; align-items: center; margin: 0 -1px; opacity: .55;
-          color: var(--ins-sidenav-item-color, inherit);
-        }
-        .dd-crumb-sep svg { width: 13px; height: 13px; }
-
-        /* Sliding stage + panels ------------------------------------------------- */
-        .dd-stage { position: relative; overflow: hidden; }
-        .dd-panel {
-          transform: translateX(0); opacity: 1;
-          transition: transform .24s var(--dd-ease), opacity .24s var(--dd-ease);
-          will-change: transform, opacity; margin-bottom: 0;
-        }
-        .dd-enter-right { transform: translateX(100%); opacity: .35; }
-        .dd-enter-left  { transform: translateX(-34%); opacity: .35; }
-        .dd-exit-left   { transform: translateX(-34%); opacity: 0; }
-        .dd-exit-right  { transform: translateX(100%); opacity: 0; }
-
-        /* Back row --------------------------------------------------------------- */
-        .dd-back { border-bottom: 1px solid rgba(128, 128, 128, .16); margin-bottom: .15rem; padding-bottom: .1rem; }
-        .dd-back-link { opacity: .78; }
-        .dd-back-link:hover { opacity: 1; }
-        .dd-back-icon svg { transition: transform .16s var(--dd-ease); }
-        .dd-back-link:hover .dd-back-icon svg { transform: translateX(-2px); }
-
-        /* The branch drill trigger keeps the theme's menu-arrow (points right). */
-        .dd-branch:active, .dd-leaf:active, .dd-back-link:active { transform: scale(.985); }
-
-        /* Entrance stagger (dropped under reduced motion by the controller) ------ */
-        .dd-stagger > li {
-          opacity: 0; transform: translateY(6px);
-          animation: ddRowIn .26s var(--dd-ease) both; animation-delay: var(--dd-delay, 0ms);
-        }
-        @keyframes ddRowIn { to { opacity: 1; transform: none; } }
-
-        @media (prefers-reduced-motion: reduce) {
-          .dd-panel { transition: opacity .18s ease; }
-          .dd-enter-right, .dd-enter-left, .dd-exit-left, .dd-exit-right { transform: none; }
-          .dd-stagger > li { animation: none; opacity: 1; transform: none; }
-          .dd-back-link:hover .dd-back-icon svg { transform: none; }
-        }
-        </style>
-        
-        <!-- Sidenav Menu Start -->
-        <div class="sidenav-menu">
-        
-            {# =========================================================================
-               LOGO / MARCA
-               Exibe o logotipo da aplicação no topo do menu lateral
-               
-               ESTRUTURA DE VISIBILIDADE (controlada pelo CSS do tema):
-                 - .logo-light:  Visível quando sidebar tem fundo escuro/gradiente
-                 - .logo-dark: Visível quando sidebar tem fundo claro
-                 - .logo-lg: Visível quando sidebar está expandida (default)
-                 - .logo-sm: Visível quando sidebar está minimizada (condensed)
-               
-               CENTRALIZAÇÃO VERTICAL:
-                 - Container usa height + padding para criar espaço
-                 - Imagens usam vertical-align: middle para centralizar
-                 
-               IMPORTANTE:  Não adicionar display: flex nos spans . logo-light/. logo-dark
-                           pois isso sobrescreve o controle de visibilidade do tema!
-               ========================================================================= #}
-            <a href="/dashboard" class="logo" style="height: 64px !important; padding: 7px 0 !important; box-sizing: border-box !important;">
-                
-                {# =====================================================================
-                   LOGO PARA TEMA CLARO (sidebar com fundo escuro/gradiente)
-                   Visibilidade controlada pelo CSS do tema - NÃO modificar display! 
-                   ===================================================================== #}
-                <span class="logo logo-light">
-                    {# Logo grande - exibido quando sidebar está EXPANDIDA #}
-                    <span class="logo-lg">
-                        <img src="{{ config.ASSETS_ROOT }}/images/logo.png"
-                             alt="OTC Tracker Logo"
-                             style="height: 50px !important; width: auto !important; object-fit: contain; vertical-align: middle;">
-                    </span>
-                    {# Logo pequeno - exibido quando sidebar está MINIMIZADA (condensed) #}
-                    <span class="logo-sm">
-                        <img src="{{ config.ASSETS_ROOT }}/images/logo-sm.png"
-                             alt="OTC Tracker Logo Small"
-                             style="height: 28px !important; width: auto !important; max-width: 60px !important; object-fit: contain; vertical-align: middle;">
-                    </span>
-                </span>
-        
-                {# =====================================================================
-                   LOGO PARA TEMA ESCURO (sidebar com fundo claro)
-                   Visibilidade controlada pelo CSS do tema - NÃO modificar display!
-                   ===================================================================== #}
-                <span class="logo logo-dark">
-                    {# Logo grande - versão escura para fundo claro #}
-                    <span class="logo-lg">
-                        <img src="{{ config.ASSETS_ROOT }}/images/logo-black.png" 
-                             alt="OTC Tracker Logo Dark"
-                             style="height: 50px !important; width: auto !important; object-fit: contain; vertical-align: middle;">
-                    </span>
-                    {# Logo pequeno - versão preta para sidebar minimizada em fundo claro #}
-                    <span class="logo-sm">
-                        <img src="{{ config.ASSETS_ROOT }}/images/logo-sm-black.png"
-                             alt="OTC Tracker Logo Small"
-                             style="height: 28px !important; width: auto !important; max-width: 60px !important; object-fit: contain; vertical-align: middle;">
-                    </span>
-                </span>
-            </a>
-        
-            <!-- Sidebar Hover Menu Toggle Button -->
-            <button class="button-on-hover">
-                <i class="ti ti-menu-4 fs-22 align-middle"></i>
+    <div class="d-flex align-items-center">
+        <a href="/dashboard" class="otc-brand">
+            <span class="otc-brand__tile"><img src="{{ config.ASSETS_ROOT }}/images/logo-sm.png" alt="" style="filter: brightness(0) invert(1); width: 26px;"></span>
+            <span class="otc-brand__word">OTC Tracker</span>
+        </a>
+        <span class="otc-side__tools">
+            <button type="button" class="btn btn-ghost-secondary btn-icon btn-sm otc-pin-btn" data-otc-pin title="Pin / unpin menu" aria-label="Pin menu">
+                <i data-lucide="panel-left"></i>
             </button>
-        
-            <!-- Full Sidebar Menu Close Button -->
-            <button class="button-close-offcanvas">
-                <i class="ti ti-x align-middle"></i>
-            </button>
-        
-            <div class="scrollbar" data-simplebar>
-        
-                <!-- User -->
-                <div class="sidenav-user">
-                    {% set _sid  = session.get('user_sid',  '') %}
-                    {% set _name = session.get('user_name', '') %}
-                    {% set _role = session.get('user_role', '') %}
-                    {% set _initials = (_name.split()[0][0] + _name.split()[-1][0]) | upper if _name and _name.split()|length > 1 else (_name[0] | upper if _name else '?') %}
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <a href="/users-profile" class="link-reset">
-                                <div class="avatar avatar-md mb-2">
-                                    <img src="{{ config.ASSETS_ROOT }}/images/users/{{ _sid | lower }}.jpg" alt="{{ _name }}"
-                                         class="rounded-circle avatar-md"
-                                         onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='inline-flex';" />
-                                    <span class="avatar-title bg-primary-subtle text-primary rounded-circle fw-bold" style="display:none;">{{ _initials }}</span>
-                                </div>
-                                <span class="sidenav-user-name fw-bold">{{ _name.split()[0] if _name else 'User' }}</span>
-                                <span class="fs-12 fw-semibold" data-lang="user-role">{{ _role or 'N/A' }}</span>
-                            </a>
-                        </div>
-                        <div>
-                            <a class="dropdown-toggle drop-arrow-none link-reset sidenav-user-set-icon"
-                               data-bs-toggle="dropdown"
-                               data-bs-offset="0,12" href="#!" aria-haspopup="false" aria-expanded="false">
-                                <i class="ti ti-settings fs-24 align-middle ms-1"></i>
-                            </a>
+        </span>
+    </div>
 
-                            <div class="dropdown-menu">
-                                <div class="dropdown-header noti-title">
-                                    <h6 class="text-overflow m-0">Welcome back, {{ _name.split()[0] if _name else 'User' }}!</h6>
-                                </div>
-                                <a href="/users-profile" class="dropdown-item">
-                                    <i class="ti ti-user-circle me-2 fs-17 align-middle"></i>
-                                    <span class="align-middle">Profile</span>
-                                </a>
-                                <a href="javascript:void(0);" class="dropdown-item">
-                                    <i class="ti ti-bell-ringing me-2 fs-17 align-middle"></i>
-                                    <span class="align-middle">Notifications</span>
-                                </a>
-                                <a href="javascript:void(0);" class="dropdown-item">
-                                    <i class="ti ti-settings-2 me-2 fs-17 align-middle"></i>
-                                    <span class="align-middle">Account Settings</span>
-                                </a>
-                                <a href="javascript:void(0);" class="dropdown-item">
-                                    <i class="ti ti-headset me-2 fs-17 align-middle"></i>
-                                    <span class="align-middle">Support Center</span>
-                                </a>
-                                <div class="dropdown-divider"></div>
-                                <a href="/auth-lock-screen" class="dropdown-item">
-                                    <i class="ti ti-lock me-2 fs-17 align-middle"></i>
-                                    <span class="align-middle">Lock Screen</span>
-                                </a>
-                                <a href="/logout" class="dropdown-item fw-semibold text-danger">
-                                    <i class="ti ti-logout-2 me-2 fs-17 align-middle"></i>
-                                    <span class="align-middle">Log Out</span>
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-        
-                <! --- Sidenav Menu -->
+    <div class="otc-side__scroll">
+
+        <div class="otc-side__label">
+            <span data-lang="otc-pinned">Pinned</span>
+            <button type="button" class="btn btn-ghost-secondary btn-icon btn-sm" data-otc-pin-edit title="Customize" aria-label="Customize pinned pages">
+                <i data-lucide="sliders-horizontal"></i>
+            </button>
+        </div>
+        <nav class="otc-pinned" data-sid="{{ _sid }}" aria-label="Pinned pages"></nav>
+
                 <ul class="side-nav">
                     <li class="side-nav-title mt-2" data-lang="menu-title">Main</li>
 
@@ -1283,9 +1008,33 @@
                     </li>
         
                 </ul>
-            </div>
+    </div>
+
+    <div class="dropdown">
+        <a href="#!" class="otc-side__user" data-bs-toggle="dropdown" data-bs-offset="0,10" aria-expanded="false">
+            <span class="avatar avatar-md">
+                <img src="{{ config.ASSETS_ROOT }}/images/users/{{ _sid | lower }}.jpg" alt="{{ _name }}"
+                     class="rounded-circle avatar-md"
+                     onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='inline-flex';" />
+                <span class="avatar-title bg-primary-subtle text-primary rounded-circle fw-bold" style="display:none;">{{ _initials }}</span>
+            </span>
+            <span class="otc-side__who">
+                <span class="otc-side__name">{{ _name or 'User' }}</span>
+                <span class="otc-side__role" data-lang="user-role">{{ _role or 'N/A' }}</span>
+            </span>
+            <i data-lucide="chevrons-up-down"></i>
+        </a>
+        <div class="dropdown-menu">
+            <div class="dropdown-header">Welcome back, {{ _name.split()[0] if _name else 'User' }}!</div>
+            <a href="/users-profile" class="dropdown-item"><i class="ti ti-user-circle"></i><span>Profile</span></a>
+            <a href="/tickets-list" class="dropdown-item"><i class="ti ti-headset"></i><span>Support Center</span></a>
+            <div class="dropdown-divider"></div>
+            <a href="/auth-lock-screen" class="dropdown-item"><i class="ti ti-lock"></i><span>Lock Screen</span></a>
+            <a href="/logout" class="dropdown-item fw-semibold text-danger"><i class="ti ti-logout-2"></i><span>Log Out</span></a>
         </div>
-        <!-- Sidenav Menu End -->
+    </div>
+
+</aside>
 
 <script>
 // Per-user page access applied to the sidebar: an admin sees the Page Access

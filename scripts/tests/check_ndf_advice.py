@@ -244,8 +244,10 @@ check('uma largura por coluna',
 check('o Print Advice esta na pagina', 'swPrintAdvice' in HTML, True)
 
 OTM = read('apps/templates/pages/otm-settlements.html')
-check('a toolbar do OTM ganhou respiro',
-      '#otm-page .card-body > .d-flex.justify-content-between' in OTM, True)
+# Desde o rebranding (19/10/2026) o respiro da toolbar é do markup — `gap-2`
+# entre os botões e a margem de baixo — e não mais de uma regra no <style>.
+TOOLBAR_RESPIRO = re.compile(r'class="d-flex justify-content-between[^"]*\bflex-wrap\b[^"]*\bgap-\d[^"]*\bmb-\d')
+check('a toolbar do OTM ganhou respiro', bool(TOOLBAR_RESPIRO.search(OTM)), True)
 
 # ─────────────────────────────────────────────────────────────────────────────
 print('\n== 7. as linhas no Trade Level ==')
@@ -407,8 +409,7 @@ check('a conta PROPRIA nao e omnibus', R._b3_is_omnibus('73760.00-9'), False)
 check('a de CLIENTE 2 e omnibus', R._b3_is_omnibus('73760.20-5'), True)
 check('conta vazia nao e omnibus', R._b3_is_omnibus(''), False)
 check('a toolbar do Live Position NDF ganhou respiro',
-      '#live-position-ndf-page .card-body > .d-flex.justify-content-between'
-      in read('apps/templates/pages/live-position-ndf.html'), True)
+      bool(TOOLBAR_RESPIRO.search(read('apps/templates/pages/live-position-ndf.html'))), True)
 
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

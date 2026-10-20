@@ -49,18 +49,49 @@ function isDark() {
     return document.documentElement.getAttribute('data-bs-theme') === 'dark';
 }
 
+// Cores do tema (otc.scss): os matizes do Pane são TOKENS (`--otc-blue`…) que
+// mudam com claro/escuro — por isso são lidos na hora de desenhar, nunca
+// guardados numa constante. `tok` resolve token que aponta para outro token.
+function tok(name) {
+    const root = document.documentElement;
+    let v = getComputedStyle(root).getPropertyValue('--otc-' + name).trim();
+    if (!v || /^(var|color-mix)\(/.test(v)) {
+        const probe = document.createElement('span');
+        probe.style.color = v || 'currentColor';
+        probe.style.display = 'none';
+        document.body.appendChild(probe);
+        v = getComputedStyle(probe).color;
+        probe.remove();
+    }
+    return v;
+}
+// matiz por nome; `shift` > 0 clareia (mistura com branco), < 0 escurece
+function hue(name, shift) {
+    const v = name === 'gray' ? tok('text-3') : tok(name);
+    if (!shift || v.charAt(0) !== '#') return v;
+    const h = v.slice(1), full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+    const n = parseInt(full, 16), to = shift > 0 ? 255 : 0, k = Math.abs(shift);
+    const mix = c => Math.round(c + (to - c) * k);
+    const r = mix((n >> 16) & 255), g = mix((n >> 8) & 255), b = mix(n & 255);
+    return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+}
+// paleta = lista de NOMES de matiz, resolvida no desenho
+function pal(names, i) {
+    const n = names[i % names.length];
+    return Array.isArray(n) ? hue(n[0], n[1]) : hue(n);
+}
+
 /** Premium theme-aware tooltip config (shared by all charts). */
 function premiumTooltip(extra) {
-    const dark = isDark();
     return Object.assign({
-        backgroundColor: dark ? 'rgba(30, 41, 59, 0.95)' : 'rgba(255, 255, 255, 0.97)',
-        titleColor:      dark ? '#f1f5f9' : '#1e293b',
-        bodyColor:       dark ? '#cbd5e1' : '#475569',
-        borderColor:     dark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+        backgroundColor: tok('menu-bg'),
+        titleColor:      tok('text'),
+        bodyColor:       tok('text-2'),
+        borderColor:     tok('sep'),
         borderWidth: 1,
         padding: 12,
-        cornerRadius: 10,
-        footerColor:     dark ? '#f1f5f9' : '#1e293b',
+        cornerRadius: 14,
+        footerColor:     tok('text'),
         titleFont: { family: bodyFont, weight: '600', size: 13 },
         bodyFont:  { family: bodyFont, size: 12 },
         footerFont:{ family: bodyFont, weight: '600', size: 12 },
@@ -209,7 +240,7 @@ function liveDisplayLabel(label) {
 // Live Position bar color per product — aligned with the Settlement Forecast palette.
 function liveProductColor(label, idx) {
     const fn = FC_PRODUCT_COLORS[label];
-    return fn ? fn() : LIVE_COLORS[idx % LIVE_COLORS.length];
+    return fn ? fn() : pal(LIVE_COLORS, idx);
 }
 
 // ─── chart instances ─────────────────────────────────────────────────────────
@@ -223,32 +254,32 @@ let pieChart = null, flowChart = null, clientsChart = null, productsChart = null
 // (`swap_products` / `unwind_products`, tirados da LOB do deal e da árvore do
 // cache); sem a quebra — dado antigo em cache — vale a série única de antes,
 // para o gráfico nunca ficar sem a barra.
-const SWAP_COLORS   = ['#f59e0b', '#fbbf24', '#b45309', '#fcd34d'];
-const UNWIND_COLORS = ['#ef4444', '#fb7185', '#b91c1c', '#fda4af'];
+const SWAP_COLORS   = ['orange', 'yellow', ['orange', -0.3], ['yellow', 0.35]];
+const UNWIND_COLORS = ['danger', ['danger', 0.35], ['danger', -0.3], ['pink', 0.3]];
 
 function dealSeries(d) {
     d = d || {};
     const out = [
         { label: 'NDF Commodities',    total: d.dist_ndf || 0,           monthly: d.monthly_ndf || [],           color: ins('chart-primary') },
-        { label: 'NDF Vanilla',        total: d.dist_ndf_vanilla || 0,   monthly: d.monthly_ndf_vanilla || [],   color: '#5e5ce6' },
-        { label: 'NDF Other Publisher',total: d.dist_ndf_otherpub || 0,  monthly: d.monthly_ndf_otherpub || [],  color: '#8b5cf6' },
-        { label: 'NDF FWD Start',      total: d.dist_ndf_fwdstart || 0,  monthly: d.monthly_ndf_fwdstart || [],  color: '#d946ef' },
-        { label: 'Option Commodities', total: d.dist_opt || 0,           monthly: d.monthly_opt || [],           color: ins('chart-secondary') },
-        { label: 'Option FXO',         total: d.dist_fxo || 0,           monthly: d.monthly_fxo || [],           color: '#10b981' }
+        { label: 'NDF Vanilla',        total: d.dist_ndf_vanilla || 0,   monthly: d.monthly_ndf_vanilla || [],   color: hue('indigo') },
+        { label: 'NDF Other Publisher',total: d.dist_ndf_otherpub || 0,  monthly: d.monthly_ndf_otherpub || [],  color: hue('purple') },
+        { label: 'NDF FWD Start',      total: d.dist_ndf_fwdstart || 0,  monthly: d.monthly_ndf_fwdstart || [],  color: hue('pink') },
+        { label: 'Option Commodities', total: d.dist_opt || 0,           monthly: d.monthly_opt || [],           color: hue('teal') },
+        { label: 'Option FXO',         total: d.dist_fxo || 0,           monthly: d.monthly_fxo || [],           color: hue('green') }
     ];
     const swaps = d.swap_products || [];
     if (swaps.length) {
         swaps.forEach((p, i) => out.push({ label: p.label, total: p.total || 0,
-                                           monthly: p.monthly || [], color: SWAP_COLORS[i % SWAP_COLORS.length] }));
+                                           monthly: p.monthly || [], color: pal(SWAP_COLORS, i) }));
     } else {
-        out.push({ label: 'Swap', total: d.dist_swap || 0, monthly: d.monthly_swap || [], color: SWAP_COLORS[0] });
+        out.push({ label: 'Swap', total: d.dist_swap || 0, monthly: d.monthly_swap || [], color: pal(SWAP_COLORS, 0) });
     }
     const unwinds = d.unwind_products || [];
     if (unwinds.length) {
         unwinds.forEach((p, i) => out.push({ label: p.label, total: p.total || 0,
-                                             monthly: p.monthly || [], color: UNWIND_COLORS[i % UNWIND_COLORS.length] }));
+                                             monthly: p.monthly || [], color: pal(UNWIND_COLORS, i) }));
     } else {
-        out.push({ label: 'Unwinds', total: d.dist_unwind || 0, monthly: d.monthly_unwind || [], color: UNWIND_COLORS[0] });
+        out.push({ label: 'Unwinds', total: d.dist_unwind || 0, monthly: d.monthly_unwind || [], color: pal(UNWIND_COLORS, 0) });
     }
     return out;
 }
@@ -265,8 +296,7 @@ function buildPieChart(series) {
             datasets: [{
                 data: series.map(p => p.total || 0),
                 backgroundColor: doughnutGradient(series.map(p => p.color), 1, 0.55),
-                borderColor: isDark() ? 'rgba(30,41,59,0.6)' : '#fff',
-                borderWidth: 2,
+                borderWidth: 0, spacing: 3, borderRadius: 6,
                 hoverOffset: 8,
                 cutout: '65%'
             }]
@@ -283,11 +313,27 @@ function buildPieChart(series) {
     });
 }
 
+// Rótulos das 12 barras do Deal Flow. O servidor diz onde a série começa
+// (`monthly_start`, 'AAAA-MM'): janeiro do ano corrente, ou o mês mais antigo da
+// janela no "Last 12 months" — ali a série cruza o ano, e a barra leva o ano
+// junto ('Nov/25') para não haver dois "Out" sem dizer qual é qual.
+const MONTH_ABBR = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+function monthLabels(start) {
+    const m = /^(\d{4})-(\d{2})$/.exec(start || '');
+    if (!m || m[2] === '01') return MONTH_ABBR.slice();
+    let y = +m[1], mo = +m[2] - 1;
+    return Array.from({ length: 12 }, () => {
+        const l = `${MONTH_ABBR[mo]}/${String(y).slice(2)}`;
+        if (++mo === 12) { mo = 0; y++; }
+        return l;
+    });
+}
+
 function buildFlowChart(series) {
     const ctx = document.getElementById('sales-analytics-chart');
     if (!ctx) return;
     if (flowChart) flowChart.destroy();
-    const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const months = monthLabels(_lastData && _lastData.monthly_start);
     flowChart = new Chart(ctx, {
         data: {
             labels: months,
@@ -308,7 +354,7 @@ function buildFlowChart(series) {
             },
             scales: {
                 x: { stacked: true, ticks: { font: { family: bodyFont }, color: ins('secondary-color') }, grid: { display: false }, border: { display: false } },
-                y: { stacked: true, ticks: { font: { family: bodyFont }, color: ins('secondary-color'), precision: 0 }, grid: { color: ins('chart-border-color'), lineWidth: 1 }, border: { display: false, dash: [5, 5] } }
+                y: { stacked: true, ticks: { font: { family: bodyFont }, color: ins('secondary-color'), precision: 0 }, grid: { color: ins('chart-border-color'), lineWidth: 1 }, border: { display: false, dash: [3, 5] } }
             }
         }
     });
@@ -324,20 +370,20 @@ let _subTemplate = null;                   // cached "…{n}…" subtitle templa
 const FC_PRODUCT_COLORS = {
     'NDF Moeda':       () => ins('chart-primary'),
     'NDF Commodities': () => ins('chart-secondary'),
-    'Option FXO':      () => '#10b981',
-    'Option Commodities': () => '#0ea5e9',
-    'Option EDG':      () => '#a855f7',
-    'SWAP CEM':        () => '#f59e0b',
-    'SWAP EDG':        () => '#f43f5e',
-    'SWAP CEMHYB':     () => '#94a3b8',
+    'Option FXO':      () => hue('green'),
+    'Option Commodities': () => hue('blue'),
+    'Option EDG':      () => hue('purple'),
+    'SWAP CEM':        () => hue('orange'),
+    'SWAP EDG':        () => hue('pink'),
+    'SWAP CEMHYB':     () => hue('gray'),
 };
-const FC_FALLBACK = ['#4f46e5', '#0ea5e9', '#10b981', '#a855f7', '#f59e0b', '#f43f5e', '#14b8a6', '#94a3b8'];
+const FC_FALLBACK = ['indigo', 'blue', 'green', 'purple', 'orange', 'pink', 'teal', 'gray'];
 // Per-entity colors — aligned with the e-mail's "Settlements by Entity" chart
 // (settlement-forecast.js entityColors). Unknown entities fall back to the palette.
 const FC_ENTITY_COLORS = {
     'LAWTON':  () => ins('chart-primary'),
-    'MGT':     () => '#10b981',
-    'ATACAMA': () => '#f59e0b',
+    'MGT':     () => hue('green'),
+    'ATACAMA': () => hue('orange'),
 };
 let forecastEntityChart = null;
 
@@ -394,17 +440,21 @@ async function loadForecastChart() {
     }
 }
 
-// Build the product dropdown from the data and wire selection → re-render
+// Build the product segment from the data and wire selection → re-render
 function populateForecastFilter(data) {
     const menu = document.getElementById('fc-product-menu');
     if (!menu) return;
     const products = (data.products || []).map(p => p.label);
     // Keep "All" (first item), drop any previously-appended product items
-    menu.querySelectorAll('[data-product]:not([data-product="__all__"])').forEach(el => el.closest('li').remove());
+    // O filtro é um SEGMENTO (nav-pills): um <a class="nav-link"> por produto
+    menu.querySelectorAll('[data-product]:not([data-product="__all__"])').forEach(el => el.remove());
     products.forEach(label => {
-        const li = document.createElement('li');
-        li.innerHTML = `<a class="dropdown-item" href="#" data-product="${label}">${label}</a>`;
-        menu.appendChild(li);
+        const a = document.createElement('a');
+        a.className = 'nav-link';
+        a.href = '#';
+        a.setAttribute('data-product', label);
+        a.textContent = label;
+        menu.appendChild(a);
     });
     // If the current filter no longer exists in this dataset, reset to All
     if (_forecastProductFilter !== '__all__' && products.indexOf(_forecastProductFilter) === -1) {
@@ -452,7 +502,7 @@ function renderForecastSub() {
     el.textContent = _subTemplate.replace('{n}', _forecastDays);
 }
 
-// Range dropdown (15 | 20 | 30 business days) → reload the forecast on selection.
+// Range segment (15 | 20 | 30 business days) → reload the forecast on selection.
 function wireForecastRange() {
     const menu = document.getElementById('fc-range-menu');
     const btn  = document.getElementById('fc-range-label');
@@ -574,7 +624,7 @@ function _forecastStackOptions() {
         },
         scales: {
             x: { stacked: true, ticks: { font: { family: bodyFont }, color: ins('secondary-color') }, grid: { display: false }, border: { display: false } },
-            y: { stacked: true, ticks: { font: { family: bodyFont }, color: ins('secondary-color'), precision: 0 }, grid: { color: ins('chart-border-color'), lineWidth: 1 }, border: { display: false, dash: [5, 5] } }
+            y: { stacked: true, ticks: { font: { family: bodyFont }, color: ins('secondary-color'), precision: 0 }, grid: { color: ins('chart-border-color'), lineWidth: 1 }, border: { display: false, dash: [3, 5] } }
         }
     };
 }
@@ -589,7 +639,7 @@ function buildForecastProductChart(data) {
         products = products.filter(p => p.label === _forecastProductFilter);
     }
     const datasets = products.map(p => {
-        const c = FC_PRODUCT_COLORS[p.label] ? FC_PRODUCT_COLORS[p.label]() : FC_FALLBACK[fb++ % FC_FALLBACK.length];
+        const c = FC_PRODUCT_COLORS[p.label] ? FC_PRODUCT_COLORS[p.label]() : pal(FC_FALLBACK, fb++);
         return {
             type: 'bar', label: p.label, data: p.values,
             backgroundColor: vGradient(c, 1, 0.45), borderColor: 'transparent',
@@ -615,7 +665,7 @@ function buildForecastEntityChart(data) {
     if (forecastEntityChart) forecastEntityChart.destroy();
     let fb = 0;
     const datasets = entities.map(en => {
-        const c = FC_ENTITY_COLORS[en.label] ? FC_ENTITY_COLORS[en.label]() : FC_FALLBACK[fb++ % FC_FALLBACK.length];
+        const c = FC_ENTITY_COLORS[en.label] ? FC_ENTITY_COLORS[en.label]() : pal(FC_FALLBACK, fb++);
         return {
             type: 'bar', label: en.label, data: en.values,
             backgroundColor: vGradient(c, 1, 0.45), borderColor: 'transparent',
@@ -634,13 +684,13 @@ function _productColor(p) {
     switch (p) {
         case 'NDF Commodities':     return ins('chart-primary');
         case 'Option Commodities':  return ins('chart-secondary');
-        case 'Option FXO':          return '#10b981';
+        case 'Option FXO':          return hue('green');
         case 'NDF FWD Start':       return ins('chart-dark');
         case 'NDF Other Publisher': return ins('chart-gray');
         default:                    return null;   // pulled from fallback palette
     }
 }
-const PRODUCT_FALLBACK = ['#0ea5e9', '#14b8a6', '#f59e0b', '#f43f5e', '#a855f7'];
+const PRODUCT_FALLBACK = ['blue', 'teal', 'orange', 'pink', 'purple'];
 
 // Toggle a card's canvas ↔ empty-state message WITHOUT removing the canvas from
 // the DOM. Replacing card-body.innerHTML (the old approach) deleted the <canvas>,
@@ -680,7 +730,7 @@ function buildClientsChart(top5) {
     let fb = 0;
     const datasets = stacked
         ? products.map(p => {
-            const base = _productColor(p) || PRODUCT_FALLBACK[fb++ % PRODUCT_FALLBACK.length];
+            const base = _productColor(p) || pal(PRODUCT_FALLBACK, fb++);
             return { label: p, data: top5.map(c => (c.by_product && c.by_product[p]) || 0),
                      backgroundColor: hGradient(base, 0.55, 1), borderRadius: stackEndRadius(6, 'left'), borderSkipped: false, barThickness: 22, stack: 'clients' };
         })
@@ -713,14 +763,13 @@ function buildProductsChart(top5) {
     if (!ctx) return;
     if (productsChart) productsChart.destroy();
     if (_setChartEmpty(ctx, !top5.length)) return;
-    // 4ª cor: chart-gray é #edeff3 no light — a fatia ficava quase branca e o
-    // valor, escrito em branco por cima, sumia. Violeta é o mesmo tom que a
-    // NDF Vanilla já tem no Deal Flow Analytics.
-    const baseColors = [ins('chart-primary'), ins('chart-secondary'), ins('chart-dark'), '#5e5ce6', ins('chart-primary')];
+    // nunca o cinza do tema: a fatia ficava quase branca e o valor, escrito
+    // em branco por cima, sumia
+    const baseColors = [ins('chart-primary'), hue('teal'), hue('indigo'), hue('purple'), hue('pink')];
     productsChart = new Chart(ctx, {
         type: 'doughnut',
         plugins: [valueLabelPlugin],
-        data: { labels: top5.map(d => d.label), datasets: [{ data: top5.map(d => d.count), backgroundColor: doughnutGradient(baseColors, 1, 0.6), borderColor: isDark() ? 'rgba(30,41,59,0.6)' : '#fff', borderWidth: 2, hoverOffset: 8, cutout: '60%' }] },
+        data: { labels: top5.map(d => d.label), datasets: [{ data: top5.map(d => d.count), backgroundColor: doughnutGradient(baseColors, 1, 0.6), borderWidth: 0, spacing: 3, borderRadius: 6, hoverOffset: 8, cutout: '62%' }] },
         options: {
             responsive: true, maintainAspectRatio: false,
             animation: GROW_ANIM_PIE,
@@ -735,7 +784,7 @@ function buildProductsChart(top5) {
 
 // Distinct, light multi-hue palette for commodities — harmonious with the
 // theme but visually separate from the products chart (purple/blue tokens).
-const COMMODITY_COLORS = ['#0ea5e9', '#14b8a6', '#f59e0b', '#f43f5e', '#a855f7'];
+const COMMODITY_COLORS = ['blue', 'teal', 'orange', 'pink', 'purple'];
 
 function buildCommoditiesChart(top5) {
     const ctx = document.getElementById('top5-commodities-chart');
@@ -745,7 +794,7 @@ function buildCommoditiesChart(top5) {
     commoditiesChart = new Chart(ctx, {
         type: 'doughnut',
         plugins: [valueLabelPlugin],
-        data: { labels: top5.map(d => d.label), datasets: [{ data: top5.map(d => d.count), backgroundColor: doughnutGradient(COMMODITY_COLORS, 1, 0.6), borderColor: isDark() ? 'rgba(30,41,59,0.6)' : '#fff', borderWidth: 2, hoverOffset: 8, cutout: '60%' }] },
+        data: { labels: top5.map(d => d.label), datasets: [{ data: top5.map(d => d.count), backgroundColor: doughnutGradient(COMMODITY_COLORS.map(n => hue(n)), 1, 0.6), borderWidth: 0, spacing: 3, borderRadius: 6, hoverOffset: 8, cutout: '62%' }] },
         options: {
             responsive: true, maintainAspectRatio: false,
             animation: GROW_ANIM_PIE,
@@ -831,7 +880,7 @@ let liveChart = null;
 let _liveData = null;
 let _liveDrp = null;  // daterangepicker instance for the Live Position date field
 // Multi-hue palette for the by-product bars (distinct from the flow/pie tokens).
-const LIVE_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e', '#a855f7', '#14b8a6', '#64748b'];
+const LIVE_COLORS = ['indigo', 'blue', 'green', 'orange', 'pink', 'purple', 'teal', 'gray'];
 
 /** Toggle a centered "no data" message over the live-position canvas. */
 function _setLiveEmpty(canvas, isEmpty) {
@@ -904,11 +953,17 @@ function renderLiveEntityStats(entities) {
     const box = document.getElementById('live-entity-stats');
     if (!box) return;
     if (!entities || !entities.length) { box.innerHTML = ''; return; }
-    box.innerHTML = entities.map(e => `
-        <div class="d-flex align-items-center justify-content-between">
-            <span class="text-muted fs-xs">${e.label}</span>
-            <span class="badge bg-light text-body fw-semibold">${e.count}</span>
-        </div>`).join('');
+    // legenda do Pane: barra de 3px na cor da entidade (a mesma do Settlement
+    // Forecast), rótulo e número
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    let fb = 0;
+    box.innerHTML = entities.map(e => {
+        const c = FC_ENTITY_COLORS[e.label] ? FC_ENTITY_COLORS[e.label]() : pal(FC_FALLBACK, fb++);
+        return `<div class="otc-legend__row" style="--hue:${esc(c)}">
+            <span class="otc-legend__label">${esc(e.label)}</span>
+            <span class="otc-legend__value">${esc(Number(e.count).toLocaleString())}</span>
+        </div>`;
+    }).join('');
 }
 
 async function loadLivePosition(dateStr) {
@@ -1137,8 +1192,8 @@ function rerenderCharts() {
     buildClientsChart(_lastData.top5_clients);
     buildProductsChart(_lastData.top5_products);
     buildCommoditiesChart(_lastData.top5_underlying);
-    if (_forecastData) buildForecastProductChart(_forecastData);
-    if (_liveData) buildLivePositionChart(_liveData);
+    if (_forecastData) { buildForecastProductChart(_forecastData); buildForecastEntityChart(_forecastData); }
+    if (_liveData) { buildLivePositionChart(_liveData); renderLiveEntityStats(_liveData.by_entity); }
 }
 
 // ─── init ────────────────────────────────────────────────────────────────────
@@ -1171,6 +1226,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const _rerender = debounce(rerenderCharts, 120);
     new MutationObserver(_rerender).observe(document.documentElement, {
         attributes: true,
-        attributeFilter: ['data-bs-theme', 'data-skin']
+        attributeFilter: ['data-bs-theme', 'data-accent']
     });
 });

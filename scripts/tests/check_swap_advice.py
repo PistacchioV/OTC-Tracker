@@ -439,8 +439,12 @@ check('o endpoint do NDF passa o rotulo', "product_label='NDF'" in SRC, True)
 print('\n== 12. a toolbar tem respiro ==')
 # Columns e Export sao injetados pelo JS depois do render e vem com margem
 # zerada; sem estas regras a fila encosta no cabecalho da tabela.
-check('padding na barra', '.card-body > .d-flex.justify-content-between' in HTML, True)
-check('altura igual para todos os botoes', '.card-body > .d-flex .dt-button' in HTML, True)
+# Desde o rebranding (19/10/2026): o respiro é do markup (`gap-*` + `mb-*` na
+# barra) e a altura dos botões é a do tema (`.btn-toolbar-all`, `.dt-button`).
+check('padding na barra',
+      bool(re.search(r'class="d-flex justify-content-between[^"]*\bgap-\d[^"]*\bmb-\d', HTML)), True)
+check('altura igual para todos os botoes',
+      'min-height: 36px' in read('apps/static/scss/otc.scss').split('.btn-toolbar-all {', 1)[-1].split('}', 1)[0], True)
 check('respiro antes da tabela', '.card-body > .table-responsive' in HTML, True)
 
 print('\n== 13. a coluna de Actions (Edit / Confirm / Delete) ==')
@@ -463,10 +467,14 @@ for frag in ("(i + LEAD)", "slice(LEAD)", "(index + LEAD)", "c.idx + LEAD", "idx
 # das duas paginas de advice continuam como estao (check_tools.py prende).
 for pg in ('live-position-swap-characteristics', 'live-position-swap-cashflow',
            'live-position-swap-premium',
-           'other-products-swap-events', 'other-products-swap-vcp',
+           'other-products-swap-events',
            'other-products-ndf-settlement-advice'):
     other = read('apps/templates/pages/%s.html' % pg)
     check('%s segue sem Actions' % pg, 'data-actions' in other, False)
+# O Swap VCP pediu SO o Send (o arquivo VCP_*.TXT da linha), pelo modo
+# `data-actions="send"` — os tres botoes do advice continuam fora dele.
+check('o Swap VCP pede SO o Send',
+      'data-actions="send"' in read('apps/templates/pages/other-products-swap-vcp.html'), True)
 athena = read('apps/templates/pages/other-products-swap-athena.html')
 check('o Swap Athena pede SO o Edit', 'data-actions="edit"' in athena, True)
 check('   e o compartilhado conhece o modo', 'ACTIONS_EDIT_ONLY' in JS, True)
@@ -485,15 +493,27 @@ check('a chave fica travada no modal', "var locked = (i === KEY_COL);" in HTML, 
 # travar 32x32 faz o raio produzir um quadrado de cantos redondos.
 check('nenhum botao de acao usa rounded-circle',
       'rounded-circle sc-act' in JS or 'sc-act" ' in JS.replace('sc-row-act sc-act', ''), False)
-check('os tres usam a classe de tamanho travado', JS.count('sc-row-act sc-act'), 3)
-check('e a pagina trava 32x32',
-      'min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;' in HTML, True)
-check('com canto arredondado, nao circulo', 'border-radius: 10px !important;' in HTML, True)
+# Send (so no modo do Swap VCP) + Edit, Confirm e Delete do advice.
+check('os quatro usam a classe de tamanho travado', JS.count('sc-row-act sc-act'), 4)
+# Desde o rebranding (19/10/2026) o desenho do botão de linha mora no TEMA
+# (`otc.scss`, regra `table td .btn.<classe>`), não no <style> da página.
+_SCSS = read('apps/static/scss/otc.scss')
+def _theme_block(sel):
+    i = _SCSS.find(sel)
+    if i < 0:
+        return ''
+    a = _SCSS.find('{', i)
+    return _SCSS[a:_SCSS.find('}', a)]
+_SC = _theme_block('table td .btn.sc-row-act')
+check('e o tema trava 32x32',
+      all(p in _SC for p in ('min-width: 32px !important', 'max-width: 32px !important',
+                              'min-height: 32px !important', 'max-height: 32px !important')), True)
+check('com canto arredondado, nao circulo', 'border-radius: 10px !important' in _SC, True)
 # O Other Products Summary mostra a MESMA linha de liquidacao: botoes de
 # formatos diferentes nas duas telas leem como telas de sistemas diferentes.
-OPS = read('apps/templates/pages/other-products-summary.html')
+# As duas classes estão na MESMA regra do tema.
 check('mesmo raio do Other Products Summary',
-      'border-radius: 10px !important;' in OPS, True)
+      _theme_block('table td .btn.ops-row-act') == _SC, True)
 
 print('\n== 14. a edicao vale na TELA e no AVISO IMPRESSO ==')
 # E o ponto do modulo inteiro: se a celula corrigida so valesse na tela, o

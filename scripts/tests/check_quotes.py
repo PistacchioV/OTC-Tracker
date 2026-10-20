@@ -591,8 +591,12 @@ check('teclado: setas, Esc e Enter',
 check('o clique no item e por mousedown', "menu.addEventListener('mousedown'" in js, True)
 check('clique fora fecha', 'if (ev.target === inpInstr || menu.contains(ev.target)) return;'
       in js, True)
+# Desde o rebranding (19/10/2026) a placa do menu é a dos menus do TEMA
+# (`--otc-menu-bg`, que tem o par claro/escuro no próprio token).
+_SCSS = read('apps/static/scss/otc.scss')
+_menus = [l for l in _SCSS.splitlines() if '.qt-combo__menu' in l and l.rstrip().endswith('{')]
 check('e o tema escuro tem o par das regras do menu',
-      '[data-bs-theme="dark"] #quotes-page .qt-combo__menu' in html, True)
+      bool(_menus) and 'var(--otc-menu-bg' in _SCSS.split(_menus[0], 1)[1].split('}', 1)[0], True)
 check('o codigo digitado e validado contra a lista do tipo antes de ir a rede',
       'function chosen()' in js, True)
 check('nao sobrou codigo das abas antigas',
@@ -616,11 +620,13 @@ check('o "MY" do Quotes — Commodities tem o mesmo realce do Commodities x B3',
       in mp, True)
 # Reusa a classe que ja existe, e ela tem o par de tema: cor so de tema claro
 # sumiria no escuro (CLAUDE.md §7).
+# Desde o rebranding o par claro/escuro vem do TOKEN (`--otc-orange` muda com
+# o tema), e não de uma regra `[data-bs-theme=dark]` repetida.
+_mv = mp.split('#mapping-page .map-var {', 1)[-1].split('}', 1)[0]
 check('   e o realce e o .map-var que ja existe, com o par claro/escuro',
-      ['#mapping-page .map-var {' in mp,
-       '[data-bs-theme=dark] #mapping-page .map-var {' in mp,
+      ['#mapping-page .map-var {' in mp, 'var(--otc-orange)' in _mv, '#' in _mv.replace('#mapping', ''),
        'map-var-quotes' in mp],
-      [True, True, False])
+      [True, True, False, False])
 
 for key in ('quotes-equity', 'quotes-commodity'):
     fp = os.path.join(ROOT, 'apps', 'static', 'data', 'mappings', key + '.json')

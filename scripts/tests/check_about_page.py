@@ -121,8 +121,11 @@ print('\n== 6. o fluxo cobre o ciclo inteiro ==')
 steps = re.findall(r'<div class="ab-step__title"[^>]*>([^<]+)</div>', HTML)
 check('seis passos', len(steps), 6)
 check('termina na liquidacao', steps[-1].strip().lower() in ('liquidação', 'settlement', 'liquidación'), True)
-# Seis passos so cabem lado a lado se a linha puder quebrar.
-check('a linha de passos quebra em telas medias', 'flex-md-row flex-wrap' in HTML, True)
+# Seis passos so cabem se a linha puder quebrar: hoje e a grade `.ab-steps`
+# (3 colunas, 2 abaixo do lg, 1 no celular).
+check('a linha de passos quebra em telas medias',
+      bool(re.search(r'\.ab-steps\s*\{[^}]*grid-template-columns:\s*repeat\(3', HTML))
+      and bool(re.search(r'max-width:\s*991\.98px\)\s*\{\s*\.ab-steps\s*\{\s*grid-template-columns:\s*repeat\(2', HTML)), True)
 
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)

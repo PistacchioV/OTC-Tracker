@@ -6,168 +6,72 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+{# Só o que é DESTA tela: os cards de contagem por status que FILTRAM a grade
+   (o ativo marcado, a cor do status no chip), as colunas de texto longo
+   (ellipsis; a Razão Social nunca corta, uma entidade por linha), o aging que
+   acende, o menu de colunas e a faixa de origem. Placa, tabela, toolbar,
+   botões de linha, tooltips e badges são do tema (otc.scss). #}
 <style>
-/* ============================================================================
-   Onboarding · Tracking Docs — a lista de CGDs do SharePoint.
-   Padrão de tabela da casa (CLAUDE.md): tudo centralizado, linha de filtro por
-   coluna, toolbar com Columns/Add Row/Export/Clear Filters, squircles de ação.
-   Tokens --ins-*/--vr-*, nunca --bs-*.
-   ============================================================================ */
-#ob-docs { --ob-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
+#ob-docs .ob-panel { padding: 1rem 1.1rem 1.15rem; }
 
-/* O widget NÃO é `.card`: o tema redeclara fundo, borda e raio depois do
-   extra_css e venceria sem !important. */
-#ob-docs .ob-panel {
-    background: var(--vr-card-bg, var(--ins-secondary-bg));
-    border: 1px solid var(--vr-card-border, var(--ins-border-color));
-    border-radius: var(--vr-card-radius, 18px);
-    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
-    padding: 1rem 1.1rem 1.15rem;
-}
-
-/* ── Cabeçalho e células: centralizado, e as MESMAS regras valem para o clone
-   que o DataTables cria com scrollX. Ele REMOVE o id da tabela clonada, então
-   `#ob-table th` não alcança o cabeçalho que se vê — daí os três seletores. */
-#ob-table thead th,
-.dt-scroll-head thead th,
-.dt-scroll-headInner thead th,
-.dataTables_scrollHeadInner thead th {
-    text-align: center !important; vertical-align: middle !important;
-    font-size: .7rem; white-space: normal;
-}
-#ob-table tbody td { text-align: center; vertical-align: middle; font-size: .8rem; white-space: nowrap; }
 /* Ellipsis nas colunas de texto longo — razão social e contatos estouram a
    linha e empurram as colunas de data para fora da tela. */
 #ob-table tbody td.ob-ell { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 /* Legal Name (Razão Social) NUNCA corta: é por ela que a mesa reconhece o
-   cliente, e com o ellipsis metade dos nomes aparecia pela metade. A célula traz
-   o GRUPO inteiro (`;`), e cada entidade vai numa linha — o `;` continua no
-   texto, então o filtro e o export seguem lendo a lista como ela é gravada. */
-#ob-table tbody td.ob-name { min-width: 280px; max-width: 460px; white-space: normal !important;
-                             line-height: 1.3; }
+   cliente. A célula traz o GRUPO inteiro (`;`), e cada entidade vai numa linha
+   — o `;` continua no texto, então o filtro e o export leem a lista como ela é
+   gravada. */
+#ob-table tbody td.ob-name { min-width: 280px; max-width: 460px; white-space: normal !important; line-height: 1.3; }
 #ob-table tbody td.ob-name > span { display: block; }
+/* A antiga linha de filtro por coluna: o funil do cabeçalho a remove na init;
+   até lá ela nasce escondida, como as que o tema já conhece. */
 
-/* A linha de filtro (2ª do thead) é montada ANTES do `.DataTable()`, com
-   `orderCellsTop: true`: no initComplete ela nasceria dentro do corpo rolável e
-   invisível. O texto e o placeholder centralizados vêm do visual-refresh.css. */
-#ob-table thead .ob-filters th,
-.dt-scroll-headInner thead .ob-filters th,
-.dataTables_scrollHeadInner thead .ob-filters th { padding: 4px 5px; }
-#ob-table thead .ob-filters input,
-.dt-scroll-headInner thead .ob-filters input,
-.dataTables_scrollHeadInner thead .ob-filters input {
-    width: 100%; font-size: 12px; height: 28px; padding: 2px 6px;
-    border: 1px solid var(--ins-border-color); border-radius: 6px;
-    background: var(--ins-secondary-bg); color: var(--ins-body-color);
-}
-
-/* ── Toolbar: as cores são fixas por função (Columns soft-primary, Add Row
-   primary, Export info, Clear Filters outline-secondary). `mb-3` e não `mb-2`:
-   o DataTables desenha a própria caixa encostada no elemento anterior e come a
-   margem do irmão de cima. */
-#ob-docs .btn-toolbar-all {
-    font-size: .75rem !important; padding: .25rem .6rem !important;
-    height: auto !important; line-height: 1.4 !important; white-space: nowrap !important;
-    transition: transform 140ms var(--ob-ease), box-shadow 140ms var(--ob-ease);
-}
-@media (hover: hover) and (pointer: fine) {
-    #ob-docs .btn-toolbar-all:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.10); }
-}
-#ob-docs .btn-toolbar-all:active { transform: scale(.96) !important; }
 #ob-docs .ob-cols-menu { max-height: 320px; overflow-y: auto; min-width: 260px; }
 #ob-docs .ob-cols-menu label { font-size: .75rem; display: flex; align-items: center; gap: .4rem; margin: 0; padding: .15rem .25rem; cursor: pointer; }
 
-/* ── Botões de ação da linha: squircle 32×32 travado nos DOIS eixos.
-   Só a largura travada deixa um botão mais alto que o vizinho quando o tema
-   põe min-height no .btn — e 32×34 não é um quadrado arredondado. */
-#ob-docs .btn-act {
-    min-width: 32px !important; max-width: 32px !important;
-    min-height: 32px !important; max-height: 32px !important;
-    box-sizing: border-box !important; padding: 0 !important;
-    border-radius: 10px !important;
-    display: inline-flex; align-items: center; justify-content: center;
-}
-/* Cinto de segurança para quem copiar o markup: a `.fs-13` do tema tem
-   `font-size:13px !important` e deixaria o ícone menor que o quadrado. */
-#ob-docs .btn-act > i { font-size: 1rem !important; }
-.tooltip-info   .tooltip-inner { background-color: #0d7ea8; color: #fff; }
-.tooltip-info   .tooltip-arrow::before { border-top-color: #0d7ea8; }
-.tooltip-danger .tooltip-inner { background-color: #d93025; color: #fff; }
-.tooltip-danger .tooltip-arrow::before { border-top-color: #d93025; }
-.tooltip-success .tooltip-inner { background-color: #1a7f37; color: #fff; }
-.tooltip-success .tooltip-arrow::before { border-top-color: #1a7f37; }
-.tooltip-secondary .tooltip-inner { background-color: #64748b; color: #fff; }
-.tooltip-secondary .tooltip-arrow::before { border-top-color: #64748b; }
-
-/* ── Status: badge pill com gradiente, cor por status (padrão da casa). */
-/* Status é o badge pill do app (`badge rounded-pill text-bg-* bg-gradient`), sem
-   paleta própria — ver `statusClass()`. Aqui só o tamanho, para o pill não
-   engordar a linha numa tabela de fonte .8rem. */
-#ob-table td .badge { font-size: .68rem; font-weight: 700; padding: .28em .7em; }
-
 /* Aging: número tabular, e a cor só nos extremos. */
 #ob-table td.ob-age { font-variant-numeric: tabular-nums; font-weight: 700; }
-#ob-table td.ob-age.ob-late { color: var(--ins-danger, #d93025); }
-#ob-table td.ob-age.ob-warn { color: #b07500; }
-
-/* A barra de edição em massa acompanha a altura dos botões da toolbar. */
-#ob-docs .ob-mass .form-select, #ob-docs .ob-mass .form-control { height: 31px; font-size: .75rem; }
-
-/* A linha em edição: fundo suave para não se perder de vista ao rolar. */
+#ob-table td.ob-age.ob-late { color: var(--otc-danger); }
+#ob-table td.ob-age.ob-warn { color: color-mix(in srgb, var(--otc-yellow) 55%, var(--otc-orange)); }
 
 /* A faixa que diz de onde a tela leu — o banco e a última importação. */
 #ob-docs .ob-src {
     display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
-    font-size: .7rem; color: var(--ins-secondary-color); margin-bottom: .75rem;
+    font-size: .7rem; color: var(--otc-text-2); margin-bottom: .75rem;
 }
 #ob-docs .ob-src code { font-size: .68rem; }
 
-/* ── Os cards de contagem por status (vindos do Overview — pedido
-   2026-09-01: o Overview fica só com as três filas das mesas; os números
-   moram aqui, onde está a grade que eles resumem). As contagens continuam
-   vindo do MESMO /api/onboarding/overview — contar no cliente duplicaria a
-   regra de Active/Inactive (§7: `INACTIVE` CONTÉM `ACTIVE`). */
+/* ── Os cards de contagem por status. As contagens vêm do MESMO
+   /api/onboarding/overview — contar no cliente duplicaria a regra de
+   Active/Inactive (`INACTIVE` CONTÉM `ACTIVE`). */
 #ob-docs .ob-stat {
     display: flex; align-items: center; gap: .75rem;
-    padding: .85rem 1rem;
+    padding: .85rem 1rem; height: 100%;
     cursor: pointer; user-select: none;
-    background: var(--vr-card-bg, var(--ins-secondary-bg));
-    border: 1px solid var(--vr-card-border, var(--ins-border-color));
-    border-radius: var(--vr-card-radius, 18px);
-    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
-    height: 100%;
-    transition: box-shadow 260ms ease, border-color 260ms ease;
+    border-radius: var(--otc-r-xl);
+    background-color: var(--otc-glass);
+    -webkit-backdrop-filter: var(--otc-blur);
+    backdrop-filter: var(--otc-blur);
+    box-shadow: var(--otc-depth);
+    transition: box-shadow var(--otc-dur-base) var(--otc-ease), scale var(--otc-dur-fast) var(--otc-ease);
 }
-@media (hover: hover) and (pointer: fine) {
-    #ob-docs .ob-stat:hover {
-        box-shadow: var(--vr-card-shadow-hover, 0 18px 40px rgba(94, 92, 230, .14));
-    }
-    #ob-docs .ob-stat:hover .ob-stat__ico { transform: scale(1.1) rotate(-4deg); }
-}
-#ob-docs .ob-stat:active { transform: scale(.985); }
+#ob-docs .ob-stat:active { scale: .985; }
 /* O card ativo é o filtro que está valendo (o mesmo desenho do Track
-   Confirmations): sem a marca, clicar num card e esquecer deixa a tabela
-   parecendo a lista inteira quando não é. */
-#ob-docs .ob-stat.is-active {
-    border-color: var(--vr-accent-1, #0066cc);
-    box-shadow: 0 0 0 2px rgba(0, 102, 204, .18),
-                var(--vr-card-shadow-hover, 0 18px 40px rgba(94, 92, 230, .14));
-}
+   Confirmations). */
+#ob-docs .ob-stat.is-active { box-shadow: var(--otc-depth), 0 0 0 2px var(--otc-accent-ink); }
 #ob-docs .ob-stat__ico {
-    width: 38px; height: 38px; flex: 0 0 auto; border-radius: 11px;
+    width: 38px; height: 38px; flex: 0 0 auto; border-radius: 30%;
     display: inline-flex; align-items: center; justify-content: center;
     color: #fff; font-size: 1.1rem;
-    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
-    box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
-    transition: transform 260ms ease;
+    background: linear-gradient(135deg, var(--otc-blue), var(--otc-purple));
 }
-#ob-docs .ob-stat--total   .ob-stat__ico { background: linear-gradient(100deg, #0066cc, #5e5ce6); box-shadow: 0 4px 12px rgba(0,102,204,.28); }
-#ob-docs .ob-stat--pending .ob-stat__ico { background: linear-gradient(100deg, #b07500, #f7b84b); box-shadow: 0 4px 12px rgba(176,117,0,.28); }
-#ob-docs .ob-stat--active  .ob-stat__ico { background: linear-gradient(100deg, #1a7f37, #34c759); box-shadow: 0 4px 12px rgba(26,127,55,.28); }
-#ob-docs .ob-stat--inactive .ob-stat__ico { background: linear-gradient(100deg, #b3261e, #ff453a); box-shadow: 0 4px 12px rgba(179,38,30,.28); }
-#ob-docs .ob-stat--cancel  .ob-stat__ico { background: linear-gradient(100deg, #374151, #6b7280); box-shadow: 0 4px 12px rgba(55,65,81,.28); }
-#ob-docs .ob-stat__n { font-size: 1.35rem; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ins-body-color); line-height: 1.1; }
-#ob-docs .ob-stat__l { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ins-secondary-color); }
+#ob-docs .ob-stat--total    .ob-stat__ico { background: linear-gradient(135deg, var(--otc-blue), var(--otc-indigo)); }
+#ob-docs .ob-stat--pending  .ob-stat__ico { background: linear-gradient(135deg, var(--otc-orange), var(--otc-yellow)); }
+#ob-docs .ob-stat--active   .ob-stat__ico { background: linear-gradient(135deg, var(--otc-green), var(--otc-teal)); }
+#ob-docs .ob-stat--inactive .ob-stat__ico { background: linear-gradient(135deg, var(--otc-danger), var(--otc-pink)); }
+#ob-docs .ob-stat--cancel   .ob-stat__ico { background: var(--otc-fill-2); color: var(--otc-text-2); }
+#ob-docs .ob-stat__n { font: 800 1.35rem/1.1 var(--otc-font-display); letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--otc-text); }
+#ob-docs .ob-stat__l { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--otc-text-2); }
 </style>
 {% endblock extra_css %}
 

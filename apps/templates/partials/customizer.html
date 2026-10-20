@@ -1,295 +1,59 @@
-<!-- Theme Settings -->
-<div class="offcanvas offcanvas-end overflow-hidden" id="theme-settings-offcanvas" tabindex="-1">
-    <div class="d-flex justify-content-between text-bg-primary gap-2 p-3"
-         style="background-image: url('/static/images/user-bg-pattern.png');">
-        <div>
-            <h5 class="mb-1 fw-bold text-white text-uppercase">Admin Customizer</h5>
-            <p class="text-white text-opacity-75 fst-italic fw-medium mb-0">Easily configure layout, styles, and preferences for your admin interface.</p>
-        </div>
-        <div class="flex-grow-0">
-            <button type="button" class="d-block btn btn-sm bg-white bg-opacity-25 text-white rounded-circle btn-icon"
-                    data-bs-dismiss="offcanvas">
-                <i class="fs-lg" data-lucide="x"></i>
-            </button>
-        </div>
+{# ============================================================================
+   PARTIAL: customizer.html — a gaveta de APARÊNCIA (botão de paleta da barra)
+
+   Tema, destaque, papel de parede, vidro e o modo opaco. Quem lê e grava é o
+   otc.js (`window.otcUI`, chave __OTC_TRACKER_UI__; o modo opaco segue em
+   __OTC_TRACKER_FX__, que é a saída de emergência das máquinas sem GPU).
+   As escolhas são por NAVEGADOR — não vão ao servidor.
+   ============================================================================ #}
+<div class="offcanvas offcanvas-end" id="theme-settings-offcanvas" tabindex="-1" aria-labelledby="otc-appearance-title">
+    <div class="offcanvas-header">
+        <h5 class="offcanvas-title" id="otc-appearance-title" data-lang="otc-appearance">Appearance</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
+    <div class="offcanvas-body">
 
-    <div class="offcanvas-body theme-customizer-bar p-0 h-100" data-simplebar="">
-        <!-- Select Theme -->
-        <div class="p-3 border-bottom border-dashed" id="skin">
-            <h5 class="mb-3 fw-bold">Select Theme</h5>
-            <div class="row g-3">
-                <div class="col-6" id="skin-default">
-                    <div class="form-check card-radio">
-                        <input class="form-check-input" id="demo-skin-default" name="data-skin" type="radio" value="default"/>
-                        <label class="form-check-label p-0 w-100" for="demo-skin-default">
-                            <img alt="Default" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/skin-default.png"/>
-                        </label>
-                    </div>
-                    <h5 class="text-center text-muted mt-2 mb-0">Default</h5>
+        <div class="otc-set-group">
+            <div class="otc-set-group__title" data-lang="otc-theme">Theme</div>
+            <div class="nav nav-pills w-100" data-otc-seg role="tablist">
+                <button type="button" class="nav-link flex-fill justify-content-center" data-theme-pick="light"><i data-lucide="sun"></i><span data-lang="otc-light">Light</span></button>
+                <button type="button" class="nav-link flex-fill justify-content-center" data-theme-pick="dark"><i data-lucide="moon"></i><span data-lang="otc-dark">Dark</span></button>
+                <button type="button" class="nav-link flex-fill justify-content-center" data-theme-pick="auto"><i data-lucide="sun-moon"></i><span data-lang="otc-auto">Auto</span></button>
+            </div>
+        </div>
+
+        <div class="otc-set-group">
+            <div class="otc-set-group__title" data-lang="otc-accent">Accent</div>
+            <div class="otc-swatches" data-otc-accents></div>
+        </div>
+
+        <div class="otc-set-group">
+            <div class="otc-set-group__title" data-lang="otc-wallpaper">Wallpaper</div>
+            <div class="otc-walls" data-otc-walls></div>
+        </div>
+
+        <div class="otc-set-group">
+            <div class="otc-set-group__title" data-lang="otc-glass">Glass</div>
+            <div class="otc-set-cell">
+                <div>
+                    <div class="t" data-lang="otc-glass-style">Glass style</div>
+                    <div class="d" data-lang="otc-glass-style-desc">Clear shows more of the wallpaper.</div>
                 </div>
-                <div class="col-6" id="skin-galaxy">
-                    <div class="form-check card-radio">
-                        <input class="form-check-input" id="demo-skin-galaxy" name="data-skin" type="radio" value="galaxy"/>
-                        <label class="form-check-label p-0 w-100" for="demo-skin-galaxy">
-                            <img alt="Galaxy" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/skin-galaxy.png"/>
-                        </label>
-                    </div>
-                    <h5 class="text-center text-muted mt-2 mb-0">Galaxy</h5>
+                <div class="nav nav-pills" data-otc-seg>
+                    <button type="button" class="nav-link" data-glass-pick="clear" data-lang="otc-clear">Clear</button>
+                    <button type="button" class="nav-link" data-glass-pick="tinted" data-lang="otc-tinted">Tinted</button>
+                </div>
+            </div>
+            <div class="otc-set-cell">
+                <div>
+                    <div class="t" data-lang="otc-solid">Reduce transparency</div>
+                    <div class="d" data-lang="otc-solid-desc">Solid surfaces, no blur. Turns on by itself on machines without a graphics card.</div>
+                </div>
+                <div class="form-check form-switch m-0">
+                    <input class="form-check-input" type="checkbox" role="switch" data-otc-solid aria-label="Reduce transparency">
                 </div>
             </div>
         </div>
 
-        <!-- Color Scheme -->
-        <div class="p-3 border-bottom border-dashed" id="theme">
-            <h5 class="mb-3 fw-bold">Color Scheme</h5>
-            <div class="row g-3">
-                <div class="col-4" id="theme-light">
-                    <div class="form-check card-radio">
-                        <input class="form-check-input" id="layout-color-light" name="data-bs-theme" type="radio" value="light"/>
-                        <label class="form-check-label p-0 w-100" for="layout-color-light">
-                            <img alt="Light" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/theme-light.png"/>
-                        </label>
-                    </div>
-                    <h5 class="text-center text-muted mt-2 mb-0">Light</h5>
-                </div>
-                <div class="col-4" id="theme-dark">
-                    <div class="form-check card-radio">
-                        <input class="form-check-input" id="layout-color-dark" name="data-bs-theme" type="radio" value="dark"/>
-                        <label class="form-check-label p-0 w-100" for="layout-color-dark">
-                            <img alt="Dark" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/theme-dark.png"/>
-                        </label>
-                    </div>
-                    <h5 class="text-center text-muted mt-2 mb-0">Dark</h5>
-                </div>
-<!-- O modo 'System' (corpo claro + barras escuras) foi aposentado: o padrão
-     da casa é light = tudo claro e dark = tudo escuro (config.js normaliza
-     configs antigas persistidas). -->
-            </div>
-        </div>
-
-        <!-- Topbar Color -->
-        <div class="p-3 border-bottom border-dashed" id="topbar-color">
-            <h5 class="mb-3 fw-bold">Topbar Color</h5>
-            <div class="row g-3">
-                <div class="col-4" id="topbar-color-light">
-                    <div class="form-check card-radio">
-                        <input class="form-check-input" id="layout-topbar-color-light" name="data-topbar-color" type="radio" value="light"/>
-                        <label class="form-check-label p-0 w-100" for="layout-topbar-color-light">
-                            <img alt="Light" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/topbar-color-light.png"/>
-                        </label>
-                    </div>
-                    <h5 class="text-center text-muted mt-2 mb-0">Light</h5>
-                </div>
-                <div class="col-4" id="topbar-color-dark">
-                    <div class="form-check card-radio">
-                        <input class="form-check-input" id="layout-topbar-color-dark" name="data-topbar-color" type="radio" value="dark"/>
-                        <label class="form-check-label p-0 w-100" for="layout-topbar-color-dark">
-                            <img alt="Dark" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/topbar-color-dark.png"/>
-                        </label>
-                    </div>
-                    <h5 class="fs-sm text-center text-muted mt-2 mb-0">Dark</h5>
-                </div>
-                <div class="col-4" id="topbar-color-gray">
-                    <div class="form-check card-radio">
-                        <input class="form-check-input" id="layout-topbar-color-gray" name="data-topbar-color" type="radio" value="gray"/>
-                        <label class="form-check-label p-0 w-100" for="layout-topbar-color-gray">
-                            <img alt="Gray" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/topbar-color-gray.png"/>
-                        </label>
-                    </div>
-                    <h5 class="fs-sm text-center text-muted mt-2 mb-0">Gray</h5>
-                </div>
-                <div class="col-4" id="topbar-color-gradient">
-                    <div class="form-check card-radio">
-                        <input class="form-check-input" id="layout-topbar-color-gradient" name="data-topbar-color" type="radio" value="gradient"/>
-                        <label class="form-check-label p-0 w-100" for="layout-topbar-color-gradient">
-                            <img alt="Gradient" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/topbar-color-gradient.png"/>
-                        </label>
-                    </div>
-                    <h5 class="fs-sm text-center text-muted mt-2 mb-0">Gradient</h5>
-                </div>
-            </div>
-        </div>
-
-        <!-- Sidenav Color -->
-        <div class="p-3 border-bottom border-dashed" id="sidenav-color">
-            <h5 class="mb-3 fw-bold">Sidenav Color</h5>
-            <div class="row g-3">
-                <div class="col-4" id="sidenav-color-light">
-                    <div class="form-check sidebar-setting card-radio">
-                        <input class="form-check-input" id="layout-sidenav-color-light" name="data-menu-color" type="radio" value="light"/>
-                        <label class="form-check-label p-0 w-100" for="layout-sidenav-color-light">
-                            <img alt="Light" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/sidenav-color-light.png"/>
-                        </label>
-                    </div>
-                    <h5 class="fs-sm text-center text-muted mt-2 mb-0">Light</h5>
-                </div>
-                <div class="col-4" id="sidenav-color-dark">
-                    <div class="form-check sidebar-setting card-radio">
-                        <input class="form-check-input" id="layout-sidenav-color-dark" name="data-menu-color" type="radio" value="dark"/>
-                        <label class="form-check-label p-0 w-100" for="layout-sidenav-color-dark">
-                            <img alt="Dark" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/sidenav-color-dark.png"/>
-                        </label>
-                    </div>
-                    <h5 class="fs-sm text-center text-muted mt-2 mb-0">Dark</h5>
-                </div>
-                <div class="col-4" id="sidenav-color-gray">
-                    <div class="form-check sidebar-setting card-radio">
-                        <input class="form-check-input" id="layout-sidenav-color-gray" name="data-menu-color" type="radio" value="gray"/>
-                        <label class="form-check-label p-0 w-100" for="layout-sidenav-color-gray">
-                            <img alt="Gray" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/sidenav-color-gray.png"/>
-                        </label>
-                    </div>
-                    <h5 class="fs-sm text-center text-muted mt-2 mb-0">Gray</h5>
-                </div>
-                <div class="col-4" id="sidenav-color-gradient">
-                    <div class="form-check sidebar-setting card-radio">
-                        <input class="form-check-input" id="layout-sidenav-color-gradient" name="data-menu-color" type="radio" value="gradient"/>
-                        <label class="form-check-label p-0 w-100" for="layout-sidenav-color-gradient">
-                            <img alt="Gradient" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/sidenav-color-gradient.png"/>
-                        </label>
-                    </div>
-                    <h5 class="fs-sm text-center text-muted mt-2 mb-0">Gradient</h5>
-                </div>
-                <div class="col-4" id="sidenav-color-image">
-                    <div class="form-check sidebar-setting card-radio">
-                        <input class="form-check-input" id="layout-sidenav-color-image" name="data-menu-color" type="radio" value="image"/>
-                        <label class="form-check-label p-0 w-100" for="layout-sidenav-color-image">
-                            <img alt="Image" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/sidenav-color-image.png"/>
-                        </label>
-                    </div>
-                    <h5 class="fs-sm text-center text-muted mt-2 mb-0">Image</h5>
-                </div>
-            </div>
-        </div>
-
-        <!-- Sidebar Size -->
-        <div class="p-3 border-bottom border-dashed" id="sidenav-size">
-            <h5 class="mb-3 fw-bold">Sidebar Size</h5>
-            <div class="row g-3">
-                <div class="col-4" id="sidenav-size-default">
-                    <div class="form-check sidebar-setting card-radio">
-                        <input class="form-check-input" id="layout-sidenav-size-default" name="data-sidenav-size" type="radio" value="default"/>
-                        <label class="form-check-label p-0 w-100" for="layout-sidenav-size-default">
-                            <img alt="Default" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/sidenav-size-default.png"/>
-                        </label>
-                    </div>
-                    <h5 class="mb-0 text-center text-muted mt-2">Default</h5>
-                </div>
-                <div class="col-4" id="sidenav-size-compact">
-                    <div class="form-check sidebar-setting card-radio">
-                        <input class="form-check-input" id="layout-sidenav-size-compact" name="data-sidenav-size" type="radio" value="compact"/>
-                        <label class="form-check-label p-0 w-100" for="layout-sidenav-size-compact">
-                            <img alt="Compact" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/sidenav-size-compact.png"/>
-                        </label>
-                    </div>
-                    <h5 class="mb-0 text-center text-muted mt-2">Compact</h5>
-                </div>
-                <div class="col-4" id="sidenav-size-condensed">
-                    <div class="form-check sidebar-setting card-radio">
-                        <input class="form-check-input" id="layout-sidenav-size-condensed" name="data-sidenav-size" type="radio" value="condensed"/>
-                        <label class="form-check-label p-0 w-100" for="layout-sidenav-size-condensed">
-                            <img alt="Condensed" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/sidenav-size-condensed.png"/>
-                        </label>
-                    </div>
-                    <h5 class="mb-0 text-center text-muted mt-2">Condensed</h5>
-                </div>
-                <div class="col-4" id="sidenav-size-on-hover">
-                    <div class="form-check sidebar-setting card-radio">
-                        <input class="form-check-input" id="layout-sidenav-size-small-hover" name="data-sidenav-size" type="radio" value="on-hover"/>
-                        <label class="form-check-label p-0 w-100" for="layout-sidenav-size-small-hover">
-                            <img alt="On Hover" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/sidenav-size-on-hover.png"/>
-                        </label>
-                    </div>
-                    <h5 class="mb-0 text-center text-muted mt-2">On Hover</h5>
-                </div>
-                <div class="col-4" id="sidenav-size-on-hover-active">
-                    <div class="form-check sidebar-setting card-radio">
-                        <input class="form-check-input" id="layout-sidenav-size-small-hover-active" name="data-sidenav-size" type="radio" value="on-hover-active"/>
-                        <label class="form-check-label p-0 w-100" for="layout-sidenav-size-small-hover-active">
-                            <img alt="On Hover Show" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/sidenav-size-on-hover-active.png"/>
-                        </label>
-                    </div>
-                    <h5 class="mb-0 fs-base text-center text-muted mt-2">On Hover - Show</h5>
-                </div>
-                <div class="col-4" id="sidenav-size-offcanvas">
-                    <div class="form-check sidebar-setting card-radio">
-                        <input class="form-check-input" id="layout-sidenav-size-offcanvas" name="data-sidenav-size" type="radio" value="offcanvas"/>
-                        <label class="form-check-label p-0 w-100" for="layout-sidenav-size-offcanvas">
-                            <img alt="Offcanvas" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/sidenav-size-offcanvas.png"/>
-                        </label>
-                    </div>
-                    <h5 class="mb-0 text-center text-muted mt-2">Offcanvas</h5>
-                </div>
-            </div>
-        </div>
-
-    </div>
-
-    <div class="offcanvas-footer border-top p-3 text-center">
-        <div class="row justify-content-center">
-            <div class="col-6">
-                <button class="btn btn-danger fw-semibold py-2 w-100" id="reset-layout" type="button">
-                    <i class="me-2 fs-md" data-lucide="refresh-ccw"></i> Reset
-                </button>
-            </div>
-        </div>
     </div>
 </div>
-<!-- end offcanvas-->
-
-<style>
-  /* Red check badge for the active Color Scheme card — independent of the radio
-     :checked state (the theme JS resets it), driven by the .scheme-checked class. */
-  #theme .card-radio.scheme-checked .form-check-label::before {
-      content: "\f746";
-      font-family: tabler-icons;
-      color: var(--ins-danger);
-      font-size: 28px;
-      line-height: 1;
-      position: absolute;
-      bottom: 2px;
-      right: 6px;
-      z-index: 3;
-  }
-</style>
-<script>
-// Show the red check badge on the active "Color Scheme" card (mirrors Select Theme).
-// The active scheme is derived from the saved config or the html attributes
-// (System = light body + dark topbar). Uses a class so it survives the theme JS
-// re-rendering / un-checking the radios.
-(function () {
-    function activeTheme() {
-        var theme;
-        try { theme = (JSON.parse(localStorage.getItem('__OTCTRACKER_CONFIG__') || '{}') || {}).theme; } catch (e) {}
-        if (!theme) {
-            var html = document.documentElement;
-            var t  = html.getAttribute('data-bs-theme');
-            var tb = html.getAttribute('data-topbar-color');
-            theme = (t === 'dark') ? 'dark' : (tb === 'dark' ? 'system' : 'light');
-        }
-        return theme;
-    }
-    function markActiveScheme() {
-        var section = document.getElementById('theme');
-        if (!section) return;
-        section.querySelectorAll('.card-radio').forEach(function (c) { c.classList.remove('scheme-checked'); });
-        // IMPORTANT: scope to #theme. The topbar dropdown has radios with the same
-        // name="data-bs-theme" (same group); querying document-wide grabbed the
-        // wrong one. Use only the class — never touch the radio's checked state.
-        var el = section.querySelector('input[name="data-bs-theme"][value="' + activeTheme() + '"]');
-        var card = el && el.closest('.card-radio');
-        if (card) card.classList.add('scheme-checked');
-    }
-    function run() { markActiveScheme(); [150, 500, 1200].forEach(function (d) { setTimeout(markActiveScheme, d); }); }
-    if (document.readyState !== 'loading') run();
-    else document.addEventListener('DOMContentLoaded', run);
-    // Update on user changes (scoped to the customizer radios) + when it opens.
-    var section0 = document.getElementById('theme');
-    if (section0) section0.querySelectorAll('input[name="data-bs-theme"]').forEach(function (r) {
-        r.addEventListener('change', function () { [50, 250].forEach(function (d) { setTimeout(markActiveScheme, d); }); });
-    });
-    var oc = document.getElementById('theme-settings-offcanvas');
-    if (oc) oc.addEventListener('shown.bs.offcanvas', markActiveScheme);
-})();
-</script>

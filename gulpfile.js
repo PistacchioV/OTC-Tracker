@@ -140,39 +140,19 @@ const plugins = function () {
     return Promise.resolve();
 };
 
-// Styles autoprefixing and minification
+// O tema é UM arquivo: scss/otc.scss → css/otc.css (o Bootstrap vem do
+// node_modules). Sem .min e sem .map — um CSS só, o que o head-css.html carrega.
 function styles() {
-
-//  src(`${paths.scss}/app.scss`)
-//        .pipe(
-//            sass({
-//                importer: tildeImporter,
-//                includePaths: [paths.scss],
-//            }).on('error', sass.logError),
-//        )
-//        .pipe(plumber()) // Checks for errors
-//        .pipe(postcss(processCss))
-//        .pipe(rename({suffix: '-rtl'}))
-//        .pipe(rtlcss())
-//        .pipe(dest(paths.css))
-//        .pipe(rename({suffix: '.min'}))
-//        .pipe(postcss(minifyCss)) // Minifies the result
-//        .pipe(dest(paths.css));
-
-  return src(`${paths.scss}/**/*.scss`)
-    .pipe(sourcemaps.init())
+  return src(`${paths.scss}/otc.scss`)
     .pipe(
       sass({
         importer: tildeImporter,
-        includePaths: [paths.scss],
+        includePaths: [paths.scss, 'node_modules'],
+        quietDeps: true,
       }).on('error', sass.logError),
     )
     .pipe(plumber()) // Checks for errors
     .pipe(postcss(processCss))
-    .pipe(dest(paths.css))
-    .pipe(rename({ suffix: '.min' }))
-    .pipe(postcss(minifyCss)) // Minifies the result
-    .pipe(sourcemaps.write('.')) //generates .map
     .pipe(dest(paths.css));
 }
 
@@ -190,4 +170,5 @@ const dev = parallel(watchPaths);
 
 task('default', series(build, dev));
 task('build', build);
+task('styles', styles);
 task('dev', dev);

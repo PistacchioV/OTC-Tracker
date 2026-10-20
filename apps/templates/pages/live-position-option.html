@@ -8,153 +8,21 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
 <style>
-#live-position-option-page {
-    --ln-hairline: rgba(0,0,0,.08);
-    --ln-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-}
-[data-bs-theme="dark"] #live-position-option-page { --ln-hairline: rgba(255,255,255,.10); }
-
-/* Widgets */
+{# Só o que é DESTA tela: os widgets de contagem, o Total em destaque e a
+   largura das colunas. Vidro, filtro inteligente, campo de data, tabela,
+   botões de linha e menu do Export vêm do tema. #}
 #live-position-option-page .ln-widgets .col { display: flex; margin-bottom: .5rem; }
-#live-position-option-page .ln-widget {
-    flex: 1; border: 1px solid var(--ln-hairline); border-radius: 14px; padding: 1rem 1.1rem;
-    background: var(--ins-secondary-bg, #fff);
-    transition: transform 220ms var(--ln-ease-out), box-shadow 220ms var(--ln-ease-out);
-}
-@media (hover: hover) and (pointer: fine) {
-    #live-position-option-page .ln-widget:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
-}
-#live-position-option-page .ln-widget__head { display: flex; align-items: center; gap: .6rem; }
-#live-position-option-page .ln-widget__icon {
-    width: 40px; height: 40px; border-radius: 11px; display: inline-flex; align-items: center;
-    justify-content: center; font-size: 1.2rem; flex-shrink: 0;
-}
-#live-position-option-page .ln-widget__title { font-size: .8rem; font-weight: 700; letter-spacing: -.2px; margin: 0; text-transform: uppercase; }
-#live-position-option-page .ln-widget__value { font-size: 1.8rem; font-weight: 700; line-height: 1; margin-left: auto; letter-spacing: -1px; }
-#live-position-option-page .ln-widget--total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0; }
-#live-position-option-page .ln-widget--total .ln-widget__title,
-#live-position-option-page .ln-widget--total .ln-widget__value { color: #fff; }
-#live-position-option-page .ln-widget--total .ln-widget__icon { background: rgba(255,255,255,.18); color: #fff; }
+#live-position-option-page .ln-widget { flex: 1; padding: 1rem 1.1rem; }
+#live-position-option-page .ln-widget__icon { width: 40px; height: 40px; font-size: 1.2rem; }
+#live-position-option-page .ln-widget__title { font-size: .8rem; text-transform: uppercase; }
+#live-position-option-page .ln-widget__value { font-size: 1.8rem; font-weight: 700; line-height: 1; margin-left: auto; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+/* o Total é a placa cheia do destaque (fora da família de vidro: `--total`) */
 
-/* Reference date picker */
-#live-position-option-page .ln-datewrap { position: relative; width: 170px; }
-#live-position-option-page .ln-datewrap input {
-    width: 100%; border: 1px solid var(--bs-border-color); border-radius: 10px;
-    padding: .3rem 2.1rem .3rem .7rem; font-size: .85rem; font-weight: 600;
-    color: var(--bs-body-color); background: var(--bs-secondary-bg, #fff); cursor: pointer;
-    transition: border-color 0.16s var(--ln-ease-out), box-shadow 0.16s var(--ln-ease-out);
-}
-#live-position-option-page .ln-datewrap input:focus { outline: none; border-color: var(--bs-primary); box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), .18); }
-#live-position-option-page .ln-cal-btn {
-    position: absolute; top: 0; right: 0; bottom: 0; width: 34px; display: inline-flex;
-    align-items: center; justify-content: center; color: var(--bs-secondary-color); cursor: pointer;
-}
-#live-position-option-page .btn:active { transform: scale(0.97); }
-
-/* Smart filter (New Deals model) */
-#live-position-option-page .smart-filter-wrapper {
-    position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
-    border: 1px solid var(--ln-hairline); border-radius: 0.6875rem;
-    padding: 4px 8px; min-height: 38px; background: var(--ins-secondary-bg); cursor: text;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-#live-position-option-page .smart-filter-wrapper:focus-within { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
-#live-position-option-page .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-#live-position-option-page .smart-filter-chip {
-    display: inline-flex; align-items: center; gap: 5px; background: #6c757d; color: #fff;
-    border-radius: 50rem; padding: 2px 8px; font-size: 10px; font-weight: 500; white-space: nowrap;
-}
-#live-position-option-page .smart-filter-chip .sf-chip-remove { cursor: pointer; opacity: .75; font-size: 13px; line-height: 1; margin-left: 2px; }
-#live-position-option-page .smart-filter-input {
-    border: none; outline: none; flex: 1; min-width: 200px; font-size: 0.82rem;
-    background: transparent; color: var(--ins-body-color); padding: 2px 0;
-}
-#live-position-option-page .smart-filter-dropdown {
-    position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 1055;
-    background: var(--ins-secondary-bg); border: 1px solid var(--ins-border-color); border-radius: 6px;
-    box-shadow: 0 6px 18px rgba(0,0,0,.25); max-height: 260px; overflow-y: auto; display: none; padding: 4px 0;
-}
-#live-position-option-page .smart-filter-dropdown li {
-    padding: 6px 12px; cursor: pointer; font-size: 0.81rem; display: flex; align-items: center;
-    gap: 8px; list-style: none; color: var(--ins-body-color);
-}
-#live-position-option-page .smart-filter-dropdown li:hover { background: rgba(0,102,204,.10); }
-#live-position-option-page .sf-type-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; text-transform: uppercase; font-weight: 600; color: #fff; opacity: .85; }
-#live-position-option-page .sf-type-text  { background: #6c757d; }
-#live-position-option-page .sf-type-date  { background: #0284c7; }
-#live-position-option-page .sf-type-value { background: #b45309; }
-
-/* Table */
-#lnopt-table thead th {
-    white-space: nowrap; text-overflow: ellipsis; min-width: 120px; padding: 8px 12px;
-    text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
-}
-#lnopt-table tbody td { white-space: nowrap; font-size: 0.74rem; text-align: center; vertical-align: middle; }
-
-/* Colunas fixas de controle (o resto usa o min-width:120px genérico do thead th).
-   nth-child(1)=checkbox  (2)=Status  (3)=Actions  (4..63)=dados Option  (64+)=Média Asiática dinâmica.
-   scrollX:false → header não é clonado, então NÃO precisa de .dt-scroll-head. */
-#lnopt-table th:nth-child(1), #lnopt-table td:nth-child(1) { width: 44px;  min-width: 44px;  }  /* checkbox */
-#lnopt-table th:nth-child(2), #lnopt-table td:nth-child(2) { width: 110px; min-width: 110px; }  /* Status */
-#lnopt-table th:nth-child(3), #lnopt-table td:nth-child(3) { width: 70px;  min-width: 70px;  }  /* Actions */
-
-/* ── Ações de linha: squircle padrão do app (spec .ops-row-act) ─────────────
-   min/max travam a ALTURA também, não só a largura: uma regra de tema com
-   `min-height` em `.btn` deixaria o botão 32×34, que não é mais um quadrado
-   arredondado. `box-sizing:border-box` porque a borda entraria por fora. */
-#lnopt-table .btn-act {
-    width:32px; height:32px;
-    min-width:32px; max-width:32px; min-height:32px; max-height:32px;
-    padding:0; flex:0 0 auto; box-sizing:border-box;
-    display:inline-flex; align-items:center; justify-content:center;
-    line-height:1; border-radius:10px !important;
-}
-/* Cinto de segurança contra o `.fs-13` do tema (também !important). */
-#lnopt-table .btn-act > i { font-size:1rem !important; }
-#lnopt-table .btn-act { transition: transform 120ms var(--ln-ease-out), box-shadow 140ms ease; }
-#lnopt-table .btn-act:active { transform: scale(0.97); }
-@media (hover: hover) and (pointer: fine) {
-    #lnopt-table .btn-act:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
-}
-/* Tooltip colorido do botão Edit (o CSS da classe tem de estar na página). */
-.tooltip-info .tooltip-inner { background-color: #0dcaf0; color: #000; }
-
-/* Per-column filter row — New Deals style */
-#lnopt-table thead tr.ln-th-filter th { padding: .3rem .4rem .5rem; border-top: 1px solid var(--ln-hairline); }
-#lnopt-table thead tr.ln-th-filter input.ln-col-filter {
-    width: 100%; min-width: 96px; height: 30px; font-size: .72rem; font-weight: 400;
-    text-align: center; padding: 3px 9px; border: 1px solid var(--ln-hairline); border-radius: 8px;
-    background: var(--bs-tertiary-bg, #f8f9fa); color: var(--ins-body-color);
-    transition: border-color 150ms var(--ln-ease-out), box-shadow 150ms var(--ln-ease-out), background-color 150ms var(--ln-ease-out);
-}
-#lnopt-table thead tr.ln-th-filter input.ln-col-filter::placeholder { color: var(--ins-secondary-color); opacity: .8; }
-@media (hover: hover) and (pointer: fine) {
-    #lnopt-table thead tr.ln-th-filter input.ln-col-filter:hover { border-color: rgba(0,102,204,.35); }
-}
-#lnopt-table thead tr.ln-th-filter input.ln-col-filter:focus {
-    outline: none; border-color: #0066cc; background: var(--ins-secondary-bg, #fff); box-shadow: 0 0 0 3px rgba(0,102,204,.15);
-}
-#lnopt-table thead tr.ln-th-filter input.ln-col-filter.ln-has-val { border-color: rgba(0,102,204,.55); background: rgba(0,102,204,.06); font-weight: 500; }
-@media (prefers-reduced-motion: reduce) {
-    #live-position-option-page * { transition: none !important; animation: none !important; }
-    #live-position-option-page .btn:active { transform: none; }
-}
-
-/* Export collection dropdown — solid background (project standard, NOT scoped). */
-.dt-button-collection {
-    z-index: 2000; background: #fff !important; border: 1px solid rgba(0,0,0,.15) !important;
-    box-shadow: 0 4px 16px rgba(0,0,0,.18) !important; border-radius: .375rem !important;
-    padding: .25rem 0 !important; opacity: 1 !important;
-}
-[data-bs-theme="dark"] .dt-button-collection { background: #2b2f3a !important; border-color: rgba(255,255,255,.15) !important; }
-.dt-button-collection .dt-button, .dt-button-collection .dropdown-item {
-    display: flex; align-items: center; background: transparent !important; color: #212529 !important;
-    border: none !important; width: 100% !important; text-align: left !important;
-    padding: .4rem 1rem !important; font-size: .84rem !important; opacity: 1 !important;
-}
-[data-bs-theme="dark"] .dt-button-collection .dt-button,
-[data-bs-theme="dark"] .dt-button-collection .dropdown-item { color: #dee2e6 !important; }
-.dt-button-collection .dt-button:hover, .dt-button-collection .dropdown-item:hover { background: rgba(13,110,253,.08) !important; color: #0d6efd !important; }
+/* Largura das colunas: as fixas de controle; o resto fica no piso de 120px. */
+#lnopt-table th { min-width: 120px; }
+#lnopt-table th:nth-child(1), #lnopt-table td:nth-child(1) { width: 44px; min-width: 44px; } /* checkbox */
+#lnopt-table th:nth-child(2), #lnopt-table td:nth-child(2) { width: 110px; min-width: 110px; } /* Status */
+#lnopt-table th:nth-child(3), #lnopt-table td:nth-child(3) { width: 70px; min-width: 70px; } /* Actions */
 </style>
 {% endblock extra_css %}
 
@@ -238,7 +106,7 @@
                 </div>
             </div>
             <div class="table-responsive pt-2">
-                <table id="lnopt-table" class="table table-sm table-hover table-striped table-centered mb-0" style="width:100%">
+                <table id="lnopt-table" data-otc-datatable class="table table-sm table-hover table-striped table-centered mb-0" style="width:100%">
                     <thead><tr id="lnopt-head"></tr></thead>
                     <tbody></tbody>
                 </table>

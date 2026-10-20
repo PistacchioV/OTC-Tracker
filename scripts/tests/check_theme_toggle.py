@@ -1,30 +1,25 @@
-"""Toggle claro/escuro: o tema sao TRES atributos, nao um.
+"""Tema e aparência: um atributo, aplicado ANTES do primeiro paint, e um arquivo
+de cada (rebranding de 19/10/2026).
 
-O botao sol/lua do topbar trocava so `data-bs-theme`. Mas quem pinta a sidebar
-e escolhe qual logo aparece sao outros dois:
-
-    data-bs-theme     -> corpo da pagina (e o fundo da sidebar em
-                         visual-refresh.css)
-    data-menu-color   -> tema da SIDEBAR e logo dela   (structure/_layout.scss)
-    data-topbar-color -> tema do TOPBAR e logo dele    (structure/_topbar.scss)
-
-Com um atributo so, a sidebar e o logo do topbar ficavam no visual anterior ate
-a proxima navegacao — porque quem realinha os tres e o config.js, e ele so roda
-no load. Por isso parecia "so acontecer em algumas paginas": item FOLHA do menu
-navega e conserta sozinho; item com ramificacao so abre o submenu (o drill-down
-nao recarrega nada), entao o estado quebrado fica a vista.
+O tema antigo eram três atributos (`data-bs-theme`, `data-menu-color`,
+`data-topbar-color`) que andavam juntos pelo LayoutCustomizer do app.js — e
+desandavam quando alguém trocava só um. No tema novo a casca inteira lê UM:
+`data-bs-theme`. Destaque, papel de parede e vidro são atributos próprios, e
+o modo opaco (máquina sem GPU) é a classe `is-solid`.
 
 O que este script protege:
 
-  1. os tres atributos andam juntos, nos dois caminhos do toggle;
-  2. a troca passa pelo LayoutCustomizer do app — trocar por fora deixava a
-     copia de config dele defasada e o primeiro resize regravava o tema antigo;
-  3. o resize nao persiste mais o config inteiro;
-  4. a classe que suprime as transicoes existe dos DOIS lados (JS e CSS);
-  5. o CSS compilado realmente depende de menu-color/topbar-color — se um dia
-     nao depender mais, o item 1 virou zelo desnecessario e este teste avisa.
+  1. o <head> aplica a aparência de forma SÍNCRONA e ANTES do CSS — senão a
+     página pisca no tema errado até o otc.js rodar;
+  2. a preferência antiga (`__OTCTRACKER_CONFIG__`) é migrada, e o modo opaco
+     continua obedecendo `__OTC_TRACKER_FX__` (a saída de emergência);
+  3. o botão sol/lua troca pelo `otcUI.set` (que grava e reaplica), e a troca
+     suprime as transições dos DOIS lados (JS e CSS);
+  4. UM arquivo de cada: o <head> carrega só vendors.min.css + otc.css, o
+     rodapé só vendors.min.js + otc.js + clipboard.js, e nenhum template volta
+     a carregar as camadas removidas.
 
-Nao encosta em dado real: le arquivos-fonte.
+Não encosta em dado real: lê arquivos-fonte.
 """
 import io
 import os
@@ -48,67 +43,54 @@ def read(path):
     return io.open(path, encoding='utf-8').read()
 
 
-VR_JS = read('apps/static/js/visual-refresh.js')
-APP_JS = read('apps/static/js/app.js')
-VR_CSS = read('apps/static/css/visual-refresh.css')
-APP_CSS = read('apps/static/css/app.css')
+HEAD = read('apps/templates/partials/head-css.html')
+FOOT = read('apps/templates/partials/footer-scripts.html')
+JS = read('apps/static/js/otc.js')
+SCSS = read('apps/static/scss/otc.scss')
 
-# O corpo do toggle: de `function initThemeToggle` ate o fim da funcao seguinte.
-m = re.search(r'function initThemeToggle\(\)\s*\{.*?\n  \}\n', VR_JS, re.DOTALL)
-TOGGLE = m.group(0) if m else ''
+print('\n== 1. a aparência vai para o <html> antes do CSS ==')
+script_at = HEAD.find('<script>')
+css_at = HEAD.find('otc.css')
+check('o <head> tem o script inline', script_at >= 0, True)
+check('e ele vem ANTES do otc.css', 0 <= script_at < css_at, True)
+for attr in ('data-bs-theme', 'data-accent', 'data-wall', 'data-glass'):
+    check('o script escreve %s' % attr, ("setAttribute('%s'" % attr) in HEAD, True)
+check('e marca o modo opaco', "classList.add('is-solid')" in HEAD, True)
+check('auto segue o sistema', 'prefers-color-scheme: dark' in HEAD, True)
 
-print('\n== 1. o toggle troca os TRES atributos ==')
-check('initThemeToggle encontrado', bool(TOGGLE), True)
-for attr in ('data-bs-theme', 'data-menu-color', 'data-topbar-color'):
-    check('o fallback escreve %s' % attr,
-          'setAttribute("%s", t)' % attr in TOGGLE, True)
-check('e persiste a cor do menu', 'c.menu.color = t' in TOGGLE, True)
-check('e a cor do topbar', 'c.topbar.color = t' in TOGGLE, True)
+print('\n== 2. preferência antiga e saída de emergência ==')
+check('lê __OTC_TRACKER_UI__', '__OTC_TRACKER_UI__' in HEAD and '__OTC_TRACKER_UI__' in JS, True)
+check('migra __OTCTRACKER_CONFIG__', '__OTCTRACKER_CONFIG__' in HEAD, True)
+check('o modo opaco obedece __OTC_TRACKER_FX__', '__OTC_TRACKER_FX__' in HEAD and '__OTC_TRACKER_FX__' in JS, True)
+check('e o otc.js detecta GPU por software', 'swiftshader|llvmpipe|software|basic render' in JS, True)
 
-print('\n== 2. a troca passa pelo LayoutCustomizer ==')
-check('o toggle delega quando ele existe',
-      'lc.changeTheme(t)' in TOGGLE, True)
-check('app.js expoe a instancia',
-      'window.layoutCustomizer = new LayoutCustomizer()' in APP_JS, True)
-check('e a inicializa', 'window.layoutCustomizer.init()' in APP_JS, True)
-# changeTheme e a fonte da verdade: tem de escrever os tres.
-ct = re.search(r'changeTheme\(color\)\s*\{.*?\n    \}', APP_JS, re.DOTALL)
-ct = ct.group(0) if ct else ''
-for attr in ('data-bs-theme', 'data-menu-color', 'data-topbar-color'):
-    check('changeTheme escreve %s' % attr,
-          'setAttribute("%s", theme)' % attr in ct, True)
+print('\n== 3. o botão sol/lua ==')
+btn = re.search(r'function initThemeButton\(\)\s*\{.*?\n  \}\n', JS, re.DOTALL)
+btn = btn.group(0) if btn else ''
+check('initThemeButton encontrado', bool(btn), True)
+check('troca pelo otcUI.set', 'otcUI.set({ theme:' in btn, True)
+check('o JS suprime as transições na troca', "classList.add('otc-theme-switching')" in JS, True)
+check('e as devolve', "classList.remove('otc-theme-switching')" in JS, True)
+check('o CSS tem a regra',
+      bool(re.search(r'html\.otc-theme-switching \*[^{]*\{\s*transition:\s*none\s*!important', SCSS)), True)
 
-print('\n== 3. o resize nao regrava o config (tema junto) ==')
-adj = re.search(r'_adjustLayout\(\)\s*\{.*?\n    \}', APP_JS, re.DOTALL)
-adj = adj.group(0) if adj else ''
-check('_adjustLayout encontrado', bool(adj), True)
-check('nenhum ramo do resize persiste',
-      re.findall(r'changeLeftbarSize\([^)]*\)', adj),
-      ["changeLeftbarSize('offcanvas', false)",
-       "changeLeftbarSize(size === 'on-hover' ? 'condensed' : 'condensed', false)",
-       "changeLeftbarSize(size, false)"])
-
-print('\n== 4. a supressao de transicoes existe dos dois lados ==')
-CLS = 'vr-theme-switching'
-check('o JS adiciona a classe', 'classList.add("%s")' % CLS in TOGGLE, True)
-check('e a remove', 'classList.remove("%s")' % CLS in TOGGLE, True)
-check('o CSS tem a regra', ('html.%s' % CLS) in VR_CSS, True)
-check('e ela zera transition',
-      bool(re.search(r'html\.%s.*?\{[^}]*transition:\s*none\s*!important' % CLS,
-                     VR_CSS, re.DOTALL)), True)
-
-print('\n== 5. o CSS realmente depende dos outros dois atributos ==')
-# Se estes contadores forem a zero, trocar so o data-bs-theme passaria a bastar
-# e o item 1 vira zelo desnecessario — melhor o teste avisar do que ninguem ver.
-check('regras presas ao menu-color',
-      len(re.findall(r'data-menu-color=', APP_CSS)) > 0, True)
-check('regras presas ao topbar-color',
-      len(re.findall(r'data-topbar-color=', APP_CSS)) > 0, True)
-check('o logo da sidebar sai do menu-color',
-      'data-menu-color=dark] .logo.logo-light' in APP_CSS.replace('\n', ' ') or
-      bool(re.search(r'data-menu-color=dark\][^{]*logo', APP_CSS)), True)
-check('o logo do topbar sai do topbar-color',
-      bool(re.search(r'data-topbar-color=dark\][^{]*logo', APP_CSS)), True)
+print('\n== 4. um arquivo de cada ==')
+check('o <head> carrega vendors.min.css + otc.css, e só',
+      re.findall(r'}}/css/([\w.-]+\.css)', HEAD), ['vendors.min.css', 'otc.css'])
+check('o rodapé carrega vendors.min.js + otc.js + clipboard.js, e só',
+      re.findall(r'}}/js/([\w.-]+\.js)', FOOT), ['vendors.min.js', 'otc.js', 'clipboard.js'])
+check('só existe UM scss', sorted(f for f in os.listdir('apps/static/scss')), ['otc.scss'])
+GONE = ('app.css', 'app.min.css', 'visual-refresh.css', 'streamflow.css', 'tools.css', 'js/app.js',
+        'js/config.js', 'visual-refresh.js', 'streamflow.js', 'sidenav-drilldown.js', 'sticky-tables.js')
+volta = []
+for dp, dn, fn in os.walk('apps/templates'):
+    for f in fn:
+        if f.endswith('.html'):
+            txt = read(os.path.join(dp, f))
+            for g in GONE:
+                if re.search(r'(src|href)="[^"]*' + re.escape(g), txt):
+                    volta.append('%s -> %s' % (f, g))
+check('nenhum template carrega as camadas removidas', volta, [])
 
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

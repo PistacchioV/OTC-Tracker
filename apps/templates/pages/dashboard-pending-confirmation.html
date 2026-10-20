@@ -5,86 +5,44 @@
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+{# Só o que é DESTA tela: a leitura ao vivo + Refresh (o mesmo desenho do
+   Intraday Monitor), os chips de faixa que ligam e desligam, o mapa de calor
+   da tabela dinâmica (--pcd-heat) e o alinhamento das colunas de texto. Placa,
+   ladrilhos de número, toolbar, Export e tabela são do tema (otc.scss). #}
 <style>
-/* Pending Confirmation › Dashboard. Painel próprio (não .card: o extra_css
-   carrega antes do tema e perderia), estados com prefixo de id (§7). */
-#pcd-page { --pcd-heat: #7b3f7a; }
-[data-bs-theme="dark"] #pcd-page { --pcd-heat: #b07ab0; }
+#pcd-page { --pcd-heat: color-mix(in srgb, var(--otc-purple) 55%, var(--otc-pink)); }
+#pcd-page .pcd-panel { padding: var(--otc-pad); }
 
-#pcd-page .pcd-panel {
-    background: var(--vr-card-bg); border: 1px solid var(--vr-card-border);
-    box-shadow: var(--vr-card-shadow); border-radius: var(--vr-card-radius, 16px);
-    padding: 1.1rem 1.25rem;
-}
-#pcd-page .pcd-kpi { display: flex; gap: 2.5rem; flex-wrap: wrap; align-items: flex-end; }
-#pcd-page .pcd-kpi__v { font-size: 2.1rem; font-weight: 700; letter-spacing: -1px; line-height: 1; }
-#pcd-page .pcd-kpi__l { font-size: .7rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #6e6e73; margin-top: .3rem; }
-#pcd-page .pcd-note { font-size: .74rem; color: #6e6e73; text-align: right; }
-/* Leitura ao vivo + Refresh — o MESMO desenho do Intraday Monitor
-   (.im-live / .im-refresh): bolinha pulsante, hora com segundos e o botão
+/* Leitura ao vivo + Refresh: bolinha pulsante, hora com segundos e o botão
    quadrado só com o ícone, que gira enquanto lê. */
+#pcd-page .pcd-note { font-size: 12.5px; color: var(--otc-text-2); text-align: right; }
 #pcd-page .pcd-bar { display: inline-flex; align-items: center; gap: .6rem; }
-#pcd-page .pcd-live { display: inline-flex; align-items: center; gap: .4rem; font-size: .74rem;
-    color: var(--ins-secondary-color); font-variant-numeric: tabular-nums; }
-#pcd-page .pcd-live i { width: 8px; height: 8px; border-radius: 99px; background: #16a34a;
-    box-shadow: 0 0 0 0 color-mix(in oklab, #16a34a 55%, transparent); }
-@media (prefers-reduced-motion: no-preference) {
-    #pcd-page .pcd-live i { animation: sf-pulse 2.4s ease-out infinite; }
-}
-#pcd-page .pcd-live.is-fail { color: #d63939; font-weight: 600; }
-#pcd-page .pcd-live.is-fail i { background: #d63939; }
-#pcd-page .pcd-refresh { width: 34px; height: 34px; padding: 0; border-radius: 10px !important;
-    display: inline-flex; align-items: center; justify-content: center; }
-#pcd-page .pcd-refresh.is-busy i { animation: pcd-spin .6s linear infinite; }
-@keyframes pcd-spin { to { transform: rotate(360deg); } }
 
 /* Faixas de pendência: chips que ligam e desligam */
 #pcd-page .pcd-bands { display: flex; flex-wrap: wrap; gap: .45rem; }
 #pcd-page .pcd-band {
-    display: inline-flex; align-items: center; gap: .45rem; border-radius: 999px;
+    display: inline-flex; align-items: center; gap: .45rem; border-radius: var(--otc-r-pill);
     padding: .3rem .8rem; font-size: .76rem; font-weight: 600; cursor: pointer;
-    border: 1px solid var(--vr-card-border); background: transparent; color: inherit;
-    transition: background .15s ease, border-color .15s ease, transform .12s ease;
+    border: 1px solid var(--otc-sep); background: transparent; color: inherit;
+    transition: background-color var(--otc-dur-fast) var(--otc-ease), border-color var(--otc-dur-fast) var(--otc-ease), scale var(--otc-dur-fast) var(--otc-ease);
 }
-#pcd-page .pcd-band:active { transform: scale(.97); }
+#pcd-page .pcd-band:active { scale: .97; }
 #pcd-page .pcd-band .pcd-band__n {
-    font-variant-numeric: tabular-nums; font-size: .7rem; padding: .05rem .45rem; border-radius: 999px;
+    font-variant-numeric: tabular-nums; font-size: .7rem; padding: .05rem .45rem; border-radius: var(--otc-r-pill);
     background: color-mix(in srgb, var(--pcd-heat) 14%, transparent);
 }
 #pcd-page .pcd-band.is-on { border-color: var(--pcd-heat); background: color-mix(in srgb, var(--pcd-heat) 16%, transparent); }
 #pcd-page .pcd-band.is-on .pcd-band__n { background: var(--pcd-heat); color: #fff; }
 
-/* Toolbar (§7): o DataTables come a margem do irmão, por isso o mb-3 */
-#pcd-page .btn-toolbar-all { transition: transform 100ms ease-out; }
-#pcd-page .btn-toolbar-all:active { transform: scale(.96) !important; }
 #pcd-toolbar .dt-buttons { display: inline-flex; margin: 0; }
 
-/* Menu do Export — fundo sólido e texto legível (o mesmo do New Deals) */
-.dt-button-collection {
-    background: #fff !important; border: 1px solid rgba(0,0,0,.15) !important;
-    box-shadow: 0 4px 16px rgba(0,0,0,.18) !important; border-radius: .375rem !important;
-    padding: .25rem 0 !important; opacity: 1 !important;
-}
-[data-bs-theme="dark"] .dt-button-collection { background: #2b2f3a !important; border-color: rgba(255,255,255,.15) !important; }
-.dt-button-collection .dt-button {
-    background: transparent !important; color: #212529 !important; border: none !important;
-    width: 100% !important; text-align: left !important; padding: .4rem 1rem !important;
-    font-size: .82rem !important; opacity: 1 !important;
-}
-[data-bs-theme="dark"] .dt-button-collection .dt-button { color: #dee2e6 !important; }
-.dt-button-collection .dt-button:hover, .dt-button-collection .dt-button:focus {
-    background: rgba(13,110,253,.08) !important; color: #0d6efd !important;
-}
-[data-bs-theme="dark"] .dt-button-collection .dt-button:hover { background: rgba(255,255,255,.08) !important; color: #6ea8fe !important; }
-
-/* Tabela — padrão da casa (§7): centralizada, th .7rem, td .8rem nowrap */
-#pcd-table th { font-size: .7rem; text-align: center; vertical-align: middle; }
-#pcd-table td { font-size: .8rem; text-align: center; vertical-align: middle; white-space: nowrap; font-variant-numeric: tabular-nums; }
-#pcd-table td.pcd-txt { text-align: left; }
+/* Tabela dinâmica: as colunas de texto à esquerda, os totais em negrito e o
+   número sobre a célula quente vai a branco. */
+#pcd-table td { font-variant-numeric: tabular-nums; }
+#pcd-table td.pcd-txt, #pcd-table tfoot th.pcd-txt { text-align: left; }
 #pcd-table td.pcd-owner { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 #pcd-table td.pcd-total, #pcd-table tfoot th { font-weight: 700; }
 #pcd-table tfoot th { font-size: .8rem; text-align: center; }
-#pcd-table tfoot th.pcd-txt { text-align: left; }
 #pcd-table td.pcd-hot { color: #fff; }
 </style>
 {% endblock extra_css %}
@@ -95,27 +53,34 @@
     {% set title='Dashboard — Pending Confirmation' %}
     {% include 'partials/page-title.html' %}
 
-    <div class="pcd-panel mb-3">
-        <div class="d-flex flex-wrap justify-content-between align-items-end gap-3">
-            <div class="pcd-kpi">
-                <div><div class="pcd-kpi__v" id="pcd-kpi-total">—</div><div class="pcd-kpi__l" data-lang="pcd-kpi-total">Pending confirmations</div></div>
-                <div><div class="pcd-kpi__v" id="pcd-kpi-groups">—</div><div class="pcd-kpi__l" data-lang="pcd-kpi-groups">Economic groups</div></div>
+    <div class="otc-page-bar">
+        <div class="otc-stats">
+            <div class="otc-stat" style="--hue: var(--otc-purple)">
+                <span class="otc-stat__label" data-lang="pcd-kpi-total">Pending confirmations</span>
+                <span class="otc-stat__value" id="pcd-kpi-total">—</span>
             </div>
-            <div class="pcd-note">
+            <div class="otc-stat" style="--hue: var(--otc-indigo)">
+                <span class="otc-stat__label" data-lang="pcd-kpi-groups">Economic groups</span>
+                <span class="otc-stat__value" id="pcd-kpi-groups">—</span>
+            </div>
+        </div>
+        <div class="otc-page-actions pcd-note">
+            <div>
                 <div data-lang="pcd-source-live">Live reading of the Pending Confirmation Main (pending base)</div>
                 <div class="pcd-bar mt-1">
-                    <span class="pcd-live" id="pcd-live"><i></i><span id="pcd-updated">—</span></span>
-                    <button type="button" class="btn btn-sm btn-soft-primary pcd-refresh" id="pcdRefresh"
+                    <span class="pcd-live otc-live" id="pcd-live"><i></i><span id="pcd-updated">—</span></span>
+                    <button type="button" class="btn btn-sm btn-soft-primary btn-icon pcd-refresh" id="pcdRefresh"
                             data-bs-toggle="tooltip" title="Refresh now">
                         <i class="ti ti-refresh"></i>
                     </button>
                 </div>
             </div>
         </div>
-        <div class="mt-3">
-            <div class="pcd-kpi__l mb-2" data-lang="pcd-bands">Pending range</div>
-            <div class="pcd-bands" id="pcd-bands"></div>
-        </div>
+    </div>
+
+    <div class="pcd-panel mb-3">
+        <div class="widget-lbl mb-2" data-lang="pcd-bands">Pending range</div>
+        <div class="pcd-bands" id="pcd-bands"></div>
     </div>
 
     <div class="d-flex flex-wrap gap-2 mb-3" id="pcd-toolbar">

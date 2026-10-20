@@ -3,379 +3,163 @@
 {% block title %}Confirmations Monitor{% endblock title %}
 
 {% block extra_css %}
+{# Só o que é DESTA tela: as CINCO filas lado a lado (uma coluna por etapa da
+   esteira, com a fila rolando dentro), o chip de cor de cada etapa, a LUZ do
+   prazo (verde no prazo, âmbar na véspera, vermelho estourado — o item inteiro
+   acende, não só o ponto), a marca de "sem callback", os chips de documento e
+   a idade da pendência. A coluna não é `.card` (tem lista rolável e botões
+   dentro): a placa é pintada aqui com os tokens do vidro do tema. #}
 <style>
-/* ============================================================================
-   Confirmations Monitor — uma fila por mesa da esteira.
-   Camada visual: tokens --ins-* (tema) e --vr-* (visual-refresh). Nunca --bs-*.
-   O desenho é o do New Deals Monitor: cartão neutro com moldura e sombra suave,
-   chip de ícone no gradiente, total à direita em dígitos de largura fixa.
+#mc-monitor { padding-bottom: .9rem; }
 
-   O cartão NÃO é um `.card` do Bootstrap, é um <div> com classe própria — sobre
-   um `.card` o tema redeclara fundo, borda, raio e cor DEPOIS deste <style>
-   (extra_css vem antes do head-css) e cada propriedade precisaria de !important.
-   ============================================================================ */
-/* O respiro entre o fim dos cards e o rodapé. Sem ele o cartão encosta na faixa
-   do footer e os dois leem como um bloco só. */
-#mc-monitor { --mc-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); padding-bottom: .9rem; }
-
-/* As CINCO etapas lado a lado (≥xl, `col-xl` sem número). O min-width:0 é o que
-   mantém as colunas IGUAIS: flex item tem min-width:auto, e um nome de cliente
-   comprido alargaria o card dele às custas dos vizinhos — dentro, quem resolve
-   é o ellipsis que os itens já têm. */
+/* As CINCO etapas lado a lado (≥xl). O min-width:0 mantém as colunas IGUAIS:
+   um nome de cliente comprido alargaria o card dele às custas dos vizinhos. */
 #mc-cards > [class*="col"] { min-width: 0; }
 
 #mc-monitor .mc-card {
     height: 100%;
-    background: var(--vr-card-bg, var(--ins-secondary-bg));
-    border: 1px solid var(--vr-card-border, var(--ins-border-color));
-    border-radius: var(--vr-card-radius, 18px);
-    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
     display: flex; flex-direction: column; overflow: hidden;
-    transition: box-shadow 260ms var(--mc-ease), border-color 260ms var(--mc-ease);
+    border-radius: var(--otc-r-xl);
+    background-color: var(--otc-glass);
+    -webkit-backdrop-filter: var(--otc-blur);
+    backdrop-filter: var(--otc-blur);
+    box-shadow: var(--otc-depth);
 }
-/* O cartão NÃO levanta como os do New Deals Monitor: aquele é um atalho
-   inteiro clicável, este tem uma lista rolável e botões dentro — mover o card
-   sob o cursor tiraria o botão de baixo do dedo. Ele reage na moldura e na
-   sombra, e o ícone faz a animação padrão da casa. */
-@media (hover: hover) and (pointer: fine) {
-    #mc-monitor .mc-card:hover {
-        box-shadow: var(--vr-card-shadow-hover, 0 18px 40px rgba(94, 92, 230, .14));
-        border-color: rgba(0, 102, 204, .28);
-    }
-    #mc-monitor .mc-card:hover .mc-card__ico {
-        transform: scale(1.1) rotate(-4deg);
-        box-shadow: 0 8px 20px rgba(94, 92, 230, .38);
-    }
-}
-#mc-monitor .mc-card__head {
-    display: flex; align-items: center; gap: .75rem;
-    padding: 1.05rem 1.15rem .85rem;
-}
-/* Header da coluna num marinho mais fundo que o corpo (pedido 2026-09-01):
-   um degrau ESCURO sobre o vidro, com fio de luz embaixo separando da fila. */
+#mc-monitor .mc-card__head { display: flex; align-items: center; gap: .75rem; padding: 1.05rem 1.15rem .85rem; }
+/* No escuro o cabeçalho da coluna é um degrau mais FUNDO que a fila (pedido da
+   mesa), com o fio separando os dois. */
 [data-bs-theme=dark] #mc-monitor .mc-card__head {
-    background: rgba(6, 16, 38, 0.58);
-    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--otc-solid) 55%, transparent);
+    box-shadow: inset 0 -1px 0 var(--otc-sep);
 }
 #mc-monitor .mc-card__ico {
-    width: 42px; height: 42px; flex: 0 0 auto; border-radius: 12px;
+    width: 42px; height: 42px; flex: 0 0 auto; border-radius: 30%;
     display: inline-flex; align-items: center; justify-content: center;
     color: #fff; font-size: 1.25rem;
-    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
-    box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
-    transition: transform 260ms var(--mc-ease), box-shadow 260ms var(--mc-ease);
+    background: linear-gradient(135deg, var(--otc-blue), var(--otc-purple));
 }
 /* A etapa é a cor do CHIP, não a do cartão: o cartão inteiro tingido briga com a
-   lista dentro dele e some no tema escuro. */
-#mc-monitor .mc-c-otc .mc-card__ico { background: linear-gradient(100deg, #0066cc, #5e5ce6); box-shadow: 0 4px 12px rgba(0,102,204,.28); }
-#mc-monitor .mc-c-mo  .mc-card__ico { background: linear-gradient(100deg, #b07500, #f7b84b); box-shadow: 0 4px 12px rgba(176,117,0,.28); }
-#mc-monitor .mc-c-fo  .mc-card__ico { background: linear-gradient(100deg, #7c3aed, #d946ef); box-shadow: 0 4px 12px rgba(124,58,237,.28); }
-/* Os dois estados fora das mesas (§254): Legal antes do OTC, FepWeb no fim. */
-#mc-monitor .mc-c-legal .mc-card__ico { background: linear-gradient(100deg, #6d4c41, #a1887f); box-shadow: 0 4px 12px rgba(109,76,65,.28); }
-#mc-monitor .mc-c-fep   .mc-card__ico { background: linear-gradient(100deg, #0d7ea8, #4a849b); box-shadow: 0 4px 12px rgba(13,126,168,.28); }
+   lista dentro dele. Legal antes do OTC e FepWeb no fim (§254). */
+#mc-monitor .mc-c-otc   .mc-card__ico { background: linear-gradient(135deg, var(--otc-blue), var(--otc-indigo)); }
+#mc-monitor .mc-c-mo    .mc-card__ico { background: linear-gradient(135deg, var(--otc-orange), var(--otc-yellow)); }
+#mc-monitor .mc-c-fo    .mc-card__ico { background: linear-gradient(135deg, var(--otc-purple), var(--otc-pink)); }
+#mc-monitor .mc-c-legal .mc-card__ico { background: linear-gradient(135deg, #6d4c41, #a1887f); }
+#mc-monitor .mc-c-fep   .mc-card__ico { background: linear-gradient(135deg, var(--otc-teal), var(--otc-blue)); }
 
-#mc-monitor .mc-card__title { font-size: .95rem; font-weight: 700; letter-spacing: -.01em; margin: 0; color: var(--ins-body-color); }
-/* O subtítulo diz quantas OPERAÇÕES estão dentro das confirmações do card: o
-   número grande conta documentos, e sem esta linha some a informação de volume. */
-#mc-monitor .mc-card__sub { font-size: .68rem; color: var(--ins-secondary-color); margin: 0; }
+#mc-monitor .mc-card__title { font: 700 .95rem/1.25 var(--otc-font); letter-spacing: -.01em; margin: 0; color: var(--otc-text); }
+/* Quantas OPERAÇÕES estão dentro das confirmações do card: o número grande
+   conta documentos. */
+#mc-monitor .mc-card__sub { font-size: .68rem; color: var(--otc-text-2); margin: 0; }
 #mc-monitor .mc-card__val {
-    margin-left: auto; font-size: 1.45rem; font-weight: 800; letter-spacing: -.02em;
-    font-variant-numeric: tabular-nums; color: var(--ins-body-color);
+    margin-left: auto; font: 800 1.45rem/1.1 var(--otc-font-display); letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums; color: var(--otc-text);
 }
 
 /* ── A fila ──────────────────────────────────────────────────────────
-   Rolagem interna com altura máxima: um card com 60 confirmações não pode
-   empurrar os outros dois para fora da tela — os três se leem lado a lado. */
+   Rolagem interna com altura máxima: um card com 60 confirmações não empurra
+   os outros para fora da tela. `flex: 1 1 auto` faz a fila ocupar o cartão
+   inteiro (os cards têm a altura do mais cheio). */
 #mc-monitor .mc-list {
-    /* Liquid glass (pedido 2026-09-01): este fundo era o TERCIÁRIO OPACO, e
-       ele cobria quase todo o cartão — o `.mc-card` É vidro pela regra
-       estrutural do streamflow (§23), mas a fila pintada por cima devolvia a
-       coluna chapada, principalmente no escuro. Vira um degrau TRANSLÚCIDO,
-       sem blur próprio: dentro da raiz de backdrop do cartão o desfoque do
-       filho não amostra nada (§7 do CLAUDE.md). */
-    background: rgba(255, 255, 255, 0.28);
-    /* Cards maiores (pedido da mesa): a fila cresce com a janela e o mínimo
-       garante presença mesmo com pouca coisa pendente.
-
-       `flex: 1 1 auto` é o que faz a fila OCUPAR o cartão inteiro. Os três cards
-       têm a altura do mais cheio (a linha do grid os estica), e sem o flex-grow a
-       fila dos outros dois parava na altura do próprio conteúdo — o resto do
-       cartão aparecia como uma faixa BRANCA embaixo, o fundo do `.mc-card`
-       aparecendo por baixo da lista cinza. O `max-height` continua limitando o
-       card mais cheio, que é quem define a altura da linha. */
     flex: 1 1 auto;
     min-height: 24rem;
     max-height: calc(100vh - 21rem); overflow-y: auto; padding: .5rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.40);
-}
-[data-bs-theme=dark] #mc-monitor .mc-list {
-    background: transparent;   /* corpo = a MESMA superfície do chip de stat */
-    border-top-color: rgba(255, 255, 255, 0.10);
-}
-/* No escuro o CARTÃO sobe para a receita do modal liquid-glass (o token
-   padrão, 4%, não desenha vidro sobre um fundo que já é escuro): alfa 0,10,
-   borda mais viva e os FIOS DE LUZ internos (inset) — é o que faz o painel
-   ler como vidro, não só o alfa. A fila fica quase transparente por cima. */
-[data-bs-theme=dark] #mc-monitor .mc-card {
-    /* O vidro é o MESMO dos chips de stat (pedido 2026-09-01: "igual
-       da primeira imagem"): fundo no token, borda hairline e o blur
-       estrutural do streamflow — nada de inset nem borda viva. O que
-       mantém a coluna glassy é a fila TRANSLÚCIDA por cima. */
-    /* blur BAIXO e alfa ABAIXO do token, de propósito (pedidos: "aumentar o
-       nível de translúcido" ×2): o desfoque alto homogeneíza o fundo e o véu
-       branco soma — com 5px e 2,5% a estrutura da página atravessa. */
-    background: rgba(255, 255, 255, 0.025);
-    border-color: var(--vr-card-border);
-    backdrop-filter: blur(5px) saturate(170%);
-    -webkit-backdrop-filter: blur(5px) saturate(170%);
-    box-shadow: var(--vr-card-shadow);
-}
-/* O item se separa da fila no escuro descendo, não subindo: com degrau
-   BRANCO por cima do cartão a 0,10 o item saía mais claro que tudo (e o
-   brilho vermelho do vizinho atravessava o corpo translúcido). O passo é um
-   translúcido ESCURO — o item afunda no vidro, e a borda hairline é quem
-   desenha o contorno. Pedido de 2026-09-01: "os cards que vão em cima
-   precisam ficar um pouco mais escuros". */
-[data-bs-theme=dark] #mc-monitor .mc-item {
-    background: rgba(9, 26, 61, 0.70);        /* marinho, pedido da mesa */
-    border-color: rgba(255, 255, 255, 0.10);
+    border-top: 1px solid var(--otc-sep);
 }
 #mc-monitor .mc-item {
-    background: var(--vr-card-bg, var(--ins-secondary-bg));
-    border: 1px solid var(--ins-border-color);
-    border-radius: 12px; padding: .8rem .9rem; margin-bottom: .5rem;
-    transition: border-color 200ms var(--mc-ease), box-shadow 200ms var(--mc-ease),
-                background 200ms var(--mc-ease);
+    background: var(--otc-menu-bg);
+    border: 1px solid var(--otc-sep);
+    border-radius: var(--otc-r-md); padding: .8rem .9rem; margin-bottom: .5rem;
+    transition: border-color var(--otc-dur-fast) var(--otc-ease), box-shadow var(--otc-dur-fast) var(--otc-ease);
 }
 #mc-monitor .mc-item:last-child { margin-bottom: 0; }
 @media (hover: hover) and (pointer: fine) {
-    #mc-monitor .mc-item:hover {
-        border-color: var(--vr-accent-1, #0066cc);
-        box-shadow: 0 4px 14px rgba(15, 23, 42, .07);
-    }
+    #mc-monitor .mc-item:hover { border-color: var(--otc-accent-ink); }
 }
 #mc-monitor .mc-item__top { display: flex; align-items: baseline; gap: .4rem; }
-#mc-monitor .mc-item__cli { font-size: .9rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ins-body-color); }
+#mc-monitor .mc-item__cli { font-size: .9rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--otc-text); }
 #mc-monitor .mc-item__age { margin-left: auto; font-size: .74rem; font-weight: 800; flex-shrink: 0; font-variant-numeric: tabular-nums; }
-#mc-monitor .mc-item__meta { font-size: .74rem; color: var(--ins-secondary-color); margin-top: .1rem; }
-/* Quantas operações a confirmação cobre. Uma folha com dez trades é UMA
-   confirmação — sem esta marca o item parece uma operação solta. */
+#mc-monitor .mc-item__meta { font-size: .74rem; color: var(--otc-text-2); margin-top: .1rem; }
+/* Quantas operações a confirmação cobre: uma folha com dez trades é UMA
+   confirmação. */
 #mc-monitor .mc-item__ops {
     display: inline-flex; align-items: center; gap: .25rem;
     font-size: .64rem; font-weight: 800; letter-spacing: .02em;
-    padding: .1rem .4rem; border-radius: 999px;
-    background: var(--ins-tertiary-bg, #eef0f4); color: var(--ins-secondary-color);
+    padding: .1rem .4rem; border-radius: var(--otc-r-pill);
+    background: var(--otc-fill); color: var(--otc-text-2);
 }
 #mc-monitor .mc-item__acts { display: flex; gap: .3rem; margin-top: .55rem; flex-wrap: wrap; align-items: center; }
+#mc-monitor .mc-item__acts .btn { font-size: .74rem; padding: .24rem .65rem; line-height: 1.5; }
 
 /* ── A luz do prazo ──────────────────────────────────────────────────────
-   OTC D+3, MO D+4, FO D+6 do trade date, em dias úteis ANBIMA. Mesma leitura
-   das luzes do New Deals Monitor — verde com folga, âmbar na véspera, vermelho
-   depois —, e como lá a cor não fica só num ponto: ela toma a moldura e a
-   sombra do item inteiro, que é o que se vê ao correr o olho pela fila.
-
-   As três cores existem nos DOIS temas: a receita clara (fundo pastel, texto
-   escuro) invertida some no escuro, que é o mesmo par do chip de NOK da recon. */
+   OTC D+3, MO D+4, FO D+6 do trade date, em dias úteis ANBIMA. A cor toma a
+   moldura e a sombra do item inteiro (é o que se vê ao correr o olho pela
+   fila), e o chip é SÓLIDO — pastel lia-se como uma etiqueta a mais. */
+#mc-monitor .mc-sla-ok   { --sla: var(--otc-green); }
+#mc-monitor .mc-sla-warn { --sla: color-mix(in srgb, var(--otc-yellow) 55%, var(--otc-orange)); }
+#mc-monitor .mc-sla-late { --sla: var(--otc-danger); }
 #mc-monitor .mc-item__slarow { margin-top: .4rem; }
-#mc-monitor .mc-item__sla {
-    display: inline-flex; align-items: center; gap: .3rem;
-    font-size: .64rem; font-weight: 800; letter-spacing: .02em;
-    padding: .14rem .5rem; border-radius: 999px; border: 1px solid transparent;
-}
-/* O chip é SÓLIDO, não pastel. A versão de fundo translúcido lia-se como uma
-   etiqueta a mais no meio das outras — e a luz do prazo tem de ser a primeira
-   coisa que se vê ao correr o olho pela fila, não a última. Texto branco sobre
-   cor cheia é o que sobrevive à distância de leitura de uma coluna inteira. */
-#mc-monitor .mc-sla-ok   .mc-item__sla { background: #1a8a4a; color: #fff; border-color: #157a41; }
-#mc-monitor .mc-sla-warn .mc-item__sla { background: #d98a00; color: #fff; border-color: #b87700; }
-#mc-monitor .mc-sla-late .mc-item__sla { background: #d32f2f; color: #fff; border-color: #b71c1c; }
-[data-bs-theme=dark] #mc-monitor .mc-sla-ok   .mc-item__sla { background: #22a35a; color: #06210f; border-color: #2fbd6c; }
-[data-bs-theme=dark] #mc-monitor .mc-sla-warn .mc-item__sla { background: #f2a417; color: #2a1c00; border-color: #ffbb3d; }
-[data-bs-theme=dark] #mc-monitor .mc-sla-late .mc-item__sla { background: #e5484d; color: #2a0508; border-color: #ff6166; }
-
-/* Sem Data Callback (só no card de Pending FepWeb). Mesma geometria do chip do
-   prazo — é a mesma linha e as duas marcas convivem —, e SÓLIDO vermelho pela
-   mesma razão: pastel some no meio das etiquetas.
-   Não reusa `.mc-sla-late` porque as duas coisas podem valer ao mesmo tempo, e
-   a cor do prazo é do PRAZO. Aqui o vermelho diz que falta um passo, não que
-   estourou o relógio. */
+#mc-monitor .mc-item__sla,
 #mc-monitor .mc-item__nocb {
     display: inline-flex; align-items: center; gap: .3rem;
     font-size: .64rem; font-weight: 800; letter-spacing: .02em;
-    padding: .14rem .5rem; border-radius: 999px;
-    background: #d32f2f; color: #fff; border: 1px solid #b71c1c;
+    padding: .14rem .5rem; border-radius: var(--otc-r-pill);
+    background: var(--sla); color: #fff;
 }
-[data-bs-theme=dark] #mc-monitor .mc-item__nocb {
-    background: #e5484d; color: #2a0508; border-color: #ff6166;
-}
-/* O item ganha só a MOLDURA vermelha, não o fundo: o card de FepWeb não tem luz
-   de prazo (o estado não é de mesa nenhuma), então a moldura é o que faz a
-   confirmação sem callback saltar ao correr o olho pela lista. */
-#mc-monitor .mc-item--nocb { border-color: rgba(211, 47, 47, .55); }
+/* Sem Data Callback (só no card de Pending FepWeb): o vermelho diz que falta um
+   passo, não que estourou o relógio — por isso não reusa `.mc-sla-late`. */
+#mc-monitor .mc-item__nocb { --sla: var(--otc-danger); }
+[data-bs-theme=dark] #mc-monitor :is(.mc-item__sla, .mc-item__nocb) { color: var(--otc-solid); }
+#mc-monitor .mc-item--nocb { border-color: color-mix(in srgb, var(--otc-danger) 55%, transparent); }
 
-/* A luz fica ATRÁS do item, na receita dos cards do New Deals Monitor: sombra em
-   CAMADAS (contato + média + halo largo) e a moldura quase neutra. O item
-   continua branco — tarja lateral e fundo em degradê pesavam a fila inteira e
-   competiam com o texto, quando o que se quer ler de relance é só o estado.
-
-   O verde entra TAMBÉM (pedido da mesa): a fila vira um semáforo completo —
-   verde no prazo, âmbar na véspera, vermelho estourado — em vez de cor só no
-   que dói. Um degrau mais suave que o âmbar/vermelho, para o que pede ação
-   continuar na frente. */
-#mc-monitor .mc-item.mc-sla-ok {
-    border-color: rgba(22,163,74,.32);
-    box-shadow: 0 2px 5px rgba(22,163,74,.14),
-                0 8px 18px rgba(22,163,74,.26),
-                0 16px 34px rgba(22,163,74,.18);
+#mc-monitor .mc-item:is(.mc-sla-ok, .mc-sla-warn, .mc-sla-late) {
+    border-color: color-mix(in srgb, var(--sla) 38%, transparent);
+    box-shadow: 0 2px 6px color-mix(in srgb, var(--sla) 16%, transparent),
+                0 8px 18px color-mix(in srgb, var(--sla) 28%, transparent),
+                0 16px 34px color-mix(in srgb, var(--sla) 18%, transparent);
 }
-[data-bs-theme=dark] #mc-monitor .mc-item.mc-sla-ok {
-    border-color: rgba(48,199,110,.4);
-    box-shadow: 0 2px 6px rgba(48,199,110,.18),
-                0 10px 22px rgba(48,199,110,.28),
-                0 20px 42px rgba(48,199,110,.18);
-}
-#mc-monitor .mc-item.mc-sla-warn {
-    border-color: rgba(217,138,0,.34);
-    box-shadow: 0 2px 5px rgba(217,138,0,.16),
-                0 8px 18px rgba(217,138,0,.32),
-                0 16px 34px rgba(217,138,0,.22);
-}
-#mc-monitor .mc-item.mc-sla-late {
-    border-color: rgba(211,47,47,.36);
-    box-shadow: 0 2px 5px rgba(211,47,47,.18),
-                0 8px 18px rgba(211,47,47,.36),
-                0 16px 34px rgba(211,47,47,.24);
-}
-[data-bs-theme=dark] #mc-monitor .mc-item.mc-sla-warn {
-    border-color: rgba(242,164,23,.42);
-    box-shadow: 0 2px 6px rgba(242,164,23,.20),
-                0 10px 22px rgba(242,164,23,.34),
-                0 20px 42px rgba(242,164,23,.22);
-}
-[data-bs-theme=dark] #mc-monitor .mc-item.mc-sla-late {
-    border-color: rgba(229,72,77,.44);
-    box-shadow: 0 2px 6px rgba(229,72,77,.22),
-                0 10px 22px rgba(229,72,77,.38),
-                0 20px 42px rgba(229,72,77,.24);
-}
-/* O hover do item (azul) vem antes destas regras e tem a MESMA especificidade,
-   então elas já o venciam — o item aceso ficava inerte sob o cursor. A luz
-   apenas se aprofunda, que é o que o New Deals Monitor faz. */
+#mc-monitor .mc-item.mc-sla-ok { border-color: color-mix(in srgb, var(--sla) 32%, transparent); }
 @media (hover: hover) and (pointer: fine) {
-    #mc-monitor .mc-item.mc-sla-warn:hover {
-        border-color: rgba(217,138,0,.46);
-        box-shadow: 0 4px 10px rgba(217,138,0,.20),
-                    0 12px 26px rgba(217,138,0,.40),
-                    0 22px 46px rgba(217,138,0,.26);
-    }
-    #mc-monitor .mc-item.mc-sla-late:hover {
-        border-color: rgba(211,47,47,.48);
-        box-shadow: 0 4px 10px rgba(211,47,47,.22),
-                    0 12px 26px rgba(211,47,47,.44),
-                    0 22px 46px rgba(211,47,47,.28);
-    }
-    #mc-monitor .mc-item.mc-sla-ok:hover {
-        border-color: rgba(22,163,74,.44);
-        box-shadow: 0 4px 10px rgba(22,163,74,.18),
-                    0 12px 26px rgba(22,163,74,.34),
-                    0 22px 46px rgba(22,163,74,.22);
+    #mc-monitor .mc-item:is(.mc-sla-ok, .mc-sla-warn, .mc-sla-late):hover {
+        border-color: color-mix(in srgb, var(--sla) 50%, transparent);
+        box-shadow: 0 4px 10px color-mix(in srgb, var(--sla) 20%, transparent),
+                    0 12px 26px color-mix(in srgb, var(--sla) 38%, transparent),
+                    0 22px 46px color-mix(in srgb, var(--sla) 24%, transparent);
     }
 }
 
-/* O spinner do "procurando os PDFs": o ícone gira enquanto a busca corre. Um
-   ícone parado ao lado de "looking…" lia-se como um estado morto — e era
-   exatamente a queixa quando uma aba antiga ficava sem resposta. */
-#mc-monitor .mc-docs-spin {
-    display: inline-block;
-    animation: mcSpin 800ms linear infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-    #mc-monitor .mc-docs-spin { animation: none; }
-}
-@keyframes mcSpin { to { transform: rotate(360deg); } }
-#mc-monitor .mc-item__acts .btn {
-    font-size: .74rem; padding: .24rem .65rem; line-height: 1.5;
-    transition: transform 140ms var(--mc-ease), box-shadow 140ms var(--mc-ease);
-}
-@media (hover: hover) and (pointer: fine) {
-    #mc-monitor .mc-item__acts .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.10); }
-}
-/* O botão responde ao toque: sem isso a lista parece congelada num clique. */
-#mc-monitor .mc-item__acts .btn:active { transform: scale(.97); }
-/* `min-width: 0` AQUI, e não só no chip: a `.mc-docs` é flex item da
-   `.mc-item__acts`, então ela nasce com `min-width: auto` — o min-content do
-   conteúdo, que com os chips em `white-space: nowrap` é a largura INTEIRA do
-   nome do arquivo. Ela se recusava a encolher, o `max-width: 100%` do chip
-   media contra essa largura já inflada, e o nome comprido saía pela direita do
-   card por cima da coluna vizinha (com ellipsis e tudo — ele existia, só
-   cortava no lugar errado). O `flex: 1 1 100%` é o que mantém o desenho atual:
-   os chips ocupam a linha inteira e o botão de ação desce para a seguinte. */
-#mc-monitor .mc-docs {
-    display: flex; flex-wrap: wrap; gap: .25rem;
-    flex: 1 1 100%; min-width: 0;
-}
-/* Só o e-mail de recap é clicável (abre em nova aba); o PDF virou chip
-   INFORMATIVO — a confirmação se abre pelo Validate, e dois caminhos para o
-   mesmo documento convidavam a "validar" sem passar pela tela de validação.
-   A cor continua separando: roxo é "e-mail", azul é "documento". */
+/* Os documentos: só o e-mail de recap é clicável (roxo = e-mail); o PDF é chip
+   INFORMATIVO (azul = documento) — a confirmação se abre pelo Validate. Um chip
+   por linha, na largura do card, com ellipsis. O min-width:0 é OBRIGATÓRIO nos
+   dois níveis (flex item tem min-width:auto e o nome comprido vazaria). */
+#mc-monitor .mc-docs { display: flex; flex-wrap: wrap; gap: .25rem; flex: 1 1 100%; min-width: 0; }
 #mc-monitor .mc-docs a,
 #mc-monitor .mc-docs .mc-doc {
-    font-size: .64rem; font-weight: 700; padding: .12rem .45rem; border-radius: 7px;
-    border: 1px solid var(--ins-border-color); color: var(--vr-accent-1, #0066cc);
+    font-size: .64rem; font-weight: 700; padding: .12rem .45rem; border-radius: var(--otc-r-xs);
+    border: 1px solid var(--otc-sep); color: var(--otc-accent-ink);
     text-decoration: none; overflow: hidden;
-    /* Um chip por linha, na LARGURA do card (pedido 2026-09-01): com o
-       max-width fixo de antes (15rem) sobrava uma faixa à direita e cada chip
-       terminava num ponto diferente. O ellipsis continua segurando os nomes
-       compridos. O min-width:0 é OBRIGATÓRIO aqui: item de flex tem
-       min-width:auto (= o min-content do texto nowrap) e min VENCE max — com
-       o max em rem o navegador capava o mínimo por ele, com 100% não, e o
-       nome comprido VAZAVA do card. */
     flex: 1 1 100%; max-width: 100%; min-width: 0;
     text-overflow: ellipsis; white-space: nowrap;
-    transition: border-color 140ms var(--mc-ease), background 140ms var(--mc-ease);
+    transition: border-color var(--otc-dur-fast) var(--otc-ease), background-color var(--otc-dur-fast) var(--otc-ease);
 }
 #mc-monitor .mc-docs .mc-doc { cursor: default; }
-#mc-monitor .mc-docs a.mc-mail { color: var(--vr-accent-3, #8b5cf6); }
-#mc-monitor .mc-docs a.mc-mail:hover {
-    border-color: var(--vr-accent-3, #8b5cf6);
-    background: color-mix(in oklab, var(--vr-accent-3, #8b5cf6) 8%, transparent);
-}
+#mc-monitor .mc-docs a.mc-mail { color: var(--otc-purple); }
+#mc-monitor .mc-docs a.mc-mail:hover { border-color: var(--otc-purple); background: color-mix(in srgb, var(--otc-purple) 10%, transparent); }
 
-/* Validate sem contrato na pasta: o botão fica neutro e RISCADO na
-   transversal, com tooltip explicando — some com ele e a pessoa procura;
-   verde e clicável, ele abre uma tela de validação sem documento. O clique
-   é bloqueado no handler (o <a> não tem disabled). */
-#mc-monitor .mc-val-off {
-    position: relative; cursor: not-allowed; opacity: .55;
-}
+/* Validate sem contrato na pasta: neutro e RISCADO na transversal (o clique é
+   bloqueado no handler — o <a> não tem disabled). */
+#mc-monitor .mc-val-off { position: relative; cursor: not-allowed; opacity: .55; }
 #mc-monitor .mc-val-off::after {
     content: ''; position: absolute; left: -6%; right: -6%; top: 50%;
     border-top: 2px solid currentColor; transform: rotate(-10deg);
 }
 
-/* A idade da pendência vira cor a partir do momento em que ela é um problema.
-   Verde não entra: uma confirmação nova não é uma conquista, é o normal.
-   Âmbar e vermelho pedem tom mais claro no tema escuro — os de tema claro são
-   escuros DEMAIS sobre o preto e a marca de atraso deixaria de saltar. */
-#mc-monitor .mc-age-0 { color: var(--ins-secondary-color); }
-#mc-monitor .mc-age-1 { color: #b07500; }
-#mc-monitor .mc-age-2 { color: #c0392b; }
-[data-bs-theme=dark] #mc-monitor .mc-age-1 { color: #ffd54f; }
-[data-bs-theme=dark] #mc-monitor .mc-age-2 { color: #ff8a80; }
+/* A idade da pendência vira cor a partir do momento em que é um problema
+   (verde não entra: confirmação nova é o normal). */
+#mc-monitor .mc-age-0 { color: var(--otc-text-2); }
+#mc-monitor .mc-age-1 { color: color-mix(in srgb, var(--otc-yellow) 55%, var(--otc-orange)); }
+#mc-monitor .mc-age-2 { color: var(--otc-danger); }
 
-#mc-monitor .mc-empty { padding: 1.6rem 1rem; text-align: center; font-size: .75rem; color: var(--ins-secondary-color); }
-
-/* Entrada escalonada — 40ms entre itens, curta o bastante para não atrasar a
-   leitura da fila. Nada nasce de scale(0). */
-@media (prefers-reduced-motion: no-preference) {
-    #mc-monitor .mc-item { animation: mcIn 240ms var(--mc-ease) both; }
-    #mc-monitor .mc-item:nth-child(1) { animation-delay: 0ms; }
-    #mc-monitor .mc-item:nth-child(2) { animation-delay: 40ms; }
-    #mc-monitor .mc-item:nth-child(3) { animation-delay: 80ms; }
-    #mc-monitor .mc-item:nth-child(4) { animation-delay: 120ms; }
-    #mc-monitor .mc-item:nth-child(n+5) { animation-delay: 160ms; }
-    @keyframes mcIn { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
-}
+#mc-monitor .mc-empty { padding: 1.6rem 1rem; text-align: center; font-size: .75rem; color: var(--otc-text-2); }
 </style>
 {% endblock %}
 
@@ -567,7 +351,7 @@
                    // demais etapas continuam com o Validate riscado. Só o OTC
                    // gera o documento — o MO e o FO conferem o que já existe.
                    'data-docs-stage="' + esc(stage) + '">' +
-                   '<i class="ti ti-loader-2 me-1 mc-docs-spin"></i>' + esc(t('docsLoading')) + '</span>';
+                   '<i class="ti ti-loader-2 me-1"></i>' + esc(t('docsLoading')) + '</span>';
 
         // O card tem UM botão só. Validar e Rejeitar são as duas respostas à
         // mesma pergunta — o documento está certo? — e as duas exigem tê-lo

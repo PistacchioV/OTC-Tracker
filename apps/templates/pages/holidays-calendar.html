@@ -4,404 +4,72 @@
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
+{# Só o que é DESTA tela: a cor de cada calendário, os dois painéis, a largura
+   do Swal do feriado e o dropzone do Create New Calendar. #}
 <style>
-/* Custom Colors for Calendar Events */
+/* Cor de cada calendário: UM mapa. O registro (`/api/holidays/calendars`)
+   dá a cada calendário uma classe `bg-X-subtle text-X`; aqui ela vira um
+   matiz da paleta do tema (`--hc-c`), e a pílula da lista, a barrinha da
+   grade e o ponto da visão Lista leem a MESMA variável. Matiz fixo por
+   calendário: não acompanha a cor de destaque escolhida na Aparência.
+   Calendário criado pela tela (`hc-cal-<slug>`) define só o `--hc-c`, com a
+   cor do registro (hcInjectCalendarCss). */
+:is(.fc-event, .fc-list-event, .external-event) { --hc-c: var(--otc-text-2); }
+:is(.fc-event, .fc-list-event, .external-event).bg-primary-subtle   { --hc-c: var(--otc-blue); }
+:is(.fc-event, .fc-list-event, .external-event).bg-secondary-subtle { --hc-c: var(--otc-text-3); }
+:is(.fc-event, .fc-list-event, .external-event).bg-success-subtle   { --hc-c: var(--otc-green); }
+:is(.fc-event, .fc-list-event, .external-event).bg-danger-subtle    { --hc-c: var(--otc-danger); }
+:is(.fc-event, .fc-list-event, .external-event).bg-info-subtle      { --hc-c: #0284c7; }
+:is(.fc-event, .fc-list-event, .external-event).bg-warning-subtle   { --hc-c: #b45309; }
+:is(.fc-event, .fc-list-event, .external-event).bg-dark-subtle      { --hc-c: var(--otc-text); }
+:is(.fc-event, .fc-list-event, .external-event).bg-purple-subtle    { --hc-c: var(--otc-purple); }
+:is(.fc-event, .fc-list-event, .external-event).bg-teal-subtle      { --hc-c: var(--otc-teal); }
+:is(.fc-event, .fc-list-event, .external-event).bg-indigo-subtle    { --hc-c: var(--otc-indigo); }
+:is(.fc-event, .fc-list-event, .external-event).bg-pink-subtle      { --hc-c: var(--otc-pink); }
+/* info e warning do Bootstrap somem no fundo claro; no escuro, os tons claros */
+[data-bs-theme="dark"] :is(.fc-event, .fc-list-event, .external-event).bg-info-subtle    { --hc-c: #5cc4f0; }
+[data-bs-theme="dark"] :is(.fc-event, .fc-list-event, .external-event).bg-warning-subtle { --hc-c: var(--otc-yellow); }
 
-/* Date Input Styling */
-#event-date {
-    position: relative;
+:is(.fc-event, .external-event):is([class*="-subtle"], [class*="hc-cal-"]) {
+    color: var(--hc-c) !important;
+    background-color: color-mix(in srgb, var(--hc-c) 16%, transparent) !important;
 }
+.fc-event:is([class*="-subtle"], [class*="hc-cal-"]) :is(.fc-event-title, .fc-event-main) { color: inherit !important; }
+.fc-list-event:is([class*="-subtle"], [class*="hc-cal-"]) { background: transparent !important; }
+.fc-list-event:is([class*="-subtle"], [class*="hc-cal-"]) .fc-list-event-dot { border-color: var(--hc-c) !important; }
+.fc-list-event:is([class*="-subtle"], [class*="hc-cal-"]) a { color: var(--hc-c) !important; }
 
-#event-date::-webkit-calendar-picker-indicator {
-    cursor: pointer;
-    font-size: 1.2em;
-}
+/* Os dois painéis: a lista de calendários e a grade, placas separadas */
+.hc-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: var(--otc-gap); align-items: start; }
+@media (max-width: 991.98px) { .hc-layout { grid-template-columns: 1fr; } }
+.hc-layout > .card { margin-bottom: 0; }
+.hc-side .card-body { display: flex; flex-direction: column; gap: 8px; }
+.hc-sidebar-hint { font-size: 13px; color: var(--otc-text-3); margin: 10px 2px 6px; line-height: 1.4; }
 
-/* Purple */
-.bg-purple-subtle {
-    background-color: rgba(139, 92, 246, 0.15) !important;
-}
+/* SweetAlert do feriado: só a largura e o alinhamento — a moldura é do tema */
+.swal2-popup.hc-swal-popup { max-width: 380px !important; }
+.swal2-popup.hc-swal-popup .swal2-html-container { margin: 0 !important; padding: 0 !important; text-align: left !important; overflow: visible !important; }
+.swal2-popup.hc-swal-popup .swal2-actions { margin-top: 18px !important; padding: 0 !important; }
+.hc-swal-enter { animation: otc-drop-in 520ms var(--otc-ease-out) both !important; }
+.hc-swal-exit { animation: otc-swal-out 200ms var(--otc-ease-in) forwards !important; }
 
-.text-purple {
-    color: #8b5cf6 !important;
-}
-
-.border-purple {
-    border-color: #8b5cf6 !important;
-}
-
-/* Teal */
-.bg-teal-subtle {
-    background-color: rgba(20, 184, 166, 0.15) !important;
-}
-
-.text-teal {
-    color: #14b8a6 !important;
-}
-
-.border-teal {
-    border-color: #14b8a6 !important;
-}
-
-/* Indigo */
-.bg-indigo-subtle {
-    background-color: rgba(99, 102, 241, 0.15) !important;
-}
-
-.text-indigo {
-    color: #6366f1 !important;
-}
-
-.border-indigo {
-    border-color: #6366f1 !important;
-}
-
-/* Pink */
-.bg-pink-subtle {
-    background-color: rgba(236, 72, 153, 0.15) !important;
-}
-
-.text-pink {
-    color: #ec4899 !important;
-}
-
-.border-pink {
-    border-color: #ec4899 !important;
-}
-
-/* FullCalendar Event Styles */
-.fc-event.bg-purple-subtle {
-    border-color: #8b5cf6 !important;
-}
-
-.fc-event.bg-purple-subtle .fc-event-title {
-    color: #8b5cf6 !important;
-}
-
-.fc-event.bg-teal-subtle {
-    border-color: #14b8a6 !important;
-}
-
-.fc-event.bg-teal-subtle .fc-event-title {
-    color: #14b8a6 !important;
-}
-
-.fc-event.bg-indigo-subtle {
-    border-color: #6366f1 !important;
-}
-
-.fc-event.bg-indigo-subtle .fc-event-title {
-    color: #6366f1 !important;
-}
-
-.fc-event.bg-pink-subtle {
-    border-color: #ec4899 !important;
-}
-
-.fc-event.bg-pink-subtle .fc-event-title {
-    color: #ec4899 !important;
-}
-
-/* FullCalendar List View */
-/* Purple - NYMEX */
-.fc-list-event.bg-purple-subtle .fc-list-event-dot {
-    border-color: #8b5cf6 !important;
-}
-
-.fc-list-event.bg-purple-subtle .fc-list-event-title a,
-.fc-list-event.bg-purple-subtle a {
-    color: #8b5cf6 !important;
-}
-
-/* Teal - PLATTS-ASIA */
-.fc-list-event.bg-teal-subtle .fc-list-event-dot {
-    border-color: #14b8a6 !important;
-}
-
-.fc-list-event.bg-teal-subtle .fc-list-event-title a,
-.fc-list-event.bg-teal-subtle a {
-    color: #14b8a6 !important;
-}
-
-/* Indigo - PLATTS-EUROPE */
-.fc-list-event.bg-indigo-subtle .fc-list-event-dot {
-    border-color: #6366f1 !important;
-}
-
-.fc-list-event.bg-indigo-subtle .fc-list-event-title a,
-.fc-list-event.bg-indigo-subtle a {
-    color: #6366f1 !important;
-}
-
-/* Pink - SOFR */
-.fc-list-event.bg-pink-subtle .fc-list-event-dot {
-    border-color: #ec4899 !important;
-}
-
-.fc-list-event.bg-pink-subtle .fc-list-event-title a,
-.fc-list-event.bg-pink-subtle a {
-    color: #ec4899 !important;
-}
-
-/* FullCalendar List View — Bootstrap semantic colors (missing before) */
-.fc-list-event.bg-primary-subtle .fc-list-event-dot { border-color: #0d6efd !important; }
-.fc-list-event.bg-primary-subtle .fc-list-event-title a,
-.fc-list-event.bg-primary-subtle a { color: #0d6efd !important; }
-
-.fc-list-event.bg-secondary-subtle .fc-list-event-dot { border-color: #6c757d !important; }
-.fc-list-event.bg-secondary-subtle .fc-list-event-title a,
-.fc-list-event.bg-secondary-subtle a { color: #6c757d !important; }
-
-.fc-list-event.bg-success-subtle .fc-list-event-dot { border-color: #198754 !important; }
-.fc-list-event.bg-success-subtle .fc-list-event-title a,
-.fc-list-event.bg-success-subtle a { color: #198754 !important; }
-
-.fc-list-event.bg-danger-subtle .fc-list-event-dot { border-color: #dc3545 !important; }
-.fc-list-event.bg-danger-subtle .fc-list-event-title a,
-.fc-list-event.bg-danger-subtle a { color: #dc3545 !important; }
-
-/* ICEAGS (info): #0dcaf0 tem contraste 1.7:1 — invisível em fundo claro → usar azul-petróleo legível */
-.fc-list-event.bg-info-subtle .fc-list-event-dot { border-color: #0284c7 !important; }
-.fc-list-event.bg-info-subtle .fc-list-event-title a,
-.fc-list-event.bg-info-subtle a { color: #0284c7 !important; }
-
-/* IPE (warning): amarelo tem contraste ~2:1 → usar âmbar escuro legível */
-.fc-list-event.bg-warning-subtle .fc-list-event-dot { border-color: #b45309 !important; }
-.fc-list-event.bg-warning-subtle .fc-list-event-title a,
-.fc-list-event.bg-warning-subtle a { color: #b45309 !important; }
-
-.fc-list-event.bg-dark-subtle .fc-list-event-dot { border-color: #374151 !important; }
-.fc-list-event.bg-dark-subtle .fc-list-event-title a,
-.fc-list-event.bg-dark-subtle a { color: #374151 !important; }
-
-/* FullCalendar Day Grid — Apple pill badges + Emil animation (mesma curva/tempo da sidebar) */
-.fc-daygrid-event {
-    border-radius: 999px !important;
-    padding: 2px 9px !important;
-    border-width: 0 !important;
-    font-size: 0.70rem !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.02em !important;
-    cursor: pointer !important;
-    /* Mesma transição que .external-event da sidebar */
-    transition: transform 140ms var(--hc-ease-out), box-shadow 140ms var(--hc-ease-out) !important;
-}
-.fc-daygrid-event .fc-event-title {
-    padding: 0 !important;
-    font-weight: 600 !important;
-}
-/* Press feedback — scale(0.96) = mesmo feeling da sidebar (.external-event:active usa 0.97) */
-.fc-daygrid-event:active {
-    transform: scale(0.96) !important;
-}
-/* Hover — lift vertical (translateX ficaria estranho em badges horizontais na célula) */
-@media (hover: hover) and (pointer: fine) {
-    .fc-daygrid-event:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12) !important;
-    }
-}
-.fc-daygrid-more-link {
-    font-size: 0.68rem !important;
-    font-weight: 600 !important;
-    color: #0066cc !important;
-    padding: 1px 6px !important;
-}
-
-/* Color overrides para dayGrid pills — Bootstrap semantic + custom */
-/* info (#0dcaf0) e warning (#ffc107) são invisíveis em fundo claro → versões escuras */
-.fc-daygrid-event.bg-info-subtle    { color: #0284c7 !important; }
-.fc-daygrid-event.bg-warning-subtle { color: #b45309 !important; }
-
-/* Custom colors — já têm bom contraste, mantém */
-.fc-daygrid-event.bg-purple-subtle  { color: #8b5cf6 !important; }
-.fc-daygrid-event.bg-teal-subtle    { color: #14b8a6 !important; }
-.fc-daygrid-event.bg-indigo-subtle  { color: #6366f1 !important; }
-.fc-daygrid-event.bg-pink-subtle    { color: #ec4899 !important; }
-
-/* Garante text color nos títulos de eventos FC para todos os casos */
-.fc-daygrid-event .fc-event-title { color: inherit !important; }
-
-/* ── Apple Design Language + Emil Motion ────────────────────────────── */
-:root { --hc-ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
-
-@keyframes hc-slide-in {
-    from { opacity: 0; transform: translateY(14px); }
-    to   { opacity: 1; transform: none; }
-}
-@media (prefers-reduced-motion: reduce) {
-    .hc-rv-1, .hc-rv-2 { animation: none !important; opacity: 1 !important; transform: none !important; }
-}
-.hc-rv-1 { animation: hc-slide-in 480ms var(--hc-ease-out) both; }
-.hc-rv-2 { animation: hc-slide-in 480ms var(--hc-ease-out) 70ms both; }
-
-/* Page header */
-.hc-product-icon {
-    width: 44px; height: 44px; border-radius: 12px;
-    background: rgba(0, 102, 204, 0.1);
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0; font-size: 20px; color: #0066cc;
-}
-.hc-product-badge {
-    font-size: 0.67rem; padding: 2px 9px; border-radius: 999px;
-    background: rgba(0, 102, 204, 0.09); color: #0066cc;
-    font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
-    border: 1px solid rgba(0, 102, 204, 0.18);
-}
-
-/* Calendar accent */
-.hc-cal-card { border-left: 3px solid #0066cc !important; }
-
-/* Sidebar hint text */
-.hc-sidebar-hint {
-    font-size: 0.74rem;
-    color: var(--ins-secondary-color, #6e6e73);
-    margin-top: 10px; margin-bottom: 12px;
-    line-height: 1.4;
-}
-
-/* External event pills */
-.external-event {
-    border-radius: 8px !important;
-    padding: 7px 12px !important;
-    font-size: 0.79rem !important;
-    font-weight: 500 !important;
-    margin-bottom: 5px !important;
-    cursor: grab !important;
-    transition: transform 140ms var(--hc-ease-out), box-shadow 140ms var(--hc-ease-out) !important;
-    display: flex !important;
-    align-items: center !important;
-}
-.external-event:active { transform: scale(0.97) !important; cursor: grabbing !important; }
-@media (hover: hover) and (pointer: fine) {
-    .external-event:hover {
-        transform: translateX(4px) !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
-    }
-}
-
-/* Create New Holiday button */
-.btn-new-event {
-    border-radius: 999px !important;
-    font-weight: 600 !important;
-    transition: transform 100ms ease-out !important;
-}
-.btn-new-event:active { transform: scale(0.97) !important; }
-
-/* FullCalendar button refinements */
-.fc .fc-button {
-    border-radius: 8px !important;
-    font-size: 0.82rem !important;
-    font-weight: 500 !important;
-    transition: transform 100ms ease-out !important;
-    padding: 0.35rem 0.75rem !important;
-}
-.fc .fc-button:active { transform: scale(0.96) !important; }
-.fc .fc-button-primary { background-color: #0066cc !important; border-color: #0066cc !important; color: #fff !important; }
-.fc .fc-button-primary:not(:disabled):hover { background-color: #0051a8 !important; border-color: #0051a8 !important; color: #fff !important; }
-.fc .fc-button-primary:not(:disabled).fc-button-active { background-color: #004899 !important; border-color: #004899 !important; color: #fff !important; }
-.fc .fc-toolbar-title { font-size: 1.05rem !important; font-weight: 600 !important; letter-spacing: -0.01em !important; }
-
-/* Modal refinements */
-#event-modal .modal-content { border-radius: 14px !important; }
-#event-modal .modal-header { border-bottom: 1px solid var(--ins-border-color, #e0e0e0); }
-#event-modal .modal-footer { border-top: 1px solid var(--ins-border-color, #e0e0e0); gap: 6px; }
-#event-modal .btn { border-radius: 8px !important; transition: transform 100ms ease-out !important; }
-#event-modal .btn:active { transform: scale(0.97) !important; }
-#event-modal .btn-primary { background-color: #0066cc !important; border-color: #0066cc !important; }
-#event-modal .btn-primary:hover { background-color: #0051a8 !important; border-color: #0051a8 !important; }
-
-/* ── Custom SweetAlert2 Holiday Popup ──────────────────────────── */
-@keyframes hc-swal-in {
-    from { opacity: 0; transform: scale(0.94); }
-    to   { opacity: 1; transform: scale(1); }
-}
-@keyframes hc-swal-out {
-    from { opacity: 1; transform: scale(1); }
-    to   { opacity: 0; transform: scale(0.96); }
-}
-.swal2-popup.hc-swal-popup {
-    border-radius: 18px !important;
-    padding: 24px 24px 20px !important;
-    max-width: 360px !important;
-}
-.swal2-popup.hc-swal-popup .swal2-html-container {
-    margin: 0 !important;
-    padding: 0 !important;
-    text-align: left !important;
-    overflow: visible !important;
-}
-.swal2-popup.hc-swal-popup .swal2-actions {
-    margin-top: 18px !important;
-    padding: 0 !important;
-}
-.swal2-popup.hc-swal-popup .swal2-close {
-    top: 10px !important;
-    right: 12px !important;
-    font-size: 1.1rem !important;
-}
-.hc-swal-enter {
-    animation: hc-swal-in 280ms cubic-bezier(0.23, 1, 0.32, 1) both !important;
-}
-.hc-swal-exit {
-    animation: hc-swal-out 180ms ease-in forwards !important;
-}
-
-/* ── External event pill: colored dot indicator ───────────────── */
-.hc-cal-dot {
-    width: 9px; height: 9px; border-radius: 50%;
-    background: currentColor;
-    flex-shrink: 0; display: inline-block;
-    margin-right: 8px;
-}
-/* ── Press feedback (JS adds .is-pressing — :active não dispara dentro do drag do FC) */
-.external-event.is-pressing,
-.external-event:active { transform: scale(0.95) !important; cursor: grabbing !important; }
-.btn-new-event.is-pressing,
-.btn-new-event:active  { transform: scale(0.96) !important; box-shadow: none !important; }
-.btn-new-calendar { border-radius: 999px !important; font-weight: 600 !important;
-                    transition: transform 100ms ease-out !important; }
-.btn-new-calendar:active { transform: scale(0.97) !important; }
-
-/* ── Dropzone do Create New Calendar ──────────────────────────────────
-   Tokens --ins-* (nativos do tema), nunca --bs-*: o tema não define os --bs-*,
-   eles caem no fallback claro e a dropzone sai branca no tema escuro
-   (HANDOFF §109). Mesmo desenho da Pay/Rec. */
-.hc-dropzone {
-    border: 1.5px dashed var(--ins-border-color, #ced4da); border-radius: 12px;
-    padding: 1.1rem 1rem; cursor: pointer; background: var(--ins-tertiary-bg, #f8f9fa);
-    text-align: center;
-    transition: border-color 150ms var(--hc-ease-out), background-color 150ms var(--hc-ease-out);
-}
-.hc-dropzone:hover, .hc-dropzone:focus-visible { border-color: #0066cc; outline: none; }
-.hc-dropzone.hc-dz-over { border-color: #0066cc; background: rgba(0,102,204,.06); }
-.hc-dz-hint {
-    display: flex; align-items: center; justify-content: center; gap: .5rem;
-    color: var(--ins-secondary-color); font-size: .82rem;
-}
-.hc-dz-hint i { font-size: 1.15rem; color: #0066cc; }
+/* Dropzone do Create New Calendar (a área tracejada e o acender são do tema) */
+.hc-dropzone { padding: 1.2rem 1rem; cursor: pointer; text-align: center; }
+.hc-dz-hint { display: flex; align-items: center; justify-content: center; gap: .5rem; color: var(--otc-text-2); font-size: 13.5px; }
+.hc-dz-hint i { font-size: 1.15rem; color: var(--otc-accent-ink); }
 .hc-dz-file {
-    display: inline-flex; align-items: center; margin-top: .6rem; font-size: .75rem;
-    background: var(--ins-secondary-bg, #fff); border: 1px solid var(--ins-border-color, #dee2e6);
-    border-radius: 50rem; padding: 2px 10px; color: var(--ins-body-color);
-    animation: hc-slide-in 200ms var(--hc-ease-out) both;
+    display: inline-flex; align-items: center; margin-top: .6rem; padding: 3px 12px;
+    border-radius: var(--otc-r-pill); background: var(--otc-fill); color: var(--otc-text); font-size: 12.5px;
+    animation: otc-pop-up 220ms var(--otc-ease-out) both;
 }
-.hc-dz-spec {
-    font-size: .72rem; color: var(--ins-secondary-color, #6e6e73);
-    margin: .55rem 0 0; line-height: 1.45;
-}
-#calendar-modal .modal-content { border-radius: 14px !important; }
-#calendar-modal .btn { border-radius: 8px !important; transition: transform 100ms ease-out !important; }
-#calendar-modal .btn:active { transform: scale(0.97) !important; }
-#calendar-modal .btn-primary { background-color: #0066cc !important; border-color: #0066cc !important; }
-#calendar-modal .btn-primary:hover { background-color: #0051a8 !important; border-color: #0051a8 !important; }
+.hc-dz-spec { font-size: 12.5px; color: var(--otc-text-3); margin: .55rem 0 0; line-height: 1.45; }
 </style>
 {% endblock extra_css %}
 
 {% block page_content %}
 <div class="container-fluid" data-content="">
 
-    <div class="page-title-head d-flex align-items-center hc-rv-1">
+    <div class="page-title-head d-flex align-items-center">
         <div class="d-flex align-items-center gap-3 flex-grow-1">
             <div class="hc-product-icon">
                 <i class="ti ti-calendar-event"></i>
@@ -419,15 +87,15 @@
         </div>
     </div>
 
-    <div class="d-flex mb-3 gap-1 hc-rv-2">
-        <div class="card h-100 mb-0 d-none d-lg-flex rounded-end-0">
+    <div class="hc-layout mb-3">
+        <div class="card hc-side d-none d-lg-flex">
             <div class="card-body">
                 <button class="btn btn-primary w-100 btn-new-event">
-                    <i class="ti ti-plus me-2 align-middle"></i>
+                    <i class="ti ti-plus"></i>
                     <span data-lang="hc-new-holiday">Create New Holiday</span>
                 </button>
-                <button class="btn btn-soft-primary w-100 mt-2 btn-new-calendar">
-                    <i class="ti ti-calendar-plus me-2 align-middle"></i>
+                <button class="btn btn-secondary w-100 btn-new-calendar">
+                    <i class="ti ti-calendar-plus"></i>
                     <span data-lang="hc-new-calendar">Create New Calendar</span>
                 </button>
                 {# As pills saem do REGISTRO (`/api/holidays/calendars`), montadas
@@ -439,18 +107,18 @@
                 </div>
             </div>
         </div> <!-- end card-->
-        <div class="card h-100 mb-0 rounded-start-0 flex-grow-1 border-start-0 hc-cal-card">
+        <div class="card hc-cal-card">
             <div class="d-lg-none d-inline-flex card-header gap-2">
                 <button class="btn btn-primary btn-new-event">
-                    <i class="ti ti-plus me-2 align-middle"></i>
+                    <i class="ti ti-plus"></i>
                     <span data-lang="hc-new-holiday">Create New Holiday</span>
                 </button>
-                <button class="btn btn-soft-primary btn-new-calendar">
-                    <i class="ti ti-calendar-plus me-2 align-middle"></i>
+                <button class="btn btn-secondary btn-new-calendar">
+                    <i class="ti ti-calendar-plus"></i>
                     <span data-lang="hc-new-calendar">Create New Calendar</span>
                 </button>
             </div>
-            <div class="card-body" data-simplebar="" data-simplebar-md="" style="height: calc(100% - 350px);">
+            <div class="card-body">
                 <div id="calendar"></div>
             </div> <!-- end card-body -->
         </div> <!-- end card-->

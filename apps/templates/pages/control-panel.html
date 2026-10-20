@@ -4,359 +4,122 @@
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
+{# Só o que é DESTA tela: cabeçalho das seções, o miolo do card de rotina
+   (ícone, título, campos, rodapé com meta e Run), o campo de data, o dropzone
+   do Daily Settlement, a lista do Confirmations Escalation, a agenda do
+   Intraday Monitor e a grade que iguala a altura dos cards da linha. A placa
+   do card (`.cp-card`) é do tema (otc.scss §10d). #}
 <style>
-/* ================================================================
- *  CONTROL PANEL — hub de rotinas (Apple Design Language)
- * ================================================================ */
-:root {
-    --cp-ease:      cubic-bezier(0.23, 1, 0.32, 1);
-    --cp-ease-out:  cubic-bezier(0.16, 1, 0.3, 1);
-    --cp-blue:      #0066cc;
-    --cp-blue-600:  #0a5bd6;
-    --cp-ink:       #1d1d1f;   /* títulos — ~15:1 */
-    --cp-muted:     #54545a;   /* body      — ~6.7:1 on white */
-    --cp-faint:     #5b5b63;   /* secundário — 5.6:1 sobre o fundo StreamFlow.
-                                  Era #6e6e73, calibrado para o quase-branco
-                                  antigo (4.65:1 lá): sobre o azul do refino ele
-                                  media 3.6:1 e o subtítulo da página sumia. Cor
-                                  de texto se calibra CONTRA um fundo, e muda
-                                  quando o fundo muda. */
-    --cp-hairline:  #e6e6ea;
-}
+/* ── Cabeçalho das seções ── */
+.cp-sec-label { font-size: .72rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--otc-accent-ink); margin-bottom: .3rem; }
+.cp-sec-title { font: 700 1.5rem/1.2 var(--otc-font-display); letter-spacing: -.02em; color: var(--otc-text); margin: 0; }
+.cp-sec-desc { font-size: .85rem; color: var(--otc-text-2); margin: .2rem 0 0; }
+.cp-subtitle { font-size: .9rem; color: var(--otc-text-2); max-width: 760px; }
 
-/* ── Section header ─────────────────────────────────────────── */
-.cp-sec-label {
-    font-size: .72rem;
-    font-weight: 700;
-    letter-spacing: .07em;
-    text-transform: uppercase;
-    color: var(--cp-blue);
-    margin-bottom: .3rem;
-}
-.cp-sec-title { font-size: 1.2rem; font-weight: 700; letter-spacing: -.01em; color: var(--cp-ink); margin: 0; }
-.cp-sec-desc  { font-size: .85rem; color: var(--cp-faint); margin: .2rem 0 0; }
-.cp-subtitle  { font-size: .9rem; color: var(--cp-faint); max-width: 760px; }
-[data-bs-theme="dark"] .cp-sec-title { color: #f5f5f7; }
-
-/* ── Routine card ───────────────────────────────────────────── */
-.cp-card {
-    position: relative;
-    background: var(--ins-secondary-bg, #fff);   /* superfície do card (branca), contrasta com o canvas cinza */
-    border: 1px solid var(--cp-hairline);
-    border-radius: 18px;
-    padding: 1.5rem 1.5rem 1.35rem;
-    height: 100%;
-    /* Floor sized to the tallest card (Settlement Forecast: TO + CC + Reference
-       date). Every card shares it so the grid stays visually uniform even though
-       cards carry a different number of fields. */
-    min-height: 480px;
-    display: flex;
-    flex-direction: column;
-    transition: transform 240ms var(--cp-ease),
-                box-shadow 240ms var(--cp-ease),
-                border-color 240ms var(--cp-ease);
-}
-@media (hover: hover) and (pointer: fine) {
-    .cp-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 12px 32px rgba(15, 23, 42, .10);
-        border-color: rgba(0, 102, 204, .28);
-    }
-}
-[data-bs-theme="dark"] .cp-card { border-color: rgba(255,255,255,.10); }
-[data-bs-theme="dark"] .cp-card:hover { box-shadow: 0 12px 32px rgba(0,0,0,.5); }
-
-.cp-card__icon {
-    width: 52px; height: 52px;
-    border-radius: 14px;
-    display: inline-flex; align-items: center; justify-content: center;
-    background: linear-gradient(135deg, #e8f1fd 0%, #d6e6fb 100%);
-    color: var(--cp-blue);
-    margin-bottom: 1.1rem;
-    flex-shrink: 0;
-    box-shadow: inset 0 0 0 1px rgba(0,102,204,.10);
-}
+/* ── Card de rotina: a altura mínima é a do mais alto (Settlement Forecast),
+   para a grade sair uniforme mesmo com quantidades diferentes de campos ── */
+.cp-card { min-height: 480px; gap: 0; }
+.cp-card__icon { width: 52px; height: 52px; margin-bottom: 1.1rem; }   /* o ladrilho é o `.otc-icon-tile` do tema */
 .cp-card__icon i { font-size: 1.55rem; }
-[data-bs-theme="dark"] .cp-card__icon {
-    background: linear-gradient(135deg, rgba(0,102,204,.28), rgba(0,102,204,.14));
-    color: #7db4f5;
-    box-shadow: inset 0 0 0 1px rgba(125,180,245,.18);
-}
+.cp-card__title { font-size: 1.05rem; font-weight: 700; letter-spacing: -.01em; color: var(--otc-text); margin: 0 0 .4rem; }
+.cp-card__desc { font-size: .83rem; color: var(--otc-text-2); line-height: 1.5; margin: 0; }
 
-.cp-card__title { font-size: 1.05rem; font-weight: 700; letter-spacing: -.01em; color: var(--cp-ink); margin: 0 0 .4rem; }
-.cp-card__desc  { font-size: .83rem; color: var(--cp-muted); line-height: 1.5; margin: 0; }
-[data-bs-theme="dark"] .cp-card__title { color: #f5f5f7; }
-[data-bs-theme="dark"] .cp-card__desc  { color: #b0b0b6; }
-
-/* ── Date field ─────────────────────────────────────────────── */
+/* ── Campos ── */
 .cp-field { margin-top: 1.15rem; }
+.cp-field label { display: block; font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--otc-text-3); margin-bottom: .35rem; }
+.cp-card .form-control { font-size: .85rem; }
+/* ajuda do CAMPO (o que a escolha muda), sob ele e não na descrição do card */
+.cp-field__hint { display: block; margin-top: .4rem; font-size: .72rem; line-height: 1.45; color: var(--otc-text-3); }
+/* data com o ícone do calendário dentro (flatpickr) */
+.cp-datefield { position: relative; max-width: 200px; }
+.cp-datefield input { padding-right: 36px; cursor: pointer; font-variant-numeric: tabular-nums; }
+.cp-cal-btn {
+    position: absolute; right: 6px; top: 50%; translate: 0 -50%; width: 26px; height: 26px; border-radius: 7px;
+    display: inline-flex; align-items: center; justify-content: center; color: var(--otc-text-2); cursor: pointer; text-decoration: none;
+    transition: color var(--otc-dur-fast) var(--otc-ease);
+}
+.cp-cal-btn:hover { color: var(--otc-accent-ink); }
+.cp-cal-btn i { font-size: 1rem; }
 
-/* ── Intraday Monitor — Task Schedule (§567) ─────────────────────────────── */
+/* ── Dropzone (arquivos do Daily Settlement) ── */
+.cp-dropzone { padding: .85rem 1rem; cursor: pointer; }
+.cp-dz-hint { display: flex; align-items: center; gap: .5rem; color: var(--otc-text-2); font-size: .82rem; }
+.cp-dz-hint i { font-size: 1.15rem; color: var(--otc-accent-ink); }
+.cp-dz-list { list-style: none; margin: .55rem 0 0; padding: 0; flex-direction: row; flex-wrap: wrap; gap: .4rem; }
+.cp-dz-list:empty { margin: 0; }
+.cp-dz-list li { display: inline-flex; align-items: center; gap: .35rem; font-size: .74rem; background: var(--otc-fill); border-radius: var(--otc-r-pill); padding: 2px 6px 2px 10px; color: var(--otc-text); }
+.cp-dz-list .cp-dz-x { cursor: pointer; font-size: 1rem; line-height: 1; opacity: .6; padding: 0 2px; }
+.cp-dz-list .cp-dz-x:hover { opacity: 1; color: var(--otc-danger); }
+
+/* ── Rodapé: meta à esquerda, Run à direita ── */
+.cp-card__foot { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-top: auto; padding-top: 1.35rem; }
+.cp-card__meta { display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 600; color: var(--otc-text-3); }
+.cp-card__meta i { font-size: .95rem; opacity: .85; }
+.cp-btn-row { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: flex-end; }
+.cp-run-btn {
+    position: relative; align-self: auto; border: none !important; border-radius: var(--otc-r-pill) !important;
+    min-height: 38px; padding: .5rem 1.4rem !important; font-size: .85rem !important; font-weight: 600 !important;
+    display: inline-flex !important; align-items: center; gap: .5rem; cursor: pointer;
+    background: var(--otc-accent) !important; color: #fff !important;
+    transition: filter var(--otc-dur-fast) var(--otc-ease), scale var(--otc-dur-fast) var(--otc-ease);
+}
+.cp-run-btn i, .cp-run-btn span { color: #fff !important; }
+.cp-run-btn:hover { filter: brightness(1.07); }
+.cp-run-btn:active { scale: .96; }
+.cp-run-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--otc-accent-soft); }
+.cp-run-btn:disabled { opacity: .75; cursor: default; scale: 1; }
+/* ação secundária (Send to other areas): o botão de vidro do tema */
+.cp-run-btn--alt { background: var(--otc-glassbtn-bg) !important; color: var(--otc-text) !important; box-shadow: var(--otc-glassbtn-shadow); }
+.cp-run-btn--alt i, .cp-run-btn--alt span { color: var(--otc-text) !important; }
+/* Run compacto, o de cada item do Confirmations Escalation */
+.cp-run-btn--sm { min-height: 28px; font-size: .72rem !important; padding: .3rem .85rem !important; gap: .35rem; }
+.cp-run-btn--sm i { font-size: .9rem; }
+
+/* ── Lista com envio individual (Confirmations Escalation) ── */
+.cp-ce-list { margin-top: 1.15rem; display: flex; flex-direction: column; gap: .3rem; }
+.cp-ce-item { justify-content: space-between; gap: .6rem; padding: .38rem .6rem; background: var(--otc-fill-hover); }
+.cp-ce-item__lbl { font-size: .78rem; font-weight: 600; color: var(--otc-text); display: inline-flex; align-items: baseline; gap: .4rem; min-width: 0; }
+.cp-ce-item__n { font-size: .72rem; font-weight: 700; color: var(--otc-accent-ink); font-variant-numeric: tabular-nums; }
+.cp-ce-item__sub { font-size: .68rem; font-weight: 500; color: var(--otc-text-3); }
+
+/* ── Intraday Monitor — agenda das tarefas (§567) ── */
 .cp-it-grid { margin-top: 1rem; }
-.cp-it-row {
-    display: grid; grid-template-columns: minmax(170px, 1.2fr) minmax(260px, 2fr) 92px 34px;
-    align-items: center; gap: .75rem; padding: .5rem .25rem;
-    border-bottom: 1px solid var(--vr-card-border, var(--ins-border-color));
-}
+.cp-it-row { display: grid; grid-template-columns: minmax(170px, 1.2fr) minmax(260px, 2fr) 92px 34px; align-items: center; gap: .75rem; padding: .5rem .25rem; border-bottom: 1px solid var(--otc-sep); }
 .cp-it-row:last-child { border-bottom: 0; }
-.cp-it-head {
-    font-size: .66rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
-    color: var(--ins-secondary-color); padding-top: 0;
-}
+.cp-it-head { font-size: .66rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--otc-text-3); padding-top: 0; }
 .cp-it-task { display: flex; align-items: center; gap: .55rem; font-weight: 600; font-size: .85rem; min-width: 0; }
-.cp-it-task i {
-    width: 28px; height: 28px; flex: 0 0 auto; border-radius: 9px; display: inline-flex;
-    align-items: center; justify-content: center; font-size: .95rem; color: #fff;
-    background: var(--vr-grad);
-}
+.cp-it-task i { width: 28px; height: 28px; flex: 0 0 auto; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; font-size: .95rem; color: #fff; background: var(--otc-accent); }
 .cp-it-days { display: flex; gap: .3rem; flex-wrap: wrap; }
 .cp-it-day {
-    min-width: 40px; padding: .22rem .45rem; border-radius: 999px; font-size: .72rem; font-weight: 700;
-    border: 1px solid var(--vr-card-border, var(--ins-border-color));
-    background: transparent; color: var(--ins-secondary-color);
-    transition: background-color 140ms var(--sf-ease-out, ease-out), color 140ms var(--sf-ease-out, ease-out),
-                border-color 140ms var(--sf-ease-out, ease-out), scale 90ms var(--sf-ease-out, ease-out);
+    min-width: 40px; padding: .22rem .45rem; border-radius: var(--otc-r-pill); font-size: .72rem; font-weight: 700;
+    border: 0; background: var(--otc-fill); color: var(--otc-text-2);
+    transition: background-color var(--otc-dur-fast) var(--otc-ease), color var(--otc-dur-fast) var(--otc-ease), scale 90ms var(--otc-ease);
 }
-.cp-it-day[aria-pressed="true"] { background: var(--vr-accent-2); border-color: var(--vr-accent-2); color: #fff; }
+.cp-it-day[aria-pressed="true"] { background: var(--otc-accent); color: #fff; }
 .cp-it-day:active { scale: .95; }
 .cp-it-day.cp-it-month { padding: .22rem .8rem; }
 .cp-it-time { text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
-.cp-it-time.is-invalid { border-color: #d93025 !important; }
-.cp-it-reset {
-    width: 30px; height: 30px; border-radius: 9px; border: 0; background: transparent;
-    color: var(--ins-secondary-color); display: inline-flex; align-items: center; justify-content: center;
-}
-.cp-it-reset:hover { background: var(--ins-tertiary-bg); color: var(--ins-body-color); }
+.cp-it-time.is-invalid { box-shadow: 0 0 0 2px var(--otc-danger) !important; }
+.cp-it-reset { width: 30px; height: 30px; border-radius: 9px; border: 0; background: transparent; color: var(--otc-text-2); display: inline-flex; align-items: center; justify-content: center; }
+.cp-it-reset:hover { background: var(--otc-fill-hover); color: var(--otc-text); }
 .cp-it-row.is-off .cp-it-task { opacity: .5; }
-/* O card mora em MEIA largura (a coluna empilhada): quem decide o desenho é a
-   largura do CARD, não a da tela — container query. Estreito, os dias descem
-   para a linha de baixo da tarefa. */
+/* o card mora em MEIA largura: quem decide o desenho é a largura do CARD
+   (container query) — estreito, os dias descem para a linha de baixo */
 .cp-card[data-cp-card="intradaytasks"] { container-type: inline-size; }
 @container (max-width: 760px) {
     .cp-it-row { grid-template-columns: 1fr 92px 34px; row-gap: .4rem; }
     .cp-it-row .cp-it-days { grid-column: 1 / -1; order: 3; }
     .cp-it-head { display: none; }
 }
-.cp-it-mailhead {
-    margin-top: 1.3rem; padding-top: 1rem; display: flex; flex-direction: column; gap: .2rem;
-    border-top: 1px solid var(--vr-card-border, var(--ins-border-color));
-}
-.cp-it-mailtitle { font-size: .66rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
-    color: var(--ins-secondary-color); }
-.cp-it-mailsub { font-size: .78rem; color: var(--ins-secondary-color); }
+.cp-it-mailhead { margin-top: 1.3rem; padding-top: 1rem; display: flex; flex-direction: column; gap: .2rem; border-top: 1px solid var(--otc-sep); }
+.cp-it-mailtitle { font-size: .66rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--otc-text-3); }
+.cp-it-mailsub { font-size: .78rem; color: var(--otc-text-3); }
 .cp-it-mailhead + .cp-field { margin-top: .6rem; }
-.cp-field label {
-    display: block;
-    font-size: .7rem; font-weight: 600;
-    text-transform: uppercase; letter-spacing: .04em;
-    color: var(--cp-faint);
-    margin-bottom: .35rem;
-}
-.cp-card .form-control {
-    border-radius: 10px;
-    border-color: var(--cp-hairline);
-    font-size: .85rem;
-    transition: border-color 140ms var(--cp-ease), box-shadow 140ms var(--cp-ease);
-}
-.cp-card .form-control:focus {
-    border-color: var(--cp-blue);
-    box-shadow: 0 0 0 3px rgba(0,102,204,.15);
-}
-/* Date field with calendar icon (flatpickr) */
-.cp-datefield { position: relative; max-width: 200px; }
-.cp-datefield input { padding-right: 36px; cursor: pointer; background-color: #fff; }
-[data-bs-theme="dark"] .cp-datefield input { background-color: var(--ins-secondary-bg); }
-.cp-cal-btn {
-    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-    width: 26px; height: 26px; border-radius: 7px;
-    display: inline-flex; align-items: center; justify-content: center;
-    color: var(--cp-faint); cursor: pointer; text-decoration: none;
-    transition: background-color 140ms var(--cp-ease), color 140ms var(--cp-ease);
-}
-.cp-cal-btn:hover { background-color: rgba(0,102,204,.10); color: var(--cp-blue); }
-.cp-cal-btn i { font-size: 1rem; }
-/* Ajuda de um campo — o que a escolha muda. Fica sob o campo, não na descrição
-   do card: a regra é do CAMPO (data de hoje × data anterior). */
-.cp-field__hint {
-    display: block; margin-top: .4rem;
-    font-size: .72rem; line-height: 1.45; color: var(--cp-faint);
-}
 
-/* Dropzone (Daily Settlement files) */
-.cp-dropzone {
-    border: 1.5px dashed var(--ins-border-color, var(--bs-border-color, #ced4da)); border-radius: 12px;
-    padding: .85rem 1rem; cursor: pointer; background: var(--ins-tertiary-bg, var(--bs-tertiary-bg, #f8f9fa));
-    transition: border-color 150ms var(--cp-ease), background-color 150ms var(--cp-ease);
-}
-.cp-dropzone:hover, .cp-dropzone:focus-visible { border-color: var(--cp-blue); outline: none; }
-.cp-dropzone.cp-dz-over { border-color: var(--cp-blue); background: rgba(0,102,204,.06); }
-.cp-dz-hint { display: flex; align-items: center; gap: .5rem; color: var(--cp-muted); font-size: .82rem; }
-.cp-dz-hint i { font-size: 1.15rem; color: var(--cp-blue); }
-.cp-dz-list { list-style: none; margin: .55rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: .4rem; }
-.cp-dz-list:empty { margin: 0; }
-.cp-dz-list li {
-    display: inline-flex; align-items: center; gap: .35rem; font-size: .74rem;
-    background: var(--ins-secondary-bg, #fff); border: 1px solid var(--ins-border-color, var(--bs-border-color, #dee2e6));
-    border-radius: 50rem; padding: 2px 6px 2px 10px; color: var(--cp-ink);
-}
-.cp-dz-list .cp-dz-x { cursor: pointer; font-size: 1rem; line-height: 1; opacity: .6; padding: 0 2px; }
-.cp-dz-list .cp-dz-x:hover { opacity: 1; color: #dc3545; }
-/* O par escuro do chip: --cp-ink é tinta CLARA (#1d1d1f) e não tem override
-   global — todo consumidor leva o seu (§7: cor só de tema claro precisa do par
-   [data-bs-theme=dark], senão o nome do arquivo some no escuro, que foi
-   exatamente o que aconteceu aqui em 2026-09-01). */
-[data-bs-theme="dark"] .cp-dz-list li { color: #f5f5f7; }
-@media (prefers-reduced-motion: reduce) { .cp-dropzone { transition: none; } }
-
-/* ── Footer / meta / button ─────────────────────────────────── */
-.cp-card__foot {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: .75rem;
-    margin-top: auto;
-    padding-top: 1.35rem;
-}
-.cp-card__meta {
-    display: inline-flex; align-items: center; gap: .35rem;
-    font-size: .72rem; font-weight: 600;
-    color: var(--cp-faint);
-}
-.cp-card__meta i { font-size: .95rem; opacity: .85; }
-
-.cp-run-btn {
-    position: relative;
-    border: none !important;
-    border-radius: 9999px !important;
-    font-size: .85rem !important; font-weight: 600 !important;
-    padding: .58rem 1.5rem !important;
-    display: inline-flex !important; align-items: center; gap: .5rem;
-    background: var(--cp-blue) !important; color: #fff !important;
-    box-shadow: 0 2px 8px rgba(0,102,204,.35);
-    cursor: pointer;
-    transition: transform 140ms var(--cp-ease-out),
-                background-color 140ms var(--cp-ease),
-                box-shadow 140ms var(--cp-ease);
-}
-.cp-run-btn i, .cp-run-btn span { color: #fff !important; }
-.cp-run-btn:hover  { background: var(--cp-blue-600) !important; box-shadow: 0 6px 18px rgba(0,102,204,.42); transform: translateY(-1px); }
-.cp-run-btn:active { transform: scale(.95); box-shadow: 0 1px 4px rgba(0,102,204,.3); }
-.cp-run-btn:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(0,102,204,.35); }
-.cp-run-btn:disabled { opacity: .75; cursor: default; transform: none; }
-
-/* Two-action footer (Save CETIP Files): meta on the left, two Run-sized buttons
-   right-aligned (same size as the original single Run button). */
-.cp-btn-row { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: flex-end; }
-/* Secondary action (Send to other areas) — distinct from the primary save. */
-.cp-run-btn--alt { background: var(--cp-slate, #64748b) !important; box-shadow: 0 2px 8px rgba(100,116,139,.32); }
-.cp-run-btn--alt:hover  { background: #475569 !important; box-shadow: 0 6px 18px rgba(71,85,105,.42); }
-.cp-run-btn--alt:active { box-shadow: 0 1px 4px rgba(71,85,105,.3); }
-.cp-run-btn--alt:focus-visible { box-shadow: 0 0 0 4px rgba(100,116,139,.35); }
-
-/* Botão Run compacto — o de cada item do Confirmations Escalation. Mesma
-   geometria e cor do Run grande, na medida de uma linha de lista. */
-.cp-run-btn--sm {
-    font-size: .72rem !important; padding: .3rem .85rem !important;
-    gap: .35rem; box-shadow: 0 1px 5px rgba(0,102,204,.28);
-}
-.cp-run-btn--sm i { font-size: .9rem; }
-
-/* Lista de itens com envio individual (Confirmations Escalation) */
-.cp-ce-list { margin-top: 1.15rem; display: flex; flex-direction: column; gap: .3rem; }
-.cp-ce-item {
-    display: flex; align-items: center; justify-content: space-between; gap: .6rem;
-    padding: .38rem .6rem; border-radius: 10px;
-    background: var(--ins-tertiary-bg, var(--bs-tertiary-bg, #f8f9fa));
-}
-.cp-ce-item__lbl {
-    font-size: .78rem; font-weight: 600; color: var(--cp-ink);
-    display: inline-flex; align-items: baseline; gap: .4rem; min-width: 0;
-}
-[data-bs-theme="dark"] .cp-ce-item__lbl { color: #f5f5f7; }
-.cp-ce-item__n {
-    font-size: .72rem; font-weight: 700; color: var(--cp-blue);
-    font-variant-numeric: tabular-nums;
-}
-.cp-ce-item__sub { font-size: .68rem; font-weight: 500; color: var(--cp-faint); }
-
-/* Feedback: expanding ring pulse on press (Emil-style press affordance) */
-.cp-run-btn::after {
-    content: ''; position: absolute; inset: 0; border-radius: inherit;
-    box-shadow: 0 0 0 0 rgba(0,102,204,.45);
-    transition: box-shadow 150ms var(--cp-ease-out);
-    pointer-events: none;
-}
-.cp-run-btn:active::after {
-    box-shadow: 0 0 0 7px rgba(0,102,204,0);
-    transition: box-shadow 550ms var(--cp-ease-out);
-}
-.cp-run-btn .ti-spin { animation: cp-spin .7s linear infinite; }
-@keyframes cp-spin { to { transform: rotate(360deg); } }
-
-@media (prefers-reduced-motion: reduce) {
-    .cp-run-btn, .cp-run-btn::after { transition: none; }
-    .cp-run-btn:hover { transform: none; }
-}
-
-/* ── Entrance reveal (staggered) ────────────────────────────── */
-.cp-reveal { opacity: 0; transform: translateY(14px); animation: cp-up 520ms var(--cp-ease-out) forwards; }
-.cp-reveal:nth-child(1) { animation-delay:  40ms; }
-.cp-reveal:nth-child(2) { animation-delay: 100ms; }
-.cp-reveal:nth-child(3) { animation-delay: 160ms; }
-.cp-reveal:nth-child(4) { animation-delay: 220ms; }
-@keyframes cp-up { to { opacity: 1; transform: none; } }
-
-@media (prefers-reduced-motion: reduce) {
-    .cp-reveal { animation: none; opacity: 1; transform: none; }
-    .cp-card, .cp-run-btn, .cp-card .form-control { transition: none; }
-}
-
-/* ── Card grid: each card fills its cell so paired cards share a row height ──── */
-/* The .col cells are d-flex; the reveal + card stretch to fill, and Bootstrap's
-   align-items:stretch makes both cards in a wrapped row equal height. */
+/* ── Grade: cada card enche a célula, e os cards de uma linha empatam a altura
+   (a coluna empilhada é `flex-column` e os `.cp-reveal` repartem a SOBRA) ── */
 .cp-cards .cp-reveal { flex: 1; display: flex; }
 .cp-cards .cp-reveal > .cp-card { width: 100%; }
-/* O card das métricas de Pending é o mais curto do painel e dividia a linha com
-   o Confirmations Escalation, que carrega SETE listas de destinatário: esticado
-   à altura do vizinho, ele virava meia tela de branco. Quem preenche o resto é o
-   **BACC EA Metrics**, empilhado na mesma coluna — e é por isso que aqui não há
-   mais regra nenhuma de altura: a coluna é `flex-column` e os dois `.cp-reveal`
-   já são `flex: 1`, então eles repartem a altura da linha sozinhos.
-   `flex: 1` é `1 1 0%`, e num contêiner em coluna o `min-height: auto` do flex
-   impede que qualquer um dos dois encolha abaixo do próprio conteúdo: o que se
-   divide é a SOBRA, não o card. */
-
-/* ── Nova realce (eyebrow em gradiente, ícones em gradiente, reveal +) ── */
-.cp-sec-label {
-    background: linear-gradient(100deg, #0066cc, #5e5ce6 55%, #8b5cf6 80%, #d946ef);
-    -webkit-background-clip: text; background-clip: text;
-    -webkit-text-fill-color: transparent; color: transparent;
-    letter-spacing: .1em;
-}
-.cp-sec-title { font-size: 1.5rem !important; letter-spacing: -.02em; }
-[data-bs-theme="dark"] .cp-sec-title { color: #fff; }
-.cp-card__icon,
-[data-bs-theme="dark"] .cp-card__icon {
-    background: linear-gradient(135deg, #0066cc, #5e5ce6 55%, #8b5cf6) !important;
-    color: #fff !important;
-    box-shadow: 0 8px 20px rgba(94, 92, 230, .28) !important;
-}
-.cp-card__icon i { color: #fff; }
-/* Animação-card padrão (about → sidenav → aqui): hover no card levanta e o
-   ícone dá scale + leve rotação. Sempre atrás de hover fino + reduced-motion. */
-.cp-card__icon { transition: transform 260ms var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)), box-shadow .2s var(--vr-ease, ease); }
-@media (hover: hover) and (pointer: fine) {
-    .cp-card:hover .cp-card__icon {
-        transform: scale(1.1) rotate(-4deg);
-        box-shadow: 0 10px 24px rgba(94, 92, 230, .38) !important;
-    }
-}
-@media (prefers-reduced-motion: reduce) {
-    .cp-card__icon { transition: none; }
-    .cp-card:hover .cp-card__icon { transform: none; }
-}
-@media (prefers-reduced-motion: no-preference) {
-    @keyframes cp-rise { from { opacity: 0; transform: translateY(22px) scale(.97); filter: blur(6px); } to { opacity: 1; transform: none; filter: blur(0); } }
-    .cp-reveal { animation: cp-rise 640ms var(--cp-ease-out) both; }
-}
 </style>
 {% endblock extra_css %}
 
@@ -393,7 +156,7 @@
         <div class="col-12 col-lg-6 d-flex flex-column gap-3 gap-xl-4" data-cp-group="intraday">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="cetip">
-                    <div class="cp-card__icon"><i class="ti ti-file-export"></i></div>
+                    <div class="cp-card__icon otc-icon-tile"><i class="ti ti-file-export"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-cetip-title">Save CETIP Files</h3>
                     <p class="cp-card__desc" data-lang="cp-r-cetip-desc">
                         Reads the raw CETIP files from the B3 daily download folder, renames them to the
@@ -466,7 +229,7 @@
 
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="intradaytasks">
-                    <div class="cp-card__icon"><i class="ti ti-calendar-check"></i></div>
+                    <div class="cp-card__icon otc-icon-tile"><i class="ti ti-calendar-check"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-it-title">Intraday Monitor — Tasks &amp; Pending Action</h3>
                     <p class="cp-card__desc" data-lang="cp-r-it-desc">
                         The days of the week each task is due on the Intraday Monitor and the time by which
@@ -527,7 +290,7 @@
         <div class="col-12 col-lg-6 d-flex" data-cp-group="intraday">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="confescalation">
-                    <div class="cp-card__icon"><i class="ti ti-mail-forward"></i></div>
+                    <div class="cp-card__icon otc-icon-tile"><i class="ti ti-mail-forward"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-ce-title">Confirmations Escalation</h3>
                     <p class="cp-card__desc" data-lang="cp-r-ce-desc">
                         E-mails the confirmations still pending validation on the Confirmations
@@ -682,7 +445,7 @@
         <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="daily">
-                    <div class="cp-card__icon"><i class="ti ti-folders"></i></div>
+                    <div class="cp-card__icon otc-icon-tile"><i class="ti ti-folders"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-ds-title">Save Daily Settlement Files</h3>
                     <p class="cp-card__desc" data-lang="cp-r-ds-desc">
                         Processes ALL Daily Settlement files into JSONs — OTM cashflows, Operações JPM/MGT,
@@ -735,7 +498,7 @@
         <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="forecast">
-                    <div class="cp-card__icon"><i class="ti ti-chart-histogram"></i></div>
+                    <div class="cp-card__icon otc-icon-tile"><i class="ti ti-chart-histogram"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-fcst-title">Settlement Forecast</h3>
                     <p class="cp-card__desc" data-lang="cp-r-fcst-desc">
                         Reads the CETIP position files, projects the upcoming settlements by business
@@ -778,7 +541,7 @@
         <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="branchsettlement">
-                    <div class="cp-card__icon"><i class="ti ti-building-bank"></i></div>
+                    <div class="cp-card__icon otc-icon-tile"><i class="ti ti-building-bank"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-branch-title">Branch Settlement Reverse Approval</h3>
                     <p class="cp-card__desc" data-lang="cp-r-branch-desc">
                         Recipients of the VP approval request for the manual reversal of a settlement
@@ -823,7 +586,7 @@
         <div class="col-12 col-lg-6 d-flex" data-cp-group="pendingconf">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="dailymetric">
-                    <div class="cp-card__icon"><i class="ti ti-mail-check"></i></div>
+                    <div class="cp-card__icon otc-icon-tile"><i class="ti ti-mail-check"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-dm-title">Daily Metric — Outstanding Confirmation Brazil OTC</h3>
                     <p class="cp-card__desc" data-lang="cp-r-dm-desc">
                         Builds the Outstanding Confirmation Brazil OTC daily metric as an Outlook draft
@@ -872,7 +635,7 @@
         <div class="col-12 col-lg-6 d-flex" data-cp-group="pendingconf">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="pendingspreadsheet">
-                    <div class="cp-card__icon"><i class="ti ti-file-spreadsheet"></i></div>
+                    <div class="cp-card__icon otc-icon-tile"><i class="ti ti-file-spreadsheet"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-pcx-title">Pending Confirmations Spreadsheet Metrics</h3>
                     <p class="cp-card__desc" data-lang="cp-r-pcx-desc">
                         Saves the "PENDING - Outstanding Confirmation OTC.xlsx" spreadsheet to the
@@ -925,7 +688,7 @@
         <div class="col-12 col-lg-6 d-flex" data-cp-group="pendingconf">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="weeklyescalation">
-                    <div class="cp-card__icon"><i class="ti ti-alert-triangle"></i></div>
+                    <div class="cp-card__icon otc-icon-tile"><i class="ti ti-alert-triangle"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-we-title">Pending Confirmation — Weekly Escalation (CEM/EDG)</h3>
                     <p class="cp-card__desc" data-lang="cp-r-we-desc">
                         Weekly (Friday) escalation of confirmations pending &gt; 30 days, split by LOB
@@ -961,7 +724,7 @@
         <div class="col-12 col-lg-6 d-flex" data-cp-group="pendingconf">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="signaturecollection">
-                    <div class="cp-card__icon"><i class="ti ti-writing-sign"></i></div>
+                    <div class="cp-card__icon otc-icon-tile"><i class="ti ti-writing-sign"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-sc-title">Pending Signature Confirmations — Collection</h3>
                     <p class="cp-card__desc" data-lang="cp-r-sc-desc">
                         Builds one editable e-mail draft per counterparty for confirmations pending
@@ -1000,7 +763,7 @@
         <div class="col-12 col-lg-6 d-flex" data-cp-group="affirmation">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="manualdealsea">
-                    <div class="cp-card__icon"><i class="ti ti-hand-stop"></i></div>
+                    <div class="cp-card__icon otc-icon-tile"><i class="ti ti-hand-stop"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-mdea-title">Manual Deals EA</h3>
                     <p class="cp-card__desc" data-lang="cp-r-mdea-desc">
                         E-mails the deals closed manually so the automatic EA does not consider
@@ -1048,7 +811,7 @@
         <div class="col-12 col-lg-6 d-flex" data-cp-group="affirmation">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="baccea">
-                    <div class="cp-card__icon"><i class="ti ti-chart-histogram"></i></div>
+                    <div class="cp-card__icon otc-icon-tile"><i class="ti ti-chart-histogram"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-bacc-title">BACC EA Metrics</h3>
                     <p class="cp-card__desc" data-lang="cp-r-bacc-desc">
                         E-mails the manual operations of the Track Confirmations page as an .xlsx
@@ -1088,7 +851,7 @@
         <div class="col-12 col-lg-6 d-flex" data-cp-group="affirmation">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="mt300">
-                    <div class="cp-card__icon"><i class="ti ti-message-2"></i></div>
+                    <div class="cp-card__icon otc-icon-tile"><i class="ti ti-message-2"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-mt300-title">MT300</h3>
                     <p class="cp-card__desc" data-lang="cp-r-mt300-desc">
                         E-mails the day's NDF Vanilla trades whose counterparty is registered in
@@ -1137,7 +900,7 @@
         <div class="col-12 col-lg-6 d-flex" data-cp-group="refdata">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="contacts">
-                    <div class="cp-card__icon"><i class="ti ti-address-book"></i></div>
+                    <div class="cp-card__icon otc-icon-tile"><i class="ti ti-address-book"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-contacts-title">Update Contacts</h3>
                     <p class="cp-card__desc" data-lang="cp-r-contacts-desc">
                         Imports the "CONTATO DE CLIENTES" spreadsheet and replaces each counterparty's
@@ -1185,7 +948,7 @@
         <div class="col-12 col-lg-6 d-flex" data-cp-group="application">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="appversion">
-                    <div class="cp-card__icon"><i class="ti ti-rocket"></i></div>
+                    <div class="cp-card__icon otc-icon-tile"><i class="ti ti-rocket"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-appver-title">New Version Released</h3>
                     <p class="cp-card__desc" data-lang="cp-r-appver-desc">
                         E-mails every user whose status is <strong>Active</strong> that a new

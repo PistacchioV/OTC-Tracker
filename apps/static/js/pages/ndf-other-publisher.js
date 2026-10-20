@@ -335,9 +335,9 @@
           return;
         }
         var html = esc(fill(t('evRows'), { n: (b.ids || []).length })) +
-          ((b.attached || []).length ? '<div style="margin-top:8px;font-size:.85em"><b>' + esc(t('evAttached')) + ':</b> <span style="font-family:monospace">' + esc(b.attached.join(', ')) + '</span></div>' : '') +
-          (b.skipped ? '<div style="margin-top:6px;font-size:.82em;color:#6c757d">' + esc(fill(t('evSkipped'), { n: b.skipped })) + '</div>' : '') +
-          (b.warnings || []).map(function (w) { return '<div style="margin-top:6px;font-size:.82em;color:#b26a00">' + esc(msgText(w, 'w_')) + '</div>'; }).join('');
+          ((b.attached || []).length ? '<div class="mt-2 small"><b>' + esc(t('evAttached')) + ':</b> <span class="font-monospace">' + esc(b.attached.join(', ')) + '</span></div>' : '') +
+          (b.skipped ? '<div class="mt-1 small text-muted">' + esc(fill(t('evSkipped'), { n: b.skipped })) + '</div>' : '') +
+          (b.warnings || []).map(function (w) { return '<div class="mt-1 small text-warning">' + esc(msgText(w, 'w_')) + '</div>'; }).join('');
         if (window.fetchNotifications) window.fetchNotifications();
         Swal.fire({ icon: 'success', title: t('evDone'), html: html });
       }).catch(function (e) { Swal.fire({ icon: 'error', title: t('e_title'), text: String(e && e.message || e) }); });

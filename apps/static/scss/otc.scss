@@ -1,0 +1,3353 @@
+// ============================================================================
+//  otc.scss — o TEMA INTEIRO do OTC Tracker, num arquivo só
+// ----------------------------------------------------------------------------
+//  Compila para `static/css/otc.css` (`npm run build`, ou
+//  `npx sass --load-path=node_modules apps/static/scss/otc.scss
+//  apps/static/css/otc.css`). É o ÚNICO CSS de tema: não existe camada que
+//  carregue depois redefinindo tokens. Vendor (DataTables, flatpickr, Swal…)
+//  continua em `plugins/` e `vendors.min.css`; daqui sai só a PINTURA deles.
+//
+//  Linguagem visual: vidro líquido — papel de parede atrás de tudo, cada
+//  superfície é uma placa de vidro (tinta translúcida + desfoque + borda de
+//  luz + profundidade), seleção por uma "lente" de gel que desliza, botões
+//  que afundam como gel. Referência visual: o demo do Pane (só referência:
+//  nenhuma linha daqui vem do código dele).
+//
+//  Seções:
+//    1. Bootstrap (prefixo `ins-`, modo de cor por `data-bs-theme`)
+//    2. Tokens (tema, destaque, papel de parede, vidro, modo opaco)
+//    3. Base (fonte, corpo, papel de parede, tipografia)
+//    4. Vidro (o material) e movimento (keyframes)
+//    5. Casca (menu lateral, barra do topo, título, rodapé, aparência, ⌘K)
+//    6. Componentes (botões, Send, badges, cards, formulários, menus, modais…)
+//    7. Tabelas e DataTables (cabeçalho fixo, funil, seleção de célula)
+//    8. Plugins (SweetAlert2, flatpickr, daterangepicker, select2, Choices,
+//       Dropzone, FilePond, FullCalendar, Quill)
+//    9. Utilitários que as páginas usam (fs-*, avatar-*, btn-soft-*…)
+//   10. Páginas (widgets próprios de cada tela)
+//   11. Modo opaco e movimento reduzido
+// ============================================================================
+
+// ── 1. Bootstrap ────────────────────────────────────────────────────────────
+// O prefixo `ins-` é o contrato com as páginas (`var(--ins-secondary-bg)` em
+// 186 lugares); `--bs-*` NÃO existe nesta casa.
+$prefix: ins-;
+$color-mode-type: data;
+$enable-shadows: false;
+$enable-gradients: false;
+$enable-negative-margins: true;
+
+$font-family-sans-serif: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+$font-size-base: .9375rem;            // 15px
+$line-height-base: 1.45;
+$headings-font-weight: 650;
+$font-weight-semibold: 600;
+
+$blue:   #1f6fe6;
+$indigo: #5b5bd6;
+$purple: #8b5cf6;
+$pink:   #e9468f;
+$red:    #d92d3a;
+$orange: #f2711c;
+$yellow: #e3a008;
+$green:  #22a559;
+$teal:   #0ea5a4;
+$cyan:   #0aa6d8;
+$gray-600: #6e6e80;
+
+$primary:   $blue;
+$secondary: $gray-600;
+$success:   $green;
+$info:      $cyan;
+$warning:   $yellow;
+$danger:    $red;
+$light:     #f3f5fa;
+$dark:      #1c1c20;
+
+$border-radius:     14px;
+$border-radius-sm:  10px;
+$border-radius-lg:  18px;
+$border-radius-xl:  24px;
+$border-radius-xxl: 30px;
+$border-radius-pill: 999px;
+
+$input-btn-focus-width: 2.5px;
+$input-btn-padding-y: .55rem;
+$input-btn-padding-x: 1.1rem;
+$btn-font-weight: 600;
+$modal-content-border-radius: 32px;
+$dropdown-border-radius: 24px;
+$tooltip-border-radius: 10px;
+$card-border-radius: 30px;
+$table-cell-padding-y: .55rem;
+$table-cell-padding-x: .6rem;
+$table-cell-padding-y-sm: .35rem;
+$table-cell-padding-x-sm: .45rem;
+
+@import "bootstrap/scss/bootstrap";
+
+// ── 2. Tokens ───────────────────────────────────────────────────────────────
+// Nomes NOSSOS (`--otc-*`). Os de Bootstrap (`--ins-*`) e os antigos
+// (`--vr-*`, `--sf-*`) são APELIDOS deles no fim da seção — páginas antigas
+// seguem resolvendo e pintam com o tema novo.
+:root {
+  color-scheme: light;
+
+  // tipografia
+  --otc-font: #{$font-family-sans-serif};
+  --otc-font-display: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+
+  // raios
+  --otc-r-xs: 7px;
+  --otc-r-sm: 12px;
+  --otc-r-md: 14px;
+  --otc-r-card-sm: 18px;
+  --otc-r-inner: 20px;
+  --otc-r-lg: 24px;
+  --otc-r-panel: 28px;
+  --otc-r-xl: 30px;
+  --otc-r-shell: 32px;
+  --otc-r-pill: 999px;
+
+  // espaço
+  --otc-inset: 14px;                                   // moldura até a borda da janela
+  --otc-gutter: clamp(14px, 1.4vw + 6px, 32px);
+  --otc-gap: clamp(12px, .6vw + 8px, 20px);
+  --otc-pad: calc(var(--otc-gap) + 4px);
+  --otc-side-w: 252px;
+
+  // movimento
+  --otc-ease: cubic-bezier(.22, .8, .24, 1);
+  --otc-spring: cubic-bezier(.34, 1.45, .55, 1);
+  --otc-ease-out: cubic-bezier(.16, 1, .3, 1);
+  --otc-ease-in: cubic-bezier(.55, .05, .75, .25);
+  --otc-dur-fast: 200ms;
+  --otc-dur-base: 280ms;
+  --otc-dur-spring: 380ms;
+  --otc-dur-enter: 600ms;
+  --otc-dur-exit: 200ms;
+  --otc-stagger: 60ms;
+
+  // paleta (chips, anéis, ícones de produto)
+  --otc-blue: #2f7cf6;
+  --otc-purple: #8b5cf6;
+  --otc-pink: #e9468f;
+  --otc-orange: #f2711c;
+  --otc-green: #22a559;
+  --otc-teal: #0ea5a4;
+  --otc-indigo: #5b5bd6;
+  --otc-yellow: #e3a008;
+  --otc-danger: #d92d3a;
+  --otc-up: #13803a;
+  --otc-down: #d92d3a;
+
+  // tema CLARO
+  --otc-text: #0f1017;
+  --otc-text-2: rgba(22, 24, 38, .70);
+  --otc-text-3: rgba(22, 24, 38, .56);
+  --otc-fill: rgba(118, 118, 140, .13);
+  --otc-fill-2: rgba(118, 118, 140, .22);
+  --otc-fill-hover: rgba(118, 118, 140, .10);
+  --otc-sep: rgba(40, 40, 70, .12);
+  --otc-scrim: rgba(20, 24, 50, .16);
+  --otc-avatar-ring: rgba(255, 255, 255, .90);
+  --otc-base: #e4e9f4;
+  --otc-solid: #f3f5fa;
+  --otc-solid-2: #e9ecf3;
+  --otc-solid-3: #dfe3ec;
+
+  --otc-glass-a: .32;                                  // Tinted; o Clear baixa (seção 2c)
+  --otc-glass-chrome-a: .26;
+  --otc-glass: rgba(255, 255, 255, var(--otc-glass-a));
+  --otc-glass-chrome: rgba(255, 255, 255, var(--otc-glass-chrome-a));
+  --otc-glass-thick: rgba(250, 252, 255, .76);
+  --otc-menu-bg: #fafbfe;                             // menu DENTRO de placa: sólido (§7)
+  --otc-blur: blur(12px) saturate(1.9) brightness(1.06);
+  --otc-blur-thick: blur(28px) saturate(1.9) brightness(1.06);
+  --otc-sheen: rgba(255, 255, 255, .34);
+  --otc-sheen-top: rgba(255, 255, 255, .34);
+  --otc-rim-1: #fff;
+  --otc-rim-2: rgba(255, 255, 255, .24);
+  --otc-rim-3: rgba(255, 255, 255, .78);
+  --otc-shadow: 0 1px 2px rgba(16, 30, 90, .08), 0 22px 44px -22px rgba(16, 30, 90, .45);
+  --otc-shadow-lift: 0 2px 4px rgba(20, 28, 70, .08), 0 26px 50px -20px rgba(20, 28, 70, .42);
+  --otc-depth:
+    inset 0 1px 1px rgba(255, 255, 255, .90),
+    inset 0 -1px 1px rgba(255, 255, 255, .40),
+    inset 3px 4px 12px -6px rgba(255, 255, 255, .85),
+    inset -4px -6px 14px -8px rgba(255, 255, 255, .55),
+    inset 0 -14px 26px -18px rgba(20, 40, 110, .20),
+    0 1px 2px rgba(16, 30, 90, .08),
+    0 22px 44px -22px rgba(16, 30, 90, .45);
+  --otc-inner-hl: inset 0 1px 0 rgba(255, 255, 255, .78);
+  --otc-lens-bg: linear-gradient(180deg, rgba(255, 255, 255, .95), rgba(255, 255, 255, .55));
+  --otc-lens-shadow: inset 0 1px 1px #fff, inset 0 -2px 5px rgba(255, 255, 255, .6),
+    inset 0 0 0 .5px rgba(255, 255, 255, .9), 0 8px 18px -8px rgba(16, 40, 110, .40), 0 1px 2px rgba(16, 40, 110, .14);
+  --otc-glassbtn-bg: linear-gradient(rgba(255, 255, 255, .72), rgba(255, 255, 255, .34));
+  --otc-glassbtn-bg-hover: linear-gradient(rgba(255, 255, 255, .72), rgba(255, 255, 255, .72));
+  --otc-glassbtn-shadow: inset 0 1px 1px #fff, inset 0 -1px 2px rgba(255, 255, 255, .5),
+    inset 0 0 0 .5px rgba(255, 255, 255, .7), 0 4px 10px -6px rgba(10, 20, 60, .3);
+  --otc-thead-bg: rgba(243, 245, 250, .86);
+  --otc-thead-line: rgba(40, 40, 70, .14);
+  --otc-row-hover: rgba(118, 118, 140, .07);
+  --otc-row-stripe: rgba(118, 118, 140, .045);
+  --otc-cell-sel: rgba(10, 98, 216, .14);
+  --otc-high-bg: rgba(242, 113, 28, .16);
+  --otc-high-fg: #9a4208;
+  --otc-urgent-bg: rgba(217, 45, 58, .14);
+  --otc-urgent-fg: #b0202c;
+
+  // destaque padrão (Blue)
+  --otc-accent: #0a62d8;
+  --otc-accent-ink: #0a58c4;
+  --otc-switch-on: var(--otc-accent);
+}
+
+[data-bs-theme="dark"] {
+  color-scheme: dark;
+
+  --otc-blue: #4b8eff;
+  --otc-purple: #a07cff;
+  --otc-pink: #f2649f;
+  --otc-orange: #ff8a3d;
+  --otc-green: #34c46b;
+  --otc-teal: #22c3c0;
+  --otc-indigo: #7a7af0;
+  --otc-yellow: #f5b82e;
+  --otc-danger: #ff5a64;
+  --otc-up: #5fd88a;
+  --otc-down: #ff8189;
+
+  --otc-text: #f5f5f7;
+  --otc-text-2: rgba(235, 235, 245, .70);
+  --otc-text-3: rgba(235, 235, 245, .55);
+  --otc-fill: rgba(150, 150, 175, .16);
+  --otc-fill-2: rgba(150, 150, 175, .26);
+  --otc-fill-hover: rgba(150, 150, 175, .12);
+  --otc-sep: rgba(255, 255, 255, .10);
+  --otc-scrim: rgba(0, 0, 0, .40);
+  --otc-avatar-ring: rgba(30, 32, 44, .95);
+  --otc-base: #0a0a0c;
+  --otc-solid: #1c1c20;
+  --otc-solid-2: #242429;
+  --otc-solid-3: #2c2c33;
+
+  --otc-glass-a: .42;
+  --otc-glass-chrome-a: .36;
+  --otc-glass: rgba(26, 26, 36, var(--otc-glass-a));
+  --otc-glass-chrome: rgba(28, 28, 38, var(--otc-glass-chrome-a));
+  --otc-glass-thick: rgba(26, 26, 30, .86);
+  --otc-menu-bg: #1e1e24;
+  --otc-blur: blur(14px) saturate(1.75) brightness(.95);
+  --otc-blur-thick: blur(30px) saturate(1.75) brightness(.95);
+  --otc-sheen: rgba(255, 255, 255, .13);
+  --otc-sheen-top: rgba(255, 255, 255, .10);
+  --otc-rim-1: rgba(255, 255, 255, .85);
+  --otc-rim-2: rgba(255, 255, 255, .12);
+  --otc-rim-3: rgba(255, 255, 255, .45);
+  --otc-shadow: 0 1px 2px rgba(0, 0, 0, .30), 0 24px 48px -22px rgba(0, 0, 0, .75);
+  --otc-shadow-lift: 0 2px 6px rgba(0, 0, 0, .35), 0 28px 56px -20px rgba(0, 0, 0, .80);
+  --otc-depth:
+    inset 0 1px 1px rgba(255, 255, 255, .30),
+    inset 0 -1px 1px rgba(255, 255, 255, .10),
+    inset 3px 4px 12px -6px rgba(255, 255, 255, .24),
+    inset -4px -6px 14px -8px rgba(255, 255, 255, .12),
+    inset 0 -16px 28px -18px rgba(0, 0, 0, .45),
+    0 1px 2px rgba(0, 0, 0, .30),
+    0 24px 48px -22px rgba(0, 0, 0, .75);
+  --otc-inner-hl: inset 0 1px 0 rgba(255, 255, 255, .45);
+  --otc-lens-bg: linear-gradient(180deg, rgba(255, 255, 255, .30), rgba(255, 255, 255, .10));
+  --otc-lens-shadow: inset 0 1px 1px rgba(255, 255, 255, .55), inset 0 -2px 5px rgba(255, 255, 255, .12),
+    inset 0 0 0 .5px rgba(255, 255, 255, .30), 0 8px 18px -8px rgba(0, 0, 0, .60);
+  --otc-glassbtn-bg: linear-gradient(rgba(255, 255, 255, .20), rgba(255, 255, 255, .07));
+  --otc-glassbtn-bg-hover: linear-gradient(rgba(255, 255, 255, .20), rgba(255, 255, 255, .20));
+  --otc-glassbtn-shadow: inset 0 1px 1px rgba(255, 255, 255, .4), inset 0 -1px 2px rgba(255, 255, 255, .06),
+    inset 0 0 0 .5px rgba(255, 255, 255, .16), 0 4px 10px -6px rgba(10, 20, 60, .3);
+  --otc-thead-bg: rgba(30, 30, 36, .86);
+  --otc-thead-line: rgba(255, 255, 255, .14);
+  --otc-row-hover: rgba(150, 150, 175, .08);
+  --otc-row-stripe: rgba(150, 150, 175, .05);
+  --otc-cell-sel: rgba(125, 180, 255, .18);
+  --otc-high-bg: rgba(242, 113, 28, .16);
+  --otc-high-fg: #ffb27a;
+  --otc-urgent-bg: rgba(217, 45, 58, .14);
+  --otc-urgent-fg: #ff8b92;
+
+  --otc-accent: #1f6fe6;
+  --otc-accent-ink: #7db4ff;
+}
+
+// 2a. Destaque — o usuário escolhe na Aparência. `--otc-accent` é o fundo
+// forte (texto branco em cima); `--otc-accent-ink` é o tom de LEITURA sobre
+// vidro (texto, ícone, contorno de foco).
+@each $name, $l-acc, $l-ink, $d-acc, $d-ink in (
+  ("purple",   #7432e0, #6a2bd0, #7b3ff0, #c0a2ff),
+  ("pink",     #c8195f, #b8175a, #cf2068, #ff8fbb),
+  ("orange",   #b9440c, #a83d0b, #c4500f, #ffad72),
+  ("green",    #147a3a, #116c33, #167f3d, #72dc98),
+  ("graphite", #2c2c33, #1d1d22, #4a4a54, #f4f4f7)
+) {
+  :root[data-accent="#{$name}"] { --otc-accent: #{$l-acc}; --otc-accent-ink: #{$l-ink}; }
+  :root[data-accent="#{$name}"][data-bs-theme="dark"] { --otc-accent: #{$d-acc}; --otc-accent-ink: #{$d-ink}; }
+}
+// grafite "ligado" em cinza leria como desligado
+:root[data-accent="graphite"] { --otc-switch-on: #2fb350; }
+:root[data-accent="graphite"][data-bs-theme="dark"] { --otc-switch-on: #30c158; }
+
+:root { --otc-accent-soft: color-mix(in srgb, var(--otc-accent) 14%, transparent); }
+
+// 2b. Papel de parede. Lisos: Ash (padrão), Sand, Sage. Ilustrados: faixas
+// de cor em gradiente sobre uma base diagonal (fitas a, b, c, d).
+:root {
+  --w-b1: #e4e4e7; --w-b2: #e4e4e7;
+  --w-a: transparent; --w-b: transparent; --w-c: transparent; --w-d: transparent;
+  --w-a2: transparent; --w-b2c: transparent; --w-c2: transparent; --w-d2: transparent;
+}
+[data-bs-theme="dark"] { --w-b1: #232428; --w-b2: #232428; }
+
+@each $wall, $lb1, $lb2, $db1, $db2 in (
+  (sand, #f6e4d2, #f6e4d2, #3a2a1e, #3a2a1e),
+  (sage, #dde9dc, #dde9dc, #1f2c23, #1f2c23)
+) {
+  :root[data-wall="#{$wall}"] { --w-b1: #{$lb1}; --w-b2: #{$lb2}; }
+  :root[data-wall="#{$wall}"][data-bs-theme="dark"] { --w-b1: #{$db1}; --w-b2: #{$db2}; }
+}
+
+// (parede, base clara 1/2, fitas claras a/a2 b/b2 c/c2 d/d2, base escura 1/2, fitas escuras)
+@each $wall, $l, $d in (
+  (aurora,
+    (#e6eaff, #d9dfff, #b4c0ff, #8796f0, #9fb0ff, #6f84e6, #c7d0ff, #5167d8, #aab6ff, #7486e8),
+    (#090b1c, #0c0f24, #2b3a8c, #0f1438, #283a8a, #101740, #1c2766, #0b1030, #34469e, #121a48)),
+  (smoke,
+    (#ececf0, #d3d3da, #c2c2ca, #a9a9b2, #b8b8c0, #9d9da6, #d0d0d6, #8e8e98, #c6c6cd, #a2a2ab),
+    (#070708, #0f0f12, #33333a, #18181c, #3d3d44, #1d1d22, #4a4a52, #202026, #5c5c64, #26262c)),
+  (tide,
+    (#bfe4ff, #d4d0ff, #6fa4ff, #3d6fe0, #67d6e3, #4f7fe0, #9a86ff, #b28bf0, #5fe0d0, #3fa6c4),
+    (#03112a, #0d0a2c, #1d55dc, #0a2a8c, #0ba9bd, #1b3cb0, #4c33d8, #7c2fc4, #16c3b0, #0b6c8c)),
+  (bloom,
+    (#ffdbe9, #d9dcff, #8fa0ff, #6d7ae6, #ff8fb5, #ffb08a, #b399ff, #ff86b8, #ffcf8a, #ff9a7a),
+    (#130a2b, #2a0c22, #2c46c8, #17207a, #c2306c, #c4501f, #5a2fd0, #a3205e, #d08a2a, #a33f17)),
+  (ember,
+    (#ffe7d0, #ffd6d8, #ff9c66, #f0703a, #ffc75e, #ff9254, #ff8aa0, #e8607d, #ffc16a, #f0954a),
+    (#200a04, #2a0a12, #c4501a, #7a220a, #c98a12, #b0421a, #b8304e, #7a1630, #c4861f, #8a4a0a)),
+  (grove,
+    (#ddf7e5, #d4f0f5, #7fd4a3, #4fb07c, #b5dc7a, #6cc49a, #72cfcb, #4aa6b8, #c9d77a, #8cc06a),
+    (#04170e, #041a1e, #1c8f55, #0b5232, #5e9e1f, #1c7a52, #138a86, #0b5a6e, #8a9a1f, #3f7a1c)),
+  (dusk,
+    (#e6e7ef, #eee3eb, #b9bdd6, #9a9fc0, #d6c0d0, #b9a2b8, #c9c2d9, #a79fbf, #dccbb8, #c2ab92),
+    (#0f1016, #17121c, #3d425e, #23263a, #5a4a62, #2e2536, #484e6e, #262a3e, #6a5440, #33281f))
+) {
+  :root[data-wall="#{$wall}"] {
+    --w-b1: #{nth($l, 1)}; --w-b2: #{nth($l, 2)};
+    --w-a: #{nth($l, 3)}; --w-a2: #{nth($l, 4)}; --w-b: #{nth($l, 5)}; --w-b2c: #{nth($l, 6)};
+    --w-c: #{nth($l, 7)}; --w-c2: #{nth($l, 8)}; --w-d: #{nth($l, 9)}; --w-d2: #{nth($l, 10)};
+  }
+  :root[data-wall="#{$wall}"][data-bs-theme="dark"] {
+    --w-b1: #{nth($d, 1)}; --w-b2: #{nth($d, 2)};
+    --w-a: #{nth($d, 3)}; --w-a2: #{nth($d, 4)}; --w-b: #{nth($d, 5)}; --w-b2c: #{nth($d, 6)};
+    --w-c: #{nth($d, 7)}; --w-c2: #{nth($d, 8)}; --w-d: #{nth($d, 9)}; --w-d2: #{nth($d, 10)};
+  }
+}
+
+// 2c. Vidro "Clear": só a tinta afina; desfoque, borda e profundidade ficam.
+:root[data-glass="clear"] { --otc-glass-a: .14; --otc-glass-chrome-a: .12; }
+:root[data-glass="clear"][data-bs-theme="dark"] { --otc-glass-a: .20; --otc-glass-chrome-a: .18; }
+
+// 2d. Apelidos — Bootstrap (`--ins-*`) e as camadas antigas (`--vr-*`,
+// `--sf-*`) leem os tokens novos. Página que escreve `var(--vr-card-bg)`
+// continua certa sem saber que o tema trocou.
+:root,
+[data-bs-theme="dark"] {
+  --ins-body-font-family: var(--otc-font);
+  --ins-body-color: var(--otc-text);
+  --ins-body-color-rgb: 15, 16, 23;
+  --ins-body-bg: var(--otc-solid);
+  --ins-secondary-color: var(--otc-text-2);
+  --ins-secondary-bg: var(--otc-solid-2);
+  --ins-tertiary-color: var(--otc-text-3);
+  --ins-tertiary-bg: var(--otc-solid-3);
+  --ins-emphasis-color: var(--otc-text);
+  --ins-heading-color: var(--otc-text);
+  --ins-border-color: var(--otc-sep);
+  --ins-border-color-translucent: var(--otc-sep);
+  --ins-link-color: var(--otc-accent-ink);
+  --ins-link-hover-color: var(--otc-accent-ink);
+  --ins-link-color-rgb: 10, 88, 196;
+  --ins-link-hover-color-rgb: 10, 88, 196;
+  --ins-focus-ring-color: color-mix(in srgb, var(--otc-accent-ink) 45%, transparent);
+  --ins-border-radius: 14px;
+  --ins-border-radius-sm: 10px;
+  --ins-border-radius-lg: 18px;
+  --ins-border-radius-xl: 24px;
+  --ins-border-radius-xxl: 30px;
+  --ins-gradient: linear-gradient(180deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, 0));
+  --ins-box-shadow: var(--otc-shadow);
+  --ins-box-shadow-sm: 0 1px 2px rgba(16, 30, 90, .08);
+  --ins-box-shadow-lg: var(--otc-shadow-lift);
+
+  // gráficos (dashboard.js lê por `ins('chart-…')`)
+  --ins-chart-primary: var(--otc-accent-ink);
+  --ins-chart-primary-rgb: 10, 88, 196;
+  --ins-chart-secondary: var(--otc-teal);
+  --ins-chart-gray: var(--otc-text-3);
+  --ins-chart-dark: var(--otc-indigo);
+  --ins-chart-border-color: var(--otc-sep);
+  --ins-chart-title-color: var(--otc-text-2);
+
+  // casca antiga
+  --ins-topbar-height: 88px;
+
+  // visual-refresh / streamflow
+  --vr-card-bg: var(--otc-glass);
+  --vr-card-border: transparent;
+  --vr-card-shadow: var(--otc-depth);
+  --vr-card-radius: var(--otc-r-xl);
+  --vr-grad: linear-gradient(100deg, var(--otc-accent), color-mix(in srgb, var(--otc-accent) 60%, var(--otc-teal)));
+  --vr-ease: var(--otc-ease);
+  --vr-text: var(--otc-text);
+  --vr-muted: var(--otc-text-2);
+  --vr-border: var(--otc-sep);
+  --vr-surface: var(--otc-glass);
+  --vr-thead-bg: var(--otc-thead-bg);
+  --vr-thead-line: var(--otc-thead-line);
+  --vr-tscroll-max: calc(100vh - 230px);
+  --sf-ease-out: var(--otc-ease-out);
+  --sf-ease-in-out: var(--otc-ease);
+  --sf-ease-drawer: var(--otc-ease-out);
+  --sf-dur-press: 130ms;
+  --sf-dur-fast: var(--otc-dur-fast);
+  --sf-dur-base: var(--otc-dur-base);
+  --sf-dur-slow: 420ms;
+  --sf-dur-page: var(--otc-dur-enter);
+  --sf-stagger: var(--otc-stagger);
+  --sf-cyan: var(--otc-teal);
+  --sf-blue: var(--otc-blue);
+  --sf-purple: var(--otc-purple);
+  --sf-overlay-bg: var(--otc-glass-thick);
+  --sf-card-bg: var(--otc-glass);
+}
+// `--bs-*`: o tema NUNCA os definiu (o prefixo da casa é `ins-`), e 27 páginas
+// os usam — tudo caía no fallback claro do `var(--bs-x, #fff)`: campo branco com
+// texto apagado no escuro. Aqui viram apelidos dos tokens, nos dois temas.
+// Página NOVA continua proibida de escrever `--bs-*` (os guardas seguem).
+:root,
+[data-bs-theme="dark"] {
+  --bs-body-color: var(--otc-text);
+  --bs-body-bg: var(--otc-solid);
+  --bs-secondary-color: var(--otc-text-2);
+  --bs-secondary-bg: var(--otc-fill);
+  --bs-tertiary-bg: var(--otc-fill-hover);
+  --bs-border-color: var(--otc-sep);
+  --bs-primary: var(--otc-accent-ink);
+  --bs-primary-rgb: var(--ins-primary-rgb);
+  --bs-font-monospace: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+:root { --ins-primary: var(--otc-accent); --ins-primary-rgb: 10, 98, 216; --ins-primary-text-emphasis: var(--otc-accent-ink); }
+[data-bs-theme="dark"] {
+  --ins-body-color-rgb: 245, 245, 247;
+  --ins-primary-rgb: 31, 111, 230;
+  --ins-link-color-rgb: 125, 180, 255;
+  --ins-link-hover-color-rgb: 125, 180, 255;
+  --ins-chart-primary-rgb: 125, 180, 255;
+}
+:root, [data-bs-theme="dark"] {
+  --ins-primary-bg-subtle: var(--otc-accent-soft);
+  --ins-primary-border-subtle: color-mix(in srgb, var(--otc-accent) 30%, transparent);
+}
+
+// ── 3. Base ─────────────────────────────────────────────────────────────────
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../fonts/inter/inter-latin-wght-normal.woff2") format("woff2-variations"),
+       url("../fonts/inter/inter-latin-wght-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../fonts/inter/inter-latin-ext-wght-normal.woff2") format("woff2-variations"),
+       url("../fonts/inter/inter-latin-ext-wght-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+// Ícones PREENCHIDOS do Tabler: fonte própria (o vendors.min.css só traz a
+// de traço). Só os glifos que o app usa — o funil ATIVO do filtro de Excel,
+// os pontos de status, a estrela… Sem isto eles saíam como quadrado vazio.
+@font-face {
+  font-family: "tabler-icons-filled";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("fonts/tabler-icons-filled.woff2?v3.49.0") format("woff2"),
+       url("fonts/tabler-icons-filled.woff?v3.49.0") format("woff");
+}
+@each $name, $code in (filter: "\fc27", point: "\f698", circle: "\f671", info-hexagon: "\fa43", star: "\f6a6", chart-donut: "\f66f") {
+  .ti-#{$name}-filled::before { font-family: "tabler-icons-filled" !important; content: $code; }
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body {
+  min-height: 100vh;
+  font-family: var(--otc-font);
+  font-feature-settings: "cv11", "ss01";
+  color: var(--otc-text);
+  background: var(--otc-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+// O papel de parede: uma camada FIXA atrás de tudo. Fitas = gradientes
+// largos e inclinados; lisos ficam só com a base.
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 60% at 8% 112%, var(--w-a) 0%, var(--w-a2) 38%, transparent 62%),
+    radial-gradient(85% 55% at 108% -8%, var(--w-b) 0%, var(--w-b2c) 40%, transparent 66%),
+    radial-gradient(70% 50% at 92% 104%, var(--w-c) 0%, var(--w-c2) 36%, transparent 64%),
+    radial-gradient(60% 42% at -6% 18%, var(--w-d) 0%, var(--w-d2) 34%, transparent 66%),
+    linear-gradient(135deg, var(--w-b1), var(--w-b2));
+}
+:root[data-wall="aurora"] body::after,
+:root[data-wall="smoke"] body::after {
+  // as duas paredes de "contorno": linhas finas e algumas bolhas de luz
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: .5;
+  background:
+    radial-gradient(circle at 78% 24%, rgba(255, 255, 255, .35) 0 6px, transparent 7px),
+    radial-gradient(circle at 18% 70%, rgba(255, 255, 255, .25) 0 10px, transparent 11px),
+    radial-gradient(circle at 62% 82%, rgba(255, 255, 255, .22) 0 4px, transparent 5px),
+    repeating-radial-gradient(ellipse 140% 90% at 30% 120%, transparent 0 46px, rgba(255, 255, 255, .07) 47px 48px);
+}
+
+h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
+  color: var(--otc-text);
+  letter-spacing: -.01em;
+}
+.text-muted { color: var(--otc-text-2) !important; }
+.text-body-secondary { color: var(--otc-text-2) !important; }
+.text-body-tertiary { color: var(--otc-text-3) !important; }
+a { color: var(--otc-accent-ink); text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); }
+::selection { background: color-mix(in srgb, var(--otc-accent) 28%, transparent); }
+.tabular-nums, .table td, .badge { font-variant-numeric: tabular-nums; }
+hr { border-color: var(--otc-sep); opacity: 1; }
+kbd {
+  display: inline-flex; align-items: center;
+  padding: 4px 6px; border-radius: var(--otc-r-xs);
+  background: var(--otc-fill); color: var(--otc-text-2);
+  font: 600 11.5px/1 var(--otc-font); box-shadow: none;
+}
+
+// barras de rolagem discretas, que não brigam com o vidro
+* { scrollbar-width: thin; scrollbar-color: var(--otc-fill-2) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--otc-fill-2); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+// a troca de tema não anima centenas de cores de uma vez (a página engasga);
+// quem dá a transição é o View Transition (otc.js)
+html.otc-theme-switching *,
+html.otc-theme-switching *::before,
+html.otc-theme-switching *::after { transition: none !important; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 250ms; }
+
+// ── 4. Vidro e movimento ────────────────────────────────────────────────────
+// O MATERIAL. Uma placa de vidro: tinta + desfoque + profundidade; a borda de
+// luz (::before) e o brilho que segue o ponteiro (::after, `--mx`/`--my`
+// escritos pelo otc.js) vêm por pseudo-elemento para não disputarem o
+// `background` que a página porventura ponha na placa.
+@mixin otc-glass($tint: var(--otc-glass), $blur: var(--otc-blur), $radius: var(--otc-r-xl), $depth: var(--otc-depth)) {
+  position: relative;
+  isolation: isolate;
+  background-color: $tint;
+  -webkit-backdrop-filter: $blur;
+  backdrop-filter: $blur;
+  border: 0;
+  border-radius: $radius;
+  box-shadow: $depth;
+}
+@mixin otc-rim {
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    padding: 1.25px;
+    border-radius: inherit;
+    pointer-events: none;
+    background: conic-gradient(from 300deg,
+      var(--otc-rim-1) 0deg, var(--otc-rim-2) 55deg, transparent 90deg, var(--otc-rim-2) 140deg,
+      var(--otc-rim-3) 180deg, var(--otc-rim-2) 220deg, transparent 270deg, var(--otc-rim-2) 315deg,
+      var(--otc-rim-1) 360deg);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  }
+}
+@mixin otc-sheen {
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+      radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%),
+      linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
+  }
+}
+@mixin otc-slab($tint: var(--otc-glass), $blur: var(--otc-blur), $radius: var(--otc-r-xl)) {
+  @include otc-glass($tint, $blur, $radius);
+  @include otc-rim;
+  @include otc-sheen;
+}
+// placa "simples" (blocos de número, cartões do kanban): sem borda de luz
+// (sem `position`: menus, calendários e dropdowns de plugin são absolute/
+// fixed, e um `relative` aqui os jogaria no fluxo da página)
+@mixin otc-tile($tint: var(--otc-glass), $radius: var(--otc-r-card-sm)) {
+  background-color: $tint;
+  -webkit-backdrop-filter: var(--otc-blur);
+  backdrop-filter: var(--otc-blur);
+  border: 0;
+  border-radius: $radius;
+  box-shadow: var(--otc-shadow), var(--otc-inner-hl);
+}
+// botão de gel colorido: cápsula com brilho de cima e halo da própria cor
+@mixin otc-gel($c) {
+  --otc-gel: #{$c};
+  --ins-btn-color: #fff;
+  --ins-btn-hover-color: #fff;
+  --ins-btn-active-color: #fff;
+  --ins-btn-bg: var(--otc-gel);
+  --ins-btn-hover-bg: var(--otc-gel);
+  --ins-btn-active-bg: var(--otc-gel);
+  --ins-btn-border-color: transparent;
+  --ins-btn-hover-border-color: transparent;
+  --ins-btn-active-border-color: transparent;
+  --ins-btn-disabled-bg: var(--otc-gel);
+  --ins-btn-disabled-color: #fff;
+  --ins-btn-disabled-border-color: transparent;
+  --ins-gradient: linear-gradient(rgba(255, 255, 255, .34) 0%, rgba(255, 255, 255, .10) 48%, transparent 52%),
+    linear-gradient(rgba(255, 255, 255, .20), transparent 70%);
+  color: #fff;
+  background-color: var(--otc-gel);
+  background-image: var(--ins-gradient);
+  border-color: transparent;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, .18);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .6), inset 0 -2px 4px rgba(0, 0, 0, .14),
+    inset 0 0 0 .5px rgba(255, 255, 255, .25), 0 10px 22px -10px var(--otc-gel), 0 1px 2px rgba(0, 0, 0, .12);
+  &:hover { filter: brightness(1.06); }
+}
+
+// A "gota": a superfície aparece crescendo de um retângulo arredondado no
+// centro, subindo. SEM `scale` de propósito — o DataTables mede a largura das
+// colunas enquanto a entrada roda, e escala muda o que ele mede.
+@keyframes otc-drop-in {
+  from { clip-path: inset(36% 30% round 40px); translate: 0 30px; }
+  60%  { clip-path: inset(-8% -8% round 60px); }
+  to   { clip-path: inset(-60px round 90px); translate: 0 0; }
+}
+@keyframes otc-drop-out {
+  from { clip-path: inset(-60px round 90px); translate: 0 0; opacity: 1; }
+  to   { clip-path: inset(20% 16% round 40px); translate: 0 -6px; opacity: 0; }
+}
+@keyframes otc-rise-in { from { opacity: 0; translate: 0 10px; } to { opacity: 1; translate: 0 0; } }
+@keyframes otc-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes otc-fade-out { from { opacity: 1; } to { opacity: 0; } }
+// menu/popover: cai do gatilho. `translate`/`scale` INDIVIDUAIS — o Popper
+// escreve `transform` inline e animar `transform` o atropelaria.
+@keyframes otc-pop-in {
+  from { opacity: 0; translate: 0 -8px; scale: .97; clip-path: inset(10% 10% round 24px); }
+  to   { opacity: 1; translate: 0 0; scale: 1; clip-path: inset(-40px round 60px); }
+}
+@keyframes otc-pop-up {
+  from { opacity: 0; translate: 0 8px; scale: .97; }
+  to   { opacity: 1; translate: 0 0; scale: 1; }
+}
+@keyframes otc-drawer-in {
+  from { translate: 70px 0; clip-path: inset(24% 0 24% 30% round 32px); }
+  to   { translate: 0 0; clip-path: inset(-60px round 90px); }
+}
+@keyframes otc-drawer-out {
+  from { translate: 0 0; opacity: 1; }
+  to   { translate: 31px -4px; opacity: 0; }
+}
+@keyframes otc-char-in {
+  from { translate: 0 .9em; rotate: 4deg; }
+  to   { translate: 0 0; rotate: 0deg; }
+}
+@keyframes otc-ripple {
+  from { opacity: .75; scale: 1; }
+  to   { opacity: 0; scale: 7.4; }
+}
+@keyframes otc-shake {
+  0%, 100% { translate: 0; } 20% { translate: -5px 0; } 40% { translate: 4px 0; } 60% { translate: -3px 0; } 80% { translate: 2px 0; }
+}
+
+// entrada de página (otc.js marca as superfícies de primeiro nível)
+.otc-enter {
+  animation: otc-drop-in var(--otc-dur-enter) var(--otc-ease-out) backwards;
+  animation-delay: calc(var(--otc-i, 0) * var(--otc-stagger));
+}
+.otc-enter-soft {
+  animation: otc-rise-in 420ms var(--otc-ease-out) backwards;
+  animation-delay: calc(300ms + var(--otc-i, 0) * 50ms);
+}
+.otc-title-char {
+  display: inline-block;
+  animation: otc-char-in 520ms var(--otc-ease-out) backwards;
+  animation-delay: calc(var(--otc-c, 0) * 28ms);
+  white-space: pre;
+}
+.otc-title-clip { display: inline-block; overflow: hidden; vertical-align: bottom; padding-bottom: .08em; margin-bottom: -.08em; }
+
+// anel do clique ("ripple"): um ANEL, não uma mancha
+.otc-ripple-host { position: relative; overflow: hidden; }
+.otc-ripple {
+  position: absolute;
+  width: 20px; height: 20px;
+  margin: -10px 0 0 -10px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 3;
+  background: radial-gradient(circle, transparent 38%, rgba(255, 255, 255, .8) 62%, transparent 72%);
+  animation: otc-ripple 800ms var(--otc-ease-out) forwards;
+}
+
+// ── 5. Casca ────────────────────────────────────────────────────────────────
+// 5a. A moldura. Menu lateral fixo à esquerda, barra do topo fixa à direita,
+// conteúdo rolando por baixo dos dois.
+.wrapper { position: relative; min-height: 100vh; }
+.content-page {
+  position: relative;
+  min-height: 100vh;
+  padding: var(--otc-inset) var(--otc-gutter) 48px calc(var(--otc-inset) + var(--otc-side-w) + var(--otc-gutter));
+  max-width: 1840px;
+  margin: 0 auto;
+  transition: padding-left var(--otc-dur-base) var(--otc-ease);
+}
+.content-page > .container-fluid,
+.content-page > [data-content] { padding-left: 0; padding-right: 0; }
+// sem cabeçalho de página, o conteúdo começa ABAIXO da barra do topo
+.content-page:not(:has(.page-title-head)) { padding-top: 88px; }
+
+// 5b. Menu lateral
+.sidenav-menu {
+  @include otc-slab(var(--otc-glass-chrome), var(--otc-blur), var(--otc-r-shell));
+  position: fixed;
+  z-index: 30;
+  top: var(--otc-inset);
+  bottom: var(--otc-inset);
+  left: max(var(--otc-inset), calc((100vw - 1840px) / 2 + var(--otc-inset)));
+  width: var(--otc-side-w);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 12px 12px;
+  transition: translate var(--otc-dur-base) var(--otc-ease-out), opacity var(--otc-dur-base) var(--otc-ease);
+  > * { position: relative; z-index: 1; }
+}
+.otc-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 10px;
+  color: var(--otc-text);
+  text-decoration: none;
+  &:hover { color: var(--otc-text); }
+}
+.otc-brand__tile {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px; height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--otc-accent) 65%, #fff), var(--otc-accent));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 6px 14px -6px var(--otc-accent);
+  img { width: 22px; height: 22px; object-fit: contain; }
+}
+.otc-brand__word { font: 700 21px/1 var(--otc-font-display); letter-spacing: -.02em; }
+.otc-side__tools { margin-left: auto; display: flex; gap: 2px; }
+.otc-side__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin: 0 -6px;
+  padding: 0 6px;
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+.otc-side__label {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px 4px;
+  font: 650 12px/1 var(--otc-font);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--otc-text-3);
+  .btn-icon { margin-left: auto; width: 24px; height: 24px; min-width: 24px; color: var(--otc-text-3); }
+}
+.otc-pinned { display: flex; flex-direction: column; gap: 1px; margin-bottom: 4px; }
+.otc-pinned a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: var(--otc-r-pill);
+  color: var(--otc-text-2);
+  font: 520 14.5px/1.2 var(--otc-font);
+  text-decoration: none;
+  transition: background-color var(--otc-dur-fast) var(--otc-ease), color var(--otc-dur-fast) var(--otc-ease);
+  span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  &::before {
+    content: "";
+    flex: none;
+    width: 10px; height: 10px;
+    border-radius: 4px;
+    background: var(--pin-hue, var(--otc-accent-ink));
+  }
+  &:hover { background: var(--otc-fill-hover); color: var(--otc-text); }
+  &.is-active { color: var(--otc-text); font-weight: 600; }
+}
+
+// o menu-fonte fica escondido: o drill-down é montado a partir dele
+.side-nav.dd-source-hidden { display: none !important; }
+.side-nav { list-style: none; margin: 0; padding: 0; }
+.side-nav .side-nav-title {
+  padding: 14px 14px 6px;
+  font: 650 12px/1 var(--otc-font);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--otc-text-3);
+}
+.side-nav .side-nav-item { position: relative; }
+.side-nav .side-nav-link {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: var(--otc-r-pill);
+  color: var(--otc-text-2);
+  font: 560 15px/1.2 var(--otc-font);
+  text-decoration: none;
+  transition: color var(--otc-dur-fast) var(--otc-ease);
+  &:hover { color: var(--otc-text); }
+  &.active { color: var(--otc-text); font-weight: 600; }
+  &.active .menu-icon { color: var(--otc-accent-ink); }
+}
+.side-nav .menu-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 20px; height: 20px;
+  color: inherit;
+  transition: color var(--otc-dur-fast) var(--otc-ease);
+  svg, i { width: 20px; height: 20px; font-size: 20px; stroke-width: 1.8; }
+}
+.side-nav .menu-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-nav .menu-arrow {
+  flex: none;
+  width: 16px; height: 16px;
+  opacity: .55;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.side-nav .badge { margin-left: auto; }
+.side-nav li[hidden] { display: none !important; }
+
+// drill-down: um nível por vez, com trilha de volta
+.dd-nav { position: relative; }
+.dd-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 8px 8px;
+  min-height: 26px;
+  &.dd-at-root { display: none; }
+}
+.dd-crumb {
+  border: 0;
+  background: transparent;
+  padding: 3px 8px;
+  border-radius: var(--otc-r-pill);
+  color: var(--otc-text-3);
+  font: 600 12.5px/1.2 var(--otc-font);
+  transition: background-color var(--otc-dur-fast) var(--otc-ease), color var(--otc-dur-fast) var(--otc-ease);
+  &:hover { background: var(--otc-fill-hover); color: var(--otc-text); }
+}
+.dd-crumb-sep { display: inline-grid; color: var(--otc-text-3); svg { width: 12px; height: 12px; } }
+.dd-stage { position: relative; }
+.side-nav.dd-panel { position: relative; }      // a lente se mede por offset* dentro do painel
+.dd-panel { transition: translate 300ms var(--otc-ease-out), opacity 220ms var(--otc-ease); }
+.dd-enter-right { translate: 36px 0; opacity: 0; }
+.dd-enter-left { translate: -36px 0; opacity: 0; }
+.dd-exit-left { translate: -36px 0; opacity: 0; }
+.dd-exit-right { translate: 36px 0; opacity: 0; }
+.dd-stagger > li { animation: otc-rise-in 320ms var(--otc-ease-out) backwards; animation-delay: var(--dd-delay, 0ms); }
+.dd-back .side-nav-link { color: var(--otc-text); font-weight: 650; }
+.dd-back .dd-back-icon { color: var(--otc-accent-ink); }
+
+// a LENTE de gel atrás do item ativo (otc.js a posiciona e anima)
+.otc-lens {
+  position: absolute;
+  z-index: 0;
+  left: 0; top: 0;
+  border-radius: var(--otc-r-pill);
+  background: var(--otc-lens-bg);
+  box-shadow: var(--otc-lens-shadow);
+  pointer-events: none;
+  transform-origin: center;
+  will-change: transform;
+}
+
+// rodapé do menu: o usuário
+.otc-side__user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: var(--otc-r-inner);
+  color: var(--otc-text);
+  text-decoration: none;
+  transition: background-color var(--otc-dur-fast) var(--otc-ease);
+  &:hover { background: var(--otc-fill-hover); color: var(--otc-text); }
+  .otc-side__who { min-width: 0; flex: 1 1 auto; line-height: 1.25; }
+  .otc-side__name { display: block; font: 600 14.5px/1.25 var(--otc-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .otc-side__role { display: block; font: 400 12.5px/1.25 var(--otc-font); color: var(--otc-text-2); }
+  svg { width: 20px; height: 20px; color: var(--otc-text-2); }
+}
+
+// desafixado ou tela estreita: o menu vira gaveta sobre o conteúdo
+.otc-nav-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+  background: var(--otc-scrim);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--otc-dur-base) var(--otc-ease);
+}
+body.otc-nav-unpinned .sidenav-menu { translate: calc(-100% - 2 * var(--otc-inset)) 0; }
+body.otc-nav-unpinned .content-page { padding-left: var(--otc-gutter); }
+body.otc-nav-unpinned.otc-nav-open .sidenav-menu { translate: 0 0; }
+body.otc-nav-open .otc-nav-backdrop { opacity: 1; pointer-events: auto; }
+.otc-menu-btn { display: none !important; }
+body.otc-nav-unpinned .otc-menu-btn { display: inline-grid !important; }
+
+@media (max-width: 1199.98px) {
+  .sidenav-menu { translate: calc(-100% - 2 * var(--otc-inset)) 0; }
+  .content-page { padding-left: var(--otc-gutter); }
+  body.otc-nav-open .sidenav-menu { translate: 0 0; }
+  .otc-menu-btn { display: inline-grid !important; }
+  .otc-pin-btn { display: none !important; }
+}
+
+// 5c. Barra do topo: uma pílula de vidro à direita
+.app-topbar {
+  position: fixed;
+  z-index: 40;
+  top: var(--otc-inset);
+  right: max(var(--otc-gutter), calc((100vw - 1840px) / 2 + var(--otc-gutter)));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+  > * { pointer-events: auto; }
+}
+.otc-toolbar {
+  @include otc-slab(var(--otc-glass-chrome), var(--otc-blur), var(--otc-r-pill));
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 60px;
+  padding: 7px;
+  > * { position: relative; z-index: 1; }
+}
+.otc-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 300px;
+  height: 46px;
+  padding: 0 10px 0 16px;
+  border: 0;
+  border-radius: var(--otc-r-pill);
+  background: var(--otc-fill);
+  color: var(--otc-text-2);
+  font: 500 15px/1 var(--otc-font);
+  text-align: left;
+  transition: background-color var(--otc-dur-fast) var(--otc-ease);
+  svg { width: 20px; height: 20px; flex: none; }
+  span { flex: 1 1 auto; }
+  &:hover { background: var(--otc-fill-2); }
+}
+.otc-tbtn {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 46px; height: 46px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--otc-text);
+  transition: background-color var(--otc-dur-fast) var(--otc-ease);
+  svg { width: 22px; height: 22px; stroke-width: 1.8; }
+  &:hover, &[aria-expanded="true"] { background: var(--otc-fill-hover); }
+  img.rounded-circle { width: 34px; height: 34px; object-fit: cover; }
+  .avatar-title { width: 34px; height: 34px; }
+}
+.otc-tbtn--lang { width: auto; padding: 0 12px; border-radius: var(--otc-r-pill); gap: 6px; display: inline-flex; align-items: center; font: 650 13px/1 var(--otc-font); }
+.otc-tbtn--lang img { width: 18px; height: 18px; border-radius: 50%; }
+.otc-dot {
+  position: absolute;
+  top: 10px; right: 10px;
+  min-width: 9px; height: 9px;
+  border-radius: 999px;
+  background: var(--otc-danger);
+  box-shadow: 0 0 0 2px var(--otc-avatar-ring);
+}
+// o sino conta: o número fica numa pílula pequena no canto
+#notif-badge.otc-dot { min-width: 18px; height: 18px; top: 4px; right: 4px; padding: 0 5px; font: 700 10.5px/18px var(--otc-font); color: #fff; text-align: center; }
+.otc-toolbar .dropdown-menu { margin-top: 12px !important; }
+
+// sol no escuro, lua no claro: o botão diz para onde vai
+.otc-ico-sun { display: none !important; }
+[data-bs-theme="dark"] .otc-ico-sun { display: block !important; }
+[data-bs-theme="dark"] .otc-ico-moon { display: none !important; }
+.dropdown-wrap { position: relative; }
+.otc-notif-menu { width: 400px; max-width: calc(100vw - 24px); }
+.notification-item {
+  position: relative;
+  border-radius: 16px;
+  padding: 10px 10px 10px 16px !important;
+  white-space: normal;
+  .flex-grow-1 { min-width: 0; overflow-wrap: anywhere; }
+  .notification-badge { display: flex !important; align-items: center !important; justify-content: center !important; svg { width: 10px !important; height: 10px !important; } }
+  &.notif-unread::before { content: ""; position: absolute; left: 5px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: var(--otc-accent-ink); }
+}
+.otc-notif-toast .flex-grow-1 { min-width: 0; overflow-wrap: anywhere; }
+.otc-notif-toast .notification-badge { display: flex !important; align-items: center !important; justify-content: center !important; svg { width: 10px !important; height: 10px !important; } }
+
+// botão do menu (gaveta) — pílula de vidro própria, à esquerda da barra
+.otc-menu-btn { @include otc-slab(var(--otc-glass-chrome), var(--otc-blur), 50%); width: 60px; height: 60px; padding: 0; display: inline-grid; place-items: center; justify-content: center; align-content: center; color: var(--otc-text); border: 0; svg { position: relative; z-index: 1; width: 22px; height: 22px; } }
+
+@media (max-width: 991.98px) {
+  .otc-search { width: 46px; padding: 0; justify-content: center; span, kbd { display: none; } }
+}
+@media (max-width: 575.98px) {
+  .app-topbar { left: var(--otc-gutter); right: var(--otc-gutter); justify-content: space-between; }
+  .otc-toolbar { height: 52px; padding: 4px; gap: 2px; }
+  .otc-tbtn { width: 42px; height: 42px; }
+  .otc-tbtn--lang, #otc-appearance-btn { display: none; }
+}
+
+// 5d. Cabeçalho da página: título grande à esquerda, dividindo a faixa
+// com a barra do topo (que fica à direita, fixa).
+.page-title-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start !important;
+  justify-content: center;
+  gap: 8px;
+  min-height: 60px;
+  margin: 0 0 22px;
+  padding: 2px calc(var(--otc-toolbar-w, 520px) + 16px) 0 4px;
+  background: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  > .flex-grow-1 { flex: none !important; }
+  > .text-end { text-align: left !important; }
+  h4, h5, .page-title, .fs-xl {
+    margin: 0;
+    font-family: var(--otc-font-display);
+    font-size: clamp(30px, 1.4vw + 16px, 46px) !important;
+    font-weight: 700 !important;
+    line-height: 1.04;
+    letter-spacing: -.03em;
+    color: var(--otc-text);
+  }
+  .breadcrumb {
+    --ins-breadcrumb-divider-color: var(--otc-text-3);
+    --ins-breadcrumb-item-active-color: var(--otc-text-2);
+    --ins-breadcrumb-item-padding-x: .45rem;
+    margin: 0;
+    padding: 0;
+    font: 500 14px/1.45 var(--otc-font);
+    a { color: var(--otc-text-3); text-decoration: none; &:hover { color: var(--otc-text); } }
+  }
+}
+@media (max-width: 991.98px) {
+  .page-title-head { padding-right: 0; padding-top: 74px; }
+}
+// O ícone do título é um LADRILHO de aplicativo (gradiente do destaque, glifo
+// branco), centrado na altura do título. Vale para os dois desenhos que as
+// telas usam: o `.nd-product-icon` do New Deals e o `<i class="ti">` solto
+// dentro do <h4> (recompras, Intrag…), cujo tamanho/cor inline o tema anula.
+.page-title-head [class*="-product-icon"],
+.page-title-head :is(h4, h5) > i.ti:first-child {
+  display: inline-grid !important;
+  place-items: center;
+  flex: none;
+  width: 48px; height: 48px;
+  border-radius: 30%;
+  background: linear-gradient(150deg, color-mix(in srgb, var(--otc-accent) 60%, #fff), var(--otc-accent)) !important;
+  color: #fff !important;
+  font-size: 24px !important;
+  line-height: 1 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .4), 0 8px 18px -8px var(--otc-accent);
+  margin-right: .1em;
+  > i, > svg { font-size: 24px !important; width: 24px; height: 24px; color: #fff !important; line-height: 1; }
+}
+.page-title-head :is(h4, h5):has(> i.ti:first-child) { display: flex !important; align-items: center !important; gap: 14px !important; }
+.page-title-head:has([class*="-product-icon"]) > .d-flex:first-child { align-items: center !important; gap: 14px !important; }
+
+// as páginas de New Deals põem ícone e título lado a lado
+.page-title-head.d-flex:not(:has(> .flex-grow-1)) { flex-direction: row; align-items: center !important; flex-wrap: wrap; }
+
+// O resto do cabeçalho do Pane: subtítulo a 8px do título e, abaixo, a FAIXA
+// com os ladrilhos de número à esquerda e as ações da página à direita,
+// alinhados pela base. Qualquer página pode usar (o Dashboard é o primeiro).
+.otc-page-sub { margin: 8px 0 0; font: 500 17px/1.45 var(--otc-font); color: var(--otc-text-2); }
+.otc-page-bar {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px;
+  margin: -6px 0 var(--otc-gap);
+}
+.otc-page-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-left: auto; }
+.otc-stats { display: flex; flex-wrap: wrap; gap: 10px; }
+.otc-stat {
+  @include otc-tile;
+  // cada ladrilho tem a SUA cor (`style="--hue:var(--otc-blue)"`; sem ela, o
+  // destaque): barra de 3px à esquerda — a mesma do card do New Deals — e uma
+  // tinta leve da cor no canto
+  --hue: var(--otc-accent-ink);
+  position: relative;
+  display: flex; flex-direction: column; gap: 2px;
+  min-width: 128px;
+  padding: 10px 18px 10px 16px;
+  border-left: 3px solid var(--hue) !important;
+  background-image: linear-gradient(135deg, color-mix(in srgb, var(--hue) 14%, transparent), transparent 72%);
+  cursor: default;
+  transition: translate 320ms var(--otc-ease-out), box-shadow 320ms var(--otc-ease-out), background-color var(--otc-dur-fast) var(--otc-ease);
+  .otc-stat__value { transition: color var(--otc-dur-base) var(--otc-ease); }
+  .otc-stat__label { transition: color var(--otc-dur-base) var(--otc-ease); }
+  // brilho que atravessa o ladrilho no hover
+  &::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, .28) 48%, transparent 66%) no-repeat;
+    background-size: 250% 100%; background-position: 130% 0;
+    opacity: 0;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      translate: 0 -3px;
+      background-color: color-mix(in srgb, var(--hue) 10%, var(--otc-glass));
+      box-shadow: var(--otc-shadow), var(--otc-inner-hl), 0 16px 30px -16px var(--hue);
+      .otc-stat__value { color: var(--hue); }
+      .otc-stat__label { color: var(--otc-text); }
+      &::after { opacity: 1; background-position: -30% 0; transition: background-position 700ms var(--otc-ease-out), opacity 120ms; }
+    }
+  }
+}
+@media (prefers-reduced-motion: reduce) { .otc-stat:hover { translate: none; } .otc-stat::after { display: none; } }
+.otc-stat__label { font: 560 12.5px/1.45 var(--otc-font); color: var(--otc-text-2); white-space: nowrap; }
+.otc-stat__value { font: 900 23px/1.1 var(--otc-font-display); letter-spacing: -.02em; color: var(--otc-text); font-variant-numeric: tabular-nums; }
+.otc-stat__suffix { font: 600 14px/1.1 var(--otc-font); color: var(--otc-text-2); }
+// movimento dos ladrilhos: entram como gota subindo só 14px (o Pane), e o
+// valor que MUDA pisca no destaque por 1s — número e anel (otc.js §9b)
+@keyframes otc-drop-in-tile {
+  from { clip-path: inset(36% 30% round 30px); translate: 0 14px; }
+  60%  { clip-path: inset(-8% -8% round 40px); }
+  to   { clip-path: inset(-40px round 60px); translate: 0 0; }
+}
+@keyframes otc-stat-flash { from { color: var(--otc-accent-ink); } to { color: var(--otc-text); } }
+@keyframes otc-stat-ring {
+  from { box-shadow: var(--otc-shadow), var(--otc-inner-hl), 0 0 0 2px color-mix(in srgb, var(--otc-accent-ink) 60%, transparent), 0 10px 26px -12px var(--otc-accent-ink); }
+  to   { box-shadow: var(--otc-shadow), var(--otc-inner-hl), 0 0 0 2px transparent, 0 10px 26px -12px transparent; }
+}
+.otc-stat.otc-enter { animation-name: otc-drop-in-tile; }
+.otc-stat.is-flash { animation: otc-stat-ring 1s var(--otc-ease) both; }
+.otc-stat.is-flash .otc-stat__value { animation: otc-stat-flash 1s var(--otc-ease) both; }
+
+.footer {
+  margin-top: 32px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--otc-text-3);
+  font: 500 12.5px/1.45 var(--otc-font);
+}
+
+// 5e. Ilha: os toasts do sino aparecem como a cápsula PRETA abaixo da barra
+#otc-toast-container {
+  top: calc(var(--otc-inset) + 72px) !important;
+  right: max(var(--otc-gutter), calc((100vw - 1840px) / 2 + var(--otc-gutter))) !important;
+  padding: 0 !important;
+  z-index: 1095;
+}
+.otc-notif-toast, .toast.otc-island {
+  --ins-toast-bg: #000;
+  --ins-toast-color: #fff;
+  --ins-toast-border-color: transparent;
+  --ins-toast-border-radius: 31px;
+  --ins-toast-box-shadow: 0 18px 40px -16px rgba(0, 0, 0, .55);
+  width: 384px;
+  max-width: calc(100vw - 2rem);
+  color: #fff;
+  background: #000;
+  border-radius: 31px;
+  .toast-body { padding: 12px 18px; }
+  .text-muted, .text-body, .fs-xs { color: rgba(255, 255, 255, .72) !important; }
+  .fw-medium.text-body { color: #fff !important; }
+  .btn-close { filter: invert(1) grayscale(1) brightness(2); opacity: .6; }
+  &.showing, &.show { animation: otc-island-in 520ms var(--otc-ease-out) both; }
+  &.hide { display: none; }
+}
+@keyframes otc-island-in {
+  from { opacity: .1; translate: 0 -12px; clip-path: inset(0 0 60% 70% round 19px); }
+  to   { opacity: 1; translate: 0 0; clip-path: inset(0 round 31px); }
+}
+
+// 5f. Aparência (gaveta à direita) e paleta de comandos (⌘K)
+.offcanvas {
+  --ins-offcanvas-width: 440px;
+  --ins-offcanvas-bg: var(--otc-glass-thick);
+  --ins-offcanvas-border-width: 0;
+  --ins-offcanvas-color: var(--otc-text);
+}
+.offcanvas.offcanvas-end, .offcanvas.offcanvas-start {
+  @include otc-slab(var(--otc-glass-thick), var(--otc-blur-thick), var(--otc-r-shell));
+  position: fixed;                                     // o mixin põe relative
+  top: var(--otc-inset);
+  bottom: var(--otc-inset);
+  height: auto;
+}
+.offcanvas.offcanvas-end { right: var(--otc-inset); }
+.offcanvas.offcanvas-start { left: var(--otc-inset); }
+.offcanvas > * { position: relative; z-index: 1; }
+.offcanvas.showing, .offcanvas.show:not(.hiding) { animation: otc-drawer-in 450ms var(--otc-ease-out) backwards; transform: none; }
+.offcanvas.hiding { animation: otc-drawer-out 220ms var(--otc-ease-in) forwards; transform: none; }
+.offcanvas-backdrop { background: var(--otc-scrim); &.show { opacity: 1; } }
+.offcanvas-header { padding: 22px 22px 8px; }
+.offcanvas-title { font: 700 22px/1.15 var(--otc-font-display); letter-spacing: -.02em; }
+.offcanvas-body { padding: 8px 22px 22px; }
+
+.otc-set-group { margin-bottom: 22px; }
+.otc-set-group__title { font: 650 12px/1 var(--otc-font); letter-spacing: .06em; text-transform: uppercase; color: var(--otc-text-3); margin: 0 0 10px; }
+.otc-set-cell {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 60px;
+  border-bottom: 1px solid var(--otc-sep);
+  &:last-child { border-bottom: 0; }
+  .t { font: 580 15px/1.3 var(--otc-font); }
+  .d { font: 400 13px/1.4 var(--otc-font); color: var(--otc-text-2); }
+}
+.otc-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.otc-swatch {
+  position: relative;
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  border: 0; background: transparent; padding: 0;
+  &::before {
+    content: "";
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--sw);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .32), 0 6px 12px -6px var(--sw);
+    outline: 2px solid transparent;
+    outline-offset: 3px;
+    transition: outline-color 250ms var(--otc-ease);
+  }
+  &::after { content: ""; position: absolute; width: 6px; height: 6px; border-radius: 50%; background: #fff; transition: all 250ms var(--otc-spring); }
+  &.is-on::before { outline-color: var(--sw); }
+  &.is-on::after { width: 12px; height: 7px; border-radius: 0; background: none; border: 2px solid #fff; border-top: 0; border-right: 0; rotate: -45deg; translate: 0 -2px; }
+}
+.otc-walls { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; }
+.otc-wall {
+  border: 0; background: transparent; padding: 0; text-align: center;
+  color: var(--otc-text-2); font: 600 13px/1.3 var(--otc-font);
+  .art {
+    display: block;
+    height: 78px;
+    margin-bottom: 6px;
+    border-radius: 16px;
+    background: var(--art);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .10), var(--otc-shadow);
+    outline: 2px solid transparent;
+    outline-offset: 3px;
+    transition: outline-color 250ms var(--otc-ease);
+  }
+  &.is-on .art { outline-color: var(--otc-accent-ink); }
+  &.is-on { color: var(--otc-text); }
+}
+
+// paleta de comandos: duas placas empilhadas (barra + lista)
+.otc-palette {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: none;
+  &.is-open { display: block; }
+  .otc-palette__scrim { position: absolute; inset: 0; background: var(--otc-scrim); animation: otc-fade-in 220ms var(--otc-ease) both; }
+  .otc-palette__box { position: relative; width: min(680px, calc(100vw - 32px)); margin: 108px auto 0; }
+  .otc-palette__bar {
+    @include otc-slab(var(--otc-glass-thick), var(--otc-blur-thick), var(--otc-r-pill));
+    display: flex; align-items: center; gap: 12px;
+    height: 64px; padding: 0 18px 0 20px;
+    animation: otc-pop-in 420ms var(--otc-ease-out) both;
+    > * { position: relative; z-index: 1; }
+    svg { width: 22px; height: 22px; color: var(--otc-text-2); flex: none; }
+    input { flex: 1 1 auto; border: 0; background: transparent; outline: 0; color: var(--otc-text); font: 500 21px/1.45 var(--otc-font); letter-spacing: -.01em; }
+  }
+  .otc-palette__list {
+    @include otc-slab(var(--otc-glass-thick), var(--otc-blur-thick), var(--otc-r-panel));
+    margin-top: 8px; padding: 8px;
+    max-height: min(60vh, 520px); overflow-y: auto;
+    animation: otc-pop-in 420ms 30ms var(--otc-ease-out) both;
+    > * { position: relative; z-index: 1; }
+  }
+  .otc-palette__group { padding: 10px 12px 6px; font: 650 12px/1 var(--otc-font); letter-spacing: .06em; text-transform: uppercase; color: var(--otc-text-3); }
+  .otc-palette__item {
+    display: flex; align-items: center; gap: 12px;
+    min-height: 52px; padding: 8px 12px; border-radius: 16px;
+    color: var(--otc-text); text-decoration: none;
+    .ico { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 30%; background: var(--otc-fill); color: var(--otc-accent-ink); flex: none; svg { width: 18px; height: 18px; } }
+    .t { font: 600 15px/1.2 var(--otc-font); }
+    .s { font: 400 12.5px/1.3 var(--otc-font); color: var(--otc-text-2); }
+    &.is-active { background: var(--otc-accent); color: #fff; .s { color: rgba(255, 255, 255, .78); } .ico { background: rgba(255, 255, 255, .18); color: #fff; } }
+  }
+  .otc-palette__empty { padding: 18px 12px; color: var(--otc-text-2); font-size: 14px; }
+}
+
+// ── 6. Componentes ──────────────────────────────────────────────────────────
+// 6a. Botões. Cápsula, peso 600; o "afundar" do clique é do otc.js (gel).
+.btn {
+  --ins-btn-padding-x: 18px;
+  --ins-btn-padding-y: 0;
+  --ins-btn-font-size: 15px;
+  --ins-btn-font-weight: 600;
+  --ins-btn-line-height: 1.2;
+  --ins-btn-border-radius: var(--otc-r-pill);
+  --ins-btn-focus-box-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  letter-spacing: -.005em;
+  transition: background-color var(--otc-dur-fast) var(--otc-ease), color var(--otc-dur-fast) var(--otc-ease),
+    box-shadow var(--otc-dur-fast) var(--otc-ease), filter var(--otc-dur-fast) var(--otc-ease);
+  &:focus-visible { outline: 2px solid var(--otc-accent-ink); outline-offset: 2px; box-shadow: none; }
+  > i, > svg { font-size: 18px; width: 18px; height: 18px; flex: none; }
+  &:disabled, &.disabled { opacity: .5; filter: saturate(.6); }
+}
+.btn-sm, .btn-group-sm > .btn {
+  --ins-btn-padding-x: 14px;
+  --ins-btn-font-size: 14px;
+  min-height: 34px;
+  > i, > svg { font-size: 16px; width: 16px; height: 16px; }
+}
+.btn-xs { --ins-btn-padding-x: 10px; --ins-btn-font-size: 12.5px; min-height: 28px; }
+.btn-lg, .btn-group-lg > .btn { --ins-btn-padding-x: 22px; --ins-btn-font-size: 16px; min-height: 48px; }
+.btn.dropdown-toggle::after { border: 0; width: 14px; height: 14px; margin-left: 2px; vertical-align: middle; background: currentColor; opacity: .7;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.drop-arrow-none::after, .btn.drop-arrow-none::after { display: none !important; }
+
+// cores SEMÂNTICAS (o guarda prende: Confirm=success · Edit=info ·
+// Delete=danger · Send=primary · Cancel=secondary)
+.btn-primary   { @include otc-gel(var(--otc-accent)); }
+.btn-success   { @include otc-gel(#1f9d55); }
+.btn-info      { @include otc-gel(#0a8fc4); }
+.btn-danger    { @include otc-gel(#d92d3a); }
+.btn-warning   { @include otc-gel(#d98a00); }
+.btn-dark      { @include otc-gel(#1c1c22); }
+.btn-purple    { @include otc-gel(#7432e0); }
+.btn-teal      { @include otc-gel(#0e9897); }
+
+// vidro (secundário)
+.btn-secondary, .btn-light, .btn-default, .btn-outline-secondary, .btn-outline-light, .btn-glass {
+  --ins-btn-color: var(--otc-text);
+  --ins-btn-hover-color: var(--otc-text);
+  --ins-btn-active-color: var(--otc-text);
+  --ins-btn-bg: transparent;
+  --ins-btn-hover-bg: transparent;
+  --ins-btn-active-bg: var(--otc-fill-2);
+  --ins-btn-border-color: transparent;
+  --ins-btn-hover-border-color: transparent;
+  --ins-btn-active-border-color: transparent;
+  --ins-btn-disabled-color: var(--otc-text-2);
+  --ins-btn-disabled-bg: transparent;
+  --ins-btn-disabled-border-color: transparent;
+  --ins-gradient: var(--otc-glassbtn-bg);
+  color: var(--otc-text);
+  background-color: transparent;
+  background-image: var(--otc-glassbtn-bg);
+  border-color: transparent;
+  box-shadow: var(--otc-glassbtn-shadow);
+  &:hover { background-image: var(--otc-glassbtn-bg-hover); --ins-gradient: var(--otc-glassbtn-bg-hover); color: var(--otc-text); }
+}
+// contorno: o mesmo vidro com a cor na tinta do texto
+@each $name, $c in ("primary": var(--otc-accent-ink), "success": var(--otc-green), "info": #0a8fc4, "danger": var(--otc-danger), "warning": #c27c00, "dark": var(--otc-text)) {
+  .btn-outline-#{$name} {
+    --ins-btn-color: #{$c};
+    --ins-btn-hover-color: #{$c};
+    --ins-btn-active-color: #{$c};
+    --ins-btn-bg: transparent;
+    --ins-btn-hover-bg: color-mix(in srgb, #{$c} 12%, transparent);
+    --ins-btn-active-bg: color-mix(in srgb, #{$c} 18%, transparent);
+    --ins-btn-border-color: color-mix(in srgb, #{$c} 38%, transparent);
+    --ins-btn-hover-border-color: color-mix(in srgb, #{$c} 50%, transparent);
+    --ins-btn-active-border-color: color-mix(in srgb, #{$c} 50%, transparent);
+    --ins-btn-disabled-color: #{$c};
+    --ins-btn-disabled-border-color: color-mix(in srgb, #{$c} 30%, transparent);
+    --ins-gradient: none;
+  }
+}
+// suave (tinta 14%) e fantasma (só o texto)
+@each $name, $c in ("primary": var(--otc-accent-ink), "secondary": var(--otc-text-2), "success": var(--otc-green), "info": #0a8fc4, "danger": var(--otc-danger), "warning": #c27c00, "dark": var(--otc-text), "light": var(--otc-text-2), "purple": var(--otc-purple)) {
+  .btn-soft-#{$name} {
+    --ins-btn-color: #{$c};
+    --ins-btn-hover-color: #{$c};
+    --ins-btn-active-color: #{$c};
+    --ins-btn-bg: color-mix(in srgb, #{$c} 14%, transparent);
+    --ins-btn-hover-bg: color-mix(in srgb, #{$c} 22%, transparent);
+    --ins-btn-active-bg: color-mix(in srgb, #{$c} 26%, transparent);
+    --ins-btn-border-color: transparent;
+    --ins-btn-hover-border-color: transparent;
+    --ins-btn-active-border-color: transparent;
+    --ins-gradient: none;
+  }
+  .btn-ghost-#{$name} {
+    --ins-btn-color: #{$c};
+    --ins-btn-hover-color: #{$c};
+    --ins-btn-active-color: #{$c};
+    --ins-btn-bg: transparent;
+    --ins-btn-hover-bg: color-mix(in srgb, #{$c} 12%, transparent);
+    --ins-btn-active-bg: color-mix(in srgb, #{$c} 18%, transparent);
+    --ins-btn-border-color: transparent;
+    --ins-btn-hover-border-color: transparent;
+    --ins-btn-active-border-color: transparent;
+    --ins-gradient: none;
+  }
+}
+.btn-link {
+  --ins-btn-color: var(--otc-accent-ink);
+  --ins-btn-hover-color: var(--otc-accent-ink);
+  --ins-btn-hover-bg: var(--otc-accent-soft);
+  --ins-btn-active-color: var(--otc-accent-ink);
+  text-decoration: none;
+  &:hover { background: var(--otc-accent-soft); }
+}
+.btn-icon {
+  width: 40px; height: 40px; min-width: 40px; min-height: 40px;
+  padding: 0 !important;
+  border-radius: 50%;
+  &.btn-sm { width: 32px; height: 32px; min-width: 32px; min-height: 32px; }
+  &.btn-lg { width: 46px; height: 46px; min-width: 46px; }
+}
+.btn-close {
+  --ins-btn-close-opacity: .6;
+  --ins-btn-close-hover-opacity: 1;
+  --ins-btn-close-focus-shadow: none;
+  width: 32px; height: 32px; padding: 0;
+  border-radius: 50%;
+  background-size: 12px;
+  background-color: var(--otc-fill);
+  transition: background-color var(--otc-dur-fast) var(--otc-ease), opacity var(--otc-dur-fast) var(--otc-ease);
+  &:hover { background-color: var(--otc-fill-2); }
+}
+.btn-group, .btn-group-vertical { border-radius: var(--otc-r-pill); }
+.btn-group > .btn { border-radius: var(--otc-r-pill) !important; }
+.btn-group { gap: 4px; }
+
+// ícone de carregamento girando (Tabler `ti-loader*`/`.ti-spin`, 21 telas):
+// o `.ti` é inline e rotação em elemento inline é ignorada
+@keyframes otc-spin { to { rotate: 360deg; } }
+i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline-block; animation: otc-spin .8s linear infinite; }
+
+// "ao vivo": bolinha verde que pulsa + a hora da última leitura (telas que
+// se atualizam sozinhas); `.is-fail` quando a última leitura falhou
+.otc-live {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--otc-text-2); font-variant-numeric: tabular-nums;
+  > i { width: 8px; height: 8px; border-radius: 50%; background: var(--otc-green); box-shadow: 0 0 0 0 color-mix(in srgb, var(--otc-green) 55%, transparent); }
+  &.is-fail { color: var(--otc-danger); font-weight: 600; > i { background: var(--otc-danger); } }
+}
+@keyframes otc-live-pulse { 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: no-preference) { .otc-live > i { animation: otc-live-pulse 2.4s var(--otc-ease-out) infinite; } }
+// botão de ícone ocupado (Refresh em curso): o ícone gira
+.is-busy > i.ti { display: inline-block; animation: otc-spin .6s linear infinite; }
+
+// 6b. Botões de AÇÃO DE LINHA: o squircle padrão, para TODAS as tabelas.
+// Só a GEOMETRIA leva !important: o `display` vai SEM, senão venceria o
+// `.d-none` com que as telas escondem o botão que o status não oferece.
+// A cor fica no markup (Confirm ti-check/success · Edit ti-edit/info ·
+// Delete ti-trash/danger · Send ti-brand-telegram/primary · Save
+// ti-device-floppy/success · Cancel ti-x/secondary).
+table td .btn.rounded-circle,
+table td .btn.ops-row-act,
+table td .btn.sc-row-act,
+table td .btn.btn-act {
+    width: 32px !important; height: 32px !important;
+    min-width: 32px !important; max-width: 32px !important;
+    min-height: 32px !important; max-height: 32px !important;
+    padding: 0 !important; box-sizing: border-box !important;
+    border-radius: 10px !important; line-height: 1 !important;
+    flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+}
+table td .btn.rounded-circle > i,
+table td .btn.ops-row-act > i,
+table td .btn.sc-row-act > i,
+table td .btn.btn-act > i { font-size: 1rem !important; line-height: 1; }
+
+// as mesmas famílias fora da regra de tabela (cards, listas)
+.btn-row-edit, .btn-row-delete, .btn-row-confirm, .btn-row-send, .btn-row-approve,
+.acc-act-edit, .acc-act-send, .acc-act-del, .ops-row-del,
+.ar-confirm, .ar-edit, .ar-delete, .btn-rd-edit, .btn-rd-confirm, .btn-rd-delete {
+  width: 32px !important; height: 32px !important;
+  min-width: 32px !important; min-height: 32px !important;
+  padding: 0 !important;
+  border-radius: 10px !important;
+  display: inline-flex !important; align-items: center !important; justify-content: center !important;
+  line-height: 1;
+  > i { font-size: 1rem; }
+}
+// ...e o par com `.d-none` (0,2,0), que ganha dos dois lados (§497)
+.btn-row-edit.d-none, .btn-row-delete.d-none, .btn-row-confirm.d-none,
+.btn-row-send.d-none, .btn-row-approve.d-none,
+.acc-act-edit.d-none, .acc-act-send.d-none, .acc-act-del.d-none,
+.ops-row-del.d-none,
+.ar-confirm.d-none, .ar-edit.d-none, .ar-delete.d-none,
+.btn-rd-edit.d-none, .btn-rd-confirm.d-none, .btn-rd-delete.d-none {
+  display: none !important;
+}
+
+// 6c. SEND — o "Contrail". Cápsula de tinta escura com avião limão; no
+// clique o avião voa deixando um rastro e o verde vem atrás; "Sent" só
+// depois que o SERVIDOR confirmou (otc.js correlaciona o pedido). Erro:
+// o verde recua com um tremor, em vermelho.
+.btn-row-send, .acc-act-send, .btn-send, .otc-send {
+  --otc-send-ink: #14161b;
+  --otc-send-lime: #d4f000;
+  --otc-send-ok: #10b04a;
+  --otc-send-err: #e5484d;
+  --otc-fill-w: 0%;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: var(--otc-send-lime) !important;
+  background: var(--otc-send-ink) !important;
+  border-color: transparent !important;
+  text-shadow: none !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .10), 0 8px 18px -10px rgba(0, 0, 0, .6) !important;
+  filter: none !important;
+  font-weight: 700;
+  letter-spacing: .08em;
+  > i, > svg { transition: rotate 220ms var(--otc-ease-out), translate 220ms var(--otc-ease-out), opacity 160ms ease; }
+  > i.ti-brand-telegram, > i.ti-send { rotate: 0deg; }
+  &:hover > i.ti-brand-telegram, &:hover > i.ti-send, &.is-flying > i { rotate: 45deg; }
+  .otc-send__fill {
+    position: absolute; inset: 0; z-index: -1;
+    border-radius: inherit;
+    background: var(--otc-send-ok);
+    clip-path: inset(0 calc(100% - var(--otc-fill-w)) 0 0 round 999px);
+    pointer-events: none;
+  }
+  .otc-send__trail {
+    position: absolute; left: 30%; top: 50%; z-index: -1;
+    width: 0; height: 1.5px; translate: 0 -50%;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--otc-send-lime) 75%, transparent));
+    opacity: 0; pointer-events: none;
+  }
+  .otc-send__done {
+    position: absolute; inset: 0; z-index: 1;
+    display: grid; place-items: center;
+    color: #08240f; opacity: 0; filter: blur(4px);
+    font-weight: 750; letter-spacing: .1em; text-transform: uppercase; font-size: .78em;
+    transition: opacity .22s ease .05s, filter .22s ease .05s;
+    pointer-events: none;
+    svg { width: 16px; height: 16px; stroke-width: 2.6; }
+  }
+  .otc-send__label { transition: opacity .16s ease, filter .16s ease, translate .16s ease; }
+  &.is-flying {
+    pointer-events: none;
+    animation: otc-send-charge .8s cubic-bezier(.45, 0, .3, 1) .3s forwards, otc-send-wait 1.2s ease-in-out 1.1s infinite alternate;
+    .otc-send__label { opacity: 0; filter: blur(3px); translate: 6px 0; }
+    > i, > svg:not(.otc-send__ok) { animation: otc-send-fly .62s var(--otc-ease-in) .14s forwards; }
+    .otc-send__trail { animation: otc-send-trail .62s var(--otc-ease-in) .14s forwards; }
+  }
+  &.is-sent {
+    animation: none;
+    --otc-fill-w: 100%;
+    transition: --otc-fill-w .35s var(--otc-ease-out);
+    > i, > svg:not(.otc-send__ok), .otc-send__label { opacity: 0; }
+    .otc-send__done { opacity: 1; filter: none; }
+  }
+  &.is-failed {
+    animation: otc-shake .38s var(--otc-ease-out);
+    .otc-send__fill { background: var(--otc-send-err); }
+  }
+  &.is-resetting { --otc-fill-w: 0%; transition: --otc-fill-w .45s var(--otc-ease); }
+}
+// a versão com rótulo (toolbar, modal): pílula
+.btn-send, .otc-send, .btn:not(.btn-row-send):not(.acc-act-send).btn-send { min-width: 120px; text-transform: uppercase; font-size: 12.5px; }
+@property --otc-fill-w { syntax: "<percentage>"; inherits: true; initial-value: 0%; }
+@keyframes otc-send-fly { 0% { translate: 0 0; } 12% { translate: -4px 0; } 85% { opacity: 1; } 100% { translate: 150px 0; opacity: 0; } }
+@keyframes otc-send-trail { 0% { width: 0; opacity: 0; } 30% { opacity: 1; } 100% { width: 70%; opacity: 0; } }
+@keyframes otc-send-charge { from { --otc-fill-w: 0%; } to { --otc-fill-w: 82%; } }
+@keyframes otc-send-wait { from { --otc-fill-w: 82%; } to { --otc-fill-w: 90%; } }
+
+// 6d. Badges, chips e status. Pílula com tinta de 16% e o texto cheio; os
+// `text-bg-*` das telas de status ficam CHEIOS (são o veredito da linha).
+.badge {
+  --ins-badge-padding-x: .62em;
+  --ins-badge-padding-y: .38em;
+  --ins-badge-font-size: 12px;
+  --ins-badge-font-weight: 650;
+  --ins-badge-border-radius: var(--otc-r-pill);
+  letter-spacing: .005em;
+}
+.badge.bg-gradient, .badge[class*="text-bg-"] { background-image: linear-gradient(rgba(255, 255, 255, .24), rgba(255, 255, 255, 0)) !important; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25); }
+.badge.badge-sent { background-color: #0e8fa8 !important; color: #fff !important; }
+.text-bg-warning { color: #3a2600 !important; }
+@each $name, $c in ("primary": var(--otc-accent-ink), "secondary": var(--otc-text-2), "success": var(--otc-green), "info": #0a8fc4, "danger": var(--otc-danger), "warning": #b97800, "dark": var(--otc-text), "light": var(--otc-text-2), "purple": var(--otc-purple), "pink": var(--otc-pink), "teal": var(--otc-teal), "orange": var(--otc-orange)) {
+  .badge-soft-#{$name}, .bg-#{$name}-subtle { background-color: color-mix(in srgb, #{$c} 16%, transparent) !important; }
+  .badge-soft-#{$name} { color: #{$c} !important; }
+  .badge-outline-#{$name} { color: #{$c} !important; border: 1px solid color-mix(in srgb, #{$c} 45%, transparent); background: transparent; }
+}
+.text-primary { color: var(--otc-accent-ink) !important; }
+// `bg-light` era cor FIXA do Bootstrap (#f3f5fa nos dois temas): o campo
+// automático do modal saía branco com texto apagado no escuro. Vira o
+// preenchimento do tema (33 telas usam)
+.bg-light, .bg-light-subtle { background-color: var(--otc-fill) !important; }
+.form-control.bg-light, .form-select.bg-light { color: var(--otc-text-2); }
+// texto semântico na paleta do tema (as telas e os scripts usam as classes do
+// Bootstrap; nunca cor fixa no `style=`)
+.text-success { color: var(--otc-green) !important; }
+.text-danger  { color: var(--otc-danger) !important; }
+.text-warning { color: color-mix(in srgb, var(--otc-yellow) 75%, var(--otc-text)) !important; }
+.text-info    { color: var(--otc-teal) !important; }
+.text-secondary { color: var(--otc-text-2) !important; }
+.text-body-secondary { color: var(--otc-text-2) !important; }
+.text-body-tertiary { color: var(--otc-text-3) !important; }
+
+// faixa informativa (o banner do preview, notas de cálculo): fundo de
+// preenchimento, sem borda, texto secundário
+.otc-banner {
+  padding: 8px 12px;
+  border-radius: var(--otc-r-md);
+  background: var(--otc-fill);
+  color: var(--otc-text-2);
+  font-size: 13px; line-height: 1.7;
+  b, strong { color: var(--otc-text); }
+}
+// mini-tabela dos previews (linhas de verificação, arquivo cru…): compacta,
+// zebrada, cabeçalho fixo em vidro
+.otc-mini-table-wrap { margin-top: 14px; max-height: 42vh; overflow: auto; border-radius: var(--otc-r-md); background: var(--otc-fill-hover); }
+.otc-mini-table {
+  width: 100%; border-collapse: collapse; font-size: 12.5px;
+  th { position: sticky; top: 0; padding: 6px 10px; background: var(--otc-thead-bg); color: var(--otc-text-2); font-weight: 650; text-align: left; -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+  td { padding: 3px 10px; border: 0; white-space: pre; }
+  tbody tr:nth-child(odd) { background: var(--otc-fill); }
+  .font-monospace, td.font-monospace { font-family: var(--bs-font-monospace); font-size: 12px; }
+}
+.bg-primary { background-color: var(--otc-accent) !important; }
+.border-primary { border-color: var(--otc-accent) !important; }
+.badge-label { border-radius: var(--otc-r-xs); }
+.badge-circle { border-radius: 50%; }
+.otc-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 24px; padding: 0 10px 0 8px;
+  border-radius: var(--otc-r-pill);
+  background: color-mix(in srgb, var(--chip, var(--otc-accent-ink)) 16%, transparent);
+  font: 600 12px/1 var(--otc-font);
+  &::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--chip, var(--otc-accent-ink)); }
+}
+// contador ("14", "2/3"): pílula neutra, número tabular
+.otc-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 22px; padding: 0 8px;
+  border-radius: var(--otc-r-pill);
+  background: var(--otc-fill); color: var(--otc-text-2);
+  font: 650 12.5px/1 var(--otc-font); font-variant-numeric: tabular-nums;
+}
+// legenda de anel/medidor: barra de 3px no matiz (`--hue`), rótulo e número
+.otc-legend { display: flex; flex-direction: column; gap: 14px; }
+.otc-legend__row { display: flex; flex-direction: column; gap: 2px; padding-left: 12px; border-left: 3px solid var(--hue, var(--otc-accent-ink)); }
+.otc-legend__label { font: 600 13px/1.3 var(--otc-font); color: var(--otc-text-2); }
+.otc-legend__value { font: 700 22px/1.1 var(--otc-font-display); letter-spacing: -.02em; color: var(--otc-text); font-variant-numeric: tabular-nums; }
+
+// 6e. Cards: a placa de vidro. Não sobem no hover — só o brilho anda.
+.card {
+  --ins-card-bg: transparent;
+  --ins-card-border-width: 0;
+  --ins-card-border-radius: var(--otc-r-xl);
+  --ins-card-inner-border-radius: var(--otc-r-xl);
+  --ins-card-spacer-y: var(--otc-pad);
+  --ins-card-spacer-x: var(--otc-pad);
+  --ins-card-cap-bg: transparent;
+  --ins-card-cap-padding-y: 16px;
+  --ins-card-cap-padding-x: var(--otc-pad);
+  --ins-card-color: var(--otc-text);
+  --ins-card-title-color: var(--otc-text);
+  @include otc-slab;
+  margin-bottom: var(--otc-gap);
+  > * { position: relative; z-index: 1; }
+}
+.card-header, .card-footer { border: 0; background: transparent; }
+// o cabeçalho do card é FLEX centrado (como no tema antigo): 14 telas montam
+// busca à esquerda e filtros à direita com `justify-content-between` nele
+.card-header { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding-bottom: 4px; }
+// a barra de filtros do Pane: campos em pílula
+.card-header :is(.form-select, .form-control):not(textarea) { border-radius: var(--otc-r-pill); }
+.card-footer { padding-top: 4px; }
+.card-title, .card-header .header-title, .card-header h4, .card-header h5 { font: 650 17px/1.25 var(--otc-font); letter-spacing: -.01em; margin: 0; color: var(--otc-text); }
+.card-subtitle { font: 400 13.5px/1.45 var(--otc-font); color: var(--otc-text-2); }
+.card-h-100 { height: calc(100% - var(--otc-gap)); }
+.card .card { @include otc-tile(var(--otc-fill), var(--otc-r-inner)); box-shadow: none; &::before, &::after { display: none; } }
+.border-dashed { border-style: dashed !important; border-color: var(--otc-sep) !important; }
+.card-bg { background: var(--otc-glass) !important; }
+// o card de trabalho das telas de New Deals / Unwinds / Intrag leva a barra de
+// 3px à esquerda na cor do produto (a mesa gosta dela): azul no termo de
+// moeda/commodities, roxo nas opções
+.nd-deal-card { border-left: 3px solid var(--nd-accent, var(--otc-blue)) !important; }
+.nd-deal-card--opt { --nd-accent: var(--otc-purple); }
+
+// 6f. Formulários
+.form-control, .form-select {
+  --ins-border-color: transparent;
+  min-height: 42px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: var(--otc-r-md);
+  background-color: var(--otc-fill);
+  color: var(--otc-text);
+  font-size: 15px;
+  box-shadow: none;
+  transition: background-color var(--otc-dur-fast) var(--otc-ease), box-shadow var(--otc-dur-fast) var(--otc-ease);
+  &::placeholder { color: var(--otc-text-3); }
+  &:hover:not(:disabled):not([readonly]) { background-color: var(--otc-fill-2); }
+  &:focus { background-color: var(--otc-fill-2); color: var(--otc-text); box-shadow: 0 0 0 2.5px var(--otc-accent-ink); border-color: transparent; outline: 0; }
+  &:disabled, &[readonly] { background-color: var(--otc-fill-hover); color: var(--otc-text-2); opacity: 1; }
+  &.is-invalid { box-shadow: 0 0 0 2px var(--otc-danger); }
+  &.is-valid { box-shadow: 0 0 0 2px var(--otc-green); }
+}
+.form-control-sm, .form-select-sm { min-height: 34px; padding: 6px 12px; font-size: 13.5px; border-radius: var(--otc-r-sm); }
+.form-control-lg, .form-select-lg { min-height: 48px; font-size: 16px; }
+.form-control.rounded-pill { padding-left: 18px; }
+textarea.form-control { min-height: 84px; }
+.form-select {
+  padding-right: 36px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--otc-text-2) 50%),
+    linear-gradient(135deg, var(--otc-text-2) 50%, transparent 50%);
+  background-position: calc(100% - 19px) 52%, calc(100% - 14px) 52%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.form-label, .col-form-label { font: 600 12.5px/1.45 var(--otc-font); color: var(--otc-text-2); margin-bottom: 6px; }
+.form-text { color: var(--otc-text-3); font-size: 12.5px; }
+.input-group {
+  > .form-control, > .form-select { border-radius: var(--otc-r-md); }
+  > .input-group-text { border: 0; background: var(--otc-fill-2); color: var(--otc-text-2); border-radius: var(--otc-r-md); }
+  gap: 4px;
+  > :not(:first-child):not(.dropdown-menu):not(.valid-tooltip):not(.valid-feedback):not(.invalid-tooltip):not(.invalid-feedback) { margin-left: 0; border-top-left-radius: var(--otc-r-md); border-bottom-left-radius: var(--otc-r-md); }
+  > :not(:last-child):not(.dropdown-toggle):not(.dropdown-menu):not(.form-floating) { border-top-right-radius: var(--otc-r-md); border-bottom-right-radius: var(--otc-r-md); }
+}
+// checkbox: círculo; a marca entra com mola
+.form-check-input {
+  width: 20px; height: 20px;
+  margin-top: .08em;
+  border: 1.5px solid var(--otc-text-3);
+  background-color: transparent;
+  transition: background-color var(--otc-dur-fast) var(--otc-ease), border-color var(--otc-dur-fast) var(--otc-ease), background-position var(--otc-dur-spring) var(--otc-spring);
+  &:focus { box-shadow: 0 0 0 3px var(--otc-accent-soft); border-color: var(--otc-accent-ink); }
+  &:checked { background-color: var(--otc-accent); border-color: var(--otc-accent); }
+  &[type="checkbox"] { border-radius: 7px; }
+  &[type="checkbox"]:checked { animation: otc-check 350ms var(--otc-spring); }
+}
+@keyframes otc-check { 0% { scale: .8; } 60% { scale: 1.12; } 100% { scale: 1; } }
+.form-check-input-light { background-color: var(--otc-fill); }
+// interruptor estilo iOS
+.form-switch .form-check-input {
+  width: 44px; height: 26px;
+  margin-top: 0;
+  border: 0;
+  border-radius: 999px;
+  background-color: var(--otc-fill-2);
+  background-image: radial-gradient(circle at center, #fff 0 9.5px, transparent 10.5px);
+  background-position: -9px center;
+  background-size: 44px 26px;
+  box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .04);
+  transition: background-color 250ms var(--otc-ease), background-position var(--otc-dur-spring) var(--otc-spring);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .06));
+  &:checked { background-color: var(--otc-switch-on); background-position: 9px center; background-image: radial-gradient(circle at center, #fff 0 9.5px, transparent 10.5px); }
+  &:focus { background-image: radial-gradient(circle at center, #fff 0 9.5px, transparent 10.5px); }
+}
+.form-switch { padding-left: 3.4em; .form-check-input { margin-left: -3.4em; } }
+.form-range::-webkit-slider-thumb { background: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, .2); }
+.form-range::-webkit-slider-runnable-track { background: var(--otc-fill-2); }
+.form-floating > label { color: var(--otc-text-3); }
+
+// AUTOCOMPLETE de campo (CLAUDE.md §7: nunca `<datalist>`): a lista abaixo do
+// campo, mesma largura, ~220px de altura, item por `mousedown`. Placa sólida
+// (o campo pode estar num modal de vidro, e desfoque dentro de desfoque não
+// amostra nada).
+.dt-ac-wrap { position: relative; width: 100%; }
+.dt-ac-list, .ar-ac-drop {
+  display: none;
+  position: fixed;
+  z-index: 10000;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: var(--otc-r-md);
+  background: var(--otc-menu-bg);
+  box-shadow: var(--otc-depth);
+}
+// a do Add Row pende do PRÓPRIO campo (o pai é `position: relative`)
+.ar-ac-drop { position: absolute; top: calc(100% + 4px); left: 0; width: 100%; z-index: 9200; }
+.dt-ac-item, .ar-ac-drop > * {
+  padding: 6px 10px;
+  border-radius: var(--otc-r-sm);
+  font-size: 13px; line-height: 1.4;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  cursor: pointer;
+  &:hover, &.dt-ac-active, &.active { background: var(--otc-accent); color: #fff; }
+}
+// valor que a linha mostra mas não se edita (no modal de Edit)
+.dt-cell-readonly {
+  display: block;
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: var(--otc-r-md);
+  background: var(--otc-fill);
+  color: var(--otc-text-2);
+  font-size: 13px; line-height: 1.5;
+}
+
+// CAMPO DE DATA DE REFERÊNCIA — um desenho só. Cada tela tinha o seu
+// (`*-datewrap` + `*-cal-btn`, 13 telas, `.date-wrap` nas recons) com fundo e
+// borda próprios; vale o campo do tema: fundo translúcido, sem borda, anel de
+// foco no destaque. !important porque a regra da página carrega antes e tem
+// id (`#dash-page .live-datewrap input`).
+:is([class$="-datewrap"], [class*="-datewrap "], .date-wrap) input:is([type="text"], :not([type])),
+input.otc-datefield, input#apiRefDate {
+  min-height: 38px;
+  border: 0 !important;
+  border-radius: var(--otc-r-md) !important;
+  background-color: var(--otc-fill) !important;
+  color: var(--otc-text) !important;
+  font: 600 14px/1.2 var(--otc-font) !important;
+  font-variant-numeric: tabular-nums;
+  box-shadow: none !important;
+  cursor: pointer;
+  transition: background-color var(--otc-dur-fast) var(--otc-ease), box-shadow var(--otc-dur-fast) var(--otc-ease);
+  &::placeholder { color: var(--otc-text-3) !important; font-weight: 500; }
+  &:hover { background-color: var(--otc-fill-2) !important; }
+  &:focus, &.active { background-color: var(--otc-fill-2) !important; box-shadow: 0 0 0 2.5px var(--otc-accent-ink) !important; outline: 0 !important; }
+}
+:is([class$="-datewrap"], [class*="-datewrap "]) {
+  position: relative;
+  width: 168px;
+  max-width: 100%;
+  input:is([type="text"], :not([type])) { width: 100%; padding: 0 38px 0 14px; }
+  [class*="-cal-btn"] {
+    position: absolute; top: 0; right: 0; bottom: 0;
+    width: 38px;
+    display: inline-grid; place-items: center;
+    color: var(--otc-text-2) !important;
+    cursor: pointer;
+    transition: color var(--otc-dur-fast) var(--otc-ease);
+    &:hover { color: var(--otc-accent-ink) !important; }
+    i { font-size: 17px; line-height: 1; }
+  }
+}
+
+// campo com ÍCONE DENTRO (`.app-search`, 9 telas: busca, filtros de Role/
+// Status…). O ícone fica por cima do campo, centrado na altura, à esquerda; o
+// texto do campo começa depois dele. Sem isto o ícone cai para baixo do campo.
+.app-search {
+  position: relative;
+  display: inline-block;
+  .form-control, .form-select { padding-left: 42px !important; border-radius: var(--otc-r-pill); }
+  // o ícone tem posição e tamanho EXPLÍCITOS: 14px da borda, 18px de lado,
+  // centrado na altura; o texto começa 10px depois dele (42px)
+  .app-search-icon {
+    position: absolute;
+    z-index: 5;
+    top: 50%;
+    left: 14px;
+    translate: 0 -50%;
+    width: 18px !important;
+    height: 18px !important;
+    margin: 0 !important;
+    pointer-events: none;
+    color: var(--otc-text-3) !important;
+    stroke-width: 1.8;
+  }
+  &.app-search-sm { .form-control, .form-select { padding-left: 34px !important; } .app-search-icon { left: 11px; width: 16px !important; height: 16px !important; } }
+  &.app-search-lg { .form-control, .form-select { padding-left: 50px !important; } .app-search-icon { left: 16px; width: 22px !important; height: 22px !important; } }
+}
+.d-flex > .app-search, .d-flex .app-search { display: block; }
+
+// campo de data da toolbar: ícone por SVG embutido (o input é de TEXTO —
+// `type="date"` desenharia no locale do sistema, mm/dd no Windows do JP)
+input.otc-datefield,
+input#apiRefDate {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236e6e80' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='3'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .7rem center;
+  background-size: 1rem 1rem;
+  padding-right: 2.1rem;
+  cursor: pointer;
+}
+[data-bs-theme="dark"] input.otc-datefield,
+[data-bs-theme="dark"] input#apiRefDate {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23b4b4c4' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='3'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
+}
+
+// 6g. Menus (dropdown) e tooltips — placa grossa, cai do gatilho
+// Menu nasce DENTRO das placas de vidro, e dentro de uma raiz de backdrop o
+// desfoque do filho não amostra o que está fora dela (§7): a parte do menu que
+// passa da borda da placa mostrava o card de baixo NÍTIDO através da tinta.
+// Daí o fundo SÓLIDO (`--otc-menu-bg`), não o vidro grosso.
+.dropdown-menu {
+  --ins-dropdown-bg: var(--otc-menu-bg);
+  --ins-dropdown-border-width: 0;
+  --ins-dropdown-border-radius: var(--otc-r-lg);
+  --ins-dropdown-color: var(--otc-text);
+  --ins-dropdown-link-color: var(--otc-text);
+  --ins-dropdown-link-hover-color: var(--otc-text);
+  --ins-dropdown-link-hover-bg: var(--otc-fill);
+  --ins-dropdown-link-active-color: #fff;
+  --ins-dropdown-link-active-bg: var(--otc-accent);
+  --ins-dropdown-padding-x: 8px;
+  --ins-dropdown-padding-y: 8px;
+  --ins-dropdown-item-padding-x: 12px;
+  --ins-dropdown-item-padding-y: 10px;
+  --ins-dropdown-item-border-radius: var(--otc-r-md);
+  --ins-dropdown-divider-bg: var(--otc-sep);
+  --ins-dropdown-divider-margin-y: 6px;
+  --ins-dropdown-header-color: var(--otc-text-3);
+  --ins-dropdown-font-size: 14.5px;
+  --ins-dropdown-min-width: 220px;
+  -webkit-backdrop-filter: var(--otc-blur-thick);
+  backdrop-filter: var(--otc-blur-thick);
+  box-shadow: var(--otc-depth);
+  z-index: 1060;
+  &.show { animation: otc-pop-in 360ms var(--otc-ease-out) both; }
+}
+// flex (com o vão entre ícone e texto) SÓ quando o item tem ícone: em texto
+// puro com <span> dentro ("15 <span>days</span>") o vão virava espaço duplo
+.dropdown-item {
+  display: block;
+  border-radius: var(--otc-r-md);
+  font-weight: 500;
+  transition: background-color 120ms var(--otc-ease);
+  > svg, > i { width: 18px; height: 18px; font-size: 18px; color: var(--otc-text-2); flex: none; }
+  &.active > svg, &.active > i, &:active > svg, &:active > i { color: #fff; }
+  &:has(> i, > svg, > img, > .badge) { display: flex; align-items: center; gap: 10px; }
+}
+// Menu aberto dentro de uma placa de vidro: a PLACA sobe. Cada placa é um
+// contexto de empilhamento (backdrop-filter/isolation), e o z-index do menu
+// fica preso dentro dela — a placa de baixo, que vem depois no DOM, o cobria.
+:is(.card, .otc-page-bar, .tl-card, .cp-card, div[class*="-widget"], div[class*="-panel"], .modal-content):has(.dropdown-menu.show) { z-index: 50; }
+
+// Pílula de FILTRO (o "All projects" / "Any priority" do Pane): fundo
+// translúcido, ícone à esquerda, chevron à direita. Gatilho de menu de filtro.
+.btn-chip {
+  --ins-btn-color: var(--otc-text);
+  --ins-btn-hover-color: var(--otc-text);
+  --ins-btn-active-color: var(--otc-text);
+  --ins-btn-bg: var(--otc-fill);
+  --ins-btn-hover-bg: var(--otc-fill-2);
+  --ins-btn-active-bg: var(--otc-fill-2);
+  --ins-btn-border-color: transparent;
+  --ins-btn-hover-border-color: transparent;
+  --ins-btn-active-border-color: transparent;
+  --ins-btn-padding-x: 14px;
+  --ins-btn-font-size: 14.5px;
+  --ins-gradient: none;
+  min-height: 40px;
+  padding-left: 12px;
+  gap: 7px;
+  > i, > svg { font-size: 18px; width: 18px; height: 18px; color: var(--otc-text-2); margin: 0 !important; }
+  &.show, &[aria-expanded="true"] { background-color: var(--otc-fill-2); }
+  &.btn-sm { min-height: 36px; --ins-btn-font-size: 14px; }
+}
+.dropdown-header { font: 650 12px/1 var(--otc-font); letter-spacing: .06em; text-transform: uppercase; padding: 10px 12px 6px; }
+.dropdown-divider { margin-left: 10px; margin-right: 10px; }
+.dropdown-menu-lg { --ins-dropdown-min-width: 320px; }
+.dropdown-menu-xxl { --ins-dropdown-min-width: 640px; }
+.tooltip {
+  --ins-tooltip-bg: #0f1017;
+  --ins-tooltip-color: #fff;
+  --ins-tooltip-border-radius: 10px;
+  --ins-tooltip-font-size: 12.5px;
+  --ins-tooltip-padding-x: 10px;
+  --ins-tooltip-padding-y: 6px;
+  --ins-tooltip-opacity: 1;
+  font-weight: 600;
+  &.show { animation: otc-pop-up 180ms var(--otc-ease-out); }
+}
+[data-bs-theme="dark"] .tooltip { --ins-tooltip-bg: #f5f5f7; --ins-tooltip-color: #0f1017; }
+@each $name, $c in ("primary": var(--otc-accent), "success": #1f9d55, "info": #0a8fc4, "danger": #d92d3a, "warning": #d98a00, "secondary": #4a4a54, "dark": #1c1c22) {
+  .tooltip-#{$name} { --ins-tooltip-bg: #{$c}; --ins-tooltip-color: #fff; }
+  .tooltip-#{$name} .tooltip-inner { background-color: #{$c}; color: #fff; }
+  .tooltip-#{$name} .tooltip-arrow::before { border-top-color: #{$c} !important; border-bottom-color: #{$c} !important; }
+}
+.popover {
+  --ins-popover-bg: var(--otc-glass-thick);
+  --ins-popover-border-color: transparent;
+  --ins-popover-border-radius: var(--otc-r-lg);
+  --ins-popover-header-bg: transparent;
+  --ins-popover-body-color: var(--otc-text);
+  -webkit-backdrop-filter: var(--otc-blur-thick);
+  backdrop-filter: var(--otc-blur-thick);
+  box-shadow: var(--otc-depth);
+}
+
+// 6h. Modais. `.modal-content.liquid-glass` é o padrão da casa (44 telas):
+// placa grossa de 32px. Entram como gota SEM escala (o shown.bs.modal
+// dispara durante a entrada e o DataTables mede a largura ali).
+.modal {
+  --ins-modal-bg: var(--otc-glass-thick);
+  --ins-modal-border-width: 0;
+  --ins-modal-border-radius: var(--otc-r-shell);
+  --ins-modal-inner-border-radius: var(--otc-r-shell);
+  --ins-modal-header-border-width: 0;
+  --ins-modal-footer-border-width: 0;
+  --ins-modal-padding: 22px;
+  --ins-modal-header-padding: 20px 22px 8px;
+  --ins-modal-color: var(--otc-text);
+  --ins-modal-box-shadow: var(--otc-depth);
+}
+.modal-backdrop { --ins-backdrop-bg: var(--otc-scrim); --ins-backdrop-opacity: 1; &.fade { transition: opacity var(--otc-dur-base) var(--otc-ease); } &.show { opacity: 1; } }
+.modal.fade .modal-dialog { transform: none; transition: none; }
+.modal-content {
+  -webkit-backdrop-filter: var(--otc-blur-thick);
+  backdrop-filter: var(--otc-blur-thick);
+  box-shadow: var(--otc-depth);
+}
+.modal-content.liquid-glass { @include otc-slab(var(--otc-glass-thick), var(--otc-blur-thick), var(--otc-r-shell)); > * { position: relative; z-index: 1; } }
+.modal.show .modal-content { animation: otc-drop-in 560ms var(--otc-ease-out) backwards; }
+.modal-header { align-items: center; gap: 12px; .btn-close { margin: 0 0 0 auto; } }
+.modal-title { font: 650 18px/1.25 var(--otc-font); letter-spacing: -.01em; }
+.modal-header.py-2 { padding: 18px 22px 6px !important; }
+.modal-footer { gap: 8px; padding: 10px 22px 20px; > * { margin: 0; } }
+.modal-footer.py-2 { padding: 10px 22px 18px !important; }
+.modal-body { padding: 12px 22px; }
+
+// 6i. Navegação em abas: trilho com a lente de gel (otc.js a desliza)
+.nav-tabs, .nav-pills {
+  --ins-nav-link-color: var(--otc-text-2);
+  --ins-nav-link-hover-color: var(--otc-text);
+  --ins-nav-link-font-weight: 600;
+  --ins-nav-link-padding-x: 14px;
+  --ins-nav-link-padding-y: 0;
+  --ins-nav-tabs-border-width: 0;
+  --ins-nav-tabs-link-active-bg: transparent;
+  --ins-nav-tabs-link-active-color: var(--otc-text);
+  --ins-nav-pills-link-active-bg: transparent;
+  --ins-nav-pills-link-active-color: var(--otc-text);
+  --ins-nav-pills-border-radius: var(--otc-r-pill);
+  position: relative;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border: 0;
+  border-radius: 22px;
+  background: var(--otc-fill);
+  .nav-link {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 34px;
+    border: 0 !important;
+    border-radius: var(--otc-r-pill) !important;
+    font-size: 14px;
+    transition: color var(--otc-dur-fast) var(--otc-ease);
+    &.active { background: transparent; }
+    > i, > svg { width: 17px; height: 17px; font-size: 17px; }
+  }
+  // sem a lente (JS não rodou), o ativo ainda se lê
+  &:not(.otc-has-lens) .nav-link.active { background: var(--otc-lens-bg); box-shadow: var(--otc-lens-shadow); }
+}
+.nav-tabs.nav-justified, .nav-pills.nav-justified, .nav-tabs.flex-column, .nav-pills.flex-column { display: flex; }
+.nav-bordered { background: transparent; padding: 0; border-bottom: 1px solid var(--otc-sep); border-radius: 0; }
+
+// 6j. Avisos, progresso, paginação, breadcrumb, listas, acordeão, toast
+.alert {
+  --ins-alert-border-radius: var(--otc-r-inner);
+  --ins-alert-border-color: transparent;
+  --ins-alert-padding-x: 18px;
+  --ins-alert-padding-y: 14px;
+  border: 0;
+  -webkit-backdrop-filter: var(--otc-blur);
+  backdrop-filter: var(--otc-blur);
+  box-shadow: var(--otc-inner-hl);
+}
+@each $name, $c in ("primary": var(--otc-accent-ink), "secondary": var(--otc-text-2), "success": var(--otc-green), "info": #0a8fc4, "warning": #c27c00, "danger": var(--otc-danger), "light": var(--otc-text-2), "dark": var(--otc-text)) {
+  .alert-#{$name} { --ins-alert-color: var(--otc-text); --ins-alert-bg: color-mix(in srgb, #{$c} 14%, var(--otc-glass)); --ins-alert-link-color: #{$c}; }
+}
+.progress, .progress-stacked {
+  --ins-progress-height: 8px;
+  --ins-progress-bg: var(--otc-fill);
+  --ins-progress-border-radius: var(--otc-r-pill);
+  --ins-progress-bar-bg: var(--otc-accent-ink);
+}
+.progress-bar { border-radius: var(--otc-r-pill); transition: width 700ms var(--otc-ease); }
+.pagination {
+  --ins-pagination-color: var(--otc-text-2);
+  --ins-pagination-bg: transparent;
+  --ins-pagination-border-width: 0;
+  --ins-pagination-hover-color: var(--otc-text);
+  --ins-pagination-hover-bg: var(--otc-fill-hover);
+  --ins-pagination-focus-box-shadow: none;
+  --ins-pagination-active-color: #fff;
+  --ins-pagination-active-bg: var(--otc-accent);
+  --ins-pagination-disabled-color: var(--otc-text-3);
+  --ins-pagination-disabled-bg: transparent;
+  --ins-pagination-border-radius: var(--otc-r-pill);
+  gap: 4px;
+  .page-link { min-width: 34px; height: 34px; display: grid; place-items: center; padding: 0 10px; border-radius: var(--otc-r-pill) !important; font-weight: 600; font-size: 13.5px; }
+}
+.pagination-boxed .page-link { border-radius: var(--otc-r-sm) !important; }
+.breadcrumb { --ins-breadcrumb-divider-color: var(--otc-text-3); --ins-breadcrumb-item-active-color: var(--otc-text-2); }
+.list-group {
+  --ins-list-group-bg: transparent;
+  --ins-list-group-border-color: var(--otc-sep);
+  --ins-list-group-border-radius: var(--otc-r-inner);
+  --ins-list-group-action-hover-bg: var(--otc-fill-hover);
+  --ins-list-group-active-bg: var(--otc-accent);
+  --ins-list-group-active-border-color: var(--otc-accent);
+  --ins-list-group-color: var(--otc-text);
+}
+.accordion {
+  --ins-accordion-bg: transparent;
+  --ins-accordion-border-color: var(--otc-sep);
+  --ins-accordion-border-radius: var(--otc-r-inner);
+  --ins-accordion-inner-border-radius: var(--otc-r-inner);
+  --ins-accordion-btn-focus-box-shadow: none;
+  --ins-accordion-active-bg: var(--otc-fill-hover);
+  --ins-accordion-active-color: var(--otc-text);
+  --ins-accordion-btn-color: var(--otc-text);
+}
+.toast {
+  --ins-toast-bg: var(--otc-glass-thick);
+  --ins-toast-border-color: transparent;
+  --ins-toast-border-radius: var(--otc-r-inner);
+  --ins-toast-header-bg: transparent;
+  --ins-toast-header-border-color: var(--otc-sep);
+  -webkit-backdrop-filter: var(--otc-blur-thick);
+  backdrop-filter: var(--otc-blur-thick);
+  box-shadow: var(--otc-depth);
+}
+.spinner-border, .spinner-grow { --ins-spinner-width: 1.6rem; --ins-spinner-height: 1.6rem; color: var(--otc-accent-ink); }
+.placeholder { border-radius: var(--otc-r-xs); background-color: var(--otc-fill-2); }
+
+// 6k. Avatares
+.avatar { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none; height: 36px; width: 36px; }
+.avatar-title { display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 100%; font-weight: 650; }
+@each $name, $s in (xxs: 18px, xs: 22px, sm: 28px, md: 36px, lg: 48px, xl: 64px, xxl: 96px) {
+  .avatar-#{$name} { width: $s; height: $s; min-width: $s; }
+}
+img.avatar-img-size { width: 100%; height: 100%; object-fit: cover; }
+.avatar-group { display: flex; padding-left: 8px; > * { margin-left: -8px; box-shadow: 0 0 0 2px var(--otc-avatar-ring); border-radius: 50%; } }
+.avatar-group-sm > * { width: 28px; height: 28px; }
+
+// ── 7. Tabelas e DataTables ─────────────────────────────────────────────────
+.table {
+  --ins-table-bg: transparent;
+  --ins-table-color: var(--otc-text);
+  --ins-table-border-color: var(--otc-sep);
+  --ins-table-striped-bg: var(--otc-row-stripe);
+  --ins-table-striped-color: var(--otc-text);
+  --ins-table-hover-bg: var(--otc-row-hover);
+  --ins-table-hover-color: var(--otc-text);
+  --ins-table-active-bg: var(--otc-cell-sel);
+  margin-bottom: 0;
+  > :not(caption) > * > * { border-bottom-color: var(--otc-sep); }
+  > thead > tr > th, > thead > tr > td {
+    color: var(--otc-text-2);
+    font-weight: 650;
+    letter-spacing: .02em;
+    vertical-align: middle;
+    border-bottom: 0;
+  }
+  > tbody > tr { transition: background-color 120ms var(--otc-ease); }
+  > tbody > tr:last-child > * { border-bottom: 0; }
+}
+.table-hover > tbody > tr:hover > * { --ins-table-bg-state: var(--otc-row-hover); }
+.thead-sm > tr > th { padding-top: .5rem !important; padding-bottom: .5rem !important; }
+.dt-scroll-body .thead-sm > tr > th { padding-top: 0 !important; padding-bottom: 0 !important; }
+.table-light { --ins-table-bg: var(--otc-fill); --ins-table-color: var(--otc-text); --ins-table-border-color: var(--otc-sep); }
+.table-dark { --ins-table-bg: var(--otc-solid-3); --ins-table-color: var(--otc-text); }
+.table-bordered > :not(caption) > * > * { border-color: var(--otc-sep); }
+.table-centered td, .table-centered th { vertical-align: middle; }
+.table-custom thead th, .table-select thead th { background: var(--otc-fill); }
+.nowrap { white-space: nowrap; }
+
+// Cabeçalho FIXO dentro do scrollport da tabela. A célula sticky precisa de
+// fundo: aqui é vidro fosco — a linha que passa por baixo aparece desfocada,
+// nunca misturada com o texto do cabeçalho.
+.table-responsive:has(> table),
+.table-responsive :has(> table):not([class*="dt-scroll"]) {
+  max-height: var(--vr-tscroll-max);
+  overflow: auto;
+}
+.table-responsive .dt-scroll-body > table > thead > tr > th {
+  position: static;
+  background-color: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.table-responsive table > thead > tr > th {
+  position: sticky;
+  z-index: 3;
+  background-color: var(--otc-thead-bg);
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  backdrop-filter: blur(14px) saturate(1.6);
+}
+.table-responsive table > thead[class*="table-"] > tr > th,
+.table-responsive table > thead > tr[class*="table-"] > th { background-color: inherit; }
+.table-responsive table > thead > tr:nth-child(1) > th { top: var(--vr-thead-row0, 0px); }
+.table-responsive table > thead > tr:nth-child(2) > th { top: var(--vr-thead-row1, 34px); }
+.table-responsive table > thead > tr:nth-child(3) > th { top: var(--vr-thead-row2, 68px); }
+.table-responsive table > thead > tr:last-child > th { box-shadow: inset 0 -1px 0 var(--otc-thead-line); }
+.table-responsive table > thead > tr > th[style*="left"] { z-index: 4; }
+.table-responsive thead input.form-control { text-transform: none; letter-spacing: normal; font-weight: 400; height: 30px; min-height: 30px; font-size: .72rem; padding: 4px 10px; }
+.table-responsive thead th:has(> input.form-control) { padding-top: .3rem; padding-bottom: .45rem; }
+.dt-scroll-head { background: var(--otc-thead-bg); -webkit-backdrop-filter: blur(14px) saturate(1.6); backdrop-filter: blur(14px) saturate(1.6); border-radius: var(--otc-r-md) var(--otc-r-md) 0 0; }
+
+// o dt-container perto do topo do scrollport (painel próprio, §486)
+.table-responsive > .dt-container { margin-top: 0; }
+.table-responsive:has(> .dt-container) { margin-top: .5rem; }
+.card .table-responsive,
+.card-body > .table-responsive,
+.card .dt-container {
+  margin-top: 1rem;
+  padding-top: 0;
+}
+
+// O PADRÃO DE TABELA da casa (CLAUDE.md §7) é do TEMA desde o rebranding:
+// toda DataTable centraliza cabeçalho e valores — th .7rem no meio, com
+// quebra; td .8rem no meio, sem quebra — e o CLONE do cabeçalho do scrollX
+// leva !important: o DataTables tira o id da tabela clonada, e a regra da
+// página perdia para `table.dataTable thead th` (o cabeçalho saía à esquerda
+// do corpo centralizado). As telas declaram só a LARGURA das suas colunas.
+// Classe na célula (`dt-left`, `text-start`) continua vencendo.
+table.dataTable > thead > tr > th {
+  text-align: center;
+  vertical-align: middle;
+  font-size: .7rem;
+  line-height: 1.15;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;            // palavra não se parte (§7)
+}
+table.dataTable > tbody > tr > td {
+  text-align: center;
+  vertical-align: middle;
+  font-size: .8rem;
+  white-space: nowrap;
+}
+:is(.dt-scroll-head, .dt-scroll-headInner, .dataTables_scrollHeadInner) thead th {
+  text-align: center !important;
+  vertical-align: middle !important;
+  font-size: .7rem;
+  line-height: 1.15;
+  white-space: normal !important;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+// A antiga LINHA DE FILTRO POR COLUNA nasce escondida: o excel-filter.js a
+// remove na init, e na instância a init demora (§610). Tabela fora do funil
+// mantém a linha — ali ela é o único filtro.
+table:not([data-excel-filter="off"]) > thead > tr:is(#column-search-inputs,
+    .column-search-input-bar, .col-search-row, .dces-filter-row, .ops-filter,
+    .cgd-filters, .mc-col-filters, .ob-filters, .ndfc-th-filter, .nop-th-filter) { display: none !important; }
+
+// DataTables — a BASE. O app nunca usou o CSS oficial do DataTables (o
+// `dataTables.bootstrap5.min.css` que as páginas pedem não existe, e o 404 é
+// antigo): a estrutura vinha do SCSS do tema e agora mora aqui.
+.dt-scroll { width: 100%; }
+.dt-scroll .dt-scroll-body {
+  thead tr, tfoot tr { height: 0; }
+  thead tr, tfoot tr {
+    th, td {
+      height: 0 !important;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+      border-top-width: 0 !important;
+      border-bottom-width: 0 !important;
+      .dt-scroll-sizing { height: 0 !important; overflow: hidden !important; }
+    }
+  }
+}
+div.dt-scroll-body > table.dataTable > thead > tr > th,
+div.dt-scroll-body > table.dataTable > thead > tr > td { overflow: hidden; }
+.dt-scroll-head table.dataTable { margin-bottom: 0 !important; }
+.dt-scroll-head table.table-bordered { border-bottom-width: 0; }
+.dt-scroll-body > table { border-top: none; margin-top: 0 !important; margin-bottom: 0 !important; }
+.dt-scroll-body > table > thead > tr { border-width: 0 !important; }
+.dt-scroll-body > table > tbody > tr:first-child { border-top-width: 0; }
+.dt-scroll-foot > .dt-scroll-footInner { box-sizing: content-box; }
+.dt-scroll-foot > .dt-scroll-footInner > table { margin-top: 0 !important; border-top: none; }
+.dt-scroll-foot > .dt-scroll-footInner > table > tfoot > tr:first-child { border-top-width: 0 !important; }
+
+table.dataTable {
+  > thead > tr, > tfoot > tr {
+    > th, > td {
+      .dt-column-order { opacity: 0; transition: opacity var(--otc-dur-fast) var(--otc-ease); }
+      &:hover .dt-column-order, &.dt-ordering-asc .dt-column-order, &.dt-ordering-desc .dt-column-order { opacity: 1; }
+      &.dt-orderable-asc span.dt-column-order::before,
+      &.dt-ordering-asc span.dt-column-order::before {
+        position: absolute; display: block; bottom: 50%;
+        content: "\ea62";                                  // tabler: seta para cima
+        font-family: "tabler-icons";
+      }
+      &.dt-orderable-desc span.dt-column-order::after,
+      &.dt-ordering-desc span.dt-column-order::after {
+        position: absolute; display: block; top: 50%;
+        content: "\ea5f";                                  // tabler: seta para baixo
+        font-family: "tabler-icons";
+      }
+      &.dt-orderable-asc, &.dt-orderable-desc, &.dt-ordering-asc, &.dt-ordering-desc {
+        cursor: pointer;
+        span.dt-column-order {
+          position: relative; width: 12px; height: 20px; flex: none;
+          &::before, &::after { left: 0; opacity: .25; line-height: 9px; font-size: .8125rem; font-weight: 600; }
+        }
+      }
+      &.dt-ordering-asc span.dt-column-order::before,
+      &.dt-ordering-desc span.dt-column-order::after { opacity: .9; color: var(--otc-accent-ink); }
+      &.sorting_asc_disabled span.dt-column-order::before,
+      &.sorting_desc_disabled span.dt-column-order::after { display: none; }
+      &:active { outline: none; }
+      div.dt-column-header, div.dt-column-footer {
+        display: flex; justify-content: space-between; align-items: center; gap: 4px;
+        span.dt-column-title { flex-grow: 1; &:empty { display: none; } }
+      }
+    }
+  }
+  &.nowrap th, &.nowrap td { white-space: nowrap; }
+  th, td {
+    box-sizing: border-box;
+    &.dt-left { text-align: left; div.dt-column-header, div.dt-column-footer { flex-direction: row; } }
+    &.dt-center { text-align: center; }
+    &.dt-right { text-align: right; div.dt-column-header, div.dt-column-footer { flex-direction: row-reverse; } }
+    &.dt-justify { text-align: justify; }
+    &.dt-nowrap { white-space: nowrap; }
+    &.dt-empty { text-align: center; vertical-align: top; }
+  }
+  thead, tfoot {
+    th, td {
+      text-align: left;
+      &.dt-head-left { text-align: left; div.dt-column-header, div.dt-column-footer { flex-direction: row; } }
+      &.dt-head-center { text-align: center; }
+      &.dt-head-right { text-align: right; div.dt-column-header, div.dt-column-footer { flex-direction: row-reverse; } }
+      &.dt-head-justify { text-align: justify; }
+      &.dt-head-nowrap { white-space: nowrap; }
+    }
+  }
+  tbody th, tbody td {
+    &.dt-body-left { text-align: left; }
+    &.dt-body-center { text-align: center; }
+    &.dt-body-right { text-align: right; }
+    &.dt-body-justify { text-align: justify; }
+    &.dt-body-nowrap { white-space: nowrap; }
+  }
+}
+table.table.dataTable { clear: both; margin-bottom: 0; max-width: none; border-spacing: 0; }
+.dt-container {
+  position: relative;
+  .dt-layout-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+  .dt-layout-start > *:not(:last-child) { margin-right: 1em; }
+  .dt-layout-end > *:not(:first-child) { margin-left: 1em; }
+  .dt-layout-full { width: 100%; > *:only-child { margin-left: auto; margin-right: auto; } }
+  .dt-layout-table > div { display: block !important; }
+  .dt-length label, .dt-search label { font-weight: normal; white-space: nowrap; text-align: left; }
+  .dt-length select { width: auto; display: inline-block; margin-right: .5em; }
+  .dt-search { text-align: right; input { margin-left: .5em; display: inline-block; width: auto; } }
+  .dt-paging { margin: 0; ul.pagination { margin: 0; flex-wrap: wrap; padding-top: 12px; } }
+  .dt-row { position: relative; }
+  .dt-info { padding-top: 12px; }
+}
+.table-responsive > .dt-container > .row { margin: 0; > div[class^="col-"]:first-child { padding-left: 0; } > div[class^="col-"]:last-child { padding-right: 0; } }
+@media screen and (max-width: 767px) {
+  .dt-container {
+    .dt-layout-start > *:not(:last-child) { margin-right: 0; }
+    .dt-layout-end > *:not(:first-child) { margin-left: 0; }
+    div.dt-length, div.dt-search, div.dt-info, div.dt-paging { text-align: center; }
+    div.dt-paging ul.pagination { justify-content: center !important; }
+  }
+}
+// spinner de processamento: três bolinhas que andam
+.dt-processing {
+  position: absolute; top: 50%; left: 50%; z-index: 10;
+  width: 120px; margin-left: -60px; margin-top: -26px;
+  text-align: center;
+  > div:last-child {
+    position: relative; width: 80px; height: 15px; margin: .6em auto;
+    > div {
+      position: absolute; top: 0; width: 13px; height: 13px; border-radius: 50%;
+      background: var(--otc-accent-ink);
+      animation-timing-function: cubic-bezier(0, 1, 1, 0);
+      &:nth-child(1) { left: 8px; animation: otc-dt-loader-1 .6s infinite; }
+      &:nth-child(2) { left: 8px; animation: otc-dt-loader-2 .6s infinite; }
+      &:nth-child(3) { left: 32px; animation: otc-dt-loader-2 .6s infinite; }
+      &:nth-child(4) { left: 56px; animation: otc-dt-loader-3 .6s infinite; }
+    }
+  }
+}
+@keyframes otc-dt-loader-1 { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+@keyframes otc-dt-loader-3 { 0% { transform: scale(1); } 100% { transform: scale(0); } }
+@keyframes otc-dt-loader-2 { 0% { transform: translate(0, 0); } 100% { transform: translate(24px, 0); } }
+.select-info { margin-left: 8px; padding: 3px 8px; border-radius: var(--otc-r-xs); background: color-mix(in srgb, var(--otc-yellow) 18%, transparent); font-weight: 600; .select-item { margin: 0 !important; } }
+.dtfh-floatingparent-head { top: calc(var(--otc-inset) + 70px) !important; }
+table.dataTable.fixedHeader-floating, table.dataTable.fixedHeader-locked { background-color: var(--otc-solid); }
+table.dataTable thead tr > .dtfc-fixed-start, table.dataTable thead tr > .dtfc-fixed-end,
+table.dataTable tfoot tr > .dtfc-fixed-start, table.dataTable tfoot tr > .dtfc-fixed-end,
+table.dataTable tbody tr > .dtfc-fixed-start, table.dataTable tbody tr > .dtfc-fixed-end { background-color: var(--otc-solid-2); }
+.dtfc-top-blocker, .dtfc-bottom-blocker { background-color: var(--otc-solid); }
+.column-search-input-bar .dt-column-order { display: none; }
+
+// DataTables 2
+.dt-container {
+  color: var(--otc-text);
+  .dt-layout-row { margin: 0; }
+  .dt-length, .dt-info, .dt-search { color: var(--otc-text-2); font-size: 13px; }
+  .dt-length select, .dt-search input {
+    min-height: 34px;
+    padding: 4px 12px;
+    border: 0;
+    border-radius: var(--otc-r-pill);
+    background: var(--otc-fill);
+    color: var(--otc-text);
+  }
+  .dt-paging {
+    // no tema Bootstrap a classe `dt-paging-button` fica no <li>: ele não se pinta
+    li.dt-paging-button { display: list-item !important; min-width: 0 !important; height: auto !important; padding: 0 !important; margin: 0 1px !important; background: transparent !important; }
+    li.dt-paging-button.active, li.dt-paging-button:hover { background: transparent !important; }
+    button.dt-paging-button, .pagination .page-link {
+      display: inline-grid !important; place-items: center; line-height: 1;
+      min-width: 34px; height: 34px;
+      margin: 0 2px; padding: 0 10px;
+      border: 0 !important;
+      border-radius: var(--otc-r-pill) !important;
+      background: transparent !important;
+      color: var(--otc-text-2) !important;
+      font-weight: 600;
+      box-shadow: none !important;
+      &:hover:not(.disabled) { background: var(--otc-fill-hover) !important; color: var(--otc-text) !important; }
+      &.current, &.active { background: var(--otc-accent) !important; color: #fff !important; box-shadow: 0 6px 14px -6px var(--otc-accent) !important; }
+      &.disabled { opacity: .4; }
+    }
+    .page-item.active .page-link { background: var(--otc-accent) !important; color: #fff !important; box-shadow: 0 6px 14px -6px var(--otc-accent) !important; }
+    .page-item.disabled .page-link { opacity: .4; }
+  }
+  .dt-empty { color: var(--otc-text-2); padding: 28px 12px !important; }
+  .dt-processing {
+    border-radius: var(--otc-r-inner);
+    background-color: var(--otc-glass-thick);
+    -webkit-backdrop-filter: var(--otc-blur-thick);
+    backdrop-filter: var(--otc-blur-thick);
+    box-shadow: var(--otc-shadow), var(--otc-inner-hl);
+    color: var(--otc-text);
+    padding: 14px 18px;
+    > div:last-child > div { background: var(--otc-accent-ink); }
+  }
+}
+table.dataTable {
+  > thead > tr > th, > thead > tr > td { border-bottom: 0; }
+  > tbody > tr.selected > *, > tbody > tr > .selected { box-shadow: inset 0 0 0 9999px var(--otc-cell-sel) !important; color: var(--otc-text) !important; }
+  > tbody > tr.selected a { color: var(--otc-accent-ink); }
+  thead > tr > th.dt-orderable-asc, thead > tr > th.dt-orderable-desc { &:hover { outline: 0; } }
+  .dt-column-order { opacity: .55; }
+  td.dt-control::before, th.dt-control::before { border-left-color: var(--otc-accent-ink); }
+}
+.dt-column-header { display: flex; align-items: center; gap: 4px; }
+.dt-column-title { min-width: 0; }
+div.dt-buttons > .btn, div.dt-buttons > .dt-button { margin: 0 !important; }
+div.dt-button-collection, .dt-button-collection.dropdown-menu {
+  @include otc-tile(var(--otc-menu-bg), var(--otc-r-lg));
+  padding: 8px !important;
+  .dt-button, .dropdown-item { border-radius: var(--otc-r-md); }
+}
+div.dt-button-info {
+  @include otc-tile(var(--otc-glass-thick), var(--otc-r-lg));
+  color: var(--otc-text);
+  border: 0 !important;
+  h2 { background: transparent; border: 0; color: var(--otc-text); }
+}
+div.dtr-modal div.dtr-modal-display { @include otc-tile(var(--otc-glass-thick), var(--otc-r-lg)); }
+table.dataTable.dtr-inline.collapsed > tbody > tr > td.dtr-control::before { background: var(--otc-accent); border-color: transparent; box-shadow: none; }
+
+// a toolbar das tabelas: botões em cápsula, margem que o DataTables não come
+.btn-toolbar { gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+.btn-toolbar-all { min-height: 36px; --ins-btn-padding-x: 14px; --ins-btn-font-size: 13.5px; }
+.btn-toolbar-import { @include otc-gel(#3f7f97); background-color: #3f7f97 !important; border-color: transparent !important; }
+
+// funil "de Excel" (excel-filter.js) — a pintura mora aqui, não no JS
+.oxf-th { position: relative; }
+.dt-column-header.oxf-ctr { justify-content: center; }
+.oxf-btn {
+  display: inline-grid; place-items: center;
+  flex: none;
+  width: 22px; height: 22px;
+  padding: 0; border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--otc-text-3);
+  cursor: pointer;
+  transition: background-color var(--otc-dur-fast) var(--otc-ease), color var(--otc-dur-fast) var(--otc-ease);
+  svg { width: 13px; height: 13px; }
+  &:hover { background: var(--otc-fill); color: var(--otc-text); }
+  &.is-active { background: var(--otc-accent); color: #fff; }
+}
+.dt-scroll-body .oxf-btn { visibility: hidden; }
+.oxf-menu {
+  @include otc-tile(var(--otc-glass-thick), var(--otc-r-lg));
+  -webkit-backdrop-filter: var(--otc-blur-thick);
+  backdrop-filter: var(--otc-blur-thick);
+  position: fixed;
+  z-index: 2100;
+  width: 280px;
+  padding: 8px;
+  color: var(--otc-text);
+  font-size: 13.5px;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+  box-shadow: var(--otc-depth);
+  animation: otc-pop-in 320ms var(--otc-ease-out) both;
+}
+.oxf-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0; border-radius: var(--otc-r-md);
+  background: transparent;
+  color: var(--otc-text);
+  text-align: left;
+  cursor: pointer;
+  &:hover { background: var(--otc-fill); }
+  svg, i { width: 16px; height: 16px; color: var(--otc-text-2); }
+}
+.oxf-sep { height: 1px; margin: 6px 10px; background: var(--otc-sep); }
+.oxf-search { width: 100%; min-height: 36px; margin: 4px 0 6px; padding: 6px 12px; border: 0; border-radius: var(--otc-r-pill); background: var(--otc-fill); color: var(--otc-text); outline: 0; &:focus { box-shadow: 0 0 0 2px var(--otc-accent-ink); } }
+.oxf-list { max-height: 240px; overflow: auto; padding: 2px; border-radius: var(--otc-r-md); background: var(--otc-fill-hover); }
+.oxf-opt, .oxf-all, .oxf-blank {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; border-radius: 9px;
+  cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  &:hover { background: var(--otc-fill); }
+  input { flex: none; margin: 0; }
+}
+.oxf-all { font-weight: 650; }
+.oxf-blank { color: var(--otc-text-2); font-style: italic; }
+.oxf-add { display: flex; align-items: center; gap: 8px; padding: 6px 8px; color: var(--otc-text-2); }
+.oxf-note { padding: 4px 8px; color: var(--otc-text-3); font-size: 12px; }
+.oxf-foot { display: flex; justify-content: flex-end; gap: 6px; padding-top: 8px; .btn { min-height: 32px; --ins-btn-padding-x: 14px; --ins-btn-font-size: 13px; } }
+
+// seleção de célula (table-std.js): contorno de 2px no destaque
+.otc-cellcopy td.otc-sel, table.dataTable td.otc-sel, table.dataTable > tbody > tr > td.selected {
+  box-shadow: inset 0 0 0 2px var(--otc-accent-ink), inset 0 0 0 9999px var(--otc-cell-sel) !important;
+}
+.otc-cellcopy td:hover { background-color: var(--otc-row-hover); }
+.otc-cellcopy .otc-nosel { user-select: none; }
+
+// filtro inteligente (New Deals, recompras): chips + campo numa pílula
+.nd-filter-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.smart-filter-wrapper {
+  position: relative;
+  flex: 1 1 320px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 4px 8px 4px 14px;
+  border-radius: var(--otc-r-pill);
+  background: var(--otc-fill);
+  transition: box-shadow var(--otc-dur-fast) var(--otc-ease), background-color var(--otc-dur-fast) var(--otc-ease);
+  &:focus-within { background: var(--otc-fill-2); box-shadow: 0 0 0 2.5px var(--otc-accent-ink); }
+}
+.smart-filter-chips { display: contents; }
+.smart-filter-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 6px 0 12px;
+  border-radius: var(--otc-r-pill);
+  background: color-mix(in srgb, var(--otc-accent) 16%, transparent);
+  color: var(--otc-text);
+  font: 600 12.5px/1 var(--otc-font);
+  animation: otc-pop-up 220ms var(--otc-ease-out);
+}
+.sf-chip-remove {
+  display: inline-grid; place-items: center;
+  width: 20px; height: 20px;
+  border: 0; border-radius: 50%;
+  background: transparent; color: var(--otc-text-2);
+  cursor: pointer;
+  &:hover { background: var(--otc-fill-2); color: var(--otc-text); }
+}
+.smart-filter-input { flex: 1 1 140px; min-width: 120px; border: 0; background: transparent; outline: 0; color: var(--otc-text); font-size: 14.5px; }
+.smart-filter-dropdown {
+  display: none;                       // o JS abre (style.display = 'block')
+  @include otc-tile(var(--otc-menu-bg), var(--otc-r-lg));
+  -webkit-backdrop-filter: var(--otc-blur-thick);
+  backdrop-filter: var(--otc-blur-thick);
+  position: absolute; z-index: 1065; top: calc(100% + 8px); left: 0;
+  min-width: 280px; max-height: 340px; overflow: auto;
+  margin: 0; padding: 8px; list-style: none;
+  box-shadow: var(--otc-depth);
+  animation: otc-pop-in 300ms var(--otc-ease-out) both;
+  li { padding: 8px 12px; border-radius: var(--otc-r-md); cursor: pointer; font-size: 14px; }
+  li:hover, li.sf-kbd-active, li.active { background: var(--otc-accent); color: #fff; }
+}
+
+// selo do TIPO do campo na lista do filtro inteligente (texto/data/número)
+.sf-type-badge {
+  display: inline-flex; align-items: center;
+  height: 18px; padding: 0 6px;
+  border-radius: var(--otc-r-xs);
+  font: 650 10px/1 var(--otc-font); letter-spacing: .04em; text-transform: uppercase;
+  background: var(--otc-fill-2); color: var(--otc-text-2);
+}
+.sf-type-text   { background: var(--otc-fill-2); color: var(--otc-text-2) !important; }
+.sf-type-date   { background: color-mix(in srgb, var(--otc-teal) 18%, transparent); color: var(--otc-teal) !important; }
+.sf-type-number { background: color-mix(in srgb, var(--otc-yellow) 22%, transparent); color: color-mix(in srgb, var(--otc-yellow) 70%, var(--otc-text)) !important; }
+.smart-filter-dropdown li:is(:hover, .sf-kbd-active, .active) .sf-type-badge { background: rgba(255, 255, 255, .22); color: #fff !important; }
+
+// exportação avançada (export-advanced.js)
+.xa-sec { padding: 14px 0; border-bottom: 1px solid var(--otc-sep); &:last-child { border-bottom: 0; } }
+.xa-sec-h { font: 650 12px/1 var(--otc-font); letter-spacing: .06em; text-transform: uppercase; color: var(--otc-text-3); margin-bottom: 10px; }
+.xa-help { color: var(--otc-text-2); font-size: 13px; }
+.xa-crit { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.xa-cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 4px 12px; max-height: 260px; overflow: auto; padding: 8px; border-radius: var(--otc-r-md); background: var(--otc-fill-hover); }
+.xa-count { font-weight: 650; color: var(--otc-accent-ink); }
+.xa-zero { color: var(--otc-danger); }
+.xa-rm { border: 0; background: transparent; color: var(--otc-text-3); &:hover { color: var(--otc-danger); } }
+.xa-off { opacity: .45; pointer-events: none; }
+.xa-busy .swal2-loader { border-color: var(--otc-accent-ink) transparent; }
+
+// preview de arquivo (file-preview.js)
+.otc-preview-tabs { display: inline-flex; gap: 2px; padding: 3px; margin-bottom: 12px; border-radius: 22px; background: var(--otc-fill); }
+.otc-preview-tabs button { min-height: 32px; padding: 0 14px; border: 0; border-radius: var(--otc-r-pill); background: transparent; color: var(--otc-text-2); font-weight: 600; font-size: 13.5px; &.active { background: var(--otc-lens-bg); box-shadow: var(--otc-lens-shadow); color: var(--otc-text); } }
+.otc-preview-line { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; white-space: pre; padding: 2px 6px; border-radius: 6px; &:hover { background: var(--otc-fill-hover); } }
+
+// prêmio D0 (premium-d0.js): faixa âmbar translúcida
+.otc-premium-d0 {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 12px; padding: 12px 16px;
+  border-radius: var(--otc-r-inner);
+  background: color-mix(in srgb, var(--otc-orange) 16%, var(--otc-glass));
+  -webkit-backdrop-filter: var(--otc-blur);
+  backdrop-filter: var(--otc-blur);
+  box-shadow: var(--otc-inner-hl);
+  &[hidden] { display: none; }
+}
+.otc-premium-d0__msg { flex: 1 1 auto; font-weight: 600; }
+.otc-premium-d0__list { color: var(--otc-text-2); font-size: 13px; }
+.otc-premium-d0__btn { @include otc-gel(#d98a00); min-height: 32px; --ins-btn-padding-x: 14px; --ins-btn-font-size: 13px; }
+
+// ── 8. Plugins ──────────────────────────────────────────────────────────────
+// SweetAlert2: placa grossa; entra como gota e sai com keyframe PRÓPRIO
+// (o mesmo nome com `reverse` não reinicia e o popup não fecha).
+.swal2-container { z-index: 2060; }
+.swal2-container.swal2-backdrop-show { background: var(--otc-scrim) !important; }
+.swal2-popup {
+  @include otc-slab(var(--otc-glass-thick), var(--otc-blur-thick), var(--otc-r-shell));
+  color: var(--otc-text) !important;
+  padding: 26px 24px 22px !important;
+  font-family: var(--otc-font) !important;
+  > * { position: relative; z-index: 1; }
+  &.swal2-show { animation: otc-drop-in 520ms var(--otc-ease-out) !important; }
+  &.swal2-hide { animation: otc-swal-out 200ms var(--otc-ease-in) forwards !important; }
+  &.swal2-toast { border-radius: 31px !important; padding: 12px 18px !important; background-color: #000 !important; color: #fff !important; .swal2-title, .swal2-html-container { color: #fff !important; } &::before, &::after { display: none; } }
+}
+@keyframes otc-swal-out { from { opacity: 1; translate: 0 0; } to { opacity: 0; translate: 0 -6px; } }
+.swal2-title { color: var(--otc-text) !important; font: 700 21px/1.25 var(--otc-font-display) !important; letter-spacing: -.02em; }
+.swal2-html-container { color: var(--otc-text-2) !important; font-size: 15px !important; }
+.swal2-actions { gap: 8px; }
+.swal2-styled { margin: 0 !important; border-radius: var(--otc-r-pill) !important; min-height: 42px; padding: 0 20px !important; font-weight: 600 !important; box-shadow: none; &:focus { box-shadow: 0 0 0 2px var(--otc-accent-ink) !important; } }
+.swal2-styled.swal2-confirm { @include otc-gel(var(--otc-accent)); background-color: var(--otc-accent) !important; }
+.swal2-styled.swal2-deny { @include otc-gel(#d92d3a); background-color: #d92d3a !important; }
+.swal2-styled.swal2-cancel { color: var(--otc-text) !important; background: var(--otc-glassbtn-bg) !important; box-shadow: var(--otc-glassbtn-shadow) !important; }
+.swal2-input, .swal2-textarea, .swal2-select, .swal2-file {
+  border: 0 !important; border-radius: var(--otc-r-md) !important;
+  background: var(--otc-fill) !important; color: var(--otc-text) !important;
+  box-shadow: none !important;
+  &:focus { box-shadow: 0 0 0 2.5px var(--otc-accent-ink) !important; }
+}
+.swal2-validation-message { background: color-mix(in srgb, var(--otc-danger) 12%, transparent) !important; color: var(--otc-text) !important; border-radius: var(--otc-r-md); }
+.swal2-close { color: var(--otc-text-3) !important; border-radius: 50%; &:hover { color: var(--otc-text) !important; background: var(--otc-fill) !important; } }
+.swal2-icon { border-width: 3px !important; scale: .9; }
+.swal2-timer-progress-bar { background: var(--otc-accent-ink) !important; }
+
+// flatpickr
+.flatpickr-calendar {
+  @include otc-tile(var(--otc-glass-thick), var(--otc-r-lg));
+  -webkit-backdrop-filter: var(--otc-blur-thick);
+  backdrop-filter: var(--otc-blur-thick);
+  box-shadow: var(--otc-depth) !important;
+  border: 0 !important;
+  padding: 8px;
+  color: var(--otc-text);
+  &::before, &::after { display: none; }
+  &.open { animation: otc-pop-in 320ms var(--otc-ease-out) both; }
+  .flatpickr-months .flatpickr-month, .flatpickr-current-month, .flatpickr-monthDropdown-months, .numInputWrapper input, .flatpickr-weekday { color: var(--otc-text) !important; fill: var(--otc-text) !important; background: transparent !important; }
+  .flatpickr-weekday { color: var(--otc-text-2) !important; font-weight: 650; font-size: 11.5px; text-transform: uppercase; }
+  .flatpickr-prev-month, .flatpickr-next-month { color: var(--otc-text-2) !important; fill: var(--otc-text-2) !important; border-radius: 50%; &:hover { background: var(--otc-fill); svg { fill: var(--otc-text) !important; } } }
+  .flatpickr-day {
+    border: 0; border-radius: 12px; color: var(--otc-text);
+    &:hover { background: var(--otc-fill); }
+    &.today { box-shadow: inset 0 0 0 1.5px var(--otc-accent-ink); }
+    &.selected, &.startRange, &.endRange { background: var(--otc-accent) !important; color: #fff !important; box-shadow: 0 4px 12px -4px var(--otc-accent); }
+    &.inRange { background: var(--otc-accent-soft) !important; box-shadow: none !important; }
+    &.prevMonthDay, &.nextMonthDay, &.flatpickr-disabled { color: var(--otc-text-3) !important; }
+  }
+}
+.flatpickr-input[readonly] { cursor: pointer; }
+
+// daterangepicker
+.daterangepicker {
+  @include otc-tile(var(--otc-glass-thick), var(--otc-r-lg));
+  -webkit-backdrop-filter: var(--otc-blur-thick);
+  backdrop-filter: var(--otc-blur-thick);
+  border: 0 !important;
+  box-shadow: var(--otc-depth) !important;
+  color: var(--otc-text);
+  font-family: var(--otc-font);
+  &::before, &::after { display: none !important; }
+  .calendar-table { background: transparent !important; border: 0 !important; }
+  td, th { border-radius: 10px !important; color: var(--otc-text); }
+  td.available:hover, th.available:hover { background: var(--otc-fill) !important; }
+  td.off { background: transparent !important; color: var(--otc-text-3) !important; }
+  td.active, td.active:hover { background: var(--otc-accent) !important; color: #fff !important; }
+  td.in-range { background: var(--otc-accent-soft); }
+  select { border: 0; border-radius: 8px; background: var(--otc-fill); color: var(--otc-text); }
+  .drp-buttons { border-top: 1px solid var(--otc-sep); .btn { min-height: 32px; } }
+  .ranges li { border-radius: var(--otc-r-md); &:hover { background: var(--otc-fill); } &.active { background: var(--otc-accent); color: #fff; } }
+  .calendar-table .next span, .calendar-table .prev span { border-color: var(--otc-text-2); }
+}
+
+// select2
+.select2-container--default {
+  .select2-selection--single, .select2-selection--multiple {
+    min-height: 42px;
+    border: 0 !important;
+    border-radius: var(--otc-r-md) !important;
+    background: var(--otc-fill) !important;
+    .select2-selection__rendered { color: var(--otc-text) !important; line-height: 42px; padding-left: 14px; }
+    .select2-selection__arrow { height: 40px; }
+  }
+  &.select2-container--focus .select2-selection--multiple, &.select2-container--open .select2-selection--single { box-shadow: 0 0 0 2.5px var(--otc-accent-ink); }
+  .select2-selection__choice { border: 0 !important; border-radius: var(--otc-r-pill) !important; background: color-mix(in srgb, var(--otc-accent) 16%, transparent) !important; color: var(--otc-text) !important; }
+  .select2-results__option--highlighted[aria-selected], .select2-results__option--highlighted.select2-results__option--selectable { background: var(--otc-accent) !important; color: #fff !important; }
+  .select2-results__option { border-radius: var(--otc-r-md); }
+  .select2-search--dropdown .select2-search__field { border: 0; border-radius: var(--otc-r-pill); background: var(--otc-fill); color: var(--otc-text); }
+}
+.select2-dropdown {
+  @include otc-tile(var(--otc-glass-thick), var(--otc-r-lg));
+  -webkit-backdrop-filter: var(--otc-blur-thick);
+  backdrop-filter: var(--otc-blur-thick);
+  border: 0 !important;
+  padding: 6px;
+  color: var(--otc-text);
+  box-shadow: var(--otc-depth);
+  z-index: 2070;
+}
+
+// Choices
+.choices__inner { min-height: 42px; border: 0 !important; border-radius: var(--otc-r-md) !important; background: var(--otc-fill) !important; color: var(--otc-text); }
+.choices__list--dropdown, .choices__list[aria-expanded] {
+  @include otc-tile(var(--otc-glass-thick), var(--otc-r-lg));
+  -webkit-backdrop-filter: var(--otc-blur-thick);
+  backdrop-filter: var(--otc-blur-thick);
+  border: 0 !important; padding: 6px; z-index: 2070;
+  .choices__item--selectable.is-highlighted { background: var(--otc-accent) !important; color: #fff; border-radius: var(--otc-r-md); }
+}
+.choices__list--multiple .choices__item { border: 0 !important; border-radius: var(--otc-r-pill) !important; background: color-mix(in srgb, var(--otc-accent) 18%, transparent) !important; color: var(--otc-text) !important; }
+.choices__input { background: transparent !important; color: var(--otc-text); }
+
+// Dropzone e FilePond: área de soltar tracejada que acende ao arrastar
+// (`.acc-drop` é a dropzone do Accrual/MtM e `.pr-dropzone` a do Pay/Rec — a
+// mesma área de soltar com outro nome; cada uma acende pela classe que o JS dela põe)
+.dropzone, .upload-zone, .acc-drop, .pr-dropzone, .cp-dropzone, .hc-dropzone, .tk-dropzone, .tkd-dropzone {
+  min-height: 0;
+  padding: 10px 16px;
+  border: 1.5px dashed color-mix(in srgb, var(--otc-text-3) 70%, transparent) !important;
+  border-radius: var(--otc-r-inner) !important;
+  background: var(--otc-fill-hover) !important;
+  color: var(--otc-text-2);
+  transition: border-color var(--otc-dur-base) var(--otc-ease), background-color var(--otc-dur-base) var(--otc-ease);
+  &.dz-drag-hover, &.is-over, &.is-drag, &.dragover, &[class*="-dz-over"], &:hover, &:focus-visible { outline: 0; border-color: var(--otc-accent-ink) !important; background: var(--otc-accent-soft) !important; }
+  // compacto (era a regra de 11 telas): ícone, frase, dica e o Browse
+  .dz-message {
+    margin: 0; padding: 4px 0; font-weight: 600;
+    .avatar-lg { width: 30px !important; height: 30px !important; margin: 0 auto 4px !important; }
+    .avatar-title { width: 30px; height: 30px; border-radius: 50%; background: var(--otc-accent-soft) !important; color: var(--otc-accent-ink) !important; i { font-size: 16px !important; } }
+    h4, h5 { font: 650 14px/1.3 var(--otc-font); margin: 0 0 2px !important; color: var(--otc-text); }
+    p { font-size: 12.5px; margin: 0 0 6px !important; color: var(--otc-text-2); }
+    .btn { --ins-btn-padding-y: 4px; --ins-btn-padding-x: 12px; --ins-btn-font-size: 12.5px; }
+  }
+  .dz-preview .dz-image { border-radius: var(--otc-r-md); }
+}
+.filepond--panel-root { background: var(--otc-fill) !important; border-radius: var(--otc-r-inner) !important; }
+.filepond--drop-label { color: var(--otc-text-2) !important; }
+.filepond--item-panel { background: var(--otc-accent) !important; }
+
+// FullCalendar — o calendário do Pane. O FC 6 INJETA o próprio CSS em tempo
+// de execução, DEPOIS do otc.css: as regras saem com `html .fc` (um elemento a
+// mais de especificidade) e os botões com !important, senão perdem para ele.
+html .fc {
+  --fc-border-color: transparent;
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: var(--otc-fill-hover);
+  --fc-today-bg-color: transparent;
+  --fc-highlight-color: var(--otc-accent-soft);
+  --fc-event-bg-color: var(--otc-accent);
+  --fc-event-border-color: transparent;
+  --fc-list-event-hover-bg-color: var(--otc-fill-hover);
+  --fc-now-indicator-color: var(--otc-danger);
+  --fc-small-font-size: 12px;
+  color: var(--otc-text);
+  font-family: var(--otc-font);
+  a { text-decoration: none !important; color: inherit; }
+
+  // toolbar: título em cima; embaixo, a navegação (‹ Today ›) e as visões
+  .fc-toolbar.fc-header-toolbar { flex-wrap: wrap; gap: 14px 12px; margin-bottom: 18px; }
+  .fc-toolbar-chunk { display: flex; align-items: center; gap: 10px; }
+  .fc-toolbar-chunk:has(> .fc-toolbar-title) { order: -1; flex: 1 0 100%; }
+  .fc-toolbar-title { font: 700 clamp(26px, 1.2vw + 14px, 38px)/1.08 var(--otc-font-display); letter-spacing: -.03em; color: var(--otc-text); margin: 0; }
+  .fc-button-group {
+    position: relative;
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: var(--otc-r-pill);
+    background: var(--otc-fill);
+    > .fc-button { margin: 0 !important; }
+  }
+  .fc-button {
+    position: relative;
+    z-index: 1;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    min-width: 36px;
+    padding: 0 16px !important;
+    border: 0 !important;
+    border-radius: var(--otc-r-pill) !important;
+    background: transparent !important;
+    color: var(--otc-text-2) !important;
+    font: 600 14px/1 var(--otc-font) !important;
+    text-transform: none;
+    box-shadow: none !important;
+    opacity: 1 !important;
+    transition: background-color var(--otc-dur-fast) var(--otc-ease), color var(--otc-dur-fast) var(--otc-ease);
+    &:hover:not(:disabled) { background: var(--otc-fill-2) !important; color: var(--otc-text) !important; }
+    &:focus-visible { outline: 2px solid var(--otc-accent-ink) !important; outline-offset: 2px; }
+    &:disabled { color: var(--otc-text-3) !important; cursor: default; }
+  }
+  .fc-today-button, .fc-prev-button, .fc-next-button { color: var(--otc-text) !important; }
+  .fc-prev-button, .fc-next-button { width: 36px; padding: 0 !important; font-size: 0 !important; }
+  .fc-prev-button::before, .fc-next-button::before { font: 18px/1 "tabler-icons"; }
+  .fc-prev-button::before { content: "\ea60"; }
+  .fc-next-button::before { content: "\ea61"; }
+  // a visão ativa: a lente de gel (otc.js a desliza; sem JS, ela fica parada)
+  .fc-button.fc-button-active { color: var(--otc-text) !important; }
+  .fc-button-group:not(.otc-has-lens) .fc-button.fc-button-active { background: var(--otc-lens-bg) !important; box-shadow: var(--otc-lens-shadow) !important; }
+  .fc-button-group.otc-has-lens .fc-button.fc-button-active { background: transparent !important; }
+
+  // grade do mês: cada dia é um ladrilho
+  .fc-scrollgrid, .fc-scrollgrid td, .fc-scrollgrid th, .fc-theme-standard td, .fc-theme-standard th { border: 0 !important; }
+  .fc-col-header-cell { background: transparent; }
+  .fc-col-header-cell-cushion { padding: 10px 4px 8px !important; font: 650 12.5px/1 var(--otc-font); letter-spacing: .04em; text-transform: uppercase; color: var(--otc-text-2); }
+  .fc-daygrid-day-frame {
+    margin: 2px;
+    min-height: 92px;
+    border-radius: 14px;
+    transition: background-color var(--otc-dur-fast) var(--otc-ease);
+  }
+  .fc-daygrid-day:hover .fc-daygrid-day-frame { background: var(--otc-fill); }
+  .fc-day-sat .fc-daygrid-day-frame, .fc-day-sun .fc-daygrid-day-frame { background: var(--otc-fill-hover); }
+  .fc-day-today .fc-daygrid-day-frame { background: var(--otc-accent-soft); box-shadow: inset 0 0 0 2px var(--otc-accent-ink), 0 0 0 4px color-mix(in srgb, var(--otc-accent-ink) 16%, transparent); }
+  .fc-daygrid-day-top { flex-direction: row; padding: 7px 6px 2px; }
+  .fc-daygrid-day-number {
+    display: inline-grid; place-items: center;
+    min-width: 26px; height: 26px; padding: 0 7px !important;
+    border-radius: var(--otc-r-pill);
+    font: 560 14px/1 var(--otc-font); font-variant-numeric: tabular-nums;
+    color: var(--otc-text-2);
+  }
+  .fc-day-today .fc-daygrid-day-number { background: var(--otc-accent); color: #fff; font-weight: 650; box-shadow: 0 4px 12px -4px var(--otc-accent); }
+  .fc-day-other .fc-daygrid-day-number { color: var(--otc-text-3); opacity: .7; }
+  .fc-day-other .fc-daygrid-day-frame { background: transparent; }
+  // feriado: barrinha com o marcador colorido à esquerda (a cor é da classe
+  // `bg-*-subtle text-*` que o registro do calendário dá)
+  .fc-daygrid-event, .fc-h-event {
+    height: auto;
+    min-height: 20px;
+    margin: 1px 4px 2px !important;
+    padding: 2px 8px 2px 10px !important;
+    border: 0 !important;
+    border-radius: 6px !important;
+    box-shadow: none !important;
+    position: relative;
+    font: 600 12px/1.3 var(--otc-font) !important;
+    padding-left: 12px !important;
+    &::before { content: ""; position: absolute; left: 4px; top: 4px; bottom: 4px; width: 3px; border-radius: 2px; background: currentColor; }
+    cursor: pointer;
+    transition: filter var(--otc-dur-fast) var(--otc-ease);
+    &:hover { filter: brightness(1.12); }
+    .fc-event-main, .fc-event-title { color: inherit !important; padding: 0 !important; }
+  }
+  .fc-daygrid-more-link { margin: 1px 6px; font: 650 12px/1.3 var(--otc-font); color: var(--otc-text-2) !important; &:hover { background: transparent; color: var(--otc-text) !important; } }
+  .fc-highlight { border-radius: 14px; }
+
+  // ano: doze meses em ladrilhos
+  .fc-multimonth { border: 0; --fc-neutral-bg-color: transparent; }
+  .fc-multimonth .fc-day-disabled { background: transparent; }
+  .fc-multimonth :is(.fc-day-sat, .fc-day-sun) .fc-daygrid-day-frame { background: transparent; }
+  .fc-multimonth .fc-day-today .fc-daygrid-day-frame { background: transparent; box-shadow: none; }
+  .fc-multimonth-month { padding: 6px; }
+  .fc-multimonth-title { padding: 6px 0 8px; font: 650 16px/1.2 var(--otc-font); color: var(--otc-text); text-align: left; }
+  .fc-multimonth-header { background: transparent; }
+  .fc-multimonth-daygrid { background: transparent; }
+  .fc-multimonth .fc-daygrid-day-frame { min-height: 0; margin: 1px; border-radius: 10px; }
+  .fc-multimonth .fc-daygrid-day-number { min-width: 22px; height: 22px; font-size: 12.5px; }
+  .fc-multimonth .fc-daygrid-more-link {
+    display: block; width: fit-content; margin: 1px auto 0; padding: 1px 7px;
+    border-radius: var(--otc-r-pill);
+    background: var(--otc-accent-soft);
+    color: var(--otc-accent-ink) !important;
+    font: 700 10.5px/1.3 var(--otc-font);
+    float: none;
+  }
+
+  // semana / dia
+  .fc-timegrid-slot { height: 2.6em; border-bottom: 1px solid var(--otc-sep) !important; }
+  .fc-timegrid-slot-label-cushion, .fc-timegrid-axis-cushion { font: 500 12px/1 var(--otc-font); color: var(--otc-text-3); }
+  .fc-timegrid-col.fc-day-today { background: var(--otc-accent-soft); }
+  .fc-timegrid-event { border-radius: 8px !important; border: 0 !important; box-shadow: none; padding: 2px 6px 2px 12px; &::before { content: ""; position: absolute; left: 4px; top: 4px; bottom: 4px; width: 3px; border-radius: 2px; background: currentColor; } }
+  .fc-timegrid-now-indicator-line { border-color: var(--otc-danger); border-width: 1.5px 0 0; }
+
+  // lista
+  .fc-list { border: 0 !important; }
+  .fc-list-day-cushion { background: var(--otc-fill) !important; border-radius: 12px; padding: 8px 14px !important; font: 650 13px/1.2 var(--otc-font); }
+  .fc-list-day > th { padding-top: 10px !important; }
+  .fc-list-event td { border: 0 !important; padding: 9px 14px !important; }
+  .fc-list-event:hover td { background: var(--otc-fill-hover) !important; }
+  .fc-list-event-time { color: var(--otc-text-3); }
+  .fc-list-empty { background: transparent; color: var(--otc-text-2); }
+}
+// a lista de calendários arrastáveis (Holidays)
+.external-event {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+  padding: 9px 14px;
+  border-radius: 14px;
+  font: 600 14px/1.2 var(--otc-font);
+  cursor: grab;
+  transition: background-color var(--otc-dur-fast) var(--otc-ease), filter var(--otc-dur-fast) var(--otc-ease), translate var(--otc-dur-fast) var(--otc-ease);
+  > i { font-size: 10px; margin: 0 !important; }
+  &:hover { filter: brightness(1.12); translate: 2px 0; }
+  &:active { cursor: grabbing; }
+}
+
+// Quill
+.ql-toolbar.ql-snow, .ql-container.ql-snow { border-color: var(--otc-sep) !important; }
+.ql-toolbar.ql-snow { border-radius: var(--otc-r-md) var(--otc-r-md) 0 0; background: var(--otc-fill-hover); }
+.ql-container.ql-snow { border-radius: 0 0 var(--otc-r-md) var(--otc-r-md); }
+.ql-snow .ql-stroke { stroke: var(--otc-text-2); }
+.ql-snow .ql-fill { fill: var(--otc-text-2); }
+.ql-editor.ql-blank::before { color: var(--otc-text-3); }
+
+// SimpleBar: o CSS estrutural vem do pacote (embutido no build — a instância
+// não tem node_modules nem internet); daqui só a cor do trilho.
+@import "simplebar/dist/simplebar";
+.simplebar-scrollbar::before { background: var(--otc-text-3); }
+
+// ── 9. Utilitários que as páginas usam ──────────────────────────────────────
+.fs-xxs { font-size: .6875rem !important; }
+.fs-xs  { font-size: .75rem !important; }
+.fs-sm  { font-size: .8125rem !important; }
+.fs-base { font-size: .9375rem !important; }
+.fs-md  { font-size: .875rem !important; }
+.fs-lg  { font-size: 1.0625rem !important; }
+.fs-xl  { font-size: 1.25rem !important; }
+.fs-xxl { font-size: 1.5rem !important; }
+@each $n in (10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 22, 24, 28, 32, 36, 40, 48, 60, 72) {
+  .fs-#{$n} { font-size: #{$n}px !important; }
+}
+.link-reset { color: inherit; text-decoration: none; &:hover { color: inherit; } }
+.text-overflow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cursor-pointer { cursor: pointer; }
+.w-lg-75 { @media (min-width: 992px) { width: 75% !important; } }
+.bg-opacity-30 { --ins-bg-opacity: .3; }
+.bg-opacity-40 { --ins-bg-opacity: .4; }
+.bg-opacity-90 { --ins-bg-opacity: .9; }
+.bg-purple-subtle { background-color: color-mix(in srgb, var(--otc-purple) 16%, transparent) !important; }
+.is-active { --otc-active: 1; }
+.off { opacity: .45; }
+.top-fixed, .top-hide, .top-scroll-up { transition: translate var(--otc-dur-base) var(--otc-ease), opacity var(--otc-dur-base) var(--otc-ease); }
+.strong-bar { height: 4px; border-radius: 999px; background: var(--otc-fill); }
+.password-bar { height: 6px; border-radius: 999px; background: var(--otc-fill); overflow: hidden; }
+.timeline-item { position: relative; padding: 0 0 18px 26px; }
+.timeline-item::before { content: ""; position: absolute; left: 7px; top: 6px; bottom: -6px; width: 2px; border-radius: 2px; background: var(--otc-sep); }
+.timeline-dot { position: absolute; left: 0; top: 4px; width: 16px; height: 16px; border-radius: 50%; background: var(--otc-accent); box-shadow: 0 0 0 4px var(--otc-accent-soft); }
+.timeline-time { color: var(--otc-text-3); font-size: 12.5px; }
+.timeline-content { padding-left: 4px; }
+.section-custom, .section-cta, .section-footer { position: relative; }
+.list-custom { list-style: none; padding: 0; }
+.mark-as-read { color: var(--otc-accent-ink); }
+.error-text-alt { color: var(--otc-text-3); font-weight: 800; letter-spacing: -.04em; }
+.card-radio { position: relative; .form-check-input { position: absolute; opacity: 0; } .form-check-label { width: 100%; padding: 14px; border-radius: var(--otc-r-inner); background: var(--otc-fill-hover); cursor: pointer; transition: box-shadow var(--otc-dur-fast) var(--otc-ease); } .form-check-input:checked + .form-check-label { box-shadow: 0 0 0 2px var(--otc-accent-ink); } }
+.card-side-img { border-radius: var(--otc-r-xl) 0 0 var(--otc-r-xl); object-fit: cover; }
+.icon-b3, .icon-intrag { display: inline-grid; place-items: center; font: 800 9px/1 var(--otc-font); letter-spacing: .02em; }
+.outlook-box, .email-app { display: flex; gap: var(--otc-gap); }
+.outlook-left-menu, .outlook-left-menu-sm { flex: none; }
+.email-editor { border-radius: var(--otc-r-md); }
+.logo-light, .logo-dark { display: inline-flex; }
+[data-bs-theme="dark"] .logo-dark { display: none !important; }
+:root:not([data-bs-theme="dark"]) .logo-light { display: none !important; }
+
+// ── 10. Páginas ─────────────────────────────────────────────────────────────
+// Widgets PRÓPRIOS das telas. Regra da casa: widget não se constrói sobre
+// `.card` (o CSS da página carrega antes do tema e perde) — classe própria,
+// e a pintura de vidro vem daqui.
+
+// 10a. Família estrutural: `-widget/-card/-panel/-tile` são placas de vidro
+// (o seletor estrutural que as telas já assumem, §23.1). Especificidade
+// BAIXA (`:where`) de propósito: o estado visual da página (`#page .x.is-ok`)
+// sempre vence.
+:where(.content-page) :where(div[class*="-widget"], div[class*="-panel"], div[class*="-tile"]):where(:not([class*="__"]):not(.row):not(.card):not(.modal-dialog):not(.tab-pane):not([class*="-widget-"]:not([class*="-widget--"])):not([class*="-panel-"]:not([class*="-panel--"])):not([class*="-tile-"]:not([class*="-tile--"]))) {
+  position: relative;
+  isolation: isolate;
+  border-radius: var(--otc-r-xl);
+  background-color: var(--otc-glass);
+  -webkit-backdrop-filter: var(--otc-blur);
+  backdrop-filter: var(--otc-blur);
+  box-shadow: var(--otc-depth);
+}
+// placas montadas pelo JS cujo nome não cai na família (`-kpi`, `-card`):
+// os cards-filtro das recons CGD/Conf Matching e as placas da Quotes
+:where(.content-page) :where(.cgd-kpi, .cfm-kpi, .qt-card) {
+  position: relative;
+  isolation: isolate;
+  border-radius: var(--otc-r-xl);
+  background-color: var(--otc-glass);
+  -webkit-backdrop-filter: var(--otc-blur);
+  backdrop-filter: var(--otc-blur);
+  box-shadow: var(--otc-depth);
+}
+// chip de ícone na cor do estado (`--hue`) dos cards-filtro das recons; o
+// Total de cada tela troca pelo gradiente da marca
+:where(.fxo-widget__ico, .cgd-kpi__ico, .cfm-kpi__ico) {
+  --hue: var(--otc-accent);
+  width: 38px; height: 38px; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--otc-r-sm);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--hue) 78%, #000), var(--hue));
+  color: #fff; font-size: 1.15rem;
+}
+// ladrilho de ícone em gradiente com o glifo branco (cards do Control Panel,
+// funcionalidades e passos do About). Matiz por `--hue` (padrão: o destaque);
+// o tamanho é da página.
+.otc-icon-tile {
+  --hue: var(--otc-accent);
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  border-radius: 30%;
+  background-image: linear-gradient(150deg, color-mix(in srgb, var(--hue) 60%, #fff), var(--hue));
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .4), 0 8px 18px -8px var(--hue);
+  i { color: #fff; }
+}
+// cabeçalho dos widgets de número (`x-widget__head`: ícone · título · pílula),
+// o mesmo nas ~20 telas de posição e liquidação. Peso zero: a página que quer
+// o ícone de 40px, o título em caixa alta ou o respiro embaixo só declara isso.
+:where(.content-page) :where([class*="-widget__head"]) {
+  display: flex; align-items: center; gap: .6rem;
+}
+:where(.content-page) :where([class*="-widget__icon"]) {
+  width: 38px; height: 38px; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--otc-r-sm); font-size: 1.15rem;
+}
+// (o título tem o peso de UMA classe: ele é um <h3>/<h5>, e com peso zero o
+// tamanho do próprio cabeçalho do Bootstrap vencia)
+:where(.content-page) [class*="-widget__title"] {
+  margin: 0; font-size: .82rem; font-weight: 700; letter-spacing: -.2px; color: var(--otc-text);
+}
+// o ladrilho TOTAL (`x-widget--total`, Cockpit, Other Publisher, Live
+// Position, Cognos…): gradiente do destaque e texto branco. Modificador `--`
+// continua na família estrutural (o `-widget-` excluído é o do FILHO).
+// (o texto vai com !important: a regra de layout da página tem id e pinta o
+// título com `--otc-text`)
+.content-page [class*="-widget--total"] {
+  background: linear-gradient(135deg, var(--otc-accent) 0%, var(--otc-indigo) 100%) !important;
+  color: #fff;
+  :is([class*="__title"], [class*="__value"], [class*="__label"], [class*="sub-val"]) { color: #fff !important; }
+  [class*="__icon"] { background: rgba(255, 255, 255, .18) !important; color: #fff !important; }
+  [class*="__sub"]:not([class*="__subs"]) { color: rgba(255, 255, 255, .85) !important; }
+  [class*="__subs"] { border-top-color: rgba(255, 255, 255, .25) !important; }
+}
+.widget-lbl { font: 560 12.5px/1.4 var(--otc-font); color: var(--otc-text-2); }
+.widget-val { font: 800 23px/1.1 var(--otc-font-display); letter-spacing: -.02em; color: var(--otc-text); font-variant-numeric: tabular-nums; }
+.widget-icon { display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 30%; background: var(--otc-fill); color: var(--otc-accent-ink); }
+.widget-total { font-weight: 800; }
+
+// 10b. Tools (as calculadoras): widget próprio `.tl-card`, nunca `.card`.
+// A centralização das tabelas NÃO mora aqui: cada template declara a sua num
+// <style> inline (é o que o check_table_center confere).
+.tl-page {
+  --tl-hairline: var(--otc-sep);
+  --tl-accent: var(--otc-accent-ink);
+  --tl-accent-soft: var(--otc-accent-soft);
+  --tl-ok: var(--otc-green);
+  --tl-warn: var(--otc-orange);
+  --tl-bad: var(--otc-danger);
+}
+.tl-page .tl-card { @include otc-slab; padding: var(--otc-pad); margin-bottom: var(--otc-gap); > * { position: relative; z-index: 1; } }
+.tl-page .tl-card--accent { box-shadow: var(--otc-depth), inset 0 0 0 1.5px color-mix(in srgb, var(--tl-accent) 55%, transparent); }
+.tl-page .tl-card--good { box-shadow: var(--otc-depth), inset 0 0 0 1.5px color-mix(in srgb, var(--tl-ok) 55%, transparent); }
+.tl-page .tl-card--bad { box-shadow: var(--otc-depth), inset 0 0 0 1.5px color-mix(in srgb, var(--tl-bad) 55%, transparent); }
+.tl-page .tl-card--dashed {
+  background: transparent; box-shadow: none; text-align: center;
+  padding: 2.5rem 1rem; color: var(--otc-text-2);
+  outline: 1.5px dashed var(--otc-sep); outline-offset: -1.5px;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  &::before, &::after { display: none; }
+  i { font-size: 2rem; display: block; margin-bottom: .5rem; opacity: .5; }
+}
+.tl-page .tl-kicker { font: 650 12px/1 var(--otc-font); text-transform: uppercase; letter-spacing: .06em; color: var(--tl-accent); margin: 0 0 .75rem; }
+.tl-page .tl-kicker--muted { color: var(--otc-text-3); }
+.tl-page .tl-title { font: 650 17px/1.25 var(--otc-font); letter-spacing: -.01em; margin: 0; }
+.tl-page .tl-sub { font-size: 13.5px; color: var(--otc-text-2); margin: .15rem 0 0; }
+.tl-page .tl-field label, .tl-page .tl-field .tl-label { display: block; font: 600 12.5px/1.4 var(--otc-font); color: var(--otc-text-2); margin-bottom: 6px; }
+.tl-page .tl-field .form-control, .tl-page .tl-field .form-select { font-size: 14px; }
+// número e percentual à ESQUERDA, junto do rótulo (pedido da mesa)
+.tl-page .tl-field .form-control[data-format] { font-variant-numeric: tabular-nums; text-align: left; }
+// o flatpickr não desenha ícone: a data se distingue de um campo de texto aqui
+// (pela CLASSE — o altInput herda a classe, não o id)
+.tl-page input.tl-date {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236e6e80' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='3'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right .7rem center; background-size: 1rem 1rem;
+  padding-right: 2.1rem; cursor: pointer;
+}
+[data-bs-theme="dark"] .tl-page input.tl-date {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23b4b4c4' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='3'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
+}
+.tl-page .tl-help { font-size: 12.5px; line-height: 1.35; color: var(--otc-text-3); margin: .3rem 0 0; }
+.tl-page .tl-help--warn { color: var(--tl-warn); }
+.tl-page .form-control.tl-readonly { opacity: .72; font-style: italic; }
+.tl-page .tl-note { font-size: 13px; line-height: 1.4; color: var(--otc-text-2); border-radius: var(--otc-r-md); padding: .6rem .85rem; background: var(--tl-accent-soft); }
+.tl-page .tl-note--warn { background: color-mix(in srgb, var(--tl-warn) 14%, transparent); color: var(--otc-text); }
+.tl-page .tl-note--ok { background: color-mix(in srgb, var(--tl-ok) 14%, transparent); color: var(--otc-text); }
+.tl-page .tl-formula { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.6; }
+.tl-page .tl-check {
+  display: flex; gap: .6rem; align-items: flex-start;
+  border-radius: var(--otc-r-md); padding: .6rem .85rem; cursor: pointer;
+  background: var(--otc-fill-hover);
+  transition: background-color var(--otc-dur-fast) var(--otc-ease);
+  &:hover { background: var(--otc-fill); }
+  input { margin-top: .15rem; flex: 0 0 auto; }
+  strong { display: block; font-size: 14px; font-weight: 600; }
+  span { font-size: 12.5px; color: var(--otc-text-2); }
+}
+// as pontas do Swap Calculator
+.tl-page .tl-leg { border-radius: var(--otc-r-inner); padding: 1rem 1.1rem; background: var(--otc-fill-hover); }
+.tl-page .tl-leg--a { background: var(--tl-accent-soft); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--tl-accent) 40%, transparent); }
+.tl-page .tl-leg .tl-kicker { margin-bottom: .6rem; }
+// o campo que o pré-preenchimento NÃO conseguiu puxar: em branco e SINALIZADO
+.tl-page .tl-missing .form-control, .tl-page .tl-missing .form-select { box-shadow: 0 0 0 2px var(--tl-bad) !important; }
+.tl-page .tl-missing label::after { content: ' •'; color: var(--tl-bad); font-size: .9rem; line-height: 0; }
+.tl-page .tl-assumed .form-control, .tl-page .tl-assumed .form-select { box-shadow: 0 0 0 2px var(--tl-warn) !important; }
+.tl-page .tl-assumed label::after { content: ' •'; color: var(--tl-warn); font-size: .9rem; line-height: 0; }
+// o campo que veio da DENOMINAÇÃO da curva (§479)
+.tl-page .tl-derived .form-control, .tl-page .tl-derived .form-select { box-shadow: 0 0 0 2px var(--tl-accent) !important; }
+.tl-page .tl-derived label::after { content: ' ◆'; color: var(--tl-accent); font-size: .7rem; line-height: 0; }
+.tl-page textarea.tl-curve-desc { font-size: 13px; resize: vertical; }
+// estatísticas e o número grande
+.tl-page .tl-stats { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.tl-page .tl-stat { @include otc-tile(var(--otc-glass), var(--otc-r-card-sm)); position: relative; padding: 10px 16px; min-width: 0; }
+.tl-page .tl-stat--hi { background-color: color-mix(in srgb, var(--otc-accent) 16%, var(--otc-glass)); }
+.tl-page .tl-stat__label { font: 560 12.5px/1.4 var(--otc-font); color: var(--otc-text-2); }
+.tl-page .tl-stat__value { font: 800 21px/1.15 var(--otc-font-display); letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin-top: .15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl-page .tl-stat__note { font-size: 12px; color: var(--otc-text-3); margin-top: .1rem; }
+.tl-page .tl-big { font: 800 2.3rem/1.05 var(--otc-font-display); font-variant-numeric: tabular-nums; letter-spacing: -.03em; }
+.tl-page .tl-big--good { color: var(--tl-ok); }
+.tl-page .tl-big--bad { color: var(--tl-bad); }
+.tl-page .tl-pill { display: inline-flex; align-items: center; gap: .35rem; font: 600 12px/1 var(--otc-font); padding: .3rem .7rem; border-radius: var(--otc-r-pill); background: var(--otc-fill); }
+.tl-page .tl-kv { display: flex; justify-content: space-between; gap: .75rem; font-size: 13.5px; padding: .2rem 0; }
+.tl-page .tl-kv span:first-child { color: var(--otc-text-2); }
+.tl-page .tl-kv span:last-child { font-variant-numeric: tabular-nums; text-align: right; font-weight: 600; }
+.tl-page .tl-desc { font-size: 13px; color: var(--otc-text-2); }
+// gráfico SVG: os eixos em currentColor para valerem nos dois temas
+.tl-page .tl-svg { width: 100%; height: auto; display: block; color: var(--otc-text-2); }
+.tl-page .tl-svg .tl-grid { stroke: currentColor; opacity: .18; }
+.tl-page .tl-svg text { fill: currentColor; font-size: 10px; }
+.tl-page .tl-legend { display: flex; flex-wrap: wrap; gap: .9rem; font-size: 12.5px; color: var(--otc-text-2); margin-top: .5rem; }
+.tl-page .tl-legend i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: .35rem; }
+// dropzone do Term SOFR
+.tl-page .tl-drop {
+  border: 1.5px dashed var(--otc-sep); border-radius: var(--otc-r-inner); padding: 1.6rem 1rem; text-align: center;
+  cursor: pointer; transition: border-color var(--otc-dur-fast) var(--otc-ease), background-color var(--otc-dur-fast) var(--otc-ease);
+  &.is-over, &:hover { border-color: var(--tl-accent); background: var(--tl-accent-soft); }
+  i { font-size: 1.8rem; color: var(--tl-accent); display: block; margin-bottom: .35rem; }
+}
+.tl-page .tl-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: 1rem; }
+.tl-page .tl-table-wrap { max-height: 32rem; overflow: auto; }
+.tl-page table.tl-dt { width: 100%; }
+.tl-page table.tl-dt tbody td { font-variant-numeric: tabular-nums; }
+.tl-page .tl-col-filter { font-size: 12px; height: 28px; min-height: 28px; }
+
+// 10c. Dashboard (index.html): só o que é dele — o tamanho das áreas de
+// gráfico. Cabeçalho, ladrilhos e cards são os componentes do tema.
+.dash-chart { position: relative; height: 300px; }
+.dash-chart--tall { height: 340px; }
+.dash-chart--sm { height: 260px; }
+
+// 10d. Control Panel: cards de rotina
+.cp-card { @include otc-slab; height: 100%; padding: var(--otc-pad); display: flex; flex-direction: column; gap: 10px; > * { position: relative; z-index: 1; } }
+.cp-run-btn { align-self: flex-start; }
+.cp-ce-item, .cp-acc-row { display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-radius: var(--otc-r-md); &:hover { background: var(--otc-fill-hover); } }
+.cp-dz-list { display: flex; flex-direction: column; gap: 6px; }
+
+// 10e. Accrual/MtM/Settlement e cards de recon
+.acc-stat, .acc-tcard, .acc-datecard { @include otc-tile(var(--otc-glass), var(--otc-r-card-sm)); padding: 12px 16px; }
+.acc-btn, .acc-load-btn { min-height: 36px; }
+.acc-comment-inp, .acc-edit-inp, .acc-date-input, .acc-tool-select, .ops-cell-inp { min-height: 32px; padding: 4px 10px; border: 0; border-radius: var(--otc-r-sm); background: var(--otc-fill); color: var(--otc-text); &:focus { outline: 0; box-shadow: 0 0 0 2px var(--otc-accent-ink); } }
+.acc-cols-menu, .ob-cols-menu, .ei-combo-menu, .qt-combo__menu, .ar-ac-drop, .map-ac-drop, .ob-req-drop {
+  @include otc-tile(var(--otc-menu-bg), var(--otc-r-lg));
+  -webkit-backdrop-filter: var(--otc-blur-thick);
+  backdrop-filter: var(--otc-blur-thick);
+  padding: 6px;
+  box-shadow: var(--otc-depth);
+  z-index: 1065;
+  max-height: 220px;
+  overflow: auto;
+  animation: otc-pop-in 280ms var(--otc-ease-out) both;
+  > * { border-radius: var(--otc-r-md); }
+  > :hover, > .active { background: var(--otc-accent); color: #fff; }
+}
+.ops-recon-badge { border-radius: var(--otc-r-pill); padding: 4px 10px; font: 650 12px/1 var(--otc-font); }
+.ops-status-sel { min-height: 30px; border: 0; border-radius: var(--otc-r-pill); background: var(--otc-fill); color: var(--otc-text); padding: 2px 10px; }
+.mc-card, .mc-item, .ob-item, .qt-card, .ei-doc-row, .ei-up-block, .fi-block, .fi-tpl-item, .fi-tpl-pair, .map-type-item, .ei-type-item {
+  border-radius: var(--otc-r-inner);
+}
+.mc-item, .ob-item { @include otc-tile(var(--otc-glass), var(--otc-r-inner)); padding: 14px 16px; }
+.map-type-item, .ei-type-item, .fi-tpl-item { padding: 8px 12px; cursor: pointer; transition: background-color var(--otc-dur-fast) var(--otc-ease); &:hover { background: var(--otc-fill-hover); } &.active, &.is-active { background: var(--otc-accent); color: #fff; font-weight: 600; } }
+.fi-src-value { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+.pa-user, .pa-role, .pa-summary { border-radius: var(--otc-r-md); }
+.pcm-mini, .pcm-hero { border-radius: var(--otc-r-xl); }
+.ndm-soon-pill { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: var(--otc-r-pill); background: var(--otc-fill); color: var(--otc-text-3); font: 650 11px/1 var(--otc-font); }
+.nop-preview { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+.hc-dz-file, .pr-dz-list { border-radius: var(--otc-r-md); }
+.date-wrap { position: relative; display: inline-flex; align-items: center; }
+.ob-fld { margin-bottom: 10px; }
+.ob-mass { display: flex; gap: 8px; align-items: center; }
+
+// 10f. About
+.ab-hero { padding: clamp(24px, 4vw, 56px) 0; }
+.ab-feat { @include otc-tile(var(--otc-glass), var(--otc-r-xl)); padding: var(--otc-pad); }
+.ab-step { display: flex; gap: 14px; }
+.ab-info { color: var(--otc-text-2); }
+.ab-btn-o { @extend .btn-glass; }
+.ab-btn-w { background: #fff !important; color: #0f1017 !important; }
+// os cinco painéis do About são a MESMA placa de vidro nos dois temas (eram
+// fundos fixos — branco, pergaminho, preto — sem par escuro)
+.ab-tile-dark, .ab-tile-dark2, .ab-tile-white, .ab-tile-parchment, .ab-tile-blue {
+  @include otc-tile(var(--otc-glass), var(--otc-r-xl));
+  overflow: hidden;
+  color: var(--otc-text);
+}
+
+// 10g. Autenticação e erro (base.html sem casca)
+.auth-box {
+  position: relative;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.auth-box .card, .auth-box-form { width: min(440px, 100%); }
+.auth-brand { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 18px; img { height: 44px; } }
+.auth-sub-text { color: var(--otc-text-2); }
+.auth-overlay { position: absolute; inset: 0; background: var(--otc-scrim); }
+.two-factor input { width: 48px; height: 56px; text-align: center; font: 700 22px/1 var(--otc-font-display); }
+
+// ── 11. Modo opaco e movimento reduzido ─────────────────────────────────────
+// Máquina SEM GPU (as do JPM): sem desfoque nenhum — superfícies de cor
+// SÓLIDA. Borda de luz, profundidade e a lente ficam: o visual continua com
+// volume, só deixa de ser translúcido. (Alfa sem blur não é material.)
+:root.is-solid {
+  --otc-glass: var(--otc-solid);
+  --otc-glass-chrome: var(--otc-solid);
+  --otc-glass-thick: var(--otc-solid);
+  --otc-thead-bg: var(--otc-solid);
+  --otc-menu-bg: var(--otc-solid);
+  --otc-blur: none;
+  --otc-blur-thick: none;
+  body::after { display: none; }
+  *, *::before, *::after { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+}
+:root.is-solid[data-bs-theme="dark"] { --otc-glass: #1c1c20; --otc-glass-chrome: #1c1c20; --otc-glass-thick: #222228; }
+@media (prefers-reduced-transparency: reduce) {
+  :root:not(.is-glass-forced) {
+    --otc-glass: var(--otc-solid);
+    --otc-glass-chrome: var(--otc-solid);
+    --otc-glass-thick: var(--otc-solid);
+    --otc-blur: none;
+    --otc-blur-thick: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+  }
+  .otc-enter, .otc-title-char, .otc-enter-soft { animation: otc-fade-in 150ms ease both !important; }
+}

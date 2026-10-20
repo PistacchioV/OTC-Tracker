@@ -35,116 +35,48 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <style>
-/* ============================================================================
-   Conf. Matching — FepWeb × Athena.
-   Cards de contagem por status + tabela no padrão da casa (molde: Recon CGD).
-   Tokens --ins-*/--vr-*, nunca --bs-*.
-   ============================================================================ */
-#cfm-page { --cfm-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
+{# Só o que é DESTA tela (molde: Recon CGD): os cards de contagem que FILTRAM a tabela pelo status (placa, chip na cor do status, o ativo, o Total de fechamento), o campo de data nativo escondido atrás do texto, as larguras de Actions/Comentário, o menu de colunas e a origem do arquivo. Painel, tabela, botões e linha de filtro vêm do tema. #}
+#cfm-page .cfm-panel { padding: 1rem 1.1rem 1.15rem; }
 
-#cfm-page .cfm-panel {
-    background: var(--vr-card-bg, var(--ins-secondary-bg));
-    border: 1px solid var(--vr-card-border, var(--ins-border-color));
-    border-radius: var(--vr-card-radius, 18px);
-    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
-    padding: 1rem 1.1rem 1.15rem;
-}
-
-/* Os cards de contagem. Clicar num deles FILTRA a tabela pelo status. */
+/* ── Cards de contagem (montados pelo JS; clicar filtra pelo status) ── */
 #cfm-page .cfm-kpi {
-    background: var(--vr-card-bg, var(--ins-secondary-bg));
-    border: 1px solid var(--vr-card-border, var(--ins-border-color));
-    border-radius: var(--vr-card-radius, 18px);
-    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
     padding: .9rem 1rem; height: 100%; cursor: pointer;
     display: flex; align-items: center; gap: .75rem;
-    transition: box-shadow 240ms var(--cfm-ease), border-color 240ms var(--cfm-ease), transform 240ms var(--cfm-ease);
+    transition: box-shadow var(--otc-dur-base) var(--otc-ease-out);
 }
-@media (hover: hover) and (pointer: fine) {
-    #cfm-page .cfm-kpi:hover { transform: translateY(-2px); border-color: rgba(0,102,204,.28);
-                               box-shadow: var(--vr-card-shadow-hover, 0 18px 40px rgba(94,92,230,.14)); }
-    #cfm-page .cfm-kpi:hover .cfm-kpi__ico { transform: scale(1.1) rotate(-4deg); }
-}
-#cfm-page .cfm-kpi.cfm-on { border-color: var(--vr-accent-1, #0066cc); box-shadow: 0 0 0 2px rgba(0,102,204,.16); }
-#cfm-page .cfm-kpi__ico {
-    width: 38px; height: 38px; flex: 0 0 auto; border-radius: 11px; color: #fff;
-    display: inline-flex; align-items: center; justify-content: center; font-size: 1.15rem;
-    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6));
-    transition: transform 240ms var(--cfm-ease);
-}
-#cfm-page .cfm-k-mfep    .cfm-kpi__ico { background: linear-gradient(100deg, #b3261e, #ff453a); }
-#cfm-page .cfm-k-math    .cfm-kpi__ico { background: linear-gradient(100deg, #7c3aed, #d946ef); }
-#cfm-page .cfm-k-dup     .cfm-kpi__ico { background: linear-gradient(100deg, #b07500, #f7b84b); }
-#cfm-page .cfm-k-ok      .cfm-kpi__ico { background: linear-gradient(100deg, #1a7f37, #34c759); }
-/* o Total usa o gradiente da MARCA: os outros quatro são cores de estado, ele é
-   o fechamento da conta */
-#cfm-page .cfm-k-total   .cfm-kpi__ico { background: var(--vr-grad); }
-#cfm-page .cfm-k-total {
-    border-color: color-mix(in oklab, var(--sf-blue) 42%, var(--vr-card-border));
-    box-shadow: var(--vr-card-shadow), 0 0 26px -8px color-mix(in oklab, var(--sf-blue) 70%, transparent);
-}
-#cfm-page .cfm-kpi__n { font-size: 1.4rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: var(--ins-body-color); }
-#cfm-page .cfm-kpi__l { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ins-secondary-color); }
+#cfm-page .cfm-kpi.cfm-on { box-shadow: 0 0 0 2px var(--otc-accent-ink), var(--otc-depth); }
+#cfm-page .cfm-k-mfep .cfm-kpi__ico { --hue: var(--otc-danger); }
+#cfm-page .cfm-k-math .cfm-kpi__ico { --hue: var(--otc-purple); }
+#cfm-page .cfm-k-dup  .cfm-kpi__ico { --hue: var(--otc-orange); }
+#cfm-page .cfm-k-ok   .cfm-kpi__ico { --hue: var(--otc-green); }
+/* O Total usa o gradiente da MARCA: os outros quatro são estados, ele é o fechamento. */
+#cfm-page .cfm-k-total .cfm-kpi__ico { background: linear-gradient(100deg, var(--otc-accent), color-mix(in srgb, var(--otc-accent) 60%, var(--otc-teal))); }
+#cfm-page .cfm-k-total { box-shadow: var(--otc-depth), 0 0 26px -8px color-mix(in srgb, var(--otc-blue) 70%, transparent); }
+#cfm-page .cfm-k-total.cfm-on { box-shadow: 0 0 0 2px var(--otc-accent-ink), var(--otc-depth); }
+#cfm-page .cfm-kpi__n { font-size: 1.4rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: var(--otc-text); }
+#cfm-page .cfm-kpi__l { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--otc-text-2); }
 
 /* ── Data: `type="date"` INVISÍVEL por cima de um texto readonly em dd/mm/aaaa
-   (o nativo desenha no locale do sistema — mm/dd no Windows do JP). */
-#cfm-page .date-wrap { position: relative; width: 132px; }
+   (o nativo desenha no locale do SISTEMA — mm/dd no Windows do JP). */
+#cfm-page .date-wrap { width: 132px; }
 #cfm-page .date-wrap input[type=date] { position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 2; }
 #cfm-page .date-wrap input[type=text] { pointer-events: none; padding-right: 28px; }
 #cfm-page .date-wrap-icon { position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
-                            z-index: 1; font-size: 15px; pointer-events: none; color: var(--ins-secondary-color, #6c757d); }
+                            z-index: 1; font-size: 15px; pointer-events: none; color: var(--otc-text-2); }
 
-/* ── Tabela no padrão da casa. As regras do `th` valem para o CLONE que o
-   scrollX cria — o DataTables remove o id da tabela do cabeçalho. */
-#cfm-table thead th,
-.dt-scroll-head thead th,
-.dt-scroll-headInner thead th,
-.dataTables_scrollHeadInner thead th {
-    text-align: center !important; vertical-align: middle !important;
-    font-size: .7rem; white-space: normal;
-}
-#cfm-table tbody td { text-align: center; vertical-align: middle; font-size: .8rem; white-space: nowrap; }
+/* ── Tabela ─────────────────────────────────────────────────────── */
 #cfm-table tbody td.cfm-ell { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
 #cfm-table tbody td.cfm-num { font-variant-numeric: tabular-nums; }
-#cfm-table thead .cfm-filters th,
-.dt-scroll-head thead .cfm-filters th,
-.dt-scroll-headInner thead .cfm-filters th,
-.dataTables_scrollHeadInner thead .cfm-filters th { padding: 4px 5px; }
-#cfm-table thead .cfm-filters input[type=text],
-.dt-scroll-head thead .cfm-filters input[type=text],
-.dt-scroll-headInner thead .cfm-filters input[type=text],
-.dataTables_scrollHeadInner thead .cfm-filters input[type=text] {
-    width: 100%; min-width: 4.5rem; font-size: 12px; height: 28px; padding: 2px 6px;
-    border: 1px solid var(--ins-border-color); border-radius: 6px;
-    background: var(--ins-secondary-bg); color: var(--ins-body-color);
-}
-/* A coluna Actions já nasce com a largura do par Save + Cancel: alargando só
-   na edição, o corpo desalinhava do cabeçalho clonado do scrollX. */
+/* Actions já nasce com a largura do par Save + Cancel: alargando só na edição,
+   o corpo desalinhava do cabeçalho clonado do scrollX. */
 #cfm-table td.cfm-acts { min-width: 84px; }
-#cfm-table td .badge { font-size: .68rem; font-weight: 700; padding: .28em .7em; }
-
-/* O comentário é texto livre e costuma ser longo: a célula corta com
-   reticências (o título no hover mostra o inteiro). */
+/* O comentário é texto livre: corta com reticências (o title mostra o inteiro). */
 #cfm-table td.cfm-comment { max-width: 18rem; overflow: hidden; text-overflow: ellipsis; }
-#cfm-table td.cfm-comment input { font-size: .72rem; min-width: 14rem; }
+#cfm-table td.cfm-comment input { min-width: 14rem; }
 
-#cfm-page .btn-toolbar-all {
-    font-size: .75rem !important; padding: .25rem .6rem !important;
-    height: auto !important; line-height: 1.4 !important; white-space: nowrap !important;
-    transition: transform 140ms var(--cfm-ease), box-shadow 140ms var(--cfm-ease);
-}
-@media (hover: hover) and (pointer: fine) {
-    #cfm-page .btn-toolbar-all:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.10); }
-}
-#cfm-page .btn-toolbar-all:active { transform: scale(.96) !important; }
 #cfm-page .cfm-cols-menu { max-height: 320px; overflow-y: auto; min-width: 14rem; font-size: .78rem; }
-#cfm-page .cfm-src { font-size: .7rem; color: var(--ins-secondary-color); }
+#cfm-page .cfm-src { font-size: .7rem; color: var(--otc-text-2); }
 #cfm-page .cfm-src code { font-size: .68rem; }
-#cfm-page .cfm-warn {
-    background: #fff6e5; border: 1px solid #f2d9a8; color: #8a5b00;
-    border-radius: 10px; padding: .6rem .8rem; font-size: .74rem; margin-bottom: .8rem;
-}
-[data-bs-theme=dark] #cfm-page .cfm-warn { background: rgba(247,184,75,.12); border-color: rgba(247,184,75,.3); color: #f7b84b; }
 </style>
 {% endblock extra_css %}
 
@@ -635,7 +567,7 @@
               (j.generated_at ? '<div>' + esc(t('at')) + ' ' + esc(j.generated_at) + '</div>' : '')
             : '');
         $('#cfm-warnings').html((j.warnings || []).length
-            ? '<div class="cfm-warn">' + (j.warnings || []).map(function (w) {
+            ? '<div class="otc-banner mb-2">' + (j.warnings || []).map(function (w) {
                   return '<div>• ' + esc(msgText(w, 'w_')) + '</div>'; }).join('') + '</div>'
             : '');
         if (j.ref) {

@@ -8,241 +8,86 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
 <style>
-#live-position-ndf-page {
-    --ln-hairline: rgba(0,0,0,.08);
-    --ln-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-}
-[data-bs-theme="dark"] #live-position-ndf-page { --ln-hairline: rgba(255,255,255,.10); }
-
-/* Widgets */
+{# Só o que é DESTA tela: os widgets de contagem, o Total em destaque e a
+   largura das colunas. Vidro, filtro inteligente, campo de data, tabela,
+   botões de linha e menu do Export vêm do tema. #}
 #live-position-ndf-page .ln-widgets .col { display: flex; margin-bottom: .5rem; }
-#live-position-ndf-page .ln-widget {
-    flex: 1; border: 1px solid var(--ln-hairline); border-radius: 14px; padding: 1rem 1.1rem;
-    background: var(--ins-secondary-bg, #fff);
-    transition: transform 220ms var(--ln-ease-out), box-shadow 220ms var(--ln-ease-out);
-}
-@media (hover: hover) and (pointer: fine) {
-    #live-position-ndf-page .ln-widget:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
-}
-#live-position-ndf-page .ln-widget__head { display: flex; align-items: center; gap: .6rem; }
-#live-position-ndf-page .ln-widget__icon {
-    width: 40px; height: 40px; border-radius: 11px; display: inline-flex; align-items: center;
-    justify-content: center; font-size: 1.2rem; flex-shrink: 0;
-}
-#live-position-ndf-page .ln-widget__title { font-size: .8rem; font-weight: 700; letter-spacing: -.2px; margin: 0; text-transform: uppercase; }
-#live-position-ndf-page .ln-widget__value { font-size: 1.8rem; font-weight: 700; line-height: 1; margin-left: auto; letter-spacing: -1px; }
-#live-position-ndf-page .ln-widget--total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0; }
-#live-position-ndf-page .ln-widget--total .ln-widget__title,
-#live-position-ndf-page .ln-widget--total .ln-widget__value { color: #fff; }
-#live-position-ndf-page .ln-widget--total .ln-widget__icon { background: rgba(255,255,255,.18); color: #fff; }
+#live-position-ndf-page .ln-widget { flex: 1; padding: 1rem 1.1rem; }
+#live-position-ndf-page .ln-widget__icon { width: 40px; height: 40px; font-size: 1.2rem; }
+#live-position-ndf-page .ln-widget__title { font-size: .8rem; text-transform: uppercase; }
+#live-position-ndf-page .ln-widget__value { font-size: 1.8rem; font-weight: 700; line-height: 1; margin-left: auto; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+/* o Total é a placa cheia do destaque (fora da família de vidro: `--total`) */
 
-/* Reference date picker */
-#live-position-ndf-page .ln-datewrap { position: relative; width: 170px; }
-#live-position-ndf-page .ln-datewrap input {
-    width: 100%; border: 1px solid var(--bs-border-color); border-radius: 10px;
-    padding: .3rem 2.1rem .3rem .7rem; font-size: .85rem; font-weight: 600;
-    color: var(--bs-body-color); background: var(--bs-secondary-bg, #fff); cursor: pointer;
-    transition: border-color 0.16s var(--ln-ease-out), box-shadow 0.16s var(--ln-ease-out);
-}
-#live-position-ndf-page .ln-datewrap input:focus { outline: none; border-color: var(--bs-primary); box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), .18); }
-#live-position-ndf-page .ln-cal-btn {
-    position: absolute; top: 0; right: 0; bottom: 0; width: 34px; display: inline-flex;
-    align-items: center; justify-content: center; color: var(--bs-secondary-color); cursor: pointer;
-}
-#live-position-ndf-page .btn:active { transform: scale(0.97); }
-
-/* Smart filter (New Deals model) */
-#live-position-ndf-page .smart-filter-wrapper {
-    position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
-    border: 1px solid var(--ln-hairline); border-radius: 0.6875rem;
-    padding: 4px 8px; min-height: 38px; background: var(--ins-secondary-bg); cursor: text;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-#live-position-ndf-page .smart-filter-wrapper:focus-within { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
-#live-position-ndf-page .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-#live-position-ndf-page .smart-filter-chip {
-    display: inline-flex; align-items: center; gap: 5px; background: #6c757d; color: #fff;
-    border-radius: 50rem; padding: 2px 8px; font-size: 10px; font-weight: 500; white-space: nowrap;
-}
-#live-position-ndf-page .smart-filter-chip .sf-chip-remove { cursor: pointer; opacity: .75; font-size: 13px; line-height: 1; margin-left: 2px; }
-#live-position-ndf-page .smart-filter-input {
-    border: none; outline: none; flex: 1; min-width: 200px; font-size: 0.82rem;
-    background: transparent; color: var(--ins-body-color); padding: 2px 0;
-}
-#live-position-ndf-page .smart-filter-dropdown {
-    position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 1055;
-    background: var(--ins-secondary-bg); border: 1px solid var(--ins-border-color); border-radius: 6px;
-    box-shadow: 0 6px 18px rgba(0,0,0,.25); max-height: 260px; overflow-y: auto; display: none; padding: 4px 0;
-}
-#live-position-ndf-page .smart-filter-dropdown li {
-    padding: 6px 12px; cursor: pointer; font-size: 0.81rem; display: flex; align-items: center;
-    gap: 8px; list-style: none; color: var(--ins-body-color);
-}
-#live-position-ndf-page .smart-filter-dropdown li:hover { background: rgba(0,102,204,.10); }
-#live-position-ndf-page .sf-type-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; text-transform: uppercase; font-weight: 600; color: #fff; opacity: .85; }
-#live-position-ndf-page .sf-type-text  { background: #6c757d; }
-#live-position-ndf-page .sf-type-date  { background: #0284c7; }
-#live-position-ndf-page .sf-type-value { background: #b45309; }
-
-/* Table */
-#lnndf-table thead th {
-    white-space: nowrap; text-overflow: ellipsis; min-width: 120px; padding: 8px 12px;
-    text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
-}
-#lnndf-table tbody td { white-space: nowrap; font-size: 0.74rem; text-align: center; vertical-align: middle; }
-
-    /* Colunas específicas com larguras adequadas — um bloco por coluna */
-    /* nth-child(1)=checkbox  (2)=Status  (3)=Actions  (4..68)=dados TER  (69+)=Média Asiática dinâmica.
-       scrollX:false → header não é clonado, então NÃO precisa de .dt-scroll-head. Edite só o px (1×). */
-    #lnndf-table th:nth-child(1), #lnndf-table td:nth-child(1) { width: 44px;  min-width: 44px;  }  /* checkbox */
-    #lnndf-table th:nth-child(2), #lnndf-table td:nth-child(2) { width: 110px; min-width: 110px; } /* Status */
-    #lnndf-table th:nth-child(3), #lnndf-table td:nth-child(3) { width: 70px;  min-width: 70px;  } /* Actions */
-    #lnndf-table th:nth-child(4), #lnndf-table td:nth-child(4) { width: 160px; min-width: 160px; } /* Codigo da Parte */
-    #lnndf-table th:nth-child(5), #lnndf-table td:nth-child(5) { width: 210px; min-width: 210px; } /* Nome da Parte */
-    #lnndf-table th:nth-child(6), #lnndf-table td:nth-child(6) { width: 170px; min-width: 170px; } /* CPF/CNPJ do Participante */
-    #lnndf-table th:nth-child(7), #lnndf-table td:nth-child(7) { width: 160px; min-width: 160px; } /* Codigo da Contraparte */
-    #lnndf-table th:nth-child(8), #lnndf-table td:nth-child(8) { width: 210px; min-width: 210px; } /* Nome da Contraparte */
-    #lnndf-table th:nth-child(9), #lnndf-table td:nth-child(9) { width: 170px; min-width: 170px; } /* CPF/CNPJ da Contraparte */
-    #lnndf-table th:nth-child(10), #lnndf-table td:nth-child(10) { width: 140px; min-width: 140px; } /* Contrato */
-    #lnndf-table th:nth-child(11), #lnndf-table td:nth-child(11) { width: 170px; min-width: 170px; } /* Classe do Ativo Subjacente */
-    #lnndf-table th:nth-child(12), #lnndf-table td:nth-child(12) { width: 150px; min-width: 150px; } /* Data de Emissao */
-    #lnndf-table th:nth-child(13), #lnndf-table td:nth-child(13) { width: 150px; min-width: 150px; } /* Data de Inicio de Vigencia */
-    #lnndf-table th:nth-child(14), #lnndf-table td:nth-child(14) { width: 150px; min-width: 150px; } /* Data de Vencimento */
-    #lnndf-table th:nth-child(15), #lnndf-table td:nth-child(15) { width: 150px; min-width: 150px; } /* Valor Base no registro */
-    #lnndf-table th:nth-child(16), #lnndf-table td:nth-child(16) { width: 150px; min-width: 150px; } /* Valor Base atual */
-    #lnndf-table th:nth-child(17), #lnndf-table td:nth-child(17) { width: 150px; min-width: 150px; } /* Taxa Forward */
-    #lnndf-table th:nth-child(18), #lnndf-table td:nth-child(18) { width: 150px; min-width: 150px; } /* Taxa de Cambio */
-    #lnndf-table th:nth-child(19), #lnndf-table td:nth-child(19) { width: 210px; min-width: 210px; } /* Descricao da posicao do Participante */
-    #lnndf-table th:nth-child(20), #lnndf-table td:nth-child(20) { width: 170px; min-width: 170px; } /* Tipo Indicador Financeiro */
-    #lnndf-table th:nth-child(21), #lnndf-table td:nth-child(21) { width: 170px; min-width: 170px; } /* Tipo do Contrato */
-    #lnndf-table th:nth-child(22), #lnndf-table td:nth-child(22) { width: 170px; min-width: 170px; } /* Situacao do Contrato */
-    #lnndf-table th:nth-child(23), #lnndf-table td:nth-child(23) { width: 160px; min-width: 160px; } /* Codigo Sisbacen da Moeda */
-    #lnndf-table th:nth-child(24), #lnndf-table td:nth-child(24) { width: 160px; min-width: 160px; } /* Simbolo da Moeda */
-    #lnndf-table th:nth-child(25), #lnndf-table td:nth-child(25) { width: 160px; min-width: 160px; } /* Codigo Sisbacen da Moeda Cotada */
-    #lnndf-table th:nth-child(26), #lnndf-table td:nth-child(26) { width: 160px; min-width: 160px; } /* Codigo do Ativo Subjacente */
-    #lnndf-table th:nth-child(27), #lnndf-table td:nth-child(27) { width: 150px; min-width: 150px; } /* Data de Fixing do Ativo Subjacente */
-    #lnndf-table th:nth-child(28), #lnndf-table td:nth-child(28) { width: 150px; min-width: 150px; } /* Data de Fixing da Moeda */
-    #lnndf-table th:nth-child(29), #lnndf-table td:nth-child(29) { width: 160px; min-width: 160px; } /* Codigo da Cotacao */
-    #lnndf-table th:nth-child(30), #lnndf-table td:nth-child(30) { width: 150px; min-width: 150px; } /* Cotacao de Moeda para o Vencimento */
-    #lnndf-table th:nth-child(31), #lnndf-table td:nth-child(31) { width: 170px; min-width: 170px; } /* Tipo de Cotacao */
-    #lnndf-table th:nth-child(32), #lnndf-table td:nth-child(32) { width: 150px; min-width: 150px; } /* Cross-Rate */
-    #lnndf-table th:nth-child(33), #lnndf-table td:nth-child(33) { width: 150px; min-width: 150px; } /* Codigo da Paridade Cross */
-    #lnndf-table th:nth-child(34), #lnndf-table td:nth-child(34) { width: 150px; min-width: 150px; } /* Data de fixing da Paridade Cross */
-    #lnndf-table th:nth-child(35), #lnndf-table td:nth-child(35) { width: 160px; min-width: 160px; } /* Codigo do Boletim */
-    #lnndf-table th:nth-child(36), #lnndf-table td:nth-child(36) { width: 130px; min-width: 130px; } /* Horario do Boletim */
-    #lnndf-table th:nth-child(37), #lnndf-table td:nth-child(37) { width: 150px; min-width: 150px; } /* Taxa de Paridade */
-    #lnndf-table th:nth-child(38), #lnndf-table td:nth-child(38) { width: 210px; min-width: 210px; } /* Nome do Feeder */
-    #lnndf-table th:nth-child(39), #lnndf-table td:nth-child(39) { width: 160px; min-width: 160px; } /* Tela funcao Consulta */
-    #lnndf-table th:nth-child(40), #lnndf-table td:nth-child(40) { width: 170px; min-width: 170px; } /* Tipo de Cotacao Moeda */
-    #lnndf-table th:nth-child(41), #lnndf-table td:nth-child(41) { width: 150px; min-width: 150px; } /* Tipo de Paridade */
-    #lnndf-table th:nth-child(42), #lnndf-table td:nth-child(42) { width: 150px; min-width: 150px; } /* Data de Avaliacao */
-    #lnndf-table th:nth-child(43), #lnndf-table td:nth-child(43) { width: 160px; min-width: 160px; } /* Indicador de Termo a Termo */
-    #lnndf-table th:nth-child(44), #lnndf-table td:nth-child(44) { width: 150px; min-width: 150px; } /* Data de Fixacao */
-    #lnndf-table th:nth-child(45), #lnndf-table td:nth-child(45) { width: 160px; min-width: 160px; } /* Forma de Atualizacao da taxa a termo */
-    #lnndf-table th:nth-child(46), #lnndf-table td:nth-child(46) { width: 150px; min-width: 150px; } /* Valor ou Percentual Negociado */
-    #lnndf-table th:nth-child(47), #lnndf-table td:nth-child(47) { width: 160px; min-width: 160px; } /* Ajustar Taxa */
-    #lnndf-table th:nth-child(48), #lnndf-table td:nth-child(48) { width: 160px; min-width: 160px; } /* Responsavel pelo Ajuste de Taxa */
-    #lnndf-table th:nth-child(49), #lnndf-table td:nth-child(49) { width: 150px; min-width: 150px; } /* Data inicial para o ajuste da taxa */
-    #lnndf-table th:nth-child(50), #lnndf-table td:nth-child(50) { width: 150px; min-width: 150px; } /* Data final para o ajuste da taxa */
-    #lnndf-table th:nth-child(51), #lnndf-table td:nth-child(51) { width: 150px; min-width: 150px; } /* Data do Ajuste da Taxa */
-    #lnndf-table th:nth-child(52), #lnndf-table td:nth-child(52) { width: 150px; min-width: 150px; } /* Cotacao para Fixing */
-    #lnndf-table th:nth-child(53), #lnndf-table td:nth-child(53) { width: 160px; min-width: 160px; } /* Atualizar Valor Base? */
-    #lnndf-table th:nth-child(54), #lnndf-table td:nth-child(54) { width: 150px; min-width: 150px; } /* Cotacao Inicial */
-    #lnndf-table th:nth-child(55), #lnndf-table td:nth-child(55) { width: 150px; min-width: 150px; } /* Valor Base Original */
-    #lnndf-table th:nth-child(56), #lnndf-table td:nth-child(56) { width: 160px; min-width: 160px; } /* Premio a ser pago pelo */
-    #lnndf-table th:nth-child(57), #lnndf-table td:nth-child(57) { width: 150px; min-width: 150px; } /* Valor do Premio */
-    #lnndf-table th:nth-child(58), #lnndf-table td:nth-child(58) { width: 170px; min-width: 170px; } /* Modalidade de Liquidacao */
-    #lnndf-table th:nth-child(59), #lnndf-table td:nth-child(59) { width: 150px; min-width: 150px; } /* Data de Liquidacao do Premio */
-    #lnndf-table th:nth-child(60), #lnndf-table td:nth-child(60) { width: 160px; min-width: 160px; } /* Premio em Moeda Estrangeira */
-    #lnndf-table th:nth-child(61), #lnndf-table td:nth-child(61) { width: 150px; min-width: 150px; } /* Data de Fixing da Moeda do Premio */
-    #lnndf-table th:nth-child(62), #lnndf-table td:nth-child(62) { width: 160px; min-width: 160px; } /* Codigo Identificador */
-    #lnndf-table th:nth-child(63), #lnndf-table td:nth-child(63) { width: 150px; min-width: 150px; } /* Data de Alteracao */
-    #lnndf-table th:nth-child(64), #lnndf-table td:nth-child(64) { width: 150px; min-width: 150px; } /* Valor Antecipado */
-    #lnndf-table th:nth-child(65), #lnndf-table td:nth-child(65) { width: 160px; min-width: 160px; } /* Criterio de Apuracao */
-    #lnndf-table th:nth-child(66), #lnndf-table td:nth-child(66) { width: 150px; min-width: 150px; } /* Taxa a Termo em Reais */
-    #lnndf-table th:nth-child(67), #lnndf-table td:nth-child(67) { width: 150px; min-width: 150px; } /* Data da Cotacao Inicial */
-    #lnndf-table th:nth-child(68), #lnndf-table td:nth-child(68) { width: 170px; min-width: 170px; } /* Tipo Media Asiatico */
-
-/* Per-column filter row — New Deals style */
-#lnndf-table thead tr.ln-th-filter th { padding: .3rem .4rem .5rem; border-top: 1px solid var(--ln-hairline); }
-#lnndf-table thead tr.ln-th-filter input.ln-col-filter {
-    width: 100%; min-width: 96px; height: 30px; font-size: .72rem; font-weight: 400;
-    text-align: center; padding: 3px 9px; border: 1px solid var(--ln-hairline); border-radius: 8px;
-    background: var(--bs-tertiary-bg, #f8f9fa); color: var(--ins-body-color);
-    transition: border-color 150ms var(--ln-ease-out), box-shadow 150ms var(--ln-ease-out), background-color 150ms var(--ln-ease-out);
-}
-#lnndf-table thead tr.ln-th-filter input.ln-col-filter::placeholder { color: var(--ins-secondary-color); opacity: .8; }
-@media (hover: hover) and (pointer: fine) {
-    #lnndf-table thead tr.ln-th-filter input.ln-col-filter:hover { border-color: rgba(0,102,204,.35); }
-}
-#lnndf-table thead tr.ln-th-filter input.ln-col-filter:focus {
-    outline: none; border-color: #0066cc; background: var(--ins-secondary-bg, #fff); box-shadow: 0 0 0 3px rgba(0,102,204,.15);
-}
-#lnndf-table thead tr.ln-th-filter input.ln-col-filter.ln-has-val { border-color: rgba(0,102,204,.55); background: rgba(0,102,204,.06); font-weight: 500; }
-@media (prefers-reduced-motion: reduce) {
-    #live-position-ndf-page * { transition: none !important; animation: none !important; }
-    #live-position-ndf-page .btn:active { transform: none; }
-}
-
-/* ── Ações de linha: squircle padrão do app (spec .ops-row-act) ─────────────
-   min/max travam a ALTURA também, não só a largura: uma regra de tema com
-   `min-height` em `.btn` deixaria o botão 32×34, que não é mais um quadrado
-   arredondado. `box-sizing:border-box` porque a borda entraria por fora. */
-#lnndf-table .btn-act {
-    width:32px; height:32px;
-    min-width:32px; max-width:32px; min-height:32px; max-height:32px;
-    padding:0; flex:0 0 auto; box-sizing:border-box;
-    display:inline-flex; align-items:center; justify-content:center;
-    line-height:1; border-radius:10px !important;
-}
-/* Cinto de segurança contra o `.fs-13` do tema (também !important). */
-#lnndf-table .btn-act > i { font-size:1rem !important; }
-#lnndf-table .btn-act { transition: transform 120ms var(--ln-ease-out), box-shadow 140ms ease; }
-#lnndf-table .btn-act:active { transform: scale(0.97); }
-@media (hover: hover) and (pointer: fine) {
-    #lnndf-table .btn-act:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
-}
-/* Tooltip colorido do botão Edit (o CSS da classe tem de estar na página). */
-.tooltip-info .tooltip-inner { background-color: #0dcaf0; color: #000; }
-
-/* Export collection dropdown — solid background (project standard, NOT scoped). */
-.dt-button-collection {
-    z-index: 2000; background: #fff !important; border: 1px solid rgba(0,0,0,.15) !important;
-    box-shadow: 0 4px 16px rgba(0,0,0,.18) !important; border-radius: .375rem !important;
-    padding: .25rem 0 !important; opacity: 1 !important;
-}
-[data-bs-theme="dark"] .dt-button-collection { background: #2b2f3a !important; border-color: rgba(255,255,255,.15) !important; }
-.dt-button-collection .dt-button, .dt-button-collection .dropdown-item {
-    display: flex; align-items: center; background: transparent !important; color: #212529 !important;
-    border: none !important; width: 100% !important; text-align: left !important;
-    padding: .4rem 1rem !important; font-size: .84rem !important; opacity: 1 !important;
-}
-[data-bs-theme="dark"] .dt-button-collection .dt-button,
-[data-bs-theme="dark"] .dt-button-collection .dropdown-item { color: #dee2e6 !important; }
-.dt-button-collection .dt-button:hover, .dt-button-collection .dropdown-item:hover { background: rgba(13,110,253,.08) !important; color: #0d6efd !important; }
-
-/* ── Toolbar acima da tabela ────────────────────────────────────────────────
-   Columns e Export são injetados pelo JS DEPOIS do render e o botão do
-   DataTables Buttons vem com margem zerada, então a fila encostava no cabeçalho
-   da tabela. Padding embaixo + altura igual para os botões das três origens
-   (template, DataTables Buttons e JS). */
-#live-position-ndf-page .card-body > .d-flex.justify-content-between {
-    padding: .35rem .25rem 1.15rem;
-    row-gap: .6rem;
-    column-gap: .5rem;
-}
-#live-position-ndf-page .columnToggleWrapper,
-#live-position-ndf-page .lnExportWrapper { display: inline-flex; align-items: center; }
-#live-position-ndf-page .columnToggleWrapper .btn,
-#live-position-ndf-page .lnExportWrapper .btn,
-#live-position-ndf-page .lnExportWrapper .dt-button,
-#live-position-ndf-page .lnExportWrapper .dt-buttons { margin: 0 !important; }
-#live-position-ndf-page .card-body > .d-flex .btn,
-#live-position-ndf-page .card-body > .d-flex .dt-button {
-    padding: .34rem .7rem; line-height: 1.35; white-space: nowrap;
-}
-#live-position-ndf-page .card-body > .d-flex .form-select-sm { padding-top: .28rem; padding-bottom: .28rem; }
-#live-position-ndf-page .card-body > .table-responsive { padding-top: .15rem; }
+/* Largura das colunas: (1) checkbox, (2) Status, (3) Actions, (4..68) dados TER, (69+) Média Asiática. */
+#lnndf-table th { min-width: 120px; }
+#lnndf-table th:nth-child(1), #lnndf-table td:nth-child(1) { width: 44px; min-width: 44px; } /* checkbox */
+#lnndf-table th:nth-child(2), #lnndf-table td:nth-child(2) { width: 110px; min-width: 110px; } /* Status */
+#lnndf-table th:nth-child(3), #lnndf-table td:nth-child(3) { width: 70px; min-width: 70px; } /* Actions */
+#lnndf-table th:nth-child(4), #lnndf-table td:nth-child(4) { width: 160px; min-width: 160px; } /* Codigo da Parte */
+#lnndf-table th:nth-child(5), #lnndf-table td:nth-child(5) { width: 210px; min-width: 210px; } /* Nome da Parte */
+#lnndf-table th:nth-child(6), #lnndf-table td:nth-child(6) { width: 170px; min-width: 170px; } /* CPF/CNPJ do Participante */
+#lnndf-table th:nth-child(7), #lnndf-table td:nth-child(7) { width: 160px; min-width: 160px; } /* Codigo da Contraparte */
+#lnndf-table th:nth-child(8), #lnndf-table td:nth-child(8) { width: 210px; min-width: 210px; } /* Nome da Contraparte */
+#lnndf-table th:nth-child(9), #lnndf-table td:nth-child(9) { width: 170px; min-width: 170px; } /* CPF/CNPJ da Contraparte */
+#lnndf-table th:nth-child(10), #lnndf-table td:nth-child(10) { width: 140px; min-width: 140px; } /* Contrato */
+#lnndf-table th:nth-child(11), #lnndf-table td:nth-child(11) { width: 170px; min-width: 170px; } /* Classe do Ativo Subjacente */
+#lnndf-table th:nth-child(12), #lnndf-table td:nth-child(12) { width: 150px; min-width: 150px; } /* Data de Emissao */
+#lnndf-table th:nth-child(13), #lnndf-table td:nth-child(13) { width: 150px; min-width: 150px; } /* Data de Inicio de Vigencia */
+#lnndf-table th:nth-child(14), #lnndf-table td:nth-child(14) { width: 150px; min-width: 150px; } /* Data de Vencimento */
+#lnndf-table th:nth-child(15), #lnndf-table td:nth-child(15) { width: 150px; min-width: 150px; } /* Valor Base no registro */
+#lnndf-table th:nth-child(16), #lnndf-table td:nth-child(16) { width: 150px; min-width: 150px; } /* Valor Base atual */
+#lnndf-table th:nth-child(17), #lnndf-table td:nth-child(17) { width: 150px; min-width: 150px; } /* Taxa Forward */
+#lnndf-table th:nth-child(18), #lnndf-table td:nth-child(18) { width: 150px; min-width: 150px; } /* Taxa de Cambio */
+#lnndf-table th:nth-child(19), #lnndf-table td:nth-child(19) { width: 210px; min-width: 210px; } /* Descricao da posicao do Participante */
+#lnndf-table th:nth-child(20), #lnndf-table td:nth-child(20) { width: 170px; min-width: 170px; } /* Tipo Indicador Financeiro */
+#lnndf-table th:nth-child(21), #lnndf-table td:nth-child(21) { width: 170px; min-width: 170px; } /* Tipo do Contrato */
+#lnndf-table th:nth-child(22), #lnndf-table td:nth-child(22) { width: 170px; min-width: 170px; } /* Situacao do Contrato */
+#lnndf-table th:nth-child(23), #lnndf-table td:nth-child(23) { width: 160px; min-width: 160px; } /* Codigo Sisbacen da Moeda */
+#lnndf-table th:nth-child(24), #lnndf-table td:nth-child(24) { width: 160px; min-width: 160px; } /* Simbolo da Moeda */
+#lnndf-table th:nth-child(25), #lnndf-table td:nth-child(25) { width: 160px; min-width: 160px; } /* Codigo Sisbacen da Moeda Cotada */
+#lnndf-table th:nth-child(26), #lnndf-table td:nth-child(26) { width: 160px; min-width: 160px; } /* Codigo do Ativo Subjacente */
+#lnndf-table th:nth-child(27), #lnndf-table td:nth-child(27) { width: 150px; min-width: 150px; } /* Data de Fixing do Ativo Subjacente */
+#lnndf-table th:nth-child(28), #lnndf-table td:nth-child(28) { width: 150px; min-width: 150px; } /* Data de Fixing da Moeda */
+#lnndf-table th:nth-child(29), #lnndf-table td:nth-child(29) { width: 160px; min-width: 160px; } /* Codigo da Cotacao */
+#lnndf-table th:nth-child(30), #lnndf-table td:nth-child(30) { width: 150px; min-width: 150px; } /* Cotacao de Moeda para o Vencimento */
+#lnndf-table th:nth-child(31), #lnndf-table td:nth-child(31) { width: 170px; min-width: 170px; } /* Tipo de Cotacao */
+#lnndf-table th:nth-child(32), #lnndf-table td:nth-child(32) { width: 150px; min-width: 150px; } /* Cross-Rate */
+#lnndf-table th:nth-child(33), #lnndf-table td:nth-child(33) { width: 150px; min-width: 150px; } /* Codigo da Paridade Cross */
+#lnndf-table th:nth-child(34), #lnndf-table td:nth-child(34) { width: 150px; min-width: 150px; } /* Data de fixing da Paridade Cross */
+#lnndf-table th:nth-child(35), #lnndf-table td:nth-child(35) { width: 160px; min-width: 160px; } /* Codigo do Boletim */
+#lnndf-table th:nth-child(36), #lnndf-table td:nth-child(36) { width: 130px; min-width: 130px; } /* Horario do Boletim */
+#lnndf-table th:nth-child(37), #lnndf-table td:nth-child(37) { width: 150px; min-width: 150px; } /* Taxa de Paridade */
+#lnndf-table th:nth-child(38), #lnndf-table td:nth-child(38) { width: 210px; min-width: 210px; } /* Nome do Feeder */
+#lnndf-table th:nth-child(39), #lnndf-table td:nth-child(39) { width: 160px; min-width: 160px; } /* Tela funcao Consulta */
+#lnndf-table th:nth-child(40), #lnndf-table td:nth-child(40) { width: 170px; min-width: 170px; } /* Tipo de Cotacao Moeda */
+#lnndf-table th:nth-child(41), #lnndf-table td:nth-child(41) { width: 150px; min-width: 150px; } /* Tipo de Paridade */
+#lnndf-table th:nth-child(42), #lnndf-table td:nth-child(42) { width: 150px; min-width: 150px; } /* Data de Avaliacao */
+#lnndf-table th:nth-child(43), #lnndf-table td:nth-child(43) { width: 160px; min-width: 160px; } /* Indicador de Termo a Termo */
+#lnndf-table th:nth-child(44), #lnndf-table td:nth-child(44) { width: 150px; min-width: 150px; } /* Data de Fixacao */
+#lnndf-table th:nth-child(45), #lnndf-table td:nth-child(45) { width: 160px; min-width: 160px; } /* Forma de Atualizacao da taxa a termo */
+#lnndf-table th:nth-child(46), #lnndf-table td:nth-child(46) { width: 150px; min-width: 150px; } /* Valor ou Percentual Negociado */
+#lnndf-table th:nth-child(47), #lnndf-table td:nth-child(47) { width: 160px; min-width: 160px; } /* Ajustar Taxa */
+#lnndf-table th:nth-child(48), #lnndf-table td:nth-child(48) { width: 160px; min-width: 160px; } /* Responsavel pelo Ajuste de Taxa */
+#lnndf-table th:nth-child(49), #lnndf-table td:nth-child(49) { width: 150px; min-width: 150px; } /* Data inicial para o ajuste da taxa */
+#lnndf-table th:nth-child(50), #lnndf-table td:nth-child(50) { width: 150px; min-width: 150px; } /* Data final para o ajuste da taxa */
+#lnndf-table th:nth-child(51), #lnndf-table td:nth-child(51) { width: 150px; min-width: 150px; } /* Data do Ajuste da Taxa */
+#lnndf-table th:nth-child(52), #lnndf-table td:nth-child(52) { width: 150px; min-width: 150px; } /* Cotacao para Fixing */
+#lnndf-table th:nth-child(53), #lnndf-table td:nth-child(53) { width: 160px; min-width: 160px; } /* Atualizar Valor Base? */
+#lnndf-table th:nth-child(54), #lnndf-table td:nth-child(54) { width: 150px; min-width: 150px; } /* Cotacao Inicial */
+#lnndf-table th:nth-child(55), #lnndf-table td:nth-child(55) { width: 150px; min-width: 150px; } /* Valor Base Original */
+#lnndf-table th:nth-child(56), #lnndf-table td:nth-child(56) { width: 160px; min-width: 160px; } /* Premio a ser pago pelo */
+#lnndf-table th:nth-child(57), #lnndf-table td:nth-child(57) { width: 150px; min-width: 150px; } /* Valor do Premio */
+#lnndf-table th:nth-child(58), #lnndf-table td:nth-child(58) { width: 170px; min-width: 170px; } /* Modalidade de Liquidacao */
+#lnndf-table th:nth-child(59), #lnndf-table td:nth-child(59) { width: 150px; min-width: 150px; } /* Data de Liquidacao do Premio */
+#lnndf-table th:nth-child(60), #lnndf-table td:nth-child(60) { width: 160px; min-width: 160px; } /* Premio em Moeda Estrangeira */
+#lnndf-table th:nth-child(61), #lnndf-table td:nth-child(61) { width: 150px; min-width: 150px; } /* Data de Fixing da Moeda do Premio */
+#lnndf-table th:nth-child(62), #lnndf-table td:nth-child(62) { width: 160px; min-width: 160px; } /* Codigo Identificador */
+#lnndf-table th:nth-child(63), #lnndf-table td:nth-child(63) { width: 150px; min-width: 150px; } /* Data de Alteracao */
+#lnndf-table th:nth-child(64), #lnndf-table td:nth-child(64) { width: 150px; min-width: 150px; } /* Valor Antecipado */
+#lnndf-table th:nth-child(65), #lnndf-table td:nth-child(65) { width: 160px; min-width: 160px; } /* Criterio de Apuracao */
+#lnndf-table th:nth-child(66), #lnndf-table td:nth-child(66) { width: 150px; min-width: 150px; } /* Taxa a Termo em Reais */
+#lnndf-table th:nth-child(67), #lnndf-table td:nth-child(67) { width: 150px; min-width: 150px; } /* Data da Cotacao Inicial */
+#lnndf-table th:nth-child(68), #lnndf-table td:nth-child(68) { width: 170px; min-width: 170px; } /* Tipo Media Asiatico */
 </style>
 {% endblock extra_css %}
 
@@ -327,7 +172,7 @@
                 </div>
             </div>
             <div class="table-responsive">
-                <table id="lnndf-table" class="table table-sm table-hover table-striped table-centered mb-0" style="width:100%">
+                <table id="lnndf-table" data-otc-datatable class="table table-sm table-hover table-striped table-centered mb-0" style="width:100%">
                     <thead><tr id="lnndf-head"></tr></thead>
                     <tbody></tbody>
                 </table>

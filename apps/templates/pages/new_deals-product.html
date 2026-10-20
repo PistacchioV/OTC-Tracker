@@ -13,82 +13,25 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
+{# Só o que é DESTA tela: a largura de cada coluna (layout FIXO, para a largura
+   declarada valer no cabeçalho e no corpo do scrollX), o texto que passa
+   cortado em "…", o campo de Trade Date e os rótulos da grade do Edit. Cabeçalho, células, filtro,
+   dropzone, toolbar, botões e a barra azul do card são do tema (otc.scss). #}
 <style>
-  @keyframes ti-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
-  i.ti-spin, .ti-spin, i.ti-loader-2 { display: inline-block !important; animation: ti-spin 0.8s linear infinite !important; }
-
-  /* Status 'Sent' — o mesmo teal das outras telas de New Deals. */
-  .badge.badge-sent { background-color: #17a2b8 !important; color: #fff !important; }
-
-  /* ── Dropzone — o MESMO bloco das páginas de New Deals (opt-fxo, ndf-comm) ── */
-  #myAwesomeDropzone.dropzone { max-width: 100% !important; margin-left: 0 !important; margin-right: 0 !important; }
-  #myAwesomeDropzone.dropzone { min-height: 0 !important; height: auto !important; padding: 4px 12px !important; }
-  #myAwesomeDropzone.dropzone .dz-message { margin: 0 !important; padding: 4px 0 !important; }
-  #myAwesomeDropzone.dropzone .dz-message .avatar-lg { height: 24px !important; width: 24px !important; margin-bottom: 2px !important; }
-  #myAwesomeDropzone.dropzone .dz-message .avatar-title { height: 24px !important; width: 24px !important; }
-  #myAwesomeDropzone.dropzone .dz-message .avatar-title i { font-size: 14px !important; }
-  #myAwesomeDropzone.dropzone .dz-message h4 { font-size: .82rem !important; margin-bottom: 1px !important; }
-  #myAwesomeDropzone.dropzone .dz-message p { font-size: .72rem !important; margin-bottom: 3px !important; }
-  #myAwesomeDropzone.dropzone .dz-message .btn { padding: 3px 10px !important; font-size: .74rem !important; }
-  #myAwesomeDropzone.dropzone { transition: border-color 180ms ease-out, background 180ms ease-out; }
-  #myAwesomeDropzone.dropzone:hover, #myAwesomeDropzone.dropzone.dz-drag-hover { border-color: #0066cc !important; background: rgba(0, 102, 204, 0.025) !important; }
-  .nd-upload-icon { background: rgba(0, 102, 204, 0.12) !important; color: #0066cc !important; }
-  .nd-deal-card { border-left: 3px solid #0066cc !important; }
-  .nd-filter-bar { background: var(--ins-secondary-bg, #f8f9fa); }
-
-  /* ── Smart filter widget (o mesmo das páginas de New Deals) ─────────── */
-  .smart-filter-wrapper { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; padding: 4px 8px; min-height: 38px; background: var(--ins-secondary-bg); cursor: text; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
-  .smart-filter-wrapper:focus-within { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
-  .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .smart-filter-chip { display: inline-flex; align-items: center; gap: 5px; background: #6c757d; color: #fff; border-radius: 50rem; padding: 2px 8px; font-size: 10px; font-weight: 500; white-space: nowrap; }
-  .smart-filter-chip .sf-chip-remove { cursor: pointer; opacity: .75; font-size: 13px; line-height: 1; margin-left: 2px; }
-  .smart-filter-chip .sf-chip-remove:hover { opacity: 1; }
-  .smart-filter-input { border: none; outline: none; flex: 1; min-width: 200px; font-size: 0.82rem; background: transparent; color: var(--ins-body-color); padding: 2px 0; }
-  .smart-filter-input::placeholder { color: var(--ins-secondary-color); }
-  .smart-filter-dropdown { position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 1055; background: var(--ins-secondary-bg); border: 1px solid var(--ins-border-color); border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.25); max-height: 240px; overflow-y: auto; display: none; padding: 4px 0; }
-  .smart-filter-dropdown li { padding: 6px 12px; cursor: pointer; font-size: 0.81rem; display: flex; align-items: center; gap: 8px; list-style: none; color: var(--ins-body-color); }
-  .smart-filter-dropdown li:hover, .smart-filter-dropdown li.sf-kbd-active { background: var(--ins-tertiary-bg); }
-  .sf-type-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; text-transform: uppercase; font-weight: 600; color: #fff; opacity: .85; }
-  .sf-type-text   { background: #6c757d; }
-  .sf-type-date   { background: #0dcaf0; color: #000 !important; }
-  .sf-type-number { background: #198754; }
-
-  div.dt-button-collection { opacity: 1 !important; background-color: var(--ins-dropdown-bg, var(--ins-secondary-bg, #fff)) !important; border: var(--ins-border-width, 1px) solid var(--ins-border-color, rgba(0,0,0,.1)) !important; border-radius: var(--ins-dropdown-border-radius, 0.6875rem) !important; box-shadow: 0 8px 24px rgba(0,0,0,.12) !important; }
-  div.dt-button-collection .dropdown-item { opacity: 1 !important; color: var(--ins-dropdown-link-color, var(--ins-body-color)) !important; }
-
-  .card-body { padding: 5px; }
-  .dt-scroll-head, .dataTables_scrollHead { padding-top: 8px; }
-  .dt-scroll-body thead, .dataTables_scrollBody thead { display: none !important; }
-  .dt-scroll-headInner table, .dataTables_scrollHeadInner table,
-  .dt-scroll-body > table, .dataTables_scrollBody > table { table-layout: fixed !important; }
-  /* Centralizada (§7): th .7rem, td .8rem; o clone do header do scrollX perde o
-     id da tabela, por isso as mesmas regras com !important nos clones. */
-  #swb-table th { white-space: normal; padding: 8px 10px; overflow: hidden; text-overflow: ellipsis; text-align: center !important; vertical-align: middle !important; font-size: 0.7rem; }
-  .dt-scroll-head thead th, .dt-scroll-headInner thead th,
-  .dataTables_scrollHead thead th, .dataTables_scrollHeadInner thead th { white-space: normal !important; overflow: hidden; text-overflow: ellipsis; text-align: center !important; vertical-align: middle !important; font-size: 0.7rem !important; }
-  #swb-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8rem; text-align: center; vertical-align: middle; font-variant-numeric: tabular-nums; }
-  #swb-table th, #swb-table td,
-  #swb-table_wrapper .dt-scroll-head thead th, #swb-table_wrapper .dataTables_scrollHead thead th { width: 130px; min-width: 130px; }
-  #swb-table th:nth-child(1), #swb-table td:nth-child(1),
-  #swb-table_wrapper .dt-scroll-head thead th:nth-child(1), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(1) { width: 50px; min-width: 50px; }
-  #swb-table th:nth-child(2), #swb-table td:nth-child(2),
-  #swb-table_wrapper .dt-scroll-head thead th:nth-child(2), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(2) { width: 170px; min-width: 170px; }
-  #swb-table th:nth-child(3), #swb-table td:nth-child(3),
-  #swb-table_wrapper .dt-scroll-head thead th:nth-child(3), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(3) { width: 105px; min-width: 105px; }
-  #swb-table th:nth-child(4), #swb-table td:nth-child(4), #swb-table th:nth-child(5), #swb-table td:nth-child(5),
-  #swb-table_wrapper .dt-scroll-head thead th:nth-child(4), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(4),
-  #swb-table_wrapper .dt-scroll-head thead th:nth-child(5), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(5) { width: 90px; min-width: 90px; }
-  #swb-table th:nth-child(6), #swb-table td:nth-child(6),
-  #swb-table_wrapper .dt-scroll-head thead th:nth-child(6), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(6) { width: 125px; min-width: 125px; }
-  #swb-table th:nth-child(7), #swb-table td:nth-child(7),
-  #swb-table_wrapper .dt-scroll-head thead th:nth-child(7), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(7) { width: 120px; min-width: 120px; }
-  #swb-table th:nth-child(8), #swb-table td:nth-child(8),
-  #swb-table_wrapper .dt-scroll-head thead th:nth-child(8), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(8) { width: 110px; min-width: 110px; }
-  .column-search-input-bar th { padding: 4px 8px; border-top: 1px solid rgba(0,0,0,0.08); text-align: center; vertical-align: middle; }
-  .btn-toolbar-all { font-size: 0.75rem !important; padding: 0.25rem 0.6rem !important; height: auto !important; line-height: 1.4 !important; white-space: nowrap !important; }
-  #apiRefDate { width: 8.5rem; }
-
-  .swb-edit-grid label { font-size: .72rem; }
+#swb-table_wrapper .dt-scroll-headInner table,
+#swb-table_wrapper .dt-scroll-body > table { table-layout: fixed !important; }
+#swb-table td { overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+#swb-table :is(th, td), #swb-table_wrapper .dt-scroll-head th { width: 130px; min-width: 130px; } /* toda coluna de dado */
+#swb-table :is(th, td):nth-child(1), #swb-table_wrapper .dt-scroll-head th:nth-child(1) { width: 50px; min-width: 50px; }
+#swb-table :is(th, td):nth-child(2), #swb-table_wrapper .dt-scroll-head th:nth-child(2) { width: 170px; min-width: 170px; }
+#swb-table :is(th, td):nth-child(3), #swb-table_wrapper .dt-scroll-head th:nth-child(3) { width: 105px; min-width: 105px; }
+#swb-table :is(th, td):nth-child(4), #swb-table_wrapper .dt-scroll-head th:nth-child(4) { width: 90px; min-width: 90px; }
+#swb-table :is(th, td):nth-child(5), #swb-table_wrapper .dt-scroll-head th:nth-child(5) { width: 90px; min-width: 90px; }
+#swb-table :is(th, td):nth-child(6), #swb-table_wrapper .dt-scroll-head th:nth-child(6) { width: 125px; min-width: 125px; }
+#swb-table :is(th, td):nth-child(7), #swb-table_wrapper .dt-scroll-head th:nth-child(7) { width: 120px; min-width: 120px; }
+#swb-table :is(th, td):nth-child(8), #swb-table_wrapper .dt-scroll-head th:nth-child(8) { width: 110px; min-width: 110px; }
+#apiRefDate { width: 8.5rem; }
+.swb-edit-grid label { font-size: .72rem; }
 </style>
 {% endblock extra_css %}
 
@@ -97,8 +40,8 @@
     <div class="page-title-head d-flex align-items-center">
         <div class="flex-grow-1">
             <h4 class="fs-xl fw-bold m-0 d-flex align-items-center gap-2">
-                <i class="ti ti-target-arrow" style="color:#0066cc;font-size:22px;flex-shrink:0;"></i>
-                <span data-lang="new-deals">New Deals</span> — <span>{{ page.name }}</span>
+                <i class="ti ti-target-arrow"></i>
+                <span><span data-lang="new-deals">New Deals</span> — <span>{{ page.name }}</span></span>
             </h4>
         </div>
         <div class="text-end">
@@ -113,7 +56,7 @@
 
     <div class="row">
         <div class="col-12">
-            <div class="card nd-deal-card">
+            <div class="card nd-deal-card{% if page.group == 'Options' %} nd-deal-card--opt{% endif %}">
 
                 <!-- ── Dropzone (o mesmo das páginas de New Deals) ──────────── -->
                 <div class="card-body" style="padding: 10px;">
@@ -746,9 +689,9 @@ $(document).ready(function() {
                 }).catch(function(e){ _restore(); Swal.fire({ icon: 'error', title: 'Error', text: String(e) }); });
             }
             if (!dups.length) { _saveAndRender(news); return; }
-            var listHtml = '<div style="max-height:240px;overflow:auto;text-align:left"><table style="width:100%;font-size:0.82rem;border-collapse:collapse">' +
-                '<thead><tr style="background:#f1f3f5"><th style="padding:4px 8px;text-align:left">Deal</th><th style="padding:4px 8px;text-align:left">Client</th></tr></thead><tbody>' +
-                dups.map(function(d){ return '<tr><td style="padding:3px 8px;border-top:1px solid #eee">' + _escHtml(d.Deal || d._id) + '</td><td style="padding:3px 8px;border-top:1px solid #eee">' + _escHtml(d.Client) + '</td></tr>'; }).join('') +
+            var listHtml = '<div class="otc-mini-table-wrap text-start"><table class="otc-mini-table">' +
+                '<thead><tr><th>Deal</th><th>Client</th></tr></thead><tbody>' +
+                dups.map(function(d){ return '<tr><td>' + _escHtml(d.Deal || d._id) + '</td><td>' + _escHtml(d.Client) + '</td></tr>'; }).join('') +
                 '</tbody></table></div>';
             Swal.fire({
                 icon: 'warning', title: t('swal-fxo-dup-title', 'Duplicate deals'),

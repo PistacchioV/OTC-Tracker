@@ -3,175 +3,31 @@
 {% block title %}Metrics — Pending Confirmation{% endblock title %}
 
 {% block extra_css %}
+{# Só o que é DESTA tela: o número grande do KPI com a seta de tendência
+   (cor pelo SENTIDO: mais pendência = pior = vermelho), os três mini-KPIs ao
+   lado e a largura dos seletores do gráfico. Placa, título, entrada e
+   movimento são do tema (otc.scss). #}
 <style>
-/* ── Pending Confirmation Metrics — Apple/Emil motion + glass ─────────────── */
-#pcm-page { --pcm-ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
+#pcm-page .pcm-kpi__label,
+#pcm-page .pcm-mini__l { font: 600 12px/1.4 var(--otc-font); letter-spacing: .06em; text-transform: uppercase; color: var(--otc-text-2); }
+#pcm-page .pcm-kpi__val { font: 900 clamp(3rem, 6vw, 4.4rem)/.95 var(--otc-font-display); letter-spacing: -.045em; color: var(--otc-text); font-variant-numeric: tabular-nums; }
+#pcm-page .pcm-note { font-size: 12.5px; color: var(--otc-text-2); }
 
-@keyframes pcmFadeIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-.pcm-fade { animation: pcmFadeIn 0.5s var(--pcm-ease-out) both; }
-.pcm-fade-2 { animation-delay: 0.10s; }
-.pcm-fade-3 { animation-delay: 0.20s; }
+#pcm-page .pcm-trend { display: inline-flex; align-items: center; gap: .25rem; font-weight: 600; font-size: .82rem; padding: .2rem .6rem; border-radius: var(--otc-r-pill); }
+#pcm-page .pcm-trend.up   { background: color-mix(in srgb, var(--otc-danger) 14%, transparent); color: var(--otc-danger); }  /* mais pendência = pior */
+#pcm-page .pcm-trend.down { background: color-mix(in srgb, var(--otc-green) 14%, transparent); color: var(--otc-green); }   /* menos = melhor */
+#pcm-page .pcm-trend.flat { background: var(--otc-fill); color: var(--otc-text-2); }
 
-/* Glassmorphism cards (light / dark) */
-[data-bs-theme="light"] #pcm-page .card {
-    background: rgba(255, 255, 255, 0.82) !important;
-    backdrop-filter: blur(18px) saturate(1.8); -webkit-backdrop-filter: blur(18px) saturate(1.8);
-    box-shadow: 0 4px 24px rgba(0,0,0,.08), 0 1px 4px rgba(0,0,0,.04) !important;
-    border: 1px solid rgba(255,255,255,.65) !important;
-}
-[data-bs-theme="dark"] #pcm-page .card {
-    background: rgba(255, 255, 255, 0.09) !important;
-    backdrop-filter: blur(18px) saturate(1.5); -webkit-backdrop-filter: blur(18px) saturate(1.5);
-    box-shadow: 0 4px 32px rgba(0,0,0,.45), 0 1px 6px rgba(0,0,0,.22) !important;
-    border: 1px solid rgba(255,255,255,.10) !important;
-}
-#pcm-page .card { transition: box-shadow .25s var(--pcm-ease-out), transform .25s var(--pcm-ease-out), border-color .3s ease; }
-@media (hover: hover) and (pointer: fine) {
-    #pcm-page .card:hover { transform: translateY(-3px); }
-}
-
-/* KPI hero */
-.pcm-kpi__val { font-size: clamp(2.4rem, 5vw, 3.4rem); font-weight: 700; letter-spacing: -1.5px; line-height: 1; color: var(--ins-heading-color, #1d1d1f); }
-[data-bs-theme="dark"] .pcm-kpi__val { color: #f5f5f7; }
-.pcm-kpi__label { font-size: .78rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #6e6e73; }
-.pcm-trend { display: inline-flex; align-items: center; gap: .25rem; font-weight: 600; font-size: .82rem; padding: .2rem .6rem; border-radius: 9999px; }
-.pcm-trend.up   { background: rgba(220,53,69,.12);  color: #dc3545; }   /* more pending = worse → red */
-.pcm-trend.down { background: rgba(25,135,84,.12);  color: #198754; }   /* fewer pending = better → green */
-.pcm-trend.flat { background: rgba(110,110,115,.12); color: #6e6e73; }
-.pcm-mini { text-align: center; }
-.pcm-mini__v { font-size: 1.35rem; font-weight: 700; color: var(--ins-heading-color, #1d1d1f); letter-spacing: -.5px; }
-[data-bs-theme="dark"] .pcm-mini__v { color: #f5f5f7; }
-.pcm-mini__l { font-size: .68rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #6e6e73; }
-
-/* Dropdowns / selects */
-#pcm-page .pcm-select {
-    max-width: 190px; font-size: .82rem; font-weight: 600; border-radius: 10px;
-    transition: box-shadow .18s var(--pcm-ease-out), border-color .18s ease;
-}
-#pcm-page .pcm-select:focus { box-shadow: 0 0 0 3px rgba(0,102,204,.18); border-color: #0066cc; }
-
-.pcm-note { font-size: .74rem; color: #6e6e73; }
-
-/* ================================================================
- *  METRICS — NOVA REDESIGN (KPI hero, tipografia, motion)
- * ================================================================ */
-#pcm-page { --pcm-grad: linear-gradient(100deg,#0066cc,#5e5ce6 52%,#8b5cf6 80%,#d946ef); }
-
-/* Page title grande com barra de acento */
-#pcm-page .page-title-head h4 {
-    font-size: 2rem !important; font-weight: 800; letter-spacing: -0.04em;
-    background: linear-gradient(180deg, var(--ins-heading-color, #1d1d1f), color-mix(in oklab, var(--ins-heading-color, #1d1d1f) 60%, transparent));
-    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-}
-#pcm-page .page-title-head .flex-grow-1::after {
-    content: ""; display: block; margin-top: .5rem; width: 52px; height: 3px; border-radius: 3px;
-    background: var(--pcm-grad);
-}
-
-/* Cards + títulos */
-#pcm-page .card { border-radius: 20px !important; }
-#pcm-page .card-title { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; }
-@media (hover: hover) and (pointer: fine) {
-    #pcm-page .card:hover { transform: translateY(-4px); }
-    [data-bs-theme="light"] #pcm-page .card:hover {
-        box-shadow: 0 18px 44px rgba(94,92,230,.16), 0 2px 8px rgba(0,0,0,.05) !important;
-    }
-    [data-bs-theme="dark"] #pcm-page .card:hover {
-        box-shadow: 0 22px 54px rgba(99,102,241,.24), 0 2px 10px rgba(0,0,0,.4) !important;
-    }
-}
-
-/* KPI hero — número gigante em gradiente + minis reforçados */
-#pcm-page .pcm-kpi__val,
-[data-bs-theme="dark"] #pcm-page .pcm-kpi__val {
-    font-size: clamp(3rem, 6.5vw, 4.6rem);
-    font-weight: 800; letter-spacing: -0.045em; line-height: .95;
-    background: var(--pcm-grad);
-    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-    color: transparent;
-}
-#pcm-page .pcm-kpi__label { letter-spacing: .12em; font-size: .72rem; }
-#pcm-page .pcm-mini__v,
-[data-bs-theme="dark"] #pcm-page .pcm-mini__v {
-    font-size: 1.8rem; font-weight: 800; letter-spacing: -0.025em;
-    background: var(--pcm-grad);
-    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-}
-#pcm-page .pcm-mini {
-    padding: 1rem .5rem;
-    border-radius: 14px;
-    background: var(--vr-card-bg, rgba(9,9,30,.02));
-    border: 1px solid var(--vr-card-border, rgba(9,9,30,.06));
-}
-#pcm-page .pcm-mini__l { letter-spacing: .08em; }
-
-/* Ícone do chip: badge em gradiente da marca, com animação igual ao about */
+#pcm-page .pcm-mini { text-align: center; padding: 1rem .5rem; border-radius: var(--otc-r-lg); background: var(--otc-fill); }
+#pcm-page .pcm-mini__v { font: 800 1.8rem/1.1 var(--otc-font-display); letter-spacing: -.025em; color: var(--otc-text); font-variant-numeric: tabular-nums; }
 #pcm-page .pcm-mini__icon {
-    width: 38px; height: 38px; border-radius: 11px;
+    width: 38px; height: 38px; border-radius: 30%;
     display: inline-flex; align-items: center; justify-content: center;
-    margin: 0 auto .6rem; font-size: 1.15rem; color: #fff;
-    background: linear-gradient(135deg, #1866dc, #8b3ff0 62%, #d946ef);
-    box-shadow: 0 8px 20px rgba(94,92,230,.34);
-    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
-                box-shadow 260ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-#pcm-page .pcm-mini { transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 300ms cubic-bezier(0.22, 1, 0.36, 1); }
-@media (hover: hover) and (pointer: fine) {
-    #pcm-page .pcm-mini:hover { transform: translateY(-5px); }
-    #pcm-page .pcm-mini:hover .pcm-mini__icon {
-        transform: scale(1.1) rotate(-4deg);
-        box-shadow: 0 12px 26px rgba(139,63,240,.5);
-    }
-}
-@media (prefers-reduced-motion: reduce) {
-    #pcm-page .pcm-mini, #pcm-page .pcm-mini__icon { transition: none !important; }
-    #pcm-page .pcm-mini:hover { transform: none !important; }
-    #pcm-page .pcm-mini:hover .pcm-mini__icon { transform: none !important; }
+    margin: 0 auto .6rem; font-size: 1.15rem;
+    background: var(--otc-accent-soft); color: var(--otc-accent-ink);
 }
 
-/* Selects com contorno visível */
-#pcm-page .pcm-select { border: 1px solid color-mix(in oklab, var(--ins-body-color) 20%, transparent); }
-
-/* ── KPI HERO — painel gradiente escuro estilo Nova ── */
-[data-bs-theme="light"] #pcm-page .pcm-hero,
-[data-bs-theme="dark"] #pcm-page .pcm-hero {
-    background:
-        radial-gradient(70% 130% at 8% -25%, rgba(0,102,204,.5), transparent 60%),
-        radial-gradient(60% 130% at 96% -15%, rgba(217,70,239,.32), transparent 60%),
-        linear-gradient(160deg, #0d1226 0%, #0a0a12 72%) !important;
-    border: 1px solid rgba(255,255,255,.09) !important;
-    border-radius: 26px !important;
-    box-shadow: 0 28px 70px rgba(8,10,25,.34) !important;
-    backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
-}
-#pcm-page .pcm-hero .card-body { padding: 2.6rem 2.4rem; }
-#pcm-page .pcm-hero .pcm-kpi__label { color: rgba(255,255,255,.55) !important; }
-#pcm-page .pcm-hero .pcm-kpi__val,
-[data-bs-theme="dark"] #pcm-page .pcm-hero .pcm-kpi__val {
-    background: linear-gradient(100deg, #fff 26%, #8ab4ff 64%, #d3aaff 100%);
-    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
-}
-#pcm-page .pcm-hero .pcm-note { color: rgba(255,255,255,.55) !important; }
-/* minis viram chips glass sobre o painel escuro */
-#pcm-page .pcm-hero .pcm-mini {
-    background: rgba(255,255,255,.06) !important;
-    border: 1px solid rgba(255,255,255,.12) !important;
-}
-#pcm-page .pcm-hero .pcm-mini__l { color: rgba(255,255,255,.55) !important; }
-#pcm-page .pcm-hero .pcm-mini__v,
-[data-bs-theme="dark"] #pcm-page .pcm-hero .pcm-mini__v {
-    background: linear-gradient(135deg, #8ab4ff, #d3aaff);
-    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-}
-
-/* Entrada mais marcante — só quando há motion */
-@media (prefers-reduced-motion: no-preference) {
-    @keyframes pcmRise {
-        from { opacity: 0; transform: translateY(26px) scale(.965); filter: blur(7px); }
-        to   { opacity: 1; transform: none; filter: blur(0); }
-    }
-    #pcm-page .pcm-fade { animation: pcmRise 0.72s var(--pcm-ease-out) both; }
-}
+#pcm-page .pcm-select { max-width: 190px; }
 </style>
 {% endblock extra_css %}
 
@@ -184,7 +40,7 @@
     <!-- ═══ KPI hero (volume data — external report, no internal history yet) ═══ -->
     <div class="row">
         <div class="col-12">
-            <div class="card pcm-fade pcm-hero">
+            <div class="card">
                 <div class="card-body">
                     <div class="row align-items-center g-4">
                         <div class="col-lg-4">
@@ -215,7 +71,7 @@
     <!-- ═══ History chart ═══════════════════════════════════════════════════ -->
     <div class="row mt-1">
         <div class="col-12">
-            <div class="card pcm-fade pcm-fade-2">
+            <div class="card">
                 <div class="card-header border-dashed d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div>
                         <h4 class="card-title mb-0">Pending Confirmations — History</h4>
@@ -244,7 +100,7 @@
     <!-- ═══ Top 5 Offenders (pending > 30 days) ═════════════════════════════ -->
     <div class="row mt-1">
         <div class="col-12">
-            <div class="card pcm-fade pcm-fade-3">
+            <div class="card">
                 <div class="card-header border-dashed">
                     <h4 class="card-title mb-0">Top 5 Offenders — pending &gt; 30 days</h4>
                 </div>

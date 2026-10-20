@@ -1,0 +1,1282 @@
+/* ============================================================================
+   otc.js — a interface do OTC Tracker, num arquivo só
+   ----------------------------------------------------------------------------
+   Carregado pelo footer-scripts.html depois do vendors.min.js (Bootstrap,
+   Lucide, SimpleBar, flatpickr). É o par do otc.css: tudo que o CSS não
+   enxerga — preferências de aparência, idioma, menu lateral, paleta de
+   comandos, o "gel" dos botões, a lente que desliza, a entrada das páginas e
+   o Send que só diz "Sent" depois que o servidor confirmou.
+
+   Contratos que as páginas usam e que este arquivo MANTÉM:
+     window.otcI18n (applyTranslations/setLanguage), window.applyTranslations,
+     [data-translator-lang], window.ins(), window.debounce(),
+     window.vrSyncStickyTables(), localStorage __OTC_TRACKER_LANG__,
+     otc_topnav_<SID> (atalhos), __OTC_TRACKER_FX__ (modo opaco).
+
+   O que é LÓGICA de página (funil, export, sessão, preview) continua no seu
+   módulo; aqui é só a casca e o movimento.
+   ========================================================================== */
+(function () {
+  'use strict';
+
+  var doc = document;
+  var root = doc.documentElement;
+  var REDUCED_MOTION = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function ready(fn) {
+    if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', fn);
+    else fn();
+  }
+  function $$(sel, ctx) { return Array.prototype.slice.call((ctx || doc).querySelectorAll(sel)); }
+  function icons() { if (window.lucide && lucide.createIcons) { try { lucide.createIcons(); } catch (e) {} } }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function lang() { try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) { return 'en'; } }
+  // Textos que este arquivo insere depois do load (o I18nManager traduz uma
+  // vez só): mapa local, como em toda página da casa.
+  var _TRANS = {
+    en: { sent: 'Sent', search: 'Search pages…', none: 'No page matches', goto: 'Go to page', pinned: 'Pinned', customize: 'Customize', menu: 'Menu' },
+    br: { sent: 'Enviado', search: 'Buscar páginas…', none: 'Nenhuma página encontrada', goto: 'Ir para a página', pinned: 'Fixados', customize: 'Personalizar', menu: 'Menu' },
+    es: { sent: 'Enviado', search: 'Buscar páginas…', none: 'Ninguna página encontrada', goto: 'Ir a la página', pinned: 'Fijados', customize: 'Personalizar', menu: 'Menú' }
+  };
+  function t(k) { var m = _TRANS[lang()] || _TRANS.en; return m[k] || _TRANS.en[k] || k; }
+
+  // ── Globais herdadas do tema antigo (o dashboard.js usa as duas) ──────────
+  window.ins = function (v, a) {
+    var val = getComputedStyle(root).getPropertyValue('--ins-' + v).trim();
+    if (v.indexOf('-rgb') !== -1) return 'rgba(' + val + ', ' + (a == null ? 1 : a) + ')';
+    // token que aponta para outro token: o Chart.js precisa da COR resolvida
+    if (val.indexOf('var(') === 0 || val.indexOf('color-mix') === 0) {
+      var probe = doc.createElement('span');
+      probe.style.color = val;
+      probe.style.display = 'none';
+      doc.body.appendChild(probe);
+      val = getComputedStyle(probe).color;
+      probe.remove();
+    }
+    return val;
+  };
+  window.debounce = function (fn, wait) {
+    var to;
+    return function () {
+      var ctx = this, args = arguments;
+      clearTimeout(to);
+      to = setTimeout(function () { fn.apply(ctx, args); }, wait);
+    };
+  };
+
+  // ==========================================================================
+  // 1. Aparência: tema, destaque, papel de parede, vidro, modo opaco
+  // ==========================================================================
+  // O <head> já aplicou os atributos antes do primeiro paint (head-css.html);
+  // aqui fica a API para a Aparência e o botão do tema.
+  var UI_KEY = '__OTC_TRACKER_UI__';
+  var FX_KEY = '__OTC_TRACKER_FX__';
+  var mqDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
+  function readPrefs() {
+    var p = {};
+    try { p = JSON.parse(localStorage.getItem(UI_KEY) || '{}') || {}; } catch (e) {}
+    return {
+      theme: p.theme || 'light',
+      accent: p.accent || 'blue',
+      wall: p.wall || 'ash',
+      glass: p.glass || 'tinted'
+    };
+  }
+  function writePrefs(p) { try { localStorage.setItem(UI_KEY, JSON.stringify(p)); } catch (e) {} }
+  function effectiveTheme(pref) {
+    if (pref === 'auto') return mqDark && mqDark.matches ? 'dark' : 'light';
+    return pref === 'dark' ? 'dark' : 'light';
+  }
+  function applyPrefs(p, animate) {
+    var go = function () {
+      root.setAttribute('data-bs-theme', effectiveTheme(p.theme));
+      if (p.accent && p.accent !== 'blue') root.setAttribute('data-accent', p.accent); else root.removeAttribute('data-accent');
+      if (p.wall && p.wall !== 'ash') root.setAttribute('data-wall', p.wall); else root.removeAttribute('data-wall');
+      if (p.glass === 'clear') root.setAttribute('data-glass', 'clear'); else root.removeAttribute('data-glass');
+    };
+    // A troca reavalia a cor de quase todo elemento; sem suprimir as
+    // transições a página engasga. Quem anima é o View Transition (cross-fade).
+    if (!animate) { go(); return; }
+    root.classList.add('otc-theme-switching');
+    var done = function () { setTimeout(function () { root.classList.remove('otc-theme-switching'); }, 60); };
+    if (doc.startViewTransition && !REDUCED_MOTION) {
+      var vt = doc.startViewTransition(go);
+      vt.finished.then(done, done);
+    } else { go(); done(); }
+  }
+  var otcUI = {
+    get: readPrefs,
+    set: function (patch, animate) {
+      var p = readPrefs();
+      for (var k in patch) if (Object.prototype.hasOwnProperty.call(patch, k)) p[k] = patch[k];
+      writePrefs(p);
+      applyPrefs(p, animate !== false);
+      syncAppearance();
+      try { window.dispatchEvent(new CustomEvent('otc:appearance', { detail: p })); } catch (e) {}
+      return p;
+    },
+    fx: function (v) {
+      if (v === undefined) { try { return localStorage.getItem(FX_KEY) || 'auto'; } catch (e) { return 'auto'; } }
+      try { if (v === 'auto') localStorage.removeItem(FX_KEY); else localStorage.setItem(FX_KEY, v); } catch (e) {}
+      decideSolid();
+      syncAppearance();
+    }
+  };
+  window.otcUI = otcUI;
+  if (mqDark && mqDark.addEventListener) {
+    mqDark.addEventListener('change', function () { if (readPrefs().theme === 'auto') applyPrefs(readPrefs(), true); });
+  }
+
+  // Modo OPACO: a máquina SEM GPU não paga o vidro. Nas máquinas do JPM o
+  // navegador roda com a aceleração desligada, e ~80 backdrop-filter
+  // recompositando por software deixam a tela inteira lenta SEM erro nenhum.
+  // Sinais, na ordem: preferência gravada ('full' | 'reduced'), WebGL por
+  // software ou ausente, Firefox no Windows (o par da mesa). O falso positivo
+  // custa estética; o falso negativo, a mesa inteira lenta.
+  function softwareGl() {
+    try {
+      var c = doc.createElement('canvas');
+      var gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+      if (!gl) return true;
+      var ext = gl.getExtension('WEBGL_debug_renderer_info');
+      var r = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+      return /swiftshader|llvmpipe|software|basic render/i.test(String(r || ''));
+    } catch (e) { return true; }
+  }
+  function decideSolid() {
+    var pref = String(otcUI.fx() || 'auto').toLowerCase();
+    var ua = navigator.userAgent || '';
+    var fxWin = /Windows/.test(ua) && /Firefox\//.test(ua);
+    var solid;
+    if (pref === 'reduced') solid = true;
+    else if (pref === 'full') solid = false;
+    else {
+      // a sonda de WebGL custa: memoizada por sessão (o <head> lê a mesma
+      // chave para não piscar vidro na página seguinte)
+      var cached = null;
+      try { cached = sessionStorage.getItem('__OTC_FX_AUTO__'); } catch (e) {}
+      if (cached === null) {
+        cached = (fxWin || softwareGl()) ? '1' : '0';
+        try { sessionStorage.setItem('__OTC_FX_AUTO__', cached); } catch (e) {}
+      }
+      solid = cached === '1';
+    }
+    root.classList.toggle('is-solid', solid);
+    return solid;
+  }
+  decideSolid();
+
+  // ==========================================================================
+  // 2. Idioma — o I18nManager de sempre (mesma API, mesmas chaves)
+  // ==========================================================================
+  function I18nManager() {
+    this.selectedLanguage = lang();
+    this.langPath = '/static/data/translations/';
+    this._cache = {};
+  }
+  I18nManager.prototype.init = function () {
+    var self = this;
+    return this.applyTranslations().then(function () {
+      self.updateSelected();
+      self.bindLanguageSwitchers();
+    });
+  };
+  I18nManager.prototype.loadTranslations = function () {
+    var l = this.selectedLanguage, self = this;
+    if (this._cache[l]) return Promise.resolve(this._cache[l]);
+    return fetch(this.langPath + l + '.json')
+      .then(function (r) { if (!r.ok) throw new Error('Failed to load ' + l + '.json'); return r.json(); })
+      .then(function (j) { self._cache[l] = j; return j; })
+      .catch(function (err) { console.error('Translation load error:', err); return {}; });
+  };
+  I18nManager.prototype.applyTranslations = function () {
+    return this.loadTranslations().then(function (tr) {
+      var get = function (obj, path) {
+        return path.split('.').reduce(function (acc, k) { return acc && acc[k] != null ? acc[k] : null; }, obj);
+      };
+      $$('[data-lang]').forEach(function (el) {
+        var v = get(tr, el.getAttribute('data-lang'));
+        if (!v) return;
+        // DataTables 2 embrulha o <th> em .dt-column-title + .dt-column-order:
+        // escrever no <th> apagaria os dois, e o export de Excel morreria no
+        // `.length` do título nulo. Traduz DENTRO do span.
+        var alvo = el.querySelector('.dt-column-title') || el;
+        alvo.innerHTML = v;
+      });
+      $$('[data-lang-placeholder]').forEach(function (el) {
+        var v = get(tr, el.getAttribute('data-lang-placeholder'));
+        if (v) el.setAttribute('placeholder', v);
+      });
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          if (window.jQuery && jQuery.fn.dataTable) jQuery.fn.dataTable.tables({ visible: true, api: true }).columns.adjust();
+        });
+      });
+    });
+  };
+  I18nManager.prototype.setLanguage = function (l) {
+    this.selectedLanguage = l;
+    try { localStorage.setItem('__OTC_TRACKER_LANG__', l); } catch (e) {}
+    var self = this;
+    return this.applyTranslations().then(function () {
+      self.updateSelected();
+      try { window.dispatchEvent(new CustomEvent('otc:language-changed', { detail: l })); } catch (e) {}
+    });
+  };
+  I18nManager.prototype.updateSelected = function () {
+    var l = this.selectedLanguage;
+    var img = doc.querySelector('[data-translator-lang="' + l + '"] [data-translator-image]');
+    var sel = doc.getElementById('selected-language-image');
+    if (img && sel) sel.src = img.src;
+    $$('[data-translator-lang]').forEach(function (a) { a.classList.toggle('active', a.getAttribute('data-translator-lang') === l); });
+    var code = doc.getElementById('selected-language-code');
+    if (code) code.textContent = l.toUpperCase();
+  };
+  I18nManager.prototype.bindLanguageSwitchers = function () {
+    var self = this;
+    $$('[data-translator-lang]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var l = b.getAttribute('data-translator-lang');
+        if (l && l !== self.selectedLanguage) self.setLanguage(l);
+      });
+    });
+  };
+  window.I18nManager = I18nManager;
+
+  // ==========================================================================
+  // 3. Menu lateral: drill-down, lente, atalhos fixados, gaveta
+  // ==========================================================================
+  var INDEX_PATHS = ['/dashboard', '/'];
+  var Nav = { tree: null, open: [], active: null, allowed: null };
+
+  function navSource() { return doc.querySelector('.sidenav-menu .side-nav:not(.dd-panel)'); }
+
+  function parseLevel(ul, parent) {
+    var out = [];
+    Array.prototype.forEach.call(ul.children, function (li) {
+      if (li.hidden) return;
+      if (li.classList.contains('side-nav-title')) { out.push({ kind: 'title', li: li }); return; }
+      if (!li.classList.contains('side-nav-item')) return;
+      var a = li.querySelector(':scope > a');
+      if (!a) return;
+      var sub = li.querySelector(':scope > .collapse > ul.sub-menu, :scope > ul.sub-menu, :scope > .collapse > .sub-menu');
+      var node = {
+        li: li, a: a, parent: parent || null,
+        href: (a.getAttribute('href') || '').split(/[?#]/)[0].replace(/\/+$/, ''),
+        textEl: a.querySelector(':scope > .menu-text')
+      };
+      if (sub) { node.kind = 'branch'; node.children = parseLevel(sub, node); if (!node.children.some(function (c) { return c.kind !== 'title'; })) return; }
+      else node.kind = 'leaf';
+      out.push(node);
+    });
+    // título sem item visível até o próximo título some junto
+    return out.filter(function (n, i) {
+      if (n.kind !== 'title') return true;
+      var nx = out[i + 1];
+      return nx && nx.kind !== 'title';
+    });
+  }
+  function labelOf(n) { return n.textEl ? n.textEl.textContent.trim() : (n.a ? n.a.textContent.trim() : ''); }
+  function langOf(n) { return n.textEl ? n.textEl.getAttribute('data-lang') : null; }
+  function curPath() { return (window.location.pathname || '/').replace(/\/+$/, '') || '/'; }
+  function findActive(nodes) {
+    var p = curPath();
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (n.kind === 'leaf' && n.href && n.href === p) return n;
+      if (n.kind === 'branch') { var f = findActive(n.children); if (f) return f; }
+    }
+    return null;
+  }
+  function leadsTo(branch) {
+    var p = Nav.active && Nav.active.parent;
+    while (p) { if (p === branch) return true; p = p.parent; }
+    return false;
+  }
+  function levelNodes() { return Nav.open.length ? Nav.open[Nav.open.length - 1].children : Nav.tree; }
+
+  function buildNav() {
+    var src = navSource();
+    if (!src) return;
+    src.classList.add('dd-source-hidden');
+    Nav.tree = parseLevel(src, null);
+    Nav.active = findActive(Nav.tree);
+    Nav.open = [];
+    if (Nav.active && INDEX_PATHS.indexOf(curPath()) === -1) {
+      var p = Nav.active.parent;
+      while (p) { Nav.open.unshift(p); p = p.parent; }
+    }
+    var host = doc.querySelector('.sidenav-menu .dd-nav');
+    if (!host) {
+      host = doc.createElement('div');
+      host.className = 'dd-nav';
+      host.innerHTML = '<div class="dd-crumbs"></div><div class="dd-stage"></div>';
+      src.parentNode.insertBefore(host, src.nextSibling);
+    }
+    Nav.crumbs = host.querySelector('.dd-crumbs');
+    Nav.stage = host.querySelector('.dd-stage');
+    Nav.stage.innerHTML = '';
+    var ul = doc.createElement('ul');
+    ul.className = 'side-nav dd-panel dd-current';
+    fillPanel(ul);
+    Nav.stage.appendChild(ul);
+    renderCrumbs();
+    icons();
+    placeLens(ul, false);
+  }
+
+  function fillPanel(ul) {
+    ul.innerHTML = '';
+    if (Nav.open.length) {
+      var parent = Nav.open[Nav.open.length - 1];
+      var back = doc.createElement('li');
+      back.className = 'side-nav-item dd-back';
+      back.innerHTML = '<a href="javascript:void(0)" class="side-nav-link dd-back-link">' +
+        '<span class="menu-icon dd-back-icon"><i data-lucide="chevron-left"></i></span>' +
+        '<span class="menu-text"' + (langOf(parent) ? ' data-lang="' + esc(langOf(parent)) + '"' : '') + '>' + esc(labelOf(parent)) + '</span></a>';
+      back.firstChild.addEventListener('click', function (e) { e.preventDefault(); goTo(Nav.open.length - 2); });
+      ul.appendChild(back);
+    }
+    levelNodes().forEach(function (node) {
+      if (node.kind === 'title') { ul.appendChild(node.li.cloneNode(true)); return; }
+      var li = node.li.cloneNode(true);
+      $$('.collapse, .collapsing, ul.sub-menu', li).forEach(function (n) { n.remove(); });
+      if (Nav.open.length) { var mi = li.querySelector('.menu-icon'); if (mi) mi.remove(); }
+      var a = li.querySelector(':scope > a');
+      a.classList.remove('active');
+      if (node.kind === 'branch') {
+        a.removeAttribute('data-bs-toggle');
+        a.removeAttribute('aria-controls');
+        a.setAttribute('href', 'javascript:void(0)');
+        a.classList.add('dd-branch');
+        if (leadsTo(node)) a.classList.add('active');
+        a.addEventListener('click', function (e) { e.preventDefault(); drill(node); });
+      } else {
+        a.classList.add('dd-leaf');
+        if (node === Nav.active) a.classList.add('active');
+        // a lente desliza até o item clicado enquanto a página seguinte carrega
+        a.addEventListener('click', function () { moveLensTo(ul, a); });
+      }
+      ul.appendChild(li);
+    });
+    if (!REDUCED_MOTION) {
+      $$(':scope > li', ul).forEach(function (li, i) { li.style.setProperty('--dd-delay', Math.min(i, 9) * 24 + 'ms'); });
+    }
+  }
+
+  function renderCrumbs() {
+    var c = Nav.crumbs;
+    c.innerHTML = '';
+    var trail = [{ label: t('menu'), lang: null, index: -1 }];
+    Nav.open.slice(0, -1).forEach(function (n, i) { trail.push({ label: labelOf(n), lang: langOf(n), index: i }); });
+    trail.forEach(function (cr, i) {
+      var b = doc.createElement('button');
+      b.type = 'button';
+      b.className = 'dd-crumb';
+      b.innerHTML = cr.lang ? '<span data-lang="' + esc(cr.lang) + '">' + esc(cr.label) + '</span>' : esc(cr.label);
+      b.addEventListener('click', function () { goTo(cr.index); });
+      c.appendChild(b);
+      if (i < trail.length - 1) {
+        var s = doc.createElement('span');
+        s.className = 'dd-crumb-sep';
+        s.innerHTML = '<i data-lucide="chevron-right"></i>';
+        c.appendChild(s);
+      }
+    });
+    c.classList.toggle('dd-at-root', Nav.open.length === 0);
+  }
+
+  function slide(dir) {
+    var out = Nav.stage.querySelector('.dd-panel.dd-current');
+    var inc = doc.createElement('ul');
+    inc.className = 'side-nav dd-panel';
+    fillPanel(inc);
+    renderCrumbs();
+    if (REDUCED_MOTION || !out) {
+      if (out) out.remove();
+      inc.classList.add('dd-current');
+      Nav.stage.appendChild(inc);
+      icons();
+      placeLens(inc, false);
+      return;
+    }
+    Nav.stage.style.minHeight = Nav.stage.offsetHeight + 'px';
+    out.style.position = 'absolute';
+    out.style.top = '0'; out.style.left = '0'; out.style.right = '0';
+    out.classList.remove('dd-current');
+    inc.classList.add(dir > 0 ? 'dd-enter-right' : 'dd-enter-left', 'dd-stagger');
+    Nav.stage.appendChild(inc);
+    icons();
+    placeLens(inc, false);
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        inc.classList.remove('dd-enter-right', 'dd-enter-left');
+        inc.classList.add('dd-current');
+        out.classList.add(dir > 0 ? 'dd-exit-left' : 'dd-exit-right');
+      });
+    });
+    var done = false;
+    function clean() { if (done) return; done = true; out.remove(); Nav.stage.style.minHeight = ''; }
+    out.addEventListener('transitionend', clean, { once: true });
+    setTimeout(clean, 400);
+    if (window.otcI18n) window.otcI18n.applyTranslations();
+  }
+  function drill(node) { Nav.open.push(node); slide(1); }
+  function goTo(i) { Nav.open = i < 0 ? [] : Nav.open.slice(0, i + 1); slide(-1); }
+
+  // ── A LENTE de gel ────────────────────────────────────────────────────────
+  // Posição por mola; no caminho ela ESTICA no eixo do movimento e, ao
+  // chegar, achata e balança. Pré-calculado em quadros-chave (WAAPI), só
+  // `transform` — nada de layout.
+  function lensFor(container) {
+    var l = container.querySelector(':scope > .otc-lens');
+    if (!l) {
+      l = doc.createElement(container.tagName === 'UL' ? 'li' : 'span');
+      l.className = 'otc-lens';
+      l.setAttribute('role', 'presentation');
+      l.setAttribute('aria-hidden', 'true');
+      container.insertBefore(l, container.firstChild);
+    }
+    return l;
+  }
+  // Posição pelo LAYOUT (offset*), nunca pelo getBoundingClientRect: o item
+  // ainda está entrando (o `translate` da animação de entrada, o slide do
+  // drill-down) quando a lente é posicionada, e a caixa visual daria a lente
+  // deslocada do texto para sempre. O container é posicionado (CSS).
+  function rectIn(container, el) {
+    var x = 0, y = 0, n = el;
+    while (n && n !== container) { x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; }
+    if (n !== container) {                                // fora da cadeia: cai para a caixa visual
+      var c = container.getBoundingClientRect(), r = el.getBoundingClientRect();
+      return { x: r.left - c.left, y: r.top - c.top, w: r.width, h: r.height };
+    }
+    return { x: x, y: y, w: el.offsetWidth, h: el.offsetHeight };
+  }
+  function setLensBox(l, b) {
+    l.style.width = b.w + 'px';
+    l.style.height = b.h + 'px';
+    l.style.transform = 'translate(' + b.x + 'px,' + b.y + 'px)';
+    l.dataset.x = b.x; l.dataset.y = b.y; l.dataset.w = b.w; l.dataset.h = b.h;
+  }
+  function animateLens(l, from, to) {
+    if (REDUCED_MOTION || !l.animate) { setLensBox(l, to); return; }
+    var dx = to.x - from.x, dy = to.y - from.y;
+    var vert = Math.abs(dy) >= Math.abs(dx);
+    var dist = Math.abs(vert ? dy : dx);
+    var size = vert ? to.h : to.w;
+    var k = Math.min(.5, .08 + dist / (size * 6));        // esticão proporcional ao salto
+    var sa = 1 + k, sc = 1 / Math.sqrt(sa);
+    var st = function (a, c) { return vert ? 'scale(' + c + ',' + a + ')' : 'scale(' + a + ',' + c + ')'; };
+    var tr = function (x, y) { return 'translate(' + x + 'px,' + y + 'px) '; };
+    var ox = vert ? 0 : Math.sign(dx) * 2.5, oy = vert ? Math.sign(dy) * 2 : 0;
+    l.style.width = to.w + 'px';
+    l.style.height = to.h + 'px';
+    var anim = l.animate([
+      { transform: tr(from.x, from.y) + 'scale(1,1)', offset: 0 },
+      { transform: tr(from.x + dx * .42, from.y + dy * .42) + st(sa, sc), offset: .22 },
+      { transform: tr(to.x + ox, to.y + oy) + st(.92, 1.06), offset: .52 },
+      { transform: tr(to.x, to.y) + st(1.012, .988), offset: .7 },
+      { transform: tr(to.x, to.y) + st(.996, 1.004), offset: .86 },
+      { transform: tr(to.x, to.y) + 'scale(1,1)', offset: 1 }
+    ], { duration: 720, easing: 'cubic-bezier(.3,.7,.3,1)' });
+    setLensBox(l, to);
+    return anim;
+  }
+  function placeLens(ul, animate) {
+    var a = ul.querySelector(':scope > li > a.active');
+    var l = ul.querySelector(':scope > .otc-lens');
+    if (!a) { if (l) l.style.opacity = '0'; return; }
+    l = lensFor(ul);
+    l.style.opacity = '1';
+    l.style.borderRadius = '22px';
+    var b = rectIn(ul, a);
+    if (animate && l.dataset.w) animateLens(l, { x: +l.dataset.x, y: +l.dataset.y, w: +l.dataset.w, h: +l.dataset.h }, b);
+    else setLensBox(l, b);
+  }
+  function moveLensTo(ul, a) {
+    var l = ul.querySelector(':scope > .otc-lens');
+    $$(':scope > li > a.active', ul).forEach(function (x) { x.classList.remove('active'); });
+    a.classList.add('active');
+    if (!l || !l.dataset.w) { placeLens(ul, false); return; }
+    animateLens(l, { x: +l.dataset.x, y: +l.dataset.y, w: +l.dataset.w, h: +l.dataset.h }, rectIn(ul, a));
+  }
+
+  // ── Acesso por usuário: o menu mostra só o que a pessoa alcança ──────────
+  // (o script do sidenav.html marca os <li hidden>; aqui o drill-down é
+  // remontado depois dele, e os atalhos/paleta usam a mesma lista)
+  function accessThen(fn) {
+    var p = window.otcMeAccess ? window.otcMeAccess() : fetch('/api/me/access', { credentials: 'same-origin' }).then(function (r) { return r.json(); });
+    p.then(function (d) {
+      if (d && d.success && !d.is_admin && d.configured) {
+        var allowed = {};
+        (d.pages || []).forEach(function (u) { allowed[u] = 1; });
+        if (allowed['/']) allowed['/dashboard'] = 1;
+        for (var k in allowed) { if (k.indexOf('/control-panel#') === 0) { allowed['/control-panel'] = 1; break; } }
+        Nav.allowed = allowed;
+      }
+      fn();
+    }).catch(function () { fn(); });
+  }
+
+  // ── Atalhos fixados (a seção "Pinned"), por usuário ──────────────────────
+  // Mesma chave e mesmo teto dos atalhos do topo antigo: o que cada pessoa
+  // escolheu continua escolhido.
+  var PIN_MAX = 10;
+  var PIN_DEFAULTS = ['/dashboard', '/live-position-ndf', '/pending-confirmation', '/reconciliation-payrec', '/reference-data'];
+  var PIN_HUES = ['var(--otc-blue)', 'var(--otc-purple)', 'var(--otc-green)', 'var(--otc-orange)', 'var(--otc-pink)', 'var(--otc-teal)', 'var(--otc-indigo)', 'var(--otc-yellow)'];
+  function pinKey() {
+    var box = doc.querySelector('.otc-pinned[data-sid]');
+    var sid = box ? (box.getAttribute('data-sid') || '').trim().toUpperCase() : '';
+    return 'otc_topnav_' + (sid || 'anon');
+  }
+  function leaves() {
+    var out = [];
+    (function walk(nodes, trail) {
+      nodes.forEach(function (n) {
+        if (n.kind === 'leaf' && n.href && n.href.charAt(0) === '/') {
+          out.push({ href: n.href, label: labelOf(n), lang: langOf(n), trail: trail.slice(), node: n });
+        } else if (n.kind === 'branch') walk(n.children, trail.concat([labelOf(n)]));
+      });
+    })(Nav.tree || [], []);
+    var seen = {};
+    return out.filter(function (o) { if (seen[o.href]) return false; seen[o.href] = 1; return true; });
+  }
+  function isAllowed(h) { return !Nav.allowed || Nav.allowed[h] === 1; }
+  function pinLoad() {
+    try { var v = JSON.parse(localStorage.getItem(pinKey()) || 'null'); if (Array.isArray(v)) return v; } catch (e) {}
+    return PIN_DEFAULTS.slice();
+  }
+  function pinDisplay(o) {
+    // rótulo genérico ("Main", "Summary", "NDF") precisa do grupo pai
+    var g = /^(main|summary|ndf|option|options|swap|overview|detail|list)$/i;
+    var parent = o.node.parent;
+    if (/^main$/i.test(o.label) && parent) return [{ text: labelOf(parent), lang: langOf(parent) }];
+    if (g.test(o.label) && parent) return [{ text: labelOf(parent), lang: langOf(parent) }, { text: o.label, lang: o.lang }];
+    return [{ text: o.label, lang: o.lang }];
+  }
+  function renderPinned() {
+    var box = doc.querySelector('.otc-pinned');
+    if (!box) return;
+    var map = {};
+    leaves().forEach(function (o) { map[o.href] = o; });
+    var chosen = pinLoad().filter(function (h) { return map[h] && isAllowed(h); });
+    if (!chosen.length) chosen = PIN_DEFAULTS.filter(function (h) { return map[h] && isAllowed(h); });
+    var p = curPath();
+    box.innerHTML = chosen.map(function (h, i) {
+      var inner = pinDisplay(map[h]).map(function (d) {
+        return '<span' + (d.lang ? ' data-lang="' + esc(d.lang) + '"' : '') + '>' + esc(d.text) + '</span>';
+      }).join(' ');
+      return '<a href="' + esc(h) + '" style="--pin-hue:' + PIN_HUES[i % PIN_HUES.length] + '"' + (p === h ? ' class="is-active"' : '') + '>' + inner + '</a>';
+    }).join('');
+  }
+  function openPinEditor() {
+    var current = pinLoad();
+    var groups = {};
+    var order = [];
+    leaves().forEach(function (o) {
+      if (!isAllowed(o.href)) return;
+      var g = o.trail[0] || labelOf(o.node);
+      if (!groups[g]) { groups[g] = []; order.push(g); }
+      groups[g].push(o);
+    });
+    var body = order.map(function (g) {
+      return '<div class="otc-set-group"><div class="otc-set-group__title">' + esc(g) + '</div>' +
+        groups[g].map(function (o) {
+          var lbl = o.trail.slice(1).concat([o.label]).join(' › ');
+          return '<label class="d-flex align-items-center gap-2 py-1" style="cursor:pointer">' +
+            '<input class="form-check-input m-0" type="checkbox" value="' + esc(o.href) + '"' + (current.indexOf(o.href) !== -1 ? ' checked' : '') + '>' +
+            '<span>' + esc(lbl) + '</span></label>';
+        }).join('') + '</div>';
+    }).join('');
+    var el = doc.createElement('div');
+    el.className = 'modal fade';
+    el.tabIndex = -1;
+    el.innerHTML =
+      '<div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content liquid-glass">' +
+      '<div class="modal-header py-2"><h5 class="modal-title fs-6" data-lang="vr-cfg-title">Customize menu</h5>' +
+      '<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>' +
+      '<div class="modal-body"><p class="text-muted fs-sm" data-lang="vr-cfg-hint">Choose which shortcuts appear at the top (max {max}).</p>' + body + '</div>' +
+      '<div class="modal-footer py-2"><button type="button" class="btn btn-sm btn-secondary me-auto" data-act="reset" data-lang="vr-cfg-reset">Default</button>' +
+      '<span class="text-muted fs-sm" data-count></span>' +
+      '<button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" data-lang="vr-cfg-cancel">Cancel</button>' +
+      '<button type="button" class="btn btn-sm btn-success" data-act="save" data-lang="vr-cfg-save">Save</button></div>' +
+      '</div></div>';
+    doc.body.appendChild(el);
+    var fixMax = function () { var h = el.querySelector('[data-lang="vr-cfg-hint"]'); if (h) h.textContent = h.textContent.replace(/\{max\}/g, PIN_MAX).replace(/\b\d+\b/, PIN_MAX); };
+    var sync = function () {
+      var n = el.querySelectorAll('input:checked').length;
+      $$('input[type=checkbox]', el).forEach(function (cb) { if (!cb.checked) cb.disabled = n >= PIN_MAX; });
+      el.querySelector('[data-count]').textContent = n + '/' + PIN_MAX;
+    };
+    el.addEventListener('change', sync);
+    el.querySelector('[data-act="reset"]').addEventListener('click', function () {
+      $$('input[type=checkbox]', el).forEach(function (cb) { cb.checked = PIN_DEFAULTS.indexOf(cb.value) !== -1; });
+      sync();
+    });
+    el.querySelector('[data-act="save"]').addEventListener('click', function () {
+      var chosen = leaves().map(function (o) { return o.href; }).filter(function (h) {
+        var cb = el.querySelector('input[value="' + h + '"]');
+        return cb && cb.checked;
+      });
+      try { localStorage.setItem(pinKey(), JSON.stringify(chosen)); } catch (e) {}
+      renderPinned();
+      if (window.otcI18n) window.otcI18n.applyTranslations();
+      bootstrap.Modal.getInstance(el).hide();
+    });
+    el.addEventListener('hidden.bs.modal', function () { el.remove(); });
+    sync();
+    fixMax();
+    if (window.otcI18n) window.otcI18n.applyTranslations().then(fixMax);
+    new bootstrap.Modal(el).show();
+  }
+
+  // ── Gaveta: fixado (padrão) ou sobre o conteúdo ──────────────────────────
+  var PIN_NAV_KEY = 'otc_nav_pinned';
+  function initDrawer() {
+    var body = doc.body;
+    var bd = doc.createElement('div');
+    bd.className = 'otc-nav-backdrop';
+    body.appendChild(bd);
+    var unpinned = false;
+    try { unpinned = localStorage.getItem(PIN_NAV_KEY) === '0'; } catch (e) {}
+    body.classList.toggle('otc-nav-unpinned', unpinned);
+    var close = function () { body.classList.remove('otc-nav-open'); };
+    $$('[data-otc-menu]').forEach(function (b) { b.addEventListener('click', function () { body.classList.toggle('otc-nav-open'); }); });
+    $$('[data-otc-pin]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var now = !body.classList.contains('otc-nav-unpinned');
+        body.classList.toggle('otc-nav-unpinned', now);
+        body.classList.remove('otc-nav-open');
+        try { localStorage.setItem(PIN_NAV_KEY, now ? '0' : '1'); } catch (e) {}
+      });
+    });
+    bd.addEventListener('click', close);
+    doc.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+    var side = doc.querySelector('.sidenav-menu');
+    if (side) side.addEventListener('click', function (e) {
+      var a = e.target.closest('a[href]');
+      var h = a && a.getAttribute('href');
+      if (h && h !== '#' && h.indexOf('javascript:') !== 0) close();
+    });
+  }
+
+  // ==========================================================================
+  // 4. Paleta de comandos (⌘K / Ctrl+K)
+  // ==========================================================================
+  var Pal = null;
+  function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+  function buildPalette() {
+    var el = doc.createElement('div');
+    el.className = 'otc-palette';
+    el.innerHTML =
+      '<div class="otc-palette__scrim"></div>' +
+      '<div class="otc-palette__box" role="dialog" aria-modal="true">' +
+        '<div class="otc-palette__bar"><i data-lucide="search"></i><input type="text" autocomplete="off" spellcheck="false"><kbd>esc</kbd></div>' +
+        '<div class="otc-palette__list" role="listbox"></div>' +
+      '</div>';
+    doc.body.appendChild(el);
+    icons();
+    var input = el.querySelector('input'), list = el.querySelector('.otc-palette__list');
+    Pal = { el: el, input: input, list: list, items: [], idx: 0 };
+    el.querySelector('.otc-palette__scrim').addEventListener('click', closePalette);
+    input.addEventListener('input', renderPalette);
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!Pal.items.length) return;
+        Pal.idx = (Pal.idx + (e.key === 'ArrowDown' ? 1 : -1) + Pal.items.length) % Pal.items.length;
+        markPalette();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        var it = Pal.items[Pal.idx];
+        if (it) window.location.href = it.href;
+      } else if (e.key === 'Escape') closePalette();
+    });
+    list.addEventListener('mousemove', function (e) {
+      var a = e.target.closest('.otc-palette__item');
+      if (!a) return;
+      var i = +a.getAttribute('data-i');
+      if (i !== Pal.idx) { Pal.idx = i; markPalette(); }
+    });
+  }
+  function renderPalette() {
+    var q = norm(Pal.input.value).trim();
+    var all = leaves().filter(function (o) { return isAllowed(o.href); });
+    var hits = !q ? all : all.filter(function (o) {
+      var hay = norm(o.label + ' ' + o.trail.join(' ') + ' ' + o.href);
+      return q.split(/\s+/).every(function (w) { return hay.indexOf(w) !== -1; });
+    });
+    Pal.items = hits.slice(0, 60);
+    Pal.idx = 0;
+    if (!Pal.items.length) { Pal.list.innerHTML = '<div class="otc-palette__empty">' + esc(t('none')) + '</div>'; return; }
+    var html = '', group = null;
+    Pal.items.forEach(function (o, i) {
+      var g = o.trail[0] || '';
+      if (g !== group) { group = g; if (g) html += '<div class="otc-palette__group">' + esc(g) + '</div>'; }
+      var icon = (o.node && (function () { var p = o.node; while (p.parent) p = p.parent; var ic = p.li.querySelector(':scope > a .menu-icon [data-lucide], :scope > a .menu-icon svg'); if (!ic) return ''; var m = (ic.getAttribute('class') || '').match(/lucide-([a-z0-9-]+)/); return ic.getAttribute('data-lucide') || (m ? m[1] : ''); })()) || 'file-text';
+      html += '<a class="otc-palette__item" href="' + esc(o.href) + '" data-i="' + i + '">' +
+        '<span class="ico"><i data-lucide="' + esc(icon) + '"></i></span>' +
+        '<span><span class="t">' + esc(o.label) + '</span><br><span class="s">' + esc(o.trail.length ? o.trail.join(' › ') : t('goto')) + '</span></span></a>';
+    });
+    Pal.list.innerHTML = html;
+    icons();
+    markPalette();
+  }
+  function markPalette() {
+    $$('.otc-palette__item', Pal.list).forEach(function (a, i) {
+      a.classList.toggle('is-active', i === Pal.idx);
+      if (i === Pal.idx) a.scrollIntoView({ block: 'nearest' });
+    });
+  }
+  function openPalette() {
+    if (!Pal) buildPalette();
+    Pal.input.placeholder = t('search');
+    Pal.input.value = '';
+    Pal.el.classList.add('is-open');
+    renderPalette();
+    setTimeout(function () { Pal.input.focus(); }, 0);
+  }
+  function closePalette() { if (Pal) Pal.el.classList.remove('is-open'); }
+  window.otcPalette = { open: openPalette, close: closePalette };
+  doc.addEventListener('keydown', function (e) {
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openPalette(); }
+  });
+
+  // ==========================================================================
+  // 5. Painel de Aparência (offcanvas do customizer.html)
+  // ==========================================================================
+  var ACCENTS = { blue: '#1f6fe6', purple: '#7b3ff0', pink: '#cf2068', orange: '#c4500f', green: '#167f3d', graphite: '#4a4a54' };
+  var WALLS = {
+    ash: 'linear-gradient(135deg,#2a2b30,#e4e4e7)', sand: 'linear-gradient(135deg,#3a2a1e,#f6e4d2)', sage: 'linear-gradient(135deg,#1f2c23,#dde9dc)',
+    aurora: 'radial-gradient(80% 70% at 10% 100%,#34469e,transparent 70%),radial-gradient(70% 70% at 100% 0,#2b3a8c,transparent 70%),linear-gradient(135deg,#090b1c,#0c0f24)',
+    smoke: 'radial-gradient(80% 70% at 10% 100%,#5c5c64,transparent 70%),linear-gradient(135deg,#070708,#2a2a30)',
+    tide: 'radial-gradient(80% 70% at 10% 100%,#16c3b0,transparent 70%),radial-gradient(70% 70% at 100% 0,#1d55dc,transparent 70%),linear-gradient(135deg,#03112a,#0d0a2c)',
+    bloom: 'radial-gradient(80% 70% at 10% 100%,#d08a2a,transparent 70%),radial-gradient(70% 70% at 100% 0,#c2306c,transparent 70%),linear-gradient(135deg,#130a2b,#2a0c22)',
+    ember: 'radial-gradient(80% 70% at 10% 100%,#c98a12,transparent 70%),radial-gradient(70% 70% at 100% 0,#c4501a,transparent 70%),linear-gradient(135deg,#200a04,#2a0a12)',
+    grove: 'radial-gradient(80% 70% at 10% 100%,#5e9e1f,transparent 70%),radial-gradient(70% 70% at 100% 0,#1c8f55,transparent 70%),linear-gradient(135deg,#04170e,#041a1e)',
+    dusk: 'radial-gradient(80% 70% at 10% 100%,#6a5440,transparent 70%),radial-gradient(70% 70% at 100% 0,#3d425e,transparent 70%),linear-gradient(135deg,#0f1016,#17121c)'
+  };
+  function initAppearance() {
+    var sw = doc.querySelector('[data-otc-accents]');
+    if (sw && !sw.children.length) {
+      sw.innerHTML = Object.keys(ACCENTS).map(function (k) {
+        return '<button type="button" class="otc-swatch" data-accent-pick="' + k + '" style="--sw:' + ACCENTS[k] + '" aria-label="' + k + '" title="' + k.charAt(0).toUpperCase() + k.slice(1) + '"></button>';
+      }).join('');
+    }
+    var wl = doc.querySelector('[data-otc-walls]');
+    if (wl && !wl.children.length) {
+      wl.innerHTML = Object.keys(WALLS).map(function (k) {
+        return '<button type="button" class="otc-wall" data-wall-pick="' + k + '"><span class="art" style="--art:' + WALLS[k] + '"></span>' + k.charAt(0).toUpperCase() + k.slice(1) + '</button>';
+      }).join('');
+    }
+    doc.addEventListener('click', function (e) {
+      var a = e.target.closest('[data-accent-pick]');
+      if (a) { otcUI.set({ accent: a.getAttribute('data-accent-pick') }, false); return; }
+      var w = e.target.closest('[data-wall-pick]');
+      if (w) { otcUI.set({ wall: w.getAttribute('data-wall-pick') }, true); return; }
+      var th = e.target.closest('[data-theme-pick]');
+      if (th) { otcUI.set({ theme: th.getAttribute('data-theme-pick') }, true); return; }
+      var g = e.target.closest('[data-glass-pick]');
+      if (g) { otcUI.set({ glass: g.getAttribute('data-glass-pick') }, false); return; }
+    });
+    var solid = doc.querySelector('[data-otc-solid]');
+    if (solid) solid.addEventListener('change', function () { otcUI.fx(solid.checked ? 'reduced' : 'full'); });
+    syncAppearance();
+  }
+  function syncAppearance() {
+    var p = readPrefs();
+    $$('[data-accent-pick]').forEach(function (b) { b.classList.toggle('is-on', b.getAttribute('data-accent-pick') === p.accent); });
+    $$('[data-wall-pick]').forEach(function (b) { b.classList.toggle('is-on', b.getAttribute('data-wall-pick') === p.wall); });
+    $$('[data-theme-pick]').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-theme-pick') === p.theme); });
+    $$('[data-glass-pick]').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-glass-pick') === p.glass); });
+    var solid = doc.querySelector('[data-otc-solid]');
+    if (solid) solid.checked = root.classList.contains('is-solid');
+    $$('.nav[data-otc-seg]').forEach(function (n) { placeSegLens(n, true); });
+  }
+
+  // botão de tema da barra (sol/lua): alterna claro/escuro
+  function initThemeButton() {
+    var b = doc.getElementById('otc-theme-btn');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      otcUI.set({ theme: root.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark' }, true);
+    });
+  }
+
+  // ==========================================================================
+  // 6. Segmentos com lente (nav-tabs / nav-pills / [data-otc-seg])
+  // ==========================================================================
+  function placeSegLens(nav, animate) {
+    var a = nav.querySelector('.nav-link.active, .active > .nav-link, button.active, .fc-button-active');
+    var l = nav.querySelector(':scope > .otc-lens');
+    if (!a || !a.offsetParent) { if (l) l.style.opacity = '0'; return; }
+    l = lensFor(nav);
+    l.style.opacity = '1';
+    var b = rectIn(nav, a);
+    l.style.borderRadius = Math.min(b.h / 2, 22) + 'px';
+    if (animate && l.dataset.w && (Math.abs(+l.dataset.x - b.x) > 1 || Math.abs(+l.dataset.y - b.y) > 1)) {
+      animateLens(l, { x: +l.dataset.x, y: +l.dataset.y, w: +l.dataset.w, h: +l.dataset.h }, b);
+    } else setLensBox(l, b);
+  }
+  // segmentos: abas do Bootstrap, os da Aparência e as visões do FullCalendar
+  // (estes nascem DEPOIS do load — o calendário espera os feriados)
+  var SEG_SEL = '.nav-tabs, .nav-pills, .nav[data-otc-seg], .fc-header-toolbar .fc-button-group';
+  var segRO = window.ResizeObserver ? new ResizeObserver(window.debounce(function () {
+    $$('.otc-has-lens').forEach(function (n) { placeSegLens(n, false); });
+  }, 60)) : null;
+  function initSegments() {
+    var navs = $$(SEG_SEL);
+    navs.forEach(function (n) {
+      if (n.__otcSeg) return;
+      n.__otcSeg = true;
+      n.classList.add('otc-has-lens');
+      placeSegLens(n, false);
+      // as telas trocam o `.active` de várias formas (Bootstrap tab, à mão):
+      // observar a classe cobre todas
+      var mo = new MutationObserver(window.debounce(function () { placeSegLens(n, true); }, 16));
+      mo.observe(n, { attributes: true, attributeFilter: ['class'], subtree: true });
+    });
+    if (segRO) navs.forEach(function (n) { if (!n.__otcSegRO) { n.__otcSegRO = true; segRO.observe(n); } });
+  }
+  ready(function () {
+    if (!window.MutationObserver) return;
+    var t = null;
+    new MutationObserver(function () {
+      if (t) return;
+      t = setTimeout(function () { t = null; if (doc.querySelector(SEG_SEL.split(', ').map(function (x) { return x + ':not(.otc-has-lens)'; }).join(', '))) initSegments(); }, 120);
+    }).observe(doc.body, { childList: true, subtree: true });
+  });
+
+  // ==========================================================================
+  // 7. Gel: o botão afunda e volta com mola; o anel do clique
+  // ==========================================================================
+  var PRESS_SEL = '.btn, .otc-tbtn, .otc-search, .otc-swatch, .otc-wall, .side-nav-link, .nav-link, .otc-menu-btn';
+  var pressed = null;
+  function pressIn(el) {
+    if (!el.animate || REDUCED_MOTION) return;
+    if (el.__otcPress) el.__otcPress.cancel();
+    el.__otcPress = el.animate([{ scale: '1 1' }, { scale: '1.07 0.9' }], { duration: 130, easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'forwards' });
+  }
+  function pressOut(el) {
+    if (!el.animate || REDUCED_MOTION) return;
+    var prev = el.__otcPress;
+    var a = el.animate([
+      { scale: '1.07 0.9' }, { scale: '0.966 1.048', offset: .16 }, { scale: '1.011 0.984', offset: .38 },
+      { scale: '0.996 1.005', offset: .58 }, { scale: '1 1' }
+    ], { duration: 520, easing: 'linear' });
+    if (prev) prev.cancel();
+    el.__otcPress = null;
+    a.onfinish = function () { a.cancel(); };
+  }
+  function ripple(el, e) {
+    if (REDUCED_MOTION || !el.classList.contains('btn') || el.matches(SEND_SEL)) return;
+    var r = el.getBoundingClientRect();
+    var s = doc.createElement('span');
+    s.className = 'otc-ripple';
+    s.style.left = (e.clientX - r.left) + 'px';
+    s.style.top = (e.clientY - r.top) + 'px';
+    var hadHost = el.classList.contains('otc-ripple-host');
+    el.classList.add('otc-ripple-host');
+    el.appendChild(s);
+    setTimeout(function () { s.remove(); if (!hadHost && !el.querySelector('.otc-ripple')) el.classList.remove('otc-ripple-host'); }, 820);
+  }
+  doc.addEventListener('pointerdown', function (e) {
+    if (e.button !== 0) return;
+    var el = e.target.closest(PRESS_SEL);
+    if (!el || el.disabled || el.classList.contains('disabled')) return;
+    pressed = el;
+    pressIn(el);
+    ripple(el, e);
+  }, { passive: true });
+  function release() { if (pressed) { pressOut(pressed); pressed = null; } }
+  doc.addEventListener('pointerup', release, { passive: true });
+  doc.addEventListener('pointercancel', release, { passive: true });
+  window.addEventListener('blur', release);
+
+  // ==========================================================================
+  // 8. Brilho que segue o ponteiro nas placas de vidro (`--mx`/`--my`)
+  // ==========================================================================
+  var SHEEN_SEL = '.card, .sidenav-menu, .otc-toolbar, .modal-content.liquid-glass, .tl-card, .cp-card, .swal2-popup, .offcanvas, .otc-menu-btn';
+  var sheenEl = null, sheenPt = null, sheenRaf = 0;
+  doc.addEventListener('pointermove', function (e) {
+    if (root.classList.contains('is-solid') || e.pointerType === 'touch') return;
+    sheenPt = { x: e.clientX, y: e.clientY, t: e.target };
+    if (sheenRaf) return;
+    sheenRaf = requestAnimationFrame(function () {
+      sheenRaf = 0;
+      var el = sheenPt.t && sheenPt.t.closest ? sheenPt.t.closest(SHEEN_SEL) : null;
+      if (sheenEl && sheenEl !== el) { sheenEl.style.removeProperty('--mx'); sheenEl.style.removeProperty('--my'); }
+      sheenEl = el;
+      if (!el) return;
+      var r = el.getBoundingClientRect();
+      el.style.setProperty('--mx', (sheenPt.x - r.left) + 'px');
+      el.style.setProperty('--my', (sheenPt.y - r.top) + 'px');
+    });
+  }, { passive: true });
+
+  // ==========================================================================
+  // 9. Entrada da página: gotas em sequência, título letra a letra
+  // ==========================================================================
+  var SURFACE_SEL = '.card, .tl-card, .cp-card, .otc-stat, div[class*="-widget"]:not([class*="__"]):not(.row), div[class*="-panel"]:not([class*="__"]):not(.row):not(.tab-pane), .page-title-head + .row > [class*="col"] > :not(.card):not(.row)';
+  function initEntrance() {
+    if (REDUCED_MOTION) return;
+    var page = doc.querySelector('.content-page');
+    if (!page) return;
+    var all = $$(SURFACE_SEL, page).filter(function (el) {
+      if (el.closest('.modal, .offcanvas, .dropdown-menu, .dt-container table, [data-otc-noenter]')) return false;
+      // só o primeiro nível: placa dentro de placa entra junto com a de fora
+      var p = el.parentElement;
+      while (p && p !== page) { if (p.__otcSurface) return false; p = p.parentElement; }
+      el.__otcSurface = true;
+      return true;
+    });
+    var vh = window.innerHeight, i = 0;
+    var io = 'IntersectionObserver' in window ? new IntersectionObserver(function (ents) {
+      var k = 0;
+      ents.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        io.unobserve(en.target);
+        en.target.style.setProperty('--otc-i', k++);
+        en.target.classList.add('otc-enter');
+      });
+    }, { rootMargin: '0px 0px -6% 0px' }) : null;
+    all.forEach(function (el) {
+      var top = el.getBoundingClientRect().top;
+      if (top < vh || !io) {
+        el.style.setProperty('--otc-i', Math.min(i++, 12));
+        el.classList.add('otc-enter');
+      } else io.observe(el);
+      el.addEventListener('animationend', function done(ev) {
+        if (ev.target !== el) return;
+        el.classList.remove('otc-enter');
+        el.removeEventListener('animationend', done);
+      });
+    });
+  }
+  function splitTitle() {
+    if (REDUCED_MOTION) return;
+    var h = doc.querySelector('.content-page .page-title-head h4, .content-page .page-title-head h5');
+    if (!h || h.children.length || h.__otcSplit) return;
+    var txt = h.textContent;
+    if (!txt || txt.length > 60) return;
+    h.__otcSplit = true;
+    // o texto continua o MESMO (o Advanced Export lê este título como nome
+    // de arquivo): só ganha spans, um por letra
+    var words = txt.trim().split(/(\s+)/);
+    var c = 0;
+    h.innerHTML = words.map(function (w) {
+      if (/^\s+$/.test(w)) return w;
+      return '<span class="otc-title-clip">' + w.split('').map(function (ch) {
+        return '<span class="otc-title-char" style="--otc-c:' + (c++) + '">' + esc(ch) + '</span>';
+      }).join('') + '</span>';
+    }).join('');
+  }
+
+  // ==========================================================================
+  // 9b. Ladrilhos de número (`.otc-stat`): o valor CONTA até o novo (do zero na
+  // primeira vez) e, quando muda, o ladrilho pisca no destaque por 1s — o
+  // "flash" do Pane. Vale para toda página: quem preenche só troca o texto do
+  // `.otc-stat__value`. O texto final é sempre o que a página escreveu (a
+  // formatação dela), a contagem só passa pelos inteiros no caminho.
+  // ==========================================================================
+  function statNumber(txt) {
+    return /^-?[\d.,\s]+$/.test(txt) ? parseFloat(txt.replace(/[^\d-]/g, '')) : NaN;
+  }
+  function animateStat(el) {
+    var txt = (el.textContent || '').trim();
+    if (txt === el.__otcFrame || txt === el.__otcText) return;   // escrita nossa
+    var prev = el.__otcVal, to = statNumber(txt);
+    el.__otcText = txt;
+    el.__otcVal = isFinite(to) ? to : undefined;
+    var anim = (el.__otcAnim || 0) + 1;
+    el.__otcAnim = anim;
+    if (!isFinite(to)) return;                    // traço do placeholder, texto
+    var tile = el.closest('.otc-stat');
+    if (tile && prev !== undefined && prev !== to) {
+      tile.classList.remove('is-flash');
+      void tile.offsetWidth;                      // reinicia a animação
+      tile.classList.add('is-flash');
+    }
+    var from = prev !== undefined ? prev : 0;
+    if (REDUCED_MOTION || from === to) return;
+    var dur = prev !== undefined ? 650 : 900, t0 = null;
+    function frame(ts) {
+      if (el.__otcAnim !== anim) return;          // chegou outro valor no meio
+      if (t0 === null) t0 = ts;
+      var p = Math.min((ts - t0) / dur, 1), e = 1 - Math.pow(1 - p, 3);
+      el.__otcFrame = p < 1 ? Math.round(from + (to - from) * e).toLocaleString('en-US') : txt;
+      el.textContent = el.__otcFrame;
+      if (p < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+  function initStats() {
+    $$('.otc-stat__value, .otc-legend__value[id]').forEach(function (el) {
+      new MutationObserver(function () { animateStat(el); })
+        .observe(el, { childList: true, characterData: true, subtree: true });
+      animateStat(el);
+    });
+    doc.addEventListener('animationend', function (e) {
+      if (e.animationName === 'otc-stat-ring') e.target.classList.remove('is-flash');
+    });
+  }
+
+  // ==========================================================================
+  // 10. SEND — o "Contrail"
+  // ==========================================================================
+  // O avião voa no clique, mas "Sent" só aparece depois que o SERVIDOR
+  // respondeu bem: este arquivo correlaciona o clique com os pedidos que a
+  // página dispara em seguida (fetch e XHR/jQuery). Se a página abre uma
+  // confirmação (Swal) antes de enviar, a janela começa quando ela fecha. Sem
+  // pedido nenhum, o botão volta quieto — nada foi enviado.
+  var SEND_SEL = '.btn-row-send, .acc-act-send, .btn-send, .otc-send';
+  var S = null;                                         // o envio "armado"
+  var OK_SVG = '<svg class="otc-send__ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  function decorate(btn) {
+    if (btn.__otcSend) return;
+    btn.__otcSend = true;
+    var square = btn.offsetWidth && btn.offsetWidth < 48;
+    if (!square) {
+      Array.prototype.slice.call(btn.childNodes).forEach(function (n) {
+        if (n.nodeType === 3 && n.textContent.trim()) {
+          var s = doc.createElement('span');
+          s.className = 'otc-send__label';
+          s.textContent = n.textContent;
+          btn.replaceChild(s, n);
+        }
+      });
+    }
+    btn.insertAdjacentHTML('beforeend',
+      '<span class="otc-send__fill" aria-hidden="true"></span><span class="otc-send__trail" aria-hidden="true"></span>' +
+      '<span class="otc-send__done" aria-hidden="true">' + (square ? OK_SVG : esc(t('sent'))) + '</span>');
+  }
+  function sendState(btn, cls) {
+    btn.classList.remove('is-flying', 'is-sent', 'is-failed', 'is-resetting');
+    if (cls) btn.classList.add(cls);
+  }
+  function fly(st) {
+    if (st.flying) return;
+    st.flying = true;
+    st.t0 = Date.now();
+    decorate(st.btn);
+    var done = st.btn.querySelector('.otc-send__done');
+    if (done && !done.querySelector('svg')) done.textContent = t('sent');
+    sendState(st.btn, 'is-flying');
+  }
+  function finish(st) {
+    if (st.finished) return;
+    st.finished = true;
+    if (S === st) S = null;
+    var btn = st.btn;
+    var wait = Math.max(0, 900 - (Date.now() - st.t0));     // o voo termina antes do desfecho
+    setTimeout(function () {
+      if (!st.failed) {
+        sendState(btn, 'is-sent');
+        setTimeout(function () {
+          sendState(btn, 'is-resetting');
+          setTimeout(function () { sendState(btn, null); }, 460);
+        }, 2200);
+      } else {
+        btn.style.setProperty('--otc-fill-w', '0%');
+        sendState(btn, 'is-failed');
+        setTimeout(function () { sendState(btn, null); btn.style.removeProperty('--otc-fill-w'); }, 420);
+      }
+    }, wait);
+  }
+  function disarm(st) { if (S === st) S = null; if (st.flying && !st.finished) { st.failed = false; sendState(st.btn, null); } }
+  function arm(btn) {
+    if (S && !S.finished) disarm(S);
+    var st = { btn: btn, pending: 0, any: false, failed: false, flying: false, finished: false, open: Date.now() + 600, deadline: Date.now() + 20000 };
+    S = st;
+    var inModal = btn.closest('.modal');
+    // sem pedido dentro da janela (e sem confirmação aberta): nada a fazer
+    setTimeout(function check() {
+      if (S !== st || st.any) return;
+      if (Date.now() > st.deadline) { disarm(st); return; }
+      var deciding = doc.querySelector('.swal2-container.swal2-backdrop-show') ||
+        $$('.modal.show').some(function (m) { return m !== inModal; });
+      if (deciding) {
+        st.open = Date.now() + 600;                      // ainda decidindo
+        setTimeout(check, 250);
+        return;
+      }
+      if (Date.now() > st.open) disarm(st);
+      else setTimeout(check, 150);
+    }, 150);
+  }
+  function reqStart() {
+    var st = S;
+    if (!st || st.finished || Date.now() > st.open && !st.pending) return null;
+    st.pending++;
+    st.any = true;
+    fly(st);
+    return st;
+  }
+  function reqEnd(st, ok) {
+    if (!st) return;
+    if (!ok) st.failed = true;
+    st.pending--;
+    if (st.pending > 0) return;
+    // pedido encadeado (preview → envio) ganha um respiro antes do desfecho
+    st.open = Date.now() + 300;
+    setTimeout(function () { if (!st.pending) finish(st); }, 300);
+  }
+  function judgeJson(j) {
+    if (!j || typeof j !== 'object') return true;
+    if (j.success === false || j.ok === false) return false;
+    if (j.error && j.success !== true) return false;
+    return true;
+  }
+  if (window.fetch) {
+    var _fetch = window.fetch;
+    window.fetch = function () {
+      var st = reqStart();
+      var p = _fetch.apply(this, arguments);
+      if (!st) return p;
+      p.then(function (res) {
+        var ct = (res.headers && res.headers.get('content-type')) || '';
+        if (!res.ok) { reqEnd(st, false); return; }
+        if (ct.indexOf('json') === -1) { reqEnd(st, true); return; }
+        res.clone().json().then(function (j) { reqEnd(st, judgeJson(j)); }, function () { reqEnd(st, true); });
+      }, function () { reqEnd(st, false); });
+      return p;
+    };
+  }
+  (function () {
+    var X = window.XMLHttpRequest && window.XMLHttpRequest.prototype;
+    if (!X) return;
+    var _send = X.send;
+    X.send = function () {
+      var st = reqStart();
+      if (st) {
+        var xhr = this;
+        xhr.addEventListener('loadend', function () {
+          var ok = xhr.status >= 200 && xhr.status < 400;
+          if (ok && /json/.test(xhr.getResponseHeader('content-type') || '')) {
+            try { ok = judgeJson(JSON.parse(xhr.responseText)); } catch (e) {}
+          }
+          reqEnd(st, ok);
+        });
+      }
+      return _send.apply(this, arguments);
+    };
+  })();
+  // captura: arma ANTES do handler da página disparar o pedido
+  doc.addEventListener('click', function (e) {
+    var b = e.target.closest(SEND_SEL);
+    if (!b || b.disabled || b.classList.contains('disabled') || b.classList.contains('is-flying')) return;
+    arm(b);
+  }, true);
+  window.otcSend = {
+    // para a página que quer controlar o desfecho à mão
+    start: function (btn) { arm(btn); var st = S; st.any = true; fly(st); return st; },
+    done: function (st, ok) { if (!st) return; st.failed = ok === false; finish(st); }
+  };
+
+  // ==========================================================================
+  // 11. Cabeçalho fixo das tabelas (os offsets de cada linha do <thead>)
+  // ==========================================================================
+  (function () {
+    var seen = typeof WeakSet === 'function' ? new WeakSet() : null;
+    var ro = null;
+    function sync(table) {
+      var head = table.tHead;
+      if (!head || !head.rows.length) return;
+      var top = 0;
+      for (var i = 0; i < head.rows.length; i++) {
+        table.style.setProperty('--vr-thead-row' + i, top.toFixed(2) + 'px');
+        top += head.rows[i].getBoundingClientRect().height;
+      }
+    }
+    function watch(table) {
+      if (seen && seen.has(table)) { sync(table); return; }
+      if (seen) seen.add(table);
+      sync(table);
+      if (ro && table.tHead) ro.observe(table.tHead);
+    }
+    function scan() { $$('.table-responsive table').forEach(watch); }
+    window.vrSyncStickyTables = scan;
+    ready(function () {
+      if (window.ResizeObserver) {
+        ro = new ResizeObserver(function (ents) {
+          ents.forEach(function (en) { if (en.target && en.target.parentNode) sync(en.target.parentNode); });
+        });
+      }
+      scan();
+      if (window.MutationObserver) {
+        var pending = null;
+        new MutationObserver(function () {
+          if (pending) return;
+          pending = setTimeout(function () { pending = null; scan(); }, 200);
+        }).observe(doc.body, { childList: true, subtree: true });
+      }
+      window.addEventListener('resize', function () { $$('.table-responsive table').forEach(sync); });
+    });
+  })();
+
+  // ==========================================================================
+  // 12. Boot
+  // ==========================================================================
+  function initBootstrapBits() {
+    icons();
+    if (!window.bootstrap) return;
+    $$('[data-bs-toggle="popover"]').forEach(function (el) { new bootstrap.Popover(el); });
+    $$('[data-bs-toggle="tooltip"]').forEach(function (el) { bootstrap.Tooltip.getOrCreateInstance(el); });
+    $$('.toast').forEach(function (el) { bootstrap.Toast.getOrCreateInstance(el); });
+  }
+  function initFullscreen() {
+    $$('[data-toggle="fullscreen"]').forEach(function (b) {
+      b.addEventListener('click', function (e) {
+        e.preventDefault();
+        if (!doc.fullscreenElement) doc.documentElement.requestFullscreen && doc.documentElement.requestFullscreen();
+        else doc.exitFullscreen && doc.exitFullscreen();
+      });
+    });
+  }
+  function initToolbarWidth() {
+    var bar = doc.querySelector('.app-topbar');
+    if (!bar) return;
+    var set = function () { root.style.setProperty('--otc-toolbar-w', Math.ceil(bar.getBoundingClientRect().width) + 'px'); };
+    set();
+    if (window.ResizeObserver) new ResizeObserver(set).observe(bar);
+  }
+
+  ready(function () {
+    initBootstrapBits();
+    initToolbarWidth();
+    initThemeButton();
+    initAppearance();
+    initDrawer();
+    initFullscreen();
+    $$('[data-otc-palette]').forEach(function (b) { b.addEventListener('click', openPalette); });
+    $$('[data-otc-pin-edit]').forEach(function (b) { b.addEventListener('click', openPinEditor); });
+
+    buildNav();
+    renderPinned();
+    accessThen(function () {
+      if (Nav.allowed) buildNav();
+      renderPinned();
+      if (window.otcI18n) window.otcI18n.applyTranslations();
+    });
+
+    initSegments();
+    initEntrance();
+    initStats();
+
+    window.otcI18n = new I18nManager();
+    window.applyTranslations = function () { return window.otcI18n.applyTranslations(); };
+    window.otcI18n.init().then(function () {
+      splitTitle();
+      // a lente mede o item já traduzido (o texto muda de largura)
+      var cur = Nav.stage && Nav.stage.querySelector('.dd-panel.dd-current');
+      if (cur) placeLens(cur, false);
+      $$('.nav.otc-has-lens').forEach(function (n) { placeSegLens(n, false); });
+    });
+    window.addEventListener('otc:language-changed', function () { renderCrumbs(); icons(); });
+  });
+})();
