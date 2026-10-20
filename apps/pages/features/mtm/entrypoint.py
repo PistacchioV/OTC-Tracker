@@ -337,7 +337,10 @@ def api_mtm_send_batch():
         return jsonify({'success': False, 'error': 'Generation failed.'}), 500
     if not files:
         return jsonify({'success': False, 'error': 'Nothing to generate for this book.'}), 400
-    written = commands._mtm_write_gen_files(files, ymd)
+    try:
+        written = commands._mtm_write_gen_files(files, ymd)
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 422
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'MTM Sent', 'MtM',
                          '{} · {} file(s)'.format(lob, len(files)) + _R()._nd_token(ymd))
@@ -408,7 +411,10 @@ def api_mtm_validation():
     if not files:
         return jsonify({'success': False, 'error': 'No records to validate.'}), 400
 
-    commands._mtm_write_gen_files(files, ymd)
+    try:
+        commands._mtm_write_gen_files(files, ymd)
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 422
 
     # All batch files generated → mark EVERY row in ALL tables as 'Sent'
     # (checker = current user) and persist, so the page reflects the finished run.
@@ -433,10 +439,10 @@ def api_mtm_validation():
     # (dicts por coluna); `_mtm_file_lines` aceita os dois, e o resumo tem de
     # aceitar também — lendo só `rows`, o primeiro arquivo de book estourava
     # em KeyError DEPOIS de os .txt já terem sido escritos no share.
-    summary = [{'filename': fn + '.txt', 'view': fd['view'],
+    summary = [{'filename': commands._mtm_new_name(fn, fd), 'view': fd['view'],
                 'count': len(fd.get('lines', fd.get('rows')) or [])}
                for fn, fd in files.items()]
-    attach = [os.path.join(_R().CONECTA_NEW_PATH, fn + '.txt')
+    attach = [os.path.join(_R().CONECTA_NEW_PATH, commands._mtm_new_name(fn, fd))
               for fn, fd in files.items() if fd['view'] in ('LAWTON', 'ATACAMA')]
     subject = 'MtM EOM - {} - Validation'.format(ref.strftime('%d/%m/%Y'))
     try:

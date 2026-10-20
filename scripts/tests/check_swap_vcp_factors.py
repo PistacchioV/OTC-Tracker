@@ -373,7 +373,7 @@ try:
     # nome, o `_unique_filepath` salvaria um deles como "(1)".
     nomes = sorted(f['filename'] for f in body['files'])
     check('cliente e intragrupo em arquivos proprios', nomes,
-          ['VCP_BANCO.TXT', 'VCP_CLIENT.TXT', 'VCP_LAWTON.TXT'])
+          ['00041007.VCP_LAWTON.TXT', '73760009.VCP_BANCO.TXT', '73760009.VCP_CLIENT.TXT'])
     check('a conta do grupo diz a visao (a mesma leitura do Accrual)',
           (PF.view_of_account('00041.00-1'), PF.view_of_account('73760.10-2'), PF.view_of_account('12345.67-8')),
           ('LAWTON', 'BANCO', ''))
@@ -387,14 +387,14 @@ try:
           (PF.vcp_file_name('BANCO'), PF.vcp_file_name('BANCO', True), PF.vcp_file_name('LAWTON', True)),
           ('VCP_CLIENT.TXT', 'VCP_BANCO.TXT', 'VCP_LAWTON.TXT'))
     check('o Accrual segue com o nome dele', PF.accrual_file_name('BANCO', 'CEM'), 'ACCRUAL_BANCO-CEM.txt')
-    txt = io.open(os.path.join(TMP, 'conecta', 'VCP_CLIENT.TXT'), encoding='utf-8').read().split('\n')
+    txt = io.open(os.path.join(TMP, 'conecta', '73760009.VCP_CLIENT.TXT'), encoding='utf-8').read().split('\n')
     check('o do cliente: header + o registro da perna VCP', len(txt), 2)
-    lw = io.open(os.path.join(TMP, 'conecta', 'VCP_LAWTON.TXT'), encoding='utf-8').read().split('\n')
+    lw = io.open(os.path.join(TMP, 'conecta', '00041007.VCP_LAWTON.TXT'), encoding='utf-8').read().split('\n')
     check('o da Lawton leva o header DELA (a logica do Accrual)',
           lw[0], PF.acc_swap_header('LAWTON', datetime.now().strftime('%Y%m%d')))
     check('   e uma linha do mesmo contrato', len(lw) == 2 and '24H02170822' in lw[1], True)
     check('o fator vai com 2+8 digitos', txt[1][-10:], '0101190000')
-    check('a evidencia foi copiada', os.path.isfile(os.path.join(PF.accrual_source_dir(datetime.now().strftime('%Y%m%d')), 'VCP_CLIENT.TXT')), True)
+    check('a evidencia foi copiada', os.path.isfile(os.path.join(PF.accrual_source_dir(datetime.now().strftime('%Y%m%d')), '73760009.VCP_CLIENT.TXT')), True)
     pay2 = queries.vcp_payload(REF)
     check('enviado vira Sent nas duas tabelas', (pay2['statuses'], [f['status'] for f in pay2['factors']]),
           (['Sent', 'Sent', 'New'], ['Sent', 'Sent', 'New']))
@@ -404,7 +404,7 @@ try:
     check('aviso no sino: acao propria, pagina Swap VCP e os arquivos no detalhe',
           (_notifs[-1][2], _notifs[-1][3], _notifs[-1][4].split(' [ND:')[0]),
           ('VCP Factors Sent', 'Swap VCP',
-           'VCP_CLIENT.TXT, VCP_BANCO.TXT, VCP_LAWTON.TXT · 2 contracts · 3 lines'))
+           '73760009.VCP_CLIENT.TXT, 73760009.VCP_BANCO.TXT, 00041007.VCP_LAWTON.TXT · 2 contracts · 3 lines'))
     body, st = commands.vcp_send(REF, ['99Z'], sid='E2')
     check('contrato fora da pagina recusa', (st, body['problems']), (400, ['99Z: not on the page']))
 

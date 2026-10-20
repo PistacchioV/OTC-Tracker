@@ -5940,6 +5940,47 @@ def _b3_participant_name(le):
     return fallback
 
 
+def _b3_view_le(view):
+    """A LE de uma VISÃO, em qualquer dos vocabulários dos geradores: a LE do
+    cadastro (`JPM`), o balde da CETIP (`BANCO`), o par de pernas (`MGT x
+    CLI` — a visão é a perna da esquerda, a NOSSA) ou a visão minúscula do
+    swap (`atacama`). '' para nada."""
+    s = _fi_le_pair_norm(view).split(' X ')[0].strip()
+    return _TER_BUCKET_LE.get(s, s)
+
+
+def _b3_own_account(le):
+    """A conta PRÓPRIA (`OWN`) da entidade no `b3-accounts`, só os dígitos —
+    `73760.00-9` → `73760009`. '' sem cadastro."""
+    alvo = _fcst_norm(_b3_view_le(le)).strip()
+    if not alvo:
+        return ''
+    for row in _mapping_rows('b3-accounts'):
+        if (_fcst_norm(row.get('LE', '')).strip() == alvo
+                and _b3_account_type(row.get('ACCOUNT TYPE', '')) == 'OWN'):
+            return _acc_digits(row.get('ACCOUNT', ''))
+    return ''
+
+
+def _conecta_file_name(view, fname):
+    """O nome do arquivo na New do Batch Conecta: a conta PRÓPRIA da visão, um
+    ponto e o nome de sempre — `73760009.TCO_BANCO.txt` (mesa, 20/10/2026,
+    §646). Banco 73760009, MGT 04880006, Lawton 00041007, Atacama 85398005:
+    quem diz é o `b3-accounts`, nunca um de-para no código.
+
+    Visão sem conta própria cadastrada LEVANTA dizendo qual: um arquivo sem a
+    conta no nome é um arquivo que o Conecta não manda. Quem grava calcula
+    TODOS os nomes antes de escrever o primeiro arquivo, para o lote não ir
+    pela metade."""
+    conta = _b3_own_account(view)
+    if not conta:
+        raise ValueError(
+            'B3 Accounts: no OWN account registered for legal entity {!r} — the '
+            'Batch Conecta file name starts with it; register it at /mapping › '
+            'B3 Accounts'.format(_b3_view_le(view) or view))
+    return '{}.{}'.format(conta, fname)
+
+
 def _ndfc_split_by_commodity(client):
     """A contraparte recebe um aviso POR COMMODITY? Cadastro `ndfc-advice-split`.
 

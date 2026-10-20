@@ -148,9 +148,10 @@ d = r.get_json() or {}
 check('200 (nao estoura no resumo nem no total)', (r.status_code, d.get('success')), (200, True))
 check('   resumo conta lines E rows',
       sorted((f['filename'], f['count']) for f in d.get('files', [])),
-      [('MtM_BANCO-CEM.txt', 2), ('MtM_BANCO-COE.txt', 2), ('MtM_LAWTON-CEM.txt', 1)])
+      [('00041007.MtM_LAWTON-CEM.txt', 1), ('73760009.MtM_BANCO-CEM.txt', 2), ('73760009.MtM_BANCO-COE.txt', 2)])
 check('   total soma os dois formatos', d.get('total'), 5)
-check('   so a visao LAWTON/ATACAMA vai anexa', d.get('attached'), ['MtM_LAWTON-CEM.txt'])
+check('   so a visao LAWTON/ATACAMA vai anexa (com a conta no nome, como esta na New)',
+      d.get('attached'), ['00041007.MtM_LAWTON-CEM.txt'])
 no_disco = json.load(io.open(os.path.join(pasta, 'mtm_swap_20260820.json'), encoding='utf-8'))
 check('   toda linha vira Sent com o checker', {r[-4] for t in no_disco['tables'].values() for r in t}, {'Sent'})
 check('   e o sino recebe MTM Sent', NOTIFS[-1][0], 'MTM Sent')

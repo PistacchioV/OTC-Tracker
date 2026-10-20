@@ -776,6 +776,12 @@ def api_fxo_import_xlsx():
                                  '{} deal{} imported from XLSX'.format(saved, '' if saved == 1 else 's'))
     return jsonify({'success': True, 'imported': saved, 'deals': deals, 'errors': errors})
 
+def _opc_default_name(prefix, view):
+    """O nome padrão do arquivo OPC de uma visão — `FXO_Banco.txt`,
+    `FXO_Lawton.txt` — quando a variante do cadastro não dá um."""
+    return '{}_{}.txt'.format(prefix, 'Banco' if view == 'JPM' else view.title())
+
+
 @blueprint.route('/api/new-deals/opt-fxo/send-conecta', methods=['POST'])
 def api_fxo_send_conecta():
     if not session.get('authenticated'):
@@ -953,10 +959,14 @@ def api_fxo_send_conecta():
 
         # Par de pernas → variante do template (Fixed das contas por par);
         # sem variante, o base — byte a byte o de sempre.
+        # O arquivo é UM por visão (a perna da esquerda do par): com a conta da
+        # visão no nome do arquivo (§646), a linha do Lawton não divide mais o
+        # FXO_Banco.txt com as do Banco.
         le_pair = _R()._opc_le_pair(client)
+        view = _R()._b3_view_le(le_pair)
         fname = (_R()._fi_variant_file_name('opcoes-flexiveis-vcp', '/new_deals-opt-fxo', le_pair)
-                 or 'FXO_Banco.txt')
-        dest = out_files.setdefault(fname, [])
+                 or _opc_default_name('FXO', view))
+        dest = out_files.setdefault((view, fname), [])
 
         deal_count += 1
         dest.append(_R()._fi_build_line('opcoes-flexiveis-vcp', 'registro', vals,
@@ -984,18 +994,21 @@ def api_fxo_send_conecta():
     header = _R()._fi_build_line('opcoes-flexiveis-vcp', 'header', {'4': today},
                             page_url='/new_deals-opt-fxo')
     if not out_files:
-        out_files['FXO_Banco.txt'] = []   # lote só de cancelados: header, como sempre
+        out_files[('JPM', 'FXO_Banco.txt')] = []   # lote só de cancelados: header, como sempre
 
     try:
         if download:
             files = [{'filename': fname, 'content': '\n'.join([header] + lines)}
-                     for fname, lines in out_files.items()]
+                     for (view, fname), lines in out_files.items()]
             return jsonify({'ok': True, 'count': deal_count, 'files': files,
                             'filename': files[0]['filename'] if files else ''})
+        # Os nomes na New (com a conta da visão) ANTES do primeiro arquivo:
+        # visão sem conta cadastrada recusa o lote inteiro.
+        nomes = {k: _R()._conecta_file_name(*k) for k in out_files}
         os.makedirs(_R().CONECTA_NEW_PATH, exist_ok=True)
         generated = []
-        for fname, lines in out_files.items():
-            filepath = _R()._unique_filepath(_R().CONECTA_NEW_PATH, fname)
+        for k, lines in out_files.items():
+            filepath = _R()._unique_filepath(_R().CONECTA_NEW_PATH, nomes[k])
             with open(filepath, 'w', encoding='utf-8') as fh:
                 fh.write('\n'.join([header] + lines))
             generated.append(os.path.basename(filepath))
@@ -1482,11 +1495,15 @@ def api_ndf_send_conecta():
             return jsonify({'ok': True, 'count': sum(d['count'] for d in out_files.values()),
                             'files': generated,
                             'filename': generated[0]['filename'] if generated else ''})
+        # Na New o nome leva a conta da visão (o balde) na frente (§646),
+        # calculado para TODOS antes do primeiro arquivo.
+        nomes = {fname: _R()._conecta_file_name(d['bucket'], fname)
+                 for fname, d in out_files.items() if d['lines']}
         os.makedirs(output_dir, exist_ok=True)
         for fname, d in out_files.items():
             if not d['lines']:
                 continue
-            path = _R()._unique_filepath(output_dir, fname)
+            path = _R()._unique_filepath(output_dir, nomes[fname])
             with open(path, 'w', encoding='utf-8') as fh:
                 fh.write('\n'.join([headers[fname]] + d['lines']))
             generated.append({'filename': os.path.basename(path), 'count': d['count']})
@@ -1783,11 +1800,13 @@ def api_send_conecta():
 
         # Par de pernas → variante do template (Fixed das contas por par);
         # sem variante, o base — byte a byte o de sempre.
+        # Um arquivo por visão, como no FXO (§646).
         le_pair = _R()._opc_le_pair(client)
+        view = _R()._b3_view_le(le_pair)
         fname = (_R()._fi_variant_file_name('opcoes-flexiveis-vcp',
                                        '/new_deals-opt-commodities', le_pair)
-                 or 'OPC_Banco.txt')
-        dest = out_files.setdefault(fname, [])
+                 or _opc_default_name('OPC', view))
+        dest = out_files.setdefault((view, fname), [])
 
         deal_count += 1
         dest.append(_R()._fi_build_line('opcoes-flexiveis-vcp', 'registro', vals,
@@ -1816,19 +1835,20 @@ def api_send_conecta():
     header = _R()._fi_build_line('opcoes-flexiveis-vcp', 'header', {'4': today},
                             page_url='/new_deals-opt-commodities')
     if not out_files:
-        out_files['OPC_Banco.txt'] = []   # lote só de cancelados: header, como sempre
+        out_files[('JPM', 'OPC_Banco.txt')] = []   # lote só de cancelados: header, como sempre
 
     output_dir = _R().CONECTA_NEW_PATH
     try:
         if download:
             files = [{'filename': fname, 'content': '\n'.join([header] + lines)}
-                     for fname, lines in out_files.items()]
+                     for (view, fname), lines in out_files.items()]
             return jsonify({'ok': True, 'count': deal_count, 'files': files,
                             'filename': files[0]['filename'] if files else ''})
+        nomes = {k: _R()._conecta_file_name(*k) for k in out_files}
         os.makedirs(output_dir, exist_ok=True)
         generated = []
-        for fname, lines in out_files.items():
-            filepath = _R()._unique_filepath(output_dir, fname)
+        for k, lines in out_files.items():
+            filepath = _R()._unique_filepath(output_dir, nomes[k])
             with open(filepath, 'w', encoding='utf-8') as fh:
                 fh.write('\n'.join([header] + lines))
             generated.append(os.path.basename(filepath))
@@ -2584,11 +2604,15 @@ def api_generic_nd_send_conecta(product):
                                   'content': '\n'.join([headers[fname]] + d['lines'])})
             return jsonify({'ok': True, 'count': len(made_by_deal), 'files': generated,
                             'filename': generated[0]['filename'] if generated else ''})
+        # Na New o nome leva a conta da visão (o balde) na frente (§646),
+        # calculado para TODOS antes do primeiro arquivo.
+        nomes = {fname: _R()._conecta_file_name(d['bucket'], fname)
+                 for fname, d in out_files.items() if d['lines']}
         os.makedirs(_R().CONECTA_NEW_PATH, exist_ok=True)
         for fname, d in out_files.items():
             if not d['lines']:
                 continue
-            path = _R()._unique_filepath(_R().CONECTA_NEW_PATH, fname)
+            path = _R()._unique_filepath(_R().CONECTA_NEW_PATH, nomes[fname])
             with open(path, 'w', encoding='utf-8') as fh:
                 fh.write('\n'.join([headers[fname]] + d['lines']))
             generated.append({'filename': os.path.basename(path), 'count': counts[fname]})

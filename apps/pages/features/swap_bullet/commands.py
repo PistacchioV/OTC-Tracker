@@ -246,7 +246,8 @@ def send(items, sid='', download=False):
         try:
             for view in domain.views_of(deal):
                 for f in deal_files(deal, view, today):
-                    g = grupos.setdefault(f['file_name'], {'header': f['header'], 'records': [], 'count': 0})
+                    g = grupos.setdefault(f['file_name'], {'header': f['header'], 'records': [], 'count': 0,
+                                                           'le_pair': f['le_pair']})
                     g['records'].extend(f['records'])
                     g['count'] += 1 if f['kind'] == 'swap' else 0
         except ValueError as exc:
@@ -263,11 +264,14 @@ def send(items, sid='', download=False):
             gerados.append({'filename': nome, 'count': g['count'],
                             'content': '\n'.join([g['header']] + g['records'])})
         return {'files': gerados, 'count': len(alvos)}
+    # Na New o nome leva a conta da visão (a perna da esquerda do par) na
+    # frente (§646) — todos calculados antes do primeiro arquivo.
+    nomes = {nome: _R()._conecta_file_name(g['le_pair'], nome) for nome, g in grupos.items()}
     out_dir = _R().CONECTA_NEW_PATH
     os.makedirs(out_dir, exist_ok=True)
     with _R()._cache_lock:
         for nome, g in grupos.items():
-            path = _R()._unique_filepath(out_dir, nome)
+            path = _R()._unique_filepath(out_dir, nomes[nome])
             # cp1252 (o ANSI do Windows), NUNCA utf-8: o travessão (–) da
             # denominação VCP é UM byte em cp1252 e TRÊS em utf-8 — o Conecta
             # lê byte a byte, a linha passava de 1927 e a B3 recusava o

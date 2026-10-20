@@ -154,6 +154,10 @@ def write_view_files(by_view, lob_tag, today, evidence_dir=None, name_fn=None):
     O Swap VCP passa o `vcp_file_name`."""
     if not by_view:
         return []
+    # Na New o nome leva a conta da visão na frente (§646), todos calculados
+    # antes do primeiro arquivo; a cópia de evidência sai com o mesmo nome.
+    nomes = {view: _R()._conecta_file_name(view, (name_fn or accrual_file_name)(view, lob_tag))
+             for view in ('BANCO', 'LAWTON', 'ATACAMA') if by_view.get(view)}
     os.makedirs(_R().CONECTA_NEW_PATH, exist_ok=True)
     if evidence_dir:
         try:
@@ -166,8 +170,7 @@ def write_view_files(by_view, lob_tag, today, evidence_dir=None, name_fn=None):
         if not lines:
             continue
         content = '\n'.join([acc_swap_header(view, today)] + lines)
-        fpath = _R()._unique_filepath(_R().CONECTA_NEW_PATH,
-                                      (name_fn or accrual_file_name)(view, lob_tag))
+        fpath = _R()._unique_filepath(_R().CONECTA_NEW_PATH, nomes[view])
         with open(fpath, 'w', encoding='utf-8') as fh:
             fh.write(content)
         if evidence_dir and _store.isdir(evidence_dir):
