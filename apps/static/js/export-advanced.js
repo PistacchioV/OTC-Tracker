@@ -1407,6 +1407,12 @@
         inp._otcMask = 1;
         inp.setAttribute('inputmode', 'numeric');
         inp.setAttribute('maxlength', '10');
+        // O clique SELECIONA a data inteira (mesa, 20/10/2026 — a regra da
+        // Quotes, §508): o primeiro dígito digitado já começa a data nova, sem
+        // apagar a anterior caractere por caractere.
+        function selAll() { try { inp.select(); } catch (e) {} }
+        inp.addEventListener('focus', selAll);
+        inp.addEventListener('click', selAll);
         inp.addEventListener('input', function () {
             var d = String(inp.value || '').replace(/\D/g, '').slice(0, 8);
             var txt = d.slice(0, 2) + (d.length > 2 ? '/' + d.slice(2, 4) : '') +
@@ -1415,11 +1421,45 @@
                 inp.value = txt;
                 try { inp.setSelectionRange(txt.length, txt.length); } catch (e) {}
             }
-            // Só a data INTEIRA é escolha; o que está pela metade é digitação em
-            // curso, e escrevê-la no picker faria o campo pular para um dia que
-            // ninguém pediu no meio do que se digita.
-            if (d.length === 8 && fp) fp.setDate(txt, true, 'd/m/Y');
+            if (!fp) return;
+            var dia = +d.slice(0, 2), mes = +d.slice(2, 4), ano = +d.slice(4);
+            // Só a data INTEIRA e REAL é escolha; o que está pela metade é
+            // digitação em curso, e escrevê-la no picker faria o campo pular para
+            // um dia que ninguém pediu. 31/02 não é escrita: o parse do flatpickr
+            // a levaria a 03/03 sem erro nenhum.
+            if (d.length === 8 && dataReal(dia, mes, ano)) { fp.setDate(txt, true, 'd/m/Y'); return; }
+            // Com dia e mês o calendário ACOMPANHA: vai para o mês digitado (no
+            // ano digitado, quando ele já está inteiro), sem escolher nada.
+            if (d.length >= 4 && mes >= 1 && mes <= 12) {
+                fp.jumpToDate(new Date(d.length === 8 ? ano : fp.currentYear, mes - 1, 1));
+            }
         });
+        // Ao SAIR do campo (ou no Enter), texto pela metade ou data impossível
+        // volta à última data válida — o flatpickr relê o texto nesse momento
+        // pelo parse frouxo, e `31/02/2026` virava 03/03 calado. Em CAPTURA,
+        // para rodar antes do listener dele no mesmo campo. Campo vazio é a
+        // pessoa apagando a data, e fica vazio.
+        function restaura() {
+            if (!fp) return;
+            var d = String(inp.value || '').replace(/\D/g, '');
+            if (!d || (d.length === 8 && dataReal(+d.slice(0, 2), +d.slice(2, 4), +d.slice(4)))) return;
+            inp.value = fp.selectedDates.length ? fp.formatDate(fp.selectedDates[0], 'd/m/Y') : '';
+        }
+        inp.addEventListener('blur', restaura, true);
+        inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') restaura(); }, true);
+        // o clique FORA relê o texto antes do blur (o `mousedown` do flatpickr no
+        // document): na janela, em captura, a restauração chega antes dele
+        function foraDoCampo(e) {
+            if (document.activeElement !== inp || e.target === inp) return;
+            if (fp && fp.calendarContainer && fp.calendarContainer.contains(e.target)) return;
+            restaura();
+        }
+        window.addEventListener('mousedown', foraDoCampo, true);
+        window.addEventListener('touchstart', foraDoCampo, true);
+    }
+    function dataReal(dia, mes, ano) {
+        var dt = new Date(ano, mes - 1, dia);
+        return ano >= 1900 && dt.getFullYear() === ano && dt.getMonth() === mes - 1 && dt.getDate() === dia;
     }
     window.otcDateMask = dateMask;
 

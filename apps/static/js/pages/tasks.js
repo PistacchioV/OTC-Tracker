@@ -22,6 +22,7 @@
       state.projects = d.projects || [];
       renderAll();
     }).catch(function (e) {
+      P.metaFailed();
       var box = $('tk-load-error');
       box.textContent = P.errText(e);
       box.classList.remove('d-none');

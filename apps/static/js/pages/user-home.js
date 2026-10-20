@@ -108,6 +108,7 @@
       var srv = new Date(d.now);                      // ISO sem fuso = hora local
       if (!isNaN(srv.getTime())) S.clockSkew = srv.getTime() - Date.now();
       if (d.meta) P.setMeta(d.meta);
+      else P.metaFailed();
       if (window.otcFocus) {
         window.otcFocus.prefs({ focus_minutes: d.settings.focus_minutes, break_minutes: d.settings.break_minutes, notify: d.settings.notify });
         var st = window.otcFocus.state();
@@ -115,7 +116,7 @@
       }
       if (S.preset == null) S.preset = d.settings.focus_minutes;
       render();
-    }).catch(P.fail);
+    }).catch(function (e) { P.metaFailed(); P.fail(e); });
   }
 
   function render() {
