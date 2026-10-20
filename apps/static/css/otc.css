@@ -16214,6 +16214,10 @@ body.otc-nav-unpinned .otc-menu-btn {
   gap: 4px;
 }
 
+:root {
+  --otc-spin-dur: 1.2s;
+}
+
 @keyframes otc-spin {
   to {
     rotate: 360deg;
@@ -16221,7 +16225,7 @@ body.otc-nav-unpinned .otc-menu-btn {
 }
 i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 {
   display: inline-block;
-  animation: otc-spin 0.8s linear infinite;
+  animation: otc-spin var(--otc-spin-dur) linear infinite;
 }
 
 .otc-live {
@@ -16262,7 +16266,7 @@ i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 {
 }
 .is-busy > i.ti {
   display: inline-block;
-  animation: otc-spin 0.6s linear infinite;
+  animation: otc-spin var(--otc-spin-dur) linear infinite;
 }
 
 table td .btn.rounded-circle,
@@ -16327,8 +16331,6 @@ table td .btn.btn-act > i {
 }
 
 .btn-row-send, .acc-act-send, .btn-send, .otc-send, .otc-send-batch {
-  --otc-send-ok: #10b04a;
-  --otc-send-err: #e5484d;
   --otc-send-r: 999px;
   --otc-fill-w: 0%;
   position: relative;
@@ -16336,35 +16338,36 @@ table td .btn.btn-act > i {
   overflow: hidden;
 }
 .btn-row-send > i, .btn-row-send > svg, .acc-act-send > i, .acc-act-send > svg, .btn-send > i, .btn-send > svg, .otc-send > i, .otc-send > svg, .otc-send-batch > i, .otc-send-batch > svg {
-  transition: rotate 220ms var(--otc-ease-out), translate 220ms var(--otc-ease-out), opacity 160ms ease;
+  transition: rotate 220ms var(--otc-ease-out), opacity 140ms ease;
 }
 .btn-row-send > i.ti-brand-telegram, .btn-row-send > i.ti-send, .acc-act-send > i.ti-brand-telegram, .acc-act-send > i.ti-send, .btn-send > i.ti-brand-telegram, .btn-send > i.ti-send, .otc-send > i.ti-brand-telegram, .otc-send > i.ti-send, .otc-send-batch > i.ti-brand-telegram, .otc-send-batch > i.ti-send {
   rotate: 0deg;
 }
-.btn-row-send:hover > i.ti-brand-telegram, .btn-row-send:hover > i.ti-send, .btn-row-send.is-flying > i, .acc-act-send:hover > i.ti-brand-telegram, .acc-act-send:hover > i.ti-send, .acc-act-send.is-flying > i, .btn-send:hover > i.ti-brand-telegram, .btn-send:hover > i.ti-send, .btn-send.is-flying > i, .otc-send:hover > i.ti-brand-telegram, .otc-send:hover > i.ti-send, .otc-send.is-flying > i, .otc-send-batch:hover > i.ti-brand-telegram, .otc-send-batch:hover > i.ti-send, .otc-send-batch.is-flying > i {
+.btn-row-send:hover > i.ti-brand-telegram, .btn-row-send:hover > i.ti-send, .acc-act-send:hover > i.ti-brand-telegram, .acc-act-send:hover > i.ti-send, .btn-send:hover > i.ti-brand-telegram, .btn-send:hover > i.ti-send, .otc-send:hover > i.ti-brand-telegram, .otc-send:hover > i.ti-send, .otc-send-batch:hover > i.ti-brand-telegram, .otc-send-batch:hover > i.ti-send {
   rotate: 45deg;
 }
 .btn-row-send .otc-send__fill, .acc-act-send .otc-send__fill, .btn-send .otc-send__fill, .otc-send .otc-send__fill, .otc-send-batch .otc-send__fill {
   position: absolute;
-  inset: 0;
+  left: 0;
+  top: 0;
+  bottom: 0;
   z-index: -1;
-  border-radius: inherit;
-  background-color: var(--otc-send-ok);
-  background-image: var(--ins-gradient, none);
-  clip-path: inset(0 calc(100% - var(--otc-fill-w)) 0 0 round var(--otc-send-r));
+  width: var(--otc-fill-w);
+  border-radius: var(--otc-send-r);
+  background: color-mix(in srgb, currentColor 26%, transparent);
   pointer-events: none;
 }
-.btn-row-send .otc-send__trail, .acc-act-send .otc-send__trail, .btn-send .otc-send__trail, .otc-send .otc-send__trail, .otc-send-batch .otc-send__trail {
+.btn-row-send .otc-send__rider, .acc-act-send .otc-send__rider, .btn-send .otc-send__rider, .otc-send .otc-send__rider, .otc-send-batch .otc-send__rider {
   position: absolute;
-  left: 30%;
   top: 50%;
-  z-index: -1;
-  width: 0;
-  height: 1.5px;
-  translate: 0 -50%;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, currentColor 75%, transparent));
+  right: 0;
+  translate: calc(100% + 2px) -50%;
+  rotate: 45deg;
+  font-size: 16px;
+  font-size: 1rem;
+  line-height: 1;
   opacity: 0;
-  pointer-events: none;
+  transition: opacity 120ms ease;
 }
 .btn-row-send .otc-send__done, .acc-act-send .otc-send__done, .btn-send .otc-send__done, .otc-send .otc-send__done, .otc-send-batch .otc-send__done {
   position: absolute;
@@ -16372,7 +16375,7 @@ table td .btn.btn-act > i {
   z-index: 1;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: inherit;
   opacity: 0;
   filter: blur(4px);
   font-weight: 750;
@@ -16388,32 +16391,28 @@ table td .btn.btn-act > i {
   stroke-width: 2.6;
 }
 .btn-row-send .otc-send__label, .acc-act-send .otc-send__label, .btn-send .otc-send__label, .otc-send .otc-send__label, .otc-send-batch .otc-send__label {
-  transition: opacity 0.16s ease, filter 0.16s ease, translate 0.16s ease;
+  transition: opacity 0.14s ease, filter 0.14s ease;
 }
 .btn-row-send.is-flying, .acc-act-send.is-flying, .btn-send.is-flying, .otc-send.is-flying, .otc-send-batch.is-flying {
   pointer-events: none;
-  animation: otc-send-charge 0.8s cubic-bezier(0.45, 0, 0.3, 1) 0.3s forwards, otc-send-wait 1.2s ease-in-out 1.1s infinite alternate;
+  animation: otc-send-charge 0.8s cubic-bezier(0.3, 0, 0.2, 1) forwards, otc-send-wait 1.2s ease-in-out 0.8s infinite alternate;
 }
-.btn-row-send.is-flying .otc-send__label, .acc-act-send.is-flying .otc-send__label, .btn-send.is-flying .otc-send__label, .otc-send.is-flying .otc-send__label, .otc-send-batch.is-flying .otc-send__label {
+.btn-row-send.is-flying > i, .btn-row-send.is-flying > svg:not(.otc-send__ok), .btn-row-send.is-flying .otc-send__label, .acc-act-send.is-flying > i, .acc-act-send.is-flying > svg:not(.otc-send__ok), .acc-act-send.is-flying .otc-send__label, .btn-send.is-flying > i, .btn-send.is-flying > svg:not(.otc-send__ok), .btn-send.is-flying .otc-send__label, .otc-send.is-flying > i, .otc-send.is-flying > svg:not(.otc-send__ok), .otc-send.is-flying .otc-send__label, .otc-send-batch.is-flying > i, .otc-send-batch.is-flying > svg:not(.otc-send__ok), .otc-send-batch.is-flying .otc-send__label {
   opacity: 0;
-  filter: blur(3px);
-  translate: 6px 0;
+  filter: blur(2px);
 }
-.btn-row-send.is-flying > i, .btn-row-send.is-flying > svg:not(.otc-send__ok), .acc-act-send.is-flying > i, .acc-act-send.is-flying > svg:not(.otc-send__ok), .btn-send.is-flying > i, .btn-send.is-flying > svg:not(.otc-send__ok), .otc-send.is-flying > i, .otc-send.is-flying > svg:not(.otc-send__ok), .otc-send-batch.is-flying > i, .otc-send-batch.is-flying > svg:not(.otc-send__ok) {
-  animation: otc-send-fly 0.62s var(--otc-ease-in) 0.14s forwards;
-}
-.btn-row-send.is-flying .otc-send__trail, .acc-act-send.is-flying .otc-send__trail, .btn-send.is-flying .otc-send__trail, .otc-send.is-flying .otc-send__trail, .otc-send-batch.is-flying .otc-send__trail {
-  animation: otc-send-trail 0.62s var(--otc-ease-in) 0.14s forwards;
+.btn-row-send.is-flying .otc-send__rider, .acc-act-send.is-flying .otc-send__rider, .btn-send.is-flying .otc-send__rider, .otc-send.is-flying .otc-send__rider, .otc-send-batch.is-flying .otc-send__rider {
+  opacity: 1;
 }
 .btn-row-send.is-sent, .acc-act-send.is-sent, .btn-send.is-sent, .otc-send.is-sent, .otc-send-batch.is-sent {
   animation: none;
   --otc-fill-w: 100%;
-  --otc-gel: var(--otc-send-ok);
-  background-color: var(--otc-send-ok) !important;
-  border-color: transparent !important;
-  transition: --otc-fill-w 0.35s var(--otc-ease-out);
+  transition: --otc-fill-w 0.3s var(--otc-ease-out);
 }
 .btn-row-send.is-sent > i, .btn-row-send.is-sent > svg:not(.otc-send__ok), .btn-row-send.is-sent .otc-send__label, .acc-act-send.is-sent > i, .acc-act-send.is-sent > svg:not(.otc-send__ok), .acc-act-send.is-sent .otc-send__label, .btn-send.is-sent > i, .btn-send.is-sent > svg:not(.otc-send__ok), .btn-send.is-sent .otc-send__label, .otc-send.is-sent > i, .otc-send.is-sent > svg:not(.otc-send__ok), .otc-send.is-sent .otc-send__label, .otc-send-batch.is-sent > i, .otc-send-batch.is-sent > svg:not(.otc-send__ok), .otc-send-batch.is-sent .otc-send__label {
+  opacity: 0;
+}
+.btn-row-send.is-sent .otc-send__rider, .acc-act-send.is-sent .otc-send__rider, .btn-send.is-sent .otc-send__rider, .otc-send.is-sent .otc-send__rider, .otc-send-batch.is-sent .otc-send__rider {
   opacity: 0;
 }
 .btn-row-send.is-sent .otc-send__done, .acc-act-send.is-sent .otc-send__done, .btn-send.is-sent .otc-send__done, .otc-send.is-sent .otc-send__done, .otc-send-batch.is-sent .otc-send__done {
@@ -16423,12 +16422,12 @@ table td .btn.btn-act > i {
 .btn-row-send.is-failed, .acc-act-send.is-failed, .btn-send.is-failed, .otc-send.is-failed, .otc-send-batch.is-failed {
   animation: otc-shake 0.38s var(--otc-ease-out);
 }
-.btn-row-send.is-failed .otc-send__fill, .acc-act-send.is-failed .otc-send__fill, .btn-send.is-failed .otc-send__fill, .otc-send.is-failed .otc-send__fill, .otc-send-batch.is-failed .otc-send__fill {
-  background-color: var(--otc-send-err);
-}
 .btn-row-send.is-resetting, .acc-act-send.is-resetting, .btn-send.is-resetting, .otc-send.is-resetting, .otc-send-batch.is-resetting {
   --otc-fill-w: 0%;
-  transition: --otc-fill-w 0.45s var(--otc-ease);
+  transition: --otc-fill-w 0.4s var(--otc-ease);
+}
+.btn-row-send.is-resetting .otc-send__fill, .acc-act-send.is-resetting .otc-send__fill, .btn-send.is-resetting .otc-send__fill, .otc-send.is-resetting .otc-send__fill, .otc-send-batch.is-resetting .otc-send__fill {
+  min-width: var(--otc-send-dot, 0px);
 }
 
 .btn-row-send, .acc-act-send {
@@ -16448,37 +16447,9 @@ table td .btn.btn-act > i {
   inherits: true;
   initial-value: 0%;
 }
-@keyframes otc-send-fly {
-  0% {
-    translate: 0 0;
-  }
-  12% {
-    translate: -4px 0;
-  }
-  85% {
-    opacity: 1;
-  }
-  100% {
-    translate: 150px 0;
-    opacity: 0;
-  }
-}
-@keyframes otc-send-trail {
-  0% {
-    width: 0;
-    opacity: 0;
-  }
-  30% {
-    opacity: 1;
-  }
-  100% {
-    width: 70%;
-    opacity: 0;
-  }
-}
 @keyframes otc-send-charge {
   from {
-    --otc-fill-w: 0%;
+    --otc-fill-w: var(--otc-fill-start, 0%);
   }
   to {
     --otc-fill-w: 82%;

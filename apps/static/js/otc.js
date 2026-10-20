@@ -1541,8 +1541,12 @@
         }
       });
     }
+    // O avião que vai na PONTA do preenchimento (o modelo do Contrail): uma
+    // cópia do ícone do botão, sem as margens de espaçamento dele.
+    var ic = btn.querySelector(':scope > i.ti');
+    var rider = ic ? ic.className.replace(/\b[mp][setbxy]?-\d\b/g, '').trim() : 'ti ti-brand-telegram';
     btn.insertAdjacentHTML('beforeend',
-      '<span class="otc-send__fill" aria-hidden="true"></span><span class="otc-send__trail" aria-hidden="true"></span>' +
+      '<span class="otc-send__fill" aria-hidden="true"><i class="' + esc(rider) + ' otc-send__rider"></i></span>' +
       '<span class="otc-send__done" aria-hidden="true">' + (square ? OK_SVG : esc(t('sent'))) + '</span>');
   }
   function sendState(btn, cls) {
@@ -1554,6 +1558,13 @@
     st.flying = true;
     st.t0 = Date.now();
     decorate(st.btn);
+    // O preenchimento nasce onde o ícone estava (o avião sai do lugar dele) e,
+    // na volta, recua até um ponto do tamanho da altura do botão.
+    var b = st.btn, ic = b.querySelector(':scope > i, :scope > svg:not(.otc-send__ok)');
+    var w = b.clientWidth || 1;
+    b.style.setProperty('--otc-fill-start', (ic ? Math.max(0, Math.min(60, (ic.offsetLeft - 2) / w * 100)) : 0).toFixed(1) + '%');
+    // (só na pílula: no quadrado da linha o "ponto" seria o botão inteiro)
+    b.style.setProperty('--otc-send-dot', (w > (b.clientHeight || 0) * 1.5 ? b.clientHeight : 0) + 'px');
     var done = st.btn.querySelector('.otc-send__done');
     if (done && !done.querySelector('svg')) done.textContent = t('sent');
     sendState(st.btn, 'is-flying');
