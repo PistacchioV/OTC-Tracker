@@ -606,8 +606,9 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   configurado = acesso total (admins incluídos). `enforce_page_access`
   bloqueia quem tem allowlist e redireciona para `_safe_landing(allowed)` — o
   dashboard é concedível, não sempre permitido. `_ALWAYS_ALLOWED_PATHS` =
-  `{'/users-profile', '/page-access'}`. `/api/*` e `/static*` nunca são
-  bloqueados aqui.
+  `{'/users-profile', '/page-access', '/user-home', '/settings'}` (as duas
+  últimas são pessoais, §632). `/api/*` e `/static*` nunca são bloqueados
+  aqui.
 - **Por card (Control Panel)**: tokens `/control-panel#<id>`
   (`_CONTROL_PANEL_CARDS`, na ordem da tela — monta a checklist do
   `/page-access`); `enforce_control_panel_cards` bloqueia o endpoint da rotina
@@ -1023,9 +1024,9 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   tema dá o hover. A primeira carga não pisca. **O card de TOTAL é
   preenchido e mais escuro** por uma regra só do tema: tela nova marca o
   card com `otc-stat--total` (ou `x-widget--total`) e não escreve cor.
-- **A seção Pinned da barra é só de PROJETOS** (§631): `window.otcPins`
-  (`has`/`toggle`/`sync`), chave `otc_pinned_projects_<SID>`. Não há mais
-  página fixada nem editor.
+- **A seção Pinned da barra é só de INICIATIVAS** (§631, "Initiatives
+  Pinned" desde §633): `window.otcPins` (`has`/`toggle`/`sync`), chave
+  `otc_pinned_projects_<SID>`. Não há mais página fixada nem editor.
 - **O aviso de AÇÃO é a pílula preta do Pane** (§632): `window.otcToast(msg,
   { undo })` (otc.js §3d) — "Done: <tarefa>" com Undo, abaixo da barra. Swal
   é para erro e confirmação, não para dizer que algo deu certo.
@@ -2415,8 +2416,20 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   Aging decrescente numérico; tipo por coluna, máscara `#,##0.00` invariante;
   planilha vazia VAI; `Conterparty Name` é grafia de contrato.
 
-### Intraday › Projects e Tasks (§631)
+### Intraday › Initiatives e Tasks (§631, §633)
 
+- **Na tela é INITIATIVES** (mesa, 20/10/2026, §633); rota, API, ids
+  (`PRJ-0001`), chaves de tradução (`pj-*`) e o código seguem `projects` de
+  propósito: o `Page_Access` grava a URL, e renomeá-la revogaria o acesso de
+  quem já a tem. O sino grava `Initiatives`/`Initiative Lead`, e os três mapas
+  têm também o `Projects` dos avisos já gravados. Texto novo nessas telas diz
+  "initiative", nunca "project" — `Projects` é uma das CATEGORIAS.
+- **Categoria é lista fechada** (`domain.CATEGORIES`: Process Review, Tech
+  Issue, Projects, B3 - Improvements, Stomp/Red), gravada em inglês como o
+  status e traduzida na tela (`cat_<valor>`). Criar exige; a iniciativa de
+  antes não tem e a edição pede uma (`category_required`). A lista filtra por
+  categoria (menu ao lado do status, lembrado por quem vê) e os contadores do
+  topo acompanham a categoria escolhida.
 - **Um documento só** (`features/projects/infra/store.py`,
   `projects/projects.json` no armazém), ler → alterar → gravar dentro do
   `store.mutate`; o id (`PRJ-0001`) e os ids filhos são CONTADORES gravados —
@@ -2443,8 +2456,19 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 - **Sync = Outlook da máquina pelo COM**, substituindo o gravado; o filtro do
   `Restrict` tenta `mm/dd` e `dd/mm` e confere cada item pela data real.
   **Reunião é ZOOM** (link do Local ou do corpo; o Join abre `zoommtg://`).
-  O colega vê "em reunião até…", NUNCA o assunto.
-- **"Vence hoje" às 08:00** (`user-home-due`, claim diário em disco).
+  O colega vê "em reunião até…", NUNCA o assunto. **O calendário padrão do
+  perfil só vale se o perfil é de quem clicou** (§633): o link do e-mail
+  aponta para a máquina de quem o mandou, e sem a conferência as reuniões do
+  dono da máquina iam para a Home de outra pessoa —
+  `calendar_not_accessible` (409).
+- **"Vence hoje" às 08:00** (`user-home-due`, claim diário em disco;
+  `commands.run_once`). Leitura que falha DEVOLVE o dia (§633) — reservado e
+  não enviado, ninguém tentava de novo até amanhã.
+- **O CSV das minhas tarefas neutraliza fórmula** (`= + - @` ganham o
+  apóstrofo: o título é digitado por qualquer um que cria a tarefa) e diz
+  `1 of 3`, nunca `1/3` (o Excel lê como data).
+- **A trava do armazém é por SID** (`store._lock_of`): uma só fazia a gravação
+  de um segurar a Home de todos.
 - `check_user_home.py`.
 
 ### Arrastar entre colunas (§632)
@@ -2453,9 +2477,19 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   a etapa pelas mesmas funções da tela do documento; a mesa move só a SUA
   etapa, um passo; admin/master qualquer coluna (para trás reabre).
   **Onboarding Overview**: soltar abre o formulário da etapa. **Intraday
-  Monitor**: ajuste manual registrado (`task_runs.set_override`). Nenhum
-  arrasto grava por um caminho próprio — vai pela regra que o botão já usa.
-  `check_mc_move.py`.
+  Monitor**: ajuste manual registrado (`task_runs.set_override`); a mesa (BO)
+  devolve ao cálculo o ajuste que ELA fez (o Undo da pílula, o "↺ auto").
+  Nenhum arrasto grava por um caminho próprio — vai pela regra que o botão já
+  usa.
+- **A coluna REAL manda, não o `from` da tela** (§633): o quadro não se
+  atualiza no meio do arrasto, e a permissão conferida contra o `from` do
+  request deixava um card velho reabrir uma confirmação Ok ou assinar a etapa
+  de outra mesa. Linha fora do lugar é 409 `stale_card` e nada é gravado (no
+  Confirmations Monitor para todos; no Intraday Monitor para a mesa).
+- **O arrasto do Tasks cancela sozinho** sem `pointerup` (`pointercancel`,
+  `blur` da janela, ponteiro de volta sem botão): o card volta ao lugar, em
+  vez de seguir o mouse até o próximo clique cair numa coluna qualquer.
+- `check_mc_move.py` §6, `check_intraday_monitor.py` §4h.
 
 ### Pending Confirmation
 
@@ -2929,7 +2963,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (189 scripts)
+### `scripts/tests/` (192 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

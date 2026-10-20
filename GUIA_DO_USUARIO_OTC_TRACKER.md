@@ -2,7 +2,7 @@
 
 **Brazil OTC Operations · JPMorgan Chase & Co.**
 
-**Versão:** 2.5 · **Data:** 20/10/2026
+**Versão:** 2.6 · **Data:** 20/10/2026
 
 ---
 
@@ -125,7 +125,7 @@ Da esquerda para a direita:
 
 O menu é uma placa **fixa** à esquerda. No alto ficam a marca e o botão **Pin / unpin menu** (o ícone de painel ao lado do nome): clique nele para **recolher** o menu e ganhar largura — um botão redondo aparece no canto superior esquerdo para abri-lo quando precisar. Clique de novo no ícone para fixá-lo. Quando o menu está fixo, o botão fica **colorido**.
 
-Logo abaixo da marca, a seção **Projects Pinned** mostra os projetos que você marcou com a **estrela** (17.3) — um clique abre o projeto. Ela só aparece quando há algum. No pé do menu ficam o seu nome e o seu cargo.
+Logo abaixo da marca, a seção **Initiatives Pinned** mostra as iniciativas que você marcou com a **estrela** (17.3) — um clique abre a iniciativa. Ela só aparece quando há algum. No pé do menu ficam o seu nome e o seu cargo.
 
 O menu é em **níveis**: um item com **›** à direita tem submenu. Clicar nele **não abre uma página** — ele desliza para dentro do submenu, e o caminho percorrido aparece no alto, como um rastro. Para voltar um nível, clique no item de volta (**‹**) ou no nome do nível anterior no rastro.
 
@@ -133,7 +133,7 @@ O menu é em **níveis**: um item com **›** à direita tem submenu. Clicar nel
 
 | Grupo | Itens |
 |---|---|
-| **MAIN** | Dashboards (o KPI) · **Intraday** (User Home · Projects · Tasks · Monitor) · About · Settings |
+| **MAIN** | Dashboards (o KPI) · **Intraday** (User Home · Initiatives · Tasks · Monitor) · About · Settings |
 | **APPS** | Calendar · Electronic Inventory · Control Panel · File Interpreter · Tools · Daily Settlement · Live Position |
 | **APPS › Tools** | **Calculators** (NDF Calculator · Option Calculator · Swap Calculator · Unwind NDF Calculator) · Euribor · Fixed Income · Quotes · SOFR Index · Term SOFR |
 | **APPS › Daily Settlement › NDF** | Summary · Cockpit · Other Publisher |
@@ -190,8 +190,8 @@ O seu cadastro vive em **Manage Roles** (Menu › Data Base › Users › Roles 
 | **Focus** | O timer de foco (abaixo) |
 | **My tasks** | As suas tarefas que vencem hoje ou estão atrasadas, e as que você concluiu hoje (riscadas) |
 | **This week** | Quantas tarefas a **equipe** concluiu em cada dia da semana, e a comparação com a semana passada |
-| **Projects** | Os projetos em que você é líder ou tem tarefa, com o progresso e as pessoas |
-| **Right now** | **Team**: quem está em foco ou em reunião agora, e até quando. **Activity**: o que aconteceu por último nos seus projetos |
+| **Initiatives** | As iniciativas em que você é líder ou tem tarefa, com o progresso e as pessoas |
+| **Right now** | **Team**: quem está em foco ou em reunião agora, e até quando. **Activity**: o que aconteceu por último nas suas iniciativas |
 
 **Passo a passo — trazer as reuniões do Outlook:**
 
@@ -226,7 +226,7 @@ O tempo focado soma no *Focused today* e no anel *Focus*. Enquanto você está e
 | Seção | O que tem |
 |---|---|
 | **Profile** | Nome, e-mail, mesa e SID — vêm do cadastro (3.7) e não se editam aqui |
-| **Notifications** | Liga e desliga os avisos do sino que são **para você**: *Task assigned* (uma tarefa foi passada a você), *Comments* (comentaram numa tarefa sua), *Project lead* (você virou líder de um projeto), *Due dates* (às 08:00 do dia em que uma tarefa sua vence) e *Focus finished* (fim de uma sessão de foco) |
+| **Notifications** | Liga e desliga os avisos do sino que são **para você**: *Task assigned* (uma tarefa foi passada a você), *Comments* (comentaram numa tarefa sua), *Initiative lead* (você virou líder de uma iniciativa), *Due dates* (às 08:00 do dia em que uma tarefa sua vence) e *Focus finished* (fim de uma sessão de foco) |
 | **Appearance** | **Theme** (*Light · Dark · Auto* — *Auto* segue o Windows), **Wallpaper** (dez papéis de parede), **Accent** (a cor de destaque dos botões e seleções), **Glass** (*Clear* mostra mais o papel de parede; *Tinted* é o padrão) e **Reduce transparency** (superfícies sólidas, sem vidro — o sistema liga sozinho em máquina sem placa de vídeo) |
 | **Focus** | A duração da **sessão**, da **pausa** e a **meta diária** de foco, com **−** e **+**. **Start** começa uma sessão agora |
 | **Data** | **Export my tasks as CSV** baixa as suas tarefas, uma por linha. **Reset to defaults** volta aparência, avisos e foco ao original |
@@ -423,7 +423,7 @@ O **sino** da barra superior mostra em vermelho quantos avisos você tem. O sist
 
 1. Clique no sino.
 2. Clique no aviso: o sistema abre a tela onde aquilo aconteceu.
-3. Os avisos são endereçados por **papel** — o Back Office recebe os da esteira de confirmação, o Middle os dele, e assim por diante. Os de **tarefa e projeto** vão para a pessoa, e cada um escolhe quais quer em Settings (3.9).
+3. Os avisos são endereçados por **papel** — o Back Office recebe os da esteira de confirmação, o Middle os dele, e assim por diante. Os de **tarefa e iniciativa** vão para a pessoa, e cada um escolhe quais quer em Settings (3.9).
 
 **O aviso de ação.** Quando você move um cartão, conclui uma tarefa ou desfaz algo, uma **pílula preta** aparece logo abaixo da barra superior dizendo o que aconteceu — por exemplo, *Done: Glass material tokens* — com o botão **Undo** para desfazer. Ela some sozinha em alguns segundos.
 
@@ -494,7 +494,8 @@ A tela se atualiza sozinha a cada minuto.
 2. Solte. O aviso preto no alto confirma (por exemplo, *Completed: Recon Pay/Rec*) e oferece **Undo**.
 3. O cartão passa a mostrar a marca **Manual · <quem> <hora>**: o ajuste vale por cima do cálculo do sistema **naquele dia**. Serve para toda tarefa, inclusive as três zonas (B3 Registration, Confirmations e Intrag).
 4. **Quem pode:** o Back Office anda **um passo à frente** (*To do* → *In progress*; *In progress* ou *Late* → *Completed*); o administrador move para qualquer coluna.
-5. Para devolver a tarefa ao cálculo do sistema, o administrador clica em **↺ auto** no cartão.
+5. Para devolver a tarefa ao cálculo do sistema, clique em **Undo** no aviso ou em **↺ auto** no cartão: quem fez o ajuste desfaz o seu; o administrador desfaz o de qualquer um.
+6. Se a tarefa mudou desde que a tela carregou (outra pessoa a concluiu, a recon rodou), o sistema **recusa** o arrasto — *o quadro estava desatualizado* — e recarrega o quadro. Nada é gravado.
 
 > **O ajuste manual vale também para o e-mail das 19h.** Tarefa marcada como concluída à mão sai da lista de pendências do aviso — use quando a tarefa foi resolvida por fora do sistema, e não para esconder o que ainda está em aberto. As contagens por produto, embaixo, continuam as do sistema.
 
@@ -1280,6 +1281,7 @@ Este bloco acompanha a confirmação depois que a operação já está registrad
 3. Se o prazo da etapa já passou, o sistema pede a **justificativa** antes de assinar. E *Pending FepWeb* → **Ok** sem a data do callback é recusado, como no **Mark as sent**.
 4. O aviso preto no alto confirma o que foi feito.
 5. **Quem pode:** cada mesa move só os itens da **sua** etapa, e um passo à frente. O administrador move para qualquer cartão — inclusive **para trás**, o que **reabre** a confirmação: as validações daquela etapa em diante são limpas.
+6. A tela não se atualiza sozinha. Se a confirmação já tinha andado desde que você a abriu (outra mesa validou, alguém a devolveu), o arrasto é **recusado** — *o quadro estava desatualizado* — e a esteira é recarregada. Nada é assinado nem reaberto.
 
 ### 9.5. A tela de validação
 
@@ -1749,7 +1751,7 @@ No **termo de mercadoria** (a classe do ativo que a posição traz), o nocional 
 
 ![Calendar](docs/sop-screenshots/holidays-calendar.png)
 
-**Para que serve:** os calendários de feriados que o sistema usa para contar dias úteis — o ANBIMA e os das praças de cada mercadoria — e, junto deles, as **datas dos projetos**: a data-alvo de cada projeto, os marcos e o prazo das tarefas em aberto (17.3).
+**Para que serve:** os calendários de feriados que o sistema usa para contar dias úteis — o ANBIMA e os das praças de cada mercadoria — e, junto deles, as **datas das iniciativas**: a data-alvo de cada iniciativa, os marcos e o prazo das tarefas em aberto (17.3).
 
 **Passo a passo — ver os feriados:**
 
@@ -1757,7 +1759,7 @@ No **termo de mercadoria** (a classe do ativo que a posição traz), o nocional 
 2. Navegue com **‹** e **›**; **Today** volta ao mês corrente.
 3. Troque a visão em **Year · Month · Week · Day · List**.
 4. Clique num feriado para ver a que calendário ele pertence.
-5. A chave **Projects and tasks**, embaixo das pastilhas, mostra ou esconde as datas dos projetos. Clique numa delas para abrir o projeto (ou a tarefa, na gaveta).
+5. A chave **Initiatives and tasks**, embaixo das pastilhas, mostra ou esconde as datas das iniciativas. Clique numa delas para abrir a iniciativa (ou a tarefa, na gaveta).
 
 **Passo a passo — incluir um feriado:**
 
@@ -1986,37 +1988,49 @@ Este merece um passo a passo próprio, porque tem uma opção que os outros não
 
 Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de partida para quem chega à mesa.
 
-### 17.3. Projects
+### 17.3. Initiatives
 
-**Menu › Main › Intraday › Projects**
+**Menu › Main › Intraday › Initiatives**
 
-![Projects](docs/sop-screenshots/projects.png)
+![Initiatives](docs/sop-screenshots/projects.png)
 
-**Para que serve:** acompanhar os projetos da área — o que está em andamento, quem lidera, o progresso e o próximo marco.
+**Para que serve:** acompanhar as iniciativas da área — o que está em andamento, de que tipo é, quem lidera, o progresso e o próximo marco.
 
-**Passo a passo — criar um projeto:**
+**As categorias.** Toda iniciativa nova tem uma:
 
-1. Clique em **New project**.
-2. Dê um **nome**, uma descrição, escolha o **líder** (só Back Office e administradores podem liderar), o **status**, a **cor**, o **ícone** e as datas de início e alvo.
+| Categoria | Para |
+|---|---|
+| **Process Review** (*Revisão de Processo*) | Rever ou redesenhar um processo da mesa |
+| **Tech Issue** | Um problema de sistema a resolver |
+| **Projects** | Um projeto com escopo, marcos e entrega |
+| **B3 - Improvements** | Melhorias ligadas à B3 (layouts, arquivos, retornos) |
+| **Stomp/Red** | Os itens Stomp/Red |
+
+**Passo a passo — criar uma iniciativa:**
+
+1. Clique em **New initiative**.
+2. Dê um **nome**, uma descrição, escolha a **categoria** (obrigatória), o **líder** (só Back Office e administradores podem liderar), a **cor**, o **ícone** e as datas de início e alvo.
 3. Salve. O líder recebe um aviso no sino.
 
-**Para filtrar:** use **All · On going · On hold · Concluded**. A **estrela** de cada cartão fixa o projeto na seção *Projects Pinned* do menu lateral.
+**Para filtrar:** o menu **All categories** mostra só uma categoria, com quantas iniciativas cada uma tem — os números do alto passam a contar só aquela categoria, e a escolha fica guardada para a próxima vez. **All · On going · On hold · Concluded** filtra pelo status. A **estrela** de cada cartão fixa a iniciativa na seção *Initiatives Pinned* do menu lateral.
 
-**A página do projeto.** Clique num cartão para abri-la:
+> **Iniciativa criada antes das categorias** aparece sem a etiqueta e com a opção *No category* no filtro. Ao editá-la, o sistema pede que se escolha uma.
 
-![A página de um projeto](docs/sop-screenshots/projects-detail.png)
+**A página da iniciativa.** Clique num cartão para abri-la:
+
+![A página de uma iniciativa](docs/sop-screenshots/projects-detail.png)
 
 | Parte | O que tem |
 |---|---|
-| **Progress · Open tasks · Done · Days left** | O resumo do projeto |
-| **Overview** | Líder, status, a linha do tempo do início até a data-alvo e as pessoas, com quantas tarefas em aberto cada uma tem |
-| **Milestones** | Os marcos (os eventos do projeto). Clique no círculo para marcar como atingido; **Add** cria um novo, com data |
+| **Progress · Open tasks · Done · Days left** | O resumo da iniciativa |
+| **Overview** | Líder, status, categoria, a linha do tempo do início até a data-alvo e as pessoas, com quantas tarefas em aberto cada uma tem |
+| **Milestones** | Os marcos (os eventos da iniciativa). Clique no círculo para marcar como atingido; **Add** cria um novo, com data |
 | **Coming up** | Os próximos marcos e a data-alvo, em ordem — as mesmas datas que aparecem no Calendar (13.5) |
 | **Recent activity** | Quem fez o quê, e quando |
-| **Burn-up** | Tarefas concluídas contra o total, ao longo da vida do projeto |
-| **Tasks** | As tarefas do projeto por status. **Add task** cria uma |
+| **Burn-up** | Tarefas concluídas contra o total, ao longo da vida da iniciativa |
+| **Tasks** | As tarefas da iniciativa por status. **Add task** cria uma |
 
-**Pin** fixa o projeto no menu; **Edit** muda os dados. Apagar um projeto é do líder, de quem o criou ou de um administrador.
+**Pin** fixa a iniciativa no menu; **Edit** muda os dados, inclusive a categoria. Apagar uma iniciativa é do líder, de quem a criou ou de um administrador.
 
 ### 17.4. Tasks
 
@@ -2024,7 +2038,7 @@ Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de pa
 
 ![Tasks](docs/sop-screenshots/tasks.png)
 
-**Para que serve:** as tarefas de **todos** os projetos num quadro só, por status: **To do · In progress · In review · Done**.
+**Para que serve:** as tarefas de **todas** as iniciativas num quadro só, por status: **To do · In progress · In review · Done**.
 
 **Os números do alto:** *Open* (em aberto), *Due this week* (vencem nesta semana), *Overdue* (atrasadas) e *Done this week*.
 
@@ -2034,7 +2048,7 @@ Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de pa
 2. Solte. O aviso preto no alto confirma (*Done: …*) e oferece **Undo**.
 3. Sem mouse, use o **…** do cartão e escolha **Move to …**.
 
-**Para filtrar:** **All projects** (um projeto), **Mine only** (só as suas), **Any priority** (uma prioridade) e o campo de busca (título, projeto ou pessoa). **Board · List** troca o quadro pela lista.
+**Para filtrar:** **All initiatives** (uma iniciativa), **Mine only** (só as suas), **Any priority** (uma prioridade) e o campo de busca (título, iniciativa ou pessoa). **Board · List** troca o quadro pela lista.
 
 **Passo a passo — abrir e editar uma tarefa:** clique no cartão. A **gaveta** abre à direita:
 
@@ -2044,7 +2058,7 @@ Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de pa
 - **Subtasks** são os passos da tarefa — cada um com o seu círculo. **Comments** é a conversa; quem é responsável recebe um aviso.
 - Tudo grava na hora; não há botão de salvar.
 
-**New task** cria uma tarefa em qualquer projeto. O responsável recebe um aviso no sino, e a tarefa com prazo aparece no Calendar (13.5) e na User Home de quem a recebeu (3.8).
+**New task** cria uma tarefa em qualquer iniciativa. O responsável recebe um aviso no sino, e a tarefa com prazo aparece no Calendar (13.5) e na User Home de quem a recebeu (3.8).
 
 ---
 
@@ -2162,11 +2176,11 @@ Fora da tolerância, a linha fica pendente e não é dada como liquidada.
 |---|---|
 | `New` · `Amend` · `Pending` · `Approved` · `Sent` · `Success` · `Error` | Ver a tabela do capítulo 5.2 |
 
-**Projects e Tasks**
+**Initiatives e Tasks**
 
 | Status | Significa |
 |---|---|
-| `On going` · `On hold` · `Concluded` | O projeto está em andamento, parado ou encerrado (17.3) |
+| `On going` · `On hold` · `Concluded` | A iniciativa está em andamento, parada ou encerrada (17.3) |
 | `To do` · `In progress` · `In review` · `Done` | As colunas do quadro de tarefas (17.4) |
 
 **Avisos de liquidação** (NDF Summary e Other Products Summary)
@@ -2256,7 +2270,7 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 |---|---|---|
 | Dashboard (KPI) | Main › Dashboards | 17.1 |
 | User Home | Main › Intraday | 3.8 |
-| Projects | Main › Intraday | 17.3 |
+| Initiatives | Main › Intraday | 17.3 |
 | Tasks | Main › Intraday | 17.4 |
 | About | Main › About | 17.2 |
 | Settings | Main | 3.9 |
@@ -2309,4 +2323,4 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 
 ---
 
-*OTC Tracker · Brazil OTC Operations · JPMorgan Chase & Co. · Guia do Usuário v2.5 — 02/10/2026*
+*OTC Tracker · Brazil OTC Operations · JPMorgan Chase & Co. · Guia do Usuário v2.6 — 20/10/2026*
