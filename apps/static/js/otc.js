@@ -136,7 +136,8 @@
   // navegador roda com a aceleração desligada, e ~80 backdrop-filter
   // recompositando por software deixam a tela inteira lenta SEM erro nenhum.
   // Sinais, na ordem: preferência gravada ('full' | 'reduced'), WebGL por
-  // software ou ausente, Firefox no Windows (o par da mesa). O falso positivo
+  // software ou ausente, Firefox no Windows (o par da mesa), o sistema com
+  // "reduzir transparência". O falso positivo
   // custa estética; o falso negativo, a mesa inteira lenta.
   function softwareGl() {
     try {
@@ -164,12 +165,18 @@
         cached = (fxWin || softwareGl()) ? '1' : '0';
         try { sessionStorage.setItem('__OTC_FX_AUTO__', cached); } catch (e) {}
       }
-      solid = cached === '1';
+      // o sistema pedindo menos transparência também liga (e é o switch que o
+      // desliga: 'full' vence)
+      solid = cached === '1' || !!(mqLessGlass && mqLessGlass.matches);
     }
     root.classList.toggle('is-solid', solid);
     return solid;
   }
+  var mqLessGlass = window.matchMedia ? window.matchMedia('(prefers-reduced-transparency: reduce)') : null;
   decideSolid();
+  if (mqLessGlass && mqLessGlass.addEventListener) {
+    mqLessGlass.addEventListener('change', function () { decideSolid(); syncAppearance(); });
+  }
 
   // ==========================================================================
   // 2. Idioma — o I18nManager de sempre (mesma API, mesmas chaves)
@@ -1188,7 +1195,7 @@
     $$('[data-otc-walls]').forEach(function (wl) {
       if (wl.children.length) return;
       wl.innerHTML = Object.keys(WALLS).map(function (k) {
-        return '<button type="button" class="otc-wall" data-wall-pick="' + k + '"><span class="art" style="--art:' + WALLS[k] + '"></span>' + k.charAt(0).toUpperCase() + k.slice(1) + '</button>';
+        return '<button type="button" class="otc-wall-swatch" data-wall-pick="' + k + '"><span class="art" style="--art:' + WALLS[k] + '"></span>' + k.charAt(0).toUpperCase() + k.slice(1) + '</button>';
       }).join('');
     });
     doc.addEventListener('click', function (e) {
@@ -1272,7 +1279,7 @@
   // ==========================================================================
   // 7. Gel: o botão afunda e volta com mola; o anel do clique
   // ==========================================================================
-  var PRESS_SEL = '.btn, .otc-tbtn, .otc-search, .otc-swatch, .otc-wall, .side-nav-link, .nav-link, .otc-menu-btn';
+  var PRESS_SEL = '.btn, .otc-tbtn, .otc-search, .otc-swatch, .otc-wall-swatch, .side-nav-link, .nav-link, .otc-menu-btn';
   var pressed = null;
   function pressIn(el) {
     if (!el.animate || REDUCED_MOTION) return;

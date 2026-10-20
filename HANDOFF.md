@@ -26404,3 +26404,57 @@ iniciativas fictícias da dev ganharam categoria pela API.
 **Guardas.** `check_screen_lock.py` (novo); `check_mc_move.py` §6,
 `check_intraday_monitor.py` §4h, `check_user_home.py` §4b/§7b/§8/§8c e
 `check_projects.py` (categoria e os nomes novos do sino) acrescentados.
+
+
+## §634 — A gaveta de Aparência, o "Reduce transparency" no JPM, a foto na Settings, o menu e o rodapé (2026-10-20)
+
+**A faixa no meio da tela e a gaveta sem papéis de parede.** A camada do papel
+de parede (§632) nasceu como `<div class="otc-wall">`, e os botões das dez
+paredes na gaveta de Aparência JÁ se chamavam `.otc-wall`. Cada botão herdava o
+`position: fixed; inset: 0; z-index: -1` da camada: saía da gaveta e os dez se
+empilhavam como uma faixa atravessando a página. O botão virou
+`.otc-wall-swatch`. A tela Settings tinha a própria classe (`.st-wall`) e por
+isso funcionava.
+
+**"Reduce transparency" desligado e tudo sólido — só no JPM.** O §11 do SCSS
+tinha, além do `is-solid`, um `@media (prefers-reduced-transparency: reduce)`
+que trocava o vidro por cor sólida em `:root:not(.is-glass-forced)` — e nada
+nunca pôs essa classe. O Windows manda esse sinal quando "Efeitos de
+transparência" está desligado (política de máquina, sessão remota: o caso das
+máquinas do JPM); o Mac não manda. O switch tirava o `is-solid`, mas o `@media`
+seguia valendo: no JPM nada mudava, no Mac funcionava. Agora o sinal do sistema
+é só mais um voto do modo AUTOMÁTICO (`head-css.html` e `decideSolid`, que
+também ouve a troca dele), e o `@media` saiu — o modo é uma classe só, e o
+switch (`full`/`reduced`) vence. Reproduzido no Chromium simulando o sinal pelo
+CDP (`Emulation.setEmulatedMedia`), com o CSS e o JS de antes servidos por
+rota: antigo, switch desligado, `--otc-glass` = `--otc-solid`; novo, vidro.
+
+**A foto na Settings.** A tela desenhava o avatar com o `avatar()` do
+`projects-common.js`, que só sabe iniciais. O `/api/settings` manda
+`me.photo` — a mesma `images/users/<sid>.jpg` da barra, e só quando o arquivo
+existe (`_photo`, SID só alfanumérico) — e o `avatar()` aceita a URL num 4º
+argumento, pondo a foto POR CIMA das iniciais (`.pj-av__img`, que some no
+`onerror`). Quem não tem o arquivo continua com as iniciais.
+
+**O menu que não sumia ao desafixar e as margens.** A casca era centrada em
+1840px: numa tela mais larga (ou com zoom de navegador para fora) o menu ficava
+a `(100vw − 1840) / 2` da borda, e o desafixar o recolhe por `−100% − 28px` —
+encostava na borda e continuava inteiro na tela, com o conteúdo pulando para a
+esquerda. A casca agora é presa na borda esquerda: menu a 10px
+(`--otc-inset`, era 14px), conteúdo a 18px dele (`--otc-side-gap`, era o
+`--otc-gutter`, 32px numa tela de 1920), barra do topo e toasts a
+`--otc-gutter` da direita, e o recolher conta a própria margem
+(`−100% − inset − 24px`). Medido a 1440, 1920 e 2560 px: fixado, menu a 10px;
+desafixado, fora da tela; o botão de menu o abre como gaveta.
+
+**O rodapé no meio da página.** Ele vinha logo depois do conteúdo, e numa
+tela curta ficava no meio. Agora é absoluto no pé do `.content-page` (que tem
+100vh no mínimo): no fim da janela na tela curta, depois do conteúdo na longa,
+nunca por cima dele (o `padding-bottom` da casca é o espaço dele). Conferido em
+Initiatives, Settings, Dashboard e Tasks.
+
+**Guardas.** `check_user_home.py` §5 (a foto: quem tem recebe a URL, quem não
+tem recebe vazio, e a Settings a passa aos dois avatares). `check_theme_toggle`,
+`check_projects`, `check_soc_layers`, `check_summary_glow`, `check_table_center`,
+`check_screen_lock` e `check_notif_page_url` seguem verdes.
+

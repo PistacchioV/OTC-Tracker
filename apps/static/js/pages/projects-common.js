@@ -305,12 +305,15 @@
     if (!p.length) return '?';
     return ((p[0][0] || '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase();
   }
-  function avatar(sid, name, size) {
+  // `photo`: a URL da foto (`images/users/<sid>.jpg`, que o servidor só manda
+  // quando o arquivo existe) — vai POR CIMA das iniciais, que ficam de reserva
+  function avatar(sid, name, size, photo) {
     var h = 0, k = String(sid || name || '');
     for (var i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
     var c = AV_HUES[h % AV_HUES.length];
     return '<span class="pj-av' + (size ? ' pj-av--' + size : '') + '" style="--av:var(--otc-' + c + ')" title="' +
-      esc(name || sid) + '">' + esc(initials(name || sid)) + '</span>';
+      esc(name || sid) + '">' + esc(initials(name || sid)) +
+      (photo ? '<img class="pj-av__img" alt="" src="' + esc(photo) + '" onerror="this.remove()">' : '') + '</span>';
   }
   function avatars(list, max) {
     max = max || 4;

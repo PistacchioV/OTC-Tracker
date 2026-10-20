@@ -1012,12 +1012,17 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   migrado). O botão sol/lua troca pelo `otcUI.set` e suprime as transições
   (`otc-theme-switching`). `check_theme_toggle.py`.
 - **Modo opaco** (`is-solid` no `<html>`, máquina SEM GPU — as do JPM):
-  WebGL por software ou Firefox no Windows (`decideSolid` do `otc.js`,
-  memoizado em `sessionStorage.__OTC_FX_AUTO__` para o `<head>` não piscar
-  vidro); `localStorage.__OTC_TRACKER_FX__` = `reduced`/`full` vence. Sem
-  blur, alfa não é material: superfícies viram cor SÓLIDA (§11 do SCSS);
-  token do modo vai como `:root.is-solid` (+ o par escuro). Valide forçando
-  `'reduced'`.
+  WebGL por software, Firefox no Windows ou o Windows sem "Efeitos de
+  transparência" (`prefers-reduced-transparency`, §634) — `decideSolid` do
+  `otc.js`, a sonda memoizada em `sessionStorage.__OTC_FX_AUTO__` para o
+  `<head>` não piscar vidro; `localStorage.__OTC_TRACKER_FX__` =
+  `reduced`/`full` (o switch "Reduce transparency") vence TODOS. **O modo é
+  UMA classe**: nada de `@media (prefers-reduced-transparency)` no CSS — era
+  ele que deixava tudo sólido nas máquinas do JPM com o switch desligado, e no
+  Mac (que não manda o sinal) não se via. Sem blur, alfa não é material:
+  superfícies viram cor SÓLIDA (§11 do SCSS); token do modo vai como
+  `:root.is-solid` (+ o par escuro). Valide forçando `'reduced'`, e o sinal do
+  Windows pelo CDP (`Emulation.setEmulatedMedia`).
 - **Card de contagem tem a animação do KPI em TODA tela** (§631): o `otc.js`
   (`initStats`) faz contar e piscar todo `.otc-stat__value`,
   `*-widget__value`, `.acc-stat__value`, `.ob-stat__n` e `.widget-val`, e o
@@ -1036,6 +1041,17 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 - **O papel de parede é o SVG do Pane** (`partials/wallpaper.html`, cores em
   `--w-*` no otc.scss §2b, sem bolhas). O "leitoso" do claro era ele, não o
   vidro (§632) — antes de mexer em alfa de vidro, MEÇA o pixel atrás da placa.
+  **`.otc-wall` é a CAMADA** (fixa em tela cheia); o botão de cada parede na
+  gaveta é `.otc-wall-swatch` (§634: com o mesmo nome, os dez botões saíam da
+  gaveta e viravam uma faixa no meio da página).
+- **A casca é presa na BORDA ESQUERDA, sem centralizar** (§634): menu a
+  `--otc-inset` (10px) da borda, conteúdo a `--otc-side-gap` (18px) dele
+  (`--otc-content-l`, que o desafixar zera para o `--otc-gutter`), barra do
+  topo e toasts a `--otc-gutter` da direita. Centrada em 1840px, o menu ficava
+  longe da borda numa tela larga e o desafixar (que o recolhe pela própria
+  largura) só o encostava nela. **O rodapé é ABSOLUTO no pé da casca**
+  (`.content-page` com 100vh no mínimo): fim da janela na tela curta, depois do
+  conteúdo na longa — o espaço dele é o `padding-bottom` da casca.
 - **Troca de página é View Transition entre documentos** (§632): os nomes da
   barra lateral, do topo e do papel de parede só existem durante a navegação
   (`otc-vt-nav`, posta pelo `pageswap`/`pagereveal` do `head-css.html`, que

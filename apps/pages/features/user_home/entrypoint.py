@@ -5,7 +5,10 @@ As duas páginas são de TODO usuário logado (`_ALWAYS_ALLOWED_PATHS`): cada um
 vê o próprio documento. As partes de tarefa e projeto só aparecem para quem
 tem o Projects ou o Tasks.
 """
-from flask import jsonify, redirect, render_template, request, session, url_for
+import os
+import re
+
+from flask import current_app, jsonify, redirect, render_template, request, session, url_for
 
 from apps.pages import blueprint
 from apps.pages.features.user_home import commands, domain, queries
@@ -22,6 +25,17 @@ def _me():
             'name': (session.get('user_name') or '').strip(),
             'email': (session.get('user_email') or '').strip(),
             'role': str(session.get('user_role') or '').strip().upper()}
+
+
+def _photo(sid):
+    """A foto do usuário, no padrão da topbar (`images/users/<sid>.jpg`), só
+    quando o arquivo existe — sem ela a tela fica com as iniciais."""
+    sid = (sid or '').lower()
+    if not re.fullmatch(r'[a-z0-9]+', sid):
+        return ''
+    if not os.path.isfile(os.path.join(current_app.static_folder, 'images', 'users', sid + '.jpg')):
+        return ''
+    return '%s/images/users/%s.jpg' % (current_app.config.get('ASSETS_ROOT', '/static'), sid)
 
 
 def _now():
@@ -120,7 +134,8 @@ def api_settings_get():
         return g
     me = _me()
     out = {'success': True, 'settings': queries.settings(me['sid']),
-           'me': {'sid': me['sid'], 'name': me['name'], 'email': me['email'], 'role': me['role']},
+           'me': {'sid': me['sid'], 'name': me['name'], 'email': me['email'], 'role': me['role'],
+                  'photo': _photo(me['sid'])},
            'can_projects': _can_projects()}
     try:
         R = _routes()

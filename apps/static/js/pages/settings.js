@@ -92,8 +92,8 @@
 
   function render() {
     var me = S.me;
-    $('st-me').innerHTML = P.avatar(me.sid, me.name || me.sid, 'lg') + '<div class="min-w-0"><b>' + esc(me.name || me.sid) + '</b><small>' + esc(me.email || '') + '</small></div>';
-    $('st-profile-head').innerHTML = '<span class="st-avwrap">' + P.avatar(me.sid, me.name || me.sid) + '</span><div class="min-w-0"><h3>' + esc(me.name || me.sid) +
+    $('st-me').innerHTML = P.avatar(me.sid, me.name || me.sid, 'lg', me.photo) + '<div class="min-w-0"><b>' + esc(me.name || me.sid) + '</b><small>' + esc(me.email || '') + '</small></div>';
+    $('st-profile-head').innerHTML = '<span class="st-avwrap">' + P.avatar(me.sid, me.name || me.sid, '', me.photo) + '</span><div class="min-w-0"><h3>' + esc(me.name || me.sid) +
       '</h3><div class="st-pos">' + esc(me.position || me.role || '') + '</div><div class="st-mail">' + esc(me.email || '') + '</div></div>';
     $('st-profile-rows').innerHTML = [
       ['user-round', 'var(--otc-blue)', 'name', me.name || '—'],

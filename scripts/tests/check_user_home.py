@@ -198,6 +198,13 @@ st, d = call(bia, 'post', '/api/settings', {'break_minutes': 0})
 check('pausa fora da faixa: 400', (st, d.get('code'), d.get('params', {}).get('field')), (400, 'out_of_range', 'break_minutes'))
 st, d = call(bia, 'post', '/api/settings', {'notify': {'inventado': True}})
 check('aviso desconhecido: 400', (st, d.get('code')), (400, 'bad_choice'))
+# a foto do perfil: a mesma `images/users/<sid>.jpg` da topbar, e só quando o
+# arquivo existe (sem ela a tela fica com as iniciais)
+st, d = call(client_for('E930179', 'Foto Sim', 'BO'), 'get', '/api/settings')
+check('quem tem foto recebe a URL dela', (st, d['me'].get('photo')), (200, '/static/images/users/e930179.jpg'))
+check('quem não tem recebe vazio', call(bia, 'get', '/api/settings')[1]['me'].get('photo'), '')
+check('a Settings passa a foto aos dois avatares',
+      open('apps/static/js/pages/settings.js', encoding='utf-8').read().count('me.photo)'), 2)
 
 print('\n== 6. o Projects respeita o aviso desligado ==')
 NOTIFS.clear()
