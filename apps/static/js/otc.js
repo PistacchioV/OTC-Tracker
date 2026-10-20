@@ -645,6 +645,405 @@
   }
 
   // ==========================================================================
+  // 3b. <select>: as opções abrem ABAIXO do campo, na largura dele
+  // ==========================================================================
+  // O popup nativo do macOS abre POR CIMA do campo (centrado na opção marcada)
+  // e o do Windows abre embaixo: a mesma tela mudava de máquina para máquina
+  // (pedido de 20/10/2026). O clique num <select> simples abre um menu do tema
+  // logo abaixo, na mesma largura. O <select> de verdade continua no lugar: o
+  // valor vai para ele e ele dispara o `input`/`change` de sempre — nenhuma
+  // tela precisa saber disto. Ficam no nativo: `multiple`/`size`, desabilitado,
+  // toque, os selects dos calendários (flatpickr, daterangepicker) e o que
+  // estiver dentro de um dropdown, ou marcado `data-native`.
+  var SM = null;
+  var SM_SKIP = '.flatpickr-calendar, .daterangepicker, .dropdown-menu, [data-native]';
+  function smUsable(sel) {
+    return sel && !sel.multiple && !(sel.size > 1) && !sel.disabled && !sel.closest(SM_SKIP);
+  }
+  function smClose() {
+    if (!SM) return;
+    SM.m.remove();
+    SM = null;
+  }
+  function smPick(i) {
+    var sel = SM && SM.sel;
+    if (!sel) return;
+    smClose();
+    if (sel.selectedIndex !== i) {
+      sel.selectedIndex = i;
+      sel.dispatchEvent(new Event('input', { bubbles: true }));
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    sel.focus();
+  }
+  function smMark(k) {
+    if (!SM) return;
+    var items = $$('.dropdown-item:not([disabled])', SM.m);
+    if (!items.length) return;
+    SM.k = (k + items.length) % items.length;
+    items.forEach(function (b, i) { b.classList.toggle('is-kbd', i === SM.k); });
+    items[SM.k].scrollIntoView({ block: 'nearest' });
+  }
+  function smOpen(sel) {
+    smClose();
+    var html = '';
+    var add = function (o) {
+      if (o.hidden) return;
+      html += '<button type="button" class="dropdown-item' + (o.selected ? ' active' : '') + '"' +
+        (o.disabled ? ' disabled' : '') + ' data-i="' + o.index + '" role="option">' + esc(o.text) + '</button>';
+    };
+    Array.prototype.forEach.call(sel.children, function (n) {
+      if (n.tagName === 'OPTGROUP') {
+        html += '<h6 class="dropdown-header">' + esc(n.label) + '</h6>';
+        Array.prototype.forEach.call(n.children, add);
+      } else if (n.tagName === 'OPTION') add(n);
+    });
+    if (!html) return;
+    var m = doc.createElement('div');
+    m.className = 'dropdown-menu show otc-select-menu';
+    m.setAttribute('role', 'listbox');
+    m.innerHTML = html;
+    // dentro de modal/SweetAlert o menu nasce DENTRO da janela: no <body>, o
+    // clique nele seria um clique fora e fecharia a janela
+    (sel.closest('.modal, .swal2-container') || doc.body).appendChild(m);
+    var r = sel.getBoundingClientRect();
+    var below = window.innerHeight - r.bottom - 12;
+    m.style.left = r.left + 'px';
+    m.style.top = (r.bottom + 4) + 'px';
+    m.style.width = r.width + 'px';
+    m.style.minWidth = r.width + 'px';
+    m.style.maxHeight = Math.max(160, Math.min(320, below)) + 'px';
+    SM = { sel: sel, m: m, k: -1 };
+    var act = m.querySelector('.active');
+    if (act) act.scrollIntoView({ block: 'nearest' });
+    m.addEventListener('mousedown', function (e) { e.preventDefault(); });   // o foco fica no <select>
+    m.addEventListener('click', function (e) {
+      var b = e.target.closest('.dropdown-item');
+      if (b && !b.disabled) smPick(+b.getAttribute('data-i'));
+    });
+  }
+  function initSelectMenus() {
+    doc.addEventListener('mousedown', function (e) {
+      if (SM && SM.m.contains(e.target)) return;
+      var sel = e.target.closest && e.target.closest('select');
+      if (e.button !== 0 || !smUsable(sel)) { smClose(); return; }
+      e.preventDefault();
+      if (SM && SM.sel === sel) { smClose(); sel.focus(); return; }
+      sel.focus();
+      smOpen(sel);
+    }, true);
+    doc.addEventListener('touchstart', function () { smClose(); }, { passive: true, capture: true });
+    doc.addEventListener('keydown', function (e) {
+      var sel = e.target.closest && e.target.closest('select');
+      if (SM) {
+        if (e.key === 'Escape' || e.key === 'Tab') { smClose(); if (e.key === 'Escape') e.preventDefault(); return; }
+        if (e.key === 'ArrowDown') { e.preventDefault(); smMark(SM.k + 1); return; }
+        if (e.key === 'ArrowUp') { e.preventDefault(); smMark(SM.k - 1); return; }
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          var items = $$('.dropdown-item:not([disabled])', SM.m);
+          if (items[SM.k]) smPick(+items[SM.k].getAttribute('data-i')); else smClose();
+          return;
+        }
+        return;
+      }
+      // no Mac, espaço e setas abrem o popup nativo: abre o nosso no lugar
+      if (smUsable(sel) && (e.key === ' ' || e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        smOpen(sel);
+      }
+    }, true);
+    window.addEventListener('scroll', function (e) { if (SM && !SM.m.contains(e.target)) smClose(); }, true);
+    window.addEventListener('resize', smClose);
+    window.addEventListener('blur', smClose);
+  }
+
+  // ==========================================================================
+  // 3c. Vidro com REFRAÇÃO nas placas grandes (o "liquid glass" do Pane)
+  // ==========================================================================
+  // O desfoque comum (12px + brilho) deixava o vidro claro leitoso: o papel de
+  // parede sumia atrás das placas. Aqui cada placa grande ganha um filtro SVG
+  // próprio — um mapa de deslocamento desenhado num canvas a partir do retângulo
+  // arredondado dela (a faixa da borda puxa o fundo para dentro, como lente),
+  // desfoque de 5,5px e saturação 1,7 — aplicado como `backdrop-filter:
+  // url(#…)`. O fundo aparece através da placa e entorta nas bordas. Só no
+  // Chromium (Chrome/Edge: é onde `backdrop-filter: url()` existe); no modo
+  // opaco e nos outros navegadores fica o desfoque do tema (pedido 20/10/2026).
+  var LG = { n: 0, svg: null, ro: null, on: false };
+  var LG_SEL = '.sidenav-menu, .otc-toolbar, .content-page .card:not(.card .card), .content-page div[class*="-panel"]:not([class*="__"]):not(.tab-pane)';
+  var LG_MAX = 28;
+  function lgSupported() {
+    var ua = navigator.userAgent || '';
+    return /Chrome\//.test(ua) && !/Firefox\//.test(ua);
+  }
+  function lgMap(w, h, r, pad, bezel) {
+    var W = w + 2 * pad, H = h + 2 * pad;
+    var k = Math.min(1, 320 / Math.max(W, H));          // o feImage estica o mapa: meia resolução basta
+    var cw = Math.max(8, Math.round(W * k)), ch = Math.max(8, Math.round(H * k));
+    var c = doc.createElement('canvas');
+    c.width = cw; c.height = ch;
+    var ctx = c.getContext('2d');
+    var img = ctx.createImageData(cw, ch), d = img.data;
+    var hw = w / 2, hh = h / 2, rr = Math.min(r, hw, hh);
+    for (var j = 0; j < ch; j++) {
+      for (var i = 0; i < cw; i++) {
+        var x = i / k - pad - hw, y = j / k - pad - hh;
+        var qx = Math.abs(x) - (hw - rr), qy = Math.abs(y) - (hh - rr);
+        var ox = Math.max(qx, 0), oy = Math.max(qy, 0);
+        var dist = Math.sqrt(ox * ox + oy * oy) + Math.min(Math.max(qx, qy), 0) - rr;   // < 0 dentro
+        var nx = 0, ny = 0, m = 0;
+        if (dist < 0 && -dist < bezel) {
+          if (qx > 0 && qy > 0) { var L = Math.sqrt(ox * ox + oy * oy) || 1; nx = ox / L; ny = oy / L; }
+          else if (qx > qy) nx = 1;
+          else ny = 1;
+          if (x < 0) nx = -nx;
+          if (y < 0) ny = -ny;
+          var t = 1 + dist / bezel;                         // 0 no começo da faixa, 1 na borda
+          m = t * t;
+        }
+        var p = (j * cw + i) * 4;
+        d[p] = 128 - nx * m * 127;                          // amostra para DENTRO: lente
+        d[p + 1] = 128 - ny * m * 127;
+        d[p + 2] = 128;
+        d[p + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return c.toDataURL();
+  }
+  function lgApply(el) {
+    var r = el.getBoundingClientRect();
+    var w = Math.round(r.width), h = Math.round(r.height);
+    if (w < 120 || h < 44) return;
+    var key = w + 'x' + h;
+    if (el.__lgKey === key && el.style.backdropFilter) return;
+    el.__lgKey = key;
+    var rad = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 24;
+    var id = el.__lgId || (el.__lgId = 'otc-lg-' + (++LG.n));
+    var pad = 24, bezel = Math.max(10, Math.min(28, Math.min(w, h) / 4));
+    var url = lgMap(w, h, rad, pad, bezel);
+    var f = doc.getElementById(id);
+    if (!f) {
+      f = doc.createElementNS('http://www.w3.org/2000/svg', 'filter');
+      f.setAttribute('id', id);
+      f.setAttribute('filterUnits', 'userSpaceOnUse');
+      f.setAttribute('color-interpolation-filters', 'sRGB');
+      LG.svg.appendChild(f);
+    }
+    f.setAttribute('x', -pad); f.setAttribute('y', -pad);
+    f.setAttribute('width', w + 2 * pad); f.setAttribute('height', h + 2 * pad);
+    f.innerHTML =
+      '<feImage result="map" preserveAspectRatio="none" x="' + (-pad) + '" y="' + (-pad) + '" width="' + (w + 2 * pad) + '" height="' + (h + 2 * pad) + '" href="' + url + '"/>' +
+      '<feDisplacementMap in="SourceGraphic" in2="map" scale="48" xChannelSelector="R" yChannelSelector="G" result="bent"/>' +
+      '<feGaussianBlur in="bent" stdDeviation="5.5" result="frost"/>' +
+      '<feColorMatrix in="frost" type="saturate" values="1.7"/>';
+    el.style.setProperty('-webkit-backdrop-filter', 'url(#' + id + ')');
+    el.style.setProperty('backdrop-filter', 'url(#' + id + ')');
+    if (LG.ro) LG.ro.observe(el);
+  }
+  function lgClear() {
+    $$('[style*="backdrop-filter"]').forEach(function (el) {
+      if (!el.__lgId) return;
+      el.style.removeProperty('backdrop-filter');
+      el.style.removeProperty('-webkit-backdrop-filter');
+      el.__lgKey = null;
+    });
+  }
+  function lgScan() {
+    if (!LG.on || root.classList.contains('is-solid')) { lgClear(); return; }
+    var els = $$(LG_SEL).filter(function (el) {
+      return el.getClientRects().length > 0 && !el.closest('.modal, .offcanvas, .dropdown-menu');   // fixed: offsetParent é nulo
+    });
+    els.sort(function (a, b) {
+      var ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+      return rb.width * rb.height - ra.width * ra.height;
+    });
+    els.slice(0, LG_MAX).forEach(lgApply);
+  }
+  function initLiquidGlass() {
+    if (!lgSupported()) return;
+    LG.on = true;
+    LG.svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    LG.svg.setAttribute('aria-hidden', 'true');
+    LG.svg.setAttribute('width', '0'); LG.svg.setAttribute('height', '0');
+    LG.svg.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none';
+    doc.body.appendChild(LG.svg);
+    var again = window.debounce ? window.debounce(lgScan, 180) : lgScan;
+    if (window.ResizeObserver) LG.ro = new ResizeObserver(function (ents) {
+      ents.forEach(function (en) { if (en.target.__lgId) en.target.__lgKey = null; });
+      again();
+    });
+    // placas que a tela monta depois do load, e o modo opaco ligado/desligado
+    var page = doc.querySelector('.content-page');
+    if (page && window.MutationObserver) new MutationObserver(again).observe(page, { childList: true, subtree: true });
+    new MutationObserver(again).observe(root, { attributes: true, attributeFilter: ['class'] });
+    setTimeout(lgScan, 60);
+  }
+
+  // ==========================================================================
+  // 3d. O aviso de AÇÃO (o do Pane): pílula preta, círculo verde com o check,
+  // o texto e o "Undo" — logo abaixo da barra do topo. Para o que a pessoa
+  // acabou de fazer (o card movido, a tarefa concluída): `otcToast('Done: X',
+  // { undo: fn })`. Some sozinho em 5s; o Undo chama `fn` e fecha.
+  // ==========================================================================
+  var TOAST_T = { en: 'Undo', br: 'Desfazer', es: 'Deshacer' };
+  function otcToast(msg, opts) {
+    opts = opts || {};
+    var old = doc.querySelector('.otc-toast');
+    if (old) old.remove();
+    var el = doc.createElement('div');
+    el.className = 'otc-toast' + (opts.error ? ' is-error' : '');
+    el.setAttribute('role', 'status');
+    var lang = 'en';
+    try { lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) {}
+    el.innerHTML = '<span class="otc-toast__ico">' + (opts.error
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>') +
+      '</span><span class="otc-toast__msg"></span>' +
+      (opts.undo ? '<button type="button" class="otc-toast__undo">' + esc(opts.undoLabel || TOAST_T[lang] || 'Undo') + '</button>' : '');
+    el.querySelector('.otc-toast__msg').textContent = String(msg == null ? '' : msg);
+    doc.body.appendChild(el);
+    var fecha = function () {
+      el.classList.add('is-leaving');
+      setTimeout(function () { el.remove(); }, 260);
+    };
+    var timer = setTimeout(fecha, opts.ms || 5000);
+    var undo = el.querySelector('.otc-toast__undo');
+    if (undo) undo.addEventListener('click', function () { clearTimeout(timer); fecha(); try { opts.undo(); } catch (e) {} });
+    el.addEventListener('mouseenter', function () { clearTimeout(timer); });
+    el.addEventListener('mouseleave', function () { timer = setTimeout(fecha, 2500); });
+    return el;
+  }
+  window.otcToast = otcToast;
+
+  // ==========================================================================
+  // 3e. A ILHA do foco (o "island" do Pane): uma pílula preta sob a barra do
+  // topo com o anel e o tempo, em QUALQUER página, enquanto há sessão. O estado
+  // fica no localStorage (a ilha conta sem ir ao servidor e acompanha as abas
+  // pelo evento `storage`); o SERVIDOR é avisado de cada passo
+  // (`/api/user-home/focus`) — é de lá que a User Home soma o foco do dia e os
+  // colegas veem "In focus · until 11:30". Acabou o foco: avisa (toast e, com
+  // a preferência ligada e a permissão dada, a notificação do sistema), grava a
+  // sessão e começa a PAUSA da Settings, que a ilha conta em verde.
+  // ==========================================================================
+  var FOCUS_KEY = '__OTC_FOCUS__', FOCUS_PREFS_KEY = '__OTC_FOCUS_PREFS__';
+  var FOCUS_T = {
+    en: { focus: 'Focus', paused: 'Paused', brk: 'Break', done: 'Focus finished', done_brk: 'Focus finished — {n}-minute break', brk_over: 'Break over' },
+    br: { focus: 'Foco', paused: 'Pausado', brk: 'Pausa', done: 'Foco concluído', done_brk: 'Foco concluído — pausa de {n} min', brk_over: 'Fim da pausa' },
+    es: { focus: 'Foco', paused: 'En pausa', brk: 'Pausa', done: 'Foco terminado', done_brk: 'Foco terminado — pausa de {n} min', brk_over: 'Fin de la pausa' }
+  };
+  function fT(k, n) {
+    var lang = 'en';
+    try { lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) {}
+    var m = FOCUS_T[lang] || FOCUS_T.en;
+    return String(m[k] || FOCUS_T.en[k] || k).replace('{n}', n);
+  }
+  function fRead() { try { return JSON.parse(localStorage.getItem(FOCUS_KEY) || 'null'); } catch (e) { return null; } }
+  function fWrite(st) {
+    try { if (st) localStorage.setItem(FOCUS_KEY, JSON.stringify(st)); else localStorage.removeItem(FOCUS_KEY); } catch (e) {}
+    fRender(); fEmit();
+  }
+  function fPrefs(p) {
+    if (p) { try { localStorage.setItem(FOCUS_PREFS_KEY, JSON.stringify(p)); } catch (e) {} return p; }
+    try { return JSON.parse(localStorage.getItem(FOCUS_PREFS_KEY) || 'null') || {}; } catch (e) { return {}; }
+  }
+  function fLeft(st) {
+    if (!st) return 0;
+    if (st.left != null) return Math.max(0, st.left);
+    return Math.max(0, Math.round((st.ends - Date.now()) / 1000));
+  }
+  var fListeners = [];
+  function fEmit() { var st = fRead(); fListeners.forEach(function (cb) { try { cb(st); } catch (e) {} }); }
+  function fPost(action, body) {
+    var b = { action: action };
+    for (var k in (body || {})) if (Object.prototype.hasOwnProperty.call(body, k)) b[k] = body[k];
+    return fetch('/api/user-home/focus', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(b)
+    }).then(function (r) { return r.json().then(function (d) { if (!r.ok || d.success === false) { var e = new Error(d.text || 'HTTP ' + r.status); e.code = d.code; throw e; } return d; }); });
+  }
+  // o estado do SERVIDOR vira o da ilha (a User Home chama ao carregar)
+  function fAdopt(srv) {
+    var cur = fRead();
+    if (!srv) { if (cur && cur.kind === 'focus') fWrite(null); return; }
+    fWrite({ kind: 'focus', total: (srv.minutes || 25) * 60, title: srv.task_title || '',
+             left: srv.paused ? srv.remaining : null, ends: srv.paused ? null : Date.now() + srv.remaining * 1000 });
+  }
+  var otcFocus = {
+    state: fRead, left: function () { return fLeft(fRead()); }, prefs: fPrefs, adopt: fAdopt,
+    on: function (cb) { fListeners.push(cb); },
+    start: function (minutes, task) {
+      task = task || {};
+      return fPost('start', { minutes: minutes, task_id: task.task_id || '', project_id: task.project_id || '' })
+        .then(function (d) { fAdopt(d.focus); return d; });
+    },
+    pause: function () { return fPost('pause').then(function (d) { fAdopt(d.focus); return d; }); },
+    resume: function () { return fPost('resume').then(function (d) { fAdopt(d.focus); return d; }); },
+    end: function () { return fPost('end').then(function (d) { fWrite(null); return d; }); },
+    skipBreak: function () { var st = fRead(); if (st && st.kind === 'break') fWrite(null); }
+  };
+  window.otcFocus = otcFocus;
+
+  var fIsland = null;
+  function fRender() {
+    if (!fIsland) return;
+    var st = fRead();
+    if (!st) { fIsland.hidden = true; doc.body.classList.remove('otc-has-island'); return; }
+    var left = fLeft(st), total = st.total || 1;
+    fIsland.hidden = false;
+    doc.body.classList.add('otc-has-island');
+    fIsland.classList.toggle('is-break', st.kind === 'break');
+    fIsland.classList.toggle('is-paused', st.left != null && st.kind === 'focus');
+    fIsland.querySelector('.otc-island__label').textContent = st.kind === 'break' ? fT('brk') : (st.left != null ? fT('paused') : fT('focus'));
+    fIsland.querySelector('.otc-island__time').textContent = Math.floor(left / 60) + ':' + ('0' + (left % 60)).slice(-2);
+    var c = 2 * Math.PI * 7;
+    var bar = fIsland.querySelector('.is-bar');
+    bar.setAttribute('stroke-dasharray', c.toFixed(2));
+    bar.setAttribute('stroke-dashoffset', (c * (1 - left / total)).toFixed(2));
+    fIsland.title = st.title || '';
+  }
+  function fFinish(st) {
+    // uma aba só encerra: a primeira marca o estado, as outras veem a marca
+    if (st.finishing && Date.now() - st.finishing < 15000) return;
+    st.finishing = Date.now();
+    try { localStorage.setItem(FOCUS_KEY, JSON.stringify(st)); } catch (e) {}
+    var pr = fPrefs(), brk = parseInt(pr.break_minutes, 10);
+    if (!(brk >= 0)) brk = 5;
+    fPost('end').catch(function () {}).then(function () {
+      if (brk > 0) fWrite({ kind: 'break', total: brk * 60, ends: Date.now() + brk * 60000, left: null });
+      else fWrite(null);
+      var msg = brk > 0 ? fT('done_brk', brk) : fT('done');
+      if (window.otcToast) window.otcToast(msg);
+      var want = !pr.notify || pr.notify.focus_finished !== false;
+      if (want && 'Notification' in window && Notification.permission === 'granted') {
+        try { new Notification('OTC Tracker', { body: msg + (st.title ? ' · ' + st.title : '') }); } catch (e) {}
+      }
+    });
+  }
+  function initFocusIsland() {
+    if (!doc.querySelector('.otc-toolbar')) return;          // só nas telas com a casca
+    fIsland = doc.createElement('a');
+    fIsland.className = 'otc-island';
+    fIsland.href = '/user-home#focus';
+    fIsland.hidden = true;
+    fIsland.innerHTML = '<svg viewBox="0 0 18 18" aria-hidden="true"><circle class="is-track" cx="9" cy="9" r="7"/><circle class="is-bar" cx="9" cy="9" r="7"/></svg>' +
+      '<span class="otc-island__label"></span><span class="otc-island__time"></span>';
+    doc.body.appendChild(fIsland);
+    fRender();
+    setInterval(function () {
+      var st = fRead();
+      if (!st) return;
+      if (st.left == null && fLeft(st) <= 0) {
+        if (st.kind === 'focus') fFinish(st);
+        else { fWrite(null); if (window.otcToast) window.otcToast(fT('brk_over')); }
+        return;
+      }
+      fRender(); fEmit();
+    }, 1000);
+    window.addEventListener('storage', function (e) { if (e.key === FOCUS_KEY) { fRender(); fEmit(); } });
+  }
+
+  // ==========================================================================
   // 4. Paleta de comandos (Ctrl+K; no Mac também ⌘K)
   // ==========================================================================
   var Pal = null;
@@ -740,19 +1139,22 @@
     grove: 'radial-gradient(80% 70% at 10% 100%,#5e9e1f,transparent 70%),radial-gradient(70% 70% at 100% 0,#1c8f55,transparent 70%),linear-gradient(135deg,#04170e,#041a1e)',
     dusk: 'radial-gradient(80% 70% at 10% 100%,#6a5440,transparent 70%),radial-gradient(70% 70% at 100% 0,#3d425e,transparent 70%),linear-gradient(135deg,#0f1016,#17121c)'
   };
+  otcUI.accents = ACCENTS;
+  otcUI.walls = WALLS;
   function initAppearance() {
-    var sw = doc.querySelector('[data-otc-accents]');
-    if (sw && !sw.children.length) {
+    // TODA lista na página (a gaveta de Aparência e a tela Settings, §632)
+    $$('[data-otc-accents]').forEach(function (sw) {
+      if (sw.children.length) return;
       sw.innerHTML = Object.keys(ACCENTS).map(function (k) {
         return '<button type="button" class="otc-swatch" data-accent-pick="' + k + '" style="--sw:' + ACCENTS[k] + '" aria-label="' + k + '" title="' + k.charAt(0).toUpperCase() + k.slice(1) + '"></button>';
       }).join('');
-    }
-    var wl = doc.querySelector('[data-otc-walls]');
-    if (wl && !wl.children.length) {
+    });
+    $$('[data-otc-walls]').forEach(function (wl) {
+      if (wl.children.length) return;
       wl.innerHTML = Object.keys(WALLS).map(function (k) {
         return '<button type="button" class="otc-wall" data-wall-pick="' + k + '"><span class="art" style="--art:' + WALLS[k] + '"></span>' + k.charAt(0).toUpperCase() + k.slice(1) + '</button>';
       }).join('');
-    }
+    });
     doc.addEventListener('click', function (e) {
       var a = e.target.closest('[data-accent-pick]');
       if (a) { otcUI.set({ accent: a.getAttribute('data-accent-pick') }, false); return; }
@@ -763,8 +1165,9 @@
       var g = e.target.closest('[data-glass-pick]');
       if (g) { otcUI.set({ glass: g.getAttribute('data-glass-pick') }, false); return; }
     });
-    var solid = doc.querySelector('[data-otc-solid]');
-    if (solid) solid.addEventListener('change', function () { otcUI.fx(solid.checked ? 'reduced' : 'full'); });
+    $$('[data-otc-solid]').forEach(function (solid) {
+      solid.addEventListener('change', function () { otcUI.fx(solid.checked ? 'reduced' : 'full'); });
+    });
     syncAppearance();
   }
   function syncAppearance() {
@@ -773,8 +1176,7 @@
     $$('[data-wall-pick]').forEach(function (b) { b.classList.toggle('is-on', b.getAttribute('data-wall-pick') === p.wall); });
     $$('[data-theme-pick]').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-theme-pick') === p.theme); });
     $$('[data-glass-pick]').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-glass-pick') === p.glass); });
-    var solid = doc.querySelector('[data-otc-solid]');
-    if (solid) solid.checked = root.classList.contains('is-solid');
+    $$('[data-otc-solid]').forEach(function (solid) { solid.checked = root.classList.contains('is-solid'); });
     $$('.nav[data-otc-seg]').forEach(function (n) { placeSegLens(n, true); });
   }
 
@@ -965,8 +1367,8 @@
   // a página escreveu (a formatação dela), a contagem só passa pelos inteiros
   // no caminho. Valor com casa decimal, moeda ou % não conta (só pisca).
   // ==========================================================================
-  var STAT_VALUES = '.otc-stat__value, .otc-legend__value[id], [class*="-widget__value"], .acc-stat__value, .ob-stat__n, .widget-val';
-  var STAT_TILES = '.otc-stat, div[class*="-widget"]:not([class*="__"]), .acc-stat, .ob-stat, .recon-widget';
+  var STAT_VALUES = '.otc-stat__value, .otc-legend__value[id], [class*="-widget__value"], .acc-stat__value, .ob-stat__n, .widget-val, .im-kpi > b, .im-prev-top > b, .cgd-kpi__n, .cfm-kpi__n, .mc-w__val';
+  var STAT_TILES = '.otc-stat, div[class*="-widget"]:not([class*="__"]), .acc-stat, .ob-stat, .recon-widget, .im-kpi, .cgd-kpi, .cfm-kpi, .mc-w';
   function statNumber(txt) {
     return /^-?\d{1,3}(,\d{3})*$|^-?\d+$/.test(txt) ? parseFloat(txt.replace(/[^\d-]/g, '')) : NaN;
   }
@@ -1001,6 +1403,18 @@
     requestAnimationFrame(frame);
   }
   function initStats() {
+    bindStats();
+    // card montado pela tela DEPOIS do load (CGD, Conf. Matching): liga ao nascer
+    var page = doc.querySelector('.content-page');
+    if (page && window.MutationObserver) {
+      new MutationObserver(window.debounce ? window.debounce(bindStats, 60) : bindStats)
+        .observe(page, { childList: true, subtree: true });
+    }
+    doc.addEventListener('animationend', function (e) {
+      if (e.animationName === 'otc-stat-ring') e.target.classList.remove('is-flash');
+    });
+  }
+  function bindStats() {
     $$(STAT_VALUES).forEach(function (el) {
       if (el.__otcStat) return;
       el.__otcStat = true;
@@ -1010,9 +1424,6 @@
         animateStat(el, first);
       }).observe(el, { childList: true, characterData: true, subtree: true });
       animateStat(el, true);
-    });
-    doc.addEventListener('animationend', function (e) {
-      if (e.animationName === 'otc-stat-ring') e.target.classList.remove('is-flash');
     });
   }
 
@@ -1254,6 +1665,9 @@
     });
 
     initSegments();
+    initSelectMenus();
+    initFocusIsland();
+    initLiquidGlass();
     initEntrance();
     initStats();
 

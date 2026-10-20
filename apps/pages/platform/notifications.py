@@ -93,6 +93,7 @@ _NOTIF_PAGE_URL = {
     'Confirmation': '/manual-confirmation/monitor',
     'Support': '/tickets-list',
     'Projects': '/projects',
+    'User Home': '/user-home',
     # Nove páginas gravavam notificação SEM entrada aqui — o aviso aparecia no
     # sino e o clique não ia a lugar nenhum (o TED Release do Other Products
     # Summary foi como isso apareceu). Todo rótulo `page` passado a
@@ -114,7 +115,8 @@ _NOTIF_PAGE_URL = {
     'File Interface':         '/file-interpreter',
     'File Interpreter':       '/file-interpreter',
     'Mapping':                '/mapping',
-    'Holidays Calendar':      '/holidays-calendar',
+    'Holidays Calendar':      '/holidays-calendar',   # avisos antigos (antes de 20/10/2026)
+    'Calendar':               '/holidays-calendar',
 }
 
 

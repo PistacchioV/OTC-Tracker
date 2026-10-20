@@ -32,30 +32,20 @@
 
         {# Só PROJETOS fixados (a estrela do Projects); vazia, a seção some. #}
         <div class="otc-side__label" data-otc-pinned-label style="display:none">
-            <span data-lang="otc-pinned">Pinned</span>
+            <span data-lang="otc-pinned">Projects Pinned</span>
         </div>
         <nav class="otc-pinned" data-sid="{{ _sid }}" aria-label="Pinned projects" style="display:none"></nav>
 
                 <ul class="side-nav">
                     <li class="side-nav-title mt-2" data-lang="menu-title">Main</li>
 
+                    <!-- Dashboards é item ÚNICO: leva direto ao KPI (o Intraday Monitor
+                         saiu para o grupo Intraday e o submenu ficou com um item só). -->
                     <li class="side-nav-item">
-                        <a data-bs-toggle="collapse" href="#sidebarDashboards" aria-expanded="false"
-                           aria-controls="sidebarDashboards"
-                           class="side-nav-link">
+                        <a href="/dashboard" class="side-nav-link">
                             <span class="menu-icon"><i data-lucide="layout-grid"></i></span>
                             <span class="menu-text" data-lang="dashboards">Dashboards</span>
-                            <span class="menu-arrow"></span>
                         </a>
-                        <div class="collapse" id="sidebarDashboards">
-                            <ul class="sub-menu">
-                                <li class="side-nav-item">
-                                    <a href="/dashboard" class="side-nav-link">
-                                        <span class="menu-text" data-lang="dashboard-one">KPI</span>
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
                     </li>
 
                     <!-- Intraday: o trabalho do dia do time — os projetos, as tarefas e o
@@ -71,6 +61,12 @@
                         </a>
                         <div class="collapse" id="sidebarIntraday">
                             <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/user-home" class="side-nav-link">
+                                        <span class="menu-icon"><i data-lucide="house"></i></span>
+                                        <span class="menu-text" data-lang="nav-user-home">User Home</span>
+                                    </a>
+                                </li>
                                 <li class="side-nav-item">
                                     <a href="/projects" class="side-nav-link">
                                         <span class="menu-icon"><i data-lucide="folder-kanban"></i></span>
@@ -100,12 +96,19 @@
                         </a>
                     </li>
 
+                    <li class="side-nav-item">
+                        <a href="/settings" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="settings"></i></span>
+                            <span class="menu-text" data-lang="nav-settings">Settings</span>
+                        </a>
+                    </li>
+
                     <li class="side-nav-title" data-lang="apps-title">Apps</li>
         
                     <li class="side-nav-item">
                         <a href="/holidays-calendar" class="side-nav-link">
                             <span class="menu-icon"><i data-lucide="calendar"></i></span>
-                            <span class="menu-text" data-lang="holidays-calendar"> Holidays Calendar </span>
+                            <span class="menu-text" data-lang="holidays-calendar">Calendar</span>
                         </a>
                     </li>
         

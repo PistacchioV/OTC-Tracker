@@ -52,6 +52,7 @@ var PAGE_URL = {
     'Intrag Unwind': '/intrag-unwind',
     'Support': '/tickets-list',
     'Projects': '/projects',
+    'User Home': '/user-home',
     'Other Products Summary': '/other-products-summary',
     'NDF Summary': '/ndf-summary',
     'Operations B3': '/operations-b3',
@@ -62,7 +63,8 @@ var PAGE_URL = {
     'File Interface': '/file-interpreter',
     'File Interpreter': '/file-interpreter',
     'Mapping': '/mapping',
-    'Holidays Calendar': '/holidays-calendar'
+    'Holidays Calendar': '/holidays-calendar',
+    'Calendar': '/holidays-calendar'
 };
 
 self.addEventListener('push', function (event) {

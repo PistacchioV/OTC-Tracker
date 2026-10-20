@@ -19,14 +19,23 @@
 
     <div class="content-page">
 
-        {% block page_content %}{% endblock page_content %}
+        {# Prefetch do HTML da tela ao passar o mouse (≥200ms) num link do MENU (§632):
+   a troca de página chega quase pronta. Só links de navegação — nunca ações
+   (logout, lock, downloads, API). #}
+<script type="speculationrules">
+{"prefetch": [{"where": {"and": [{"selector_matches": ".side-nav-link[href^='/'], .otc-pinned a[href^='/']"},
+  {"not": {"href_matches": "/logout"}}, {"not": {"href_matches": "/lock*"}}, {"not": {"href_matches": "/api/*"}}, {"not": {"href_matches": "/dev-login"}}]},
+  "eagerness": "moderate"}]}
+</script>
+{% block page_content %}{% endblock page_content %}
 
         {# O ladrilho de ícone do título é o MESMO ícone da tela no menu
            lateral (o item de submenu sem ícone herda o do grupo). Fica aqui,
            síncrono logo depois do conteúdo, e não no otc.js: no rodapé o
            título já teria sido pintado sem ele e pularia para a direita.
            Tela que já desenha o próprio ícone (`-product-icon`, `<i class="ti">`
-           no h4) fica como está. #}
+           no h4) fica como está; o ícone pequeno SOLTO antes do título (o
+           desenho antigo) vira o ladrilho. #}
         <script>
         (function () {
             var head = document.querySelector('.content-page .page-title-head');
@@ -35,6 +44,19 @@
             var link = document.querySelector('.side-nav a.side-nav-link[href="' + location.pathname + '"]');
             if (!h) return;
             var glyph = null;
+            // O desenho antigo (recons, Track Confirmations, Onboarding…): um ícone
+            // pequeno SOLTO antes do título. Ele É o ícone da tela — vira o
+            // ladrilho, em vez de ganhar um segundo ícone ao lado (eram dois).
+            var solto = Array.prototype.filter.call(head.querySelectorAll('i[data-lucide], i.ti, svg'), function (e) {
+                return !e.closest('.breadcrumb, a, button') && (e.compareDocumentPosition(h) & 4);
+            })[0];
+            if (solto) {
+                var nome = solto.getAttribute('data-lucide');
+                glyph = document.createElement('i');
+                if (nome) glyph.setAttribute('data-lucide', nome);
+                else glyph.className = (solto.getAttribute('class') || '').split(/\s+/).filter(function (c) { return /^ti(-|$)/.test(c); }).join(' ');
+                solto.parentNode.removeChild(solto);
+            }
             for (var li = link && link.closest('.side-nav-item'); li && !glyph; li = li.parentElement && li.parentElement.closest('.side-nav-item')) {
                 var a = li.querySelector(':scope > a.side-nav-link .menu-icon > :first-child');
                 if (a) glyph = a.cloneNode(true);

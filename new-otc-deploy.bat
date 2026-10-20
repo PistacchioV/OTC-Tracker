@@ -13,6 +13,9 @@ REM  tela, o DuckDB de usuarios, os caches por dia, os arquivos-dia do New
 REM  Deals). Ele pertence a pasta que roda, e uma versao nova carregando a copia
 REM  da maquina de desenvolvimento sobrescreveria o que a mesa cadastrou.
 REM
+REM  MENOS static\data\translations: a i18n e codigo e vai para o DATA_DIR da
+REM  instancia numa passada propria, no fim (a mesma do hotfix.bat).
+REM
 REM  Pasta ou arquivo NOVO na aplicacao tem de entrar nas listas abaixo, senao a
 REM  versao sobe sem ele. O script AVISA quando um item listado nao existe na
 REM  origem (renomeado, movido) em vez de copiar menos em silencio.
@@ -113,6 +116,29 @@ for %%D in (%DEPLOY_DIRS%) do (
 )
 
 echo Skipped: "%EXCLUDE_DIR%"
+
+REM --- Traducoes: destino proprio, o DATA_DIR da instancia ---------------------
+REM  A i18n e CODIGO versionado, mas a instancia a le do DATA_DIR
+REM  (Application\static\data\translations, o static_data_file procura la
+REM  antes da copia empacotada) - e o static\data inteiro fica de fora da copia
+REM  acima. Sem esta passada, texto novo de tela subia com a versao e aparecia
+REM  em ingles/sem traducao. O hotfix.bat ja fazia o mesmo; a versao nova nao.
+REM  Antes do link.txt: a versao so passa a valer com os textos dela no lugar.
+set "TRANS_SRC=%ORIGIN_PATH%\static\data\translations"
+set "TRANS_DST=%SHARE_ROOT%\static\data\translations"
+if exist "%TRANS_SRC%\" (
+    echo   - static\data\translations ^(DATA_DIR da instancia^)
+    robocopy "%TRANS_SRC%" "%TRANS_DST%" *.json /COPY:DAT /R:2 /W:1 >nul
+    set "ROBOCOPY_RESULT=!ERRORLEVEL!"
+    if !ROBOCOPY_RESULT! GEQ 8 (
+        echo Error: Copy failed for the translations. Robocopy returned !ROBOCOPY_RESULT!.
+        echo        Version folder created but link.txt NOT updated - fix and retry.
+        pause
+        exit /b !ROBOCOPY_RESULT!
+    )
+) else (
+    echo Warning: "%TRANS_SRC%" not found - translations NOT updated.
+)
 
 > "%CURRENT_VERSION_FILE%" echo %NEW_VERSION%
 echo Created %NEW_VERSION% and updated link.txt.
