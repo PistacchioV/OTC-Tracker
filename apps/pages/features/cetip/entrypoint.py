@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 """As duas rotas do card Save CETIP Files."""
 import os
+import shutil
+import tempfile
 import traceback
 from datetime import datetime
 
 from flask import jsonify, request, session
 
 from apps.pages import blueprint
-from apps.pages.features.cetip import commands, queries
+from apps.pages.features.cetip import commands, domain, queries
 from apps.pages.features.cetip.infra import mail, persistence
 from apps.pages import data_store as _store  # noqa: E402
 from apps.pages.platform import task_runs
@@ -86,6 +88,14 @@ def api_cp_cetip_settlement():
                                         _R()._parse_emails(rec['bacc_to']),
                                         _R()._parse_emails(rec['hub_to']))
 
+    # Os crus da data chegam na Return do Batch Conecta (20/10/2026): primeiro
+    # eles vêm para a pasta de origem do dia, que é onde o cru fica guardado e
+    # de onde o reprocessamento de um dia passado os lê. Saem da Return só
+    # DEPOIS da rodada (mais abaixo), e só os que já estão na origem.
+    ref_yymmdd = ref.strftime('%y%m%d')
+    retorno = _R().CETIP_RETURN_PATH
+    trazidos, errors = persistence._cetip_trazer_do_retorno(retorno, src_dir, ref_yymmdd)
+
     # Ensure the dated source folder exists (B3 daily drop). On Windows create it
     # in the standard layout if missing; on dev (POSIX) just error out cleanly.
     if not _store.isdir(src_dir):
@@ -97,16 +107,20 @@ def api_cp_cetip_settlement():
                 _R().log.warning("[cetip] could not create source %s:\n%s", src_dir, traceback.format_exc())
         if not _store.isdir(src_dir):
             return jsonify({'success': False,
-                            'error': 'Source folder not found: {}'.format(src_dir)}), 400
+                            'error': 'No CETIP files for {} in the Return folder ({}), and the '
+                                     'source folder was not found: {}'.format(
+                                         ref.strftime('%d/%m/%Y'), retorno, src_dir)}), 400
 
     files = [f for f in _store.listdir(src_dir) if _store.isfile(os.path.join(src_dir, f))]
     if not files:
         return jsonify({'success': False,
-                        'error': 'No files found in the source folder: {}'.format(src_dir)}), 400
+                        'error': 'No CETIP files for {} in the Return folder ({}) nor in the '
+                                 'source folder ({})'.format(ref.strftime('%d/%m/%Y'), retorno,
+                                                             src_dir)}), 400
 
     # Make sure the destination day folder exists before saving anything.
     os.makedirs(dest_dir, exist_ok=True)
-    saved, errors = [], []
+    saved = []
     # (Sales Support / CEM Latam attachments are gathered in stage 2 from dest_dir,
     # so stage 1 only saves + e-mails OTC Ops — see _cetip_distribute_emails.)
 
@@ -114,7 +128,6 @@ def api_cp_cetip_settlement():
     # files land in the single per-day destination folder, renamed. Rules with no
     # matching source file are collected in `missing` so the e-mail can flag the
     # expected-but-absent files (expected name derived from the reference date).
-    ref_yymmdd = ref.strftime('%y%m%d')
     missing = []
     # O arquivo salvo NÃO é o que as telas leem: quem alimenta o Live Position, o
     # Settlement Forecast, a Swap Characteristics e o Other Products é o JSON que
@@ -128,66 +141,91 @@ def api_cp_cetip_settlement():
     json_falhou = []
     # Anexos do e-mail de stage 1 (OTC Ops) — hoje só o cadastro de domínios.
     ops_anexos = []
-    for rule in queries._cetip_rules():
-        rule_matched = False
-        for name in files:
-            if not rule['match'](name.lower()):
-                continue
-            rule_matched = True
-            dref = name[rule['date_start']:rule['date_start'] + 6]
-            if len(dref) < 6 or not dref.isdigit():
-                errors.append({'file': name, 'type': rule['label'],
-                               'error': 'Could not parse date from filename.'})
-                continue
-            dest_name = rule['dest_name'](dref)
-            dest_path = os.path.join(dest_dir, dest_name)
-            src_path  = os.path.join(src_dir, name)
-            try:
-                persistence._cetip_save_file(src_path, dest_path)
-                entry = {'src': name, 'dest': dest_name, 'type': rule['label']}
-                saved.append(entry)
-                # Also emit a tidy JSON (NDF / Option / Swap / Operations), split
-                # into per-day folders (<category>/YYYY/MM/DD/).
-                if rule.get('json'):
-                    if _R()._b3_export_json(dest_path, rule['json'], dest_name, dref) is None:
-                        json_falhou.append({'dest': dest_name, 'type': rule['label']})
-                        _R().log.warning('[cetip] %s salvo, mas o JSON do dia NAO foi gerado '
-                                         '(categoria %s, ref %s): as telas que leem esse '
-                                         'arquivo vao continuar no dia anterior. O motivo esta '
-                                         'na linha [b3-json] logo acima.',
-                                         dest_name, rule['json'].get('category', '?'), dref)
-                # INDEXADORESSWAP_VCP → refresh the VCP indexer reference JSON.
-                if rule.get('vcp_update'):
-                    persistence._cetip_update_vcp_json(dest_path)
-                # CADASTROCURVASMOEDASFEEDERDOMINIOS → atualiza a base de domínios.
-                if rule.get('dominio_update'):
-                    persistence._cetip_update_dominio_json(dest_path)
-                # CETIP_YYMMDD_COE → atualiza a base de ativos subjacentes.
-                if rule.get('subj_update'):
-                    persistence._cetip_update_subj_json(dest_path)
-                # Anexo do e-mail de stage 1 (OTC Ops). O caminho é o do arquivo
-                # JÁ SALVO no destino — nunca o da origem: é o que foi salvo que
-                # se confere, e a origem some no dia seguinte.
-                if rule.get('attach_ops'):
-                    ops_anexos.append(dest_path)
-            except Exception as e:
-                errors.append({'file': name, 'type': rule['label'], 'error': str(e)})
-                continue
-            # Optional secondary copy to a flat network share (mirrors Alteryx 2nd output).
-            extra = rule.get('extra_dest')
-            if extra:
+    # O que de fato se usou da pasta de origem: o resto (os arquivos da B3 que o
+    # cadastro não pede) fica guardado lá, e a rodada diz quantos são — é por
+    # ele que se acha um arquivo cujo nome mudou e parou de casar.
+    usados = set()
+    # O cru compactado (o que vem da Return) é aberto num temporário: o que fica
+    # guardado na origem é o arquivo como a B3 o entregou.
+    tmp_cru = tempfile.mkdtemp(prefix='cetip-cru-')
+    try:
+        for rule in queries._cetip_rules():
+            # A comparação é pelo nome ANTIGO (o do cadastro): o nome novo da
+            # Return volta a ele sem o envelope (`domain._cetip_nome_legado`).
+            # A MESMA linha pode ter mais de uma entrega da mesma data (a B3
+            # reenvia com outra sequência): vale a mais nova, e as outras ficam
+            # guardadas na origem sem ir para o destino.
+            por_data = {}
+            for name in files:
+                chave = domain._cetip_nome_legado(name)
+                if not rule['match'](chave.lower()):
+                    continue
+                dref = chave[rule['date_start']:rule['date_start'] + 6]
+                por_data.setdefault(dref, []).append(name)
+            if not por_data:
                 try:
-                    os.makedirs(extra, exist_ok=True)
-                    persistence._cetip_save_file(src_path, os.path.join(extra, dest_name))
+                    exp = rule['dest_name'](ref_yymmdd)
                 except Exception:
-                    _R().log.warning("[cetip] secondary copy failed %s → %s:\n%s",
-                                name, extra, traceback.format_exc())
-        if not rule_matched:
-            try:
-                exp = rule['dest_name'](ref_yymmdd)
-            except Exception:
-                exp = ''
-            missing.append({'dest': exp, 'type': rule['label']})
+                    exp = ''
+                missing.append({'dest': exp, 'type': rule['label']})
+                continue
+            for dref, nomes in sorted(por_data.items()):
+                usados.update(nomes)
+                name = max(nomes, key=domain._cetip_ordem)
+                if len(dref) < 6 or not dref.isdigit():
+                    errors.append({'file': name, 'type': rule['label'],
+                                   'error': 'Could not parse date from filename.'})
+                    continue
+                dest_name = rule['dest_name'](dref)
+                dest_path = os.path.join(dest_dir, dest_name)
+                try:
+                    src_path = persistence._cetip_texto_cru(os.path.join(src_dir, name), tmp_cru)
+                    persistence._cetip_save_file(src_path, dest_path)
+                    entry = {'src': name, 'dest': dest_name, 'type': rule['label']}
+                    saved.append(entry)
+                    # Also emit a tidy JSON (NDF / Option / Swap / Operations), split
+                    # into per-day folders (<category>/YYYY/MM/DD/).
+                    if rule.get('json'):
+                        if _R()._b3_export_json(dest_path, rule['json'], dest_name, dref) is None:
+                            json_falhou.append({'dest': dest_name, 'type': rule['label']})
+                            _R().log.warning('[cetip] %s salvo, mas o JSON do dia NAO foi gerado '
+                                             '(categoria %s, ref %s): as telas que leem esse '
+                                             'arquivo vao continuar no dia anterior. O motivo esta '
+                                             'na linha [b3-json] logo acima.',
+                                             dest_name, rule['json'].get('category', '?'), dref)
+                    # INDEXADORESSWAP_VCP → refresh the VCP indexer reference JSON.
+                    if rule.get('vcp_update'):
+                        persistence._cetip_update_vcp_json(dest_path)
+                    # CADASTROCURVASMOEDASFEEDERDOMINIOS → atualiza a base de domínios.
+                    if rule.get('dominio_update'):
+                        persistence._cetip_update_dominio_json(dest_path)
+                    # CETIP_YYMMDD_COE → atualiza a base de ativos subjacentes.
+                    if rule.get('subj_update'):
+                        persistence._cetip_update_subj_json(dest_path)
+                    # Anexo do e-mail de stage 1 (OTC Ops). O caminho é o do arquivo
+                    # JÁ SALVO no destino — nunca o da origem: é o que foi salvo que
+                    # se confere, e a origem some no dia seguinte.
+                    if rule.get('attach_ops'):
+                        ops_anexos.append(dest_path)
+                except Exception as e:
+                    errors.append({'file': name, 'type': rule['label'], 'error': str(e)})
+                    continue
+                # Optional secondary copy to a flat network share (mirrors Alteryx 2nd output).
+                extra = rule.get('extra_dest')
+                if extra:
+                    try:
+                        os.makedirs(extra, exist_ok=True)
+                        persistence._cetip_save_file(src_path, os.path.join(extra, dest_name))
+                    except Exception:
+                        _R().log.warning("[cetip] secondary copy failed %s → %s:\n%s",
+                                         name, extra, traceback.format_exc())
+    finally:
+        shutil.rmtree(tmp_cru, ignore_errors=True)
+
+    # Os crus que vieram da Return já estão guardados na origem: saem de lá.
+    do_retorno, erros_apagar = persistence._cetip_apagar_do_retorno(trazidos)
+    errors.extend(erros_apagar)
+    sem_cadastro = sorted(set(files) - usados)
 
     # O Intraday Monitor cobra o Save do dia (tarefa `save-cetip`): conta como
     # feito quando ao menos um arquivo foi salvo — pasta vazia não é rotina feita.
@@ -230,6 +268,12 @@ def api_cp_cetip_settlement():
             attachments=ops_anexos)
 
     msg = '<b>{}</b> file(s) saved.'.format(len(saved))
+    if do_retorno:
+        msg += ('<br>{} raw file(s) moved from the Return folder to the source folder.'
+                .format(len(do_retorno)))
+    if sem_cadastro:
+        msg += ('<br><span class="text-muted">{} other raw file(s) kept in the source folder '
+                '— not in the CETIP Files mapping.</span>'.format(len(sem_cadastro)))
     if errors:
         msg += '<br><span class="text-warning">{} file(s) skipped/failed.</span>'.format(len(errors))
     if json_falhou:
@@ -247,4 +291,5 @@ def api_cp_cetip_settlement():
     return jsonify({'success': True, 'message': msg, 'saved': saved, 'errors': errors,
                     'json_failed': json_falhou,
                     'source': src_dir, 'destination': dest_dir,
+                    'return': retorno, 'from_return': do_retorno, 'unmatched': sem_cadastro,
                     'email_sent': {'otc_ops': mail_ops}})

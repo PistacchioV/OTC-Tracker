@@ -2777,7 +2777,12 @@ def control_panel():
 #  Destination folder:       CETIP_DEST_ROOT\{YYYY}\{mm. Month}\{DD}
 #  (both keyed on the reference date; the file date in the rename still comes
 #   from the source filename via Substring)
+#  Arrivals (since 20/10/2026): CETIP_RETURN_PATH — a pasta Return do Batch
+#  Conecta, onde a B3 deixa os arquivos crus compactados e no nome novo
+#  (`73760_CETIP_261019_SP_…zip.S<n>`). A rotina os traz para a pasta de
+#  origem do dia, processa de lá e os apaga da Return (features/cetip).
 # ----------------------------------------------------------------------------
+CETIP_RETURN_PATH = os.getenv('CETIP_RETURN_PATH', Config.CONECTA_RETURN_PATH)
 CETIP_SOURCE_ROOT = os.getenv('CETIP_SOURCE_ROOT', os.path.join(
     Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Alteryx',
     'Posição B3', 'ARQUIVOS CETIP'))
@@ -12037,6 +12042,13 @@ def _cetip_files_upgrade(rows):
     for linha in _CETIP_FILES_SEED:
         if _cetip_domain._cetip_paren_key(linha['TYPE']) not in have:
             rows.append(dict(linha))
+    # O cadastro de ativos subjacentes chega na Return como
+    # `…_COE_ATIVOS_SUBJACENTES` (20/10/2026), e a linha da mesa o chamava pelo
+    # nome curto — com ele, `_COE` não é o FINAL do nome e a linha não casaria
+    # mais. Só muda a linha que está EXATAMENTE assim: editada, é da mesa.
+    for r in rows:
+        if isinstance(r, dict) and str(r.get('SOURCE') or '').strip().upper() == 'CETIP_YYMMDD_COE':
+            r['SOURCE'] = 'CETIP_YYMMDD_COE_ATIVOS_SUBJACENTES'
     return rows
 
 

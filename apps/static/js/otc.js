@@ -1516,7 +1516,9 @@
   // página dispara em seguida (fetch e XHR/jQuery). Se a página abre uma
   // confirmação (Swal) antes de enviar, a janela começa quando ela fecha. Sem
   // pedido nenhum, o botão volta quieto — nada foi enviado.
-  var SEND_SEL = '.btn-row-send, .acc-act-send, .btn-send, .otc-send';
+  // `.otc-send-batch` é o Send EM LOTE da barra de ferramentas (as linhas
+  // marcadas): a mesma animação, sem o visual de pílula do `.btn-send`.
+  var SEND_SEL = '.btn-row-send, .acc-act-send, .btn-send, .otc-send, .otc-send-batch';
   var S = null;                                         // o envio "armado"
   var OK_SVG = '<svg class="otc-send__ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
   function decorate(btn) {
@@ -1524,12 +1526,18 @@
     btn.__otcSend = true;
     var square = btn.offsetWidth && btn.offsetWidth < 48;
     if (!square) {
+      // O rótulo é o que some quando o avião decola: o texto solto ganha um
+      // span, e o rótulo que a página já pôs num elemento (`<span data-lang>`,
+      // o contador das linhas marcadas) ganha a classe — sem trocar o nó, que
+      // a página continua atualizando por id.
       Array.prototype.slice.call(btn.childNodes).forEach(function (n) {
         if (n.nodeType === 3 && n.textContent.trim()) {
           var s = doc.createElement('span');
           s.className = 'otc-send__label';
           s.textContent = n.textContent;
           btn.replaceChild(s, n);
+        } else if (n.nodeType === 1 && !/^(i|svg)$/i.test(n.tagName)) {
+          n.classList.add('otc-send__label');
         }
       });
     }

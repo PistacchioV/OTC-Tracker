@@ -347,7 +347,7 @@ $(document).ready(function () {
             var actions = document.querySelector('.conditionalActions');
             if (actions) {
                 actions.innerHTML =
-                    '<button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all d-none" id="btnSend" type="button" data-table-send-selected><i class="ti ti-brand-telegram me-1"></i> Send</button>' +
+                    '<button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all d-none otc-send-batch" id="btnSend" type="button" data-table-send-selected><i class="ti ti-brand-telegram me-1"></i> Send</button>' +
                     '<button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="btnDel" type="button" data-table-delete-selected><i class="ti ti-trash me-1"></i> Delete</button>';
                 document.getElementById('btnSend').addEventListener('click', function () { sendRows(Array.from(selected)); });
                 document.getElementById('btnDel').addEventListener('click', function () { deleteRows(Array.from(selected)); });
