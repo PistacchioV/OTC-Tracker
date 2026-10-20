@@ -1557,9 +1557,14 @@ body.otc-nav-unpinned .otc-menu-btn { display: inline-grid !important; }
 .btn-group { gap: 4px; }
 
 // ícone de carregamento girando (Tabler `ti-loader*`/`.ti-spin`, 21 telas):
-// o `.ti` é inline e rotação em elemento inline é ignorada
+// o `.ti` é inline e rotação em elemento inline é ignorada. UMA volta a cada
+// 1,2 s (§644): a .8 s/.6 s do rebranding o giro parecia "maluco" — nas
+// máquinas do JP, sem GPU, a tela perde quadros durante o request, e giro
+// rápido com poucos quadros anda aos trancos ou parece voltar. O tema antigo
+// girava a 2 s. Um ritmo só para todo ícone que gira.
+:root { --otc-spin-dur: 1.2s; }
 @keyframes otc-spin { to { rotate: 360deg; } }
-i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline-block; animation: otc-spin .8s linear infinite; }
+i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline-block; animation: otc-spin var(--otc-spin-dur) linear infinite; }
 
 // "ao vivo": bolinha verde que pulsa + a hora da última leitura (telas que
 // se atualizam sozinhas); `.is-fail` quando a última leitura falhou
@@ -1572,7 +1577,7 @@ i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline
 @keyframes otc-live-pulse { 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 @media (prefers-reduced-motion: no-preference) { .otc-live > i { animation: otc-live-pulse 2.4s var(--otc-ease-out) infinite; } }
 // botão de ícone ocupado (Refresh em curso): o ícone gira
-.is-busy > i.ti { display: inline-block; animation: otc-spin .6s linear infinite; }
+.is-busy > i.ti { display: inline-block; animation: otc-spin var(--otc-spin-dur) linear infinite; }
 
 // 6b. Botões de AÇÃO DE LINHA: o squircle padrão, para TODAS as tabelas.
 // Só a GEOMETRIA leva !important: o `display` vai SEM, senão venceria o
@@ -1620,88 +1625,84 @@ table td .btn.btn-act > i { font-size: 1rem !important; line-height: 1; }
   display: none !important;
 }
 
-// 6c. SEND — o "Contrail". O botão fica com a COR DELE — o Send da linha é o
-// `btn-primary` da regra do §7, o do Accrual é `btn-success` — e a animação
-// corre POR CIMA da cor padrão (mesa, 20/10/2026: a cápsula de tinta escura
-// com avião limão destoava das outras três ações da linha). No clique o avião
-// voa deixando um rastro na cor do ícone e o verde vem atrás; "Sent" só
-// depois que o SERVIDOR confirmou (otc.js correlaciona o pedido). Erro: o
-// verde recua com um tremor, em vermelho. O Send EM LOTE da barra
-// (`.otc-send-batch`, as linhas marcadas) tem a MESMA animação, sem o visual
-// de pílula com rótulo em caixa alta do `.btn-send`: a barra fica como está.
+// 6c. SEND — o "Contrail" (o vídeo de referência da mesa, §644). O botão fica
+// com a COR DELE o tempo todo — o Send da linha é o `btn-primary` da regra do
+// §7, o do Accrual é `btn-success`, o da barra é o que a tela pôs —, e a
+// animação é a do modelo, por cima dela: no clique o rótulo some e o avião vai
+// na PONTA de um preenchimento que avança da esquerda (um tom mais claro da
+// própria cor do botão — a cor do texto dele em transparência, que clareia o
+// azul e escurece o claro); "Sent" só depois que o SERVIDOR confirmou (otc.js
+// correlaciona o pedido), e na volta o preenchimento recua para a esquerda até
+// um ponto e o rótulo volta. Erro: o preenchimento recua com um tremor. Nada
+// troca de cor (mesa, 20/10/2026: o verde do "Sent" mudava a cor do botão).
+// O Send EM LOTE da barra (`.otc-send-batch`) tem a MESMA animação, sem o
+// visual de pílula com rótulo em caixa alta do `.btn-send`.
 .btn-row-send, .acc-act-send, .btn-send, .otc-send, .otc-send-batch {
-  --otc-send-ok: #10b04a;
-  --otc-send-err: #e5484d;
-  --otc-send-r: 999px;               // o canto do verde: pílula aqui, squircle abaixo
+  --otc-send-r: 999px;               // o canto do preenchimento: pílula aqui, squircle abaixo
   --otc-fill-w: 0%;
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  > i, > svg { transition: rotate 220ms var(--otc-ease-out), translate 220ms var(--otc-ease-out), opacity 160ms ease; }
+  > i, > svg { transition: rotate 220ms var(--otc-ease-out), opacity 140ms ease; }
   > i.ti-brand-telegram, > i.ti-send { rotate: 0deg; }
-  &:hover > i.ti-brand-telegram, &:hover > i.ti-send, &.is-flying > i { rotate: 45deg; }
+  &:hover > i.ti-brand-telegram, &:hover > i.ti-send { rotate: 45deg; }
   .otc-send__fill {
-    position: absolute; inset: 0; z-index: -1;
-    border-radius: inherit;
-    // o verde leva o MESMO brilho de gel do botão (`--ins-gradient`, §6a):
-    // chapado, ele parecia um adesivo por cima das outras três ações
-    background-color: var(--otc-send-ok);
-    background-image: var(--ins-gradient, none);
-    clip-path: inset(0 calc(100% - var(--otc-fill-w)) 0 0 round var(--otc-send-r));
+    position: absolute; left: 0; top: 0; bottom: 0; z-index: -1;
+    width: var(--otc-fill-w);
+    border-radius: var(--otc-send-r);
+    background: color-mix(in srgb, currentColor 26%, transparent);
     pointer-events: none;
   }
-  .otc-send__trail {
-    position: absolute; left: 30%; top: 50%; z-index: -1;
-    width: 0; height: 1.5px; translate: 0 -50%;
-    background: linear-gradient(90deg, transparent, color-mix(in srgb, currentColor 75%, transparent));
-    opacity: 0; pointer-events: none;
+  // o avião que vai na ponta do preenchimento: uma cópia do ícone do botão
+  .otc-send__rider {
+    position: absolute; top: 50%; right: 0;
+    translate: calc(100% + 2px) -50%; rotate: 45deg;
+    font-size: 1rem; line-height: 1; opacity: 0;
+    transition: opacity 120ms ease;
   }
   .otc-send__done {
     position: absolute; inset: 0; z-index: 1;
     display: grid; place-items: center;
-    color: #fff; opacity: 0; filter: blur(4px);
+    color: inherit; opacity: 0; filter: blur(4px);
     font-weight: 750; letter-spacing: .1em; text-transform: uppercase; font-size: .78em;
     transition: opacity .22s ease .05s, filter .22s ease .05s;
     pointer-events: none;
     svg { width: 16px; height: 16px; stroke-width: 2.6; }
   }
-  .otc-send__label { transition: opacity .16s ease, filter .16s ease, translate .16s ease; }
+  .otc-send__label { transition: opacity .14s ease, filter .14s ease; }
   &.is-flying {
     pointer-events: none;
-    animation: otc-send-charge .8s cubic-bezier(.45, 0, .3, 1) .3s forwards, otc-send-wait 1.2s ease-in-out 1.1s infinite alternate;
-    .otc-send__label { opacity: 0; filter: blur(3px); translate: 6px 0; }
-    > i, > svg:not(.otc-send__ok) { animation: otc-send-fly .62s var(--otc-ease-in) .14s forwards; }
-    .otc-send__trail { animation: otc-send-trail .62s var(--otc-ease-in) .14s forwards; }
+    animation: otc-send-charge .8s cubic-bezier(.3, 0, .2, 1) forwards,
+               otc-send-wait 1.2s ease-in-out .8s infinite alternate;
+    > i, > svg:not(.otc-send__ok), .otc-send__label { opacity: 0; filter: blur(2px); }
+    .otc-send__rider { opacity: 1; }
   }
   &.is-sent {
     animation: none;
     --otc-fill-w: 100%;
-    // o próprio botão vira verde: o `overflow` corta o preenchimento na borda
-    // de DENTRO, e sem isto ficava um fio da cor de antes em volta do "Sent"
-    --otc-gel: var(--otc-send-ok);
-    // ...e o que não é gel (o `btn-light` do New Deals, o `btn-soft-*`) também
-    background-color: var(--otc-send-ok) !important;
-    border-color: transparent !important;
-    transition: --otc-fill-w .35s var(--otc-ease-out);
+    transition: --otc-fill-w .3s var(--otc-ease-out);
     > i, > svg:not(.otc-send__ok), .otc-send__label { opacity: 0; }
+    .otc-send__rider { opacity: 0; }
     .otc-send__done { opacity: 1; filter: none; }
   }
-  &.is-failed {
-    animation: otc-shake .38s var(--otc-ease-out);
-    .otc-send__fill { background-color: var(--otc-send-err); }
+  &.is-failed { animation: otc-shake .38s var(--otc-ease-out); }
+  // a volta do modelo: o preenchimento recua para a esquerda até um PONTO (o
+  // diâmetro é a altura do botão, que o otc.js mede) e o rótulo volta
+  &.is-resetting {
+    --otc-fill-w: 0%;
+    transition: --otc-fill-w .4s var(--otc-ease);
+    .otc-send__fill { min-width: var(--otc-send-dot, 0px); }
   }
-  &.is-resetting { --otc-fill-w: 0%; transition: --otc-fill-w .45s var(--otc-ease); }
 }
-// o squircle da linha (§6b): o verde que enche o botão segue o canto dele —
-// com o canto de pílula ele virava um círculo, e a cor do botão sobrava nas
-// quinas no "Sent"
+// o squircle da linha (§6b): o preenchimento segue o canto dele — com o canto
+// de pílula ele virava um círculo dentro do quadrado
 .btn-row-send, .acc-act-send { --otc-send-r: 10px; }
 // a versão com rótulo (toolbar, modal): pílula
 .btn-send, .otc-send, .btn:not(.btn-row-send):not(.acc-act-send).btn-send { min-width: 120px; text-transform: uppercase; font-size: 12.5px; font-weight: 700; letter-spacing: .08em; }
 @property --otc-fill-w { syntax: "<percentage>"; inherits: true; initial-value: 0%; }
-@keyframes otc-send-fly { 0% { translate: 0 0; } 12% { translate: -4px 0; } 85% { opacity: 1; } 100% { translate: 150px 0; opacity: 0; } }
-@keyframes otc-send-trail { 0% { width: 0; opacity: 0; } 30% { opacity: 1; } 100% { width: 70%; opacity: 0; } }
-@keyframes otc-send-charge { from { --otc-fill-w: 0%; } to { --otc-fill-w: 82%; } }
+// o preenchimento nasce onde o ícone estava (`--otc-fill-start`, o otc.js
+// mede): o avião sai do lugar dele, sem pular para a borda
+@keyframes otc-send-charge { from { --otc-fill-w: var(--otc-fill-start, 0%); } to { --otc-fill-w: 82%; } }
 @keyframes otc-send-wait { from { --otc-fill-w: 82%; } to { --otc-fill-w: 90%; } }
 
 // 6d. Badges, chips e status. Pílula com tinta de 16% e o texto cheio; os

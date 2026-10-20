@@ -1,4 +1,5 @@
-"""O Send na cor padrão, com o Contrail por cima — na linha E em lote.
+"""O Send na cor padrão, com o Contrail por cima — na linha E em lote — e o
+ritmo dos ícones que giram.
 
 Duas decisões da mesa (20/10/2026, HANDOFF §641/§642):
 
@@ -19,9 +20,13 @@ O que este script prende:
   3. todo Send em lote das telas leva a classe — os `btnSend*`, o Send do New
      Deals (`data-table-confirm-selected`), o do Swap VCP e o do Other
      Publisher. Tela nova com Send em lote cai aqui;
-  4. no Chromium, com o `otc.css` e o `otc.js` de verdade: em repouso o botão
-     tem a cor do `btn-primary`; o voo esconde o rótulo; no "Sent" o botão
-     inteiro fica verde.
+  4. no Chromium, com o `otc.css` e o `otc.js` de verdade: o botão fica na cor
+     do `btn-primary` em repouso, no voo e no "Sent" — a animação do modelo do
+     Contrail (§644) corre por cima: o rótulo some, o avião vai na PONTA do
+     preenchimento e o "Sent" aparece; nada vira verde;
+  5. todo ícone que gira (`ti-spin`, `ti-loader*`, o refresh `.is-busy`) gira
+     no MESMO ritmo, 1,2 s por volta — a .8 s/.6 s do rebranding ele parecia
+     "maluco" nas máquinas do JP (§644).
 """
 import io
 import os
@@ -52,6 +57,8 @@ cabeca = bloco[bloco.index('{') + 1: bloco.index('> i, > svg')]
 check('  o bloco da animação não força fundo nem cor em repouso',
       re.findall(r'^\s*(background|color)\s*:', cabeca, re.M), [])
 check('  nem a tinta escura / avião limão', [c for c in ('#14161b', '#d4f000', 'otc-send-ink', 'otc-send-lime') if c in bloco], [])
+check('  nem o verde do Sent trocando a cor do botão',
+      [c for c in ('otc-send-ok', '#10b04a', '--otc-gel:', 'background-color: var(--otc-send') if c in bloco], [])
 seletor = bloco[bloco.index('.btn-row-send'):bloco.index('{')]
 check('  o lote está no bloco da animação', '.otc-send-batch' in seletor, True)
 pilula = re.search(r'\n(\.btn-send, \.otc-send[^{]*)\{', bloco)
@@ -86,7 +93,7 @@ for nome in sorted(os.listdir(PAGES)):
 check('  os Sends em lote encontrados (19 em 20/10/2026)', achados >= 19, True)
 check('  nenhum sem a classe', faltam, [])
 
-print('=== 4. No Chromium: cor padrão em repouso, verde no Sent ===')
+print('=== 4. No Chromium: a cor do botão do começo ao fim, o avião na ponta ===')
 try:
     from playwright.sync_api import sync_playwright
 except ImportError:
@@ -130,10 +137,42 @@ if sync_playwright:
                   bool(rotulo) and all(float(o) < 0.5 for o in rotulo), True)
             check('  [%s] o contador da página segue no mesmo nó' % theme,
                   pg.evaluate("document.getElementById('n').textContent"), '2')
+            check('  [%s] no voo o botão segue na cor do btn-primary' % theme,
+                  pg.evaluate(COR, 'lote'), ref)
+            ponta = pg.evaluate("""() => { const b = document.getElementById('lote'),
+                     f = b.querySelector('.otc-send__fill'), r = b.querySelector('.otc-send__rider');
+                     if (!f || !r) return null;
+                     const fb = f.getBoundingClientRect(), rb = r.getBoundingClientRect();
+                     return {fill: fb.width / b.getBoundingClientRect().width,
+                             rider: getComputedStyle(r).opacity, gap: rb.left - fb.right}; }""")
+            check('  [%s] o avião vai na PONTA do preenchimento' % theme,
+                  bool(ponta) and ponta['fill'] > 0.3 and float(ponta['rider']) > 0.5
+                  and -2 <= ponta['gap'] <= 6, True)
             pg.evaluate("otcSend.done(window.__st, true)")
             pg.wait_for_timeout(1400)
-            check('  [%s] no Sent o botão inteiro fica verde' % theme,
-                  pg.evaluate(COR, 'lote'), 'rgb(16, 176, 74)')
+            check('  [%s] no Sent o botão segue na cor do btn-primary (nada de verde)' % theme,
+                  pg.evaluate(COR, 'lote'), ref)
+            check('  [%s] e o Sent aparece' % theme,
+                  float(pg.evaluate("getComputedStyle(document.querySelector('#lote .otc-send__done')).opacity")) > 0.9,
+                  True)
+        b.close()
+
+print('=== 5. Os ícones que giram, num ritmo só ===')
+if sync_playwright:
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        pg = b.new_page()
+        arq = os.path.join(tmp, 'spin.html')
+        io.open(arq, 'w', encoding='utf-8').write(
+            '<!doctype html><html><head><link rel="stylesheet" href="file://%s/css/vendors.min.css">'
+            '<link rel="stylesheet" href="file://%s/css/otc.css"></head><body>'
+            '<button class="cp-run-btn"><i class="ti ti-loader-2 ti-spin" id="a"></i></button>'
+            '<button class="btn btn-sm btn-icon is-busy"><i class="ti ti-refresh" id="b"></i></button>'
+            '<i class="ti ti-loader" id="c"></i></body></html>' % (STATIC, STATIC))
+        pg.goto('file://' + arq)
+        pg.wait_for_timeout(200)
+        durs = pg.evaluate("['a','b','c'].map(i => getComputedStyle(document.getElementById(i)).animationDuration)")
+        check('  ti-spin, o refresh ocupado e o ti-loader: 1,2 s por volta', durs, ['1.2s'] * 3)
         b.close()
 
 print()

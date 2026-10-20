@@ -1017,15 +1017,22 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   **sem escala** (§6h) — o `shown.bs.modal` dispara durante a entrada e escala
   muda a largura que o DataTables mede. Saída do Swal tem keyframe PRÓPRIO
   (`otc-swal-out`): mesmo nome com `reverse` não reinicia e o popup não fecha.
-- **O Send é o "Contrail"** (`otc.scss` §6c + `otc.js`): o avião decola no
-  request e o botão pousa no resultado lido do JSON. **O botão fica com a COR
-  DELE** (mesa, 20/10/2026, §641): o Send da linha é o `btn-primary` da regra
-  dos botões de ação, e o voo, o verde do "Sent" e o vermelho do erro correm
-  por cima da cor padrão — a cápsula escura com avião limão destoava das outras
-  três ações. **O Send EM LOTE da barra também voa** (§642): classe
+- **O Send é o "Contrail"** (`otc.scss` §6c + `otc.js`), a animação do VÍDEO
+  de referência (`memory: referencia-visual-pane`, §644): no clique o rótulo
+  some e o avião vai na PONTA de um preenchimento que avança da esquerda; o
+  "Sent" (✓ na linha) só aparece com o resultado lido do JSON; na volta o
+  preenchimento recua até um ponto e o rótulo volta. **O botão fica com a COR
+  DELE do começo ao fim** (mesa, 20/10/2026, §641/§644): o preenchimento é a cor
+  do TEXTO do botão em transparência (clareia o azul), e nada vira verde nem
+  vermelho — erro é só o tremor. **O Send EM LOTE da barra também voa** (§642): classe
   `otc-send-batch` no botão — a animação sem a pílula do `.btn-send` —, e
   tela nova com Send em lote a põe; `check_send_contrail.py` varre as telas.
   Não se reimplementa por página.
+- **Ícone que gira tem UM ritmo: `--otc-spin-dur` (1,2 s por volta)** — o
+  `ti-spin`/`ti-loader*` e o `.is-busy` (refresh ocupado), no `otc.scss` (§644).
+  A .8 s/.6 s do rebranding o giro parecia "maluco" nas máquinas do JP (sem
+  GPU, a tela perde quadros durante o request e o giro rápido anda aos trancos);
+  o tema antigo girava a 2 s. Tela nova não declara giro próprio.
 - **A aparência vai para o `<html>` ANTES do primeiro paint** (script
   síncrono do `partials/head-css.html`): `data-bs-theme`, `data-accent`,
   `data-wall`, `data-glass` e a classe `is-solid`, lidos de
