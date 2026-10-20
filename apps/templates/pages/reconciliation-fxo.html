@@ -5,275 +5,86 @@
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <style>
-/* ============================================================================
-   Camada visual: tokens --ins-* (tema) e --vr-* (visual-refresh). Nunca --bs-*.
-   O desenho dos cards é o do New Deals Monitor: cartão neutro com moldura e
-   sombra suave, chip de ícone no gradiente da marca (--vr-grad) e o total à
-   direita em dígitos de largura fixa.
-
-   Repare que o cartão NÃO é um `.card` do Bootstrap: é um <div> com classe
-   própria. Foi o que resolveu de vez o cartão branco — sobre um `.card` o tema
-   redeclara fundo, borda, raio e cor DEPOIS deste <style> (extra_css vem antes
-   do head-css), e cada propriedade precisava de !important para sobreviver.
-   ============================================================================ */
-#fxo-page { --fxo-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
-
+{# Só o que é DESTA tela: os cartões-filtro de status (disposição, chip na cor da GRAVIDADE, o ativo, o Total de fechamento), os chips de diagnóstico/NOK por campo, as larguras de Actions/Comentário e o campo de data nativo escondido atrás do texto. Placa, tabela, botões, modal e zona de upload vêm do tema. #}
+/* ── Cartões de status (clicar filtra a tabela) ─────────────────── */
 #fxo-page .fxo-widget {
     height: 100%;
-    background: var(--vr-card-bg, var(--ins-secondary-bg));
-    border: 1px solid var(--vr-card-border, var(--ins-border-color));
-    border-radius: var(--vr-card-radius, 18px);
-    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
     padding: 1rem 1.15rem;
     display: flex; align-items: center; gap: .75rem;
     cursor: pointer;
-    transition: transform 260ms var(--fxo-ease), box-shadow 260ms var(--fxo-ease),
-                border-color 260ms var(--fxo-ease);
-}
-@media (hover: hover) and (pointer: fine) {
-    #fxo-page .fxo-widget:hover {
-        transform: translateY(-3px);
-        box-shadow: var(--vr-card-shadow-hover, 0 18px 40px rgba(94, 92, 230, .14));
-        border-color: rgba(0, 102, 204, .28);
-    }
-    /* Animação padrão do ícone (about → sidenav → New Deals Monitor → aqui):
-       o chip cresce e inclina de leve. É o que dá ao card a sensação de peça
-       viva; sem ela só o cartão se move e o ícone parece colado. */
-    #fxo-page .fxo-widget:hover .fxo-widget__ico {
-        transform: scale(1.1) rotate(-4deg);
-        box-shadow: 0 8px 20px rgba(94, 92, 230, .38);
-    }
-}
-#fxo-page .fxo-widget:active { transform: scale(.985); }
-/* O card ativo é o filtro que está valendo. Sem essa marca, clicar num card e
-   esquecer deixa a tabela parecendo a lista inteira quando não é. */
-#fxo-page .fxo-widget.is-active {
-    border-color: var(--vr-accent-1, #0066cc);
-    box-shadow: 0 0 0 2px rgba(0, 102, 204, .18),
-                var(--vr-card-shadow-hover, 0 18px 40px rgba(94, 92, 230, .14));
+    transition: box-shadow var(--otc-dur-base) var(--otc-ease-out);
 }
 #fxo-page .fxo-widget__ico {
-    width: 42px; height: 42px; flex: 0 0 auto; border-radius: 12px;
-    display: inline-flex; align-items: center; justify-content: center;
-    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
-    color: #fff; font-size: 1.25rem;
-    box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
-    transition: transform 260ms var(--fxo-ease), box-shadow 260ms var(--fxo-ease);
+    width: 42px; height: 42px; font-size: 1.25rem;
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--hue) 30%, transparent);
 }
-/* O status é a COR do chip, não a do cartão: o cartão inteiro tingido briga com
-   a tabela abaixo e some no tema escuro. */
-#fxo-page .fxo-w-ok   .fxo-widget__ico { background: linear-gradient(100deg, #1a8a4a, #34c759); box-shadow: 0 4px 12px rgba(26,138,74,.28); }
-/* A cor é a da GRAVIDADE, e o card tem de contar a mesma história do badge da
-   1ª coluna: Partial em laranja (casou, algum campo diverge), Sem match em
-   vermelho (a operação nem existe do outro lado). Estavam trocados. */
-#fxo-page .fxo-w-nok  .fxo-widget__ico { background: linear-gradient(100deg, #b07500, #f7b84b); box-shadow: 0 4px 12px rgba(176,117,0,.28); }
-/* Os dois Unmatched são o MESMO vermelho: a gravidade é a mesma, o que muda é de
-   que lado falta a operação — e é o rótulo que diz isso, não a cor. */
+/* O status é a COR do chip, não a do cartão, e conta a mesma história do badge
+   da 1ª coluna: Partial laranja (casou, algum campo diverge), os dois Unmatched
+   o MESMO vermelho (o rótulo diz de que lado falta), Justified índigo. */
+#fxo-page .fxo-w-ok   .fxo-widget__ico { --hue: var(--otc-green); }
+#fxo-page .fxo-w-nok  .fxo-widget__ico { --hue: var(--otc-orange); }
 #fxo-page .fxo-w-none .fxo-widget__ico,
-#fxo-page .fxo-w-none-ath .fxo-widget__ico { background: linear-gradient(100deg, #c0392b, #ff5a5a); box-shadow: 0 4px 12px rgba(192,57,43,.28); }
-#fxo-page .fxo-w-just .fxo-widget__ico { background: linear-gradient(100deg, #0066cc, #5e5ce6); box-shadow: 0 4px 12px rgba(0,102,204,.28); }
-/* O Total é o card de FECHAMENTO da fileira: vem por ÚLTIMO e leva o gradiente
-   da MARCA, o que o separa dos cinco cards de ESTADO ao lado (Matched ·
-   Partial · os dois Unmatched · Justified), que carregam cor semântica. Ele
-   estava em primeiro e sem acento nenhum — lido como só mais um estado. */
+#fxo-page .fxo-w-none-ath .fxo-widget__ico { --hue: var(--otc-danger); }
+#fxo-page .fxo-w-just .fxo-widget__ico { --hue: var(--otc-indigo); }
+/* O Total FECHA a fileira: gradiente da marca e um halo, para não ser lido como
+   mais um estado. */
 #fxo-page .fxo-w-total .fxo-widget__ico {
-    background: var(--vr-grad);
-    box-shadow: 0 6px 18px color-mix(in oklab, var(--sf-blue) 55%, transparent);
+    background: linear-gradient(100deg, var(--otc-accent), color-mix(in srgb, var(--otc-accent) 60%, var(--otc-teal)));
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--otc-blue) 55%, transparent);
 }
-#fxo-page .fxo-w-total {
-    border-color: color-mix(in oklab, var(--sf-blue) 45%, var(--vr-card-border)) !important;
-    box-shadow: var(--vr-card-shadow),
-                0 0 30px -8px color-mix(in oklab, var(--sf-blue) 70%, transparent) !important;
-}
+#fxo-page .fxo-w-total { box-shadow: var(--otc-depth), 0 0 30px -8px color-mix(in srgb, var(--otc-blue) 70%, transparent); }
+/* O card ativo é o filtro que está valendo: sem a marca, a tabela parece a lista
+   inteira quando não é. */
+#fxo-page .fxo-widget.is-active { box-shadow: 0 0 0 2px var(--otc-accent-ink), var(--otc-depth); }
+#fxo-page .widget-lbl { margin: 0; color: var(--otc-text); font-weight: 650; }
+#fxo-page .widget-val { margin: 0 0 0 auto; }
 
-#fxo-page .widget-lbl {
-    font-size: .78rem; font-weight: 700; letter-spacing: -.01em;
-    margin: 0; color: var(--ins-body-color);
-}
-#fxo-page .widget-val {
-    margin-left: auto; font-size: 1.45rem; font-weight: 800; letter-spacing: -.02em;
-    font-variant-numeric: tabular-nums; color: var(--ins-body-color);
-}
-
-/* Entrada escalonada: 45ms entre cards. Nada nasce de scale(0) — nada no mundo
-   real aparece do nada. */
-@media (prefers-reduced-motion: no-preference) {
-    #fxo-page .fxo-widget { animation: fxoWIn 260ms var(--fxo-ease) both; }
-    #fxo-page .col-fxo-w:nth-child(1) .fxo-widget { animation-delay: 0ms; }
-    #fxo-page .col-fxo-w:nth-child(2) .fxo-widget { animation-delay: 45ms; }
-    #fxo-page .col-fxo-w:nth-child(3) .fxo-widget { animation-delay: 90ms; }
-    #fxo-page .col-fxo-w:nth-child(4) .fxo-widget { animation-delay: 135ms; }
-    #fxo-page .col-fxo-w:nth-child(5) .fxo-widget { animation-delay: 180ms; }
-    #fxo-page .col-fxo-w:nth-child(6) .fxo-widget { animation-delay: 225ms; }
-    @keyframes fxoWIn { from { opacity:0; transform: translateY(8px) scale(.97); } to { opacity:1; transform:none; } }
-}
-
-/* ── Faixa de diagnóstico ────────────────────────────────────────── */
+/* ── Faixa de diagnóstico / NOK por campo ───────────────────────── */
 #fxo-page .fxo-chip {
-    display:inline-flex; align-items:center; gap:.35rem;
-    font-size:.7rem; font-weight:600; padding:.28rem .7rem; border-radius:20px;
-    background:var(--ins-tertiary-bg, #eef0f4); color:var(--ins-body-color);
-    border:1px solid var(--ins-border-color); white-space:nowrap;
+    display: inline-flex; align-items: center; gap: .35rem;
+    font-size: .7rem; font-weight: 600; padding: .28rem .7rem; border-radius: var(--otc-r-pill);
+    background: var(--otc-fill); color: var(--otc-text); white-space: nowrap;
 }
-#fxo-page .fxo-chip b { font-variant-numeric:tabular-nums; }
+#fxo-page .fxo-chip b { font-variant-numeric: tabular-nums; }
 #fxo-page .fxo-chip-nok {
-    cursor:pointer;
-    transition:border-color 140ms var(--fxo-ease), background 140ms var(--fxo-ease),
-               transform 140ms var(--fxo-ease);
+    cursor: pointer;
+    transition: background-color var(--otc-dur-fast) var(--otc-ease), box-shadow var(--otc-dur-fast) var(--otc-ease);
 }
-/* O chip com NOK é vermelho, e o vermelho precisa das DUAS versões: a receita
-   clara (fundo pastel, texto escuro) invertida some no tema escuro — é o mesmo
-   par do Pay/Rec. */
-#fxo-page .fxo-chip-nok.has-nok { background:#fde8e8; color:#b71c1c; border-color:#ef9a9a; }
-[data-bs-theme=dark] #fxo-page .fxo-chip-nok.has-nok {
-    background:rgba(244,67,54,.18); color:#ef9a9a; border-color:rgba(244,67,54,.35);
-}
-#fxo-page .fxo-chip-nok.is-active {
-    box-shadow:0 0 0 2px color-mix(in oklab, var(--vr-accent-1, #0066cc) 45%, transparent);
-    border-color:var(--vr-accent-1, #0066cc);
-}
-@media (hover: hover) and (pointer: fine) {
-    #fxo-page .fxo-chip-nok:hover { border-color:var(--vr-accent-1, #0066cc); transform:translateY(-1px); }
-}
-#fxo-page .fxo-chip-nok:active { transform:scale(.97); }
+@media (hover: hover) and (pointer: fine) { #fxo-page .fxo-chip-nok:hover { background: var(--otc-fill-2); } }
+#fxo-page .fxo-chip-nok.has-nok { background: color-mix(in srgb, var(--otc-danger) 16%, transparent); color: var(--otc-danger); }
+#fxo-page .fxo-chip-nok.is-active { box-shadow: 0 0 0 2px var(--otc-accent-ink); }
 
-/* ── Tabela ──────────────────────────────────────────────────────────
-   As regras do cabeçalho valem para o `#fxo-table` E para o CLONE: com scrollX
-   o DataTables desenha o cabeçalho numa tabela irmã e **remove o id dela**, de
-   modo que `#fxo-table th` não alcança o cabeçalho que se vê. Sem as três linhas
-   abaixo o header ficava com a fonte e o padding do tema (maiores) enquanto o
-   corpo usava os desta página — as duas tabelas mediam larguras diferentes e os
-   valores saíam deslocados das colunas, com o erro acumulando para a direita.
-
-   E o header QUEBRA LINHA (`white-space:normal`): com nowrap uma coluna como
-   "Combinação de operações" impõe uma largura mínima que o corpo não tem, e a
-   largura de cada coluna volta a divergir por baixo. */
-#fxo-table th,
-.dt-scroll-head thead th,
-.dt-scroll-headInner thead th,
-.dataTables_scrollHeadInner thead th {
-    font-size:.68rem; padding:8px 10px;
-    text-align:center !important; vertical-align:middle !important;
-    white-space:normal !important; word-break:break-word; overflow-wrap:anywhere;
-    line-height:1.15;
-}
-#fxo-table td { font-size:.72rem; padding:6px 10px; vertical-align:middle; text-align:center; }
-#fxo-table td.cell-status { text-align:center; }
-/* Alinhamento centralizado como todo o app (padrão New Deals); os dígitos de
-   largura fixa continuam garantindo a comparação linha contra linha. */
-#fxo-table td.cell-num { text-align:center; font-variant-numeric:tabular-nums; white-space:nowrap; }
-
-/* Ações da linha no squircle padrão do app (spec .ops-row-act): 32×32 travado
-   com min/max — sem o trava, uma regra de tema estica o botão e o `rounded` do
-   Bootstrap sai OVAL, porque círculo só é círculo em botão já quadrado. */
-/* A coluna de Actions tem largura mínima: sem ela o DataTables a espremia até a
-   largura do botão, e o cabeçalho quebrava em "ACTION" / "S". O `th` precisa da
-   mesma regra porque com scrollX ele vive noutra tabela.
-
-   O `min-width` sozinho NÃO resolveu: os 74px são a largura da CÉLULA, e o
-   padding do tema come ~30px deles — sobrava menos do que "ACTIONS" ocupa em
-   .7rem maiúsculo, e a palavra quebrava dentro de uma coluna que já tinha a
-   largura pedida. Por isso vão as três coisas juntas: `nowrap` no cabeçalho
-   (a regra geral do padrão é `normal`, mas aqui o nome é curto e é ELE que
-   define a largura), padding menor e a mínima em 96px. */
-#fxo-table td.fxo-acts { white-space:nowrap; text-align:center; min-width:96px; }
+/* ── Tabela ─────────────────────────────────────────────────────── */
+#fxo-table td.cell-num { font-variant-numeric: tabular-nums; }
+/* Actions: com scrollX o th vive no clone (sem id). Mínima de 96px e nowrap,
+   senão "ACTIONS" quebrava dentro de uma coluna que já tinha a largura pedida. */
+#fxo-table td.fxo-acts { white-space: nowrap; min-width: 96px; }
 #fxo-table thead th:nth-child(2),
 .dt-scroll-head thead th:nth-child(2),
 .dt-scroll-headInner thead th:nth-child(2),
 .dataTables_scrollHeadInner thead th:nth-child(2) {
-    min-width:96px; white-space:nowrap !important; padding-left:4px !important; padding-right:4px !important;
+    min-width: 96px; white-space: nowrap !important; padding-left: 4px !important; padding-right: 4px !important;
 }
-#fxo-table td.fxo-acts .btn.ops-row-act {
-    width:32px; height:32px; min-width:32px; max-width:32px;
-    padding:0; flex:0 0 auto; border-radius:10px !important;
-    display:inline-flex; align-items:center; justify-content:center;
-    line-height:1; font-size:1rem;
-    transition: transform 140ms var(--fxo-ease), box-shadow 140ms var(--fxo-ease);
-}
-@media (hover: hover) and (pointer: fine) {
-    #fxo-table td.fxo-acts .btn.ops-row-act:hover { transform: translateY(-1px) scale(1.08); }
-}
-#fxo-table td.fxo-acts .btn.ops-row-act:active { transform: scale(.94); }
+/* O comentário é texto livre: largura máxima com reticências (o title mostra o
+   inteiro), senão empurraria as 38 colunas para fora da tela. */
+#fxo-table td.fxo-comment { max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#fxo-table td.fxo-comment input { min-width: 12rem; }
+/* A busca própria do DataTables sai: o funil de cada coluna faz o mesmo. */
+#fxo-table_filter { display: none !important; }
 
-/* O comentário é texto livre e costuma ser longo: a célula tem largura máxima e
-   corta com reticências (o título no hover mostra o inteiro). Sem o limite, uma
-   justificativa de duas linhas empurraria as 38 colunas para fora da tela. */
-#fxo-table td.fxo-comment {
-    text-align:center; max-width:16rem;
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-}
-#fxo-table td.fxo-comment input { font-size:.72rem; min-width:12rem; }
-/* A busca própria do DataTables sai: a linha de filtro por coluna faz o mesmo
-   trabalho com precisão, e as duas juntas se combinam em silêncio — um termo
-   esquecido lá em cima escondia linhas que o filtro da coluna dizia mostrar. */
-#fxo-table_filter { display:none !important; }
-
-/* ── Filtros por coluna ──────────────────────────────────────────────
-   A linha é montada ANTES do `.DataTable()`, e é isso que a faz aparecer: com
-   `scrollX` o DataTables MOVE o <thead> para a tabela do cabeçalho rolável e
-   deixa uma cópia oculta no corpo. Acrescentar a linha depois do init a punha na
-   cópia — existia no DOM e não aparecia. Com ela já no lugar, o DataTables leva
-   as duas linhas juntas, e `orderCellsTop` mantém a ordenação na primeira. */
-#fxo-table thead .fxo-col-filters th,
-.dt-scroll-headInner thead .fxo-col-filters th,
-.dataTables_scrollHeadInner thead .fxo-col-filters th { padding:.3rem .4rem .5rem; }
-/* Mesma caixa das demais páginas do app (Cognos, Live Position, OTM…): 30px de
-   altura e .72rem. A versão anterior (.62rem / padding 2px) saía visivelmente
-   mais fina que a de todas as outras telas. */
-#fxo-table thead .fxo-col-filters input,
-.dt-scroll-headInner thead .fxo-col-filters input,
-.dataTables_scrollHeadInner thead .fxo-col-filters input {
-    width:100%; min-width:90px; height:30px; font-size:.72rem; font-weight:400;
-    padding:3px 9px; border-radius:8px;
-    border:1px solid var(--ins-border-color); background:var(--ins-tertiary-bg, #f8f9fa);
-    color:var(--ins-body-color);
-}
-#fxo-page .fxo-col-filters input::placeholder { color:var(--ins-secondary-color); opacity:.6; }
-
-/* ── Data ────────────────────────────────────────────────────────── */
-#fxo-page .date-wrap { position:relative; width:130px; }
-#fxo-page .date-wrap input[type=date] { position:absolute; inset:0; opacity:0; cursor:pointer; z-index:2; }
-#fxo-page .date-wrap input[type=text] { pointer-events:none; padding-right:28px; }
+/* ── Data: o input nativo fica invisível POR CIMA do texto dd/mm/aaaa ── */
+#fxo-page .date-wrap { width: 130px; }
+#fxo-page .date-wrap input[type=date] { position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 2; }
+#fxo-page .date-wrap input[type=text] { pointer-events: none; padding-right: 28px; }
 #fxo-page .date-wrap-icon {
-    position:absolute; right:9px; top:50%; transform:translateY(-50%);
-    z-index:1; pointer-events:none; font-size:15px; color:var(--ins-secondary-color, #6c757d);
+    position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
+    z-index: 1; pointer-events: none; font-size: 15px; color: var(--otc-text-2);
 }
 
-/* ── Upload ──────────────────────────────────────────────────────── */
-/* A zona de arrastar é a do Pay/Rec: tracejado no --ins-border-color e fundo no
-   tertiary, que existem nos dois temas — o azul do foco é o accent da marca. */
-.upload-zone {
-    border:2px dashed var(--ins-border-color); border-radius:12px; padding:.9rem 1rem;
-    text-align:center; background:var(--ins-tertiary-bg, #eef0f4); cursor:pointer;
-    transition:border-color 160ms var(--vr-ease, ease), background 160ms var(--vr-ease, ease);
-}
-.upload-zone:hover, .upload-zone.dragover {
-    border-color:var(--vr-accent-1, #0066cc);
-    background:color-mix(in oklab, var(--vr-accent-1, #0066cc) 6%, var(--ins-tertiary-bg, #eef0f4));
-}
-.upload-zone input[type=file] { display:none; }
-.upload-zone .fn { font-size:.72rem; color:var(--vr-accent-1, #0066cc); font-weight:600; margin-top:.3rem; }
-
-/* Mesma micro-interação dos botões de barra do resto do app (New Deals,
-   Track Confirmations): sobe 1px no hover, afunda no clique. */
-#fxo-page .btn-toolbar-all {
-    font-size:.75rem !important; padding:.25rem .6rem !important;
-    height:auto !important; line-height:1.4 !important; white-space:nowrap !important;
-    transition: transform 140ms var(--fxo-ease), box-shadow 140ms var(--fxo-ease);
-}
-@media (hover: hover) and (pointer: fine) {
-    #fxo-page .btn-toolbar-all:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.10); }
-}
-#fxo-page .btn-toolbar-all:active { transform: scale(.97) !important; }
-
-/* O modal fica no MESMO raio dos cards (--vr-card-radius). Ele nasce fora do
-   #fxo-page — o Bootstrap não o move, mas o container fecha antes dele —, então
-   o seletor é o id do próprio modal. */
-#fxoUploadModal .modal-content {
-    border-radius: var(--vr-card-radius, 18px);
-    border: 1px solid var(--vr-card-border, var(--ins-border-color));
-    box-shadow: 0 24px 60px rgba(0, 0, 0, .18);
-}
+/* ── Upload manual ──────────────────────────────────────────────── */
+.upload-zone { text-align: center; cursor: pointer; }
+.upload-zone input[type=file] { display: none; }
+.upload-zone .fn { font-size: .72rem; color: var(--otc-accent-ink); font-weight: 600; margin-top: .3rem; }
 </style>
 {% endblock %}
 

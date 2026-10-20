@@ -90,11 +90,19 @@ OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_<nome>.py
   `?`.** Só DDL sobre identificadores do próprio código (`_PC_TABLE`,
   `_PC_COLUMNS`) monta string. Referência vendorizada:
   `Docs/SQL_Injection_Prevention_Cheat_Sheet.md`.
-- **Design: tokens `--vr-*`/`--ins-*`, jamais `--bs-*`** (o tema não os define;
-  caem no fallback claro e viram cartão branco no escuro). A pintura atual é o
-  StreamFlow (`static/css/streamflow.css` + `streamflow.js`), camada carregada
-  DEPOIS do `visual-refresh.css` que redefine os mesmos tokens — por isso
-  continua se escrevendo `--vr-*`. Armadilhas do vidro em §7.
+- **Design: UM tema e UM JS de casca** (rebranding no visual do Pane,
+  19/10/2026, §630): `static/scss/otc.scss` → `static/css/otc.css` e
+  `static/js/otc.js`. Não existe camada carregada depois redefinindo token —
+  `app.css`, `visual-refresh.css`, `streamflow.css`, `tools.css` e os JS delas
+  foram APAGADOS, e o `check_theme_toggle.py` recusa template que volte a
+  carregá-los. **Token é `--otc-*`** (texto `--otc-text/-2/-3`, superfícies
+  `--otc-fill`/`--otc-glass`/`--otc-menu-bg`, matizes `--otc-blue…danger`,
+  raios `--otc-r-*`, movimento `--otc-dur-*`/`--otc-ease*`); `--ins-*` é o
+  prefixo do Bootstrap e, como `--vr-*`/`--sf-*`, virou APELIDO que lê os
+  tokens novos (§2d do SCSS) — página antiga segue certa, página nova escreve
+  `--otc-*`. **Jamais `--bs-*`**: o tema não os define, caem no fallback claro
+  e viram placa branca no escuro. Mexeu no `otc.scss`: `npx gulp styles` e
+  commite o `otc.css` junto (o `?v=` sai do `asset_v`). Armadilhas em §7.
 - **i18n: texto visível nasce em INGLÊS e é traduzido por `data-lang`**
   (`static/data/translations/{en,br,es}.json`). O `I18nManager` traduz UMA vez
   no load; o que o JS insere depois sai de um mapa `_TRANS` local com `t()`
@@ -148,7 +156,8 @@ Templates: `layouts/base.html` → `layouts/vertical.html` (o único layout) →
 1. Rota no entrypoint da vertical (ou no `routes.py` se for plataforma)
    devolvendo `render_template('pages/<nome>.html', segment='<nome>')`.
 2. Template em `apps/templates/pages/` estendendo o layout.
-3. SCSS opcional em `apps/static/scss/`.
+3. CSS da tela no `<style>` do `{% block extra_css %}`, só o que é DELA e
+   com tokens `--otc-*` (§7, Layout e vidro). O SCSS é um só e é do tema.
 4. Tabela → padrão de tabela do §7, sem exceção.
 5. Notificação nova → rótulo nos TRÊS mapas (§8, Notificações).
 
@@ -743,11 +752,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   expõe o jQuery — sem isso a página abre sem tabela, erro só no console.
 - `dom: "rt<'d-md-flex justify-content-between align-items-center mt-2'ip>"`.
 - **Centralizada**: `th` `.7rem` centro/middle (quebra permitida), `td` `.8rem`
-  centro/middle `nowrap`. Não existe regra global; com `scrollX` os clones
-  `.dt-scroll-headInner`/`.dataTables_scrollHeadInner thead th` levam as mesmas
-  regras **com `!important`** (o DataTables remove o id da tabela clonada e a
-  regra da página perde para `table.dataTable thead th`). `table-centered` não
-  existe em CSS nenhum. `check_table_center.py`.
+  centro/middle `nowrap`. **Desde o rebranding a regra é GLOBAL, no tema**
+  (`table.dataTable > thead > tr > th` / `> tbody > tr > td`, e o clone
+  `.dt-scroll-headInner thead th` **com `!important`** — o DataTables remove o
+  id da tabela clonada); a tela declara só a LARGURA das colunas. Tabela que
+  NÃO é DataTable continua declarando a sua. `table-centered` não existe em
+  CSS nenhum. `check_table_center.py` cobra a regra no tema e a das tabelas
+  soltas nas telas.
 - **Filtro é o FUNIL "de Excel" no cabeçalho** (mesa, 29/09/2026; §591):
   `static/js/excel-filter.js`, carregado pelo `base.html` DEPOIS dos scripts
   da página, liga-se SOZINHO a toda DataTable (as que existem e as que nascem
@@ -789,7 +800,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   funis** (o helper reconhece o botão pelo id/`data-lang`); página com uma
   tabela por card dá ao botão `data-oxf-table="#id"` e ele limpa só aquela
   (os dois Summaries). **A linha nasce ESCONDIDA pelo CSS** (§610,
-  `streamflow.css` §53, pelas classes/ids que as páginas usam): o helper só a
+  `otc.scss` §7, pelas classes/ids que as páginas usam): o helper só a
   tira na init, e na instância a init demora — a linha ficava na tela o tempo
   todo da carga. E **callback do DataTables não usa a variável `table`**: o
   `drawCallback` da primeira pintura roda antes da atribuição — use
@@ -801,20 +812,20 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 - **Botões de ação: squircle 32×32** travado nos DOIS eixos, `padding:0`,
   `border-radius:10px !important`, ícone Tabler `1rem` (nunca `.fs-13`),
   tooltip colorido delegado no primeiro hover (os `<td>` são reescritos a cada
-  redraw). Regra GLOBAL no `visual-refresh.css`; ordem Confirm `ti-check` →
+  redraw). Regra GLOBAL no `otc.scss` §6b (a página NÃO redeclara o
+  `.btn-act`); ordem Confirm `ti-check` →
   Edit `ti-edit` → Delete `ti-trash` → Send `ti-brand-telegram`; edição Save
   `ti-device-floppy` + Cancel `ti-x`. **A COR é semântica e o guarda varre TODA
   página**: Confirm/Approve `btn-success`, Edit `btn-info`, Delete `btn-danger`,
   Send `btn-primary`, Save `btn-success`, Cancel `btn-secondary` — duas telas
   novas nasceram com o Edit em `btn-warning` e nada acusou, porque o guarda só
   olhava as duas páginas de referência. `check_row_action_buttons.py`.
-  **`d-none` esconde botão de linha — e só voltou a esconder em 18/09/2026**
-  (§497): a regra de FORMATO do `partials/head-css.html` declara `display:
-  inline-flex !important` nessas quinze classes, mesma especificidade do
-  `.d-none` do `app.css` e carregada DEPOIS dele, então todo
-  `toggleClass('d-none', …)` de botão de ação era mudo — o botão continuava na
-  tela e só o servidor recusava. O par `.btn-row-x.d-none` (0,2,0) no mesmo
-  arquivo resolve para o app inteiro; página nova não escreve nada.
+  **`d-none` esconde botão de linha** (§497): a regra de FORMATO declarava
+  `display: inline-flex !important`, mesma especificidade do `.d-none` e
+  carregada depois dele, e todo `toggleClass('d-none', …)` de botão de ação era
+  mudo — o botão ficava na tela e só o servidor recusava. No `otc.scss` §6b o
+  `!important` vai só na GEOMETRIA, e o par `.btn-row-x.d-none` (0,2,0) garante
+  os dois lados; página nova não escreve nada.
   **O Edit da linha SEMPRE abre um MODAL** (regra da mesa, 28/09/2026, §572):
   nunca `<input>` nas células com Save/Cancel na coluna Actions. O modal é o
   padrão `liquid-glass`, traz TODOS os campos editáveis (inclusive os de
@@ -826,7 +837,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   (**Copy · CSV · Excel · Print · PDF**, DataTables Buttons; CSV `;` + BOM;
   Excel exige o registro síncrono do JSZip), Import teal `#4a849b`,
   Mapping/refresh success, Clear Filters outline-secondary. **O teal do Import
-  e o ícone do campo de data moram no `streamflow.css` (§50)**, não copiados no
+  e o ícone do campo de data moram no `otc.scss`**, não copiados no
   `<style>` de cada página: eram iguais em seis e faltavam na sétima, que saiu
   com o Import laranja e a data sem ícone (§490). A classe é
   `.btn-toolbar-import`; o ícone vale por `.otc-datefield` E por `#apiRefDate`
@@ -929,31 +940,43 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 
 ### Layout e vidro
 
+- **O `<style>` da página carrega ANTES do `otc.css`** — é a regra que explica
+  quase todo "minha regra não pegou". Regra da tela precisa de peso de id ou
+  de classe (`#ops-page .x`) para vencer componente do tema; e o tema, ao
+  contrário, escreve as regras genéricas de widget com peso ZERO
+  (`:where(.content-page) :where(...)`) para a tela sempre vencer. Peso zero
+  perde até para seletor de ELEMENTO do Bootstrap (o `font-size` do `h3`):
+  título de widget no tema leva peso (0,1,0) de propósito.
+- **O que a tela pode usar em vez de CSS próprio** (todos no `otc.scss`):
+  `.page-title-head` (título grande + `.otc-page-sub`), `.otc-page-bar` com
+  `.otc-stats`/`.otc-stat` (`__label`/`__value`: o número conta e pisca
+  sozinho) e `.otc-page-actions`, `.otc-legend`, `.otc-count`, `.otc-chip`
+  (`--chip`), `.otc-banner` (caixa de aviso), `.otc-mini-table(-wrap)` (tabela
+  montada em JS, Swal/preview), `.otc-icon-tile` (ícone em gradiente com
+  glifo branco, `--hue`), `.nd-deal-card`, `.btn-chip`, badges
+  `bg-*-subtle`/`badge-soft-*`, segmento `nav-pills` com `data-otc-seg` (a
+  lente desliza pelo `otc.js`). O cabeçalho dos widgets de número
+  (`x-widget__head` · `__icon` · `__title`) é do tema: a tela declara só o que
+  difere (ícone de 40px, título em caixa alta, margem).
 - **Tabela em painel PRÓPRIO (fora de `.card`) tinha o topo do cabeçalho
-  CORTADO** (§486): o `app.css` do tema puxa o `.dt-container` 12px para cima e
-  o `.table-responsive` (`overflow:auto`) corta o checkbox e a primeira linha
-  do rótulo. Está resolvido NA RAIZ, no `streamflow.css` §49b
+  CORTADO** (§486): o `.table-responsive` (`overflow:auto`) cortava o checkbox
+  e a primeira linha do rótulo. Está resolvido NA RAIZ, no `otc.scss` §7
   (`.table-responsive > .dt-container { margin-top: 0 }` + respiro em
-  `margin-top`, ANTES da regra do `.card`, que tem a mesma especificidade) —
-  tela nova não escreve nada, e **não se conserta com `padding-top` na página**
-  (padding fica dentro da área que rola, §49). Mexeu no `streamflow.css`, sobe
-  o `?v=` do `head-css.html`.
-- **Não use `.card` para widget seu** — o `extra_css` da página carrega ANTES
-  do tema e perde. Padrão: `<div>` com classe própria (`.ndm-card`,
-  `.fxo-widget`) com `--vr-card-*`/`--vr-grad`. Pela mesma ordem, classe
-  Bootstrap de mesma especificidade vence a da página mesmo com `!important`,
-  e o `background: … !important` do `.card` apaga `background-image` (cartão
-  com gradiente vai no `streamflow.css`).
+  `margin-top`) — tela nova não escreve nada, e **não se conserta com
+  `padding-top` na página** (padding fica dentro da área que rola, §49).
+- **Não use `.card` para widget seu**: `<div>` com classe própria
+  (`.ndm-card`, `.fxo-widget`). A família `-widget/-panel/-tile` (classe que
+  TERMINA assim, sem `__`) já é placa de vidro pelo seletor estrutural do
+  `otc.scss` §10a; cartão com gradiente vai no tema. **No Pane card não sobe
+  no hover** — `translateY` de hover, `backdrop-filter`, sombra, borda e raio
+  de card na página são resto do tema antigo e saem.
 - **Estado visual de widget seu (`is-ok`/`is-check`) leva PREFIXO DE ID**
   (`#ops-page .ops-recon.is-ok`, como o `#ndm-page` do Intraday Monitor) —
-  §464. Classe que termina em `-widget` casa com o seletor ESTRUTURAL do tema
-  (`div[class*="-widget"]:not([class*="__"]):not(.row)`, §23.1 do
-  `streamflow.css`), que declara `box-shadow` com especificidade **0,3,1** e
-  carrega DEPOIS do `extra_css`: a regra da página (0,2,0) perde pelos dois
-  critérios. Nada some, o cartão continua bonito e só falta a informação — a
-  classe ESTÁ no elemento e o token resolve certo. Medir o `box-shadow`
-  computado exige esperar a `transition` do tema (~0,3 s): lido na hora, ele
-  devolve a cor ANTIGA no meio da animação e a sonda mente.
+  §464, e o `check_summary_glow.py` cobra. O seletor estrutural do tema hoje
+  tem peso zero, mas o prefixo é o que mantém o estado acima de qualquer
+  componente do tema que carregue depois. Medir o `box-shadow` computado
+  exige esperar a `transition` do tema (~0,3 s): lido na hora, ele devolve a
+  cor ANTIGA no meio da animação e a sonda mente.
 - **`backdrop-filter` cria contexto de empilhamento**: `z-index` vai no
   WRAPPER, nunca no menu; o `.wrapper` fica sem `z-index`.
 - **Dentro de uma raiz de backdrop o desfoque do filho não amostra nada**:
@@ -962,21 +985,32 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 - **Regra de brilho alcança as DUAS famílias de seletor** (estrutural
   `[class*="-widget"]` e as quinze classes próprias), calibrada por tipo de
   superfície.
-- **Movimento é um SISTEMA** (`streamflow.css` §52): duração e curva só por
-  token (`--sf-dur-*`, `--sf-ease-*`); entra com ease-out, sai mais curto; UI
-  abaixo de 300 ms; botão afunda (`scale(.97)`). Menu e tooltip são do Popper
-  (`transform` inline): anima-se `scale`/`translate` INDIVIDUAIS, nunca
-  `transform`. Modal troca o keyframe do tema (repouso VISÍVEL) e **não escala**
-  — o `shown.bs.modal` dispara durante a entrada e escala muda a largura que o
-  DataTables mede. Saída do Swal tem keyframe PRÓPRIO: mesmo nome com `reverse`
-  não reinicia e o popup não fecha.
-- **`.modal-content.liquid-glass` é exceção da regra genérica das
-  sobreposições** (`--sf-overlay-bg` a 82% matava o vidro dos modais, §387).
-- **Modo de efeitos reduzidos** (`sf-reduced` no `<html>`, decidido pela IIFE
-  do `streamflow.js`: WebGL por software ou Firefox no Windows;
-  `localStorage.__OTC_TRACKER_FX__` vence): sem blur, alfa não é material —
-  superfícies viram cor SÓLIDA (seção 16 do CSS). Token do modo vai como
-  `html.sf-reduced:not([data-bs-theme=dark])`. Valide forçando `'reduced'`.
+- **Movimento é um SISTEMA** (`otc.scss` §2/§4): duração e curva só por
+  token (`--otc-dur-fast/base/spring/enter/exit`, `--otc-ease`,
+  `--otc-ease-out`, `--otc-spring`); entra com ease-out, sai mais curto. O
+  tema faz a ENTRADA de toda placa e o "afundar" de gel dos botões (`otc.js`)
+  — animação de entrada própria na página (`@keyframes …fade/rise`) é resto e
+  sai. Menu e tooltip são do Popper (`transform` inline): anima-se
+  `scale`/`translate` INDIVIDUAIS, nunca `transform`. Modal entra como gota
+  **sem escala** (§6h) — o `shown.bs.modal` dispara durante a entrada e escala
+  muda a largura que o DataTables mede. Saída do Swal tem keyframe PRÓPRIO
+  (`otc-swal-out`): mesmo nome com `reverse` não reinicia e o popup não fecha.
+- **O Send é o "Contrail"** (`otc.scss` §6c + `otc.js`): o botão de envio vira
+  a cápsula com o avião, que decola no request e pousa no resultado lido do
+  JSON. Não se reimplementa por página.
+- **A aparência vai para o `<html>` ANTES do primeiro paint** (script
+  síncrono do `partials/head-css.html`): `data-bs-theme`, `data-accent`,
+  `data-wall`, `data-glass` e a classe `is-solid`, lidos de
+  `localStorage.__OTC_TRACKER_UI__` (o `__OTCTRACKER_CONFIG__` antigo é
+  migrado). O botão sol/lua troca pelo `otcUI.set` e suprime as transições
+  (`otc-theme-switching`). `check_theme_toggle.py`.
+- **Modo opaco** (`is-solid` no `<html>`, máquina SEM GPU — as do JPM):
+  WebGL por software ou Firefox no Windows (`decideSolid` do `otc.js`,
+  memoizado em `sessionStorage.__OTC_FX_AUTO__` para o `<head>` não piscar
+  vidro); `localStorage.__OTC_TRACKER_FX__` = `reduced`/`full` vence. Sem
+  blur, alfa não é material: superfícies viram cor SÓLIDA (§11 do SCSS);
+  token do modo vai como `:root.is-solid` (+ o par escuro). Valide forçando
+  `'reduced'`.
 - Cor só de tema claro precisa do par `[data-bs-theme=dark]`.
 
 ---

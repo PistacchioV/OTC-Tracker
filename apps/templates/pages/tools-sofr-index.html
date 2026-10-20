@@ -4,11 +4,12 @@
 
 {% block extra_css %}
 {% include 'partials/tools-assets-css.html' %}
+{# Só o que é DESTA tela: a centralização das tabelas que NÃO são DataTable
+   (memória, quadros fixos), que a regra do tema não alcança. O clone do
+   cabeçalho e a pintura são do tema (otc.scss §7 e §10b). #}
 <style>
-/* Padrão de tabela (§3): cabeçalho e valores centralizados, clone incluído. */
 #tl-sofr-index table thead th { text-align: center !important; vertical-align: middle !important; font-size: .7rem; white-space: normal; }
 #tl-sofr-index table tbody td { text-align: center; vertical-align: middle; font-size: .8rem; white-space: nowrap; }
-#tl-sofr-index .dt-scroll-headInner thead th, #tl-sofr-index .dataTables_scrollHeadInner thead th { text-align: center !important; }
 </style>
 {% endblock extra_css %}
 

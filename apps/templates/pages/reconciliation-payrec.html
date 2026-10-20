@@ -5,147 +5,79 @@
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
 <style>
-#payrec-page {
-    --pr-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-    --pr-navy: #1c2b6b;
-    --pr-navy-2: #23347e;
-    --pr-hairline: rgba(0,0,0,.08);
-}
-[data-bs-theme="dark"] #payrec-page { --pr-hairline: rgba(255,255,255,.10); }
-
-/* ── Toolbar (dropzone + buttons) ─────────────────────────────── */
-#payrec-page .pr-dropzone {
-    /* tokens --ins-* (nativos do tema): os --bs-* são indefinidos aqui e caíam
-       no fallback claro — dropzone branco no dark (HANDOFF §109). */
-    border: 1.5px dashed var(--ins-border-color, #ced4da); border-radius: 12px;
-    padding: .85rem 1rem; cursor: pointer; background: var(--ins-tertiary-bg, #f8f9fa);
-    transition: border-color 150ms var(--pr-ease-out), background-color 150ms var(--pr-ease-out);
-}
-#payrec-page .pr-dropzone:hover, #payrec-page .pr-dropzone:focus-visible { border-color: #0066cc; outline: none; }
-#payrec-page .pr-dropzone.pr-dz-over { border-color: #0066cc; background: rgba(0,102,204,.06); }
-#payrec-page .pr-dz-hint { display: flex; align-items: center; gap: .5rem; color: var(--ins-secondary-color); font-size: .82rem; }
-#payrec-page .pr-dz-hint i { font-size: 1.15rem; color: #0066cc; }
+{# Só o que é DESTA tela: o respiro da dropzone dos insumos, as tabelas de resultado montadas pelo JS (não são DataTable), os chips/badges de veredito e as marcas Branch/Manual, e a tabela do Swal do Match. Placa, botões, campo de data, squircle das ações e spinner vêm do tema. #}
+/* ── Dropzone dos insumos ─────────────────────────────────────── */
+#payrec-page .pr-dropzone { padding: .85rem 1rem; cursor: pointer; }
+#payrec-page .pr-dz-hint { display: flex; align-items: center; gap: .5rem; color: var(--otc-text-2); font-size: .82rem; }
+#payrec-page .pr-dz-hint i { font-size: 1.15rem; color: var(--otc-accent-ink); }
 #payrec-page .pr-dz-list { list-style: none; margin: .55rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: .4rem; }
 #payrec-page .pr-dz-list:empty { margin: 0; }
 #payrec-page .pr-dz-list li {
     display: inline-flex; align-items: center; gap: .35rem; font-size: .74rem;
-    background: var(--ins-secondary-bg, #fff); border: 1px solid var(--ins-border-color, #dee2e6);
-    border-radius: 50rem; padding: 2px 6px 2px 10px; color: var(--ins-body-color);
-    animation: pr-chip-in 200ms var(--pr-ease-out) both;
+    background: var(--otc-fill); border-radius: var(--otc-r-pill); padding: 2px 6px 2px 10px; color: var(--otc-text);
 }
-@keyframes pr-chip-in { from { opacity: 0; transform: translateY(6px) scale(.96); } to { opacity: 1; transform: none; } }
 #payrec-page .pr-dz-list .pr-dz-x { cursor: pointer; font-size: 1rem; line-height: 1; opacity: .6; padding: 0 2px; }
-#payrec-page .pr-dz-list .pr-dz-x:hover { opacity: 1; color: #dc3545; }
+#payrec-page .pr-dz-list .pr-dz-x:hover { opacity: 1; color: var(--otc-danger); }
 
-#payrec-page .btn { transition: transform 160ms var(--pr-ease-out), box-shadow 160ms var(--pr-ease-out); }
-#payrec-page .btn:active { transform: scale(0.97); }
-/* Uniform, compact toolbar buttons (override theme pill/padding differences) */
-#payrec-page .pr-tbtn {
-    padding: .32rem .8rem !important; font-size: .78rem !important; font-weight: 600 !important;
-    line-height: 1.35 !important; border-radius: 8px !important;
+/* Marcas da linha: quebra da Branch Settlement (Banco × MGT) e match manual. */
+#payrec-page :is(.pr-branch-tag, .pr-manual-tag) {
+    display: inline-block; margin-left: .35rem; padding: 1px 7px; border-radius: var(--otc-r-pill);
+    font-size: .65rem; font-weight: 700; white-space: nowrap;
 }
-#payrec-page .pr-tbtn i { font-size: .95rem; }
-/* Marca da linha de quebra da Branch Settlement (reversão Banco × MGT). */
-#payrec-page .pr-branch-tag { display: inline-block; margin-left: .35rem; padding: 1px 7px; border-radius: 20px;
-    font-size: .65rem; font-weight: 700; background: #ede7f6; color: #4a3ba0; white-space: nowrap; }
-[data-bs-theme="dark"] #payrec-page .pr-branch-tag { background: rgba(169,155,234,.18); color: #c9bff2; }
+#payrec-page .pr-branch-tag { background: color-mix(in srgb, var(--otc-purple) 16%, transparent); color: var(--otc-purple); }
+#payrec-page .pr-manual-tag { background: color-mix(in srgb, var(--otc-blue) 16%, transparent); color: var(--otc-blue); }
 
-/* Reference date */
-#payrec-page .pr-datewrap { position: relative; width: 160px; }
-#payrec-page .pr-datewrap input {
-    width: 100%; border: 1px solid var(--ins-border-color); border-radius: 10px;
-    padding: .3rem 2.1rem .3rem .7rem; font-size: .85rem; font-weight: 600;
-    color: var(--ins-body-color); background: var(--ins-secondary-bg, #fff); cursor: pointer;
-}
-#payrec-page .pr-cal-btn { position: absolute; top: 0; right: 0; bottom: 0; width: 34px; display: inline-flex; align-items: center; justify-content: center; color: var(--ins-secondary-color); cursor: pointer; }
+/* ── Blocos de resultado ──────────────────────────────────────── */
+#payrec-page .pr-block__title { font-size: .95rem; font-weight: 700; letter-spacing: -.2px; margin: 0 0 .55rem; display: flex; align-items: center; gap: .45rem; color: var(--otc-text); }
+#payrec-page .pr-block__title i { font-size: 1.05rem; color: var(--otc-accent-ink); }
 
-/* ── Result blocks ────────────────────────────────────────────── */
-#payrec-page .pr-block { animation: pr-block-in 280ms var(--pr-ease-out) both; }
-@keyframes pr-block-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-#payrec-page .pr-block:nth-child(1) { animation-delay: 0ms; }
-#payrec-page .pr-block:nth-child(2) { animation-delay: 45ms; }
-#payrec-page .pr-block:nth-child(3) { animation-delay: 90ms; }
-#payrec-page .pr-block:nth-child(4) { animation-delay: 135ms; }
-
-#payrec-page .pr-block__title { font-size: .95rem; font-weight: 700; letter-spacing: -.2px; margin: 0 0 .55rem; display: flex; align-items: center; gap: .45rem; }
-#payrec-page .pr-block__title i { font-size: 1.05rem; color: #0066cc; }
-#payrec-page .pr-block__count { font-size: .72rem; font-weight: 600; color: var(--ins-secondary-color); background: var(--ins-tertiary-bg); border-radius: 50rem; padding: 1px 9px; }
-
-#payrec-page .pr-table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--pr-hairline); }
+/* As tabelas são montadas pelo JS (não são DataTable): o desenho é o das tabelas do tema. */
+#payrec-page .pr-table-wrap { overflow-x: auto; border-radius: var(--otc-r-md); }
 #payrec-page table.pr-table { width: 100%; border-collapse: collapse; font-size: .78rem; margin: 0; }
 #payrec-page table.pr-table thead th {
-    background: var(--pr-navy); color: #fff; font-weight: 600; text-align: center;
-    padding: 8px 12px; white-space: nowrap; border-right: 1px solid rgba(255,255,255,.12);
+    background: var(--otc-thead-bg); color: var(--otc-text-2); font-weight: 650; text-align: center;
+    padding: 8px 12px; white-space: nowrap; border-bottom: 1px solid var(--otc-thead-line);
 }
-#payrec-page table.pr-table thead th:last-child { border-right: 0; }
-#payrec-page table.pr-table tbody td { padding: 7px 12px; border-bottom: 1px solid var(--pr-hairline); white-space: nowrap; vertical-align: middle; text-align: center; }
+#payrec-page table.pr-table tbody td { padding: 7px 12px; border-bottom: 1px solid var(--otc-sep); white-space: nowrap; vertical-align: middle; text-align: center; color: var(--otc-text); }
 #payrec-page table.pr-table tbody tr:last-child td { border-bottom: 0; }
-#payrec-page table.pr-table tbody tr:hover td { background: rgba(0,102,204,.05); }
+#payrec-page table.pr-table tbody tr:hover td { background: var(--otc-fill-hover); }
 #payrec-page table.pr-table .pr-num { text-align: center; font-variant-numeric: tabular-nums; }
-#payrec-page table.pr-table .pr-neg { color: #c0392b; }
-#payrec-page table.pr-table tr.pr-total td { font-weight: 700; background: rgba(0,102,204,.07); }
-#payrec-page .pr-empty { padding: 14px; text-align: center; color: var(--ins-secondary-color); font-size: .8rem; }
+#payrec-page table.pr-table .pr-neg { color: var(--otc-danger); }
+#payrec-page table.pr-table tr.pr-total td { font-weight: 700; background: var(--otc-accent-soft); }
+#payrec-page .pr-empty { padding: 14px; text-align: center; color: var(--otc-text-2); font-size: .8rem; }
 
-/* Check chips (OK / Not OK) */
-#payrec-page .pr-check { display: inline-flex; align-items: center; gap: .3rem; font-weight: 700; font-size: .72rem; padding: 2px 8px; border-radius: 50rem; }
-#payrec-page .pr-check--ok { background: #e8f5e9; color: #1b5e20; }
-#payrec-page .pr-check--no { background: #fde8e8; color: #b71c1c; }
-[data-bs-theme="dark"] #payrec-page .pr-check--ok { background: rgba(76,175,80,.18); color: #a5d6a7; }
-[data-bs-theme="dark"] #payrec-page .pr-check--no { background: rgba(244,67,54,.18); color: #ef9a9a; }
-#payrec-page .badge-status { font-size: .68rem; font-weight: 600; padding: 2px 8px; border-radius: 50rem; }
-#payrec-page .badge-pending { background: #fff8e1; color: #7b5e00; }
-#payrec-page .badge-settled { background: #e8f5e9; color: #1b5e20; }
-#payrec-page .badge-justified { background: #e3f2fd; color: #0d47a1; }
-[data-bs-theme="dark"] #payrec-page .badge-pending { background: rgba(255,193,7,.18); color: #ffd54f; }
-[data-bs-theme="dark"] #payrec-page .badge-settled { background: rgba(76,175,80,.18); color: #a5d6a7; }
-[data-bs-theme="dark"] #payrec-page .badge-justified { background: rgba(33,150,243,.18); color: #90caf9; }
+/* Veredito (OK / Not OK) e o status da linha. */
+#payrec-page .pr-check { display: inline-flex; align-items: center; gap: .3rem; font-weight: 700; font-size: .72rem; padding: 2px 8px; border-radius: var(--otc-r-pill); }
+#payrec-page .pr-check--ok { background: color-mix(in srgb, var(--otc-green) 16%, transparent); color: var(--otc-green); }
+#payrec-page .pr-check--no { background: color-mix(in srgb, var(--otc-danger) 16%, transparent); color: var(--otc-danger); }
+#payrec-page .badge-status { font-size: .68rem; font-weight: 600; padding: 2px 8px; border-radius: var(--otc-r-pill); }
+#payrec-page .badge-pending   { background: color-mix(in srgb, var(--otc-yellow) 20%, transparent); color: color-mix(in srgb, var(--otc-yellow) 75%, var(--otc-text)); }
+#payrec-page .badge-settled   { background: color-mix(in srgb, var(--otc-green) 16%, transparent);  color: var(--otc-green); }
+#payrec-page .badge-justified { background: color-mix(in srgb, var(--otc-blue) 16%, transparent);   color: var(--otc-blue); }
 
-/* Comment + Actions columns are always visible. The comment is read-only and
-   only becomes editable (Edit → Confirm) for rows that still need justifying. */
+/* Comentário: só vira editável (Edit → Confirm) na linha que ainda pede justificativa. */
 #payrec-page .pr-comment-input { width: 100%; min-width: 160px; font-size: .78rem; padding: 3px 8px;
-    border: 1px solid var(--pr-hairline); border-radius: 6px; background: var(--ins-secondary-bg, #fff); color: inherit; }
-/* Action buttons (Edit/Confirm) no mesmo padrão das tabelas de New Deals:
-   quadrado arredondado ~28px, sem padding, ícone 13px centralizado
-   (o mesmo estilo de #deals-processing-table .btn-sm.rounded-circle). */
-#payrec-page table.pr-table .pr-actions-cell .btn {
-    width: 32px; height: 32px; min-width: 32px; max-width: 32px; padding: 0; font-size: 1rem;
-    flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
-    line-height: 1; border-radius: 10px !important;   /* squircle padrão (spec .ops-row-act) */
-}
-#payrec-page table.pr-table .pr-actions-cell .btn i { font-size: 1rem; }
+    border: 0; border-radius: var(--otc-r-sm); background: var(--otc-fill); color: inherit; }
 
-/* Seleção para o match manual: só a linha com UM lado (não casada pelo motor)
-   ganha a caixinha; a marcada fica realçada. */
+/* Seleção para o match manual: só a linha com UM lado ganha a caixinha. */
 #payrec-page table.pr-table .pr-sel-col { width: 34px; padding-left: 8px; padding-right: 4px; }
 #payrec-page table.pr-table .pr-sel { width: 15px; height: 15px; cursor: pointer; vertical-align: middle; }
-#payrec-page table.pr-table tr.pr-selected td { background: rgba(0,102,204,.10); }
-#payrec-page .pr-manual-tag { display: inline-block; margin-left: .35rem; padding: 1px 7px; border-radius: 20px;
-    font-size: .65rem; font-weight: 700; background: #e3f2fd; color: #0d47a1; white-space: nowrap; }
-[data-bs-theme="dark"] #payrec-page .pr-manual-tag { background: rgba(33,150,243,.18); color: #90caf9; }
-/* A tabela do Swal pende do <body> (fora do #payrec-page). */
+#payrec-page table.pr-table tr.pr-selected td { background: var(--otc-accent-soft); }
+
+/* ── Swal do Match (pende do <body>, fora do #payrec-page) ─────── */
 .pr-match-table { width: 100%; border-collapse: collapse; font-size: .8rem; margin: 0; }
-.swal2-popup .pr-match-table thead th { background: #1c2b6b !important; color: #fff !important; font-weight: 600;
+.swal2-popup .pr-match-table thead th { background: var(--otc-thead-bg); color: var(--otc-text-2); font-weight: 650;
     padding: 6px 10px; text-align: center; white-space: nowrap; }
-.pr-match-table td { padding: 6px 10px; border-bottom: 1px solid rgba(127,127,127,.2); text-align: center; white-space: nowrap; }
+.pr-match-table td { padding: 6px 10px; border-bottom: 1px solid var(--otc-sep); text-align: center; white-space: nowrap; }
 .pr-match-table td.pr-num { font-variant-numeric: tabular-nums; }
-.pr-match-table tfoot td { font-weight: 700; border-top: 2px solid rgba(127,127,127,.35); border-bottom: 0; }
-.pr-match-table .pr-neg { color: #c0392b; }
+.pr-match-table tfoot td { font-weight: 700; border-top: 2px solid var(--otc-thead-line); border-bottom: 0; }
+.pr-match-table .pr-neg { color: var(--otc-danger); }
 .pr-match-sum { margin-top: .8rem; display: flex; justify-content: center; align-items: center; gap: .6rem; font-size: .9rem; }
 .pr-match-sum b { font-variant-numeric: tabular-nums; }
-.pr-match-chip { font-size: .72rem; font-weight: 700; padding: 2px 9px; border-radius: 50rem; }
-.pr-match-chip.ok { background: #e8f5e9; color: #1b5e20; }
-.pr-match-chip.no { background: #fde8e8; color: #b71c1c; }
-[data-bs-theme="dark"] .pr-match-chip.ok { background: rgba(76,175,80,.18); color: #a5d6a7; }
-[data-bs-theme="dark"] .pr-match-chip.no { background: rgba(244,67,54,.18); color: #ef9a9a; }
-.pr-match-err { margin-top: .5rem; font-size: .8rem; color: #b71c1c; }
-[data-bs-theme="dark"] .pr-match-err { color: #ef9a9a; }
-
-#payrec-page .ti-spin { animation: pr-spin 700ms linear infinite; }
-@keyframes pr-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) {
-    #payrec-page *, #payrec-page .pr-block, #payrec-page .pr-dz-list li { animation: none !important; transition: none !important; }
-    #payrec-page .btn:active { transform: none; }
-}
+.pr-match-chip { font-size: .72rem; font-weight: 700; padding: 2px 9px; border-radius: var(--otc-r-pill); }
+.pr-match-chip.ok { background: color-mix(in srgb, var(--otc-green) 16%, transparent); color: var(--otc-green); }
+.pr-match-chip.no { background: color-mix(in srgb, var(--otc-danger) 16%, transparent); color: var(--otc-danger); }
+.pr-match-err { margin-top: .5rem; font-size: .8rem; color: var(--otc-danger); }
 </style>
 {% endblock extra_css %}
 
@@ -235,7 +167,7 @@
         <div class="card mt-2 pr-block" id="prCardPendPay" hidden>
             <div class="card-body">
                 <h3 class="pr-block__title"><i class="ti ti-arrow-up-right"></i><span data-lang="pr-pendpay">Pending Payment</span>
-                    <span class="pr-block__count" id="prPendPayCount">0</span></h3>
+                    <span class="pr-block__count otc-count" id="prPendPayCount">0</span></h3>
                 <div class="pr-table-wrap">
                     <table class="pr-table">
                         <thead><tr>
@@ -261,7 +193,7 @@
         <div class="card mt-2 pr-block" id="prCardPendRec" hidden>
             <div class="card-body">
                 <h3 class="pr-block__title"><i class="ti ti-arrow-down-left"></i><span data-lang="pr-pendrec">Pending Receivement</span>
-                    <span class="pr-block__count" id="prPendRecCount">0</span></h3>
+                    <span class="pr-block__count otc-count" id="prPendRecCount">0</span></h3>
                 <div class="pr-table-wrap">
                     <table class="pr-table">
                         <thead><tr>
@@ -287,7 +219,7 @@
         <div class="card mt-2 pr-block" id="prCardSettled" hidden>
             <div class="card-body">
                 <h3 class="pr-block__title"><i class="ti ti-circle-check"></i><span data-lang="pr-settled">Settled</span>
-                    <span class="pr-block__count" id="prSettledCount">0</span></h3>
+                    <span class="pr-block__count otc-count" id="prSettledCount">0</span></h3>
                 <div class="pr-table-wrap">
                     <table class="pr-table">
                         <thead><tr>
@@ -312,7 +244,7 @@
     <!-- Empty state -->
     <div class="card mt-2" id="prEmpty">
         <div class="card-body text-center py-5">
-            <i class="ti ti-file-search" style="font-size:2.4rem; color:var(--ins-secondary-color); opacity:.55;"></i>
+            <i class="ti ti-file-search text-muted" style="font-size:2.4rem; opacity:.55;"></i>
             <p class="text-muted mt-2 mb-0" data-lang="pr-emptystate">Click Run to reconcile with the files from the folder, or drop the input files here first to use those instead.</p>
         </div>
     </div>

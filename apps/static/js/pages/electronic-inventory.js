@@ -540,7 +540,7 @@
                 '</div>' +
                 '<div class="col-md-3">' +
                     '<label class="form-label fs-xs text-muted mb-1">Date</label>' +
-                    '<input type="text" class="form-control ei-up-date" placeholder="dd/mm/yyyy" autocomplete="off">' +
+                    '<input type="text" class="form-control ei-up-date otc-datefield" placeholder="dd/mm/yyyy" autocomplete="off">' +
                 '</div>' +
                 '<div class="col-md-6 d-none ei-up-sub-wrap">' +
                     '<label class="form-label fs-xs text-muted mb-1 ei-up-sub-label">Transactional Type</label>' +

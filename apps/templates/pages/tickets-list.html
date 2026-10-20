@@ -6,75 +6,35 @@
 <!-- SweetAlert2 CSS: sem ela o Swal.fire renderiza sem estilo. O formulário de
      novo ticket vive dentro de um Swal (a página /ticket-create foi removida). -->
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
+{# Só o que é DESTA tela: a lista de tickets não é DataTable (a regra do tema
+   não a alcança), o logo do agente por tema, a ordenação pelo cabeçalho, o
+   dropzone de imagens e os campos do Swal do New Ticket (pendurado no body). #}
 <style>
-#tk-page { --tk-hairline: #e0e0e0; }
-[data-bs-theme=dark] #tk-page { --tk-hairline: rgba(255,255,255,.09); }
-
-/* Agente atribuído: não há fila de atendentes, o dono é sempre o time. O logo
-   troca com o TEMA, não com o menu — por isso as regras se penduram em
-   [data-bs-theme] (o atributo que o toggle de tema escreve no <html>) e não nas
-   classes .logo-light/.logo-dark do layout, que reagem também a data-menu-color. */
+#tk-table thead th { font-size: .7rem; vertical-align: middle !important; text-align: center !important; }
+#tk-table tbody td { font-size: .8rem; vertical-align: middle; text-align: center; }
 #tk-page .tk-agent-logo { width: 22px; height: 22px; object-fit: contain; }
-
-/* Cabeçalho e valores centralizados, como no resto do app (CLAUDE.md §3). A
-   classe `table-centered` do markup vem do tema comprado e NÃO existe em CSS
-   nenhum — não centralizava coisa alguma. O `!important` do `th` é porque a
-   regra do DataTables (`table.dataTable thead th`, (0,1,3)) alinha à esquerda
-   com especificidade maior que a daqui; e os clones entram no seletor porque
-   com scrollX o cabeçalho que se vê é uma tabela irmã, de onde o plugin REMOVE
-   o id. */
-#tk-table thead th,
-.dt-scroll-head thead th,
-.dt-scroll-headInner thead th,
-.dataTables_scrollHeadInner thead th {
-    font-size: .7rem;
-    vertical-align: middle !important;
-    text-align: center !important;
-}
-#tk-table tbody td {
-    font-size: .8rem;
-    vertical-align: middle;
-    text-align: center;
-}
-#tk-page .tk-agent-logo--dark  { display: none; }
-[data-bs-theme=dark] #tk-page .tk-agent-logo--dark  { display: inline-block; }
-[data-bs-theme=dark] #tk-page .tk-agent-logo--light { display: none; }
-
-/* O tema dá a `.btn-primary:not(.btn-sm):not(.btn-lg)` um padding maior
-   (11px 22px — a pílula de CTA), e só a ele: o Export (`btn-info`) fica no
-   padding default de `.btn`. Lado a lado na mesma barra os dois têm de medir
-   igual, então o New Ticket volta ao default — pelas MESMAS variáveis do
-   `.btn`, para não descolar se o tema mudar o tamanho. */
-#tk-page #tk-new-btn { padding: var(--ins-btn-padding-y) var(--ins-btn-padding-x); }
-
-#tk-page .tk-empty { padding: 44px 16px; text-align: center; color: var(--ins-secondary-color); }
-#tk-page .tk-due-empty { color: var(--ins-secondary-color); }
+#tk-page .tk-agent-logo--dark { display: none; }
+[data-bs-theme="dark"] #tk-page .tk-agent-logo--dark { display: inline-block; }
+[data-bs-theme="dark"] #tk-page .tk-agent-logo--light { display: none; }
+#tk-page .tk-empty { padding: 44px 16px; text-align: center; color: var(--otc-text-3); }
+#tk-page .tk-due-empty { color: var(--otc-text-3); }
 #tk-page th[data-tk-sort] { cursor: pointer; user-select: none; }
-#tk-page th[data-tk-sort]:hover { color: var(--ins-emphasis-color); }
+#tk-page th[data-tk-sort]:hover { color: var(--otc-text); }
 
-/* Dropzone de imagens do New Ticket (pedido 2026-09-01). Fora do #tk-page: o
-   Swal pendura o modal no <body>. */
-.tk-dropzone { border: 1.5px dashed rgba(128,128,128,.4); border-radius: 12px;
-    padding: 12px; text-align: center; cursor: pointer; font-size: .8rem;
-    color: var(--ins-secondary-color, #8a93a3); user-select: none;
-    transition: border-color .2s ease, background-color .2s ease; }
-.tk-dropzone.tk-dz-over { border-color: #0d6efd; background: rgba(13,110,253,.06); }
+.tk-dropzone { padding: 12px; text-align: center; cursor: pointer; font-size: .8rem; user-select: none; }
 .tk-drop-thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.tk-drop-thumbs .tk-thumb { position: relative; width: 64px; height: 64px;
-    border-radius: 8px; overflow: hidden; border: 1px solid rgba(128,128,128,.3); }
+.tk-drop-thumbs .tk-thumb { position: relative; width: 64px; height: 64px; border-radius: var(--otc-r-sm); overflow: hidden; box-shadow: 0 0 0 1px var(--otc-sep); }
 .tk-drop-thumbs .tk-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.tk-drop-thumbs .tk-thumb button { position: absolute; top: 2px; right: 2px; width: 18px;
-    height: 18px; border: none; border-radius: 6px; padding: 0; font-size: .65rem;
-    display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,.55); color: #fff; cursor: pointer; }
+.tk-drop-thumbs .tk-thumb button {
+    position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border: none; border-radius: 6px; padding: 0;
+    font-size: .65rem; display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.55); color: #fff; cursor: pointer;
+}
 
-/* Campos do Swal: o tema escuro do SweetAlert não alcança inputs nativos. */
 .tk-swal-form { text-align: left; }
-.tk-swal-form .form-label { font-size: .78rem; font-weight: 600; text-transform: uppercase;
-    letter-spacing: .04em; color: var(--ins-secondary-color); margin-bottom: .25rem; }
-.tk-swal-form .form-control:disabled,
-.tk-swal-form .form-control[readonly] { background: var(--ins-tertiary-bg); opacity: 1; }
-.tk-swal-form .tk-locked-hint { font-size: .72rem; color: var(--ins-secondary-color); margin-top: .2rem; }
+.tk-swal-form .form-label { font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--otc-text-2); margin-bottom: .25rem; }
+.tk-swal-form .form-control:disabled, .tk-swal-form .form-control[readonly] { background: var(--otc-fill); opacity: 1; }
+.tk-swal-form .tk-locked-hint { font-size: .72rem; color: var(--otc-text-3); margin-top: .2rem; }
 </style>
 {% endblock extra_css %}
 
@@ -85,80 +45,27 @@
     {% set title='Tickets' %}
     {% include 'partials/page-title.html' %}
 
-    <div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1">
-        <!-- Open Tickets Widget -->
-        <div class="col">
-            <div class="card">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="avatar fs-60 avatar-img-size flex-shrink-0">
-                            <span class="avatar-title bg-primary-subtle text-primary rounded-circle fs-24">
-                                <i class="ti ti-ticket"></i>
-                            </span>
-                        </div>
-                        <div class="text-end">
-                            <h3 class="mb-2 fw-normal"><span id="tk-count-open">0</span></h3>
-                            <p class="mb-0 text-muted"><span data-lang="tk-open">Open Tickets</span></p>
-                        </div>
-                    </div>
-                </div>
+    {# Os quatro números do topo: os ladrilhos do tema (`.otc-stat`). #}
+    <div class="otc-page-bar">
+        <div class="otc-stats">
+            <div class="otc-stat" style="--hue:var(--otc-blue)">
+                <span class="otc-stat__label" data-lang="tk-open">Open Tickets</span>
+                <span class="otc-stat__value" id="tk-count-open">0</span>
             </div>
-        </div><!-- end col -->
-        <!-- Pending Tickets Widget -->
-        <div class="col">
-            <div class="card">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="avatar fs-60 avatar-img-size flex-shrink-0">
-                            <span class="avatar-title bg-info-subtle text-info rounded-circle fs-24">
-                                <i class="ti ti-hourglass"></i>
-                            </span>
-                        </div>
-                        <div class="text-end">
-                            <h3 class="mb-2 fw-normal"><span id="tk-count-pending">0</span></h3>
-                            <p class="mb-0 text-muted"><span data-lang="tk-pending">Pending Tickets</span></p>
-                        </div>
-                    </div>
-                </div>
+            <div class="otc-stat" style="--hue:var(--otc-teal)">
+                <span class="otc-stat__label" data-lang="tk-pending">Pending Tickets</span>
+                <span class="otc-stat__value" id="tk-count-pending">0</span>
             </div>
-        </div><!-- end col -->
-        <!-- Resolved Tickets Widget -->
-        <div class="col">
-            <div class="card">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="avatar fs-60 avatar-img-size flex-shrink-0">
-                            <span class="avatar-title bg-success-subtle text-success rounded-circle fs-24">
-                                <i class="ti ti-check"></i>
-                            </span>
-                        </div>
-                        <div class="text-end">
-                            <h3 class="mb-2 fw-normal"><span id="tk-count-resolved">0</span></h3>
-                            <p class="mb-0 text-muted"><span data-lang="tk-resolved">Resolved Tickets</span></p>
-                        </div>
-                    </div>
-                </div>
+            <div class="otc-stat" style="--hue:var(--otc-green)">
+                <span class="otc-stat__label" data-lang="tk-resolved">Resolved Tickets</span>
+                <span class="otc-stat__value" id="tk-count-resolved">0</span>
             </div>
-        </div><!-- end col -->
-        <!-- Closed Tickets Widget -->
-        <div class="col">
-            <div class="card">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="avatar fs-60 avatar-img-size flex-shrink-0">
-                            <span class="avatar-title bg-secondary-subtle text-secondary rounded-circle fs-24">
-                                <i class="ti ti-archive"></i>
-                            </span>
-                        </div>
-                        <div class="text-end">
-                            <h3 class="mb-2 fw-normal"><span id="tk-count-closed">0</span></h3>
-                            <p class="mb-0 text-muted"><span data-lang="tk-closed">Closed Tickets</span></p>
-                        </div>
-                    </div>
-                </div>
+            <div class="otc-stat" style="--hue:var(--otc-text-3)">
+                <span class="otc-stat__label" data-lang="tk-closed">Closed Tickets</span>
+                <span class="otc-stat__value" id="tk-count-closed">0</span>
             </div>
-        </div><!-- end col -->
-    </div><!-- end row -->
+        </div>
+    </div>
 
     <div class="row">
         <div class="col-12">

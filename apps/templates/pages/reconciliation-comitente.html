@@ -4,159 +4,40 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <style>
-/* ── Widgets ─────────────────────────────────────────────────────── */
-.recon-widget {
-    border-radius: 20px;
-    border: none;
-    padding: 1.25rem 1.4rem;
-    transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1),
-                box-shadow 220ms cubic-bezier(0.23, 1, 0.32, 1);
-    cursor: default;
-    position: relative;
-    overflow: hidden;
-}
-@media (hover: hover) and (pointer: fine) {
-    .recon-widget:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 12px 32px rgba(0,0,0,.10);
-    }
-}
+{# Só o que é DESTA tela: os cards de status (a cor é a da GRAVIDADE, como o badge da tabela), a célula de score pintada pelo JS, o campo de data nativo escondido atrás do texto e o estado de arrastar do upload. Placa, tabela, botões, modal, Export e zona de upload vêm do tema. #}
+/* ── Cards de status ─────────────────────────────────────────────── */
+.recon-widget { --hue: var(--otc-text-3); padding: 1.25rem 1.4rem; cursor: default; position: relative; overflow: hidden; }
 .recon-widget .widget-icon {
-    opacity: .20;
-    position: absolute;
-    right: 1rem;
-    top: 50%;
-    transform: translateY(-50%);
+    position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
+    background: none; color: var(--hue); opacity: .45;
 }
-.recon-widget .widget-val {
-    font-size: 2rem;
-    font-weight: 700;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-}
-.recon-widget .widget-lbl {
-    font-size: 0.7rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    opacity: .65;
-    margin-bottom: .4rem;
-}
-/* O Total é o card de FECHAMENTO: vem por último e leva o gradiente da MARCA.
-   O ESTILO dele mora no `streamflow.css`, e não aqui: o `visual-refresh.css`
-   aplica `background: … !important` (ATALHO, que zera o background-image) no
-   `.card`, e é carregado DEPOIS do <style> da página — daqui a regra perderia
-   por ordem de origem, com a mesma especificidade. O sintoma era o texto
-   branco sobre o vidro claro, sem o gradiente por baixo. */
-.widget-new   { background:#f1f3f5; color:#495057; border:1px solid #dee2e6 !important; }
-.widget-check { background:#fff8e1; color:#7b5e00; border:1px solid #ffe082 !important; }
-.widget-ok    { background:#e8f5e9; color:#1b5e20; border:1px solid #a5d6a7 !important; }
-.widget-amend { background:#fde8e8; color:#b71c1c; border:1px solid #ef9a9a !important; }
-
-/* ── Status badges ───────────────────────────────────────────────── */
-/* O Status é o badge pill do app (`badge rounded-pill text-bg-* bg-gradient`),
-   como nas outras três recons e em toda tabela — e não uma paleta própria:
-   a `.s-badge` de cores chapadas claras (#e9ecef, #fff3cd…) saía como pílula
-   branca sobre o vidro escuro, e era a única coluna de status do app fora do
-   padrão. Aqui só o tamanho, para o pill não crescer a linha. */
-#recon-table td .badge { font-size:.68rem; font-weight:700; padding:.28em .7em; letter-spacing:.03em; }
-
-/* ── Toolbar buttons ─────────────────────────────────────────────── */
-.btn-toolbar-all {
-    font-size:0.75rem !important; padding:0.25rem 0.6rem !important;
-    height:auto !important; line-height:1.4 !important; white-space:nowrap !important;
-    transition: transform 140ms cubic-bezier(0.23,1,0.32,1),
-                box-shadow 140ms cubic-bezier(0.23,1,0.32,1);
-}
-@media (hover: hover) and (pointer: fine) {
-    .btn-toolbar-all:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,.10); }
-}
-.btn-toolbar-all:active { transform:scale(0.97) !important; }
-
-/* ── Table ───────────────────────────────────────────────────────── */
-#recon-table th {
-    white-space:nowrap; font-size:0.68rem; padding:8px 10px;
-    text-align:center !important; vertical-align:middle !important;
-}
-#recon-table td { font-size:0.72rem; padding:6px 10px; vertical-align:middle; text-align:center; }
-#recon-table td.score-cell {
-    text-align:center; font-weight:600;
-    box-shadow: none !important;
+.recon-widget .widget-lbl { text-transform: uppercase; letter-spacing: .05em; font-size: .7rem; font-weight: 700; margin-bottom: .4rem; }
+/* New sem par (neutro) · Check divergência a olhar (âmbar) · OK fechou (verde) ·
+   Amend diverge de verdade (vermelho). O anel é a cor; o Total fica sem. */
+.widget-new   { --hue: var(--otc-text-3); }
+.widget-check { --hue: var(--otc-yellow); }
+.widget-ok    { --hue: var(--otc-green); }
+.widget-amend { --hue: var(--otc-danger); }
+.widget-total { --hue: var(--otc-accent-ink); }
+.recon-widget:is(.widget-new, .widget-check, .widget-ok, .widget-amend) {
+    border: 1px solid color-mix(in srgb, var(--hue) 45%, transparent) !important;
 }
 
-/* ── Upload modal ────────────────────────────────────────────────── */
-#uploadModal .modal-content {
-    border-radius:20px; border:none;
-    box-shadow:0 24px 60px rgba(0,0,0,.15);
-}
-.upload-zone {
-    border:2px dashed var(--ins-border-color); border-radius:12px; padding:.9rem 1rem;
-    text-align:center; background:var(--ins-tertiary-bg, #f6f7fb); cursor:pointer;
-    transition:border-color 160ms, background 160ms;
-}
-.upload-zone:hover, .upload-zone.dragover { border-color:var(--vr-accent-1, #0066cc); background:var(--ins-secondary-bg, #fff); }
-.upload-zone input[type=file] { display:none; }
-.upload-zone .fn { font-size:.72rem; color:var(--vr-accent-1, #0066cc); font-weight:600; margin-top:.3rem; }
+/* ── Tabela: o score pinta a célula (o JS escreve a cor) ─────────── */
+#recon-table td.score-cell { font-weight: 600; box-shadow: none !important; }
 
-/* ── Column filters (second thead row via headerCallback) ────────── */
-#recon-table thead .recon-col-filters th,
-.dt-scroll-headInner thead .recon-col-filters th,
-.dataTables_scrollHeadInner thead .recon-col-filters th { padding:3px 4px; }
-#recon-table thead .recon-col-filters input,
-.dt-scroll-headInner thead .recon-col-filters input,
-.dataTables_scrollHeadInner thead .recon-col-filters input {
-    width:100%; font-size:.62rem; padding:2px 4px; border-radius:6px;
-    border:1px solid var(--bs-border-color); background:var(--bs-body-bg);
-    color:var(--bs-body-color);
-}
-.recon-col-filters input::placeholder { color:var(--bs-secondary-color); opacity:.6; }
+/* ── Upload manual ───────────────────────────────────────────────── */
+.upload-zone { text-align: center; cursor: pointer; }
+.upload-zone input[type=file] { display: none; }
+.upload-zone .fn { font-size: .72rem; color: var(--otc-accent-ink); font-weight: 600; margin-top: .3rem; }
 
-/* ── Date wrapper ────────────────────────────────────────────────── */
-.date-wrap { position:relative; width:130px; }
-.date-wrap input[type=date] {
-    position:absolute; inset:0; opacity:0; cursor:pointer; z-index:2;
-}
-.date-wrap input[type=text] { pointer-events:none; padding-right:28px; }
-/* Visible calendar affordance inside the field (the native date input is
-   transparent and overlays the whole wrap, so its own icon is hidden). */
+/* ── Data: o input nativo fica invisível POR CIMA do texto dd/mm/aaaa ── */
+.date-wrap { width: 130px; }
+.date-wrap input[type=date] { position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 2; }
+.date-wrap input[type=text] { pointer-events: none; padding-right: 28px; }
 .date-wrap-icon {
-    position:absolute; right:9px; top:50%; transform:translateY(-50%);
-    z-index:1; pointer-events:none; font-size:15px;
-    color: var(--bs-secondary-color, #6c757d);
-}
-
-/* ── Export/ColVis collection dropdown — fundo sólido e texto legível */
-.dt-button-collection {
-    background: #fff !important;
-    border: 1px solid rgba(0,0,0,.15) !important;
-    box-shadow: 0 4px 16px rgba(0,0,0,.18) !important;
-    border-radius: 0.375rem !important;
-    padding: 0.25rem 0 !important;
-    opacity: 1 !important;
-}
-[data-bs-theme="dark"] .dt-button-collection {
-    background: #2b2f3a !important;
-    border-color: rgba(255,255,255,.15) !important;
-}
-.dt-button-collection .dt-button {
-    background: transparent !important;
-    color: #212529 !important;
-    border: none !important;
-    width: 100% !important;
-    text-align: left !important;
-    padding: 0.4rem 1rem !important;
-    font-size: 0.82rem !important;
-    opacity: 1 !important;
-}
-[data-bs-theme="dark"] .dt-button-collection .dt-button { color: #dee2e6 !important; }
-.dt-button-collection .dt-button:hover,
-.dt-button-collection .dt-button:focus {
-    background: rgba(13,110,253,.08) !important;
-    color: #0d6efd !important;
-}
-[data-bs-theme="dark"] .dt-button-collection .dt-button:hover {
-    background: rgba(255,255,255,.08) !important;
-    color: #6ea8fe !important;
+    position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
+    z-index: 1; pointer-events: none; font-size: 15px; color: var(--otc-text-2);
 }
 </style>
 {% endblock %}
@@ -522,19 +403,19 @@ $(document).ready(function() {
     $('#file-b3-cgd').on('change', function() {
         if (this.files[0]) {
             $('#name1').text(this.files[0].name).removeClass('d-none');
-            $('#zone1').css({borderColor:'#0d6efd', background:'var(--bs-secondary-bg)'});
+            $('#zone1').css({borderColor:'var(--otc-accent-ink)', background:'var(--otc-accent-soft)'});
         }
     });
     $('#file-dcad').on('change', function() {
         if (this.files[0]) {
             $('#name2').text(this.files[0].name).removeClass('d-none');
-            $('#zone2').css({borderColor:'#0d6efd', background:'var(--bs-secondary-bg)'});
+            $('#zone2').css({borderColor:'var(--otc-accent-ink)', background:'var(--otc-accent-soft)'});
         }
     });
     $('#file-party').on('change', function() {
         if (this.files[0]) {
             $('#name3').text(this.files[0].name).removeClass('d-none');
-            $('#zone3').css({borderColor:'#0d6efd', background:'var(--bs-secondary-bg)'});
+            $('#zone3').css({borderColor:'var(--otc-accent-ink)', background:'var(--otc-accent-soft)'});
         }
     });
 

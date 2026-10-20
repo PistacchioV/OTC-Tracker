@@ -7,6 +7,9 @@
 
 ## ⚠️ PRÁTICA OBRIGATÓRIA — Design de páginas/UI
 
+> **Desde 19/10/2026 (§630) a referência visual é o Pane e o tema é UM arquivo,
+> o `otc.scss`.** Os tokens Apple e as camadas citadas abaixo são histórico.
+
 **Toda alteração de página ou UI DEVE seguir, sempre:**
 1. A skill **`/emil-design-eng`** — feedback de press (`:active scale(0.97)`), curvas de easing custom (`cubic-bezier(0.23,1,0.32,1)`), durações < 300ms, `prefers-reduced-motion`, animar só `transform`/`opacity`, stagger de entrada, popovers origin-aware, etc.
 2. O guia **[`DESIGN-apple.md`](DESIGN-apple.md)** — tokens (Action Blue `#0066cc`, tipografia SF Pro com letter-spacing negativo, tiles claro/escuro, hairlines, raio 18px, sem sombras em chrome), hierarquia e paleta.
@@ -26038,3 +26041,90 @@ voltou a passar. Ela falhava desde 01/10/2026: a fixture usava 30/09/2026 como
 vencimento FUTURO, e quando a data chegou o prefill foi buscar a PTAX real do
 fixing. O vencimento da fixture foi para 30/09/2036.
 
+---
+
+## §630 — Front end no visual do Pane: um tema, um JS (2026-10-19)
+
+**O pedido.** Refazer o front end INTEIRO no visual e no motion do Pane (o
+demo é a referência; o Send usa a animação do Contrail), sem perder
+funcionalidade nem os ajustes visuais que a mesa já tinha pedido. E **um
+arquivo de cada**: um SCSS de tema, um CSS compilado, um JS de casca.
+
+**Por que um arquivo de cada.** A pintura eram QUATRO camadas — o `app.css` do
+tema comprado, o `visual-refresh.css`, o `streamflow.css` e o `tools.css`, com
+`app.js`/`config.js`/`visual-refresh.js`/`streamflow.js`/`sidenav-drilldown.js`/
+`sticky-tables.js` — cada uma carregada depois da outra e redefinindo os mesmos
+tokens. Toda correção começava descobrindo qual camada vencia, e várias
+armadilhas deste arquivo (§464, §486, §497, §610) eram só isso. Saíram todas,
+com os 73 SCSS soltos do tema antigo.
+
+**Licença.** O Pane é template PAGO ("licensed, not sold"): nenhuma linha do
+bundle dele foi copiada — o demo serviu de referência visual, e o código é
+nosso. A fonte Inter vai embutida em `static/fonts/inter/` (a instância roda
+sem internet).
+
+**O que existe agora.**
+- `static/scss/otc.scss` → `static/css/otc.css` (`npx gulp styles`), em onze
+  seções: Bootstrap (prefixo `ins-`, cor por `data-bs-theme`), tokens
+  (`--otc-*`; destaque, papel de parede, vidro, e os APELIDOS `--ins-*`/
+  `--vr-*`/`--sf-*`, para a página antiga continuar certa), base, vidro e
+  movimento, casca, componentes, tabelas, plugins, utilitários, páginas e o
+  modo opaco.
+- `static/js/otc.js`: a aparência (`otcUI`), o `I18nManager` com a MESMA API,
+  o menu lateral em drill-down com breadcrumb e itens fixados, a paleta ⌘K, a
+  lente dos segmentos e das abas, o "gel" dos botões, a entrada das placas, o
+  título letra a letra, o número dos `.otc-stat` que conta, o Send (Contrail),
+  tela cheia e a largura da toolbar.
+- O `<head>` aplica a aparência ANTES do CSS (script síncrono do
+  `partials/head-css.html`): sem isso a página piscava no tema errado até o JS
+  rodar. A preferência mora em `__OTC_TRACKER_UI__`; o `__OTCTRACKER_CONFIG__`
+  antigo é migrado uma vez.
+- O modo de efeitos reduzidos virou `is-solid` (máquina sem GPU, as do JPM):
+  WebGL por software ou Firefox no Windows, memoizado por sessão para o
+  `<head>` não piscar vidro na página seguinte; `__OTC_TRACKER_FX__` segue
+  sendo a saída de emergência.
+- **A tabler-icons é BINÁRIO** (`.gitattributes`): a do repositório tinha sido
+  gravada como texto — bytes `EF BF BD` no lugar dos originais — e os ícones
+  novos sumiam sem erro nenhum.
+
+**Como foi feito.** Fase 1, a casca e os componentes. Fase 2, o piloto
+(Dashboard, uma tela de New Deals, um modal), com o período **Last 12 Months**
+do painel (commit próprio: os 12 meses-CALENDÁRIO até o corrente, regra única
+em `_dash_in_period`/`_dash_month_slot`, lida também pelo card das recompras).
+Fase 3, as ~80 telas restantes, por uma receita só: o `<style>` de cada página
+ficou com o que é DELA (largura de coluna, grade de widget, área de gráfico,
+estado próprio), em `--otc-*`; o que o tema já cobre saiu (botões, badges,
+tabela, funil, toolbar, modais, datas, entrada própria, card que sobe no
+hover, vidro próprio); `style="color:#…"` no markup e nas strings de JS virou
+classe (`text-*`, `.otc-banner`, `.otc-mini-table`). O que se repetia em
+várias telas foi PROMOVIDO ao tema: o cabeçalho dos widgets de número
+(`x-widget__head`/`__icon`/`__title`, que estava copiado em 20 telas) e o
+`.otc-icon-tile` (o ícone em gradiente do Control Panel e do About). Resultado:
+os templates perderam ~18,6 mil linhas de CSS e ganharam ~3,8 mil.
+
+**O que se aprendeu (e foi para o CLAUDE.md §7).**
+- O `<style>` da página carrega ANTES do `otc.css`: regra da tela precisa de
+  peso de id/classe. O tema escreve as regras genéricas de widget com peso
+  ZERO (`:where(.content-page) :where(...)`) para a tela vencer — e peso zero
+  perde até para o `font-size` do `h3` do Bootstrap: o título de widget no
+  tema leva (0,1,0) de propósito. Foi o que fez os títulos saírem gigantes na
+  primeira passada.
+- Other Products Summary: cinco cards lado a lado sobrepunham entre 1400 e
+  1700px (a coluna de valor tem 7rem fixos, para um número de nove dígitos);
+  nessa faixa a grade é 3+2.
+- No Pane card não sobe no hover; o estado `is-check` do Summary é VERMELHO.
+
+**Guardas.** Os que liam as camadas apagadas passaram a ler o tema:
+`check_theme_toggle` (reescrito: aparência antes do paint, migração,
+`is-solid`, sol/lua e "um arquivo de cada"), `check_table_center` (a regra
+agora é GLOBAL no tema; nas telas só a tabela que não é DataTable),
+`check_row_action_buttons` (geometria só no tema; a página não redeclara o
+`.btn-act`), `check_modal_standard`, `check_summary_glow` (Check vermelho,
+prefixo `#ops-page`), `check_about_page` (grade `.ab-steps`),
+`check_holiday_calendars` (Close/Import viraram botões de ícone, com o rótulo
+no `title`), `check_pc_widgets`, `check_recon_fxo`, `check_quotes`,
+`check_conf_matching`, `check_ndf_advice`, `check_ops_summary`,
+`check_swap_advice`. A suíte (187) fecha com 4 falhas, nenhuma de front:
+`check_b3_pattern`, `check_export_advanced` (o `temDia` no `jsc`) e
+`check_req_cache` falham igual antes desta mudança; `check_swap_bullet`
+falhava só com os dados do worktree.

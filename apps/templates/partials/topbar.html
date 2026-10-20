@@ -1,364 +1,56 @@
-<style>
-  /* Topbar white ONLY when the chosen Topbar Color is "light" (theme default for
-     that is the gray #f5f5f7 canvas tone). Gray / dark / gradient and the System
-     scheme (which sets data-topbar-color=dark) keep their own colours. */
-  html[data-topbar-color="light"]:not([data-bs-theme="dark"]) { --ins-topbar-bg: #ffffff !important; }
-
-  .notification-item .notification-badge {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-  }
-  .notification-item .notification-badge svg {
-    width: 10px !important;
-    height: 10px !important;
-    display: block;
-    flex-shrink: 0;
-  }
-  /* O texto do item tem de caber SEMPRE, e são duas regras porque são dois
-     defeitos: `min-width: 0` deixa o filho flex encolher abaixo do conteúdo
-     (o default `auto` não deixa, e um token comprido — um FepWeb ID no detail —
-     alargava o bloco de texto além do dropdown, com o overflow-x:hidden do
-     #notif-list cortando TODAS as linhas na mesma altura, inclusive a ação);
-     `overflow-wrap: anywhere` quebra esse token em linha em vez de estourar.
-     Vale para o sino e para o toast, que desenham o mesmo corpo. */
-  .notification-item .flex-grow-1,
-  .otc-notif-toast .flex-grow-1 { min-width: 0; overflow-wrap: anywhere; }
-  /* Unread notifications: subtle tint + accent dot; read items render plain. */
-  .notification-item { position: relative; }
-  .notification-item.notif-unread {
-    background-color: rgba(var(--ins-primary-rgb, 13, 110, 253), 0.06);
-  }
-  .notification-item.notif-unread::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    right: 10px;
-    transform: translateY(-50%);
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--ins-primary, #0d6efd);
-  }
-  /* Live notification toast (top-right, just below the topbar) — mirrors the bell item content. */
-  #otc-toast-container { z-index: 1090; top: var(--ins-topbar-height, 64px); }
-  .otc-notif-toast {
-    width: 360px; max-width: calc(100vw - 2rem);
-    --ins-toast-bg: rgba(var(--ins-body-bg-rgb), 0.95);
-  }
-  .otc-notif-toast .notification-badge {
-    display: flex !important; align-items: center !important; justify-content: center !important;
-  }
-  .otc-notif-toast .notification-badge svg { width: 10px !important; height: 10px !important; display: block; flex-shrink: 0; }
-</style>
+{# ============================================================================
+   PARTIAL: topbar.html — a barra do topo: uma pílula de vidro à direita
+   (busca ⌘K · tema · idioma · sino · aparência · usuário). A pintura está no
+   otc.scss (seção 5c); os ids do sino, do idioma e do usuário são contrato
+   dos scripts abaixo e do I18nManager — não renomear.
+   ============================================================================ #}
 <header class="app-topbar">
-    <div class="container-fluid topbar-menu">
 
-      <!-- Centered horizontal nav (Nova/Linear style). Quick links; full
-           navigation via the menu drawer (☰). -->
-      <nav class="vr-topnav d-none d-lg-flex" id="vr-topnav" aria-label="Primary" data-sid="{{ session.get('user_sid', '') }}">
-        <a href="/dashboard" data-vrnav="/dashboard">Dashboard</a>
-        <a href="/live-position-ndf" data-vrnav="/live-position">Live Position</a>
-        <a href="/pending-confirmation" data-vrnav="/pending-confirmation">Pending</a>
-        <a href="/reconciliation-payrec" data-vrnav="/reconciliation">Pay/Rec</a>
-        <a href="/reference-data" data-vrnav="/reference-data">Reference Data</a>
-      </nav>
+    <button type="button" class="otc-menu-btn" data-otc-menu aria-label="Open menu"><i data-lucide="menu"></i></button>
 
-      <div class="d-flex align-items-center gap-2">
+    <div class="otc-toolbar">
 
-        <!-- Menu button: opens the full navigation drawer (visual-refresh) -->
-        <button class="vr-menu-btn" id="vr-menu-btn" type="button" aria-label="Open menu">
-          <i data-lucide="menu"></i>
+        <button type="button" class="otc-search" data-otc-palette aria-label="Search pages">
+            <i data-lucide="search"></i>
+            <span data-lang="otc-search">Search</span>
+            <kbd>⌘K</kbd>
         </button>
 
-        <!-- Topbar Brand Logo -->
-        <div class="logo-topbar">
-          <!-- Logo light -->
-          <a class="logo-light" href="/dashboard">
-            <span class="logo-lg">
-              <img alt="logo" src="{{ config.ASSETS_ROOT }}/images/logo.png" style="height:40px;width:auto;object-fit:contain;vertical-align:middle;" />
-            </span>
-            <span class="logo-sm">
-              <img alt="small logo" src="{{ config.ASSETS_ROOT }}/images/logo-sm.png" style="height:28px;width:auto;object-fit:contain;vertical-align:middle;" />
-            </span>
-          </a>
-          <!-- Logo Dark -->
-          <a class="logo-dark" href="/dashboard">
-            <span class="logo-lg">
-              <img alt="dark logo" src="{{ config.ASSETS_ROOT }}/images/logo-black.png" style="height:40px;width:auto;object-fit:contain;vertical-align:middle;" />
-            </span>
-            <span class="logo-sm">
-              <img alt="small logo" src="{{ config.ASSETS_ROOT }}/images/logo-sm.png" style="height:28px;width:auto;object-fit:contain;vertical-align:middle;" />
-            </span>
-          </a>
-        </div>
-  
-        <!-- Sidebar Menu Toggle Button -->
-        <button class="sidenav-toggle-button btn btn-default btn-icon">
-          <i data-lucide="menu"></i>
+        <button type="button" class="otc-tbtn" id="otc-theme-btn" aria-label="Toggle light / dark theme" title="Light / dark">
+            <i class="otc-ico-moon" data-lucide="moon"></i>
+            <i class="otc-ico-sun" data-lucide="sun"></i>
         </button>
-  
-        <!-- Horizontal Menu Toggle Button -->
-        <button class="topnav-toggle-button px-2" data-bs-target="#topnav-menu" data-bs-toggle="collapse">
-          <i data-lucide="menu"></i>
-        </button>
-  
-        <!-- Pages Megamenu -->
-        <div class="topbar-item d-none d-md-flex" id="megamenu-pages">
-          <div class="dropdown">
-            <button
-              aria-expanded="false"
-              aria-haspopup="false"
-              class="topbar-link btn fw-medium btn-link dropdown-toggle drop-arrow-none px-2"
-              data-bs-toggle="dropdown"
-              type="button"
-            >
-              Pages
-              <i class="ms-1" data-lucide="chevron-down"></i>
+
+        <!-- Language Selector (ids: contrato do I18nManager) -->
+        <div class="dropdown" id="language-selector-rounded">
+            <button aria-expanded="false" class="otc-tbtn otc-tbtn--lang" data-bs-toggle="dropdown" type="button">
+                <img alt="" id="selected-language-image" src="{{ config.ASSETS_ROOT }}/images/flags/us.svg" />
+                <span id="selected-language-code">EN</span>
             </button>
-            <div class="dropdown-menu dropdown-menu-xxl p-0">
-              <div class="h-100" data-simplebar="" style="max-height: 460px">
-                <div class="row g-0">
-
-                  <!-- Column 1: Navigation + Apps + Reconciliations -->
-                  <div class="col-md-4">
-                    <div class="p-2">
-                      <h5 class="mb-1 fw-semibold fs-sm dropdown-header">Navigation</h5>
-                      <ul class="list-unstyled megamenu-list">
-                        <li>
-                          <a class="dropdown-item" href="/">
-                            <i class="align-middle me-2 fs-16" data-lucide="circle-gauge"></i>
-                            KPI Dashboard
-                          </a>
-                        </li>
-                      </ul>
-                      <h5 class="mb-1 fw-semibold fs-sm dropdown-header mt-2">Apps</h5>
-                      <ul class="list-unstyled megamenu-list">
-                        <li>
-                          <a class="dropdown-item" href="/holidays-calendar">
-                            <i class="align-middle me-2 fs-16" data-lucide="calendar"></i>
-                            Holidays Calendar
-                          </a>
-                        </li>
-                        <li>
-                          <a class="dropdown-item" href="/file-interpreter">
-                            <i class="align-middle me-2 fs-16" data-lucide="folder-open-dot"></i>
-                            File Interpreter
-                          </a>
-                        </li>
-                        <li>
-                          <a class="dropdown-item" href="/electronic-inventory">
-                            <i class="align-middle me-2 fs-16" data-lucide="package-check"></i>
-                            Electronic Inventory
-                          </a>
-                        </li>
-                        <li>
-                          <a class="dropdown-item" href="javascript:void(0);">
-                            <i class="align-middle me-2 fs-16" data-lucide="wallet-cards"></i>
-                            Daily Settlement
-                          </a>
-                        </li>
-                      </ul>
-                      <h5 class="mb-1 fw-semibold fs-sm dropdown-header mt-2">Reconciliations</h5>
-                      <ul class="list-unstyled megamenu-list">
-                        <li>
-                          <a class="dropdown-item" href="/reconciliation-comitente">
-                            <i class="align-middle me-2 fs-16" data-lucide="square-user"></i>
-                            Comitente
-                          </a>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-
-                  <!-- Column 2: Documentation + Regulatory -->
-                  <div class="col-md-4">
-                    <div class="p-2">
-                      <h5 class="mb-1 fw-semibold fs-sm dropdown-header">Documentation</h5>
-                      <ul class="list-unstyled megamenu-list">
-                        <li>
-                          <a class="dropdown-item" href="/pending-confirmation">
-                            <i class="align-middle me-2 fs-16" data-lucide="clock"></i>
-                            Pending Confirmation
-                          </a>
-                        </li>
-                        <li>
-                          <a class="dropdown-item" href="/manual-confirmation">
-                            <i class="align-middle me-2 fs-16" data-lucide="check-circle"></i>
-                            Manual Confirmation
-                          </a>
-                        </li>
-                        <li>
-                          <a class="dropdown-item" href="/cgd">
-                            <i class="align-middle me-2 fs-16" data-lucide="building-2"></i>
-                            CGD
-                          </a>
-                        </li>
-                      </ul>
-                      <h5 class="mb-1 fw-semibold fs-sm dropdown-header mt-2">Regulatory</h5>
-                      <ul class="list-unstyled megamenu-list">
-                        <li>
-                          <a class="dropdown-item" href="/regulatory/e-financeira/kapital">
-                            <i class="align-middle me-2 fs-16" data-lucide="file-text"></i>
-                            E-financeira
-                          </a>
-                        </li>
-                        <li>
-                          <a class="dropdown-item" href="/accrual-swap">
-                            <i class="align-middle me-2 fs-16" data-lucide="calculator"></i>
-                            Accrual
-                          </a>
-                        </li>
-                        <li>
-                          <a class="dropdown-item" href="/regulatory/mtm">
-                            <i class="align-middle me-2 fs-16" data-lucide="trending-up"></i>
-                            MtM
-                          </a>
-                        </li>
-                        <li>
-                          <a class="dropdown-item" href="/regulatory/wht">
-                            <i class="align-middle me-2 fs-16" data-lucide="percent"></i>
-                            WHT
-                          </a>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-
-                  <!-- Column 3: Products + Data Base + Users -->
-                  <div class="col-md-4">
-                    <div class="p-2">
-                      <h5 class="mb-1 fw-semibold fs-sm dropdown-header">Products</h5>
-                      <ul class="list-unstyled megamenu-list">
-                        <li>
-                          <a class="dropdown-item" href="/new_deals-ndf-fwdstart">
-                            <i class="align-middle me-2 fs-16" data-lucide="plus-circle"></i>
-                            New Deals
-                          </a>
-                        </li>
-                        <li>
-                          <a class="dropdown-item" href="/unwinds/swap/cem">
-                            <i class="align-middle me-2 fs-16" data-lucide="rotate-ccw"></i>
-                            Unwinds
-                          </a>
-                        </li>
-                      </ul>
-                      <h5 class="mb-1 fw-semibold fs-sm dropdown-header mt-2">Data Base</h5>
-                      <ul class="list-unstyled megamenu-list">
-                        <li>
-                          <a class="dropdown-item" href="/reference-data">
-                            <i class="align-middle me-2 fs-16" data-lucide="database"></i>
-                            Reference Data
-                          </a>
-                        </li>
-                        <li>
-                          <a class="dropdown-item" href="/index-b3">
-                            <i class="align-middle me-2 fs-16" data-lucide="bar-chart-2"></i>
-                            Index B3
-                          </a>
-                        </li>
-                        <li>
-                          <a class="dropdown-item" href="/email">
-                            <i class="align-middle me-2 fs-16" data-lucide="inbox"></i>
-                            Email Inbox
-                          </a>
-                        </li>
-                      </ul>
-                      <h5 class="mb-1 fw-semibold fs-sm dropdown-header mt-2">Users</h5>
-                      <ul class="list-unstyled megamenu-list">
-                        <li>
-                          <a class="dropdown-item" href="/users-roles">
-                            <i class="align-middle me-2 fs-16" data-lucide="users"></i>
-                            Users
-                          </a>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-              <!-- end .h-100 -->
+            <div class="dropdown-menu dropdown-menu-end">
+                <a class="dropdown-item" data-translator-lang="en" href="javascript:void(0);" title="English">
+                    <img alt="English" class="rounded-circle" data-translator-image="" height="18" src="{{ config.ASSETS_ROOT }}/images/flags/us.svg" />
+                    <span>English</span>
+                </a>
+                <a class="dropdown-item" data-translator-lang="br" href="javascript:void(0);" title="Portuguese">
+                    <img alt="Português" class="rounded-circle" data-translator-image="" height="18" src="{{ config.ASSETS_ROOT }}/images/flags/br.svg" />
+                    <span>Português</span>
+                </a>
+                <a class="dropdown-item" data-translator-lang="es" href="javascript:void(0);" title="Spanish">
+                    <img alt="Español" class="rounded-circle" data-translator-image="" height="18" src="{{ config.ASSETS_ROOT }}/images/flags/es.svg" />
+                    <span>Español</span>
+                </a>
             </div>
-            <!-- end .dropdown-menu -->
-          </div>
-          <!-- end .dropdown -->
         </div>
-  
-      </div>
-  
-      <div class="d-flex align-items-center gap-2">
-  
-        <!-- Theme toggle (visual-refresh): segmented sun/moon switch -->
-        <button class="vr-theme" id="vr-theme-btn" type="button" role="switch" aria-label="Alternar tema claro e escuro" title="Tema claro / escuro">
-          <span class="vr-theme__hl" aria-hidden="true"></span>
-          <span class="vr-theme__seg vr-theme__seg--sun"><i data-lucide="sun"></i></span>
-          <span class="vr-theme__seg vr-theme__seg--moon"><i data-lucide="moon"></i></span>
-        </button>
 
-        <!-- Search Box -->
-        <div class="app-search d-none d-xl-flex" id="search-box-rounded-right">
-          <input
-            class="form-control rounded-pill topbar-search"
-            name="search"
-            placeholder="Quick Search..."
-            type="search"
-          />
-          <i class="app-search-icon text-muted" data-lucide="search"></i>
-        </div>
-  
-        <!-- Theme Dropdown -->
-        <div class="topbar-item d-none d-sm-flex" id="theme-dropdown">
-          <div class="dropdown">
-            <button
-              aria-expanded="false"
-              aria-haspopup="false"
-              class="topbar-link"
-              data-bs-toggle="dropdown"
-              type="button"
-            >
-              <i class="topbar-link-icon d-none" data-lucide="sun" id="theme-icon-light"></i>
-              <i class="topbar-link-icon d-none" data-lucide="moon" id="theme-icon-dark"></i>
-              <i class="topbar-link-icon d-none" data-lucide="sun-moon" id="theme-icon-system"></i>
-            </button>
-            <div class="dropdown-menu dropdown-menu-end" data-thememode="dropdown">
-              <label class="dropdown-item cursor-pointer">
-                <input class="form-check-input" name="data-bs-theme" style="display: none" type="radio" value="light" />
-                <i class="align-middle me-1 fs-16" data-lucide="sun"></i>
-                <span class="align-middle">Light</span>
-              </label>
-              <label class="dropdown-item cursor-pointer">
-                <input class="form-check-input" name="data-bs-theme" style="display: none" type="radio" value="dark" />
-                <i class="align-middle me-1 fs-16" data-lucide="moon"></i>
-                <span class="align-middle">Dark</span>
-              </label>
-              <label class="dropdown-item cursor-pointer">
-                <input class="form-check-input" name="data-bs-theme" style="display: none" type="radio" value="system" />
-                <i class="align-middle me-1 fs-16" data-lucide="sun-moon"></i>
-                <span class="align-middle">System</span>
-              </label>
-            </div>
-            <!-- end dropdown-menu -->
-          </div>
-          <!-- end dropdown -->
-        </div>
-  
         <!-- Notifications Dropdown -->
-        <div class="topbar-item" id="notification-dropdown-people">
+        <div class="dropdown-wrap" id="notification-dropdown-people">
           <div class="dropdown">
-            <button
-              aria-expanded="false"
-              aria-haspopup="false"
-              class="topbar-link dropdown-toggle drop-arrow-none"
-              data-bs-auto-close="outside"
-              data-bs-toggle="dropdown"
-              id="notif-toggle-btn"
-              type="button"
-            >
-              <i class="topbar-link-icon animate-ring" data-lucide="bell"></i>
-              <span class="badge text-bg-danger badge-circle topbar-badge" id="notif-badge" style="display:none;"></span>
+            <button aria-expanded="false" class="otc-tbtn" data-bs-auto-close="outside" data-bs-toggle="dropdown" id="notif-toggle-btn" type="button" aria-label="Notifications">
+              <i data-lucide="bell"></i>
+              <span class="otc-dot" id="notif-badge" style="display:none;"></span>
             </button>
-            <div class="dropdown-menu p-0 dropdown-menu-end dropdown-menu-lg">
+            <div class="dropdown-menu p-2 dropdown-menu-end dropdown-menu-lg otc-notif-menu">
               <div class="px-3 py-2 border-bottom">
                 <div class="row align-items-center">
                   <div class="col">
@@ -1058,139 +750,24 @@
         });
         </script>
 
-        <!-- Megamenu ("Pages" dropdown): show only the pages the user can access.
-             Master / unconfigured users see everything. -->
-        <script>
-        (function () {
-            var mm = document.getElementById('megamenu-pages');
-            if (!mm) return;
-            (window.otcMeAccess ? window.otcMeAccess() : fetch('/api/me/access', { credentials: 'same-origin' }).then(function (r) { return r.json(); }))
-                .then(function (d) {
-                    if (!d || !d.success || d.is_admin || !d.configured) return;   // full access
-                    var allowed = {};
-                    (d.pages || []).forEach(function (u) { allowed[u] = 1; });
-                    // Control Panel card grant → keep the Control Panel entry visible.
-                    for (var k in allowed) { if (k.indexOf('/control-panel#') === 0) { allowed['/control-panel'] = 1; break; } }
-                    function norm(h) { return h === '/' ? '/dashboard' : h; }   // KPI link is "/"
-                    // Keep only real, accessible pages — anything else (a page the user
-                    // can't reach, or a label with no page like "javascript:void(0)") is hidden.
-                    mm.querySelectorAll('a.dropdown-item').forEach(function (a) {
-                        var href = a.getAttribute('href') || '';
-                        var keep = href.charAt(0) === '/' && allowed[norm(href)];
-                        if (!keep) { var li = a.closest('li'); if (li) li.hidden = true; }
-                    });
-                    // Hide a group (header + list) once nothing under it remains visible.
-                    mm.querySelectorAll('.dropdown-header').forEach(function (h) {
-                        var ul = h.nextElementSibling;
-                        while (ul && !(ul.classList && ul.classList.contains('megamenu-list'))) ul = ul.nextElementSibling;
-                        if (!ul) return;
-                        var anyVisible = Array.prototype.some.call(ul.querySelectorAll('li'), function (li) { return !li.hidden; });
-                        if (!anyVisible) { h.hidden = true; ul.hidden = true; }
-                    });
-                    // Nothing left → drop the whole "Pages" dropdown.
-                    var anyItem = Array.prototype.some.call(mm.querySelectorAll('a.dropdown-item'), function (a) {
-                        var li = a.closest('li'); return li && !li.hidden;
-                    });
-                    if (!anyItem) mm.hidden = true;
-                })
-                .catch(function () {});
-        })();
-        </script>
 
-        <!-- Fullscreen Toggler -->
-        <div class="topbar-item d-none d-md-flex" id="fullscreen-toggler">
-          <button class="topbar-link" data-toggle="fullscreen" type="button">
-            <i class="topbar-link-icon" data-lucide="maximize"></i>
-            <i class="topbar-link-icon d-none" data-lucide="minimize"></i>
-          </button>
-        </div>
-  
-        <!-- Monochrome Toggler -->
-        <div class="topbar-item d-none d-xl-flex" id="monochrome-toggler">
-          <button class="topbar-link" data-toggle="monochrome" id="monochrome-mode" type="button">
-            <i class="topbar-link-icon" data-lucide="palette"></i>
-          </button>
-        </div>
-  
-        <!-- Theme Settings -->
-        <div class="topbar-item d-none d-sm-flex">
-          <button
-            class="topbar-link btn-theme-setting"
-            data-bs-target="#theme-settings-offcanvas"
-            data-bs-toggle="offcanvas"
-            type="button"
-          >
-            <i class="topbar-link-icon" data-lucide="settings"></i>
-          </button>
-        </div>
-  
-        <!-- Language Selector -->
-        <div class="topbar-item" id="language-selector-rounded">
-          <div class="dropdown">
-            <button
-              aria-expanded="false"
-              aria-haspopup="false"
-              class="topbar-link fw-bold"
-              data-bs-toggle="dropdown"
-              type="button"
-            >
-              <img
-                alt="user-image"
-                class="rounded-circle me-2"
-                height="18"
-                id="selected-language-image"
-                src="{{ config.ASSETS_ROOT }}/images/flags/us.svg"
-              />
-              <span id="selected-language-code">EN</span>
-            </button>
-            <div class="dropdown-menu dropdown-menu-end">
-              <a class="dropdown-item" data-translator-lang="en" href="javascript:void(0);" title="English">
-                <img alt="English" class="me-1 rounded-circle" data-translator-image="" height="18" src="{{ config.ASSETS_ROOT }}/images/flags/us.svg" />
-                <span class="align-middle">English</span>
-              </a>            
-              <a class="dropdown-item" data-translator-lang="br" href="javascript:void(0);" title="Portuguese">
-                <img alt="Italian" class="me-1 rounded-circle" data-translator-image="" height="18" src="{{ config.ASSETS_ROOT }}/images/flags/br.svg" />
-                <span class="align-middle">Português</span>
-              </a>
-              <a class="dropdown-item" data-translator-lang="es" href="javascript:void(0);" title="Spanish">
-                <img alt="Spanish" class="me-1 rounded-circle" data-translator-image="" height="18" src="{{ config.ASSETS_ROOT }}/images/flags/es.svg" />
-                <span class="align-middle">Español</span>
-              </a>            
-            </div>
-            <!-- end dropdown-menu -->
-          </div>
-          <!-- end dropdown -->
-        </div>
-  
+
+        <button type="button" class="otc-tbtn" id="otc-appearance-btn" data-bs-toggle="offcanvas" data-bs-target="#theme-settings-offcanvas" aria-label="Appearance" title="Appearance">
+            <i data-lucide="palette"></i>
+        </button>
+
         <!-- User Dropdown -->
         {% set _tb_sid   = session.get('user_sid',   '') %}
         {% set _tb_name  = session.get('user_name',  '') %}
         {% set _tb_email = session.get('user_email', '') %}
         {% set _tb_role  = session.get('user_role',  '') %}
         {% set _tb_init  = (_tb_name.split()[0][0] + _tb_name.split()[-1][0]) | upper if _tb_name and _tb_name.split()|length > 1 else (_tb_name[0] | upper if _tb_name else '?') %}
-        <div class="topbar-item nav-user" id="simple-user-dropdown">
+        <div class="dropdown-wrap" id="simple-user-dropdown">
           <div class="dropdown">
-            <a
-              aria-expanded="false"
-              aria-haspopup="false"
-              class="topbar-link dropdown-toggle drop-arrow-none px-2"
-              data-bs-toggle="dropdown"
-              href="#!"
-            >
-              <div class="avatar avatar-sm me-lg-2 d-flex">
-                <img
-                  alt="{{ _tb_name }}"
-                  class="rounded-circle"
-                  src="{{ config.ASSETS_ROOT }}/images/users/{{ _tb_sid | lower }}.jpg"
-                  width="32"
-                  onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='inline-flex';"
-                />
-                <span class="avatar-title bg-primary-subtle text-primary rounded-circle fw-bold fs-xs" style="display:none;width:32px;height:32px;">{{ _tb_init }}</span>
-              </div>
-              <div class="d-lg-flex align-items-center gap-1 d-none">
-                <h5 class="my-0">{{ _tb_name.split()[0] if _tb_name else 'User' }}</h5>
-                <i class="align-middle" data-lucide="chevron-down"></i>
-              </div>
+            <a aria-expanded="false" class="otc-tbtn" data-bs-toggle="dropdown" href="#!" aria-label="Account">
+              <img alt="{{ _tb_name }}" class="rounded-circle" src="{{ config.ASSETS_ROOT }}/images/users/{{ _tb_sid | lower }}.jpg"
+                   onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='inline-flex';" />
+              <span class="avatar-title bg-primary-subtle text-primary rounded-circle fw-bold fs-xs" style="display:none;">{{ _tb_init }}</span>
             </a>
             <div class="dropdown-menu dropdown-menu-end">
               <!-- Header with user info -->
@@ -1233,6 +810,10 @@
                 <i class="me-1 fs-lg align-middle" data-lucide="headset"></i>
                 <span class="align-middle">Support Center</span>
               </a>
+              <a class="dropdown-item" href="javascript:void(0);" data-toggle="fullscreen">
+                <i class="me-1 fs-lg align-middle" data-lucide="maximize"></i>
+                <span class="align-middle" data-lang="otc-fullscreen">Full screen</span>
+              </a>
               <!-- Divider -->
               <div class="dropdown-divider"></div>
               <!-- Lock -->
@@ -1272,36 +853,6 @@
         });
         </script>
   
-      </div>
     </div>
   </header>
   <!-- Topbar End -->
-  
-  <!-- Search Modal -->
-  <div
-    aria-hidden="true"
-    aria-labelledby="searchModalLabel"
-    class="modal fade"
-    id="searchModal"
-    role="dialog"
-    tabindex="-1"
-  >
-    <div class="modal-dialog modal-lg">
-      <div class="modal-content bg-transparent">
-        <form>
-          <div class="card mb-1">
-            <div class="px-3 py-2 d-flex flex-row align-items-center" id="top-search">
-              <i class="fs-22" data-lucide="search"></i>
-              <input
-                class="form-control border-0"
-                id="search-modal-input"
-                placeholder="Search for actions, people,"
-                type="search"
-              />
-              <button aria-label="Close" class="btn p-0" data-bs-dismiss="modal" type="submit">[esc]</button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>

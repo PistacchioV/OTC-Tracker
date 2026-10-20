@@ -3,664 +3,148 @@
 {% block title %}About OTC Tracker{% endblock title %}
 
 {% block extra_css %}
+{# Só o que é DESTA tela: os painéis das seções (um desenho só, de vidro),
+   o herói com o logo por tema, o índice e o "eyebrow" de cada seção, os
+   números, os cartões de funcionalidade, a grade dos seis passos, as duas
+   placas de notificação/autenticação, a esteira da tecnologia e o CTA. A
+   entrada das placas, o vidro dos painéis e os botões são do tema. #}
 <style>
-/* ============================================================================
-   About OTC Tracker — folha StreamFlow
-   ----------------------------------------------------------------------------
-   Esta página é a VITRINE do design: quem quiser ver o StreamFlow inteiro num
-   lugar só olha aqui. Por isso ela é a única que usa os gestos completos das
-   três referências — o índice mono entre colchetes do glass-effect2, o
-   "eyebrow" (traço + rótulo espaçado) do cogni e as pílulas de vidro do
-   pulsedesk — em vez de só herdar o `streamflow.css`.
+/* ── Painéis: um só desenho de vidro para as cinco seções ── */
+div:is(.ab-tile-dark, .ab-tile-dark2, .ab-tile-white, .ab-tile-parchment, .ab-tile-blue) {
+  padding: 2.6rem 2.2rem; margin-bottom: 1.6rem;
+}
 
-   Tudo sai dos tokens `--sf-*` / `--vr-*` da camada global: nenhuma cor é
-   escrita duas vezes, e o dia em que a marca mudar esta página muda junto.
-
-   DARK e LIGHT: a folha global já entrega `--vr-card-bg`, `--vr-card-border`,
-   `--sf-hair` e `--sf-micro` nos dois temas. O que se declara aqui por tema é
-   só o que NÃO deriva deles (o painel de contraste e o texto sobre ele).
-   ========================================================================== */
-
-/* ── Painéis: um só desenho, cinco acentos ──────────────────────────────────
-   Antes eram cinco tiles com paletas próprias (dark, dark2, white, parchment,
-   blue) — cinco fundos escritos à mão que não acompanhavam o tema. Agora é UM
-   painel de vidro e um acento por seção, o que também é o que faz a página
-   ler como uma sequência e não como cinco blocos avulsos. */
-.ab-tile-dark, .ab-tile-dark2, .ab-tile-white,
-.ab-tile-parchment, .ab-tile-blue {
-  position: relative;
-  overflow: hidden;
-  border-radius: 24px;
-  border: 1px solid var(--vr-card-border);
-  background-color: var(--vr-card-bg);
-  backdrop-filter: blur(var(--sf-glass-blur)) saturate(160%);
-  -webkit-backdrop-filter: blur(var(--sf-glass-blur)) saturate(160%);
-  box-shadow: var(--vr-card-shadow);
-  padding: 2.6rem 2.2rem;
-  margin-bottom: 1.6rem;
-}
-/* a aurora de cada seção — o acento entra por aqui, não por um fundo sólido */
-.ab-tile-dark::before, .ab-tile-dark2::before, .ab-tile-white::before,
-.ab-tile-parchment::before, .ab-tile-blue::before {
-  content: "";
-  position: absolute;
-  inset: -30% -10% auto -10%;
-  height: 70%;
-  pointer-events: none;
-  filter: blur(40px);
-  opacity: 0.5;
-}
-[data-bs-theme=dark] .ab-tile-dark::before,
-[data-bs-theme=dark] .ab-tile-dark2::before,
-[data-bs-theme=dark] .ab-tile-white::before,
-[data-bs-theme=dark] .ab-tile-parchment::before,
-[data-bs-theme=dark] .ab-tile-blue::before { opacity: 0.72; }
-
-.ab-tile-dark::before {
-  background: radial-gradient(46% 100% at 20% 0%, color-mix(in oklab, var(--sf-cyan) 62%, transparent), transparent 68%),
-              radial-gradient(42% 100% at 78% 6%, color-mix(in oklab, var(--sf-blue) 52%, transparent), transparent 68%);
-}
-.ab-tile-parchment::before {
-  background: radial-gradient(48% 100% at 16% 0%, color-mix(in oklab, var(--sf-blue) 52%, transparent), transparent 68%),
-              radial-gradient(44% 100% at 84% 4%, color-mix(in oklab, var(--sf-violet) 50%, transparent), transparent 68%);
-}
-.ab-tile-white::before {
-  background: radial-gradient(50% 100% at 50% 0%, color-mix(in oklab, var(--sf-cyan) 46%, transparent), transparent 70%);
-}
-.ab-tile-dark2::before {
-  background: radial-gradient(46% 100% at 26% 0%, color-mix(in oklab, var(--sf-violet) 56%, transparent), transparent 68%),
-              radial-gradient(42% 100% at 74% 6%, color-mix(in oklab, var(--sf-fuchsia) 44%, transparent), transparent 68%);
-}
-.ab-tile-blue::before {
-  background: radial-gradient(60% 130% at 50% 0%, color-mix(in oklab, var(--sf-blue) 70%, transparent), transparent 72%);
-  inset: -40% -10% auto -10%;
-  height: 130%;
-  opacity: 0.6;
-}
-/* cantos em esquadro (cogni) em todo painel */
-.ab-tile-dark::after, .ab-tile-dark2::after, .ab-tile-white::after,
-.ab-tile-parchment::after, .ab-tile-blue::after {
-  content: "";
-  position: absolute;
-  top: 14px; left: 14px;
-  width: 16px; height: 16px;
-  border-top: 1px solid color-mix(in oklab, var(--sf-cyan) 55%, transparent);
-  border-left: 1px solid color-mix(in oklab, var(--sf-cyan) 55%, transparent);
-  pointer-events: none;
-}
-.ab-tile-dark > *, .ab-tile-dark2 > *, .ab-tile-white > *,
-.ab-tile-parchment > *, .ab-tile-blue > * { position: relative; z-index: 1; }
-
-/* ── Índice da seção: [ 01. Capacidades ] — o marcador do glass-effect2 ───── */
+/* ── Índice [ 01. Capacidades ], "eyebrow" e título da seção ── */
 .ab-idx {
-  display: inline-block;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-  font-size: 0.62rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--sf-micro);
-  border: 1px solid var(--sf-hair);
-  border-radius: 6px;
-  padding: 0.22rem 0.6rem;
-  background: color-mix(in oklab, var(--vr-card-bg) 60%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  margin-bottom: 0.9rem;
+  display: inline-block; margin-bottom: .9rem; padding: .22rem .6rem; border-radius: 6px;
+  font: 500 .62rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--otc-text-3); background: var(--otc-fill);
 }
-
-/* ── "Eyebrow" do cogni: traço curto + rótulo bem espaçado ────────────────── */
 .ab-sl {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-size: 0.66rem;
-  font-weight: 600;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--sf-cyan);
-  margin-bottom: 0.7rem;
+  display: inline-flex; align-items: center; gap: .6rem; margin: 0 0 .7rem .6rem;
+  font-size: .66rem; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--otc-accent-ink);
 }
-.ab-sl::before {
-  content: "";
-  width: 26px; height: 1px;
-  background: var(--vr-grad);
-}
-.ab-st {
-  font-size: clamp(1.7rem, 3vw, 2.5rem);
-  font-weight: 700;
-  letter-spacing: -0.035em;
-  line-height: 1.1;
-  margin: 0 0 1.8rem;
-  background: linear-gradient(180deg, var(--ins-body-color),
-              color-mix(in oklab, var(--ins-body-color) 55%, transparent));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
+.ab-sl::before { content: ""; width: 26px; height: 1px; background: currentColor; }
+.ab-st { font: 700 clamp(1.7rem, 3vw, 2.5rem)/1.1 var(--otc-font-display); letter-spacing: -.035em; margin: 0 0 1.8rem; color: var(--otc-text); }
 
-/* ── HERO ─────────────────────────────────────────────────────────────────── */
-.ab-hero {
-  position: relative;
-  overflow: hidden;
-  text-align: center;
-  padding: 4.2rem 2rem 3.6rem;
-  border-radius: 28px;
-  border: 1px solid var(--vr-card-border);
-  background-color: var(--vr-card-bg);
-  backdrop-filter: blur(var(--sf-glass-blur)) saturate(165%);
-  -webkit-backdrop-filter: blur(var(--sf-glass-blur)) saturate(165%);
-  box-shadow: var(--vr-card-shadow),
-              0 0 90px -18px color-mix(in oklab, var(--sf-blue) 60%, transparent);
-  margin-bottom: 1.6rem;
+/* ── Herói ── */
+div.ab-hero {
+  position: relative; isolation: isolate; overflow: hidden; text-align: center;
+  padding: 4.2rem 2rem 3.6rem; margin-bottom: 1.6rem; border-radius: var(--otc-r-xl);
+  background-color: var(--otc-glass);
+  -webkit-backdrop-filter: var(--otc-blur); backdrop-filter: var(--otc-blur);
+  box-shadow: var(--otc-depth);
 }
-/* os feixes de luz do pulsedesk, presos ao hero */
+/* a luz do herói: três halos dos matizes do tema, parados */
 .ab-hero::before {
-  content: "";
-  position: absolute;
-  inset: -60%;
-  pointer-events: none;
-  opacity: 0.55;
+  content: ""; position: absolute; inset: -40%; z-index: -1; pointer-events: none; opacity: .35; filter: blur(40px);
   background:
-    radial-gradient(38% 42% at 24% 12%, color-mix(in oklab, var(--sf-cyan) 62%, transparent), transparent 66%),
-    radial-gradient(34% 40% at 78% 18%, color-mix(in oklab, var(--sf-violet) 58%, transparent), transparent 66%),
-    radial-gradient(40% 36% at 50% 96%, color-mix(in oklab, var(--sf-blue) 52%, transparent), transparent 68%);
-  filter: blur(36px);
-  animation: ab-drift 26s ease-in-out infinite alternate;
+    radial-gradient(38% 42% at 24% 12%, color-mix(in srgb, var(--otc-teal) 60%, transparent), transparent 66%),
+    radial-gradient(34% 40% at 78% 18%, color-mix(in srgb, var(--otc-purple) 55%, transparent), transparent 66%),
+    radial-gradient(40% 36% at 50% 96%, color-mix(in srgb, var(--otc-blue) 50%, transparent), transparent 68%);
 }
-[data-bs-theme=dark] .ab-hero::before { opacity: 0.8; }
-.ab-hero > * { position: relative; z-index: 1; }
-
-@keyframes ab-drift {
-  0%   { transform: translate3d(0,0,0) scale(1); }
-  100% { transform: translate3d(2.5%, -2%, 0) scale(1.08); }
-}
-
 .ab-hero__badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.62rem;
-  font-weight: 600;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--sf-micro);
-  border: 1px solid var(--sf-hair);
-  border-radius: 999px;
-  padding: 0.4rem 0.95rem;
-  background: color-mix(in oklab, var(--vr-card-bg) 62%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  margin-bottom: 1.9rem;
+  display: inline-flex; align-items: center; gap: .5rem; margin-bottom: 1.9rem; padding: .4rem .95rem;
+  border-radius: var(--otc-r-pill); background: var(--otc-fill);
+  font-size: .62rem; font-weight: 600; letter-spacing: .2em; text-transform: uppercase; color: var(--otc-text-2);
 }
-/* o ponto "ao vivo" do pulsedesk */
-.ab-hero__badge::before {
-  content: "";
-  width: 6px; height: 6px;
-  border-radius: 999px;
-  background: var(--sf-cyan);
-  box-shadow: 0 0 10px var(--sf-cyan);
-  animation: ab-pulse 2.4s ease-out infinite;
-}
-@keyframes ab-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(41,197,246,.6); }
-  70%  { box-shadow: 0 0 0 9px rgba(41,197,246,0); }
-  100% { box-shadow: 0 0 0 0 rgba(41,197,246,0); }
-}
-
-.ab-hero__logo {
-  /* BLOCO, e não a imagem inline que era antes: inline ele dividia a linha com
-     o `.ab-hero__badge` (que é `inline-flex`) e aparecia colado nele, à direita,
-     em vez de centrado abaixo. */
-  display: block;
-  width: 132px;
-  margin: 0 auto 1.4rem;
-  filter: drop-shadow(0 8px 26px rgba(41, 197, 246, 0.35));
-}
+/* o ponto "ao vivo" */
+.ab-hero__badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--otc-green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--otc-green) 25%, transparent); }
+/* BLOCO, não inline: inline ele dividia a linha com o badge (inline-flex) */
+.ab-hero__logo { display: block; width: 132px; margin: 0 auto 1.4rem; }
 /* a versão certa por tema — ver o comentário no markup */
-.ab-logo--dark  { display: none; }
-[data-bs-theme=dark] .ab-logo--light { display: none; }
-[data-bs-theme=dark] .ab-logo--dark  { display: block; }
-.ab-hero h1 {
-  font-size: clamp(2.6rem, 6vw, 4.6rem);
-  font-weight: 800;
-  letter-spacing: -0.045em;
-  line-height: 0.98;
-  margin: 0 0 1.1rem;
-  background: linear-gradient(100deg,
-              var(--ins-body-color) 0%, var(--sf-cyan) 30%,
-              var(--sf-blue) 50%, var(--sf-violet) 70%,
-              var(--ins-body-color) 100%);
-  background-size: 260% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: ab-shimmer 9s ease-in-out infinite;
-}
-@keyframes ab-shimmer {
-  0%, 100% { background-position: 0% 0; }
-  50%      { background-position: 100% 0; }
-}
-.ab-lead {
-  max-width: 620px;
-  margin: 0 auto 2.4rem;
-  font-size: 1.05rem;
-  line-height: 1.7;
-  color: var(--ins-secondary-color);
-}
-
-.ab-hero__btns {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.7rem;
-}
-/* Botão de vidro com o BRILHO QUE VARRE (cogni). O brilho é uma camada a mais
-   no background animada por `background-position`, e não um ::after com
-   overflow hidden — o mesmo motivo do `.btn-primary` global: pseudo recortado
-   decapitaria qualquer coisa posicionada para fora do botão. */
+.ab-logo--dark { display: none; }
+[data-bs-theme="dark"] .ab-logo--light { display: none; }
+[data-bs-theme="dark"] .ab-logo--dark { display: block; }
+.ab-hero h1 { font: 800 clamp(2.6rem, 6vw, 4.6rem)/.98 var(--otc-font-display); letter-spacing: -.045em; margin: 0 0 1.1rem; color: var(--otc-text); }
+.ab-lead { max-width: 620px; margin: 0 auto 2.4rem; font-size: 1.05rem; line-height: 1.7; color: var(--otc-text-2); }
+.ab-hero__btns { display: flex; flex-wrap: wrap; justify-content: center; gap: .7rem; }
+/* a cor dos dois botões é do tema (§10f); aqui só a geometria da cápsula */
 .ab-btn-w, .ab-btn-o {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  padding: 0.66rem 1.25rem;
-  border-radius: 999px;
-  text-decoration: none;
-  background-repeat: no-repeat;
-  background-size: 230% 100%, 100% 100%;
-  background-position: 135% 0, 0 0;
-  transition: background-position 0.7s var(--vr-ease),
-              transform 0.25s var(--vr-ease),
-              box-shadow 0.25s var(--vr-ease),
-              border-color 0.25s var(--vr-ease);
-}
-.ab-btn-w {
-  color: #fff;
-  border: none;
-  background-image:
-    linear-gradient(100deg, transparent 32%, rgba(255,255,255,.34) 50%, transparent 68%),
-    var(--vr-grad);
-  box-shadow: 0 8px 24px rgba(0, 123, 255, 0.34);
-}
-.ab-btn-o {
-  color: var(--ins-body-color);
-  border: 1px solid var(--sf-hair);
-  background-image:
-    linear-gradient(100deg, transparent 32%, var(--sf-shine) 50%, transparent 68%),
-    linear-gradient(color-mix(in oklab, var(--vr-card-bg) 66%, transparent),
-                    color-mix(in oklab, var(--vr-card-bg) 66%, transparent));
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-.ab-btn-w:hover, .ab-btn-o:hover {
-  background-position: -35% 0, 0 0;
-  transform: translateY(-2px);
-  color: var(--ins-body-color);
-}
-.ab-btn-w:hover { color: #fff; box-shadow: 0 12px 32px rgba(0, 123, 255, 0.46); }
-.ab-btn-o:hover { border-color: color-mix(in oklab, var(--sf-cyan) 55%, var(--sf-hair)); }
-
-/* ── STATS ────────────────────────────────────────────────────────────────── */
-.ab-stat { text-align: center; padding: 0.5rem 0.25rem; }
-.ab-stat__label {
-  display: block;
-  font-size: 0.6rem;
-  font-weight: 600;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--sf-micro);
-  margin-bottom: 0.55rem;
-}
-.ab-stat__val {
-  display: block;
-  font-size: clamp(2.3rem, 5vw, 3.4rem);
-  font-weight: 800;
-  letter-spacing: -0.05em;
-  line-height: 1;
-  background: var(--vr-grad);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-.ab-stat__sub {
-  display: block;
-  margin-top: 0.5rem;
-  font-size: 0.78rem;
-  color: var(--ins-secondary-color);
+  display: inline-flex; align-items: center; gap: .5rem; min-height: 40px; padding: .6rem 1.25rem;
+  border-radius: var(--otc-r-pill); font-size: .8rem; font-weight: 600; text-decoration: none;
 }
 
-/* ── CAPACIDADES ──────────────────────────────────────────────────────────── */
-.ab-cap-groups { margin-top: 0.4rem; }
+/* ── Números ── */
+.ab-stat { text-align: center; padding: .5rem .25rem; }
+.ab-stat__label { display: block; margin-bottom: .55rem; font-size: .6rem; font-weight: 600; letter-spacing: .2em; text-transform: uppercase; color: var(--otc-text-3); }
+.ab-stat__val { display: block; font: 800 clamp(2.3rem, 5vw, 3.4rem)/1 var(--otc-font-display); letter-spacing: -.05em; color: var(--otc-accent-ink); font-variant-numeric: tabular-nums; }
+.ab-stat__sub { display: block; margin-top: .5rem; font-size: .78rem; color: var(--otc-text-2); }
+
+/* ── Capacidades ── */
+.ab-cap-groups { margin-top: .4rem; }
 .ab-cap-group {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--sf-micro);
-  margin: 2.2rem 0 0.9rem;
+  display: flex; align-items: center; gap: .7rem; margin: 2.2rem 0 .9rem;
+  font-size: .66rem; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: var(--otc-text-3);
 }
 .ab-cap-groups > .ab-cap-group:first-child { margin-top: 0; }
-.ab-cap-group::before {
-  content: "";
-  width: 18px; height: 1px;
-  flex: 0 0 auto;
-  background: var(--vr-grad);
-}
-.ab-cap-group::after {
-  content: "";
-  flex: 1 1 auto;
-  height: 1px;
-  background: linear-gradient(90deg, var(--sf-hair), transparent);
-}
-.ab-sg { margin-bottom: 0.4rem !important; }
-
-/* cartão de funcionalidade — o spotlight vem da camada global (`streamflow.js`
-   escreve --sf-mx/--sf-my e o `.ab-feat::after` desenha) */
-.ab-feat {
-  position: relative;
-  overflow: hidden;
-  height: 100%;
-  padding: 1.45rem 1.35rem;
-  border-radius: 18px;
-  border: 1px solid var(--vr-card-border);
-  background-color: color-mix(in oklab, var(--vr-card-bg) 72%, transparent);
-  backdrop-filter: blur(14px) saturate(150%);
-  -webkit-backdrop-filter: blur(14px) saturate(150%);
-  transition: transform 0.3s var(--vr-ease), border-color 0.3s var(--vr-ease),
-              box-shadow 0.3s var(--vr-ease);
-}
-.ab-feat::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.35s var(--vr-ease);
-  background: radial-gradient(circle 240px at var(--sf-mx, 50%) var(--sf-my, -10%),
-              color-mix(in oklab, var(--sf-cyan) 34%, transparent) 0%,
-              color-mix(in oklab, var(--sf-blue) 20%, transparent) 34%,
-              transparent 74%);
-}
-.ab-feat:hover::after { opacity: 1; }
-.ab-feat:hover {
-  transform: translateY(-3px);
-  border-color: color-mix(in oklab, var(--sf-cyan) 52%, var(--vr-card-border));
-  box-shadow: var(--vr-card-shadow-hover);
-}
-.ab-feat > * { position: relative; z-index: 1; }
-
-.ab-feat__icon {
-  width: 44px; height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 13px;
-  font-size: 1.2rem;
-  margin-bottom: 1rem;
-  /* o tile é sempre o gradiente da marca com o glifo branco: as classes
-     `bg-*-subtle text-*` do markup ficam por história e são sobrescritas aqui,
-     senão cada cartão teria uma cor de tema diferente e a grade viraria um
-     mostruário de paleta em vez de uma família. */
-  background: var(--vr-grad) !important;
-  color: #fff !important;
-  box-shadow: 0 6px 18px rgba(0, 123, 255, 0.30),
-              inset 0 1px 0 rgba(255, 255, 255, 0.28);
-  transition: transform 0.3s var(--vr-ease), box-shadow 0.3s var(--vr-ease);
-}
-.ab-feat__icon i { color: #fff !important; }
-.ab-feat:hover .ab-feat__icon {
-  transform: scale(1.1) rotate(-4deg);
-  box-shadow: 0 8px 22px rgba(41, 197, 246, 0.46),
-              inset 0 1px 0 rgba(255, 255, 255, 0.36);
-}
-.ab-feat__title {
-  font-size: 1.02rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin-bottom: 0.45rem;
-}
-.ab-feat__desc {
-  font-size: 0.86rem;
-  line-height: 1.6;
-  color: var(--ins-secondary-color);
-  margin-bottom: 0.9rem;
-}
+.ab-cap-group::before { content: ""; width: 18px; height: 1px; flex: 0 0 auto; background: var(--otc-accent-ink); }
+.ab-cap-group::after { content: ""; flex: 1 1 auto; height: 1px; background: linear-gradient(90deg, var(--otc-sep), transparent); }
+.ab-sg { margin-bottom: .4rem !important; }
+/* cartão de funcionalidade: a placa é do tema (§10f), aqui a altura e o miolo */
+.ab-feat { position: relative; height: 100%; padding: 1.45rem 1.35rem; }
+/* o ladrilho do ícone e do número do passo é o `.otc-icon-tile` do tema */
+.ab-feat__icon { width: 44px; height: 44px; font-size: 1.2rem; margin-bottom: 1rem; }
+.ab-feat__title { font-size: 1.02rem; font-weight: 700; letter-spacing: -.02em; margin-bottom: .45rem; color: var(--otc-text); }
+.ab-feat__desc { font-size: .86rem; line-height: 1.6; color: var(--otc-text-2); margin-bottom: .9rem; }
 .ab-feat__link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  text-decoration: none;
-  color: var(--sf-cyan);
-  transition: gap 0.25s var(--vr-ease), color 0.25s var(--vr-ease);
+  display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; text-decoration: none; color: var(--otc-accent-ink);
+  transition: gap var(--otc-dur-fast) var(--otc-ease);
 }
-.ab-feat__link:hover { gap: 0.7rem; color: var(--sf-blue); }
+.ab-feat__link:hover { gap: .7rem; color: var(--otc-accent-ink); }
 
-/* ── FLUXO OPERACIONAL — trilho de gradiente ligando os passos ────────────── */
-.ab-step {
-  position: relative;
-  height: 100%;
-  padding: 1.5rem 1.3rem;
-  border-radius: 18px;
-  border: 1px solid var(--vr-card-border);
-  background-color: color-mix(in oklab, var(--vr-card-bg) 72%, transparent);
-  backdrop-filter: blur(14px) saturate(150%);
-  -webkit-backdrop-filter: blur(14px) saturate(150%);
-  transition: transform 0.3s var(--vr-ease), border-color 0.3s var(--vr-ease),
-              box-shadow 0.3s var(--vr-ease);
-}
-.ab-step:hover {
-  transform: translateY(-3px);
-  border-color: color-mix(in oklab, var(--sf-cyan) 52%, var(--vr-card-border));
-  box-shadow: var(--vr-card-shadow-hover);
-}
-.ab-step__num {
-  width: 34px; height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 11px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: #fff;
-  background: var(--vr-grad);
-  box-shadow: 0 6px 18px rgba(0, 123, 255, 0.32);
-  margin-bottom: 0.85rem;
-}
-.ab-step__icon { display: none; }   /* o número já marca o passo */
-.ab-step__title {
-  font-size: 0.98rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin-bottom: 0.4rem;
-}
-.ab-step__desc {
-  font-size: 0.85rem;
-  line-height: 1.6;
-  color: var(--ins-secondary-color);
-  margin: 0;
-}
-/* ── A grade dos passos ────────────────────────────────────────────────────
-   O container é um flex que QUEBRA LINHA, e os `.ab-step` não têm largura
-   fixa: cada linha fica com uma soma de larguras diferente e o
-   `justify-content: center` centraliza cada uma no seu próprio comprimento —
-   o que se vê como um escalonamento diagonal, e não como uma grade.
-
-   Grade de colunas iguais resolve os dois de uma vez: as linhas passam a ter a
-   mesma largura e os cartões, a mesma medida. As setas somem porque numa grade
-   que quebra em linhas elas apontariam para o fim da linha, não para o passo
-   seguinte — quem dá a ordem é o número no canto de cada cartão. */
-.ab-steps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-  align-items: stretch;
-}
+/* ── Fluxo operacional: grade de colunas iguais (as setas somem — numa grade
+   que quebra linha elas apontariam para o fim da linha, não para o passo) ── */
+.ab-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; align-items: stretch; }
 @media (max-width: 991.98px) { .ab-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 575.98px) { .ab-steps { grid-template-columns: 1fr; } }
 .ab-steps .ab-step-arrow { display: none !important; }
-
-/* a seta entre passos vira um trilho em gradiente */
-.ab-step-arrow {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: transparent;
-  position: relative;
+.ab-steps .ab-step {
+  flex-direction: column; gap: 0; height: 100%; padding: 1.5rem 1.3rem;
+  border-radius: var(--otc-r-card-sm); background-color: var(--otc-glass);
+  -webkit-backdrop-filter: var(--otc-blur); backdrop-filter: var(--otc-blur);
+  box-shadow: var(--otc-shadow), var(--otc-inner-hl);
 }
-.ab-step-arrow::before {
-  content: "";
-  width: 100%; height: 2px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, transparent, var(--sf-cyan), var(--sf-violet), transparent);
-  opacity: 0.6;
-}
+.ab-step__num { width: 34px; height: 34px; margin-bottom: .85rem; font: 700 .82rem/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ab-step__icon { display: none; }   /* o número já marca o passo */
+.ab-step__title { font-size: .98rem; font-weight: 700; letter-spacing: -.02em; margin-bottom: .4rem; color: var(--otc-text); }
+.ab-step__desc { font-size: .85rem; line-height: 1.6; color: var(--otc-text-2); margin: 0; }
 
-/* ── NOTIFICAÇÕES / AUTENTICAÇÃO ──────────────────────────────────────────── */
+/* ── Notificações / autenticação ── */
 .ab-info {
-  position: relative;
-  height: 100%;
-  padding: 1.8rem 1.6rem;
-  border-radius: 20px;
-  border: 1px solid var(--vr-card-border);
-  background-color: color-mix(in oklab, var(--vr-card-bg) 74%, transparent);
-  backdrop-filter: blur(16px) saturate(155%);
-  -webkit-backdrop-filter: blur(16px) saturate(155%);
-  transition: transform 0.3s var(--vr-ease), border-color 0.3s var(--vr-ease),
-              box-shadow 0.3s var(--vr-ease);
+  position: relative; height: 100%; padding: 1.8rem 1.6rem; border-radius: var(--otc-r-card-sm);
+  background-color: var(--otc-glass); -webkit-backdrop-filter: var(--otc-blur); backdrop-filter: var(--otc-blur);
+  box-shadow: var(--otc-shadow), var(--otc-inner-hl);
 }
-.ab-info:hover {
-  transform: translateY(-3px);
-  border-color: color-mix(in oklab, var(--sf-violet) 52%, var(--vr-card-border));
-  box-shadow: var(--vr-card-shadow-hover);
-}
-.ab-info__icon {
-  width: 50px; height: 50px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 15px;
-  font-size: 1.4rem;
-  margin-bottom: 1rem;
-  background: linear-gradient(105deg, var(--sf-violet), var(--sf-fuchsia)) !important;
-  color: #fff !important;
-  box-shadow: 0 8px 22px rgba(139, 92, 246, 0.36),
-              inset 0 1px 0 rgba(255, 255, 255, 0.28);
-}
-.ab-info__icon i { color: #fff !important; }
-.ab-info__title {
-  font-size: 1.1rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin-bottom: 0.5rem;
-}
-.ab-info__desc {
-  font-size: 0.88rem;
-  line-height: 1.65;
-  color: var(--ins-secondary-color);
-  margin: 0;
-}
+.ab-info__icon { --hue: var(--otc-purple); width: 50px; height: 50px; font-size: 1.4rem; margin-bottom: 1rem; }
+.ab-info__title { font-size: 1.1rem; font-weight: 700; letter-spacing: -.02em; margin-bottom: .5rem; color: var(--otc-text); }
+.ab-info__desc { font-size: .88rem; line-height: 1.65; color: var(--otc-text-2); margin: 0; }
 
-/* ── TECNOLOGIA — esteira contínua (a marquee do glass-effect2) ────────────
-   A lista de tecnologias é curta e fixa; em grade ela ocupava meia tela sem
-   dizer mais. Em esteira ela vira movimento, que é o que a seção precisa ser.
-   O conteúdo é DUPLICADO no markup para o laço fechar sem salto. */
+/* ── Tecnologia: esteira contínua (o conteúdo vai DUPLICADO no markup para o
+   laço fechar sem salto); a cor de cada ícone vem do `--hue` no markup ── */
 .ab-marquee {
-  position: relative;
-  overflow: hidden;
+  position: relative; overflow: hidden;
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
   mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
 }
-.ab-marquee__track {
-  display: flex;
-  width: max-content;
-  gap: 0.9rem;
-  animation: ab-marquee 32s linear infinite;
-}
-.ab-marquee__dup { display: flex; gap: 0.9rem; }
+.ab-marquee__track { display: flex; width: max-content; gap: .9rem; animation: ab-marquee 32s linear infinite; }
+.ab-marquee__dup { display: flex; gap: .9rem; }
 .ab-marquee:hover .ab-marquee__track { animation-play-state: paused; }
-@keyframes ab-marquee {
-  from { transform: translate3d(0, 0, 0); }
-  to   { transform: translate3d(-50%, 0, 0); }
-}
-.ab-tech {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6rem;
-  flex: 0 0 auto;
-  padding: 0.8rem 1.3rem;
-  border-radius: 999px;
-  border: 1px solid var(--sf-hair);
-  background: color-mix(in oklab, var(--vr-card-bg) 70%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: border-color 0.25s var(--vr-ease), transform 0.25s var(--vr-ease);
-}
-.ab-tech:hover {
-  border-color: color-mix(in oklab, var(--sf-cyan) 55%, var(--sf-hair));
-  transform: translateY(-2px);
-}
-.ab-tech i { font-size: 1.15rem; color: var(--sf-cyan); }
-.ab-tech__label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-}
+@keyframes ab-marquee { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-50%, 0, 0); } }
+.ab-tech { display: inline-flex; align-items: center; gap: .6rem; flex: 0 0 auto; padding: .8rem 1.3rem; border-radius: var(--otc-r-pill); background: var(--otc-fill); }
+.ab-tech i { font-size: 1.15rem; color: var(--hue, var(--otc-accent-ink)); }
+.ab-tech__label { font-size: .8rem; font-weight: 600; letter-spacing: .01em; white-space: nowrap; color: var(--otc-text); }
 
-/* ── CTA ──────────────────────────────────────────────────────────────────── */
-.ab-tile-blue { text-align: center; padding: 3.4rem 2rem; }
-.ab-cta-title {
-  font-size: clamp(1.8rem, 4vw, 2.9rem);
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  line-height: 1.05;
-  margin: 0 0 0.9rem;
-  background: linear-gradient(100deg, var(--sf-cyan), var(--sf-blue) 46%, var(--sf-violet));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-.ab-cta-desc {
-  max-width: 560px;
-  margin: 0 auto 2rem;
-  font-size: 0.98rem;
-  line-height: 1.7;
-  color: var(--ins-secondary-color);
-}
+/* ── CTA ── */
+div.ab-tile-blue { text-align: center; padding: 3.4rem 2rem; }
+.ab-cta-title { font: 800 clamp(1.8rem, 4vw, 2.9rem)/1.05 var(--otc-font-display); letter-spacing: -.04em; margin: 0 0 .9rem; color: var(--otc-text); }
+.ab-cta-desc { max-width: 560px; margin: 0 auto 2rem; font-size: .98rem; line-height: 1.7; color: var(--otc-text-2); }
 
-/* ── Animação de entrada por bloco ────────────────────────────────────────── */
-@media (prefers-reduced-motion: no-preference) {
-  .ab-rv {
-    opacity: 0;
-    transform: translateY(18px);
-    transition: opacity 0.7s var(--vr-ease), transform 0.7s var(--vr-ease);
-  }
-  /* a classe é `in`, e não `ab-in`: quem a adiciona é o IntersectionObserver
-     no <script> do fim DESTA página. Trocar o nome aqui deixaria todo bloco
-     com `opacity: 0` para sempre — a página abriria em branco, sem erro. */
-  .ab-rv.in { opacity: 1; transform: none; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ab-hero::before, .ab-hero h1, .ab-hero__badge::before,
-  .ab-marquee__track { animation: none; }
-}
-
+@media (prefers-reduced-motion: reduce) { .ab-marquee__track { animation: none; } }
 @media (max-width: 767.98px) {
-  .ab-tile-dark, .ab-tile-dark2, .ab-tile-white,
-  .ab-tile-parchment, .ab-tile-blue { padding: 1.9rem 1.15rem; border-radius: 20px; }
-  .ab-hero { padding: 3rem 1.15rem 2.6rem; }
+  div:is(.ab-tile-dark, .ab-tile-dark2, .ab-tile-white, .ab-tile-parchment, .ab-tile-blue) { padding: 1.9rem 1.15rem; }
+  div.ab-hero { padding: 3rem 1.15rem 2.6rem; }
 }
 </style>
 {% endblock extra_css %}
@@ -784,7 +268,7 @@
                 <div class="row g-3 ab-sg mb-2">
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-secondary-subtle text-secondary"><i class="ti ti-link"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-link"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-mapping-title">Mapeamento B3</div>
                             <p class="ab-feat__desc" data-lang="about-feat-mapping-desc">
                                 Vinculação do ID interno de cada operação ao ID atribuído pela B3 após o registro,
@@ -794,7 +278,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-success-subtle text-success"><i class="ti ti-currency-dollar"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-currency-dollar"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-fxo-title">FXO Options</div>
                             <p class="ab-feat__desc" data-lang="about-feat-fxo-desc">
                                 Opções de câmbio (FX Options): importação do blotter XLSX, conversão automática de
@@ -808,7 +292,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-file-description"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-file-description"></i></div>
                             <div class="ab-feat__title">NDF Commodities</div>
                             <p class="ab-feat__desc" data-lang="about-feat-ndf-desc">
                                 Importação de arquivos de operações NDF via Dropzone, validação automática,
@@ -822,7 +306,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-calendar-clock"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-calendar-clock"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-fwd-title">NDF Forward Start</div>
                             <p class="ab-feat__desc" data-lang="about-feat-fwd-desc">
                                 Operações de NDF com início futuro (Forward Start), com importação, coluna de Acronym, preenchimento automático do cliente, as colunas de Strike e Strike Set Offset vindas da API e geração da confirmação de cliente.
@@ -835,7 +319,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-news"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-news"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-other-title">NDF Other Publisher</div>
                             <p class="ab-feat__desc" data-lang="about-feat-other-desc">
                                 Operações de NDF de outros publishers, com coluna de Acronym, preenchimento automático
@@ -849,7 +333,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-success-subtle text-success"><i class="ti ti-chart-candle"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-chart-candle"></i></div>
                             <div class="ab-feat__title">Option Commodities</div>
                             <p class="ab-feat__desc" data-lang="about-feat-opt-desc">
                                 Gestão de operações de Opções de Commodities, com suporte a importação em lote,
@@ -863,7 +347,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-warning-subtle text-warning"><i class="ti ti-send"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-send"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-submit-title">Envio ao Conecta B3</div>
                             <p class="ab-feat__desc" data-lang="about-feat-submit-desc">
                                 Geração automática dos arquivos de envio no formato exigido pela B3 e disparo
@@ -873,7 +357,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-file-dollar"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-file-dollar"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-ndfvanilla-title">NDF Vanilla</div>
                             <p class="ab-feat__desc" data-lang="about-feat-ndfvanilla-desc">
                                 Operações de NDF vanilla (PTAX), com importação, validação, edição em massa e o mesmo ciclo de aprovação e envio ao Conecta das demais páginas de New Deals.
@@ -886,7 +370,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-radar"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-radar"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-ndmonitor-title">Intraday Monitor</div>
                             <p class="ab-feat__desc" data-lang="about-feat-ndmonitor-desc">
                                 As tarefas do dia — registro, confirmações, Intrag e as reconciliações — com prazo, progresso e quem rodou o quê; o detalhe por produto × status e o e-mail automático de pendências às 19:00, 19:30 e 20:00 (horário de Brasília).
@@ -899,7 +383,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-success-subtle text-success"><i class="ti ti-file-check"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-file-check"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-conf-title">Confirmações de Cliente</div>
                             <p class="ab-feat__desc" data-lang="about-feat-conf-desc">
                                 Geração do documento de confirmação por contraparte × ativo — Word, PDF e XML gravados no Electronic Inventory —, com painel de edição, ciclo New → Generated → Success e checklist de validação. Cobre NDF Commodities, Opções de Commodities, Opção de Câmbio e Termo de Moeda a termo (FWD Start).
@@ -915,7 +399,7 @@
                 <div class="row g-3 ab-sg mb-2">
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-layout-dashboard"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-layout-dashboard"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-dsndf-title">NDF Summary &amp; Cockpit</div>
                             <p class="ab-feat__desc" data-lang="about-feat-dsndf-desc">
                                 Aggregated NDF settlement cards (Summary) plus a per-counterparty Cockpit with an
@@ -929,7 +413,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-warning-subtle text-warning"><i class="ti ti-cash"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-cash"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-opssum-title">Other Products Summary</div>
                             <p class="ab-feat__desc" data-lang="about-feat-opssum-desc">
                                 Batch de liquidação por data: cards de contagem e valor conciliando B3 contra o lado interno, Trade Level com o IR por operação e as diferenças, o net por contraparte (Receive/Pay/Settlement Net, conta e observação) e o e-mail de liberação de TED — tudo lendo as mesmas linhas derivadas, então card e tabela não têm como discordar.
@@ -942,7 +426,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-cash-banknote"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-cash-banknote"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-otm-title">OTM Settlements</div>
                             <p class="ab-feat__desc" data-lang="about-feat-otm-desc">
                                 Importa o arquivo cashflows (dropzone ou pasta), aplica a limpeza da macro (DELETE/códigos)
@@ -957,7 +441,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-building-bank"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-building-bank"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-dsswap-title">Swap Settlements</div>
                             <p class="ab-feat__desc" data-lang="about-feat-dsswap-desc">
                                 Swap positions and settlements by engine — Athena and VCP totals, Swap Events and
@@ -971,7 +455,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-success-subtle text-success"><i class="ti ti-table"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-table"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-cognos-title">Option — Cognos</div>
                             <p class="ab-feat__desc" data-lang="about-feat-cognos-desc">
                                 Option settlement (Cognos) with an editable grid — import, add/edit/delete and confirm —
@@ -985,7 +469,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-secondary-subtle text-secondary"><i class="ti ti-files"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-files"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-opsb3-title">Operations B3</div>
                             <p class="ab-feat__desc" data-lang="about-feat-opsb3-desc">
                                 B3 operations files by operation type (JPM + MGT) with an editable grid — import, CRUD
@@ -999,7 +483,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-mail-forward"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-mail-forward"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-swadv-title">Settlement Advice — Swap</div>
                             <p class="ab-feat__desc" data-lang="about-feat-swadv-desc">
                                 Aviso de liquidação de swap por contraparte: indexadores das duas pernas, prazo, IR pela tabela regressiva e resultado líquido, com impressão dos avisos em PDF e o status New → Generated → Sent compartilhado com o Settlement Summary.
@@ -1012,7 +496,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-warning-subtle text-warning"><i class="ti ti-receipt"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-receipt"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-ndfadv-title">Settlement Advice — Termo de Commodities</div>
                             <p class="ab-feat__desc" data-lang="about-feat-ndfadv-desc">
                                 Aviso de liquidação do termo de mercadoria: ativo subjacente, PTAX e cotação da data de fixing, IR de 0,005% por cadastro de isenção e quebra dos avisos por tipo de net e, quando registrado, por commodity.
@@ -1025,7 +509,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-message-forward"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-message-forward"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-msg-title">Mensageria B3</div>
                             <p class="ab-feat__desc" data-lang="about-feat-msg-desc">
                                 Geração das mensagens de liquidação bilateral a partir do Operations B3, uma por tipo × contraparte, com batimento contra o valor interno ("Favor considerar") e os vencimentos de swap agrupados num aviso só.
@@ -1041,7 +525,7 @@
                 <div class="row g-3 ab-sg mb-2">
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-chart-line"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-chart-line"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-lpndf-title">NDF</div>
                             <p class="ab-feat__desc" data-lang="about-feat-lpndf-desc">
                                 Live NDF position with classification widgets (Vanilla, Commodities, T+0, Other Publisher)
@@ -1055,7 +539,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-file-description"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-file-description"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-lpswap-title">Swap</div>
                             <p class="ab-feat__desc" data-lang="about-feat-lpswap-desc">
                                 Swap book in custody: characteristics by contract type, cashflows (DFLUXO) and premiums
@@ -1069,7 +553,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-success-subtle text-success"><i class="ti ti-chart-candle"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-chart-candle"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-lpopt-title">Option</div>
                             <p class="ab-feat__desc" data-lang="about-feat-lpopt-desc">
                                 Live Option position with settlement/status widgets and per-column filtering.
@@ -1082,7 +566,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-success-subtle text-success"><i class="ti ti-cash-banknote"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-cash-banknote"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-lpcash-title">Swap — Cashflow</div>
                             <p class="ab-feat__desc" data-lang="about-feat-lpcash-desc">
                                 Fluxos de caixa dos swaps em custódia (DFLUXO), com filtro por coluna e exportação.
@@ -1095,7 +579,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-warning-subtle text-warning"><i class="ti ti-coins"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-coins"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-lpprem-title">Swap — Premium</div>
                             <p class="ab-feat__desc" data-lang="about-feat-lpprem-desc">
                                 Agenda de prêmios dos swaps (DAGENDAPREMIOS), fonte do batimento interno dos avisos de prêmio.
@@ -1111,7 +595,7 @@
                 <div class="row g-3 ab-sg mb-2">
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-refresh"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-refresh"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-accrual-title">Accrual Swap</div>
                             <p class="ab-feat__desc" data-lang="about-feat-accrual-desc">
                                 Atualização de PU/Fator dos swaps VCP: geração dos registros de atualização, reconciliação
@@ -1125,7 +609,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-warning-subtle text-warning"><i class="ti ti-building-bank"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-building-bank"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-intrag-title">Intrag (Custódia)</div>
                             <p class="ab-feat__desc" data-lang="about-feat-intrag-desc">
                                 Geração e envio dos arquivos de custódia Intrag para NDF e Opções, com coluna de Status
@@ -1139,7 +623,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-success-subtle text-success"><i class="ti ti-report-money"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-report-money"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-mtm-title">MtM Swap</div>
                             <p class="ab-feat__desc" data-lang="about-feat-mtm-desc">
                                 Mark-to-Market de swaps por LOB (CEM, EDG, Hybrids) e COE: mapeamento dos valores de MtM,
@@ -1156,7 +640,7 @@
                 <div class="row g-3 ab-sg mb-2">
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-git-compare"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-git-compare"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-recon-title">Reconciliation Comitente</div>
                             <p class="ab-feat__desc" data-lang="about-feat-recon-desc">
                                 Reconciliação de comitentes entre B3, CGD e Party Central, com scores de matching por
@@ -1170,7 +654,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-arrows-exchange"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-arrows-exchange"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-payrec-title">Reconciliation Pay/Rec</div>
                             <p class="ab-feat__desc" data-lang="about-feat-payrec-desc">
                                 Concilia pagamentos e recebimentos JPM/MGT contra os extratos e os efetivados do SPB, pelo tipo de net de cada contraparte, carregando as pendências do dia anterior e descontando o IR regressivo do swap para que o lado interno bruto encontre o valor líquido que de fato saiu da conta.
@@ -1183,7 +667,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-warning-subtle text-warning"><i class="ti ti-arrows-left-right"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-arrows-left-right"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-reconfxo-title">Reconciliation FXO</div>
                             <p class="ab-feat__desc" data-lang="about-feat-reconfxo-desc">
                                 Confronta a posição de opções de câmbio registrada na B3 com o relatório EOD da Athena, campo a campo — direção, tipo, contraparte, quantidade, prêmio, strike, datas e o cronograma de fixing da asiática —, casando pelo DealID e, quando a chave não existe em DealID nenhum, por um MatchingDealID que tenha registro correspondente na B3.
@@ -1199,7 +683,7 @@
                 <div class="row g-3 ab-sg mb-2">
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-adjustments-horizontal"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-adjustments-horizontal"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-cp-title">Control Panel</div>
                             <p class="ab-feat__desc" data-lang="about-feat-cp-desc">
                                 Central de rotinas operacionais: salva os arquivos CETIP (tradução do Alteryx, D-1 ANBIMA)
@@ -1214,7 +698,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-warning-subtle text-warning"><i class="ti ti-clock-check"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-clock-check"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-pending-title">Pending Confirmation</div>
                             <p class="ab-feat__desc" data-lang="about-feat-pending-desc">
                                 Acompanhamento das confirmações pendentes por faixa de atraso, com widgets por tipo de
@@ -1228,7 +712,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-success-subtle text-success"><i class="ti ti-chart-bar"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-chart-bar"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-fcst-title">Settlement Forecast</div>
                             <p class="ab-feat__desc" data-lang="about-feat-fcst-desc">
                                 Projeção das liquidações dos próximos 14 dias úteis (ANBIMA), por produto e entidade,
@@ -1242,7 +726,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-danger-subtle text-danger"><i class="ti ti-users"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-users"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-users-title">Gestão de Usuários</div>
                             <p class="ab-feat__desc" data-lang="about-feat-users-desc">
                                 Controle de acesso baseado em SID JPMorgan, autenticação 2FA por e-mail,
@@ -1256,7 +740,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-file-search"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-file-search"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-fileint-title">File Interpreter</div>
                             <p class="ab-feat__desc" data-lang="about-feat-fileint-desc">
                                 Parses e-mail messages (.msg / HTML) to extract structured trade data from Outlook exports.
@@ -1269,7 +753,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-secondary-subtle text-secondary"><i class="ti ti-calendar"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-calendar"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-holidays-title">Holidays Calendar</div>
                             <p class="ab-feat__desc" data-lang="about-feat-holidays-desc">
                                 Editable, persisted market-holiday calendar (ANBIMA and FX schedules) used across the app
@@ -1283,7 +767,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-danger-subtle text-danger"><i class="ti ti-lock-access"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-lock-access"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-pageaccess-title">Page Access</div>
                             <p class="ab-feat__desc" data-lang="about-feat-pageaccess-desc">
                                 Per-page and per-card access control (including Control Panel cards), with access cloning
@@ -1297,7 +781,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-folders"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-folders"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-ei-title">Electronic Inventory</div>
                             <p class="ab-feat__desc" data-lang="about-feat-ei-desc">
                                 Árvore de documentos por contraparte no share da área: upload manual, navegação por ano/mês/dia e destino automático das confirmações geradas.
@@ -1310,7 +794,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-lifebuoy"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-lifebuoy"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-tickets-title">Support Center</div>
                             <p class="ab-feat__desc" data-lang="about-feat-tickets-desc">
                                 Chamados internos com numeração sequencial (#OTC-0001), anexos, comentários e as regras de permissão por perfil — quem abre, quem atende e quem enxerga.
@@ -1323,7 +807,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-secondary-subtle text-secondary"><i class="ti ti-chart-histogram"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-chart-histogram"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-metrics-title">Metrics</div>
                             <p class="ab-feat__desc" data-lang="about-feat-metrics-desc">
                                 Indicadores das confirmações pendentes por faixa de atraso e por tipo, para acompanhamento gerencial.
@@ -1339,7 +823,7 @@
                 <div class="row g-3 ab-sg mb-2">
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-database"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-database"></i></div>
                             <div class="ab-feat__title">Index B3</div>
                             <p class="ab-feat__desc" data-lang="about-feat-index-desc">
                                 Cadastro e manutenção de índices de referência da B3 utilizados no mapeamento
@@ -1353,7 +837,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-address-book"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-address-book"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-refdata-title">Reference Data</div>
                             <p class="ab-feat__desc" data-lang="about-feat-refdata-desc">
                                 Editor de contrapartes (estilo glass) com contas bancárias, contatos e CGD, fluxo
@@ -1367,7 +851,7 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-warning-subtle text-warning"><i class="ti ti-table-options"></i></div>
+                            <div class="ab-feat__icon otc-icon-tile"><i class="ti ti-table-options"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-mapping-title">Mapping</div>
                             <p class="ab-feat__desc" data-lang="about-feat-mapping-desc">
                                 As tabelas de-para do sistema num só lugar — 22 cadastros, de moedas e publishers a eventos da B3, isenções de IR e endereços de API. Editar aqui vale já na próxima requisição, sem restart e sem tocar em código.
@@ -1396,7 +880,7 @@
                 <div class="ab-steps">
                     <!-- Step 1 -->
                     <div class="ab-step ab-rv" style="transition-delay:0ms">
-                        <div class="ab-step__num">1</div>
+                        <div class="ab-step__num otc-icon-tile">1</div>
                         <i class="ti ti-upload ab-step__icon"></i>
                         <div class="ab-step__title" data-lang="about-step1-title">Importação</div>
                         <p class="ab-step__desc" data-lang="about-step1-desc">
@@ -1408,7 +892,7 @@
                     </div>
                     <!-- Step 2 -->
                     <div class="ab-step ab-rv" style="transition-delay:80ms">
-                        <div class="ab-step__num">2</div>
+                        <div class="ab-step__num otc-icon-tile">2</div>
                         <i class="ti ti-clipboard-check ab-step__icon"></i>
                         <div class="ab-step__title" data-lang="about-step2-title">Revisão</div>
                         <p class="ab-step__desc" data-lang="about-step2-desc">
@@ -1420,7 +904,7 @@
                     </div>
                     <!-- Step 3 -->
                     <div class="ab-step ab-rv" style="transition-delay:160ms">
-                        <div class="ab-step__num">3</div>
+                        <div class="ab-step__num otc-icon-tile">3</div>
                         <i class="ti ti-send ab-step__icon"></i>
                         <div class="ab-step__title" data-lang="about-step3-title">Envio à B3</div>
                         <p class="ab-step__desc" data-lang="about-step3-desc">
@@ -1432,7 +916,7 @@
                     </div>
                     <!-- Step 4 -->
                     <div class="ab-step ab-rv" style="transition-delay:240ms">
-                        <div class="ab-step__num">4</div>
+                        <div class="ab-step__num otc-icon-tile">4</div>
                         <i class="ti ti-link ab-step__icon"></i>
                         <div class="ab-step__title" data-lang="about-step4-title">Mapeamento</div>
                         <p class="ab-step__desc" data-lang="about-step4-desc">
@@ -1444,7 +928,7 @@
                     </div>
                     <!-- Step 5 -->
                     <div class="ab-step ab-rv" style="transition-delay:320ms">
-                        <div class="ab-step__num">5</div>
+                        <div class="ab-step__num otc-icon-tile">5</div>
                         <i class="ti ti-file-check ab-step__icon"></i>
                         <div class="ab-step__title" data-lang="about-step5-title">Confirmação</div>
                         <p class="ab-step__desc" data-lang="about-step5-desc">
@@ -1456,7 +940,7 @@
                     </div>
                     <!-- Step 6 -->
                     <div class="ab-step ab-rv" style="transition-delay:400ms">
-                        <div class="ab-step__num">6</div>
+                        <div class="ab-step__num otc-icon-tile">6</div>
                         <i class="ti ti-cash-banknote ab-step__icon"></i>
                         <div class="ab-step__title" data-lang="about-step6-title">Liquidação</div>
                         <p class="ab-step__desc" data-lang="about-step6-desc">
@@ -1475,8 +959,8 @@
                 <div class="row g-3 ab-sg">
                     <div class="col-md-6 ab-rv">
                         <div class="ab-info">
-                            <div class="ab-info__icon">
-                                <i class="ti ti-bell" style="color: var(--ab-blue-dk);"></i>
+                            <div class="ab-info__icon otc-icon-tile">
+                                <i class="ti ti-bell"></i>
                             </div>
                             <div class="ab-info__title" data-lang="about-notif-title">Notificações em Tempo Real</div>
                             <p class="ab-info__desc" data-lang="about-notif-desc">
@@ -1488,8 +972,8 @@
                     </div>
                     <div class="col-md-6 ab-rv">
                         <div class="ab-info">
-                            <div class="ab-info__icon">
-                                <i class="ti ti-shield-lock" style="color: #30d158;"></i>
+                            <div class="ab-info__icon otc-icon-tile">
+                                <i class="ti ti-shield-lock"></i>
                             </div>
                             <div class="ab-info__title" data-lang="about-auth-title">Autenticação Segura</div>
                             <p class="ab-info__desc" data-lang="about-auth-desc">
@@ -1516,27 +1000,27 @@
                 <div class="ab-marquee ab-rv">
                     <div class="ab-marquee__track" aria-label="Platform stack">
                         <div class="ab-tech">
-                            <i class="ti ti-brand-python" style="color:#29c5f6;"></i>
+                            <i class="ti ti-brand-python" style="--hue:var(--otc-teal)"></i>
                             <div class="ab-tech__label">Python / Flask</div>
                         </div>
                         <div class="ab-tech">
-                            <i class="ti ti-database" style="color:#007bff;"></i>
+                            <i class="ti ti-database" style="--hue:var(--otc-blue)"></i>
                             <div class="ab-tech__label">DuckDB</div>
                         </div>
                         <div class="ab-tech">
-                            <i class="ti ti-brand-bootstrap" style="color:#8b5cf6;"></i>
+                            <i class="ti ti-brand-bootstrap" style="--hue:var(--otc-purple)"></i>
                             <div class="ab-tech__label">Bootstrap 5</div>
                         </div>
                         <div class="ab-tech">
-                            <i class="ti ti-table" style="color:#34d399;"></i>
+                            <i class="ti ti-table" style="--hue:var(--otc-green)"></i>
                             <div class="ab-tech__label">DataTables</div>
                         </div>
                         <div class="ab-tech">
-                            <i class="ti ti-cloud-upload" style="color:#fbbf24;"></i>
+                            <i class="ti ti-cloud-upload" style="--hue:var(--otc-yellow)"></i>
                             <div class="ab-tech__label">Dropzone.js</div>
                         </div>
                         <div class="ab-tech">
-                            <i class="ti ti-server" style="color:#f43f5e;"></i>
+                            <i class="ti ti-server" style="--hue:var(--otc-pink)"></i>
                             <div class="ab-tech__label">Gunicorn</div>
                         </div>
                         <!-- A cópia é obrigatória, não decorativa: a animação desliza o track
@@ -1545,27 +1029,27 @@
                              de tela não anunciar a lista repetida. -->
                         <div class="ab-marquee__dup" aria-hidden="true">
                             <div class="ab-tech">
-                                <i class="ti ti-brand-python" style="color:#29c5f6;"></i>
+                                <i class="ti ti-brand-python" style="--hue:var(--otc-teal)"></i>
                                 <div class="ab-tech__label">Python / Flask</div>
                             </div>
                             <div class="ab-tech">
-                                <i class="ti ti-database" style="color:#007bff;"></i>
+                                <i class="ti ti-database" style="--hue:var(--otc-blue)"></i>
                                 <div class="ab-tech__label">DuckDB</div>
                             </div>
                             <div class="ab-tech">
-                                <i class="ti ti-brand-bootstrap" style="color:#8b5cf6;"></i>
+                                <i class="ti ti-brand-bootstrap" style="--hue:var(--otc-purple)"></i>
                                 <div class="ab-tech__label">Bootstrap 5</div>
                             </div>
                             <div class="ab-tech">
-                                <i class="ti ti-table" style="color:#34d399;"></i>
+                                <i class="ti ti-table" style="--hue:var(--otc-green)"></i>
                                 <div class="ab-tech__label">DataTables</div>
                             </div>
                             <div class="ab-tech">
-                                <i class="ti ti-cloud-upload" style="color:#fbbf24;"></i>
+                                <i class="ti ti-cloud-upload" style="--hue:var(--otc-yellow)"></i>
                                 <div class="ab-tech__label">Dropzone.js</div>
                             </div>
                             <div class="ab-tech">
-                                <i class="ti ti-server" style="color:#f43f5e;"></i>
+                                <i class="ti ti-server" style="--hue:var(--otc-pink)"></i>
                                 <div class="ab-tech__label">Gunicorn</div>
                             </div>
                         </div>

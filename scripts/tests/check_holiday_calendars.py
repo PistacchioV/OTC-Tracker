@@ -123,11 +123,16 @@ check('dropzone', 'id="hc-dropzone"' in corpo, True)
 check('aceita so .xlsx/.xlsm', 'accept=".xlsx,.xlsm"' in corpo, True)
 # A dropzone tem de reagir ao arrastar; sem o dragover ela e so um botao.
 check('o JS trata dragover/drop', "dz.addEventListener(ev" in JS and "'drop'" in JS, True)
-# Tokens do tema, nunca --bs-*: senao a dropzone sai branca no tema escuro.
-css = TPL.split('{% block extra_css %}', 1)[1].split('{% endblock extra_css %}', 1)[0]
-dz_css = css.split('.hc-dropzone {', 1)[1].split('}', 1)[0]
-check('a dropzone usa --ins-*, nao --bs-*',
-      ('--ins-' in dz_css, '--bs-' in dz_css), (True, False))
+# Tokens do tema (`--otc-*` desde o rebranding, ou os `--ins-*` do Bootstrap),
+# nunca --bs-*: senao a dropzone sai branca no tema escuro.
+# Desde o rebranding (19/10/2026) a área tracejada e o acender ao arrastar são
+# da família de dropzone do TEMA (otc.scss), que pinta com `--otc-*`.
+SCSS = io.open(os.path.join(ROOT, 'apps', 'static', 'scss', 'otc.scss'), encoding='utf-8').read()
+fam = re.search(r'^\.dropzone, \.upload-zone[^{]*\{(.*?)^\}', SCSS, re.S | re.M)
+fam_sel = SCSS[fam.start():SCSS.index('{', fam.start())] if fam else ''
+check('a dropzone usa tokens do tema, nao --bs-*',
+      ('.hc-dropzone' in fam_sel, bool(fam) and '--otc-' in fam.group(1), bool(fam) and '--bs-' in fam.group(1)),
+      (True, True, False))
 
 print('\n== 4. a planilha: coluna A a data, coluna B a descricao ==')
 linhas = [
@@ -233,12 +238,18 @@ print('\n== 9. o texto novo nasce em ingles e tem data-lang ==')
 CHAVES = ['hc-new-holiday', 'hc-new-calendar', 'hc-new-calendar-title', 'hc-hint',
           'hc-calendar', 'hc-cal-name', 'hc-cal-file', 'hc-dz', 'hc-dz-spec',
           'hc-close', 'hc-import']
+ICONE = {'hc-close': 'Close', 'hc-import': 'Import'}
 LANGS = {l: json.loads(read('apps/static/data/translations/%s.json' % l))
          for l in ('en', 'br', 'es')}
 for k in CHAVES:
     check('%s nos tres idiomas' % k,
           sorted(l for l in LANGS if not str(LANGS[l].get(k, '')).strip()), [])
-    check('   e no template', 'data-lang="%s"' % k in corpo, True)
+    if k in ICONE:
+        # Close/Import do modal viraram botao de ICONE (padrao do modal): o
+        # rotulo e o `title`, nao texto com data-lang.
+        check('   e no template (title do icone)', 'title="%s"' % ICONE[k] in corpo, True)
+    else:
+        check('   e no template', 'data-lang="%s"' % k in corpo, True)
 
 print('\nFALHAS: %d' % len(fails))
 sys.exit(1 if fails else 0)

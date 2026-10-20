@@ -7,123 +7,44 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <style>
-/* ============================================================================
-   Reconciliação de CGD — FEP × B3.
-   Cards de resumo no desenho do resto do app + tabela no padrão da casa.
-   Tokens --ins-*/--vr-*, nunca --bs-*.
-   ============================================================================ */
-#cgd-page { --cgd-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
+{# Só o que é DESTA tela: os cards de contagem que FILTRAM a tabela pelo bucket (placa, chip na cor do bucket, o ativo, o Total de fechamento), o campo de data nativo escondido atrás do texto, a célula de Aging e a origem do arquivo. Painel, tabela, botões e linha de filtro vêm do tema. #}
+#cgd-page .cgd-panel { padding: 1rem 1.1rem 1.15rem; }
 
-#cgd-page .cgd-panel {
-    background: var(--vr-card-bg, var(--ins-secondary-bg));
-    border: 1px solid var(--vr-card-border, var(--ins-border-color));
-    border-radius: var(--vr-card-radius, 18px);
-    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
-    padding: 1rem 1.1rem 1.15rem;
-}
-
-/* Os cards de contagem. Clicar num deles FILTRA a tabela pelo bucket — é o
-   caminho que a mesa faz de qualquer jeito, e sem isso ela digita o nome do
-   bucket no filtro da coluna. */
+/* ── Cards de contagem (montados pelo JS; clicar filtra pelo bucket) ── */
 #cgd-page .cgd-kpi {
-    background: var(--vr-card-bg, var(--ins-secondary-bg));
-    border: 1px solid var(--vr-card-border, var(--ins-border-color));
-    border-radius: var(--vr-card-radius, 18px);
-    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
     padding: .9rem 1rem; height: 100%; cursor: pointer;
     display: flex; align-items: center; gap: .75rem;
-    transition: box-shadow 240ms var(--cgd-ease), border-color 240ms var(--cgd-ease), transform 240ms var(--cgd-ease);
+    transition: box-shadow var(--otc-dur-base) var(--otc-ease-out);
 }
-@media (hover: hover) and (pointer: fine) {
-    #cgd-page .cgd-kpi:hover { transform: translateY(-2px); border-color: rgba(0,102,204,.28);
-                               box-shadow: var(--vr-card-shadow-hover, 0 18px 40px rgba(94,92,230,.14)); }
-    #cgd-page .cgd-kpi:hover .cgd-kpi__ico { transform: scale(1.1) rotate(-4deg); }
-}
-#cgd-page .cgd-kpi.cgd-on { border-color: var(--vr-accent-1, #0066cc); box-shadow: 0 0 0 2px rgba(0,102,204,.16); }
-#cgd-page .cgd-kpi__ico {
-    width: 38px; height: 38px; flex: 0 0 auto; border-radius: 11px; color: #fff;
-    display: inline-flex; align-items: center; justify-content: center; font-size: 1.15rem;
-    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6));
-    transition: transform 240ms var(--cgd-ease);
-}
-#cgd-page .cgd-k-b3      .cgd-kpi__ico { background: linear-gradient(100deg, #b3261e, #ff453a); }
-#cgd-page .cgd-k-action  .cgd-kpi__ico { background: linear-gradient(100deg, #b07500, #f7b84b); }
-#cgd-page .cgd-k-onlyb3  .cgd-kpi__ico { background: linear-gradient(100deg, #7c3aed, #d946ef); }
-#cgd-page .cgd-k-just    .cgd-kpi__ico { background: linear-gradient(100deg, #0d7ea8, #4a849b); }
-#cgd-page .cgd-k-match   .cgd-kpi__ico { background: linear-gradient(100deg, #1a7f37, #34c759); }
-/* o Total usa o gradiente da MARCA, que é o que o separa dos buckets: os outros
-   cinco são cores de estado, ele é o fechamento da conta */
-#cgd-page .cgd-k-total   .cgd-kpi__ico { background: var(--vr-grad); }
-#cgd-page .cgd-k-total {
-    border-color: color-mix(in oklab, var(--sf-blue) 42%, var(--vr-card-border));
-    box-shadow: var(--vr-card-shadow), 0 0 26px -8px color-mix(in oklab, var(--sf-blue) 70%, transparent);
-}
-#cgd-page .cgd-kpi__n { font-size: 1.4rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: var(--ins-body-color); }
-#cgd-page .cgd-kpi__l { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ins-secondary-color); }
+#cgd-page .cgd-kpi.cgd-on { box-shadow: 0 0 0 2px var(--otc-accent-ink), var(--otc-depth); }
+#cgd-page .cgd-k-b3     .cgd-kpi__ico { --hue: var(--otc-danger); }
+#cgd-page .cgd-k-action .cgd-kpi__ico { --hue: var(--otc-orange); }
+#cgd-page .cgd-k-onlyb3 .cgd-kpi__ico { --hue: var(--otc-purple); }
+#cgd-page .cgd-k-just   .cgd-kpi__ico { --hue: var(--otc-teal); }
+#cgd-page .cgd-k-match  .cgd-kpi__ico { --hue: var(--otc-green); }
+/* O Total usa o gradiente da MARCA: os outros cinco são estados, ele é o fechamento. */
+#cgd-page .cgd-k-total .cgd-kpi__ico { background: linear-gradient(100deg, var(--otc-accent), color-mix(in srgb, var(--otc-accent) 60%, var(--otc-teal))); }
+#cgd-page .cgd-k-total { box-shadow: var(--otc-depth), 0 0 26px -8px color-mix(in srgb, var(--otc-blue) 70%, transparent); }
+#cgd-page .cgd-k-total.cgd-on { box-shadow: 0 0 0 2px var(--otc-accent-ink), var(--otc-depth); }
+#cgd-page .cgd-kpi__n { font-size: 1.4rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: var(--otc-text); }
+#cgd-page .cgd-kpi__l { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--otc-text-2); }
 
-/* ── Data: `type="date"` INVISÍVEL por cima de um texto readonly em dd/mm/aaaa.
-   O campo nativo desenha no locale do SISTEMA — no Windows do JP isso é
-   mm/dd/yyyy, e a mesa leria 03/04 como 3 de abril onde o campo quis dizer 4 de
-   março. O que se lê é sempre o texto; o nativo é só o calendário. */
-#cgd-page .date-wrap { position: relative; width: 132px; }
+/* ── Data: `type="date"` INVISÍVEL por cima de um texto readonly em dd/mm/aaaa
+   (o nativo desenha no locale do SISTEMA — mm/dd no Windows do JP). */
+#cgd-page .date-wrap { width: 132px; }
 #cgd-page .date-wrap input[type=date] { position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 2; }
 #cgd-page .date-wrap input[type=text] { pointer-events: none; padding-right: 28px; }
 #cgd-page .date-wrap-icon { position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
-                            z-index: 1; font-size: 15px; pointer-events: none; color: var(--ins-secondary-color, #6c757d); }
+                            z-index: 1; font-size: 15px; pointer-events: none; color: var(--otc-text-2); }
 
-/* ── Tabela no padrão da casa. As regras do `th` valem para o CLONE que o
-   scrollX cria — o DataTables remove o id da tabela do cabeçalho. */
-#cgd-table thead th,
-.dt-scroll-head thead th,
-.dt-scroll-headInner thead th,
-.dataTables_scrollHeadInner thead th {
-    text-align: center !important; vertical-align: middle !important;
-    font-size: .7rem; white-space: normal;
-}
-#cgd-table tbody td { text-align: center; vertical-align: middle; font-size: .8rem; white-space: nowrap; }
+/* ── Tabela ─────────────────────────────────────────────────────── */
 #cgd-table tbody td.cgd-ell { max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
-/* A linha de filtro. Os seletores do CLONE são obrigatórios: com `scrollX` o
-   DataTables desenha o cabeçalho duas vezes e REMOVE o id da tabela copiada, que
-   é justamente a que se vê — só `#cgd-table` estilizava o `<thead>` escondido no
-   corpo rolável, e os campos à vista caíam no input padrão do tema, destoando de
-   todas as outras telas. */
-#cgd-table thead .cgd-filters th,
-.dt-scroll-head thead .cgd-filters th,
-.dt-scroll-headInner thead .cgd-filters th,
-.dataTables_scrollHeadInner thead .cgd-filters th { padding: 4px 5px; }
-#cgd-table thead .cgd-filters input,
-.dt-scroll-head thead .cgd-filters input,
-.dt-scroll-headInner thead .cgd-filters input,
-.dataTables_scrollHeadInner thead .cgd-filters input {
-    width: 100%; font-size: 12px; height: 28px; padding: 2px 6px;
-    border: 1px solid var(--ins-border-color); border-radius: 6px;
-    background: var(--ins-secondary-bg); color: var(--ins-body-color);
-}
 #cgd-table td.cgd-age { font-variant-numeric: tabular-nums; font-weight: 700; }
-#cgd-table td.cgd-age.cgd-late { color: var(--ins-danger, #d93025); }
-#cgd-table td.cgd-age.cgd-warn { color: #b07500; }
+#cgd-table td.cgd-age.cgd-late { color: var(--otc-danger); }
+#cgd-table td.cgd-age.cgd-warn { color: color-mix(in srgb, var(--otc-yellow) 75%, var(--otc-text)); }
 
-/* O Check é o badge pill do app (`badge rounded-pill text-bg-* bg-gradient`),
-   sem paleta própria — ver `badge()`. Aqui só o tamanho, para o pill não
-   engordar a linha numa tabela de fonte .8rem. */
-#cgd-table td .badge { font-size: .68rem; font-weight: 700; padding: .28em .7em; }
-
-#cgd-page .btn-toolbar-all {
-    font-size: .75rem !important; padding: .25rem .6rem !important;
-    height: auto !important; line-height: 1.4 !important; white-space: nowrap !important;
-    transition: transform 140ms var(--cgd-ease), box-shadow 140ms var(--cgd-ease);
-}
-@media (hover: hover) and (pointer: fine) {
-    #cgd-page .btn-toolbar-all:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.10); }
-}
-#cgd-page .btn-toolbar-all:active { transform: scale(.96) !important; }
-#cgd-page .cgd-src { font-size: .7rem; color: var(--ins-secondary-color); }
+#cgd-page .cgd-src { font-size: .7rem; color: var(--otc-text-2); }
 #cgd-page .cgd-src code { font-size: .68rem; }
-#cgd-page .cgd-warn {
-    background: #fff6e5; border: 1px solid #f2d9a8; color: #8a5b00;
-    border-radius: 10px; padding: .6rem .8rem; font-size: .74rem; margin-bottom: .8rem;
-}
-[data-bs-theme=dark] #cgd-page .cgd-warn { background: rgba(247,184,75,.12); color: #f7b84b; }
 </style>
 {% endblock extra_css %}
 
@@ -503,7 +424,7 @@
               (j.generated_at ? '<div>' + esc(t('at')) + ' ' + esc(j.generated_at) + '</div>' : '')
             : '');
         $('#cgd-warnings').html((j.warnings || []).length
-            ? '<div class="cgd-warn">' + (j.warnings || []).map(function (w) {
+            ? '<div class="otc-banner mb-2">' + (j.warnings || []).map(function (w) {
                   return '<div>• ' + esc(msgText(w, 'w_')) + '</div>'; }).join('') + '</div>'
             : '');
         if (j.ref) {

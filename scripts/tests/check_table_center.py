@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
 """Toda tabela do app centraliza cabecalho E valores (CLAUDE.md §3).
 
+DESDE O REBRANDING (19/10/2026) A REGRA E DO TEMA: o `otc.scss` centraliza
+toda DataTable (`table.dataTable > thead > tr > th` e `... > tbody > tr > td`)
+e o clone do scrollX com `!important`, e as telas declaram so a largura das
+colunas. O guarda passou a cobrar a regra LA (secao 0) e, nas telas, so a
+tabela que NAO e DataTable (a regra do tema nao a alcanca) -- o resto do texto
+abaixo conta como era antes, quando cada tela declarava a sua.
+
 Nao ha regra GLOBAL de centralizacao: o `visual-refresh.css` centraliza so os
 campos da linha de filtro, e o `streamflow.css` nao declara `text-align` em
 lugar nenhum. Cada tela declara a sua -- e e por isso que a tela nova nasce
@@ -105,7 +112,37 @@ def analisa(src):
     return th, td, fracos
 
 
-print('== 1. cabecalho e valores centralizados ==')
+SCSS = os.path.join(ROOT, 'apps', 'static', 'scss', 'otc.scss')
+
+print('== 0. a regra mora no TEMA ==')
+tema = io.open(SCSS, encoding='utf-8').read()
+regras_tema = REGRA.findall(re.sub(r'//[^\n]*', '', tema))
+def _tema_tem(seletor_re, imp=False):
+    for sel, decls in regras_tema:
+        if re.search(seletor_re, sel) and (CENTER_IMP if imp else CENTER).search(decls):
+            return True
+    return False
+check('o tema centraliza o cabecalho de toda DataTable',
+      _tema_tem(r'table\.dataTable\s*>\s*thead\s*>\s*tr\s*>\s*th\s*$'))
+check('o tema centraliza as celulas de toda DataTable',
+      _tema_tem(r'table\.dataTable\s*>\s*tbody\s*>\s*tr\s*>\s*td\s*$'))
+check('e o clone do scrollX com !important (o plugin tira o id da copia)',
+      _tema_tem(r'dt-scroll-headInner[^{]*thead th', imp=True))
+
+# uma tela "e DataTable" quando inicializa uma (o tema a alcanca)
+DATATABLE = re.compile(r'\.DataTable\(|new DataTable\(|\.dataTable\(|otcTableStd|data-otc-datatable', re.I)
+
+
+# a DataTable pode nascer no JS PROPRIO da pagina (`js/pages/<nome>.js`, o
+# Quotes), e nao no template
+def _js_da_pagina(src):
+    for rel in re.findall(r'/js/pages/([\w.-]+\.js)', src):
+        p = os.path.join(ROOT, 'apps', 'static', 'js', 'pages', rel)
+        if os.path.exists(p):
+            yield io.open(p, encoding='utf-8').read()
+
+
+print('\n== 1. cabecalho e valores centralizados ==')
 alvos = []
 for nome in sorted(os.listdir(PAGES)):
     if not nome.endswith('.html') or nome.startswith('email-template'):
@@ -122,11 +159,13 @@ sem_regra = []
 for nome, src in alvos:
     if nome in DEMO_DO_TEMA:
         continue
+    if DATATABLE.search(src) or any(DATATABLE.search(js) for js in _js_da_pagina(src)):
+        continue                      # a regra do tema alcanca
     th, td, _ = analisa(src)
     if not (th and td):
         sem_regra.append('%s (falta %s)' % (nome, ' + '.join(
             [x for x, ok in (('th', th), ('td', td)) if not ok])))
-check('as %d telas de dado declaram a regra generica de th E td%s'
+check('as telas com tabela que NAO e DataTable (de %d) declaram a regra de th E td%s'
       % (len(alvos) - len(DEMO_DO_TEMA),
          '' if not sem_regra else '\n        ' + '\n        '.join(sem_regra)),
       not sem_regra)

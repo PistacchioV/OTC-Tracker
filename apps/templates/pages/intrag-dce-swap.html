@@ -8,174 +8,71 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
+{# Só o que é DESTA tela: a largura de cada coluna das DUAS grades (layout FIXO,
+   escopado pelo wrapper de cada tabela), o texto que passa cortado em "…", a
+   célula de Actions sem padding lateral, o dropzone enxuto, o chip dos fluxos,
+   as grades editáveis do modal e a linha do preview. Cabeçalho, células,
+   filtro, toolbar, botões e menus são do tema (otc.scss). #}
 <style>
-  /* ti-spin: ver intrag-dce-option.html. */
-  @keyframes ti-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
-  i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline-block !important; animation: ti-spin 0.8s linear infinite !important; }
-  @media (prefers-reduced-motion: reduce) { i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { animation-duration: 1.6s !important; } }
-
-  .badge.badge-sent { background-color: #17a2b8 !important; color: #fff !important; }
-
-  div.dt-button-collection {
-      opacity: 1 !important;
-      background-color: var(--ins-dropdown-bg, var(--ins-secondary-bg, #fff)) !important;
-      border: var(--ins-border-width, 1px) solid var(--ins-border-color, rgba(0,0,0,.1)) !important;
-      border-radius: var(--ins-dropdown-border-radius, 0.6875rem) !important;
-      box-shadow: 0 8px 24px rgba(0,0,0,.12) !important;
-  }
-  div.dt-button-collection .dropdown-item { opacity: 1 !important; color: var(--ins-dropdown-link-color, var(--ins-body-color)) !important; }
-  div.dt-button-collection .dropdown-item:hover { background-color: var(--ins-dropdown-link-hover-bg, rgba(0,102,204,.06)) !important; }
-
-  .card-body { padding: 5px; }
-  .table-responsive { overflow-x: auto; }
-  .dt-scroll-head, .dataTables_scrollHead { padding-top: 8px; }
-  .dt-scroll-body thead, .dataTables_scrollBody thead { display: none !important; }
-  .dces-table thead th,
-  .dt-scroll-head thead th,
-  .dataTables_scrollHeadInner thead th,
-  .dataTables_scrollHead thead th { padding-top: 12px !important; vertical-align: middle; }
-  .dt-scroll-headInner table, .dataTables_scrollHeadInner table,
-  .dt-scroll-body > table, .dataTables_scrollBody > table { table-layout: fixed !important; }
-  .dces-table th {
-      white-space: nowrap !important; padding: 8px 12px; overflow: hidden; text-overflow: ellipsis;
-      text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
-  }
-  .dt-scroll-head thead th, .dt-scroll-headInner thead th,
-  .dataTables_scrollHead thead th, .dataTables_scrollHeadInner thead th {
-      white-space: nowrap !important; overflow: hidden; text-overflow: ellipsis;
-      text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
-  }
-  .dces-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8rem; text-align: center; vertical-align: middle; }
-
-  /* Larguras — escopadas pelo WRAPPER de cada tabela (`<id>_wrapper`), porque
-     o DataTables remove o id da tabela clonada do header e há DUAS tabelas na
-     página: uma regra solta em `.dt-scroll-head th:nth-child(n)` alcançaria
-     as duas. Legs: (1)=checkbox (2)=actions (3)=Status (4)=Intrag ID
-     (5)=Trade Date (6..47)=42 colunas da planilha (48)=hidden ID. */
-  #intrag-dces-legs th, #intrag-dces-legs td,
-  #intrag-dces-legs_wrapper .dt-scroll-head thead th, #intrag-dces-legs_wrapper .dataTables_scrollHead thead th { width: 135px; min-width: 135px; }
-  #intrag-dces-legs th:nth-child(1), #intrag-dces-legs td:nth-child(1),
-  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(1), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(1) { width: 50px; min-width: 50px; }
-  #intrag-dces-legs th:nth-child(2), #intrag-dces-legs td:nth-child(2),
-  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(2), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(2) { width: 160px; min-width: 160px; }
-  #intrag-dces-legs th:nth-child(3), #intrag-dces-legs td:nth-child(3),
-  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(3), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(3) { width: 110px; min-width: 110px; }
-  #intrag-dces-legs th:nth-child(5), #intrag-dces-legs td:nth-child(5),
-  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(5), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(5) { width: 110px; min-width: 110px; }
-  #intrag-dces-legs th:nth-child(6), #intrag-dces-legs td:nth-child(6),
-  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(6), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(6) { width: 150px; min-width: 150px; }
-  #intrag-dces-legs th:nth-child(8), #intrag-dces-legs td:nth-child(8),
-  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(8), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(8) { width: 220px; min-width: 220px; }
-  #intrag-dces-legs th:nth-child(11), #intrag-dces-legs td:nth-child(11),
-  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(11), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(11) { width: 170px; min-width: 170px; }
-  #intrag-dces-legs th:nth-child(22), #intrag-dces-legs td:nth-child(22),
-  #intrag-dces-legs th:nth-child(23), #intrag-dces-legs td:nth-child(23),
-  #intrag-dces-legs th:nth-child(25), #intrag-dces-legs td:nth-child(25),
-  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(22), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(22),
-  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(23), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(23),
-  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(25), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(25) { width: 230px; min-width: 230px; }
-  #intrag-dces-legs th:nth-child(27), #intrag-dces-legs td:nth-child(27),
-  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(27), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(27) { width: 170px; min-width: 170px; }
-  /* Flows: (1)=Deal Name … (14)=Notional(%) (15)=hidden ID. */
-  #intrag-dces-flows th, #intrag-dces-flows td,
-  #intrag-dces-flows_wrapper .dt-scroll-head thead th, #intrag-dces-flows_wrapper .dataTables_scrollHead thead th { width: 140px; min-width: 140px; }
-  #intrag-dces-flows th:nth-child(1), #intrag-dces-flows td:nth-child(1),
-  #intrag-dces-flows_wrapper .dt-scroll-head thead th:nth-child(1), #intrag-dces-flows_wrapper .dataTables_scrollHead thead th:nth-child(1) { width: 150px; min-width: 150px; }
-  #intrag-dces-flows th:nth-child(3), #intrag-dces-flows td:nth-child(3),
-  #intrag-dces-flows_wrapper .dt-scroll-head thead th:nth-child(3), #intrag-dces-flows_wrapper .dataTables_scrollHead thead th:nth-child(3) { width: 170px; min-width: 170px; }
-
-  .dces-filter-row th { padding: 4px 8px; border-top: 1px solid rgba(0,0,0,0.08); text-align: center; vertical-align: middle; }
-  .dces-filter-row input { font-size: 12px; height: 28px; }
-  .btn-toolbar-all { font-size: 0.75rem !important; padding: 0.25rem 0.6rem !important; height: auto !important; line-height: 1.4 !important; white-space: nowrap !important; }
-  /* Trade Date do import: o campo de data da casa (ícone SVG embutido, par claro/escuro). */
-  #dcesTradeDate {
-      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
-      background-repeat: no-repeat; background-position: right 0.6rem center; background-size: 1rem 1rem; padding-right: 2rem; cursor: pointer;
-  }
-  [data-bs-theme="dark"] #dcesTradeDate {
-      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23adb5bd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
-  }
-
-  /* ── Dropzone (slim, o desenho do Accrual) ──────────────────────────── */
-  .dces-drop {
-      flex: 1 1 320px; min-width: 260px;
-      border: 1.5px dashed rgba(0,0,0,.14); border-radius: 12px;
-      background: var(--vr-card-bg, var(--ins-secondary-bg, #fff));
-      padding: .55rem .9rem; display: flex; align-items: center; gap: .75rem;
-      cursor: pointer; text-align: left;
-      transition: border-color 180ms ease, background-color 180ms ease, transform 120ms ease;
-  }
-  .dces-drop:hover  { border-color: #4a849b; }
-  .dces-drop:active { transform: scale(0.99); }
-  .dces-drop.is-drag { border-color: #0066cc; background: rgba(0,102,204,.05); }
-  .dces-drop__icon { flex: 0 0 auto; width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: rgba(74,132,155,.14); color: #4a849b; font-size: 1.05rem; }
-  .dces-drop__title { font-size: .8rem; font-weight: 600; margin: 0; line-height: 1.2; }
-  .dces-drop__hint  { font-size: .7rem; color: #6c757d; margin: .1rem 0 0; }
-  /* O spinner do dropzone só existe enquanto o upload está em voo. O `!important`
-     é obrigatório: a regra genérica do ti-spin acima força `display:inline-block
-     !important` em todo `i.ti-loader-2`, e sem ele o ícone girava eternamente
-     ao lado do de upload. */
-  .dces-drop:not(.is-busy) .dces-drop__spin { display: none !important; }
-  .dces-drop.is-busy { pointer-events: none; opacity: .85; }
-  .dces-drop.is-busy .dces-drop__glyph { display: none !important; }
-  .dces-drop.is-busy .dces-drop__spin  { display: inline-block; }
-  [data-bs-theme=dark] .dces-drop { border-color: rgba(255,255,255,.14); }
-  [data-bs-theme=dark] .dces-drop__hint { color: #adb5bd; }
-
-  /* Chip "Cashflows of: <deal>" sobre a grade de fluxos. */
-  .dces-flows-chip { display: inline-flex; align-items: center; gap: 6px; background: #4a849b; color: #fff; border-radius: 50rem; padding: 2px 10px; font-size: 11px; font-weight: 500; }
-  .dces-flows-chip .sf-chip-remove { cursor: pointer; opacity: .8; font-size: 14px; line-height: 1; }
-  .dces-flows-chip .sf-chip-remove:hover { opacity: 1; }
-
-  /* Grades editáveis do modal (pernas e fluxos): inputs em linha, rolagem horizontal. */
-  .dces-edit-wrap { overflow-x: auto; max-height: 34vh; overflow-y: auto; border: 1px solid rgba(0,0,0,.08); border-radius: 8px; }
-  [data-bs-theme=dark] .dces-edit-wrap { border-color: rgba(255,255,255,.1); }
-  /* `width: max-content`: a grade é mais larga que o modal de propósito (43
-     colunas) e rola dentro do wrap — com `table-layout: fixed` a 100% as 43
-     colunas eram espremidas a ~30px e os cabeçalhos se sobrepunham. */
-  .dces-edit-table { margin: 0; table-layout: auto; width: max-content; min-width: 100%; }
-  .dces-edit-table th { font-size: .66rem; text-transform: uppercase; white-space: nowrap; text-align: center; vertical-align: middle; padding: 6px 6px; min-width: 150px; position: sticky; top: 0; background: var(--vr-thead-bg, var(--ins-tertiary-bg, #f8f9fa)); z-index: 1; }
-  .dces-edit-table th:first-child, .dces-edit-table td:first-child { min-width: 40px; width: 40px; text-align: center; }
-  .dces-edit-table td { padding: 2px 3px; min-width: 150px; }
-  .dces-edit-table td:first-child { min-width: 40px; }
-  .dces-edit-table input { font-size: .75rem; height: 28px; width: 100%; min-width: 140px; }
-  .dces-edit-table .dces-row-del { width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; }
-
-  /* Preview do arquivo (duplo clique). */
-  .dces-preview-line { font-family: monospace; font-size: .76rem; white-space: pre-wrap; word-break: break-all; background: rgba(0,0,0,.04); border-radius: 8px; padding: 8px 10px; }
-  [data-bs-theme=dark] .dces-preview-line { background: rgba(255,255,255,.06); }
-
-  .smart-filter-wrapper { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; padding: 4px 8px; min-height: 38px; background: var(--ins-secondary-bg, #fff); cursor: text; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
-  .smart-filter-wrapper:focus-within { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
-  .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .smart-filter-chip { display: inline-flex; align-items: center; gap: 5px; background: #6c757d; color: #fff; border-radius: 50rem; padding: 2px 8px; font-size: 10px; font-weight: 500; white-space: nowrap; }
-  .smart-filter-chip .sf-chip-remove { cursor: pointer; opacity: .75; font-size: 13px; line-height: 1; margin-left: 2px; }
-  .smart-filter-chip .sf-chip-remove:hover { opacity: 1; }
-  .smart-filter-input { border: none; outline: none; flex: 1; min-width: 200px; font-size: 0.82rem; background: transparent; padding: 2px 0; color: inherit; }
-  .smart-filter-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1055; background: var(--ins-secondary-bg, #fff); border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; box-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04); max-height: 240px; overflow-y: auto; display: none; padding: 4px 0; }
-  .smart-filter-dropdown li { padding: 6px 12px; cursor: pointer; font-size: 0.81rem; display: flex; align-items: center; gap: 8px; list-style: none; color: inherit; }
-  .smart-filter-dropdown li:hover, .smart-filter-dropdown li.sf-kbd-active { background: rgba(0,102,204,0.06); }
-  .sf-type-badge { font-size: 9px; padding: 1px 5px; border-radius: 50rem; text-transform: uppercase; font-weight: 600; color: #fff; opacity: .85; }
-  .sf-type-text   { background: #6c757d; }
-  .sf-type-date   { background: #0dcaf0; color: #000 !important; }
-  .sf-type-number { background: #ffc107; color: #000 !important; }
-  .dces-table .btn-sm.rounded-circle { width: 32px; height: 32px; flex: 0 0 32px; min-width: 32px; max-width: 32px; padding: 0; font-size: 1rem; display: flex; align-items: center; justify-content: center; border-radius: 10px !important; box-sizing: border-box; }
-  #intrag-dces-legs td:nth-child(2) > div { flex-wrap: nowrap; }
-  #intrag-dces-legs td:nth-child(2) { padding-left: 0 !important; padding-right: 0 !important; }
-  [data-bs-theme=dark] .smart-filter-wrapper { background: var(--ins-secondary-bg) !important; border-color: rgba(255,255,255,0.1) !important; }
-  [data-bs-theme=dark] .smart-filter-wrapper:focus-within { border-color: #0066cc !important; }
-  [data-bs-theme=dark] .smart-filter-dropdown { background: var(--ins-secondary-bg) !important; border-color: rgba(255,255,255,0.08) !important; box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06) !important; }
-  [data-bs-theme=dark] .smart-filter-dropdown li:hover, [data-bs-theme=dark] .smart-filter-dropdown li.sf-kbd-active { background: rgba(0,102,204,0.12) !important; }
-  [data-bs-theme=dark] .dces-filter-row th { border-top-color: rgba(255,255,255,0.08) !important; }
-  [data-bs-theme=dark] .dces-filter-row input { background: var(--ins-secondary-bg) !important; color: var(--ins-body-color) !important; border-color: rgba(255,255,255,0.1) !important; }
-
-  .container-fluid .btn {
-      transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out, transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
-  }
-  .container-fluid .btn:active { transform: scale(0.97) !important; box-shadow: none !important; }
-  @media (hover: hover) and (pointer: fine) {
-      .container-fluid .btn:not(:active):hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1); }
-  }
+#intrag-dces-legs_wrapper .dt-scroll-headInner table,
+#intrag-dces-legs_wrapper .dt-scroll-body > table,
+#intrag-dces-flows_wrapper .dt-scroll-headInner table,
+#intrag-dces-flows_wrapper .dt-scroll-body > table { table-layout: fixed !important; }
+.dces-table td { overflow: hidden; text-overflow: ellipsis; }
+#intrag-dces-legs td:nth-child(2) { padding-left: 0 !important; padding-right: 0 !important; }
+#intrag-dces-legs td:nth-child(2) > div { flex-wrap: nowrap; }
+/* pernas: (1)=checkbox (2)=actions (3)=Status (4)=Intrag ID (5)=Trade Date (6..47)=planilha */
+#intrag-dces-legs :is(th, td), #intrag-dces-legs_wrapper .dt-scroll-head th { width: 135px; min-width: 135px; } /* toda coluna de dado */
+#intrag-dces-legs :is(th, td):nth-child(1), #intrag-dces-legs_wrapper .dt-scroll-head th:nth-child(1) { width: 50px; min-width: 50px; }
+#intrag-dces-legs :is(th, td):nth-child(2), #intrag-dces-legs_wrapper .dt-scroll-head th:nth-child(2) { width: 160px; min-width: 160px; }
+#intrag-dces-legs :is(th, td):nth-child(3), #intrag-dces-legs_wrapper .dt-scroll-head th:nth-child(3) { width: 110px; min-width: 110px; }
+#intrag-dces-legs :is(th, td):nth-child(5), #intrag-dces-legs_wrapper .dt-scroll-head th:nth-child(5) { width: 110px; min-width: 110px; }
+#intrag-dces-legs :is(th, td):nth-child(6), #intrag-dces-legs_wrapper .dt-scroll-head th:nth-child(6) { width: 150px; min-width: 150px; }
+#intrag-dces-legs :is(th, td):nth-child(8), #intrag-dces-legs_wrapper .dt-scroll-head th:nth-child(8) { width: 220px; min-width: 220px; }
+#intrag-dces-legs :is(th, td):nth-child(11), #intrag-dces-legs_wrapper .dt-scroll-head th:nth-child(11) { width: 170px; min-width: 170px; }
+#intrag-dces-legs :is(th, td):nth-child(22), #intrag-dces-legs_wrapper .dt-scroll-head th:nth-child(22) { width: 230px; min-width: 230px; }
+#intrag-dces-legs :is(th, td):nth-child(23), #intrag-dces-legs_wrapper .dt-scroll-head th:nth-child(23) { width: 230px; min-width: 230px; }
+#intrag-dces-legs :is(th, td):nth-child(25), #intrag-dces-legs_wrapper .dt-scroll-head th:nth-child(25) { width: 230px; min-width: 230px; }
+#intrag-dces-legs :is(th, td):nth-child(27), #intrag-dces-legs_wrapper .dt-scroll-head th:nth-child(27) { width: 170px; min-width: 170px; }
+/* fluxos: (1)=Deal Name … (14)=Notional(%) */
+#intrag-dces-flows :is(th, td), #intrag-dces-flows_wrapper .dt-scroll-head th { width: 140px; min-width: 140px; } /* toda coluna de dado */
+#intrag-dces-flows :is(th, td):nth-child(1), #intrag-dces-flows_wrapper .dt-scroll-head th:nth-child(1) { width: 150px; min-width: 150px; }
+#intrag-dces-flows :is(th, td):nth-child(3), #intrag-dces-flows_wrapper .dt-scroll-head th:nth-child(3) { width: 170px; min-width: 170px; }
+/* dropzone enxuto da planilha (o desenho do Accrual) */
+.dces-drop {
+    flex: 1 1 320px; min-width: 260px;
+    display: flex; align-items: center; gap: .75rem;
+    padding: .55rem .9rem;
+    border: 1.5px dashed color-mix(in srgb, var(--otc-text-3) 70%, transparent);
+    border-radius: var(--otc-r-inner);
+    background: var(--otc-fill-hover);
+    cursor: pointer; text-align: left;
+    transition: border-color var(--otc-dur-base) var(--otc-ease), background-color var(--otc-dur-base) var(--otc-ease);
+}
+.dces-drop:hover, .dces-drop.is-drag { border-color: var(--otc-accent-ink); background: var(--otc-accent-soft); }
+.dces-drop__icon { flex: none; width: 32px; height: 32px; border-radius: 30%; display: grid; place-items: center; background: var(--otc-accent-soft); color: var(--otc-accent-ink); font-size: 1.05rem; }
+.dces-drop__title { margin: 0; font-size: .8rem; font-weight: 600; line-height: 1.2; color: var(--otc-text); }
+.dces-drop__hint { margin: .1rem 0 0; font-size: .7rem; color: var(--otc-text-2); }
+/* o spinner só existe com o upload em voo (o ti-loader do tema é inline-block) */
+.dces-drop:not(.is-busy) .dces-drop__spin { display: none !important; }
+.dces-drop.is-busy { pointer-events: none; opacity: .85; }
+.dces-drop.is-busy .dces-drop__glyph { display: none !important; }
+.dces-drop.is-busy .dces-drop__spin { display: inline-block; }
+/* chip "Cashflows of: <deal>" sobre a grade de fluxos */
+.dces-flows-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: var(--otc-r-pill); background: color-mix(in srgb, var(--otc-teal) 16%, transparent); color: var(--otc-teal); font-size: 12px; font-weight: 600; }
+.dces-flows-chip .sf-chip-remove { cursor: pointer; opacity: .75; }
+.dces-flows-chip .sf-chip-remove:hover { opacity: 1; }
+/* grades editáveis do modal (pernas e fluxos): 43 colunas, mais largas que o
+   modal de propósito — rolam dentro do wrap, com o cabeçalho fixo */
+.dces-edit-wrap { max-height: 34vh; overflow: auto; border-radius: var(--otc-r-md); background: var(--otc-fill-hover); }
+.dces-edit-table { margin: 0; table-layout: auto; width: max-content; min-width: 100%; }
+.dces-edit-table th { position: sticky; top: 0; z-index: 1; min-width: 150px; padding: 6px; font-size: .66rem; text-transform: uppercase; white-space: nowrap; text-align: center; vertical-align: middle; background: var(--otc-thead-bg); }
+.dces-edit-table td { min-width: 150px; padding: 2px 3px; }
+.dces-edit-table :is(th, td):first-child { width: 40px; min-width: 40px; text-align: center; }
+.dces-edit-table input { width: 100%; min-width: 140px; height: 28px; font-size: .75rem; }
+.dces-edit-table .dces-row-del { width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--otc-r-sm); }
+/* preview do arquivo (duplo clique): a linha posicional como veio */
+.dces-preview-line { padding: 8px 10px; border-radius: var(--otc-r-sm); background: var(--otc-fill); font-family: SFMono-Regular, Menlo, Consolas, monospace; font-size: .76rem; white-space: pre-wrap; word-break: break-all; }
 </style>
 {% endblock extra_css %}
 
@@ -184,7 +81,7 @@
     <div class="page-title-head d-flex align-items-center">
         <div class="flex-grow-1">
             <h4 class="fs-xl fw-bold m-0 d-flex align-items-center gap-2">
-                <i class="ti ti-file-import" style="color:#0066cc;font-size:22px;flex-shrink:0;"></i>
+                <i class="ti ti-file-import"></i>
                 <span data-lang="intrag-dces-title">Intrag — DCE Swap</span>
             </h4>
         </div>
@@ -248,7 +145,7 @@
                 <div class="card-header d-flex flex-wrap align-items-center gap-2">
                     <div class="d-flex align-items-center gap-1">
                         <label for="dcesTradeDate" class="form-label fs-xs text-muted mb-0 me-1 text-nowrap" data-lang="intrag-dces-col-trade-date">Trade Date</label>
-                        <input type="text" id="dcesTradeDate" class="form-control form-control-sm" style="width: 8.5rem;" placeholder="dd/mm/yyyy" autocomplete="off" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Trade Date of the deals in the file (field 6 of the Intrag line)" data-bs-custom-class="tooltip-teal">
+                        <input type="text" id="dcesTradeDate" class="form-control form-control-sm otc-datefield" style="width: 8.5rem;" placeholder="dd/mm/yyyy" autocomplete="off" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Trade Date of the deals in the file (field 6 of the Intrag line)" data-bs-custom-class="tooltip-teal">
                     </div>
                     <div class="dces-drop" id="dcesDrop" role="button" tabindex="0" aria-label="Upload swap spreadsheet">
                         <div class="dces-drop__icon">

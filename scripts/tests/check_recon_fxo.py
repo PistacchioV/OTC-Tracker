@@ -612,14 +612,19 @@ check('   e a ordenacao fica na 1a linha do thead', 'orderCellsTop: true' in HTM
 # borda, raio e cor DEPOIS deste <style>, e cada propriedade precisaria de
 # !important. Um <div> com classe propria acaba com a disputa.
 check('o cartao nao e um .card do Bootstrap', 'class="card fxo-widget' in HTML, False)
+# Desde o rebranding (19/10/2026) a placa vem do seletor ESTRUTURAL `-widget`
+# do tema e a página só fala `--otc-*`.
 check('   e usa os tokens do tema, nao os do Bootstrap',
-      ('--vr-card-bg' in HTML, '--vr-grad' in HTML, 'var(--bs-' in HTML),
-      (True, True, False))
+      ('--otc-' in HTML, 'var(--vr-' in HTML, 'var(--bs-' in HTML),
+      (True, False, False))
 
-# O chip do icone usa o gradiente da MARCA (--vr-grad), o mesmo do New Deals
-# Monitor. Um gradiente proprio aqui faria esta tela destoar das outras.
+# O chip do icone e o do TEMA (a cor do estado em `--hue`), o mesmo das recons
+# CGD e Conf Matching; o Total troca pelo gradiente da MARCA (`--otc-accent`).
+_SCSS = io.open(os.path.join(ROOT, 'apps/static/scss/otc.scss'), encoding='utf-8').read()
 check('o chip do icone usa o gradiente da marca',
-      'var(--vr-grad, linear-gradient(100deg, #0066cc' in HTML, True)
+      (':where(.fxo-widget__ico' in _SCSS,
+       '.fxo-w-total .fxo-widget__ico {\n    background: linear-gradient(100deg, var(--otc-accent)' in HTML),
+      (True, True))
 
 print('\n== 8. leituras do arquivo ==')
 # 'Texto para Colunas' quebra o CABEÇALHO junto com o dado. Quebrar só o dado

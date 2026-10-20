@@ -5,224 +5,170 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css">
 <link rel="stylesheet" href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css">
+{# Só o que é DESTA tela: o trilho de tipos de documento e a árvore de pastas
+   das confirmações (Ano › Mês › Dia › Produto, abrindo por grid 0fr→1fr), o
+   combo de contraparte, a grade de documentos com o ícone por tipo de arquivo,
+   o visor de PDF (véu de carregamento e spinner) e os blocos extras do modal de
+   upload. Placa, botões, modal, daterangepicker e entrada são do tema. #}
 <style>
-    /* ------------------------------------------------------------------ */
-    /*  ELECTRONIC INVENTORY — document library                            */
-    /*  Motion: strong ease-out for entrances, gentle color for hover;     */
-    /*  hover effects gated to fine pointers; all motion killed under      */
-    /*  prefers-reduced-motion.                                            */
-    /* ------------------------------------------------------------------ */
-    #ei-page {
-        --ei-ease: cubic-bezier(0.23, 1, 0.32, 1);
-        --ei-radius: 14px;
-    }
-
     /* Doc-type rail --------------------------------------------------- */
     #ei-page .ei-type-item {
         display: flex; align-items: center; gap: .6rem;
-        padding: .6rem .75rem; border-radius: 10px; cursor: pointer;
-        color: var(--bs-body-color); text-decoration: none;
+        padding: .6rem .75rem; border-radius: var(--otc-r-sm); cursor: pointer;
+        color: var(--otc-text); text-decoration: none;
         border: 1px solid transparent;
-        transition: background-color .18s var(--ei-ease), border-color .18s var(--ei-ease), color .18s var(--ei-ease);
+        transition: background-color var(--otc-dur-fast) var(--otc-ease), border-color var(--otc-dur-fast) var(--otc-ease), color var(--otc-dur-fast) var(--otc-ease);
     }
     #ei-page .ei-type-item .ei-type-ico { font-size: 1.15rem; opacity: .8; }
-    #ei-page .ei-type-item .ei-type-badge {
+    #ei-page .ei-type-item .ei-type-badge,
+    #ei-page .ei-fold-count {
         margin-left: auto; font-size: .68rem; font-weight: 600;
-        background: var(--bs-secondary-bg); color: var(--bs-secondary-color);
-        padding: .1rem .45rem; border-radius: 999px; min-width: 1.6rem; text-align: center;
-        transition: background-color .18s var(--ei-ease), color .18s var(--ei-ease);
+        background: var(--otc-fill); color: var(--otc-text-2);
+        padding: .1rem .45rem; border-radius: var(--otc-r-pill); min-width: 1.6rem; text-align: center;
+        transition: background-color var(--otc-dur-fast) var(--otc-ease), color var(--otc-dur-fast) var(--otc-ease);
     }
-    #ei-page .ei-type-item.is-active {
-        background: rgba(0, 102, 204, .10); border-color: rgba(0, 102, 204, .22);
-        color: #0066cc; font-weight: 600;
+    #ei-page .ei-type-item.is-active,
+    #ei-page .ei-fold-item.is-sel {
+        background: var(--otc-accent-soft); border-color: color-mix(in srgb, var(--otc-accent-ink) 25%, transparent);
+        color: var(--otc-accent-ink); font-weight: 600;
     }
-    #ei-page .ei-type-item.is-active .ei-type-badge { background: #0066cc; color: #fff; }
-    [data-bs-theme=dark] #ei-page .ei-type-item.is-active { color: #6ea8fe; background: rgba(41,151,255,.14); border-color: rgba(41,151,255,.30); }
-    [data-bs-theme=dark] #ei-page .ei-type-item.is-active .ei-type-badge { background: #2997ff; }
+    #ei-page .ei-type-item.is-active .ei-type-badge,
+    #ei-page .ei-fold-item.is-sel .ei-fold-count { background: var(--otc-accent); color: #fff; }
 
-    /* Searchable counterparty combo ----------------------------------- */
+    /* Searchable counterparty combo: placa SÓLIDA (menu dentro de placa, §7) */
     #ei-page .ei-combo { position: relative; }
     #ei-page .ei-combo-menu {
         position: absolute; z-index: 1080; top: calc(100% + 4px); left: 0; right: 0;
         max-height: 320px; overflow-y: auto; margin: 0; padding: .3rem; list-style: none;
-        background: #ffffff; border: 1px solid var(--bs-border-color);
-        border-radius: 12px; box-shadow: 0 12px 34px rgba(0,0,0,.22); display: none;
-        transform-origin: top center;
-        -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+        background: var(--otc-menu-bg); border-radius: var(--otc-r-md);
+        box-shadow: var(--otc-shadow); display: none;
     }
-    [data-bs-theme=dark] #ei-page .ei-combo-menu {
-        background: #1b1e24; border-color: rgba(255,255,255,.14);
-        box-shadow: 0 14px 40px rgba(0,0,0,.55);
-    }
-    #ei-page .ei-combo-menu.show { display: block; animation: eiPop .16s var(--ei-ease); }
-    @keyframes eiPop { from { opacity: 0; transform: scale(.97) translateY(-2px); } to { opacity: 1; transform: none; } }
+    #ei-page .ei-combo-menu.show { display: block; }
     #ei-page .ei-combo-menu li {
-        padding: .5rem .6rem; border-radius: 8px; cursor: pointer;
+        padding: .5rem .6rem; border-radius: var(--otc-r-xs); cursor: pointer;
         display: flex; align-items: baseline; gap: .5rem;
-        transition: background-color .15s var(--ei-ease);
+        transition: background-color var(--otc-dur-fast) var(--otc-ease);
     }
-    #ei-page .ei-combo-menu li .ei-combo-spn { font-size: .72rem; color: var(--bs-secondary-color); margin-left: auto; }
-    #ei-page .ei-combo-menu li.ei-kbd-active, #ei-page .ei-combo-menu li:hover { background: var(--bs-tertiary-bg); }
-    #ei-page .ei-combo-menu li .ei-nofolder { font-size: .62rem; color: #b5892b; border: 1px solid rgba(181,137,43,.4); border-radius: 6px; padding: 0 .3rem; }
+    #ei-page .ei-combo-menu li .ei-combo-spn { font-size: .72rem; color: var(--otc-text-2); margin-left: auto; }
+    #ei-page .ei-combo-menu li.ei-kbd-active, #ei-page .ei-combo-menu li:hover { background: var(--otc-fill-hover); }
+    #ei-page .ei-combo-menu li .ei-nofolder {
+        font-size: .62rem; color: var(--otc-yellow); border-radius: var(--otc-r-xs); padding: 0 .3rem;
+        border: 1px solid color-mix(in srgb, var(--otc-yellow) 40%, transparent);
+    }
     #ei-page .ei-combo-menu li.ei-combo-more { font-size: .68rem; opacity: .7; padding: .35rem .6rem; }
     #ei-page .ei-combo-menu li.ei-combo-more:hover { background: transparent; }
 
-    /* Document list --------------------------------------------------- */
+    /* Document list: a grade ocupa a largura do card ------------------ */
     #ei-page .ei-doc-row {
         display: flex; align-items: center; gap: .75rem; padding: .6rem .7rem;
-        border-radius: 10px; cursor: pointer; border: 1px solid transparent;
-        transition: background-color .16s var(--ei-ease), border-color .16s var(--ei-ease);
+        border-radius: var(--otc-r-sm); cursor: pointer; border: 1px solid transparent;
+        transition: background-color var(--otc-dur-fast) var(--otc-ease), border-color var(--otc-dur-fast) var(--otc-ease);
     }
     #ei-page .ei-doc-ico {
-        flex-shrink: 0; width: 40px; height: 40px; border-radius: 9px;
+        flex-shrink: 0; width: 40px; height: 40px; border-radius: 30%;
         display: inline-flex; align-items: center; justify-content: center;
-        background: var(--bs-secondary-bg); font-size: 1.25rem;
+        background: var(--otc-fill); font-size: 1.25rem;
     }
-    #ei-page .ei-doc-ico.pdf   { color: #d93636; background: rgba(217,54,54,.10); }
-    #ei-page .ei-doc-ico.img   { color: #0a8f4e; background: rgba(10,143,78,.10); }
-    #ei-page .ei-doc-ico.mail  { color: #2274c9; background: rgba(34,116,201,.10); }
-    #ei-page .ei-doc-ico.sheet { color: #1d7a46; background: rgba(29,122,70,.10); }
+    #ei-page .ei-doc-ico.pdf   { color: var(--otc-danger); background: color-mix(in srgb, var(--otc-danger) 12%, transparent); }
+    #ei-page .ei-doc-ico.img   { color: var(--otc-green);  background: color-mix(in srgb, var(--otc-green) 12%, transparent); }
+    #ei-page .ei-doc-ico.mail  { color: var(--otc-blue);   background: color-mix(in srgb, var(--otc-blue) 12%, transparent); }
+    #ei-page .ei-doc-ico.sheet { color: var(--otc-teal);   background: color-mix(in srgb, var(--otc-teal) 12%, transparent); }
     #ei-page .ei-doc-name { font-weight: 600; font-size: .9rem; line-height: 1.2; word-break: break-word; }
-    #ei-page .ei-doc-meta { font-size: .72rem; color: var(--bs-secondary-color); margin-top: .12rem; }
-    #ei-page .ei-doc-row.is-active { background: rgba(0,102,204,.09); border-color: rgba(0,102,204,.22); }
-    [data-bs-theme=dark] #ei-page .ei-doc-row.is-active { background: rgba(41,151,255,.13); border-color: rgba(41,151,255,.28); }
+    #ei-page .ei-doc-meta { font-size: .72rem; color: var(--otc-text-2); margin-top: .12rem; }
+    #ei-page .ei-doc-row.is-active { background: var(--otc-accent-soft); border-color: color-mix(in srgb, var(--otc-accent-ink) 25%, transparent); }
     #ei-page .ei-chip {
         font-size: .64rem; font-weight: 700; letter-spacing: .02em; text-transform: uppercase;
-        padding: .08rem .4rem; border-radius: 6px; background: var(--bs-secondary-bg); color: var(--bs-secondary-color);
+        padding: .08rem .4rem; border-radius: var(--otc-r-xs); background: var(--otc-fill); color: var(--otc-text-2);
     }
-
     @media (hover: hover) and (pointer: fine) {
-        #ei-page .ei-type-item:not(.is-active):hover { background: var(--bs-tertiary-bg); }
-        #ei-page .ei-doc-row:not(.is-active):hover  { background: var(--bs-tertiary-bg); }
+        #ei-page .ei-type-item:not(.is-active):hover,
+        #ei-page .ei-doc-row:not(.is-active):hover,
+        #ei-page .ei-fold-item:not(.is-sel):hover { background: var(--otc-fill-hover); }
     }
-
-    /* Buttons feel responsive to press -------------------------------- */
-    #ei-page .ei-btn { transition: transform 160ms ease-out, background-color .18s var(--ei-ease), box-shadow .18s var(--ei-ease); }
-    #ei-page .ei-btn:active { transform: scale(.97); }
-
-    /* Preview pane ---------------------------------------------------- */
-    #ei-page .ei-preview {
-        height: 100%; min-height: 460px; border-radius: var(--ei-radius);
-        border: 1px solid var(--bs-border-color); overflow: hidden;
-        background: var(--bs-tertiary-bg); display: flex; flex-direction: column;
-    }
-    #ei-page .ei-preview-head {
-        display: flex; align-items: center; gap: .6rem; padding: .6rem .8rem;
-        border-bottom: 1px solid var(--bs-border-color); background: var(--bs-body-bg);
-    }
-    #ei-page .ei-preview-body { position: relative; flex: 1; min-height: 380px; background: var(--bs-tertiary-bg); }
-    /* Taller viewer now that the PDF has its own card below the list. */
-    #ei-page .ei-preview-body-lg { min-height: 78vh; }
-    #ei-page .ei-preview-frame {
-        position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff;
-        opacity: 0; transition: opacity .28s var(--ei-ease);
-    }
-    #ei-page .ei-preview-frame.ready { opacity: 1; }
-    /* Lightweight loading veil while a (possibly slow, network-share) PDF streams. */
-    #ei-page .ei-preview-loading {
-        position: absolute; inset: 0; display: flex; flex-direction: column;
-        align-items: center; justify-content: center; gap: .6rem; z-index: 2;
-        color: var(--bs-secondary-color); background: var(--bs-tertiary-bg);
-    }
-    #ei-page .ei-spin {
-        width: 30px; height: 30px; border-radius: 50%;
-        border: 3px solid var(--bs-border-color); border-top-color: #0066cc;
-        animation: eiSpin .7s linear infinite;
-    }
-    @keyframes eiSpin { to { transform: rotate(360deg); } }
-    @media (prefers-reduced-motion: reduce) { #ei-page .ei-spin { animation-duration: 1.6s; } }
-
-    /* Empty / placeholder states (self-explanatory) ------------------- */
-    #ei-page .ei-empty {
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-        text-align: center; gap: .5rem; height: 100%; min-height: 380px; padding: 2rem;
-        color: var(--bs-secondary-color);
-    }
-    #ei-page .ei-empty .ei-empty-ico {
-        font-size: 2.6rem; opacity: .5; margin-bottom: .3rem;
-        animation: eiFloat .5s var(--ei-ease);
-    }
-    @keyframes eiFloat { from { opacity: 0; transform: translateY(6px) scale(.96); } to { opacity: .5; transform: none; } }
-
     #ei-page .ei-list-scroll { max-height: 360px; overflow-y: auto; }
-    /* Document list uses the full card width now — flow into responsive columns. */
     #ei-page .ei-doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: .35rem; align-content: start; }
     #ei-page .ei-doc-grid .ei-empty { grid-column: 1 / -1; min-height: 220px; }
 
-    #ei-page .ei-status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-    #ei-page .ei-status-dot.on  { background: #16a34a; box-shadow: 0 0 0 3px rgba(22,163,74,.15); }
-    #ei-page .ei-status-dot.off { background: #d0a02a; box-shadow: 0 0 0 3px rgba(208,160,42,.15); }
-    #ei-page .ei-status-dot.slow { background: #2997ff; box-shadow: 0 0 0 3px rgba(41,151,255,.15); }
+    /* Preview pane ---------------------------------------------------- */
+    #ei-page .ei-preview {
+        height: 100%; min-height: 460px; border-radius: var(--otc-r-lg); overflow: hidden;
+        background: var(--otc-fill); display: flex; flex-direction: column;
+    }
+    #ei-page .ei-preview-head {
+        display: flex; align-items: center; gap: .6rem; padding: .6rem .8rem;
+        border-bottom: 1px solid var(--otc-sep);
+    }
+    #ei-page .ei-preview-body { position: relative; flex: 1; min-height: 380px; }
+    #ei-page .ei-preview-body-lg { min-height: 78vh; }
+    #ei-page .ei-preview-frame {
+        position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--otc-solid);
+        opacity: 0; transition: opacity var(--otc-dur-base) var(--otc-ease);
+    }
+    #ei-page .ei-preview-frame.ready { opacity: 1; }
+    /* Véu de carregamento enquanto o PDF (às vezes do share, lento) chega. */
+    #ei-page .ei-preview-loading {
+        position: absolute; inset: 0; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: .6rem; z-index: 2;
+        color: var(--otc-text-2); background: var(--otc-solid);
+    }
+    #ei-page .ei-spin {
+        width: 30px; height: 30px; border-radius: 50%;
+        border: 3px solid var(--otc-fill-2); border-top-color: var(--otc-accent-ink);
+        animation: otc-spin .7s linear infinite;
+    }
 
-    /* O painel do modal é o `.modal-content.liquid-glass` da casa, e a página
-       NÃO o repinta: o alfa de vidro mora no `streamflow.css` (§34) e é lá que
-       o `sf-reduced` o torna sólido. Um `background` daqui, sob `#eiUploadModal`,
-       vence os dois pela especificidade do id — era o único modal opaco do app. */
+    /* Empty / placeholder states -------------------------------------- */
+    #ei-page .ei-empty {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        text-align: center; gap: .5rem; height: 100%; min-height: 380px; padding: 2rem;
+        color: var(--otc-text-2);
+    }
+    #ei-page .ei-empty .ei-empty-ico { font-size: 2.6rem; opacity: .5; margin-bottom: .3rem; }
+
+    #ei-page .ei-status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    #ei-page .ei-status-dot.on   { background: var(--otc-green);  box-shadow: 0 0 0 3px color-mix(in srgb, var(--otc-green) 18%, transparent); }
+    #ei-page .ei-status-dot.off  { background: var(--otc-yellow); box-shadow: 0 0 0 3px color-mix(in srgb, var(--otc-yellow) 18%, transparent); }
+    #ei-page .ei-status-dot.slow { background: var(--otc-blue);   box-shadow: 0 0 0 3px color-mix(in srgb, var(--otc-blue) 18%, transparent); }
 
     /* Confirmations folder navigator (left rail) ----------------------- */
     #ei-page .ei-fold-tree { margin-top: .25rem; }
     #ei-page .ei-fold-item {
         display: flex; align-items: center; gap: .4rem;
-        padding: .34rem .5rem; border-radius: 8px; cursor: pointer;
-        color: var(--bs-body-color); text-decoration: none;
+        padding: .34rem .5rem; border-radius: var(--otc-r-xs); cursor: pointer;
+        color: var(--otc-text); text-decoration: none;
         border: 1px solid transparent; font-size: .8rem;
-        transition: background-color .16s var(--ei-ease), color .16s var(--ei-ease),
-                    border-color .16s var(--ei-ease), transform .16s var(--ei-ease);
-    }
-    @media (hover: hover) and (pointer: fine) {
-        #ei-page .ei-fold-item:not(.is-sel):hover { background: var(--bs-tertiary-bg); }
-    }
-    #ei-page .ei-fold-item:active { transform: scale(.985); }
-    #ei-page .ei-fold-item.is-sel {
-        background: rgba(0, 102, 204, .10); border-color: rgba(0, 102, 204, .22);
-        color: #0066cc; font-weight: 600;
-    }
-    [data-bs-theme=dark] #ei-page .ei-fold-item.is-sel {
-        color: #6ea8fe; background: rgba(41,151,255,.14); border-color: rgba(41,151,255,.30);
+        transition: background-color var(--otc-dur-fast) var(--otc-ease), color var(--otc-dur-fast) var(--otc-ease), border-color var(--otc-dur-fast) var(--otc-ease);
     }
     #ei-page .ei-fold-chev {
-        width: 12px; flex: 0 0 12px; font-size: 12px; color: var(--bs-secondary-color);
-        transition: transform .2s var(--ei-ease);
+        width: 12px; flex: 0 0 12px; font-size: 12px; color: var(--otc-text-2);
+        transition: transform var(--otc-dur-fast) var(--otc-ease);
     }
     #ei-page .ei-fold-item.is-open .ei-fold-chev { transform: rotate(90deg); }
     #ei-page .ei-fold-ico { font-size: 14px; flex: 0 0 auto; opacity: .75; }
     #ei-page .ei-fold-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    #ei-page .ei-fold-count {
-        flex: 0 0 auto; font-size: .62rem; font-weight: 600; line-height: 1;
-        padding: .16rem .36rem; border-radius: 50rem;
-        background: var(--bs-secondary-bg); color: var(--bs-secondary-color);
-    }
-    #ei-page .ei-fold-item.is-sel .ei-fold-count { background: #0066cc; color: #fff; }
-    /* 0fr -> 1fr expands to the content's natural height: no JS measuring, no
-       max-height guesswork. */
+    #ei-page .ei-fold-count { flex: 0 0 auto; margin-left: 0; font-size: .62rem; line-height: 1; padding: .16rem .36rem; min-width: 0; }
+    /* 0fr -> 1fr abre na altura natural do conteúdo: sem medir em JS. */
     #ei-page .ei-fold-panel {
         display: grid; grid-template-rows: 0fr; opacity: 0;
-        transition: grid-template-rows .22s var(--ei-ease), opacity .15s var(--ei-ease);
+        transition: grid-template-rows var(--otc-dur-fast) var(--otc-ease), opacity var(--otc-dur-fast) var(--otc-ease);
     }
     #ei-page .ei-fold-item.is-open + .ei-fold-panel { grid-template-rows: 1fr; opacity: 1; }
     #ei-page .ei-fold-inner {
         overflow: hidden; min-height: 0;
         margin-left: .55rem; padding-left: .45rem;
-        border-left: 1px solid var(--bs-border-color);
+        border-left: 1px solid var(--otc-sep);
     }
-    #ei-page .ei-fold-empty { font-size: .74rem; color: var(--bs-secondary-color); padding: .35rem .5rem; }
+    #ei-page .ei-fold-empty { font-size: .74rem; color: var(--otc-text-2); padding: .35rem .5rem; }
 
     /* Extra document blocks in the upload modal ------------------------ */
-    #eiUploadModal .ei-up-block {
-        border: 1px solid var(--bs-border-color); border-radius: 12px;
-        padding: .7rem .75rem; background: var(--bs-tertiary-bg);
-        animation: eiBlockIn .22s var(--ei-ease) both;
-    }
-    @keyframes eiBlockIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
-    #eiUploadModal .ei-up-block-head {
-        display: flex; align-items: center; justify-content: space-between; margin-bottom: .5rem;
-    }
+    #eiUploadModal .ei-up-block { border-radius: var(--otc-r-md); padding: .7rem .75rem; background: var(--otc-fill); }
+    #eiUploadModal .ei-up-block-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: .5rem; }
     #eiUploadModal .ei-up-block-n {
         font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
-        color: var(--bs-secondary-color);
+        color: var(--otc-text-2);
     }
     #eiUploadModal .ei-up-del {
-        width: 24px; height: 24px; padding: 0; border-radius: 7px;
+        width: 24px; height: 24px; padding: 0; border-radius: var(--otc-r-xs);
         display: inline-flex; align-items: center; justify-content: center; font-size: 13px;
     }
     #eiUploadModal .ei-up-drop { cursor: pointer; }
@@ -238,48 +184,13 @@
     /* Breadcrumb of the folder feeding the list ------------------------ */
     #ei-page .ei-crumb {
         display: flex; align-items: center; flex-wrap: wrap; gap: .18rem;
-        font-size: .72rem; color: var(--bs-secondary-color);
+        font-size: .72rem; color: var(--otc-text-2);
     }
     #ei-page .ei-crumb-sep { font-size: 11px; opacity: .6; }
 
-    #ei-page .ei-doc-row { animation: eiRowIn .22s var(--ei-ease) both; }
-    @keyframes eiRowIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-
-    /* Calendar icon inside the Date picker field — o campo fixo e os dos
-       blocos extras do lote, que nasciam sem ele. */
-    #eiUploadModal #eiUpDate,
-    #eiUploadModal .ei-up-date {
-        padding-right: 2.1rem;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: right 0.7rem center;
-        background-size: 16px 16px;
-    }
-    [data-bs-theme=dark] #eiUploadModal #eiUpDate,
-    [data-bs-theme=dark] #eiUploadModal .ei-up-date {
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23adb5bd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E");
-    }
-
-    /* daterangepicker — the calendar is appended to <body>, so these rules are
-       deliberately NOT scoped under #ei-page. Solid background (it must not go
-       translucent over the glass modal) + Action Blue selection. */
-    .daterangepicker { z-index: 1090; border-radius: 12px; border: 1px solid var(--bs-border-color);
-        box-shadow: 0 8px 28px rgba(0, 0, 0, .18); background: #fff; }
-    .daterangepicker td.active, .daterangepicker td.active:hover { background-color: #0066cc; }
-    .daterangepicker .calendar-table { background: transparent; border: 0; }
-    [data-bs-theme=dark] .daterangepicker { background: #2b2f3a; color: var(--bs-body-color); }
-    [data-bs-theme=dark] .daterangepicker td.available:hover,
-    [data-bs-theme=dark] .daterangepicker th.available:hover { background: #3a3f4d; }
-    [data-bs-theme=dark] .daterangepicker td.off,
-    [data-bs-theme=dark] .daterangepicker td.off:hover { background: transparent; color: #6c757d; }
-    [data-bs-theme=dark] .daterangepicker:after { border-bottom-color: #2b2f3a; }
-    [data-bs-theme=dark] .daterangepicker .calendar-table th,
-    [data-bs-theme=dark] .daterangepicker .calendar-table td { color: var(--bs-body-color); }
-    [data-bs-theme=dark] .daterangepicker select { background: #2b2f3a; color: var(--bs-body-color);
-        border-color: var(--bs-border-color); }
 
     @media (prefers-reduced-motion: reduce) {
-        #ei-page *, #ei-page *::before, #ei-page *::after { animation: none !important; transition: none !important; }
+        #ei-page *, #ei-page *::before, #ei-page *::after { transition: none !important; }
     }
 </style>
 {% endblock extra_css %}
@@ -432,7 +343,7 @@
                         </div>
                         <div class="col-md-3">
                             <label class="form-label fs-xs text-muted mb-1">Date</label>
-                            <input type="text" class="form-control" id="eiUpDate" placeholder="dd/mm/yyyy" autocomplete="off">
+                            <input type="text" class="form-control otc-datefield" id="eiUpDate" placeholder="dd/mm/yyyy" autocomplete="off">
                         </div>
 
                         <div class="col-md-6 d-none" id="eiUpSubtypeWrap">

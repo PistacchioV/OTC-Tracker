@@ -13,743 +13,41 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/choices/choices.min.css" rel="stylesheet"/>
 <link href="{{ config.ASSETS_ROOT }}/plugins/select2/select2.min.css" rel="stylesheet"/>
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
-
-<!-- ╔══════════════════════════════════════════════════════════════════╗ -->
-<!-- ║  AJUSTE DE TAMANHO DO DROPZONE — ALTERE SOMENTE AQUI           ║ -->
-<!-- ╚══════════════════════════════════════════════════════════════════╝ -->
+{# Só o que é DESTA tela: a largura de cada coluna (com o texto que passa
+   cortado em "…"). Cabeçalho, células, filtro, toolbar e dropzone são do
+   tema (otc.scss). #}
 <style>
-/* Status 'Sent' — teal escurecido (diferencia do New; não tão escuro quanto Approved). */
-.badge.badge-sent { background-color: #17a2b8 !important; color: #fff !important; }
-
-  /*
-   * 1) LARGURA do bloco inteiro
-   *    - max-width : largura máxima (ex: 600px, 50%, 70vw)
-   *    - margin: auto centraliza horizontalmente
-   */
-  #myAwesomeDropzone.dropzone {
-    max-width: 100% !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-  }
-
-  /*
-   * 2) ALTURA do bloco inteiro
-   *    - min-height : altura mínima do form/dropzone
-   *    - padding    : espaçamento interno (reduzir = bloco menor)
-   */
-  #myAwesomeDropzone.dropzone {
-    min-height: 0 !important;
-    height: auto !important;           /* ← ALTERE A ALTURA AQUI  */
-    padding: 4px 12px !important;      /* ← ALTERE O PADDING AQUI (altura pela metade) */
-  }
-
-  /*
-   * 3) Centraliza o conteúdo interno (ícone, texto, botão)
-   *    Não altere a menos que queira mudar o alinhamento.
-   */
-  #myAwesomeDropzone.dropzone .dz-message {
-    margin: 0 !important;
-    padding: 4px 0 !important;
-  }
-
-  #myAwesomeDropzone.dropzone .dz-message h4 {
-    font-size: 1rem;
-  }
-
-  #myAwesomeDropzone.dropzone .dz-message p {
-    font-size: 0.85rem;
-  }
-
-  /* Altura reduzida ~pela metade: comprime o ícone, textos e margens verticais
-     do conteúdo do dropzone (largura inalterada). */
-  #myAwesomeDropzone.dropzone .dz-message .avatar-lg {
-    height: 24px !important; width: 24px !important; margin-bottom: 2px !important;
-  }
-  #myAwesomeDropzone.dropzone .dz-message .avatar-title { height: 24px !important; width: 24px !important; }
-  #myAwesomeDropzone.dropzone .dz-message .avatar-title i { font-size: 14px !important; }
-  #myAwesomeDropzone.dropzone .dz-message h4 { font-size: .82rem !important; margin-bottom: 1px !important; }
-  #myAwesomeDropzone.dropzone .dz-message p { font-size: .72rem !important; margin-bottom: 3px !important; }
-  #myAwesomeDropzone.dropzone .dz-message .btn { padding: 3px 10px !important; font-size: .74rem !important; }
-
-  /* Widgets adjustments */
-  .row-cols-xxl-6 .col {
-      margin-bottom: 5px;
-  }
-
-  .card-body {
-      padding: 5px;
-  }
-
-  .d-flex.justify-content-between h5 {
-      font-size: 14px;
-      line-height: 1.3;
-  }
-
-  .d-flex.align-items-center h3 {
-      font-size: 13px;
-  }
-
-  .avatar-title {
-      width: 50px;
-      height: 50px;
-  }
-
-/* ╔══════════════════════════════════════════════════════════════════╗ */
-/* ║  AJUSTE DE TAMANHO DO CHOICES — ALTERE SOMENTE AQUI              ║ */
-/* ╚══════════════════════════════════════════════════════════════════╝ */
-
-/*
- * 1) LARGURA do bloco inteiro
- *    - max-width : largura máxima (ex: 600px, 50%, 70vw)
- *    - margin: 0 alinha com o dropzone acima
- */
-.choices {
-    max-width: 100% !important;
-    width: 100% !important;       /* ← garante ocupar o flex-grow-1 */
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    margin-bottom: 0 !important;  /* ← remove margem inferior padrão */
-    padding-left: 12px !important;
-    padding-right: 7px !important;
-}
-
-/*
- * 2) ALTURA do bloco inteiro
- *    - min-height : altura mínima do choices
- *    - padding    : espaçamento interno (reduzir = bloco menor)
- */
-.choices__inner {
-    min-height: 0 !important;
-    height: auto !important;          /* ← ALTERE A ALTURA AQUI  */
-}
-
-/*
- * 3) TAMANHO DOS ITENS SELECIONADOS (chips/badges)
- *    - padding    : aumentar padding-top/bottom = chip mais alto
- *    - font-size  : tamanho da fonte dentro do chip
- */
-.choices__list--multiple .choices__item {
-    padding: 4px 8px !important;     /* ← ALTERE A ALTURA DO CHIP AQUI */
-    font-size: 10px !important;       /* ← ALTERE A FONTE DO CHIP AQUI  */
-}
-
-/* ╔══════════════════════════════════════════════════════════════════╗ */
-/* ║  FIM DO AJUSTE CHOICES                                           ║ */
-/* ╚══════════════════════════════════════════════════════════════════╝ */
-
-/* ╔══════════════════════════════════════════════════════════════════╗ */
-/* ║  AJUSTE DO BOTÃO SEARCH — ALTERE SOMENTE AQUI                    ║ */
-/* ╚══════════════════════════════════════════════════════════════════╝ */
-
-/*
- * 1) LARGURA do botão
- *    - width  : largura fixa (ex: 120px) ou auto para ajustar ao conteúdo
- *    - min-width : largura mínima
- */
-.btn-search {
-    font-size: 0.75rem !important;
-    padding: 0.25rem 0.6rem !important;
-    height: auto !important;
-    line-height: 1.4 !important;
-    white-space: nowrap !important;
-}
-
-/* ╔══════════════════════════════════════════════════════════════════╗ */
-/* ║  FIM DO AJUSTE BOTÃO SEARCH                                      ║ */
-/* ╚══════════════════════════════════════════════════════════════════╝ */
-
-/* ╔══════════════════════════════════════════════════════════════════╗ */
-/* ║  AJUSTE DOS BOTÕES DA TOOLBAR DA TABELA — ALTERE SOMENTE AQUI   ║ */
-/* ║                                                                  ║ */
-/* ║  Botões cobertos:                                                ║ */
-/* ║    1) Columns  →  .btn-toolbar-showhide               ║ */
-/* ║    2) Add Row            →  .btn-toolbar-addrow                 ║ */
-/* ║    3) Export             →  .btn-toolbar-export                 ║ */
-/* ║    4) Import             →  .btn-toolbar-import                 ║ */
-/* ║    5) Send               →  .btn-toolbar-confirm                ║ */
-/* ║    6) Delete             →  .btn-toolbar-delete                 ║ */
-/* ║    7) Mapping B3 ID      →  .btn-toolbar-refresh                ║ */
-/* ║                                                                  ║ */
-/* ║  Para aplicar uma regra a TODOS os botões da toolbar de uma vez, ║ */
-/* ║  use o seletor .btn-toolbar-all (seção 1 abaixo).               ║ */
-/* ╚══════════════════════════════════════════════════════════════════╝ */
-
-/*
- * ─────────────────────────────────────────────────────────────────────
- * 1) TODOS OS BOTÕES DA TOOLBAR — regras aplicadas a todos de uma vez
- *    Altere aqui para uniformizar tamanho, fonte e padding globalmente.
- * ─────────────────────────────────────────────────────────────────────
- */
-.btn-toolbar-all {
-    font-size: 0.75rem !important;    /* ← ALTERE O TAMANHO DA FONTE AQUI  */
-    padding: 0.25rem 0.6rem !important; /* ← ALTERE O PADDING (altura) AQUI */
-    height: auto !important;          /* ← ALTERE A ALTURA FIXA AQUI (ex: 30px) */
-    line-height: 1.4 !important;      /* ← ALTERE O LINE-HEIGHT AQUI       */
-    white-space: nowrap !important;   /* impede quebra de linha             */
-}
-
-/*
- * ─────────────────────────────────────────────────────────────────────
- * 2) BOTÃO: Columns
- *    Cor padrão: btn-soft-primary (lilás suave)
- * ─────────────────────────────────────────────────────────────────────
- */
-.btn-toolbar-showhide {
-    /* Cor de fundo — descomente e altere para sobrescrever o btn-soft-primary */
-    /* background-color: #e8eaf6 !important; */
-    /* color: #3949ab !important;            */
-
-    /* Espaçamento externo à direita (gap entre botões) */
-    margin-right: 0 !important;       /* ← controlado pelo me-2 do wrapper  */
-}
-
-/*
- * ─────────────────────────────────────────────────────────────────────
- * 3) BOTÃO: Add Row +
- *    Cor padrão: btn-primary bg-gradient
- * ─────────────────────────────────────────────────────────────────────
- */
-.btn-toolbar-addrow {
-    /* Cor de fundo — descomente e altere para sobrescrever o btn-primary */
-    /* background-color: #1976d2 !important; */
-    /* border-color:     #1976d2 !important; */
-    /* color:            #ffffff !important; */
-}
-
-/*
- * ─────────────────────────────────────────────────────────────────────
- * 4) BOTÃO: Export (dropdown)
- *    Cor padrão: btn-info bg-gradient
- * ─────────────────────────────────────────────────────────────────────
- */
-.btn-toolbar-export {
-    /* Cor de fundo — descomente e altere para sobrescrever o btn-info */
-    /* background-color: #0288d1 !important; */
-    /* border-color:     #0288d1 !important; */
-    /* color:            #ffffff !important; */
-}
-
-/*
- * ─────────────────────────────────────────────────────────────────────
- * 5) BOTÃO: Import
- *    Cor padrão: btn-warning bg-gradient
- * ─────────────────────────────────────────────────────────────────────
- */
-.btn-toolbar-import {
-    /* Cor de fundo — descomente e altere para sobrescrever o btn-warning */
-    background-color: #4a849b !important;
-    border-color:     #4a849b !important;
-    /* color:            #ffffff !important; */
-}
-
-/*
- * ─────────────────────────────────────────────────────────────────────
- * 6) BOTÃO: Send (aparece ao selecionar 2+ linhas)
- *    Cor padrão: btn-light
- * ─────────────────────────────────────────────────────────────────────
- */
-.btn-toolbar-confirm {
-    /* Cor de fundo — descomente e altere para sobrescrever o btn-light */
-    /* background-color: #f8f9fa !important; */
-    /* border-color:     #dee2e6 !important; */
-    /* color:            #212529 !important; */
-}
-
-/*
- * ─────────────────────────────────────────────────────────────────────
- * 7) BOTÃO: Delete (aparece ao selecionar 2+ linhas)
- *    Cor padrão: btn-danger
- * ─────────────────────────────────────────────────────────────────────
- */
-.btn-toolbar-delete {
-    /* Cor de fundo — descomente e altere para sobrescrever o btn-danger */
-    /* background-color: #c62828 !important; */
-    /* border-color:     #c62828 !important; */
-    /* color:            #ffffff !important; */
-}
-
-/*
- * ─────────────────────────────────────────────────────────────────────
- * 8) BOTÃO: Mapping B3 ID (apenas ícone, sem texto)
- *    Cor padrão: btn-success bg-gradient
- * ─────────────────────────────────────────────────────────────────────
- */
-.btn-toolbar-refresh {
-    /* Cor de fundo — descomente e altere para sobrescrever o btn-success */
-    /* background-color: #198754 !important; */
-    /* border-color:     #198754 !important; */
-    /* color:            #ffffff !important; */
-}
-
-/* ╔══════════════════════════════════════════════════════════════════╗ */
-/* ║  FIM DO AJUSTE BOTÕES DA TOOLBAR                                 ║ */
-/* ╚══════════════════════════════════════════════════════════════════╝ */
-
-
-  /* Widgets adjustments */
-  .row-cols-xxl-6 .col {
-      margin-bottom: 5px;
-  }
-
- 
-  /* DataTable custom adjustments */
-  .table-responsive {
-      overflow-x: auto;
-  }
-
-  #deals-processing-table th {
-      white-space: normal;        /* permite quebra de linha no header (texto inteiro visível) */
-      word-break: break-word;
-      overflow-wrap: anywhere;
-      line-height: 1.15;
-      min-width: 120px;
-      padding: 8px 12px;
-      text-align: center !important;
-      vertical-align: middle !important;
-      font-size: 0.7rem;
-  }
-
-  #deals-processing-table thead th.sorting,
-  #deals-processing-table thead th.sorting_asc,
-  #deals-processing-table thead th.sorting_desc {
-      text-align: center !important;
-  }
-
-  /* Centre column headers in the DataTables fixed scroll-head (DT2.x / DT1.x) */
-  .dt-scroll-head thead th,
-  .dt-scroll-headInner thead th,
-  .dataTables_scrollHeadInner thead th {
-      text-align: center !important;
-      vertical-align: middle !important;
-      font-size: 0.7rem;
-      white-space: normal !important;   /* header do clone quebra linha → texto inteiro */
-      word-break: break-word;
-      overflow-wrap: anywhere;
-      line-height: 1.15;
-  }
-
-  /* ── Inline autocomplete dropdown ── */
-  .dt-ac-wrap { position: relative; width: 100%; }
-  .dt-ac-list {
-      display: none;
-      position: fixed;
-      background: #fff;
-      border: 1px solid #ced4da;
-      border-top: none;
-      border-radius: 0 0 4px 4px;
-      z-index: 10000;
-      max-height: 200px;
-      overflow-y: auto;
-      box-shadow: 0 6px 12px rgba(0,0,0,.15);
-  }
-  .dt-ac-item {
-      padding: 4px 8px;
-      cursor: pointer;
-      font-size: 0.73rem;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      line-height: 1.5;
-  }
-  .dt-ac-item:hover, .dt-ac-item.dt-ac-active { background: #e9ecef; }
-  /* Read-only cell style during edit mode */
-  .dt-cell-readonly {
-      display: block;
-      padding: 2px 6px;
-      font-size: 0.73rem;
-      color: #6c757d;
-      background: #f8f9fa;
-      border: 1px solid #dee2e6;
-      border-radius: 4px;
-      min-height: 28px;
-      line-height: 1.8;
-  }
-
-  /* Colunas específicas com larguras adequadas — um bloco por coluna */
-  /* nth-child(1)=checkbox  (2)=actions  (3..33)=dados */
-
-  #deals-processing-table th:nth-child(3),
-  #deals-processing-table td:nth-child(3) { min-width: 100px;  width: 100px;  } /* Status */
-
-  #deals-processing-table th:nth-child(4),
-  #deals-processing-table td:nth-child(4) { min-width: 70px;   width: 70px;   } /* LE */
-
-  #deals-processing-table th:nth-child(5),
-  #deals-processing-table td:nth-child(5) { min-width: 180px;  width: 180px;  } /* Deal */
-
-  #deals-processing-table th:nth-child(6),
-  #deals-processing-table td:nth-child(6) { min-width: 120px;  width: 120px;  } /* B3 ID */
-
-  #deals-processing-table th:nth-child(7),
-  #deals-processing-table td:nth-child(7) { min-width: 110px;  width: 110px;  } /* Trade Date */
-
-  #deals-processing-table th:nth-child(8),
-  #deals-processing-table td:nth-child(8) { min-width: 90px;   width: 90px;   } /* Month */
-
-  #deals-processing-table th:nth-child(9),
-  #deals-processing-table td:nth-child(9) { min-width: 130px;  width: 130px;  } /* Settlement Date */
-
-  #deals-processing-table th:nth-child(10),
-  #deals-processing-table td:nth-child(10) { min-width: 90px;  width: 90px;   } /* SPN */
-
-  #deals-processing-table th:nth-child(11),
-  #deals-processing-table td:nth-child(11) { min-width: 90px;  width: 90px;   } /* Acronym */
-
-  #deals-processing-table th:nth-child(12),
-  #deals-processing-table td:nth-child(12) { min-width: 220px; width: 220px;  } /* Client */
-
-  #deals-processing-table th:nth-child(13),
-  #deals-processing-table td:nth-child(13) { min-width: 150px; width: 150px;  } /* Tax ID */
-
-  #deals-processing-table th:nth-child(14),
-  #deals-processing-table td:nth-child(14) { min-width: 130px; width: 130px;  } /* First Fixing Date */
-
-  #deals-processing-table th:nth-child(15),
-  #deals-processing-table td:nth-child(15) { min-width: 130px; width: 130px;  } /* Last Fixing Date */
-
-  #deals-processing-table th:nth-child(16),
-  #deals-processing-table td:nth-child(16) { min-width: 110px; width: 110px;  } /* Intrument */
-
-  #deals-processing-table th:nth-child(17),
-  #deals-processing-table td:nth-child(17) { min-width: 95px;  width: 95px;   } /* Trade Type */
-
-  #deals-processing-table th:nth-child(18),
-  #deals-processing-table td:nth-child(18) { min-width: 85px;  width: 85px;   } /* Direction */
-
-  #deals-processing-table th:nth-child(19),
-  #deals-processing-table td:nth-child(19) { min-width: 100px; width: 100px;  } /* FX Pair */
-
-  #deals-processing-table th:nth-child(20),
-  #deals-processing-table td:nth-child(20) { min-width: 140px; width: 140px;  } /* Quantity Currency */
-
-  #deals-processing-table th:nth-child(21),
-  #deals-processing-table td:nth-child(21) { min-width: 130px; width: 130px;  } /* Publisher */
-
-  #deals-processing-table th:nth-child(22),
-  #deals-processing-table td:nth-child(22) { min-width: 130px; width: 130px;  } /* Notional */
-
-  #deals-processing-table th:nth-child(23),
-  #deals-processing-table td:nth-child(23) { min-width: 110px; width: 110px;  } /* Rate */
-
-  #deals-processing-table th:nth-child(24),
-  #deals-processing-table td:nth-child(24) { min-width: 120px; width: 120px;  } /* Is BRR Fixed? */
-
-  #deals-processing-table th:nth-child(25),
-  #deals-processing-table td:nth-child(25) { min-width: 120px; width: 120px;  } /* TradingBook */
-
-  /* Todas as células da tabela devem ter nowrap */
-  #deals-processing-table td {
-      white-space: nowrap;
-      text-overflow: ellipsis;
-      overflow: hidden;
-      font-size: 0.8rem;
-      text-align: center;
-      vertical-align: middle;
-  }
-
-  #column-search-inputs th input {
-      text-align: center;
-  }
-
-  /* ── Colored tooltips ──────────────────────────────────────────── */
-  .tooltip-primary   .tooltip-inner { background-color: #6658dd; }
-  .tooltip-success   .tooltip-inner { background-color: #198754; }
-  .tooltip-info      .tooltip-inner { background-color: #0dcaf0; color: #000; }
-  .tooltip-danger    .tooltip-inner { background-color: #dc3545; }
-  .tooltip-teal      .tooltip-inner { background-color: #4a849b; }
-  .tooltip-secondary .tooltip-inner { background-color: #6c757d; }
-
-  /* Arrow — top placement (tooltip above element, arrow points ↓) */
-  .tooltip-primary.bs-tooltip-top   .tooltip-arrow::before,
-  .tooltip-primary.bs-tooltip-auto[data-popper-placement^="top"] .tooltip-arrow::before   { border-top-color:    #6658dd !important; }
-  .tooltip-success.bs-tooltip-top   .tooltip-arrow::before,
-  .tooltip-success.bs-tooltip-auto[data-popper-placement^="top"] .tooltip-arrow::before   { border-top-color:    #198754 !important; }
-  .tooltip-info.bs-tooltip-top      .tooltip-arrow::before,
-  .tooltip-info.bs-tooltip-auto[data-popper-placement^="top"]    .tooltip-arrow::before   { border-top-color:    #0dcaf0 !important; }
-  .tooltip-danger.bs-tooltip-top    .tooltip-arrow::before,
-  .tooltip-danger.bs-tooltip-auto[data-popper-placement^="top"]  .tooltip-arrow::before   { border-top-color:    #dc3545 !important; }
-  .tooltip-teal.bs-tooltip-top      .tooltip-arrow::before,
-  .tooltip-teal.bs-tooltip-auto[data-popper-placement^="top"]    .tooltip-arrow::before   { border-top-color:    #4a849b !important; }
-  .tooltip-secondary.bs-tooltip-top .tooltip-arrow::before,
-  .tooltip-secondary.bs-tooltip-auto[data-popper-placement^="top"] .tooltip-arrow::before { border-top-color:    #6c757d !important; }
-
-  /* Arrow — bottom placement (tooltip below element, arrow points ↑) */
-  .tooltip-primary.bs-tooltip-bottom   .tooltip-arrow::before,
-  .tooltip-primary.bs-tooltip-auto[data-popper-placement^="bottom"] .tooltip-arrow::before   { border-bottom-color: #6658dd !important; }
-  .tooltip-success.bs-tooltip-bottom   .tooltip-arrow::before,
-  .tooltip-success.bs-tooltip-auto[data-popper-placement^="bottom"] .tooltip-arrow::before   { border-bottom-color: #198754 !important; }
-  .tooltip-info.bs-tooltip-bottom      .tooltip-arrow::before,
-  .tooltip-info.bs-tooltip-auto[data-popper-placement^="bottom"]    .tooltip-arrow::before   { border-bottom-color: #0dcaf0 !important; }
-  .tooltip-danger.bs-tooltip-bottom    .tooltip-arrow::before,
-  .tooltip-danger.bs-tooltip-auto[data-popper-placement^="bottom"]  .tooltip-arrow::before   { border-bottom-color: #dc3545 !important; }
-  .tooltip-teal.bs-tooltip-bottom      .tooltip-arrow::before,
-  .tooltip-teal.bs-tooltip-auto[data-popper-placement^="bottom"]    .tooltip-arrow::before   { border-bottom-color: #4a849b !important; }
-  .tooltip-secondary.bs-tooltip-bottom .tooltip-arrow::before,
-  .tooltip-secondary.bs-tooltip-auto[data-popper-placement^="bottom"] .tooltip-arrow::before { border-bottom-color: #6c757d !important; }
-
-  /* ── Smart filter widget ─────────────────────────────────────────── */
-  .smart-filter-wrapper {
-      position: relative;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 4px;
-      border: 1px solid rgba(0,0,0,0.08);
-      border-radius: 0.6875rem;
-      padding: 4px 8px;
-      min-height: 38px;
-      background: var(--ins-secondary-bg);
-      cursor: text;
-      transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  }
-  .smart-filter-wrapper:focus-within {
-      border-color: #0066cc;
-      box-shadow: 0 0 0 3px rgba(0,102,204,0.15);
-  }
-  .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .smart-filter-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      background: #6c757d;
-      color: #fff;
-      border-radius: 50rem;
-      padding: 2px 8px;
-      font-size: 10px;
-      font-weight: 500;
-      white-space: nowrap;
-  }
-  .smart-filter-chip .sf-chip-remove {
-      cursor: pointer;
-      opacity: .75;
-      font-size: 13px;
-      line-height: 1;
-      margin-left: 2px;
-  }
-  .smart-filter-chip .sf-chip-remove:hover { opacity: 1; }
-  .smart-filter-input {
-      border: none;
-      outline: none;
-      flex: 1;
-      min-width: 200px;
-      font-size: 0.82rem;
-      background: transparent;
-      color: var(--ins-body-color);
-      padding: 2px 0;
-  }
-  .smart-filter-input::placeholder { color: var(--ins-secondary-color); }
-  .smart-filter-dropdown {
-      position: absolute;
-      top: calc(100% + 2px);
-      left: 0;
-      right: 0;
-      z-index: 1055;
-      background: var(--ins-secondary-bg);
-      border: 1px solid var(--ins-border-color);
-      border-radius: 6px;
-      box-shadow: 0 6px 18px rgba(0,0,0,.25);
-      max-height: 240px;
-      overflow-y: auto;
-      display: none;
-      padding: 4px 0;
-  }
-  .smart-filter-dropdown li {
-      padding: 6px 12px;
-      cursor: pointer;
-      font-size: 0.81rem;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      list-style: none;
-      color: var(--ins-body-color);
-  }
-  .smart-filter-dropdown li:hover,
-  .smart-filter-dropdown li.sf-kbd-active { background: var(--ins-tertiary-bg); }
-  .sf-type-badge {
-      font-size: 9px;
-      padding: 1px 5px;
-      border-radius: 3px;
-      text-transform: uppercase;
-      font-weight: 600;
-      color: #fff;
-      opacity: .85;
-  }
-  .sf-type-text   { background: #6c757d; }
-  .sf-type-date   { background: #0dcaf0; color: #000 !important; }
-  .sf-type-number { background: #ffc107; color: #000 !important; }
-
-  .table-centered th,
-  .table-centered td {
-      vertical-align: middle;
-  }
-
-  /* Action buttons adjustments for rounding */
-  #deals-processing-table .btn-sm.rounded-circle {
-      /* Squircle padrão do app (spec .ops-row-act): 32×32, raio 10 —
-         min/max travam o tamanho contra qualquer min-width do tema. */
-      width: 32px;
-      height: 32px;
-      min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;
-      padding: 0;
-      flex: 0 0 auto;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      line-height: 1;
-      border-radius: 10px !important;
-  }
-
-  #deals-processing-table .btn-sm.rounded-circle i {
-      font-size: 1rem;
-  }
-
-  /* Column search inputs styling */
-  #column-search-inputs input {
-      font-size: 12px;
-      height: 28px;
-  }
-
-  #column-search-inputs th {
-      padding: 4px 8px;
-      border-top: 1px solid #dee2e6;
-      text-align: center;
-      vertical-align: middle;
-  }
-
-  /* Cell Selection Styles */
-  #deals-processing-table td.selected {
-      background-color: #b3d7ff !important;
-      border: 2px solid #0066cc !important;
-  }
-
-  /* Hover effect for cells */
-  #deals-processing-table tbody td:hover {
-      background-color: #e6f2ff;
-      cursor: cell;
-  }
-
-  /* Disable cell selection on checkbox and action columns */
-  #deals-processing-table tbody td:nth-child(1),
-  #deals-processing-table tbody td:nth-child(2) {
-      cursor: default !important;
-  }
-
-  #deals-processing-table tbody td:nth-child(1):hover,
-  #deals-processing-table tbody td:nth-child(2):hover {
-      background-color: transparent !important;
-  }
-
-  /* Note: columns are 29 total data cols (no Premium/PremiumPerUnit/PremiumCCY/SpotDate) */
-
-  /* ── NDF Product Identity & Motion ──────────────────────────────────── */
-  :root { --nd-ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
-
-  @keyframes nd-slide-in {
-      from { opacity: 0; transform: translateY(14px); }
-      to   { opacity: 1; transform: none; }
-  }
-  /* ti-spin: Tabler webfont 3.31 não anima .ti-spin E .ti não seta display:inline-block
-     (transform/rotate é ignorado em display:inline). !important garante sobre app.min.css,
-     que carrega DEPOIS do extra_css (ver base.html). */
-  @keyframes ti-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
-  /* anima também os ícones loader diretamente (não só .ti-spin) → à prova de cache do JS,
-     pois ti-loader/ti-loader-2 só são usados como spinner nesta página */
-  i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline-block !important; animation: ti-spin 0.8s linear infinite !important; }
-  @media (prefers-reduced-motion: reduce) { i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { animation-duration: 1.6s !important; } }
-  @media (prefers-reduced-motion: reduce) {
-      .nd-rv-1, .nd-rv-2, .nd-rv-3 { animation: none !important; opacity: 1 !important; transform: none !important; }
-  }
-  .nd-rv-1 { animation: nd-slide-in 480ms var(--nd-ease-out) both; }
-  .nd-rv-2 { animation: nd-slide-in 480ms var(--nd-ease-out) 70ms both; }
-  .nd-rv-3 { animation: nd-slide-in 480ms var(--nd-ease-out) 140ms both; }
-
-  .nd-product-icon {
-      width: 44px; height: 44px; border-radius: 12px;
-      background: rgba(0, 102, 204, 0.1);
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0; font-size: 20px; color: #0066cc;
-  }
-  .nd-product-badge {
-      font-size: 0.67rem; padding: 2px 9px; border-radius: 999px;
-      background: rgba(0, 102, 204, 0.09); color: #0066cc;
-      font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
-      border: 1px solid rgba(0, 102, 204, 0.18);
-  }
-  .nd-deal-card { border-left: 3px solid #0066cc !important; }
-  .nd-filter-bar { background: var(--ins-secondary-bg, #f8f9fa); }
-
-  #myAwesomeDropzone.dropzone {
-      transition: border-color 180ms var(--nd-ease-out), background 180ms var(--nd-ease-out);
-  }
-  #myAwesomeDropzone.dropzone:hover,
-  #myAwesomeDropzone.dropzone.dz-drag-hover {
-      border-color: #0066cc !important;
-      background: rgba(0, 102, 204, 0.025) !important;
-  }
-  .nd-upload-icon { background: rgba(0, 102, 204, 0.12) !important; color: #0066cc !important; }
-
-  .btn-toolbar-all { transition: transform 100ms ease-out; }
-  .btn-toolbar-all:active { transform: scale(0.96) !important; }
-  @media (hover: hover) and (pointer: fine) {
-      .btn-toolbar-all:hover { transform: translateY(-1px); transition: transform 160ms var(--nd-ease-out); }
-  }
-  /* Export collection dropdown — fundo sólido e texto legível */
-  .dt-button-collection {
-      background: #fff !important;
-      border: 1px solid rgba(0,0,0,.15) !important;
-      box-shadow: 0 4px 16px rgba(0,0,0,.18) !important;
-      border-radius: 0.375rem !important;
-      padding: 0.25rem 0 !important;
-      opacity: 1 !important;
-  }
-  [data-bs-theme="dark"] .dt-button-collection {
-      background: #2b2f3a !important;
-      border-color: rgba(255,255,255,.15) !important;
-  }
-  .dt-button-collection .dt-button {
-      background: transparent !important;
-      color: #212529 !important;
-      border: none !important;
-      width: 100% !important;
-      text-align: left !important;
-      padding: 0.4rem 1rem !important;
-      font-size: 0.82rem !important;
-      opacity: 1 !important;
-  }
-  [data-bs-theme="dark"] .dt-button-collection .dt-button { color: #dee2e6 !important; }
-  .dt-button-collection .dt-button:hover,
-  .dt-button-collection .dt-button:focus {
-      background: rgba(13,110,253,.08) !important;
-      color: #0d6efd !important;
-  }
-  [data-bs-theme="dark"] .dt-button-collection .dt-button:hover {
-      background: rgba(255,255,255,.08) !important;
-      color: #6ea8fe !important;
-  }
-  /* Ícone de calendário no campo Reference Date (flatpickr abre no clique) —
-     mesmo tratamento dos campos de data do pending-confirmation. O input é de
-     texto, não type=date, então o ícone nativo do navegador não existe. */
-  #apiRefDate {
-      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 0.6rem center;
-      background-size: 1rem 1rem;
-      padding-right: 2rem;
-      cursor: pointer;
-  }
-  [data-bs-theme="dark"] #apiRefDate {
-      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23adb5bd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
-  }
+#deals-processing-table th { min-width: 120px; }
+#deals-processing-table td { overflow: hidden; text-overflow: ellipsis; }
+#deals-processing-table :is(th, td):nth-child(3) { min-width: 100px; width: 100px; } /* Status */
+#deals-processing-table :is(th, td):nth-child(4) { min-width: 70px; width: 70px; } /* LE */
+#deals-processing-table :is(th, td):nth-child(5) { min-width: 180px; width: 180px; } /* Deal */
+#deals-processing-table :is(th, td):nth-child(6) { min-width: 120px; width: 120px; } /* B3 ID */
+#deals-processing-table :is(th, td):nth-child(7) { min-width: 110px; width: 110px; } /* Trade Date */
+#deals-processing-table :is(th, td):nth-child(8) { min-width: 90px; width: 90px; } /* Month */
+#deals-processing-table :is(th, td):nth-child(9) { min-width: 130px; width: 130px; } /* Settlement Date */
+#deals-processing-table :is(th, td):nth-child(10) { min-width: 90px; width: 90px; } /* SPN */
+#deals-processing-table :is(th, td):nth-child(11) { min-width: 90px; width: 90px; } /* Acronym */
+#deals-processing-table :is(th, td):nth-child(12) { min-width: 220px; width: 220px; } /* Client */
+#deals-processing-table :is(th, td):nth-child(13) { min-width: 150px; width: 150px; } /* Tax ID */
+#deals-processing-table :is(th, td):nth-child(14) { min-width: 130px; width: 130px; } /* First Fixing Date */
+#deals-processing-table :is(th, td):nth-child(15) { min-width: 130px; width: 130px; } /* Last Fixing Date */
+#deals-processing-table :is(th, td):nth-child(16) { min-width: 110px; width: 110px; } /* Intrument */
+#deals-processing-table :is(th, td):nth-child(17) { min-width: 95px; width: 95px; } /* Trade Type */
+#deals-processing-table :is(th, td):nth-child(18) { min-width: 85px; width: 85px; } /* Direction */
+#deals-processing-table :is(th, td):nth-child(19) { min-width: 100px; width: 100px; } /* FX Pair */
+#deals-processing-table :is(th, td):nth-child(20) { min-width: 140px; width: 140px; } /* Quantity Currency */
+#deals-processing-table :is(th, td):nth-child(21) { min-width: 130px; width: 130px; } /* Publisher */
+#deals-processing-table :is(th, td):nth-child(22) { min-width: 130px; width: 130px; } /* Notional */
+#deals-processing-table :is(th, td):nth-child(23) { min-width: 110px; width: 110px; } /* Rate */
+#deals-processing-table :is(th, td):nth-child(24) { min-width: 120px; width: 120px; } /* Is BRR Fixed? */
+#deals-processing-table :is(th, td):nth-child(25) { min-width: 120px; width: 120px; } /* TradingBook */
 </style>
-<!-- ╔══════════════════════════════════════════════════════════════════╗ -->
-<!-- ║  FIM DO AJUSTE DE TAMANHO                                      ║ -->
-<!-- ╚══════════════════════════════════════════════════════════════════╝ -->
-
 {% endblock extra_css %}
 
 {% block page_content %}
 <div class="container-fluid" data-content="">
-    <div class="page-title-head d-flex align-items-center nd-rv-1">
+    <div class="page-title-head d-flex align-items-center">
         <div class="d-flex align-items-center gap-3 flex-grow-1">
             <div class="nd-product-icon">
                 <i class="ti ti-arrows-exchange-2"></i>
@@ -768,7 +66,7 @@
         </div>
     </div>
 
-    <div class="row nd-rv-2">
+    <div class="row">
         <div class="col-12">
             <div class="card nd-deal-card">
 
@@ -991,7 +289,7 @@
             <label class="form-label form-label-sm mb-1">Acronym</label>
             <div class="position-relative">
               <input type="text" class="form-control form-control-sm" id="ar-acronym" autocomplete="off" placeholder="Type to search…">
-              <div id="ar-acronym-drop" class="ar-ac-drop" style="display:none;position:absolute;top:100%;left:0;width:100%;z-index:9200;max-height:180px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-radius:4px;box-shadow:0 4px 6px rgba(0,0,0,.12)"></div>
+              <div id="ar-acronym-drop" class="ar-ac-drop"></div>
             </div>
           </div>
           <div class="col-md-4">
@@ -4579,23 +3877,23 @@ $(document).ready(function() {
             var calBanner = '';
             if (calInfo) {
                 var _cn = calInfo.calendar || '';
-                var _cl = _cn ? '<b>' + _cn + '</b>' : '<span style="color:#6c757d">nenhum (Seg&ndash;Sex)</span>';
+                var _cl = _cn ? '<b>' + _cn + '</b>' : '<span class="text-muted">nenhum (Seg&ndash;Sex)</span>';
                 var _st = '';
                 if (_cn) {
                     if (calInfo.fetchStatus === true)
-                        _st = ' &nbsp;<span style="color:#198754">&#10003; ' + calInfo.holidaysTotal + ' feriado(s)</span>';
+                        _st = ' &nbsp;<span class="text-success">&#10003; ' + calInfo.holidaysTotal + ' feriado(s)</span>';
                     else if (calInfo.fetchStatus === false)
-                        _st = ' &nbsp;<span style="color:#dc3545">&#10007; arquivo n&atilde;o encontrado</span>';
+                        _st = ' &nbsp;<span class="text-danger">&#10007; arquivo n&atilde;o encontrado</span>';
                 }
                 var _sk = '';
                 if (_cn && calInfo.fetchStatus === true) {
                     _sk = (calInfo.skipped && calInfo.skipped.length)
-                        ? ' &nbsp;| <b>Pulados:</b> <span style="color:#dc3545">' + calInfo.skipped.join(', ') + '</span>'
-                        : ' &nbsp;| <span style="color:#6c757d">nenhum feriado no per&iacute;odo</span>';
+                        ? ' &nbsp;| <b>Pulados:</b> <span class="text-danger">' + calInfo.skipped.join(', ') + '</span>'
+                        : ' &nbsp;| <span class="text-muted">nenhum feriado no per&iacute;odo</span>';
                 }
                 var _bz = calInfo.bizCount !== undefined
                     ? ' &nbsp;| <b>Dias &uacute;teis: ' + calInfo.bizCount + '</b>' : '';
-                calBanner = '<div style="margin-bottom:10px;padding:7px 10px;background:#eef2ff;border:1px solid #c5d0f0;border-radius:4px;font-size:0.81em;line-height:1.8">&#128197;&nbsp;' + _cl + _st + _sk + _bz + '</div>';
+                calBanner = '<div class="otc-banner mb-2">&#128197;&nbsp;' + _cl + _st + _sk + _bz + '</div>';
             }
 
             // O preview da casa (file-preview.js): uma aba por visão do arquivo.
@@ -4610,15 +3908,14 @@ $(document).ready(function() {
 
             if (fixingRows && fixingRows.length > 0) {
                 var fxRows = fixingRows.map(function(r, i) {
-                    var bg = i % 2 === 0 ? 'rgba(0,0,0,.03)' : 'transparent';
-                    return '<tr style="background:' + bg + '">' +
-                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;white-space:pre">TER  </td>' +
-                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;white-space:pre;text-align:center">2</td>' +
-                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;white-space:pre">0001</td>' +
-                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;white-space:pre">' + r.fixDate + '</td>' +
-                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;white-space:pre">0000000000000000</td>' +
-                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;white-space:pre">' +
-                            (r.fxDate ? r.fxDate : '<span style="color:#aaa">&mdash;</span>') +
+                    return '<tr>' +
+                        '<td class="font-monospace">TER  </td>' +
+                        '<td class="font-monospace text-center">2</td>' +
+                        '<td class="font-monospace">0001</td>' +
+                        '<td class="font-monospace">' + r.fixDate + '</td>' +
+                        '<td class="font-monospace">0000000000000000</td>' +
+                        '<td class="font-monospace">' +
+                            (r.fxDate ? r.fxDate : '<span class="text-muted">&mdash;</span>') +
                         '</td>' +
                     '</tr>';
                 }).join('');
@@ -4631,16 +3928,16 @@ $(document).ready(function() {
                     ? _vb.fields.map(function (fd, ix) {
                         return '<th style="padding:5px 8px;text-align:' + (ix === 1 ? 'center' : 'left') + ';font-weight:600">' + fd.field + '</th>';
                       }).join('')
-                    : '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-sys-id">ID do Sistema</span></th>' +
-                      '<th style="padding:5px 8px;text-align:center;font-weight:600"><span data-lang="nd-preview-col-line-type">ID Tipo de Linha</span></th>' +
-                      '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-op-code">Código Operação</span></th>' +
-                      '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fix-date">Data de Fixing do Ativo Subjacente</span></th>' +
-                      '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-ref-qty">Qtd. de Refer&ecirc;ncia</span></th>' +
-                      '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fx-date">Data de Fixing da Moeda</span></th>';
+                    : '<th><span data-lang="nd-preview-col-sys-id">ID do Sistema</span></th>' +
+                      '<th class="text-center"><span data-lang="nd-preview-col-line-type">ID Tipo de Linha</span></th>' +
+                      '<th><span data-lang="nd-preview-col-op-code">Código Operação</span></th>' +
+                      '<th><span data-lang="nd-preview-col-fix-date">Data de Fixing do Ativo Subjacente</span></th>' +
+                      '<th><span data-lang="nd-preview-col-ref-qty">Qtd. de Refer&ecirc;ncia</span></th>' +
+                      '<th><span data-lang="nd-preview-col-fx-date">Data de Fixing da Moeda</span></th>';
                 _pvExtra +=
-                    '<div style="margin-top:14px;overflow:auto;max-height:42vh;border:1px solid rgba(0,0,0,.12);border-radius:6px">' +
-                    '<table style="width:100%;border-collapse:collapse;font-size:0.85em">' +
-                    '<thead><tr style="background:#343a40;color:#fff;position:sticky;top:0">' + _fxHead + '</tr></thead>' +
+                    '<div class="otc-mini-table-wrap">' +
+                    '<table class="otc-mini-table">' +
+                    '<thead><tr>' + _fxHead + '</tr></thead>' +
                     '<tbody>' + fxRows + '</tbody>' +
                     '</table></div>';
             }

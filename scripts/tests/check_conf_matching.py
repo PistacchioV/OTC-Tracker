@@ -489,8 +489,8 @@ try:
               sorted([('w_' + c) for c in av_cfm if 'w_' + c not in chaves] +
                      [('e_' + c) for c in er_cfm if 'e_' + c not in chaves]), [])
 
-    print('=== 9. O cabeçalho da tabela não é cortado em painel próprio (streamflow §49b) ===')
-    css = _io.open(os.path.join(ROOT, 'apps/static/css/streamflow.css'), encoding='utf-8').read()
+    print('=== 9. O cabeçalho da tabela não é cortado em painel próprio (otc.scss §7) ===')
+    css = _io.open(os.path.join(ROOT, 'apps/static/scss/otc.scss'), encoding='utf-8').read()
     raiz = css.find('.table-responsive > .dt-container { margin-top: 0; }')
     check('o tema neutraliza o -0.75rem do .dt-container fora de .card', raiz > 0, True)
     check('e a regra vem ANTES da do .card (mesma especificidade)',

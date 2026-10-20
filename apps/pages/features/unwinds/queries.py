@@ -194,7 +194,8 @@ def dashboard_counts(period, now):
     # UMA passada SEM poda ('all'), e o periodo aplicado no laco. O painel faz
     # duas passadas porque as duas compartilham o memo de arquivo-dia; aqui a
     # arvore e pequena, e varrer por 'year' perderia os anos anteriores no
-    # periodo 'all' — a serie mensal e sempre do ano corrente, o total nao.
+    # periodo 'all' — a serie mensal e do ano corrente (ou a janela do
+    # 'last12'), o total segue o periodo.
     for fp, fname, _mtime, _size in _R()._dash_scan_files(raiz, 'all', now):
         if fname.endswith('.tmp') or fname.endswith('.bak'):
             continue
@@ -216,13 +217,13 @@ def dashboard_counts(period, now):
             continue
         rotulo = _rotulo_do_caminho(raiz, fp)
         p = por_produto.setdefault(rotulo, {'label': rotulo, 'total': 0, 'monthly': [0] * 12})
-        if fdate.year == now.year:
-            monthly[fdate.month - 1] += n
-            p['monthly'][fdate.month - 1] += n
-        no_periodo = (period == 'month' and fdate.year == now.year and fdate.month == now.month) \
-            or (period == 'year' and fdate.year == now.year) \
-            or period not in ('month', 'year')
-        if no_periodo:
+        # período e barra pelas MESMAS regras do painel (a série mensal é o ano
+        # corrente, ou a janela móvel no `last12`)
+        slot = _R()._dash_month_slot(fdate, period, now)
+        if slot is not None:
+            monthly[slot] += n
+            p['monthly'][slot] += n
+        if _R()._dash_in_period(fdate, period, now):
             total += n
             p['total'] += n
     return {'total': total, 'monthly': monthly,

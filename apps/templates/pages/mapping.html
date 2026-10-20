@@ -4,102 +4,38 @@
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
+{# Só o que é DESTA tela: o rail dos cadastros (item ativo e contagem), o
+   espaço significativo dos códigos B3, o trecho VARIÁVEL de um padrão e a
+   posição do autocomplete do modal (o desenho da lista é do tema). Tabela,
+   toolbar, botões de linha e Export são do tema. #}
 <style>
-    #mapping-page { --map-ease: cubic-bezier(0.22, 1, 0.36, 1); }
-    #mapping-page .map-page-icon {
-        width: 44px; height: 44px; border-radius: 12px;
-        background: rgba(0, 102, 204, 0.1);
-        display: flex; align-items: center; justify-content: center;
-        flex-shrink: 0; color: #0066cc;
-    }
-
     /* Rail esquerdo — mesmo desenho dos Document Types do Electronic Inventory */
-    #mapping-page .map-type-item {
-        display: flex; align-items: center; gap: .6rem;
-        padding: .6rem .75rem; border-radius: 10px; cursor: pointer;
-        color: var(--ins-body-color); text-decoration: none;
-        border: 1px solid transparent;
-        transition: background-color .18s var(--map-ease), border-color .18s var(--map-ease), color .18s var(--map-ease);
-    }
+    #mapping-page .map-type-item { display: flex; align-items: center; gap: .6rem; color: var(--otc-text); text-decoration: none; }
     #mapping-page .map-type-item .map-type-ico { font-size: 1.15rem; opacity: .8; }
     #mapping-page .map-type-item .map-type-badge {
-        margin-left: auto; font-size: .68rem; font-weight: 600;
-        background: var(--ins-secondary-bg); color: var(--ins-secondary-color);
-        padding: .1rem .45rem; border-radius: 999px; min-width: 1.6rem; text-align: center;
+        margin-left: auto; font-size: .68rem; font-weight: 600; background: var(--otc-fill); color: var(--otc-text-2);
+        padding: .1rem .45rem; border-radius: var(--otc-r-pill); min-width: 1.6rem; text-align: center; white-space: nowrap; flex-shrink: 0;
     }
-    #mapping-page .map-type-item.is-active {
-        background: rgba(0, 102, 204, .10); border-color: rgba(0, 102, 204, .22);
-        color: #0066cc; font-weight: 600;
-    }
-    #mapping-page .map-type-item.is-active .map-type-badge { background: #0066cc; color: #fff; }
-    [data-bs-theme=dark] #mapping-page .map-type-item.is-active { color: #6ea8fe; background: rgba(41,151,255,.14); border-color: rgba(41,151,255,.30); }
-    [data-bs-theme=dark] #mapping-page .map-type-item.is-active .map-type-badge { background: #2997ff; }
-    #mapping-page .map-type-hint { font-size: .72rem; color: var(--ins-secondary-color); }
+    #mapping-page .map-type-item.is-active .map-type-badge { background: rgba(255,255,255,.22); color: #fff; }
+    #mapping-page .map-type-hint { font-size: .72rem; color: var(--otc-text-3); }
 
-    /* Tabela do mapping selecionado — alinhamento centralizado, padrão New Deals */
-    #mapping-page #mapTable tbody td { font-size: 0.8rem; text-align: center; vertical-align: middle; }
-    #mapping-page #mapTable thead th { font-size: .7rem; text-align: center !important; vertical-align: middle !important; }
-    /* Botões da toolbar — mesmo dimensionamento do New Deals */
-    #mapping-page .btn-toolbar-all {
-        font-size: .75rem !important; padding: .25rem .6rem !important;
-        height: auto !important; line-height: 1.4 !important; white-space: nowrap !important;
-        transition: transform 100ms ease-out;
-    }
-    #mapping-page .btn-toolbar-all:active { transform: scale(.96) !important; }
-    @media (hover: hover) and (pointer: fine) {
-        #mapping-page .btn-toolbar-all:hover { transform: translateY(-1px); }
-    }
-    /* Ações de linha no squircle padrão do app (spec .ops-row-act) — sem isto o
-       rounded-circle do tema sai OVAL (o raio só é círculo em botão quadrado). */
-    #mapping-page #mapTable .btn.rounded-circle {
-        width: 32px; height: 32px; min-width: 32px; max-width: 32px;
-        padding: 0; flex: 0 0 auto; display: inline-flex; align-items: center;
-        justify-content: center; line-height: 1; border-radius: 10px !important;
-    }
-    #mapping-page #mapTable .btn.rounded-circle i { font-size: 1rem; }
     /* espaço significativo no fim de códigos B3 (ex.: 'C ') fica visível */
     #mapping-page td.map-code { white-space: pre; }
 
     /* Trecho VARIÁVEL de um padrão (o "MY" do B3 Code, o YYMMDD dos arquivos
-       CETIP). Âmbar/laranja: é a única família que não colide com nada já em uso
-       na tabela (azul = ação, verde = ok, vermelho = excluir) e mantém contraste
-       nos dois temas — #a05a00 sobre o branco e #ffb545 sobre o #08080d do dark
-       passam de 4.5:1. O fundo levíssimo delimita o trecho mesmo para quem não
-       distingue a cor, que é o ponto: bater o olho e ver o que muda. */
-    #mapping-page .map-var {
-        color: #a05a00;
-        background: rgba(255, 170, 40, .16);
-        border-radius: 4px;
-        padding: 0 3px;
-        font-weight: 700;
-    }
-    [data-bs-theme=dark] #mapping-page .map-var {
-        color: #ffb545;
-        background: rgba(255, 170, 40, .14);
-    }
+       CETIP): âmbar, a única família que não colide com a tabela (azul = ação,
+       verde = ok, vermelho = excluir), com um fundo leve que delimita o trecho
+       para quem não distingue a cor. */
+    #mapping-page .map-var { color: var(--otc-orange); background: color-mix(in srgb, var(--otc-orange) 16%, transparent); border-radius: 4px; padding: 0 3px; font-weight: 700; }
 
     #mapping-page .mapExportWrapper .dropdown-menu { min-width: 9rem; }
 
-    /* Dropdown de sugestões do modal — o padrão da casa para domínio aberto:
-       a lista sai ABAIXO do campo, com a MESMA largura, altura limitada e
-       rolagem. O <datalist> nativo desenha o popup do navegador (sem tema,
-       sem largura, e com as ~560 contrapartes do RefData ele cobria a tela
-       inteira — era o Counterparty do MT300). */
+    /* Sugestões do modal ABAIXO do campo, com a MESMA largura (nunca <datalist>) */
     #mapping-page .map-ac-wrap { position: relative; }
-    #mapping-page .map-ac-drop {
-        position: absolute; top: calc(100% + 2px); left: 0; width: 100%;
-        z-index: 30; max-height: 220px; overflow-y: auto;
-        background: var(--vr-card-bg, var(--ins-secondary-bg));
-        border: 1px solid var(--ins-border-color); border-radius: 8px;
-        box-shadow: 0 8px 22px rgba(0, 0, 0, .14);
-    }
-    #mapping-page .map-ac-item {
-        padding: .3rem .55rem; font-size: .78rem; cursor: pointer;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    #mapping-page .map-ac-item:hover { background: rgba(0, 102, 204, .10); }
-    [data-bs-theme=dark] #mapping-page .map-ac-item:hover { background: rgba(41, 151, 255, .16); }
-    #mapping-page .map-ac-sub { color: var(--ins-secondary-color); font-size: .68rem; }
+    #mapping-page .map-ac-drop { position: absolute; top: calc(100% + 2px); left: 0; width: 100%; }
+    #mapping-page .map-ac-item { padding: .3rem .55rem; font-size: .78rem; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #mapping-page .map-ac-sub { color: var(--otc-text-3); font-size: .68rem; }
+    #mapping-page .map-ac-item:hover .map-ac-sub { color: inherit; opacity: .8; }
 </style>
 {% endblock extra_css %}
 
@@ -108,7 +44,7 @@
 
     <div class="page-title-head d-flex align-items-center">
         <div class="d-flex align-items-center gap-3 flex-grow-1">
-            <div class="map-page-icon"><i data-lucide="arrow-left-right"></i></div>
+            <div class="map-product-icon"><i data-lucide="arrow-left-right"></i></div>
             <h4 class="fs-xl fw-bold m-0" data-lang="nav-mapping">Mapping</h4>
         </div>
         <div class="text-end">

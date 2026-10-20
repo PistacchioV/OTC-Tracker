@@ -100,8 +100,12 @@ print('\n== 3. o layout comporta os sete ==')
 row_div = re.search(r'<div class="row [^"]*pending-widgets-row"', HTML).group(0)
 check('o row-cols-xxl-6 saiu do markup', 'row-cols-xxl-6' in row_div, False)
 check('a largura de 1/7 esta no CSS', 'width: 14.2857%' in HTML, True)
-check('a entrada escalonada cobre o setimo',
-      '.pending-widgets-row .col:nth-child(7)' in HTML, True)
+# A entrada escalonada era CSS da pagina (um atraso por coluna, e o setimo
+# ficava de fora); desde o rebranding e do TEMA: o otc.js da a gota a toda
+# placa `.card` de primeiro nivel, na ordem do DOM, sem lista de colunas.
+OTC_JS = io.open(os.path.join(ROOT, 'apps', 'static', 'js', 'otc.js'), encoding='utf-8').read()
+check('a entrada escalonada e do tema (cobre todo card, o setimo inclusive)',
+      bool(re.search(r"SURFACE_SEL = '\.card[,']", OTC_JS)), True)
 
 print('\n== 4. a contagem: o Total fecha com a soma das faixas ==')
 if not os.path.exists(JSC):

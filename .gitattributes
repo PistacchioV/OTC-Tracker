@@ -12,3 +12,9 @@
 
 # O resto fica como está: normalizar a árvore inteira agora produziria um diff
 # gigante e sem relação com o problema.
+
+# Fontes são BINÁRIO: a tabler-icons do repositório chegou a ser gravada como
+# texto (bytes EF BF BD no lugar dos originais) e os ícones sumiram sem erro.
+*.woff2 binary
+*.woff  binary
+*.ttf   binary
