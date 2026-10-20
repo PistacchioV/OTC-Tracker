@@ -251,5 +251,15 @@ for k in CHAVES:
     else:
         check('   e no template', 'data-lang="%s"' % k in corpo, True)
 
+print('\n== 10. a janela do "+N more" e uma placa SOLIDA ==')
+# O FC pinta o popover com o `--fc-page-bg-color`, que o tema zera (a grade
+# fica sobre a placa): sem regra propria, os feriados da celula de baixo
+# apareciam atraves da lista do dia (mesa, 20/10/2026).
+pop = re.search(r'\n  \.fc-popover \{(.*?)\n  \}', SCSS, re.S)
+check('o tema tem a regra do .fc-popover', bool(pop), True)
+check('   com o fundo solido dos menus', bool(pop) and 'background: var(--otc-menu-bg)' in pop.group(1), True)
+check('   e o fechar tem glifo (o FC o entrega vazio)',
+      bool(re.search(r'\.fc-popover-close \{[^}]*&::before \{ content: "\\eb55"', SCSS)), True)
+
 print('\nFALHAS: %d' % len(fails))
 sys.exit(1 if fails else 0)
