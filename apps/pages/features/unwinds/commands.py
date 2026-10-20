@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-"""Escritas da recompra de NDF de moeda: importar o e-mail do Athena, montar a
-linha da tela com a posicao e gerar o arquivo da B3 (TER 0014)."""
+"""Escritas da recompra de NDF de moeda: importar a recompra (pela API de
+liquidacao do Athena ou pelo e-mail no dropzone), montar a linha da tela com a
+posicao e gerar o arquivo da B3 (TER 0014)."""
 import os
 import random
 import threading
@@ -22,12 +23,6 @@ def _R():
 TER_FI_KEY = 'antecipacao-termo-multiclasses'
 PAGE_URL = '/unwinds/ndf/fx'
 PAGE = 'Unwind NDF FX'            # o rotulo `page` das notificacoes (§8)
-
-# Quem aparece no sino quando foi a MAQUINA que importou — o mesmo 'BOX' do
-# scan de New Deals, escrito aqui porque feature nao importa feature. Nao vai
-# para o `Maker` da linha: ali se registra quem ENVIOU para a B3, e enviar
-# continua sendo da mesa.
-BOX_MAKER_SID = 'BOX'
 
 # O nome do arquivo por VISAO (a entidade que lanca). A visao sai da conta da
 # parte pelo cadastro `b3-accounts` — nao ha par de pernas a adivinhar, porque
@@ -93,24 +88,65 @@ def import_emails(items, ref_dt=None, dry_run=False):
             falhas.append({'name': nome or '', 'subject': assunto or '', 'reason': str(exc)})
     if not recs:
         return {'rows': [], 'warnings': [], 'failed': falhas, 'source_date': ''}
+    rows, avisos, src = _montar_linhas(recs, ref)
+    if not dry_run:
+        _gravar({ref: rows})
+    return {'rows': rows, 'warnings': avisos, 'failed': falhas, 'source_date': src}
+
+
+def _visao_rank(linha):
+    """Qual visao do contrato vale quando o Live Position o traz mais de uma
+    vez: 0 = a Parte e entidade nossa que nao e fundo (o Banco, a MGT), 1 = um
+    fundo, 2 = nao e nossa. A mesma regra do catalogo (`product.queries.
+    _visao_rank`), repetida aqui porque a camada de cima nao importa a de
+    baixo de outra fatia."""
+    le = _R()._b3_account_le(domain.conta8((linha or {}).get('Codigo da Parte')))
+    if not le:
+        return 2
+    return 1 if le in queries.FUNDOS else 0
+
+
+def _montar_linhas(recs, ref):
+    """Os registros da recompra (do e-mail ou da API) -> as linhas da tela.
+
+    A posicao e lida UMA vez para o lote (§622): e dela que saem contas, moeda,
+    lado e contraparte. A ponte ate a linha dela depende da origem — a API traz
+    o B3 ID (`contrato`) e a posicao se acha pelo `Contrato`; o e-mail nao o
+    traz, e ai vale a ponte do `Codigo Identificador`.
+    -> (linhas, avisos, data da posicao lida)."""
+    R = _R()
     linhas, src = queries.position_rows(ref)
     rows, avisos = [], []
-    agora = _R()._br_now().strftime('%Y-%m-%d %H:%M')
+    agora = R._br_now().strftime('%Y-%m-%d %H:%M')
     for rec in recs:
-        contrato, posicao = domain.contrato_por_identificador(linhas, rec['athena_id'])
+        if rec.get('contrato'):
+            contrato = rec['contrato']
+            posicao = domain.posicao_pelo_contrato(linhas, contrato, _visao_rank)
+        else:
+            contrato, posicao = domain.contrato_por_identificador(linhas, rec['athena_id'])
         # Conta guarda-chuva? A resposta e do cadastro `b3-accounts` (pelo TIPO
         # da conta) e o `domain` nao fala com cadastro — ela vai PRONTA. Numa
         # guarda-chuva o `Nome da Contraparte` da posicao e o titular, que
         # somos nos: quem identifica o cliente e o CPF/CNPJ.
-        omnibus = _R()._b3_is_omnibus((posicao or {}).get('Codigo da Contraparte'))
-        linha, av = domain.linha_da_recompra(rec, posicao, ref, contrato, omnibus=omnibus)
+        omnibus = R._b3_is_omnibus((posicao or {}).get('Codigo da Contraparte'))
+        dia = R._parse_date_any(rec.get('data_recompra')) or ref
+        linha, av = domain.linha_da_recompra(rec, posicao, dia, contrato, omnibus=omnibus)
         _completar_contraparte(linha)
         linha['MyNumber'] = _rand10()
         linha['ImportedAt'] = agora
         linha['PositionDate'] = src
         rows.append(linha)
         avisos.extend(av)
-    if not dry_run:
+    return rows, avisos, src
+
+
+def _gravar(por_dia):
+    """Grava as recompras `{dia: [linhas]}` e alimenta as outras telas — o que
+    o import faz, venha ela do e-mail ou da API."""
+    todas = []
+    for ref, rows in por_dia.items():
+        if not rows:
+            continue
         persistence.upsert(datetime(ref.year, ref.month, ref.day), rows)
         # A recompra entra na esteira JÁ NO IMPORT (mesa): Pending Confirmation,
         # Track e Confirmations Monitor a mostram sem esperar o Send.
@@ -119,10 +155,11 @@ def import_emails(items, ref_dt=None, dry_run=False):
         # 28/09/2026): nem toda recompra é registrada na B3 pelo OTC Tracker,
         # e esperar o Send deixava a Intrag sem a instrução das que não são.
         intrag_da_recompra(rows, ref)
-        # E no NDF Cockpit, que é a tela onde a mesa acompanha a liquidação e o
-        # imposto — o dia dela é o da LIQUIDAÇÃO, não o do import.
-        cockpit_da_recompra(rows)
-    return {'rows': rows, 'warnings': avisos, 'failed': falhas, 'source_date': src}
+        todas.extend(rows)
+    # E no NDF Cockpit, que é a tela onde a mesa acompanha a liquidação e o
+    # imposto — o dia dela é o da LIQUIDAÇÃO, não o do import.
+    if todas:
+        cockpit_da_recompra(todas)
 
 
 def _completar_contraparte(linha):
@@ -190,67 +227,181 @@ def import_email_uploads(files, ref_dt=None, dry_run=False):
     return out
 
 
-def scan_box(ref_dt=None):
-    """Roda a varredura do box AGORA (o automatico e de 30 em 30 minutos) e
-    importa o que achar, arquivando cada e-mail na pasta Unwind depois de
-    gravar a linha. So no Windows, onde ha Outlook.
+# ── A recompra pela API (getTradesBySettle) ──────────────────────────────────
+# Desde 20/10/2026 a recompra de NDF de moeda chega pela API de liquidacao —
+# o MESMO `getTradesBySettle` do NDF Cockpit —, no bloco `termination` do
+# trade, com o `Cetip ID` do contrato (`domain.recompras_da_api`). Ela tomou o
+# lugar da varredura do Outlook: o e-mail do Athena nao trazia o contrato, e
+# a ponte ate ele era o `Codigo Identificador` truncado do Live Position. O
+# e-mail continua entrando pelo dropzone, como plano B do dia em que a API
+# nao responder.
+#
+# O endereco mora no cadastro `api-links` (uso `Unwinds` x NDF). Sem a linha
+# — ela chega a quem ja tem o cadastro so quando alguem abre a tela /mapping
+# (o `upgrade` nao alcanca quem le pelo `athena_api`, §6) —, vale o endereco do
+# Daily Settlement x NDF, que e o mesmo endpoint.
+API_PRODUCT = 'NDF'
+# Quem aparece no sino quando foi a MAQUINA que importou. Nao vai para o
+# `Maker` da linha: ali se registra quem ENVIOU para a B3, e enviar continua
+# sendo da mesa.
+API_MAKER_SID = 'API'
+API_MAKER_NAME = 'Athena API'
 
-    O arquivamento vem DEPOIS da gravacao de proposito: e-mail movido com a
-    linha nao gravada e uma recompra que ninguem mais acha."""
-    from apps.pages import otc_boxscan
-    ref = ref_dt or _hoje()
-    resultado = otc_boxscan.scan_unwind_box('ndf') or {}
-    achados = resultado.get('emails') or []
-    # UM import para a caixa inteira (§622): posicao lida uma vez e cada
-    # destino gravado uma vez. O `nome` e o indice, para saber de volta quais
-    # e-mails entraram e podem ser arquivados.
-    out = import_emails([(it.get('html') or '', it.get('subject') or '', str(i))
-                         for i, it in enumerate(achados)], ref_dt=ref)
-    avisos = list(out['warnings'])
-    recusados = {f['name'] for f in out['failed']}
-    # O arquivamento tambem e em lote: a pasta Unwind e resolvida uma vez.
-    entraram = [it for i, it in enumerate(achados) if str(i) not in recusados]
+
+def _calendario():
+    from apps.pages.precificador import calendario
+    return calendario.calendario_anbima()
+
+
+def datas_de_liquidacao(ref, cal=None):
+    """As datas que se pedem a API para as recompras de `ref`: ela e o dia
+    util ANBIMA seguinte.
+
+    O endpoint e POR DATA DE LIQUIDACAO, e a recompra liquida em D0 ou D+1 (a
+    B3 aceita o campo 11 do TER 0014 ate D+1 da antecipacao). Pedindo so `ref`,
+    a recompra de hoje que liquida amanha so chegaria amanha — depois do
+    arquivo da B3 e do Termo que ela pede hoje."""
+    cal = cal or _calendario()
+    return [ref, cal.workday(ref, 1)]
+
+
+def _api_url(liq):
+    from apps.pages import athena_api
+    ymd = liq.strftime('%Y%m%d')
     try:
-        motivos = otc_boxscan.archive_unwind_emails(
-            [it.get('entry_id') or '' for it in entraram])
+        url = athena_api.registered_url(athena_api.USE_UNWINDS, API_PRODUCT, date=ymd)
     except Exception as exc:                                # noqa: BLE001
-        motivos = {it.get('entry_id') or '': str(exc) for it in entraram}
-    for item in entraram:
-        eid = item.get('entry_id') or ''
-        motivo = motivos.get(eid, 'not archived') if eid else 'entry_id vazio'
-        if motivo:
-            avisos.append({'code': 'unwind_archive_failed',
-                           'params': {'subject': item.get('subject') or ''},
-                           'text': 'Imported, but the e-mail could not be archived: %s' % motivo})
-    falhas = [{'subject': f['subject'], 'reason': f['reason']} for f in out['failed']]
-    return {'rows': out['rows'], 'warnings': avisos, 'failed': falhas,
-            'scanned': len(achados)}
+        _R().log.debug('[unwind-api] cadastro api-links indisponivel: %s', exc)
+        url = None
+    return url or _R()._ndfc_api_url(liq)
+
+
+def _fora_da_recompra(reg):
+    """Por que o registro da API NAO e recompra a importar, ou None. As regras
+    sao as do New Deals e do Cockpit, pelas mesmas funcoes: cancelado
+    (`isCancelled`, nunca o `isDead` — o trade recomprado inteiro MORRE) e a
+    perna interna (interbook cadastrado, GLOBAL_HOLDING_BOOK)."""
+    R = _R()
+    norm = R._ndf_api_norm(reg)
+    if R._api_rec_is_cancelled(norm):
+        return 'cancelled'
+    end_cp = str(norm.get('END COUNTERPARTY') or '').upper().replace(' ', '_').replace('-', '_')
+    if 'GLOBAL_HOLDING_BOOK' in end_cp or R._ndf_is_interbook(norm):
+        return 'internal'
+    return None
+
+
+def importar_da_api(ref_dt=None):
+    """As recompras de NDF de moeda de `ref` pela API, gravadas e levadas as
+    outras telas pelo MESMO caminho do import do e-mail (`_gravar`): esteira e
+    Pending Confirmation, Intrag e o NDF Cockpit com o IR do dia.
+
+    So entra a recompra NOVA — a que ainda nao esta no arquivo-dia dela (o dia
+    da recompra, pelo `Trade Date` do termination). O laco roda a cada 30
+    minutos o dia inteiro: reimportar a mesma recompra a cada volta
+    reescreveria a linha que a mesa editou (o upsert preserva o Status e o
+    maker, nao os valores) e reabriria uns quinze bancos no share por nada. A
+    leitura do dia e ESTRITA — banco ocupado lido como "nao ha nada" faria
+    exatamente essa reimportacao.
+
+    Uma data cuja API falha nao derruba a outra: volta em `failed` com o
+    motivo; so quando TODAS falham e erro (RuntimeError com os motivos).
+    -> {'rows', 'warnings', 'failed': [{date, reason}], 'existing': n,
+        'skipped': {motivo: n}, 'dates': [iso], 'source_date'}"""
+    from apps.pages import athena_api
+    from apps.pages.precificador import derivativos
+    R = _R()
+    ref = ref_dt or _hoje()
+    if isinstance(ref, datetime):
+        ref = ref.date()
+    if not athena_api.is_available():
+        raise RuntimeError("The 'requests' package is not installed; the Athena API "
+                           "client is unavailable.")
+    cal = _calendario()
+    datas = datas_de_liquidacao(ref, cal)
+
+    def _du(inicio, fim):
+        try:
+            return derivativos.dias_uteis_ate(inicio, fim, cal)
+        except Exception:                                   # noqa: BLE001
+            return None             # sem DU a conferencia diz que nao da para conferir
+
+    sessao = athena_api.build_session()
+    recs, falhas, pulados, vistos = [], [], {}, set()
+    for liq in datas:
+        url = _api_url(liq)
+        try:
+            # `REPORT_TIMEOUT`: o endpoint varre o livro INTEIRO da data (o
+            # mesmo motivo do Cockpit, `_ndfc_fetch_api`).
+            payload = athena_api.get_json_url(sessao, url, timeout=athena_api.REPORT_TIMEOUT)
+        except Exception as exc:                            # noqa: BLE001
+            R.log.warning('[unwind-api] getTradesBySettle de %s falhou (%s):\n%s',
+                          liq.isoformat(), url, traceback.format_exc())
+            falhas.append({'date': liq.isoformat(),
+                           'reason': '%s: %s' % (type(exc).__name__, exc)})
+            continue
+        validos = []
+        for reg in athena_api.extract_records(payload):
+            if not isinstance(reg, dict):
+                continue
+            motivo = _fora_da_recompra(reg)
+            if motivo:
+                pulados[motivo] = pulados.get(motivo, 0) + 1
+                continue
+            validos.append(reg)
+        for rec in domain.recompras_da_api(validos, liq.isoformat(), _du):
+            chave = (rec['athena_id'].upper(), rec['notification_id'])
+            if chave not in vistos:
+                vistos.add(chave)
+                recs.append(rec)
+    if falhas and len(falhas) == len(datas):
+        raise RuntimeError('Athena getTradesBySettle: ' + '; '.join(
+            '%s: %s' % (f['date'], f['reason']) for f in falhas))
+
+    gravadas, novas, ja = {}, [], 0
+    for rec in recs:
+        dia = R._parse_date_any(rec.get('data_recompra')) or ref
+        if dia not in gravadas:
+            gravadas[dia] = queries.chaves_do_dia(dia)
+        if rec['athena_id'].upper() in gravadas[dia]:
+            ja += 1
+            continue
+        gravadas[dia].add(rec['athena_id'].upper())
+        novas.append((dia, rec))
+    out = {'rows': [], 'warnings': [], 'failed': falhas, 'existing': ja,
+           'skipped': pulados, 'dates': [d.isoformat() for d in datas], 'source_date': ''}
+    if not novas:
+        return out
+    rows, avisos, src = _montar_linhas([r for _d, r in novas], ref)
+    por_dia = {}
+    for (dia, _rec), linha in zip(novas, rows):
+        por_dia.setdefault(dia, []).append(linha)
+    _gravar(por_dia)
+    out.update(rows=rows, warnings=avisos, source_date=src)
+    return out
 
 
 # ── O laco dos 30 minutos ────────────────────────────────────────────────────
-# A varredura tambem roda sozinha, como a do booking recap de NDF Comm e Opt
-# Comm — a tela sempre prometeu isso ("also runs on its own every 30 minutes")
-# e nao havia laco nenhum registrado: a recompra so entrava no clique do
-# Import. Nada quebrava; ela simplesmente ficava no Outlook ate alguem abrir a
-# pagina.
+# A recompra entra sozinha, sem ninguem abrir a pagina: o laco pede a API a
+# cada `POLL_MIN` minutos, dentro da janela de importacao da mesa, como os
+# pulls de NDF e FXO do New Deals. Era a varredura do Outlook ate 20/10/2026.
 #
-# E laco PROPRIO, e nao uma parada dentro do `features/boxscan`: nesta casa
-# feature nao importa feature (nenhuma das 49 importa, e o `check_soc_layers` e
-# quem segura). O que as duas compartilham de verdade e o INTERVALO — a mesma
-# `BOX_SCAN_POLL_MIN` —, para a mesa ter um botao so para "a varredura do box".
-POLL_MIN = int(os.getenv('BOX_SCAN_POLL_MIN', '30') or 30)
+# E laco PROPRIO da vertical: nesta casa feature nao importa feature (nenhuma
+# das 49 importa, e o `check_soc_layers` e quem segura), e o wiring e o do
+# `routes.py` (`_schedule_on_start`).
+POLL_MIN = int(os.getenv('OTC_UNWIND_API_POLL_MIN', '30') or 30)
 
 _scheduler_started = False
 _scheduler_lock = threading.Lock()
 
 
 def scheduler_loop():
-    """Uma varredura a cada `POLL_MIN` minutos, dentro da janela da mesa.
+    """Um pull da API a cada `POLL_MIN` minutos, dentro da janela da mesa.
 
     O `_app_context` e obrigatorio: a thread do scheduler nao tem um, e o
     caminho do import passa pelo Live Position e pelo armazem (§8). O erro
-    REPETIDO sai uma vez so — sem Outlook (a dev e macOS) seriam 48 linhas por
-    dia dizendo a mesma coisa, e e ai que o log para de ser lido.
+    REPETIDO sai uma vez so — a API fora do ar seriam 24 linhas por dia
+    dizendo a mesma coisa, e e ai que o log para de ser lido.
     """
     from apps.pages import data_store
     ultimo = ''
@@ -261,65 +412,58 @@ def scheduler_loop():
             continue                    # fora do horario da mesa
         try:
             with R._app_context():
-                out = scan_box()
+                out = importar_da_api()
             ultimo = ''
-            _avisar_varredura(out)
+            _avisar_pull(out)
         except data_store.BancoOcupado as exc:
-            # E um IOError, e cairia no EnvironmentError abaixo como "sem
-            # Outlook", em INFO: e a instancia vizinha gravando (§434).
-            R.log.warning('[unwind-boxscan] banco ocupado, fica para a proxima '
-                          'volta (%s)', exc)
-        except EnvironmentError as exc:
-            # Sem Outlook (host nao-Windows): estado esperado, nao e falha.
-            if ultimo != str(exc):
-                R.log.info('[unwind-boxscan] indisponivel: %s', exc)
-            ultimo = str(exc)
+            R.log.warning('[unwind-api] banco ocupado, fica para a proxima volta (%s)', exc)
         except Exception as exc:                            # noqa: BLE001
             if ultimo != str(exc):
-                R.log.warning('[unwind-boxscan] varredura falhou: %s\n%s',
-                              exc, traceback.format_exc())
+                R.log.warning('[unwind-api] pull falhou: %s\n%s', exc, traceback.format_exc())
             else:
-                R.log.debug('[unwind-boxscan] varredura falhou de novo: %s', exc)
+                R.log.debug('[unwind-api] pull falhou de novo: %s', exc)
             ultimo = str(exc)
 
 
-def _avisar_varredura(out):
-    """O sino e o log do que a varredura automatica trouxe.
+def _avisar_pull(out):
+    """O sino e o log do que o pull automatico trouxe.
 
-    So avisa quando ENTROU alguma coisa: o laco roda o dia inteiro e a caixa
-    esta vazia quase sempre. E-mail que o parser recusou vai para o log em
-    WARNING mesmo sem linha nenhuma — ele ficou no box, e alguem precisa saber
-    por que.
+    So avisa quando ENTROU alguma coisa: o laco roda o dia inteiro e quase
+    sempre nao ha recompra nova. A data cuja API falhou vai para o log em
+    WARNING mesmo sem linha nenhuma — a recompra dela pode estar faltando.
     """
     R = _R()
     rows = (out or {}).get('rows') or []
-    falhas = (out or {}).get('failed') or []
-    for f in falhas:
-        R.log.warning('[unwind-boxscan] %r nao entrou (e-mail mantido no box): %s',
-                      f.get('subject') or '', f.get('reason') or '')
+    for f in (out or {}).get('failed') or []:
+        R.log.warning('[unwind-api] liquidacao de %s nao respondeu: %s',
+                      f.get('date') or '', f.get('reason') or '')
     if not rows:
         return
-    R.log.info('[unwind-boxscan] %d e-mail(s) · %d recompra(s) importada(s) · '
-               '%d recusada(s)', (out or {}).get('scanned') or 0, len(rows), len(falhas))
-    R._create_notification(BOX_MAKER_SID, 'Box Scan', 'Imported', PAGE,
-                           'Outlook box: %d unwind%s' % (len(rows),
-                                                         '' if len(rows) == 1 else 's'))
+    R.log.info('[unwind-api] %d recompra(s) importada(s) · %d ja estavam no dia · datas %s',
+               len(rows), (out or {}).get('existing') or 0,
+               ', '.join((out or {}).get('dates') or []))
+    R._create_notification(API_MAKER_SID, API_MAKER_NAME, 'Imported', PAGE,
+                           'Athena API: %d unwind%s' % (len(rows), '' if len(rows) == 1 else 's'))
 
 
 def start_scheduler():
     """Sobe o laco UMA vez por processo. Quem o chama e o wiring do
     `routes.py` (`_schedule_on_start`), que respeita o `OTC_DISABLE_SCHEDULERS`
     dos testes — a feature nunca sobe thread no proprio import."""
+    from apps.pages import athena_api
     global _scheduler_started
+    R = _R()
+    if not athena_api.is_available():
+        R.log.info('[unwind-api] scheduler NAO iniciado (requests ausente)')
+        return
     with _scheduler_lock:
         if _scheduler_started:
             return
         _scheduler_started = True
     threading.Thread(target=scheduler_loop,
-                     name='unwind-box-scan-scheduler', daemon=True).start()
-    R = _R()
-    R.log.info('[unwind-boxscan] scheduler do box iniciado (a cada %d min · '
-               'janela %s BRT · NDF FX)', POLL_MIN, R._import_window_label())
+                     name='unwind-api-scheduler', daemon=True).start()
+    R.log.info('[unwind-api] scheduler da recompra iniciado (a cada %d min · '
+               'janela %s BRT · NDF FX pela API)', POLL_MIN, R._import_window_label())
 
 
 # ── O arquivo da B3 ──────────────────────────────────────────────────────────

@@ -2585,6 +2585,8 @@
   "cfm-c-feptype": "FepWeb Type",
   "cfm-c-fepcount": "FepWeb Count",
   "ndfsum-unwind": "Unwind",
+  "unw-dropzone-title": "Drop the unwind notification here, or click to upload.",
+  "unw-dropzone-hint": "Leave it empty and click Import to pull the unwinds of the Reference Date from the Athena API (the pull also runs on its own every 30 minutes) — or drop the Athena e-mail (.msg, .eml or .htm) if the API is down.",
   "unw-dropzone-title-generic": "Drop the unwind spreadsheet or e-mail here, or click to upload.",
   "unw-dropzone-hint-generic": "Excel, CSV or the e-mail (.msg/.eml) with the table pasted from Excel — grid columns as the header (labels or field names) — then click Import.",
   "unw-preview-hint-generic": "Double-click a row to preview the B3 file",

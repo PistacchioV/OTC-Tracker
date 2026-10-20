@@ -2585,6 +2585,8 @@
   "cfm-c-feptype": "Tipo FepWeb",
   "cfm-c-fepcount": "Qtde. no FepWeb",
   "ndfsum-unwind": "Recompra",
+  "unw-dropzone-title": "Solte aqui o aviso de recompra, ou clique para enviar.",
+  "unw-dropzone-hint": "Deixe vazio e clique em Import para puxar da API do Athena as recompras da Reference Date (o pull também roda sozinho a cada 30 minutos) — ou solte o e-mail do Athena (.msg, .eml ou .htm) se a API estiver fora do ar.",
   "unw-dropzone-title-generic": "Solte aqui a planilha ou o e-mail da recompra, ou clique para enviar.",
   "unw-dropzone-hint-generic": "Excel, CSV ou o e-mail (.msg/.eml) com a tabela colada do Excel — colunas da grade no cabeçalho (rótulos ou nomes de campo) — depois clique em Import.",
   "unw-preview-hint-generic": "Duplo clique na linha para ver o arquivo da B3",
