@@ -311,7 +311,9 @@
   function openTask(pid, tid) {
     var x = findTask(pid, tid);
     if (!x) return;
-    P.openTaskDrawer({ project: { id: x.project_id, name: x.project_name, color: x.project_color }, task: x,
+    // o responsável sai dos envolvidos NA iniciativa da tarefa (§639)
+    var pr = ((S.d && S.d.projects_all) || []).filter(function (p) { return p.id === x.project_id; })[0] || {};
+    P.openTaskDrawer({ project: { id: x.project_id, name: x.project_name, color: x.project_color, involved: pr.involved }, task: x,
                        onChange: function () { load(); } });
   }
 

@@ -226,7 +226,7 @@
   function openTask(id) {
     var x = (state.p.tasks || []).filter(function (k) { return k.id === id; })[0];
     if (!x) return;
-    P.openTaskDrawer({ task: x, project: { id: state.p.id, name: state.p.name, color: state.p.color }, onChange: render });
+    P.openTaskDrawer({ task: x, project: { id: state.p.id, name: state.p.name, color: state.p.color, people: state.p.people }, onChange: render });
   }
 
   function wire() {

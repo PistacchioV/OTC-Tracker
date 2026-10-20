@@ -39,6 +39,9 @@ MAX_DESCRIPTION = 600
 MAX_TITLE = 200
 MAX_COMMENT = 2000
 MAX_ACTIVITY = 200
+# O TIME da iniciativa (mesa, 20/10/2026): os envolvidos além do Lead, mesmo
+# sem tarefa. Mesmas pessoas que podem liderar (`LEAD_ROLES`).
+MAX_MEMBERS = 30
 # Burn-up com mais pontos que isto é amostrado (o último dia entra sempre).
 MAX_BURNUP_POINTS = 120
 
@@ -140,11 +143,70 @@ def validate_project(data, people, current=None):
     if not partial or 'due_date' in data:
         out['due_date'] = iso_date(data.get('due_date'), 'due_date')
 
+    if not partial or 'member_sids' in data:
+        lead = out.get('lead_sid', (current or {}).get('lead_sid', ''))
+        out['members'] = _members(data.get('member_sids'), people, current, lead)
+
     start = out.get('start_date', (current or {}).get('start_date', ''))
     due = out.get('due_date', (current or {}).get('due_date', ''))
     if start and due and due < start:
         raise ProjectError('due_before_start', 'The target date is before the start date.')
     return out
+
+
+def _members(sids, people, current, lead_sid):
+    """O time, limpo: [{sid, name}] sem repetir e sem o Lead (ele já está na
+    iniciativa como Lead). Quem JÁ estava no time continua válido mesmo que
+    tenha saído do BO — a mesma regra do Lead gravado; quem entra agora tem de
+    ser elegível."""
+    if sids is None or sids == '':
+        sids = []
+    if not isinstance(sids, (list, tuple)):
+        raise ProjectError('bad_choice', 'Invalid value for "members".', field='members')
+    ja = {m.get('sid'): m.get('name', '') for m in (current or {}).get('members') or []}
+    out, vistos = [], set()
+    for sid in sids:
+        sid = str(sid or '').strip().upper()
+        if not sid or sid in vistos or sid == str(lead_sid or '').upper():
+            continue
+        vistos.add(sid)
+        if sid in ja:
+            out.append({'sid': sid, 'name': ja[sid]})
+        else:
+            sid, nome = _person(sid, people, 'members', False)
+            out.append({'sid': sid, 'name': nome})
+    if len(out) > MAX_MEMBERS:
+        raise ProjectError('too_many_members', 'At most %d people in the team.' % MAX_MEMBERS,
+                           max=MAX_MEMBERS)
+    return out
+
+
+def new_members(before, after):
+    """Quem ENTROU no time (para o aviso no sino): os SIDs de `after` que
+    não estavam em `before`."""
+    antes = {m.get('sid') for m in before or []}
+    return [m for m in after or [] if m.get('sid') not in antes]
+
+
+def involved_sids(project):
+    """Os SIDs de quem está na iniciativa — o Lead, o time e quem já tem
+    tarefa (a lista de `people`)."""
+    return [p['sid'] for p in people(project, {})]
+
+
+def assignable(project, people_list, data, current=None):
+    """As pessoas que podem receber ESTA tarefa: o responsável da tarefa é
+    escolhido entre os ENVOLVIDOS na iniciativa (mesa, 20/10/2026) — e continua
+    tendo de ser elegível (BO/Admin ativo). Responsável escolhido fora do time
+    recusa com o código próprio, que diz o que fazer: incluir a pessoa no time
+    da iniciativa primeiro. O responsável que a tarefa JÁ tem é mantido."""
+    dentro = set(involved_sids(project))
+    sid = str((data or {}).get('assignee_sid') or '').strip().upper()
+    if sid and sid not in dentro and sid != (current or {}).get('assignee_sid'):
+        if any(p['sid'] == sid for p in people_list or []):
+            raise ProjectError('assignee_not_in_team',
+                               'Add this person to the initiative team before giving them a task.')
+    return [p for p in people_list or [] if p['sid'] in dentro]
 
 
 def validate_task(data, people, current=None):
@@ -234,8 +296,10 @@ def days_left(project, today):
 
 
 def people(project, directory):
-    """O Lead primeiro, depois quem tem tarefa, na ordem em que entrou — cada
-    um com as tarefas em aberto. `directory` = {SID: {name, position}}."""
+    """O Lead primeiro, depois o TIME (§639) e quem tem tarefa, na ordem em que
+    entrou — cada um com as tarefas em aberto. `directory` = {SID: {name,
+    position}}. A User Home tem a mesma regra (`user_home.domain.envolvidos`):
+    feature não importa feature."""
     ordem, vistos = [], set()
 
     def add(sid, name):
@@ -249,6 +313,8 @@ def people(project, directory):
                           'open_tasks': 0})
 
     add(project.get('lead_sid'), project.get('lead_name'))
+    for m in project.get('members') or []:
+        add(m.get('sid'), m.get('name'))
     for t in project.get('tasks') or []:
         add(t.get('assignee_sid'), t.get('assignee_name'))
     abertas = {}
@@ -301,6 +367,8 @@ def summary(project):
         'icon': project.get('icon', ICONS[0]),
         'lead_sid': project.get('lead_sid', ''),
         'lead_name': project.get('lead_name', ''),
+        'members': [{'sid': m.get('sid', ''), 'name': m.get('name', '')}
+                    for m in project.get('members') or []],
         'start_date': project.get('start_date', ''),
         'due_date': project.get('due_date', ''),
         'progress': progress(project),

@@ -17,6 +17,7 @@
       n_task_assigned: 'Task assigned', n_task_assigned_s: 'When a task is given to you',
       n_task_comment: 'Comments', n_task_comment_s: 'When someone comments on your task',
       n_project_lead: 'Initiative lead', n_project_lead_s: 'When you are made lead of an initiative',
+      n_project_member: 'Initiative team', n_project_member_s: 'When you are added to the team of an initiative',
       n_due_dates: 'Due dates', n_due_dates_s: 'The morning a task of yours is due (08:00)',
       n_focus_finished: 'Focus finished', n_focus_finished_s: 'When a session ends',
       session: 'Session', break_: 'Break', goal: 'Daily goal', min: 'min', shorter: 'Shorter', longer: 'Longer',
@@ -32,6 +33,7 @@
       n_task_assigned: 'Tarefa atribuída', n_task_assigned_s: 'Quando uma tarefa é passada para você',
       n_task_comment: 'Comentários', n_task_comment_s: 'Quando alguém comenta na sua tarefa',
       n_project_lead: 'Líder de iniciativa', n_project_lead_s: 'Quando você vira líder de uma iniciativa',
+      n_project_member: 'Time de iniciativa', n_project_member_s: 'Quando você é incluído no time de uma iniciativa',
       n_due_dates: 'Prazos', n_due_dates_s: 'Na manhã em que uma tarefa sua vence (08:00)',
       n_focus_finished: 'Fim do foco', n_focus_finished_s: 'Quando uma sessão termina',
       session: 'Sessão', break_: 'Pausa', goal: 'Meta diária', min: 'min', shorter: 'Menos', longer: 'Mais',
@@ -47,6 +49,7 @@
       n_task_assigned: 'Tarea asignada', n_task_assigned_s: 'Cuando le asignan una tarea',
       n_task_comment: 'Comentarios', n_task_comment_s: 'Cuando alguien comenta su tarea',
       n_project_lead: 'Líder de iniciativa', n_project_lead_s: 'Cuando lo nombran líder de una iniciativa',
+      n_project_member: 'Equipo de iniciativa', n_project_member_s: 'Cuando lo incluyen en el equipo de una iniciativa',
       n_due_dates: 'Vencimientos', n_due_dates_s: 'La mañana en que vence una tarea suya (08:00)',
       n_focus_finished: 'Fin del foco', n_focus_finished_s: 'Cuando termina una sesión',
       session: 'Sesión', break_: 'Pausa', goal: 'Meta diaria', min: 'min', shorter: 'Menos', longer: 'Más',
@@ -69,6 +72,7 @@
     ['task_assigned', 'list-checks', 'var(--otc-blue)'],
     ['task_comment', 'message-square', 'var(--otc-teal)'],
     ['project_lead', 'folder-kanban', 'var(--otc-purple)'],
+    ['project_member', 'users', 'var(--otc-indigo)'],
     ['due_dates', 'flag', 'var(--otc-orange)'],
     ['focus_finished', 'timer', 'var(--otc-pink)']
   ];

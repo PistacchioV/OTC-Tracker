@@ -28,6 +28,16 @@
                         <label class="form-label fs-xs text-muted mb-1" for="pjm-lead" data-lang="pj-f-lead">Lead</label>
                         <select class="form-select" id="pjm-lead"></select>
                     </div>
+                    {# O TIME (§639): os envolvidos além do Lead, mesmo sem tarefa —
+                       as mesmas pessoas que podem liderar. São eles que podem
+                       receber as tarefas da iniciativa. #}
+                    <div class="col-12">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjm-team-add" data-lang="pj-f-team">Team</label>
+                        <div class="pj-team">
+                            <div class="pj-team__chips" id="pjm-team"></div>
+                            <select class="form-select pj-team__add" id="pjm-team-add"></select>
+                        </div>
+                    </div>
                     <div class="col-md-6 d-none" id="pjm-status-wrap">
                         <label class="form-label fs-xs text-muted mb-1" for="pjm-status" data-lang="pj-f-status">Status</label>
                         <select class="form-select" id="pjm-status"></select>

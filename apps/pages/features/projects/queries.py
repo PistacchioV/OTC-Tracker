@@ -91,7 +91,9 @@ def all_tasks():
             if t.get('status') != domain.DONE:
                 abertas += 1
         projetos.append({'id': p['id'], 'name': p.get('name', ''), 'color': p.get('color', domain.COLORS[0]),
-                         'status': p.get('status', domain.DEFAULT_STATUS), 'open': abertas})
+                         'status': p.get('status', domain.DEFAULT_STATUS), 'open': abertas,
+                         # quem pode receber tarefa nela (§639)
+                         'involved': domain.involved_sids(p)})
     tarefas.sort(key=lambda t: (_PRIO_ORDER.get(t.get('priority'), 9), t.get('due') or '9999-12-31',
                                 t.get('project_id', ''), t.get('id', '')))
     projetos.sort(key=lambda p: (_STATUS_ORDER.get(p['status'], 9), p['name'].lower()))
