@@ -129,9 +129,12 @@ def api_intraday_monitor():
 # ── Arrastar o card de tarefa (§632) ───────────────────────────────────────────
 # O estado de cada tarefa é CALCULADO (a recon rodou, o End process); soltar o
 # card noutra coluna grava um ajuste manual do dia, com quem e quando, que vale
-# por cima. Tarefa de zona não se move (o estado dela é a contagem). As tarefas
-# do Monitor são do OTC Ops (BO): a mesa anda um passo à frente; admin e master
-# põem qualquer estado, ou `auto` para devolver ao cálculo.
+# por cima — inclusive na tarefa de ZONA (B3 Registration, Confirmations,
+# Intrag), cujo estado é a contagem: travada, ela não arrastava e não dizia
+# por quê, e a mesa lia o quadro como quebrado (20/10/2026). O ajuste é dela,
+# com quem/quando no card e o "↺ auto" para voltar. As tarefas do Monitor são
+# do OTC Ops (BO): a mesa anda um passo à frente; admin e master põem
+# qualquer estado, ou `auto` para devolver ao cálculo.
 _IM_NEXT = {'todo': ('in_progress',), 'in_progress': ('done',), 'late': ('done',)}
 _IM_DESK = ('BO',)
 
@@ -149,9 +152,6 @@ def api_intraday_override():
     tdef = next((t for t in _dom.TASKS if t['id'] == task), None)
     if tdef is None:
         return jsonify({'success': False, 'code': 'unknown_task'}), 400
-    if tdef.get('kind') == 'zone':
-        return jsonify({'success': False, 'code': 'zone_not_movable',
-                        'message': 'Zone tasks follow the count and cannot be moved.'}), 400
     if para not in task_runs.OVERRIDE_STATES + ('auto',):
         return jsonify({'success': False, 'code': 'bad_state'}), 400
     R = _R()
