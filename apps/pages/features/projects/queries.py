@@ -2,6 +2,7 @@
 """As leituras do Projects e o payload que as duas telas desenham."""
 from apps.pages.features.projects import domain
 from apps.pages.features.projects.infra import people, store
+from apps.pages.platform import user_photos
 
 _STATUS_ORDER = {s: i for i, s in enumerate(domain.STATUSES)}
 _TASK_ORDER = {s: i for i, s in enumerate(domain.TASK_STATUSES)}
@@ -12,15 +13,18 @@ def eligible(me):
     """Quem pode ser Lead ou responsável: o cadastro Active com papel BO ou
     ADMIN, mais a própria sessão quando ela é BO/Admin/master — o admin que
     não está no cadastro (o master, a dev) também lidera. `me` = {sid, name,
-    role}. Ordem alfabética."""
+    role}. Ordem alfabética. Cada um leva a `photo` (URL, ou '' sem arquivo):
+    é por ela que o avatar de Lead, responsável, comentário e atividade mostra
+    a foto em vez das iniciais."""
     out, vistos = [], set()
     for u in people.users():
         if u['role'] in domain.LEAD_ROLES and u['status'] == 'ACTIVE' and u['sid'] not in vistos:
             vistos.add(u['sid'])
-            out.append({'sid': u['sid'], 'name': u['name'] or u['sid'], 'position': u['position']})
+            out.append({'sid': u['sid'], 'name': u['name'] or u['sid'], 'position': u['position'],
+                        'photo': user_photos.url(u['sid'])})
     sid = str((me or {}).get('sid') or '').upper()
     if sid and sid not in vistos and str(me.get('role') or '').upper() in domain.LEAD_ROLES:
-        out.append({'sid': sid, 'name': me.get('name') or sid, 'position': ''})
+        out.append({'sid': sid, 'name': me.get('name') or sid, 'position': '', 'photo': user_photos.url(sid)})
     out.sort(key=lambda p: p['name'].lower())
     return out
 

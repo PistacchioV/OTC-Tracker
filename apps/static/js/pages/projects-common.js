@@ -306,8 +306,21 @@
     return ((p[0][0] || '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase();
   }
   // `photo`: a URL da foto (`images/users/<sid>.jpg`, que o servidor só manda
-  // quando o arquivo existe) — vai POR CIMA das iniciais, que ficam de reserva
+  // quando o arquivo existe) — vai POR CIMA das iniciais, que ficam de reserva.
+  // Sem ela, a foto sai da lista de pessoas (`meta.people[].photo`): é assim que
+  // Lead, responsáveis, comentários e atividade ganham a foto sem cada tela
+  // pedir. O plano B é o NOME exato: os participantes da reunião (User Home)
+  // vêm do Outlook por nome, sem SID
+  function photoOf(sid, name) {
+    sid = String(sid || '').toUpperCase();
+    var nm = String(name || '').trim().toLowerCase();
+    var people = meta.people || [];
+    var p = people.filter(function (x) { return x.sid === sid; })[0] ||
+      (nm ? people.filter(function (x) { return String(x.name || '').trim().toLowerCase() === nm; })[0] : null);
+    return (p && p.photo) || '';
+  }
   function avatar(sid, name, size, photo) {
+    if (photo === undefined) photo = photoOf(sid, name);
     var h = 0, k = String(sid || name || '');
     for (var i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
     var c = AV_HUES[h % AV_HUES.length];
