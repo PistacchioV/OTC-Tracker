@@ -161,6 +161,59 @@ _CETIP_BEHAVIOUR = {
 _CETIP_DATE_TOKEN = 'YYMMDD'
 
 
+# ── O nome NOVO do arquivo cru (20/10/2026) ──────────────────────────────────
+# A B3 passou a entregar os arquivos na pasta Return do Batch Conecta,
+# compactados e com o nome num ENVELOPE:
+#
+#   73760_CETIP_261019_SP_CADASTROCURVASMOEDASFEEDERDOMINIOS.txt.zip.S10567296
+#   └──┬┘ └─────────┬────┘└┬┘└──────────────┬─────────────────┘└┬─┘└───┬───┘
+#   participante  o nome ANTIGO até a data   o resto do nome antigo  zip  a entrega
+#
+# Tirado o envelope (o participante, o `_SP` depois da data, o `.zip` e a
+# sequência da entrega), sobra o nome que o cadastro `cetip-files` sempre
+# guardou: `CETIP_261019_CADASTROCURVASMOEDASFEEDERDOMINIOS.txt`. A rotina
+# compara pelo nome ANTIGO (`_cetip_nome_legado`), então as linhas do cadastro
+# valem sem ser reescritas — e o SOURCE pode ser digitado nas duas formas.
+#
+# Só o participante do BANCO entra: os nomes de destino do cadastro são
+# `73760_YYMMDD_…`, e um arquivo de outro participante casaria com a mesma
+# linha e gravaria por cima do arquivo do banco.
+_CETIP_PARTICIPANTE = '73760'
+_CETIP_ENVELOPE = re.compile(
+    r'^(?P<part>\d{5})_(?P<sis>[A-Za-z0-9]+)_(?P<data>\d{6}|YYMMDD)_SP_(?P<nome>.+?)'
+    r'(?P<zip>\.zip)?(?:\.S(?P<seq>\d+))?$', re.I)
+
+
+def _cetip_envelope(nome):
+    """O nome novo desmontado — `{participante, sistema, data, nome, legado,
+    seq, zip}` —, ou None quando o nome não está no envelope (o nome antigo, um
+    retorno do Batch Conecta, qualquer outro arquivo da pasta)."""
+    m = _CETIP_ENVELOPE.match(os.path.basename(str(nome or '').strip()))
+    if not m:
+        return None
+    return {'participante': m.group('part'), 'sistema': m.group('sis'),
+            'data': m.group('data'), 'nome': m.group('nome'),
+            'legado': '%s_%s_%s' % (m.group('sis'), m.group('data'), m.group('nome')),
+            'seq': int(m.group('seq')) if m.group('seq') else -1,
+            'zip': bool(m.group('zip'))}
+
+
+def _cetip_nome_legado(nome):
+    """O nome como o cadastro o conhece: o do envelope do BANCO volta sem ele;
+    qualquer outro volta como veio."""
+    env = _cetip_envelope(nome)
+    if env and env['participante'] == _CETIP_PARTICIPANTE:
+        return env['legado']
+    return str(nome or '')
+
+
+def _cetip_ordem(nome):
+    """A ordem das entregas do MESMO arquivo: a sequência da B3 (`.S<n>`),
+    maior = mais nova; o nome antigo, sem sequência, vem antes de todas."""
+    env = _cetip_envelope(nome)
+    return (env['seq'] if env else -1, str(nome or ''))
+
+
 def _cetip_split_pattern(pattern):
     """`'CETIP21_YYMMDD_DPOSICAO-SWAP'` → `(8, '_dposicao-swap')`.
 
@@ -168,8 +221,11 @@ def _cetip_split_pattern(pattern):
     não tiver o `YYMMDD`. A extensão é descartada: o cadastro guarda o nome sem
     `.TXT` (é o formato que o usuário digita) e a comparação é feita contra o
     nome do arquivo sem extensão, o que faz `.TXT` e `.txt` casarem sozinhos.
+
+    O padrão escrito no nome NOVO (`73760_CETIP_YYMMDD_SP_…`) vale como o
+    antigo: os dois viram o nome antigo antes de qualquer conta.
     """
-    s = os.path.splitext(str(pattern or '').strip())[0]
+    s = os.path.splitext(_cetip_nome_legado(str(pattern or '').strip()))[0]
     i = s.upper().find(_CETIP_DATE_TOKEN)
     if i < 0:
         return None
@@ -195,10 +251,12 @@ def _cetip_make_matcher(pattern, label):
     if not parts:
         return None
     idx, tail = parts
-    head = os.path.splitext(str(pattern or '').strip())[0][:idx].lower()
+    head = os.path.splitext(_cetip_nome_legado(str(pattern or '').strip()))[0][:idx].lower()
 
     def _match(name_lower):
-        stem = os.path.splitext(name_lower)[0]
+        # O arquivo no nome NOVO (a Return, desde 20/10/2026) é comparado pelo
+        # nome antigo, sem o envelope.
+        stem = os.path.splitext(_cetip_nome_legado(name_lower).lower())[0]
         if tail and not stem.endswith(tail):
             return False
         date = stem[idx:idx + 6]

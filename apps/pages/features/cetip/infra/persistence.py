@@ -7,7 +7,10 @@ e recon_cgd leem a mesma raiz de destino — são plataforma (§8: nenhum módul
 escreve a raiz à mão).
 """
 import os
+import shutil
+import tempfile
 import traceback
+import zipfile
 
 from apps.pages.features.cetip import domain
 from apps.pages import data_store as _store  # noqa: E402
@@ -87,6 +90,92 @@ def _cetip_save_file(src_path, dest_path):
         out += '\r\n'
     with open(dest_path, 'w', encoding='latin-1', newline='') as f:
         f.write(out)
+
+
+# ── A pasta Return do Batch Conecta (20/10/2026) ─────────────────────────────
+# A B3 passou a deixar os arquivos crus na Return, compactados e no nome novo
+# (`domain._cetip_envelope`). A rotina os TRAZ para a pasta de origem do dia —
+# que é onde o cru sempre ficou guardado, e de onde o reprocessamento de um dia
+# passado os lê —, processa de lá e só então os APAGA da Return.
+#
+# A Return é a mesma pasta de onde os Mapping B3 ID leem o retorno do Batch
+# Conecta, e por isso só se toca no arquivo que está no envelope do BANCO e é
+# da data da rodada: retorno de registro, arquivo de outro participante ou de
+# outro dia ficam onde estão.
+
+def _cetip_trazer_do_retorno(retorno, origem, yymmdd):
+    """Copia para `origem` os arquivos crus da data `yymmdd` que estão na
+    `retorno`, byte a byte e com o nome como chegou.
+
+    -> (trazidos [(nome, caminho na Return)], erros [{file, type, error}]).
+    O que não se copiou (ou se copiou com outro tamanho) fica na Return e vai
+    nos erros: é ele que a rodada seguinte tenta de novo, e apagá-lo seria
+    perder o único exemplar."""
+    trazidos, erros = [], []
+    if not retorno or not os.path.isdir(retorno):
+        return trazidos, erros
+    for nome in sorted(os.listdir(retorno)):
+        env = domain._cetip_envelope(nome)
+        if (not env or env['participante'] != domain._CETIP_PARTICIPANTE
+                or env['data'] != yymmdd):
+            continue
+        src = os.path.join(retorno, nome)
+        if not os.path.isfile(src):
+            continue
+        dst = os.path.join(origem, nome)
+        try:
+            os.makedirs(origem, exist_ok=True)
+            tam = os.path.getsize(src)
+            if not (os.path.isfile(dst) and os.path.getsize(dst) == tam):
+                shutil.copy2(src, dst)
+            if os.path.getsize(dst) != tam:
+                raise IOError('the copy has {} bytes, the file in Return has {}'.format(
+                    os.path.getsize(dst), tam))
+            trazidos.append((nome, src))
+        except Exception as exc:                            # noqa: BLE001
+            _R().log.warning('[cetip] %s nao foi trazido da Return para %s:\n%s',
+                             nome, origem, traceback.format_exc())
+            erros.append({'file': nome, 'type': 'Return',
+                          'error': 'not copied to the source folder: {}'.format(exc)})
+    return trazidos, erros
+
+
+def _cetip_apagar_do_retorno(trazidos):
+    """Apaga da Return o que JÁ está guardado na pasta de origem.
+    -> (apagados [nome], erros [{file, type, error}])."""
+    apagados, erros = [], []
+    for nome, caminho in trazidos or []:
+        try:
+            os.remove(caminho)
+            apagados.append(nome)
+        except Exception as exc:                            # noqa: BLE001
+            _R().log.warning('[cetip] %s nao foi apagado da Return:\n%s',
+                             nome, traceback.format_exc())
+            erros.append({'file': nome, 'type': 'Return',
+                          'error': 'saved, but not deleted from Return: {}'.format(exc)})
+    return apagados, erros
+
+
+def _cetip_texto_cru(caminho, tmpdir):
+    """O arquivo cru pronto para LER: o próprio caminho ou — compactado, que é
+    como ele chega na Return desde 20/10/2026 — o arquivo de dentro do zip,
+    extraído num temporário. O cru guardado na origem fica como chegou.
+
+    Quem decide é o CONTEÚDO (`is_zipfile`), não o nome. Zip com mais de um
+    arquivo levanta dizendo quais: escolher um deles em silêncio seria salvar
+    no destino um arquivo que talvez não seja o daquela linha do cadastro."""
+    if not zipfile.is_zipfile(caminho):
+        return caminho
+    with zipfile.ZipFile(caminho) as z:
+        membros = [i for i in z.infolist() if not i.is_dir()]
+        if len(membros) != 1:
+            raise ValueError('the zip carries {} files ({}) — expected exactly one'.format(
+                len(membros), ', '.join(i.filename for i in membros[:5]) or 'none'))
+        pasta = tempfile.mkdtemp(dir=tmpdir)
+        alvo = os.path.join(pasta, os.path.basename(membros[0].filename) or 'cetip.txt')
+        with z.open(membros[0]) as fin, open(alvo, 'wb') as fout:
+            shutil.copyfileobj(fin, fout)
+    return alvo
 
 
 def _cetip_update_vcp_json(src_path):
