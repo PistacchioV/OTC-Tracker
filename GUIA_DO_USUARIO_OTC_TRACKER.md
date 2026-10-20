@@ -399,7 +399,9 @@ São quadrados coloridos de canto arredondado, sempre na mesma ordem e sempre co
 | **Save** | Verde | disquete | Grava a edição em curso |
 | **Cancel** | Cinza | × | Descarta a edição em curso |
 
-> **O Send mostra o envio acontecendo.** Ao clicar no **Send** da linha — ou no **Send** da barra, que envia as linhas marcadas —, o avião decola e o botão vai ficando verde enquanto o sistema envia; ele fica **verde com "Sent"** só quando o servidor confirma. Se der erro, o botão treme em vermelho e volta à cor normal. Fora disso ele fica azul, como sempre.
+> **O Send mostra o envio acontecendo.** Ao clicar no **Send** da linha — ou no **Send** da barra, que envia as linhas marcadas —, o rótulo some e o avião atravessa o botão na ponta de uma faixa mais clara, enquanto o sistema envia. **"Sent"** (ou um ✓, no botão da linha) só aparece quando o servidor confirma; depois a faixa recua e o botão volta ao normal. Se der erro, o botão treme e volta. O botão continua **azul** o tempo todo.
+>
+> **Os ícones que giram** (o de carregamento dos botões *Run*, o *Refresh* das telas que se atualizam) dão uma volta a cada pouco mais de um segundo. Girando, querem dizer só "trabalhando" — o resultado vem na mensagem de cada rotina.
 
 ### 4.11. Datas
 

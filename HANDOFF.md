@@ -26889,3 +26889,45 @@ o outro participante de fora, o upgrade do COE, a rodada inteira em tmp
 não é da rodada, o zip com dois arquivos, o não pedido contado, a cópia que
 falha ficando, o reprocessamento pela origem). `check_cetip_bacc`,
 `check_cetip_dominio`, `check_cetip_json_export` e `check_cetip_subj` verdes.
+
+## §644 — O Send no modelo do Contrail, sem verde; os spinners no ritmo (2026-10-20)
+
+**"A animação do botão send não está igual ao modelo enviado, e tem que manter
+a cor do botão atual, ele mudou pra verde."** O §641/§642 tinha deixado o
+botão na cor dele EM REPOUSO, mas o "Sent" ainda pintava tudo de verde (o
+preenchimento verde e o `--otc-gel` trocado), e o voo não era o do vídeo: o
+avião saía disparado sozinho com um rastro e o verde vinha atrás.
+
+O vídeo de referência (`contrail.mp4`, visto em folha de quadros) faz outra
+coisa: o rótulo some, o avião vai na PONTA de um preenchimento que avança da
+esquerda, o preenchimento completo mostra "SENT", e na volta ele recua para a
+esquerda até um PONTO e o rótulo volta. O preenchimento do vídeo é a cor de
+cada botão (o SEND enche de verde, o SHIP de azul). Aqui o botão já É a cor, e
+a mesa quer que ela fique — então o preenchimento é a cor do TEXTO do botão em
+transparência (26%): clareia o azul do `btn-primary`, escurece o `btn-light`,
+e em nenhum caso troca a cor. Erro é só o tremor (sem vermelho).
+
+Por dentro: o fill passou de `clip-path` a LARGURA (`width:
+var(--otc-fill-w)`, cantos de pílula ou do squircle da linha), e o avião é uma
+cópia do ícone do botão DENTRO do fill, encostada na borda direita
+(`.otc-send__rider`) — anda com ele. O `otc.js` mede onde o ícone estava
+(`--otc-fill-start`: o avião sai do lugar dele, sem pular para a borda) e a
+altura do botão (`--otc-send-dot`, o ponto da volta — só na pílula; no
+quadrado da linha o ponto seria o botão inteiro). O rastro saiu.
+
+**"Verifique os spinners dos botões... o Save + OTC e-mail está malucão, o
+refresh do Intraday Monitor roda MUITO rápido."** Medido nas duas telas:
+uma animação só em cada ícone, girando pelo centro — o defeito era o RITMO. O
+rebranding passou a girar todo `ti-spin`/`ti-loader*` a .8 s e o refresh
+`.is-busy` a .6 s; antes dele esses ícones nem giravam (o tema antigo só tinha
+o `.icon-spin`, a 2 s). Nas máquinas do JP, sem GPU, a tela perde quadros
+durante o request, e giro rápido com poucos quadros anda aos trancos ou
+parece voltar. Agora é UM ritmo, `--otc-spin-dur` = 1,2 s por volta, para os
+dois.
+
+**Guarda.** `check_send_contrail.py`: o bloco sem o verde (`otc-send-ok`,
+`--otc-gel:`), e no Chromium a cor do `btn-primary` em repouso, no voo e no
+Sent, o avião na ponta do preenchimento, o Sent aparecendo; seção nova com os
+três ícones que giram a 1,2 s. Conferido em tira de quadros (pílula e quadrado,
+claro e escuro) e, nas telas reais, o Run do Control Panel e o refresh da
+Intraday Monitor a 1,2 s.
