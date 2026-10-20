@@ -55,7 +55,11 @@
 .acc-asof b { color: var(--otc-text); font-weight: 600; }
 
 /* ── Cartão de cada LOB (a placa é do tema) ──────────────────────────── */
-.acc-tcard { overflow: hidden; }
+/* Sem `overflow: hidden`: ele CORTAVA o menu do Export e do Columns na borda
+   do cartão (a tabela já rola sozinha, scrollX). O menu aberto sobe o cartão
+   acima do vizinho de baixo, que vem depois no DOM (mesa, 20/10/2026). */
+.acc-tcard { position: relative; }
+.acc-tcard:has(.dropdown-menu.show) { z-index: 50; }
 .acc-tcard__head {
     display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
     padding: .85rem 1.1rem; border-bottom: 1px solid var(--otc-sep);
