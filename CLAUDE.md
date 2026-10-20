@@ -2464,10 +2464,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 
 ### Intraday › Initiatives e Tasks (§631, §633)
 
-- **Na tela é INITIATIVES** (mesa, 20/10/2026, §633); rota, API, ids
-  (`PRJ-0001`), chaves de tradução (`pj-*`) e o código seguem `projects` de
-  propósito: o `Page_Access` grava a URL, e renomeá-la revogaria o acesso de
-  quem já a tem. O sino grava `Initiatives`/`Initiative Lead`, e os três mapas
+- **Na tela e no ENDEREÇO é INITIATIVES** (mesa, 20/10/2026, §633/§638): a
+  página é `/initiatives` e `/initiatives/<id>`; `/projects` e
+  `/projects/<id>` REDIRECIONAM (com o `?task=`), e o `Page_Access` gravado com
+  `/projects` vale para a página nova pelo `authz._renomeadas` — é assim que se
+  renomeia URL sem revogar acesso. A API (`/api/projects`), os ids
+  (`PRJ-0001`), as chaves de tradução (`pj-*`) e o código seguem `projects`:
+  não aparecem no navegador. O sino grava `Initiatives`/`Initiative Lead`, e os três mapas
   têm também o `Projects` dos avisos já gravados. Texto novo nessas telas diz
   "initiative", nunca "project" — `Projects` é uma das CATEGORIAS.
 - **Categoria é lista fechada** (`domain.CATEGORIES`: Process Review, Tech
@@ -2480,8 +2483,19 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `projects/projects.json` no armazém), ler → alterar → gravar dentro do
   `store.mutate`; o id (`PRJ-0001`) e os ids filhos são CONTADORES gravados —
   apagado nunca volta (o projeto fixado na barra de alguém abriria outro).
-- **Lead e responsável = usuários Active com papel BO ou ADMIN**, mais a
+- **Lead, time e responsável = usuários Active com papel BO ou ADMIN**, mais a
   própria sessão BO/Admin/master (`queries.eligible`). Regra da mesa.
+- **O TIME da iniciativa** (`members`, §639): os envolvidos além do Lead, mesmo
+  sem tarefa — sem repetir e sem o Lead; quem já estava segue nele fora do BO
+  (a regra do Lead gravado). Quem ENTRA é avisado (`Initiative Member`,
+  preferência `project_member`). **O responsável de cada tarefa sai dos
+  ENVOLVIDOS** — Lead, time e quem já tem tarefa (`domain.assignable`); fora
+  deles é 400 `assignee_not_in_team`, e o responsável que a tarefa já tem é
+  mantido. A User Home tem a MESMA regra de envolvido em
+  `user_home.domain.envolvidos` (feature não importa feature): mudou uma,
+  muda a outra. Tela que abre o modal ou a gaveta de tarefa passa os
+  envolvidos da iniciativa (`involved` ou `people`), senão o menu oferece
+  todos os elegíveis e só o servidor recusa.
 - **O avatar mostra a FOTO** (`images/users/<sid>.jpg`, a mesma da barra) de
   quem a tem (§634): cada pessoa do `eligible` leva `photo`, e o `avatar()` do
   `projects-common.js` a acha pelo SID (plano B: o nome exato — os
@@ -2489,8 +2503,8 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   nada. Quem responde é `platform/user_photos.url`, que LISTA a pasta uma vez
   por minuto: um `stat` por pessoa, com o código no share, é uma ida à rede
   por avatar.
-- **A API vale para `/projects` OU `/tasks`** (`entrypoint._can_see`): a Tasks
-  move as tarefas dos projetos. A página `/projects/<id>` confere na rota —
+- **A API vale para `/initiatives` OU `/tasks`** (`entrypoint._can_see`): a Tasks
+  move as tarefas dos projetos. A página `/initiatives/<id>` confere na rota —
   o `enforce_page_access` não a vê (não está no menu).
 - **Os modais esperam as listas da página** (`afterMeta`, §636): Lead,
   responsável e ícone vêm na resposta da página, que no JP leva segundos, e o
