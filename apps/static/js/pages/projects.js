@@ -1,5 +1,5 @@
 /* projects.js — a lista das iniciativas (Intraday › Initiatives; a rota e a
-   API seguem /projects): os contadores, os filtros por CATEGORIA e por
+   API segue /api/projects): os contadores, os filtros por CATEGORIA e por
    status, os cartões e o "New initiative". O desenho das peças e as frases
    estão no projects-common.js (OtcPj). */
 (function () {
@@ -108,10 +108,10 @@
       ms = '<div class="pj-card__ms-label">' + esc(t('next_ms')) + '</div>' +
            '<div class="pj-card__ms-title text-muted">' + esc(t('no_ms')) + '</div>';
     }
-    return '<div class="pj-card-panel" data-href="/projects/' + esc(encodeURIComponent(p.id)) + '" style="--hue:' + hue + '">' +
+    return '<div class="pj-card-panel" data-href="/initiatives/' + esc(encodeURIComponent(p.id)) + '" style="--hue:' + hue + '">' +
       '<div class="pj-card__top">' +
         '<span class="otc-icon-tile pj-card__icon" style="--hue:' + hue + '"><i data-lucide="' + esc(p.icon) + '"></i></span>' +
-        '<div class="pj-card__ttl"><a class="pj-card__name" href="/projects/' + esc(encodeURIComponent(p.id)) + '">' + esc(p.name) + '</a>' +
+        '<div class="pj-card__ttl"><a class="pj-card__name" href="/initiatives/' + esc(encodeURIComponent(p.id)) + '">' + esc(p.name) + '</a>' +
           '<span class="pj-card__chips">' + P.chip(P.tStatus(p.status), P.STATUS_HUE[p.status] || 'var(--otc-text-3)') + P.catChip(p.category) + '</span></div>' +
         '<button type="button" class="pj-star' + (pinned ? ' is-on' : '') + '" data-pin="' + esc(p.id) + '" aria-pressed="' + (pinned ? 'true' : 'false') + '" title="' + esc(t('pin')) + '"><i data-lucide="star"></i></button>' +
       '</div>' +
@@ -159,7 +159,7 @@
     $('pj-new').addEventListener('click', function () {
       P.openProjectModal({
         mode: 'new',
-        onSaved: function (d) { window.location.href = '/projects/' + encodeURIComponent(d.project.id); }
+        onSaved: function (d) { window.location.href = '/initiatives/' + encodeURIComponent(d.project.id); }
       });
     });
   }

@@ -236,7 +236,7 @@
         onSaved: function (d) { render(d.project); P.toast(t('saved')); },
         onDeleted: function () {
           if (window.otcPins && window.otcPins.has(PID)) window.otcPins.toggle({ id: PID });
-          window.location.href = '/projects';
+          window.location.href = '/initiatives';
         }
       });
     });

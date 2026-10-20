@@ -175,7 +175,7 @@ class CalendarSchedule {
         // gaveta. Não é feriado: nem o popup nem o modal de edição valem aqui.
         const xp = info.event.extendedProps || {};
         if (xp.pj) {
-            let url = '/projects/' + encodeURIComponent(xp.project_id);
+            let url = '/initiatives/' + encodeURIComponent(xp.project_id);
             if (xp.kind === 'task' && xp.id) url += '?task=' + encodeURIComponent(xp.id);
             window.location.href = url;
             return;

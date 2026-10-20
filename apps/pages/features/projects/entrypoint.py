@@ -2,7 +2,7 @@
 """As rotas do Projects. Camada FINA: lê a sessão, confere o acesso à página,
 chama a consulta ou o comando e devolve JSON (ou a página).
 
-Toda API exige a página `/projects` liberada para a sessão (o
+Toda API exige a página `/initiatives` liberada para a sessão (o
 `enforce_page_access` não olha `/api/*`, CLAUDE.md §5). Erro de validação sai
 ESTRUTURADO: `{code, params, text}` — a tela traduz pelo código.
 """
@@ -13,7 +13,11 @@ from flask import jsonify, redirect, render_template, request, session, url_for
 from apps.pages import blueprint
 from apps.pages.features.projects import commands, domain, queries
 
-PAGE_URL = '/projects'
+# A página é `/initiatives` (mesa, 20/10/2026): a tela já se chamava assim e o
+# navegador mostrava `/projects`. O `Page_Access` gravado com `/projects` vale
+# para ela (`authz._renomeadas`), e o endereço antigo redireciona. A API segue
+# `/api/projects` — não aparece no navegador.
+PAGE_URL = '/initiatives'
 TASKS_URL = '/tasks'
 
 
@@ -90,14 +94,24 @@ def _meta(me, people):
 
 # ── Páginas ───────────────────────────────────────────────────────────────────
 
-@blueprint.route('/projects')
+@blueprint.route('/initiatives')
 def projects_page():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
     return render_template('pages/projects.html', segment='projects')
 
 
+@blueprint.route('/projects')
 @blueprint.route('/projects/<project_id>')
+def projects_old_url(project_id=None):
+    """O endereço antigo: favoritos, links de e-mail e avisos já enviados
+    continuam chegando — à mesma iniciativa, com o `?task=` junto."""
+    alvo = PAGE_URL + ('/' + project_id if project_id else '')
+    qs = request.query_string.decode('utf-8', 'ignore')
+    return redirect(alvo + ('?' + qs if qs else ''))
+
+
+@blueprint.route('/initiatives/<project_id>')
 def project_page(project_id):
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))

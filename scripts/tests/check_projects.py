@@ -6,6 +6,7 @@ O armazém vai para um tmp (`store.FILE`), o cadastro de usuários é um stub
 (`people.users`) e o sino é um espião (`routes._create_notification`): nada
 encosta em dado real.
 """
+import io
 import os
 import sys
 import tempfile
@@ -270,14 +271,47 @@ real = R._user_can_access_page
 R._user_can_access_page = lambda url: False
 st, d = call(bia, 'get', '/api/projects')
 check('sem a página Projects: 403', (st, d.get('code')), (403, 'not_allowed'))
-r = bia.get('/projects/%s' % P1)
-check('página do projeto sem acesso volta para /projects', (r.status_code, r.headers.get('Location', '')),
-      (302, '/projects'))
+r = bia.get('/initiatives/%s' % P1)
+check('página da iniciativa sem acesso volta para /initiatives', (r.status_code, r.headers.get('Location', '')),
+      (302, '/initiatives'))
 R._user_can_access_page = real
-r = bia.get('/projects/%s' % P1)
-check('página do projeto abre', r.status_code, 200)
-r = bia.get('/projects/PRJ-9999')
-check('projeto inexistente volta para a lista', r.status_code, 302)
+r = bia.get('/initiatives/%s' % P1)
+check('página da iniciativa abre', r.status_code, 200)
+r = bia.get('/initiatives/PRJ-9999')
+check('iniciativa inexistente volta para a lista', r.status_code, 302)
+# O endereço é /initiatives (§638): o antigo redireciona — favoritos, e-mails e
+# avisos já enviados chegam à MESMA iniciativa, com o `?task=` junto.
+r = bia.get('/projects')
+check('/projects redireciona para /initiatives', (r.status_code, r.headers.get('Location', '')),
+      (302, '/initiatives'))
+r = bia.get('/projects/%s?task=t3' % P1)
+check('/projects/<id>?task= redireciona para a mesma iniciativa e tarefa',
+      (r.status_code, r.headers.get('Location', '')), (302, '/initiatives/%s?task=t3' % P1))
+r = bia.get('/initiatives')
+check('a lista abre em /initiatives', r.status_code, 200)
+_navs = io.open('apps/templates/partials/sidenav.html', encoding='utf-8').read()
+check('o menu leva a /initiatives', ('href="/initiatives"' in _navs, 'href="/projects"' in _navs), (True, False))
+
+
+class _Con(object):
+    def execute(self, *a):
+        return self
+
+    def fetchone(self):
+        return ('["/projects"]', 'BO')
+
+    def close(self):
+        pass
+
+
+_orig_conn = R.get_db_connection
+R.get_db_connection = lambda readonly=False: _Con()
+try:
+    from apps.pages.platform import authz as _authz_mod
+    check('quem tem /projects gravado no acesso entra em /initiatives',
+          '/initiatives' in _authz_mod._read_user_authz('T000009')[1], True)
+finally:
+    R.get_db_connection = _orig_conn
 st, d = call(ana, 'delete', '/api/projects/%s' % P2)
 check('admin apaga', st, 200)
 st, d = call(bia, 'delete', '/api/projects/%s' % P1)

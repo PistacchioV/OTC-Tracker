@@ -542,7 +542,7 @@
     var el = drawerEl(), tk = Dr.task, pr = Dr.project;
     var chipEl = el.querySelector('#pjt-project');
     chipEl.style.setProperty('--chip', colorVar(pr.color));
-    chipEl.href = '/projects/' + encodeURIComponent(pr.id);
+    chipEl.href = '/initiatives/' + encodeURIComponent(pr.id);
     chipEl.innerHTML = '<span>' + esc(pr.name) + '</span>';
     el.querySelector('#pjt-prio-badge').innerHTML = prioBadge(tk.priority);
     var title = el.querySelector('#pjt-title');

@@ -292,6 +292,8 @@ def _read_user_authz(sid):
             _renomeadas = {'/file-interface': '/file-interpreter',
                            '/cgd': '/onboarding',
                            '/new-deals-monitor': '/intraday-monitor',
+                           # o Projects virou Initiatives também no endereço (§638)
+                           '/projects': '/initiatives',
                            # o card do aviso entrou no da agenda (§567)
                            '/control-panel#dealsmonitor': '/control-panel#intradaytasks'}
             return (True, set(_renomeadas.get(str(u), str(u)) for u in arr), papel, cargo)

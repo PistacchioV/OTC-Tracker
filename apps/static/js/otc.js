@@ -306,8 +306,8 @@
       if (n.kind === 'leaf' && n.href && n.href === p) return n;
       if (n.kind === 'branch') { var f = findActive(n.children, p); if (f) return f; }
     }
-    // Subpágina fora do menu (`/projects/PRJ-0001`): acende o item-pai do
-    // caminho (`/projects`), subindo um segmento por vez.
+    // Subpágina fora do menu (`/initiatives/PRJ-0001`): acende o item-pai do
+    // caminho (`/initiatives`), subindo um segmento por vez.
     if (p === curPath()) {
       var up = p;
       while ((up = up.replace(/\/[^\/]*$/, '')) && up !== '') {
@@ -595,7 +595,7 @@
     box.style.display = list.length ? '' : 'none';
     var p = curPath();
     box.innerHTML = list.map(function (o) {
-      var h = '/projects/' + encodeURIComponent(o.id);
+      var h = '/initiatives/' + encodeURIComponent(o.id);
       var c = PIN_COLORS.indexOf(o.color) !== -1 ? o.color : 'blue';
       return '<a href="' + esc(h) + '" style="--pin-hue:var(--otc-' + c + ')"' + (p === h ? ' class="is-active"' : '') + '><span>' + esc(o.name) + '</span></a>';
     }).join('');

@@ -40,7 +40,7 @@ def _err(code, text, status, **params):
 
 def _can_projects():
     R = _routes()
-    return bool(R._user_can_access_page('/projects') or R._user_can_access_page('/tasks'))
+    return bool(R._user_can_access_page('/initiatives') or R._user_can_access_page('/tasks'))
 
 
 def _guard():

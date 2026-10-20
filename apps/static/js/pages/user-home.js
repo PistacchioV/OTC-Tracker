@@ -342,7 +342,7 @@
     if (!rows.length) { ul.innerHTML = '<li class="uh-empty"><i data-lucide="folder-open"></i><div>' + esc(t('no_projects')) + '</div></li>'; return; }
     ul.innerHTML = rows.map(function (p) {
       var hue = P.colorVar(p.color);
-      return '<li><a href="/projects/' + encodeURIComponent(p.id) + '">' +
+      return '<li><a href="/initiatives/' + encodeURIComponent(p.id) + '">' +
         '<span class="otc-icon-tile" style="--hue:' + hue + '"><i data-lucide="' + esc(p.icon || 'folder') + '"></i></span>' +
         '<span class="min-w-0"><b>' + esc(p.name) + '</b><small>' + esc(P.tStatus(p.status)) + ' · ' +
         esc(p.due_date ? t('due', { d: P.fmtShort(p.due_date) }) : t('no_due')) + '</small></span>' +

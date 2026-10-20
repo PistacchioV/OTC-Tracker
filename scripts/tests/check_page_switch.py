@@ -91,7 +91,7 @@ def stat_contado(p, *a, **k):
     return _stat(p, *a, **k)
 
 
-for pagina in ('/projects', '/intraday-monitor'):
+for pagina in ('/initiatives', '/intraday-monitor'):
     r = c.get(pagina, environ_base=ENV)                    # aquece (memo do processo)
     check('  %s responde' % pagina, r.status_code, 200)
     del idas[:]
@@ -113,7 +113,7 @@ check('  flask run da dev: recarga ligada', saida[-1] if saida else '', 'True Tr
 
 # ── 2. Estático com token ───────────────────────────────────────────────────
 print('=== 2. Estatico com o token atual fica no cache ===')
-html = c.get('/projects', environ_base=ENV).get_data(as_text=True)
+html = c.get('/initiatives', environ_base=ENV).get_data(as_text=True)
 for rel in ('css/otc.css', 'js/otc.js', 'css/vendors.min.css', 'js/vendors.min.js'):
     tok = R._asset_v(rel)
     check('  %s sai com o token do arquivo' % rel, ('/static/%s?v=%s' % (rel, tok)) in html, True)

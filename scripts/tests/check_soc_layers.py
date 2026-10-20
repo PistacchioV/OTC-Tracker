@@ -248,6 +248,7 @@ for r in ('/holidays-calendar', '/api/holidays/calendars', '/api/holidays/save',
           '/api/b3/add', '/api/b3/update', '/api/b3/delete',
           '/api/control-panel/daily-settlement-save', '/new-deals-monitor',
           '/intraday-monitor', '/api/intraday-monitor', '/api/control-panel/intraday-tasks',
+          '/initiatives', '/initiatives/<project_id>', '/projects', '/projects/<project_id>',
           '/api/parse-msg-html',
           '/api/new-deals/<product>/cache', '/api/new-deals/<product>/cache/search',
           '/api/new-deals/<product>/mapping-b3', '/api/new-deals/<product>/send-conecta'):
