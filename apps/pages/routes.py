@@ -1887,6 +1887,46 @@ _dash_memo_lock = threading.Lock()
 _DASH_MEMO_MAX = 8000
 
 
+# Os períodos do painel. `last12` são os 12 meses-CALENDÁRIO que terminam no
+# mês corrente (nov/2025–out/2026 em outubro de 2026), não 365 dias corridos: é
+# a janela que o gráfico mensal desenha barra a barra, e uma janela em dias
+# cortaria o primeiro mês ao meio sem a barra dizer isso.
+_DASH_PERIODS = ('month', 'year', 'last12', 'all')
+
+
+def _dash_last12_start(now):
+    """(ano, mês) do primeiro dos 12 meses-calendário que terminam em `now`."""
+    ano, mes = now.year, now.month - 11
+    if mes <= 0:
+        ano, mes = ano - 1, mes + 12
+    return ano, mes
+
+
+def _dash_in_period(fdate, period, now):
+    """O arquivo-dia de `fdate` entra nos TOTAIS do período? (uma regra para o
+    painel e para o card das recompras)."""
+    if period == 'month':
+        return (fdate.year, fdate.month) == (now.year, now.month)
+    if period == 'year':
+        return fdate.year == now.year
+    if period == 'last12':
+        return _dash_last12_start(now) <= (fdate.year, fdate.month) <= (now.year, now.month)
+    return True
+
+
+def _dash_month_slot(fdate, period, now):
+    """A barra (0–11) de `fdate` na série MENSAL, ou `None` se fica fora dela.
+
+    A série é o ano corrente, de janeiro a dezembro, qualquer que seja o
+    período — menos no `last12`, em que ela é a própria janela móvel (a
+    primeira barra é o mês mais antigo)."""
+    if period == 'last12':
+        ano, mes = _dash_last12_start(now)
+        i = (fdate.year - ano) * 12 + fdate.month - mes
+        return i if 0 <= i < 12 else None
+    return fdate.month - 1 if fdate.year == now.year else None
+
+
 def _dash_dir_matters(nome, pai, period, now):
     """Este diretório pode conter arquivo do período pedido?
 
@@ -1897,6 +1937,13 @@ def _dash_dir_matters(nome, pai, period, now):
     nível de subpasta e produto com dois.
     """
     if period == 'all':
+        return True
+    if period == 'last12':
+        inicio = _dash_last12_start(now)
+        if len(nome) == 4 and nome.isdigit():
+            return inicio[0] <= int(nome) <= now.year
+        if len(nome) == 2 and nome.isdigit() and len(pai) == 4 and pai.isdigit():
+            return inicio <= (int(pai), int(nome)) <= (now.year, now.month)
         return True
     if len(nome) == 4 and nome.isdigit():
         return int(nome) == now.year
@@ -2171,7 +2218,9 @@ def api_dashboard_stats():
     if not session.get('authenticated'):
         return jsonify({'error': 'unauthorized'}), 401
 
-    period = request.args.get('period', 'all')  # month | year | all
+    period = request.args.get('period', 'all')  # month | year | last12 | all
+    if period not in _DASH_PERIODS:
+        period = 'all'
     cache = _dash_stats_cached(period)
     if cache is not None:
         return jsonify(cache)
@@ -2179,11 +2228,7 @@ def api_dashboard_stats():
     cur_month, cur_year = now.month, now.year
 
     def _file_in_period(fdate):
-        if period == 'month':
-            return fdate.month == cur_month and fdate.year == cur_year
-        if period == 'year':
-            return fdate.year == cur_year
-        return True
+        return _dash_in_period(fdate, period, now)
 
     def _is_lawton(d):
         return 'lawton' in (d.get('Client') or '').lower()
@@ -2335,7 +2380,14 @@ def api_dashboard_stats():
     )
     top5_underlying = [{'label': c, 'count': n} for c, n in _top5(underlying_counts)]
 
-    # Monthly counts for current year (always full year, ignores period filter)
+    # Série mensal: o ano corrente (jan–dez) em todo período, menos no
+    # `last12`, em que ela é a janela móvel dos 12 meses (`_dash_month_slot`).
+    serie = 'last12' if period == 'last12' else 'year'
+    if serie == 'last12':
+        _ini = _dash_last12_start(now)
+        monthly_start = '%04d-%02d' % _ini
+    else:
+        monthly_start = '%04d-01' % cur_year
     monthly_opt = [0] * 12
     monthly_ndf = [0] * 12
     monthly_fxo = [0] * 12
@@ -2352,14 +2404,15 @@ def api_dashboard_stats():
         # ano uma vez e a primeira passada aproveita. Antes eram dois `os.walk`
         # independentes, cada um abrindo os arquivos do próprio critério — o mesmo
         # arquivo lido DUAS vezes do share na mesma tela.
-        for fp, fname, mtime, size in _dash_scan_files(NEW_DEALS_CACHE_ROOT, 'year', now):
+        for fp, fname, mtime, size in _dash_scan_files(NEW_DEALS_CACHE_ROOT, serie, now):
             if fname.endswith('.tmp') or fname.endswith('.bak'):
                 continue
             try:
                 fdate = datetime.strptime(fname[:8], '%Y%m%d')
             except ValueError:
                 continue
-            if fdate.year != cur_year:
+            slot = _dash_month_slot(fdate, serie, now)
+            if slot is None:
                 continue
             product = _product_from_path(fp)
             is_fxo_file = 'fxo' in product.lower()
@@ -2386,12 +2439,12 @@ def api_dashboard_stats():
             # O `Deal` vazio e o `Canceled` já foram descartados na leitura.
             _do_mes = [d for d in _dash_file_deals(fp, fname, mtime, size, fdate, product, ptype)
                        if (_gen_ndf_counted(d) if gen_bucket else not _is_bank(d))]
-            target[fdate.month - 1] += len(_do_mes)
+            target[slot] += len(_do_mes)
             if ptype == 'SWAP' and not is_fxo_file:
                 # A mesma quebra por mesa do total, na série do mês.
                 for d in _do_mes:
                     monthly_swap_products.setdefault(
-                        _swap_label(d), [0] * 12)[fdate.month - 1] += 1
+                        _swap_label(d), [0] * 12)[slot] += 1
 
     # Recent deals: last 50 client rows sorted desc — frontend filters by product
     # A chave leva o Deal junto: `sorted` é estável, então sem ele o desempate
@@ -2434,6 +2487,7 @@ def api_dashboard_stats():
         'dist_fxo':      len(fxo_deals),
         'dist_swap':     len(swap_deals),
         'dist_unwind':   _unw['total'],
+        'monthly_start': monthly_start,   # 'AAAA-MM' da 1ª barra da série
         'monthly_opt':   monthly_opt,
         'monthly_ndf':   monthly_ndf,
         'monthly_ndf_vanilla':  monthly_ndf_vanilla,
