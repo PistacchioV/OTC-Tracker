@@ -735,11 +735,24 @@ def api_mc_move():
     comment = str(payload.get('comment') or '').strip()
     rules = _mc.validation_rules()
     sid = session.get('user_sid', '')
-    saved = []
+    # A permissão acima foi conferida contra o `from` que a TELA mandou, e a
+    # tela não se atualiza sozinha: num quadro velho o card pode estar numa
+    # coluna em que a linha já não está (validada por outra mesa, devolvida
+    # por um Reject). Seguir assim reabria uma confirmação Ok ou assinava a
+    # etapa de outra mesa — o `_mc_move_one` age sobre a coluna REAL. Toda
+    # linha do card tem de estar onde a tela diz, ou nada é gravado.
+    rows = []
     for k in keys:
         row = _mc.find_row(k)
         if row is None:
             continue
+        cur = _mc_col(row, rules)
+        if not (cur == src or (src in ('MO', 'FO') and cur == 'MO/FO')):
+            return jsonify({'success': False, 'code': 'stale_card', 'key': k, 'stage': cur,
+                            'message': 'The board was out of date: {} is now in {}.'.format(k, cur or '?')}), 409
+        rows.append(row)
+    saved = []
+    for row in rows:
         try:
             r = _mc_move_one(row, src, dst, sid, comment, admin, rules)
         except _mc.SlaCommentRequired as exc:

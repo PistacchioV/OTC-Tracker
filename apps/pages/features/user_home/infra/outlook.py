@@ -4,10 +4,15 @@ mesmo caminho do box scan (`otc_boxscan._win32`). Só Windows: fora dele (a dev
 no macOS) levanta `OutlookUnavailable`, e a tela diz que o Sync precisa do
 Outlook da máquina.
 
-Cada pessoa roda a PRÓPRIA instância (CLAUDE.md §9), então o Outlook da
-máquina é o dela: o calendário vem pela caixa do e-mail cadastrado
-(`GetSharedDefaultFolder`) e, se ela não resolver, pelo calendário padrão do
-perfil.
+Cada pessoa roda a PRÓPRIA instância (CLAUDE.md §9), mas o link do e-mail
+aponta para a máquina de quem o mandou — e aí quem clica Sync não é o dono do
+Outlook. O calendário vem pela caixa do e-mail cadastrado
+(`GetSharedDefaultFolder`, que só abre a agenda de outra pessoa com
+permissão de delegado) e, se ela não resolver, pelo calendário padrão do
+perfil SÓ quando o perfil é de quem clicou: sem essa conferência as reuniões
+do dono da máquina (título, participantes, link do Zoom com a senha) iam para
+a Home de outra pessoa, e a presença dela passava a dizer "em reunião" pela
+agenda alheia. Fora disso, `CalendarNotAccessible`.
 
 O filtro de data do `Restrict` é texto no formato do Windows de quem roda —
 `mm/dd` num, `dd/mm` noutro. Tenta-se os dois e o que volta é conferido de
@@ -33,6 +38,11 @@ class OutlookUnavailable(EnvironmentError):
     """Sem win32com ou sem Outlook nesta máquina."""
 
 
+class CalendarNotAccessible(Exception):
+    """O Outlook desta máquina é de outra pessoa e a caixa de quem clicou
+    não abriu por ele."""
+
+
 def _naive(dt):
     # O pywin32 devolve a hora LOCAL marcada como UTC: tira-se o fuso e fica a
     # hora que o Outlook mostra.
@@ -40,6 +50,38 @@ def _naive(dt):
         return datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
     except Exception:                                    # noqa: BLE001
         return None
+
+
+def _profile_emails(ns):
+    """Os endereços do PERFIL do Outlook desta máquina (contas + o usuário
+    Exchange), em minúsculas."""
+    out = set()
+    try:
+        for acc in ns.Accounts:
+            a = str(getattr(acc, 'SmtpAddress', '') or '').strip().lower()
+            if a:
+                out.add(a)
+    except Exception:                                    # noqa: BLE001
+        pass
+    try:
+        ex = ns.CurrentUser.AddressEntry.GetExchangeUser()
+        a = str(getattr(ex, 'PrimarySmtpAddress', '') or '').strip().lower() if ex is not None else ''
+        if a:
+            out.add(a)
+    except Exception:                                    # noqa: BLE001
+        pass
+    return out
+
+
+def is_profile_owner(email, profile):
+    """`email` é do dono do perfil? Pelo endereço inteiro ou pela parte antes
+    do `@` (o phonebook e o Exchange nem sempre usam o mesmo domínio:
+    `jpmorgan.com` × `jpmchase.com`)."""
+    email = str(email or '').strip().lower()
+    if not email:
+        return False
+    local = email.split('@', 1)[0]
+    return any(p == email or p.split('@', 1)[0] == local for p in profile)
 
 
 def _calendar(ns, email):
@@ -50,7 +92,9 @@ def _calendar(ns, email):
             if rec.Resolved:
                 return ns.GetSharedDefaultFolder(rec, OL_FOLDER_CALENDAR)
         except Exception:                                # noqa: BLE001
-            log.warning('[user-home] calendário de %s não abriu pela caixa; vai o padrão do perfil', email)
+            log.warning('[user-home] calendário de %s não abriu pela caixa', email)
+    if not is_profile_owner(email, _profile_emails(ns)):
+        raise CalendarNotAccessible(email or '(no e-mail)')
     return ns.GetDefaultFolder(OL_FOLDER_CALENDAR)
 
 

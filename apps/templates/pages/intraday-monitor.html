@@ -929,14 +929,18 @@
         return fetch('/api/intraday-monitor/override', {
             method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ date: refAtual, task: task, from: from, to: to })
-        }).then(function (r) { return r.json(); }).then(function (j) {
+        }).then(function (r) { return r.json().catch(function () { return { success: false }; }); }).then(function (j) {
             if (j.success && to !== 'auto' && window.otcToast) {
                 var nome = (document.querySelector('#im-board .im-task[data-task="' + task + '"] .im-task-name') || {}).textContent || task;
                 window.otcToast(t('im-k-' + to, ESTADO_TXT[to]) + ': ' + nome, { undo: function () { imAjusta(task, '', 'auto'); } });
             }
             if (!j.success && window.Swal) Swal.fire({ icon: 'error', title: t('im-move-fail', 'Not moved'),
                 text: j.code === 'move_not_allowed' ? t('im-move-denied', 'Your desk can only move a task one step forward.')
-                    : (j.message || '') });
+                    : j.code === 'stale_card' ? t('im-move-stale', 'The board was out of date — this task had already changed. It was reloaded.')
+                    : t('im-move-retry', 'Could not save now. Try again in a moment.') });
+            emVoo = null; load();
+        }).catch(function () {
+            if (window.Swal) Swal.fire({ icon: 'error', title: t('im-move-fail', 'Not moved'), text: t('im-move-retry', 'Could not save now. Try again in a moment.') });
             emVoo = null; load();
         });
     }
@@ -955,7 +959,7 @@
                  '<span class="im-task-meta d-block">' + metaTxt(tk) + '</span>' +
                  (tk.manual ? '<span class="im-task-manual"><i class="ti ti-hand-finger"></i>' + esc(t('im-manual', 'Manual')) +
                     ' · ' + esc(tk.manual.by || '') + (tk.manual.time ? ' ' + esc(tk.manual.time) : '') +
-                    (IM_ME.is_admin ? ' <button type="button" class="im-auto" data-auto="' + esc(tk.id) + '" title="' +
+                    ((IM_ME.is_admin || (IM_ME.sid && String(tk.manual.sid || '').toUpperCase() === IM_ME.sid)) ? ' <button type="button" class="im-auto" data-auto="' + esc(tk.id) + '" title="' +
                         esc(t('im-auto-tip', 'Back to the automatic state')) + '">↺ auto</button>' : '') + '</span>' : '') +
                '</a>';
     }
@@ -1271,6 +1275,12 @@
 </script>
 <!-- Chaves de tradução usadas pelo JS (invisíveis; applyTranslations preenche) -->
 <div class="d-none" aria-hidden="true">
+    <span data-lang="im-manual">Manual</span>
+    <span data-lang="im-auto-tip">Back to the automatic state</span>
+    <span data-lang="im-move-fail">Not moved</span>
+    <span data-lang="im-move-denied">Your desk can only move a task one step forward.</span>
+    <span data-lang="im-move-stale">The board was out of date — this task had already changed. It was reloaded.</span>
+    <span data-lang="im-move-retry">Could not save now. Try again in a moment.</span>
     <span data-lang="ndm-dev">In development</span>
     <span data-lang="ndm-col-product">Product</span>
     <span data-lang="ndm-col-open">Open</span>

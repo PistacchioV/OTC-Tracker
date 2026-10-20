@@ -242,6 +242,7 @@
     var board = $('tk-board');
     board.addEventListener('pointerdown', function (e) {
       if (e.pointerType !== 'mouse' || e.button !== 0) return;
+      if (drag && drag.on) cancelDrag();                 // um arrasto velho que perdeu o pointerup
       var c = e.target.closest('.tk-card');
       if (!c || e.target.closest('button, a, input, .dropdown-menu')) return;
       var r = c.getBoundingClientRect();
@@ -252,6 +253,10 @@
     });
     document.addEventListener('pointermove', function (e) {
       if (!drag) return;
+      // Sem botão apertado o pointerup se perdeu (soltou fora da janela, o
+      // Alt+Tab, o lembrete do Outlook roubou o foco): o card volta, em vez
+      // de seguir o mouse até o próximo clique cair numa coluna qualquer.
+      if (e.buttons === 0) { if (drag.on) cancelDrag(); else drag = null; return; }
       drag.x = e.clientX; drag.y = e.clientY;
       if (!drag.on) {
         if (Math.abs(e.clientX - drag.x0) + Math.abs(e.clientY - drag.y0) < 6) return;
@@ -262,11 +267,19 @@
       placeGap();
     });
     document.addEventListener('pointerup', function () { if (drag) dropCard(); });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && drag && drag.on) { drag.cancel = true; dropCard(); } });
+    document.addEventListener('pointercancel', function () { if (drag) cancelDrag(); });
+    window.addEventListener('blur', function () { if (drag) cancelDrag(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && drag && drag.on) cancelDrag(); });
     // o clique que encerra um arrasto não abre o card
     board.addEventListener('click', function (e) {
       if (board._swallow) { board._swallow = false; e.stopPropagation(); e.preventDefault(); }
     }, true);
+  }
+  function cancelDrag() {
+    if (!drag) return;
+    if (!drag.on) { drag = null; return; }
+    drag.cancel = true;
+    dropCard();
   }
   function liftCard() {
     drag.on = true;

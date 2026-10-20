@@ -247,7 +247,7 @@
               fepDone: 'Marked as sent',
               actGo: 'Yes, proceed', actNo: 'Cancel',
               warnMissing: 'No validation rule registered for: {p}. Until then these confirmations go through OTC and MO.',
-              moveDone: 'Moved', notAllowed: 'Your desk can only move its own stage, one step forward.', slaAskTitle: 'Late validation', slaAskText: 'Give the reason for the delay — it goes to the comment of the stage.', moveFail: 'Not moved', failTitle: 'Could not load the queue',
+              moveDone: 'Moved', notAllowed: 'Your desk can only move its own stage, one step forward.', stale: 'The board was out of date — this confirmation already moved. The queue was reloaded.', slaAskTitle: 'Late validation', slaAskText: 'Give the reason for the delay — it goes to the comment of the stage.', moveFail: 'Not moved', failTitle: 'Could not load the queue',
               failText: 'Refresh the page; if it persists the server may be restarting.' },
         br: { ops: 'op(s)', opsLong: 'operação(ões)', none: '—',
               slaOk: 'faltam {n}d', slaWarn: 'vence amanhã', slaToday: 'vence hoje',
@@ -276,7 +276,7 @@
               fepDone: 'Marcado como enviado',
               actGo: 'Sim, seguir', actNo: 'Cancelar',
               warnMissing: 'Sem cadastro de validação para: {p}. Enquanto isso essas confirmações seguem por OTC e MO.',
-              moveDone: 'Movido', notAllowed: 'Sua mesa só move a etapa dela, um passo à frente.', slaAskTitle: 'Validação fora do prazo', slaAskText: 'Informe o motivo do atraso — ele vai para o comentário da etapa.', moveFail: 'Não movido', failTitle: 'Não foi possível carregar a esteira',
+              moveDone: 'Movido', notAllowed: 'Sua mesa só move a etapa dela, um passo à frente.', stale: 'O quadro estava desatualizado — esta confirmação já tinha andado. A esteira foi recarregada.', slaAskTitle: 'Validação fora do prazo', slaAskText: 'Informe o motivo do atraso — ele vai para o comentário da etapa.', moveFail: 'Não movido', failTitle: 'Não foi possível carregar a esteira',
               failText: 'Atualize a página; se persistir, o servidor pode estar reiniciando.' },
         es: { ops: 'op(s)', opsLong: 'operación(es)', none: '—',
               slaOk: 'faltan {n}d', slaWarn: 'vence mañana', slaToday: 'vence hoy',
@@ -305,7 +305,7 @@
               fepDone: 'Marcado como enviado',
               actGo: 'Sí, seguir', actNo: 'Cancelar',
               warnMissing: 'Sin registro de validación para: {p}. Mientras tanto estas confirmaciones siguen por OTC y MO.',
-              moveDone: 'Movido', notAllowed: 'Su mesa solo mueve su propia etapa, un paso adelante.', slaAskTitle: 'Validación fuera de plazo', slaAskText: 'Indique el motivo del retraso — va al comentario de la etapa.', moveFail: 'No movido', failTitle: 'No se pudo cargar la cola',
+              moveDone: 'Movido', notAllowed: 'Su mesa solo mueve su propia etapa, un paso adelante.', stale: 'El tablero estaba desactualizado — esta confirmación ya había avanzado. La cola se recargó.', slaAskTitle: 'Validación fuera de plazo', slaAskText: 'Indique el motivo del retraso — va al comentario de la etapa.', moveFail: 'No movido', failTitle: 'No se pudo cargar la cola',
               failText: 'Actualice la página; si persiste, el servidor puede estar reiniciando.' }
     };
     function t(k, vars) {
@@ -367,7 +367,8 @@
                     .then(function (r) { if (r.isConfirmed) return mover(keys, from, to, r.value); load(); });
             }
             var msg = d.code === 'callback_required' ? t('noCbBlockTitle')
-                    : d.code === 'move_not_allowed' ? t('notAllowed') : (d.message || ('HTTP ' + res.st));
+                    : d.code === 'move_not_allowed' ? t('notAllowed')
+                    : d.code === 'stale_card' ? t('stale') : (d.message || ('HTTP ' + res.st));
             if (window.Swal) Swal.fire({ icon: 'error', title: t('moveFail'), text: msg });
             load();
         }).catch(function () { if (window.Swal) Swal.fire({ icon: 'error', title: t('moveFail') }); load(); });

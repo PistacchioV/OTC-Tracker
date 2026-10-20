@@ -391,6 +391,58 @@ cl.post('/api/control-panel/intraday-tasks', json={'tasks': {'swap-mtm': {'days'
 check('... e desligada no Control Panel não é devida', _tk('2026-10-01')['swap-mtm']['due'], False)
 cl.post('/api/control-panel/intraday-tasks', json={'tasks': {}})
 
+print('\n== 4h. o arrasto do card (override, §632) ==')
+# A mesa (BO) anda UM passo à frente e devolve ao cálculo o ajuste que ELA fez
+# (o Undo da pílula, o "↺ auto"); o passo é conferido contra o estado REAL da
+# tarefa, não contra o `from` da tela — o quadro se atualiza a cada minuto, e
+# um card velho em `todo` de uma tarefa já feita viraria `in_progress`.
+DIA_OV = R._br_now().strftime('%Y-%m-%d')
+
+
+def _bo(sid):
+    c = app.test_client()
+    with c.session_transaction() as s:
+        s.update({'authenticated': True, 'user_sid': sid, 'user_name': sid,
+                  'user_role': 'BO', 'session_ip': '127.0.0.1'})
+    return c
+
+
+def _ov(c, task, de, para):
+    r = c.post('/api/intraday-monitor/override', json={'date': DIA_OV, 'task': task, 'from': de, 'to': para})
+    return r.status_code, (r.get_json() or {})
+
+
+_NEXT = {'todo': 'in_progress', 'in_progress': 'done', 'late': 'done'}
+snap = cl.get('/api/intraday-monitor?date=' + DIA_OV).get_json() or {}
+alvo = next((t for t in snap.get('tasks', []) if t.get('state') in _NEXT and not t.get('manual')), None)
+check('há uma tarefa para arrastar hoje', alvo is not None, True)
+if alvo:
+    real, tid = alvo['state'], alvo['id']
+    velho = next(k for k in _NEXT if k != real and _NEXT[k] != real)     # um `from` que a tela velha mostraria
+    bo, bo2 = _bo('B000001'), _bo('B000002')
+    st, d = _ov(bo, tid, velho, _NEXT[velho])
+    check('BO com o card velho (%s, real %s): 409 stale_card' % (velho, real), (st, d.get('code')), (409, 'stale_card'))
+    check('   e nada foi gravado', task_runs.overrides_of(R._br_now().date()).get(tid), None)
+    st, d = _ov(bo, tid, real, 'todo')
+    check('BO não volta para trás', (st, d.get('code')), (403, 'move_not_allowed'))
+    st, d = _ov(bo, tid, real, _NEXT[real])
+    check('BO dá o passo certo: 200', st, 200)
+    aj = task_runs.overrides_of(R._br_now().date()).get(tid) or {}
+    check('   o ajuste é dele', (aj.get('state'), aj.get('sid')), (_NEXT[real], 'B000001'))
+    st, d = _ov(bo2, tid, '', 'auto')
+    check('outro BO não desfaz o ajuste alheio', (st, d.get('code')), (403, 'move_not_allowed'))
+    st, d = _ov(bo, tid, '', 'auto')
+    check('quem fez desfaz (o Undo da pílula): 200', st, 200)
+    check('   e a tarefa volta ao cálculo', task_runs.overrides_of(R._br_now().date()).get(tid), None)
+    st, d = _ov(bo, tid, '', 'auto')
+    check('sem ajuste nenhum, o auto do BO é recusado', st, 403)
+    st, d = _ov(cl, tid, velho, 'done')
+    check('o admin põe qualquer estado (sem conferir o from)', st, 200)
+    st, d = _ov(cl, tid, '', 'auto')
+    check('   e desfaz', (st, task_runs.overrides_of(R._br_now().date()).get(tid)), (200, None))
+    snap = cl.get('/api/intraday-monitor?date=' + DIA_OV).get_json() or {}
+    check('o snapshot diz o SID de quem está logado (o "↺ auto" de quem fez)', (snap.get('me') or {}).get('sid'), 'T000000')
+
 print('\n== 5. o endereço antigo ==')
 r = cl.get('/new-deals-monitor')
 check('/new-deals-monitor redireciona', (r.status_code, r.headers.get('Location', '').endswith('/intraday-monitor')),
