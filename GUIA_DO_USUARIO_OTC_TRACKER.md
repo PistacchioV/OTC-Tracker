@@ -2,11 +2,11 @@
 
 **Brazil OTC Operations · JPMorgan Chase & Co.**
 
-**Versão:** 2.4 · **Data:** 02/10/2026
+**Versão:** 2.5 · **Data:** 20/10/2026
 
 ---
 
-> **Sobre as telas deste guia.** Todas as imagens foram capturadas do sistema real, porém com **dados fictícios**. Nenhum nome de cliente, CNPJ, conta, valor ou caminho de servidor real aparece nestas páginas.
+> **Sobre as telas deste guia.** Todas as imagens foram capturadas do sistema real, porém com **dados fictícios**. Nenhum nome de cliente, CNPJ, conta, valor ou caminho de servidor real aparece nestas páginas. Elas mostram o visual atual — vidro sobre o papel de parede *Aurora*, tema claro; o seu pode estar diferente, porque tema e papel de parede são escolha de cada um (3.9).
 
 ---
 
@@ -52,7 +52,7 @@ O trabalho se divide em seis blocos, e o menu lateral segue essa divisão:
 
 ### 2.1. Como o sistema se organiza na tela
 
-Toda página tem o mesmo esqueleto: **menu lateral** à esquerda (escondido até você chamá-lo), **barra superior** com tema, notificações, idioma e perfil, e a **área de trabalho** no centro.
+Toda página tem o mesmo esqueleto: o **menu lateral** fixo à esquerda, a **barra superior** — uma pílula no canto direito, com busca, tema, idioma, notificações, aparência e perfil — e a **área de trabalho** no centro. As superfícies são de **vidro** sobre um **papel de parede** que você escolhe; quem prefere sem transparência liga *Reduce transparency* em Settings (3.9).
 
 ![Painel inicial do OTC Tracker](docs/sop-screenshots/dashboard.png)
 
@@ -98,22 +98,22 @@ Quando a tela de verificação abrir:
 
 Da esquerda para a direita:
 
-| Item | Onde fica | O que faz |
-|---|---|---|
-| **☰** | Extremo esquerdo | Abre o menu lateral (ver 3.5) |
-| **Logo OTC Tracker** | Ao lado do ☰ | Clique para voltar ao painel inicial |
-| **Atalhos** (KPI · Live Position NDF · Pending Confirmation · Pay/Rec · Reference Data) | Centro | Vão direto às telas mais usadas, sem passar pelo menu |
-| **Ícone de ajustes** | Depois dos atalhos | Personaliza quais atalhos aparecem ali |
-| **Sol / Lua** | À direita | Alterna entre tema claro e escuro |
-| **Sino** com o número vermelho | À direita | Notificações do sistema — importações, mapeamentos, validações, envios |
-| **Bandeira · EN** | À direita | Troca o idioma da interface entre **EN**, **BR** e **ES** |
-| **Suas iniciais + nome** | Extremo direito | Abre o menu do usuário |
+| Item | O que faz |
+|---|---|
+| **Search** · `Ctrl+K` | Procura qualquer tela pelo nome. Digite parte do nome e tecle **Enter**; `Esc` fecha. O atalho `Ctrl+K` abre a busca de qualquer tela |
+| **Lua / Sol** | Alterna entre tema claro e escuro |
+| **Bandeira · EN** | Troca o idioma da interface entre **EN**, **BR** e **ES** |
+| **Sino** com o número vermelho | Notificações do sistema — importações, mapeamentos, validações, envios, tarefas |
+| **Paleta** | Abre a **Aparência**: tema, papel de parede, cor de destaque e vidro — as mesmas opções de Settings (3.9) |
+| **Suas iniciais** | Abre o menu do usuário |
 
-**Para abrir o menu do usuário:** clique nas suas iniciais (o círculo colorido) ou no seu nome, no canto superior direito. O menu traz:
+**Para abrir o menu do usuário:** clique nas suas iniciais (o círculo colorido), no canto superior direito. O menu traz:
 
 - **Profile** — os seus dados e a sua função no sistema
-- **Notifications** — a lista completa de avisos
+- **Settings** — o seu perfil, os avisos que você quer receber, a aparência e o foco (3.9)
+- **Notifications** — liga e desliga os avisos que aparecem sozinhos na tela (o sino continua contando)
 - **Support Center** — abrir um chamado (capítulo 16)
+- **Full screen** — a tela cheia do navegador
 - **Lock Screen** — tranca a tela sem encerrar a sessão
 - **Log Out** — encerra a sessão
 
@@ -123,11 +123,9 @@ Da esquerda para a direita:
 
 ![Menu lateral](docs/sop-screenshots/menu-lateral.png)
 
-O menu fica **escondido** e aparece de duas formas:
+O menu é uma placa **fixa** à esquerda. No alto ficam a marca e o botão **Pin / unpin menu** (o ícone de painel ao lado do nome): clique nele para **recolher** o menu e ganhar largura — um botão redondo aparece no canto superior esquerdo para abri-lo quando precisar. Clique de novo no ícone para fixá-lo. Quando o menu está fixo, o botão fica **colorido**.
 
-- **Passe o mouse** pela borda esquerda da tela — ele desliza para dentro e some quando você sai.
-- **Clique no ☰** da barra superior para abri-lo.
-- Para deixá-lo **fixo**, clique no ícone de **alfinete** (*Pin / unpin menu*), no alto do próprio menu. Clique de novo para soltá-lo.
+Logo abaixo da marca, a seção **Projects Pinned** mostra os projetos que você marcou com a **estrela** (17.3) — um clique abre o projeto. Ela só aparece quando há algum. No pé do menu ficam o seu nome e o seu cargo.
 
 O menu é em **níveis**: um item com **›** à direita tem submenu. Clicar nele **não abre uma página** — ele desliza para dentro do submenu, e o caminho percorrido aparece no alto, como um rastro. Para voltar um nível, clique no item de volta (**‹**) ou no nome do nível anterior no rastro.
 
@@ -135,8 +133,8 @@ O menu é em **níveis**: um item com **›** à direita tem submenu. Clicar nel
 
 | Grupo | Itens |
 |---|---|
-| **NAVIGATION** | Dashboards (KPI · Intraday Monitor) · About |
-| **APPS** | Holidays Calendar · Electronic Inventory · Control Panel · File Interpreter · Tools · Daily Settlement · Live Position |
+| **MAIN** | Dashboards (o KPI) · **Intraday** (User Home · Projects · Tasks · Monitor) · About · Settings |
+| **APPS** | Calendar · Electronic Inventory · Control Panel · File Interpreter · Tools · Daily Settlement · Live Position |
 | **APPS › Tools** | **Calculators** (NDF Calculator · Option Calculator · Swap Calculator · Unwind NDF Calculator) · Euribor · Fixed Income · Quotes · SOFR Index · Term SOFR |
 | **APPS › Daily Settlement › NDF** | Summary · Cockpit · Other Publisher |
 | **APPS › Daily Settlement › Other Products** | Summary · OTM · Latam Desk Position · **Swap** (Settlement Advice · Athena · VCP · Events · Kapital Hybrids) · **NDF** (Settlement Advice) · **Option** (Settlement Advice · Cognos) |
@@ -163,7 +161,7 @@ O acesso é **por página**. Um administrador monta a sua lista de páginas em *
 
 - Se a sua lista nunca foi configurada, você vê **tudo**.
 - Se ela foi configurada, você vê só o que está nela — e digitar o endereço direto no navegador também não passa: o sistema devolve você para uma página que você tem.
-- **Profile** e **Page Access** são sempre acessíveis.
+- **Profile**, **Page Access**, **User Home** e **Settings** são sempre acessíveis — as duas últimas são pessoais: cada um vê só o que é seu.
 
 **Se falta uma tela que você precisa:** abra um chamado no Support Center (capítulo 16) dizendo qual é a tela e por quê.
 
@@ -172,6 +170,70 @@ O acesso é **por página**. Um administrador monta a sua lista de páginas em *
 ![O cadastro de usuários (Manage Roles)](docs/sop-screenshots/users-roles.png)
 
 O seu cadastro vive em **Manage Roles** (Menu › Data Base › Users › Roles — capítulo 15.1): é lá que estão o que o phonebook devolveu sobre você (nome, e-mail, cargo) e o **papel** que você tem no sistema — `ADMIN`, `BO` (Back Office), `MO` (Middle Office), `FO` (Front Office), `INSTITUTIONAL` ou `HUB`. O papel não se edita por você mesmo: ele define o que você pode **assinar** (por exemplo, validar uma etapa da esteira de confirmação — capítulo 9.5) e é alterado em *Manage Roles* por um administrador.
+
+### 3.8. A sua página inicial — User Home
+
+**Menu › Main › Intraday › User Home**
+
+![User Home](docs/sop-screenshots/user-home.png)
+
+**Para que serve:** é o **seu** dia numa tela só — as suas reuniões, as suas tarefas, o seu foco e o que a equipe está fazendo agora. Cada pessoa vê a própria.
+
+**O que está na tela, de cima para baixo:**
+
+| Parte | O que mostra |
+|---|---|
+| **Saudação** | O dia e quantas reuniões e tarefas ainda faltam hoje |
+| **Done today · Focus today · Overdue** | Tarefas suas concluídas hoje (sobre as do dia), tempo de foco de hoje e quantas tarefas suas estão atrasadas |
+| **Today** | Os três anéis do dia: **Tasks** (feitas sobre as do dia), **Focus** (foco sobre a meta diária) e **Meetings** (reuniões que já passaram sobre as do dia) |
+| **Up next** | A próxima reunião em destaque — em quanto tempo começa, horário, local, participantes e o botão **Join**, que abre a reunião no **Zoom** — e as outras do dia embaixo |
+| **Focus** | O timer de foco (abaixo) |
+| **My tasks** | As suas tarefas que vencem hoje ou estão atrasadas, e as que você concluiu hoje (riscadas) |
+| **This week** | Quantas tarefas a **equipe** concluiu em cada dia da semana, e a comparação com a semana passada |
+| **Projects** | Os projetos em que você é líder ou tem tarefa, com o progresso e as pessoas |
+| **Right now** | **Team**: quem está em foco ou em reunião agora, e até quando. **Activity**: o que aconteceu por último nos seus projetos |
+
+**Passo a passo — trazer as reuniões do Outlook:**
+
+1. Clique em **Sync**, no alto à direita.
+2. O sistema lê o calendário do **Outlook da sua máquina** pelo seu e-mail cadastrado e traz as reuniões de hoje até a semana seguinte.
+3. O *Up next* e o anel *Meetings* passam a mostrar as reuniões. O rodapé do cartão diz quando foi a última sincronização.
+
+> **O Sync precisa do Outlook aberto na máquina** (Windows). Reunião cancelada não entra. O calendário é seu: os colegas veem só que você está **em reunião, até que horas** — nunca o assunto.
+
+**Passo a passo — concluir uma tarefa:** clique no **círculo** à esquerda da tarefa. Ela fica riscada e um aviso preto aparece no alto com **Undo**, para desfazer. Clique no **nome** da tarefa para abrir a gaveta com todos os detalhes (17.4).
+
+**Passo a passo — focar:**
+
+1. No cartão **Focus**, escolha a duração (**15m · 25m · 50m**) e, se quiser, a tarefa em **Focus on**.
+2. Clique em **Start focus**.
+3. Uma **pílula preta** aparece abaixo da barra superior, com o tempo correndo — ela acompanha você em **qualquer tela**. Clique nela para voltar à User Home.
+4. **Pause** / **Resume** param e retomam; **End** encerra.
+5. Ao terminar, o sistema avisa e começa a **pausa** (5 minutos, por padrão), que a pílula conta em verde.
+
+O tempo focado soma no *Focused today* e no anel *Focus*. Enquanto você está em foco, os colegas veem *In focus · until 11:30* no *Right now*.
+
+**Os botões do alto:** **New task** abre a criação de tarefa (17.4) e **Next: 11:00 AM** abre a próxima reunião direto no **Zoom**.
+
+### 3.9. Settings — perfil, avisos, aparência e foco
+
+**Menu › Main › Settings** (ou **Settings** no menu do usuário)
+
+![Settings](docs/sop-screenshots/settings.png)
+
+**Para que serve:** as suas preferências. A coluna da esquerda leva a cada seção.
+
+| Seção | O que tem |
+|---|---|
+| **Profile** | Nome, e-mail, mesa e SID — vêm do cadastro (3.7) e não se editam aqui |
+| **Notifications** | Liga e desliga os avisos do sino que são **para você**: *Task assigned* (uma tarefa foi passada a você), *Comments* (comentaram numa tarefa sua), *Project lead* (você virou líder de um projeto), *Due dates* (às 08:00 do dia em que uma tarefa sua vence) e *Focus finished* (fim de uma sessão de foco) |
+| **Appearance** | **Theme** (*Light · Dark · Auto* — *Auto* segue o Windows), **Wallpaper** (dez papéis de parede), **Accent** (a cor de destaque dos botões e seleções), **Glass** (*Clear* mostra mais o papel de parede; *Tinted* é o padrão) e **Reduce transparency** (superfícies sólidas, sem vidro — o sistema liga sozinho em máquina sem placa de vídeo) |
+| **Focus** | A duração da **sessão**, da **pausa** e a **meta diária** de foco, com **−** e **+**. **Start** começa uma sessão agora |
+| **Data** | **Export my tasks as CSV** baixa as suas tarefas, uma por linha. **Reset to defaults** volta aparência, avisos e foco ao original |
+
+Tudo vale na hora: não há botão de salvar.
+
+> Os avisos que **não são para uma pessoa** — os da esteira de confirmação para a sua mesa, por exemplo — não se desligam aqui: eles chegam por papel (4.13).
 
 ---
 
@@ -361,7 +423,9 @@ O **sino** da barra superior mostra em vermelho quantos avisos você tem. O sist
 
 1. Clique no sino.
 2. Clique no aviso: o sistema abre a tela onde aquilo aconteceu.
-3. Os avisos são endereçados por **papel** — o Back Office recebe os da esteira de confirmação, o Middle os dele, e assim por diante.
+3. Os avisos são endereçados por **papel** — o Back Office recebe os da esteira de confirmação, o Middle os dele, e assim por diante. Os de **tarefa e projeto** vão para a pessoa, e cada um escolhe quais quer em Settings (3.9).
+
+**O aviso de ação.** Quando você move um cartão, conclui uma tarefa ou desfaz algo, uma **pílula preta** aparece logo abaixo da barra superior dizendo o que aconteceu — por exemplo, *Done: Glass material tokens* — com o botão **Undo** para desfazer. Ela some sozinha em alguns segundos.
 
 ---
 
@@ -382,7 +446,7 @@ O **sino** da barra superior mostra em vermelho quantos avisos você tem. O sist
 
 ### 5.1. Intraday Monitor — por onde começar o dia
 
-**Menu › Navigation › Dashboards › Intraday Monitor** (logo abaixo do KPI). O endereço antigo, `/new-deals-monitor`, leva para cá.
+**Menu › Main › Intraday › Monitor**. O endereço antigo, `/new-deals-monitor`, leva para cá.
 
 ![Intraday Monitor](docs/sop-screenshots/intraday-monitor.png)
 
@@ -1597,7 +1661,7 @@ pontas. Duas coisas para ler com atenção:
   TARGET2) — não no ANBIMA. É o D-2 do início do fluxo pulando os feriados
   *americanos*: para um fluxo que começa na segunda 22/06/2026 o fixing é a
   quarta **17/06**, porque a sexta 19/06 é feriado lá (Juneteenth). Os feriados
-  são os do **Holidays Calendar** (13.5): cadastrou lá, vale aqui.
+  são os do **Calendar** (13.5): cadastrou lá, vale aqui.
 - **Perna de equity: o *Cupom Limpo* pode ser um percentual, não um preço.**
   Quando a descrição da curva diz algo como `100.00% Close 20-Sep-24`, o preço
   inicial é o **fechamento do papel naquele dia × o percentual**. A tela mostra
@@ -1655,13 +1719,13 @@ No **termo de mercadoria** (a classe do ativo que a posição traz), o nocional 
 
 > **A contraparte da opção.** O nome que a posição traz é só um apelido de conta (`JPMORGANBM`). Na conta guarda-chuva, o cliente é o do **CPF/CNPJ**, resolvido pelo Reference Data; nas outras contas, o nome sai do Reference Data pela **conta CETIP**. Se aparecer vazio ou com o apelido, a caixa de avisos diz o que falta cadastrar em **Reference Data** (13.1).
 
-### 13.5. Holidays Calendar
+### 13.5. Calendar
 
-**Menu › Apps › Holidays Calendar**
+**Menu › Apps › Calendar** (antes, *Holidays Calendar*)
 
-![Holidays Calendar](docs/sop-screenshots/holidays-calendar.png)
+![Calendar](docs/sop-screenshots/holidays-calendar.png)
 
-**Para que serve:** os calendários de feriados que o sistema usa para contar dias úteis — o ANBIMA e os das praças de cada mercadoria.
+**Para que serve:** os calendários de feriados que o sistema usa para contar dias úteis — o ANBIMA e os das praças de cada mercadoria — e, junto deles, as **datas dos projetos**: a data-alvo de cada projeto, os marcos e o prazo das tarefas em aberto (17.3).
 
 **Passo a passo — ver os feriados:**
 
@@ -1669,6 +1733,7 @@ No **termo de mercadoria** (a classe do ativo que a posição traz), o nocional 
 2. Navegue com **‹** e **›**; **Today** volta ao mês corrente.
 3. Troque a visão em **Year · Month · Week · Day · List**.
 4. Clique num feriado para ver a que calendário ele pertence.
+5. A chave **Projects and tasks**, embaixo das pastilhas, mostra ou esconde as datas dos projetos. Clique numa delas para abrir o projeto (ou a tarefa, na gaveta).
 
 **Passo a passo — incluir um feriado:**
 
@@ -1878,7 +1943,7 @@ Este merece um passo a passo próprio, porque tem uma opção que os outros não
 
 ### 17.1. Dashboard
 
-**Menu › Navigation › Dashboards › KPI**
+**Menu › Main › Dashboards**
 
 ![Dashboard](docs/sop-screenshots/dashboard.png)
 
@@ -1891,11 +1956,71 @@ Este merece um passo a passo próprio, porque tem uma opção que os outros não
 
 ### 17.2. About
 
-**Menu › Navigation › About**
+**Menu › Main › About**
 
 ![About](docs/sop-screenshots/about.png)
 
 Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de partida para quem chega à mesa.
+
+### 17.3. Projects
+
+**Menu › Main › Intraday › Projects**
+
+![Projects](docs/sop-screenshots/projects.png)
+
+**Para que serve:** acompanhar os projetos da área — o que está em andamento, quem lidera, o progresso e o próximo marco.
+
+**Passo a passo — criar um projeto:**
+
+1. Clique em **New project**.
+2. Dê um **nome**, uma descrição, escolha o **líder** (só Back Office e administradores podem liderar), o **status**, a **cor**, o **ícone** e as datas de início e alvo.
+3. Salve. O líder recebe um aviso no sino.
+
+**Para filtrar:** use **All · On going · On hold · Concluded**. A **estrela** de cada cartão fixa o projeto na seção *Projects Pinned* do menu lateral.
+
+**A página do projeto.** Clique num cartão para abri-la:
+
+![A página de um projeto](docs/sop-screenshots/projects-detail.png)
+
+| Parte | O que tem |
+|---|---|
+| **Progress · Open tasks · Done · Days left** | O resumo do projeto |
+| **Overview** | Líder, status, a linha do tempo do início até a data-alvo e as pessoas, com quantas tarefas em aberto cada uma tem |
+| **Milestones** | Os marcos (os eventos do projeto). Clique no círculo para marcar como atingido; **Add** cria um novo, com data |
+| **Coming up** | Os próximos marcos e a data-alvo, em ordem — as mesmas datas que aparecem no Calendar (13.5) |
+| **Recent activity** | Quem fez o quê, e quando |
+| **Burn-up** | Tarefas concluídas contra o total, ao longo da vida do projeto |
+| **Tasks** | As tarefas do projeto por status. **Add task** cria uma |
+
+**Pin** fixa o projeto no menu; **Edit** muda os dados. Apagar um projeto é do líder, de quem o criou ou de um administrador.
+
+### 17.4. Tasks
+
+**Menu › Main › Intraday › Tasks**
+
+![Tasks](docs/sop-screenshots/tasks.png)
+
+**Para que serve:** as tarefas de **todos** os projetos num quadro só, por status: **To do · In progress · In review · Done**.
+
+**Os números do alto:** *Open* (em aberto), *Due this week* (vencem nesta semana), *Overdue* (atrasadas) e *Done this week*.
+
+**Passo a passo — mover uma tarefa:**
+
+1. Clique no cartão e **arraste**: ele se levanta e, na coluna de destino, abre-se o espaço onde ele vai cair.
+2. Solte. O aviso preto no alto confirma (*Done: …*) e oferece **Undo**.
+3. Sem mouse, use o **…** do cartão e escolha **Move to …**.
+
+**Para filtrar:** **All projects** (um projeto), **Mine only** (só as suas), **Any priority** (uma prioridade) e o campo de busca (título, projeto ou pessoa). **Board · List** troca o quadro pela lista.
+
+**Passo a passo — abrir e editar uma tarefa:** clique no cartão. A **gaveta** abre à direita:
+
+![A gaveta da tarefa](docs/sop-screenshots/tasks-drawer.png)
+
+- O **status** muda pelo seletor do alto; **responsável**, **prazo**, **prioridade** e **estimativa** pelos campos logo abaixo.
+- **Subtasks** são os passos da tarefa — cada um com o seu círculo. **Comments** é a conversa; quem é responsável recebe um aviso.
+- Tudo grava na hora; não há botão de salvar.
+
+**New task** cria uma tarefa em qualquer projeto. O responsável recebe um aviso no sino, e a tarefa com prazo aparece no Calendar (13.5) e na User Home de quem a recebeu (3.8).
 
 ---
 
@@ -1982,7 +2107,7 @@ Várias pessoas usam a mesma base ao mesmo tempo, e o sistema impede que uma des
 - **Intraday Monitor** (5.1): as tarefas do dia, com horário limite, e o que ainda está em aberto por produto. Às **19h** sai o e-mail *Pending Action* com o que ficou pendente.
 - **Prazos (SLA) da confirmação** em dias úteis a partir da data da operação — OTC D+3, MO D+4, FO D+6. Passado o prazo, a validação só passa com justificativa (9.5).
 - **A data lida é sempre mostrada.** Quando falta o arquivo do dia, o Live Position busca até dez dias úteis para trás e **diz qual data leu** (7). O Pending Confirmation diz de que dia é a foto que está no servidor (14.3).
-- **Calendário ANBIMA** para todo prazo e todo dia útil; feriado cadastrado no Holidays Calendar vale no clique seguinte (13.5). Datas de fixing de índices estrangeiros seguem o calendário do próprio índice.
+- **Calendário ANBIMA** para todo prazo e todo dia útil; feriado cadastrado no Calendar vale no clique seguinte (13.5). Datas de fixing de índices estrangeiros seguem o calendário do próprio índice.
 - **Formato de data único** `dd/mm/aaaa` em toda tela, para que `03/04` nunca seja lido como dois dias diferentes (4.11). Um relatório externo que muda de formato tem as linhas ambíguas separadas com aviso, em vez de lidas como outra data (8.5).
 
 #### 18.2.4. Dentro dos limites esperados
@@ -2012,6 +2137,13 @@ Fora da tolerância, a linha fica pendente e não é dada como liquidada.
 | Status | Significa |
 |---|---|
 | `New` · `Amend` · `Pending` · `Approved` · `Sent` · `Success` · `Error` | Ver a tabela do capítulo 5.2 |
+
+**Projects e Tasks**
+
+| Status | Significa |
+|---|---|
+| `On going` · `On hold` · `Concluded` | O projeto está em andamento, parado ou encerrado (17.3) |
+| `To do` · `In progress` · `In review` · `Done` | As colunas do quadro de tarefas (17.4) |
 
 **Avisos de liquidação** (NDF Summary e Other Products Summary)
 
@@ -2098,9 +2230,13 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 
 | Tela | Menu | Capítulo |
 |---|---|---|
-| Dashboard (KPI) | Navigation › Dashboards | 17.1 |
-| About | Navigation › About | 17.2 |
-| Holidays Calendar | Apps | 13.5 |
+| Dashboard (KPI) | Main › Dashboards | 17.1 |
+| User Home | Main › Intraday | 3.8 |
+| Projects | Main › Intraday | 17.3 |
+| Tasks | Main › Intraday | 17.4 |
+| About | Main › About | 17.2 |
+| Settings | Main | 3.9 |
+| Calendar | Apps | 13.5 |
 | Electronic Inventory | Apps | 13.7 |
 | Control Panel | Apps | 14 |
 | File Interpreter | Apps | 13.6 |
@@ -2135,7 +2271,7 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 | Track Confirmations | Documentation › Manual Confirmation | 9.6 |
 | Onboarding Overview | Documentation › Onboarding | 10.1 |
 | Tracking Docs | Documentation › Onboarding › Track Docs | 10.2 |
-| Intraday Monitor | Navigation › Dashboards | 5.1 |
+| Intraday Monitor | Main › Intraday › Monitor | 5.1 |
 | New Deals (6 telas de produto) | Products › New Deals | 5.2 |
 | Intrag NDF · Option · Swap · Unwind | Products › Intrag | 11 |
 | Intrag DCE (Option · Swap · NDF) | Products › Intrag › DCE | 11 |
