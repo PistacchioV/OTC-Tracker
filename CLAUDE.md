@@ -246,7 +246,15 @@ exista no módulo (`__module__` mente sob `functools.wraps`; quem diz é o
   (§551): a DEV grava os arquivos gerados em `Batch Conecta\New - UAT` e o
   Mapping B3 ID lê de `Return - UAT`; a PROD usa `New`/`Return`. O sufixo é o
   `_CONECTA_SUFFIX` do bloco de ambiente — gerador novo grava pelo
-  `routes.CONECTA_NEW_PATH`, nunca montando a pasta.
+  `routes.CONECTA_NEW_PATH`, nunca montando a pasta. **E o NOME na New começa
+  pela conta da visão** (mesa, 20/10/2026, §646): `73760009.TCO_BANCO.txt` —
+  `routes._conecta_file_name(visão, nome)`, a conta PRÓPRIA da LE no
+  `b3-accounts` (aceita a LE, o balde `BANCO` e o par `MGT x CLI`). Os nomes
+  saem TODOS antes do primeiro arquivo (visão sem conta recusa o lote), um
+  arquivo é de UMA visão só (as Opções juntavam Banco e Lawton no
+  `FXO_Banco.txt`) e o download do preview fica sem a conta.
+  `check_conecta_file_name.py` §5 varre por AST: quem lê o `CONECTA_NEW_PATH`
+  chama o nomeador.
 - **`/static/data/...` do navegador também sai do `DATA_DIR`**: a rota
   `static_data_file` resolve pelo `data_path()` e vence o `/static/<path>`
   embutido; serve RefData/CPD/calendários do BANCO quando fresco. Raiz e caminho
@@ -3067,7 +3075,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (197 scripts)
+### `scripts/tests/` (198 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
