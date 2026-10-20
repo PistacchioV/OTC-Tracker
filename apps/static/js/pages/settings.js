@@ -113,9 +113,9 @@
         ' aria-label="' + esc(t('n_' + n[0])) + '"></div></div>';
     }).join('');
 
-    var walls = (window.otcUI && otcUI.walls) || {};
-    $('st-walls').innerHTML = Object.keys(walls).map(function (k) {
-      return '<button type="button" class="st-wall" data-wall-pick="' + k + '"><span class="st-wall__art" style="--art:' + walls[k] + '"><i></i><i></i><i></i></span>' +
+    var walls = (window.otcUI && otcUI.walls) || [];
+    $('st-walls').innerHTML = walls.map(function (k) {
+      return '<button type="button" class="st-wall" data-wall-pick="' + k + '"><span class="st-wall__art" data-art="' + k + '"><i></i><i></i><i></i></span>' +
         esc(t('walls')[k] || k) + '</button>';
     }).join('');
 

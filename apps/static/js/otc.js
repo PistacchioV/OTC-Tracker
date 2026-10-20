@@ -1172,16 +1172,10 @@
   // 5. Painel de Aparência (offcanvas do customizer.html)
   // ==========================================================================
   var ACCENTS = { blue: '#1f6fe6', purple: '#7b3ff0', pink: '#cf2068', orange: '#c4500f', green: '#167f3d', graphite: '#4a4a54' };
-  var WALLS = {
-    ash: 'linear-gradient(135deg,#2a2b30,#e4e4e7)', sand: 'linear-gradient(135deg,#3a2a1e,#f6e4d2)', sage: 'linear-gradient(135deg,#1f2c23,#dde9dc)',
-    aurora: 'radial-gradient(80% 70% at 10% 100%,#34469e,transparent 70%),radial-gradient(70% 70% at 100% 0,#2b3a8c,transparent 70%),linear-gradient(135deg,#090b1c,#0c0f24)',
-    smoke: 'radial-gradient(80% 70% at 10% 100%,#5c5c64,transparent 70%),linear-gradient(135deg,#070708,#2a2a30)',
-    tide: 'radial-gradient(80% 70% at 10% 100%,#16c3b0,transparent 70%),radial-gradient(70% 70% at 100% 0,#1d55dc,transparent 70%),linear-gradient(135deg,#03112a,#0d0a2c)',
-    bloom: 'radial-gradient(80% 70% at 10% 100%,#d08a2a,transparent 70%),radial-gradient(70% 70% at 100% 0,#c2306c,transparent 70%),linear-gradient(135deg,#130a2b,#2a0c22)',
-    ember: 'radial-gradient(80% 70% at 10% 100%,#c98a12,transparent 70%),radial-gradient(70% 70% at 100% 0,#c4501a,transparent 70%),linear-gradient(135deg,#200a04,#2a0a12)',
-    grove: 'radial-gradient(80% 70% at 10% 100%,#5e9e1f,transparent 70%),radial-gradient(70% 70% at 100% 0,#1c8f55,transparent 70%),linear-gradient(135deg,#04170e,#041a1e)',
-    dusk: 'radial-gradient(80% 70% at 10% 100%,#6a5440,transparent 70%),radial-gradient(70% 70% at 100% 0,#3d425e,transparent 70%),linear-gradient(135deg,#0f1016,#17121c)'
-  };
+  // as paredes, na ordem da tela. A MINIATURA de cada uma não mora aqui: é o
+  // `--w-art` do otc.scss §2b, pela mesma paleta da parede e no tema atual
+  // (`data-art`) — escrita aqui, ela tinha uma versão só e não seguia o tema
+  var WALLS = ['ash', 'sand', 'sage', 'aurora', 'smoke', 'tide', 'bloom', 'ember', 'grove', 'dusk'];
   otcUI.accents = ACCENTS;
   otcUI.walls = WALLS;
   function initAppearance() {
@@ -1194,8 +1188,8 @@
     });
     $$('[data-otc-walls]').forEach(function (wl) {
       if (wl.children.length) return;
-      wl.innerHTML = Object.keys(WALLS).map(function (k) {
-        return '<button type="button" class="otc-wall-swatch" data-wall-pick="' + k + '"><span class="art" style="--art:' + WALLS[k] + '"></span>' + k.charAt(0).toUpperCase() + k.slice(1) + '</button>';
+      wl.innerHTML = WALLS.map(function (k) {
+        return '<button type="button" class="otc-wall-swatch" data-wall-pick="' + k + '"><span class="art" data-art="' + k + '"></span>' + k.charAt(0).toUpperCase() + k.slice(1) + '</button>';
       }).join('');
     });
     doc.addEventListener('click', function (e) {
