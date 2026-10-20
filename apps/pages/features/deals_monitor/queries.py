@@ -575,8 +575,8 @@ def _intraday_snapshot(ref):
                 item['progress'] = 100 if feito else 0
                 est = domain.avalia(c, dia, agora, feriado, feito, False, feito_em)
         item.update(est)
-        # O ajuste MANUAL do dia vale por cima do automático (zona não: é contagem)
-        aj = ajustes.get(t['id']) if t.get('kind') != 'zone' else None
+        # O ajuste MANUAL do dia vale por cima do automático (a zona também)
+        aj = ajustes.get(t['id'])
         if aj and aj.get('state') in task_runs.OVERRIDE_STATES:
             item['auto_state'] = item.get('state')
             item['state'] = aj['state']

@@ -26287,6 +26287,10 @@ o Chromium do Playwright não dispara o `pagereveal`** — no Google Chrome
   do OTC, o Complete do MO); para trás é do admin (`unstamp`).
 - **Intraday Monitor**: ajuste MANUAL registrado
   (`task_runs.set_override`, `…_task-overrides.json`), com o "↺ auto" de volta.
+  **Vale também para a tarefa de ZONA** (B3 Registration, Confirmations,
+  Intrag): a primeira versão a travava (`draggable=false`, o estado é a
+  contagem), o arrasto nem começava e não dizia por quê — a mesa leu o quadro
+  como quebrado. O ajuste é de quem o faz, com quem/quando no card.
 - **O aviso de ação** é a pílula preta do Pane (`window.otcToast(msg, {undo})`,
   otc.js §3d) — "Done: <tarefa>" com Undo — nas três telas e na Tasks.
 

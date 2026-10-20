@@ -915,12 +915,12 @@
     }
     // ── Arrastar o card de tarefa (§632) ─────────────────────────────────
     // Soltar noutra coluna grava um AJUSTE MANUAL do dia (quem/quando) que vale
-    // por cima do estado calculado. Zona não se move (é contagem). A mesa (BO)
+    // por cima do estado calculado — a zona também. A mesa (BO)
     // anda um passo à frente; admin e master, qualquer coluna — e o "↺ auto" do
     // card devolve ao cálculo. O quadro não se redesenha no meio do arrasto.
     var IM_ME = {}, IMDRAG = null;
     var IM_NEXT = { todo: ['in_progress'], in_progress: ['done'], late: ['done'] };
-    function imPode(tk) { return tk.kind !== 'zone' && !!(IM_ME.is_admin || IM_ME.desk === 'BO'); }
+    function imPode(tk) { return !!(IM_ME.is_admin || IM_ME.desk === 'BO'); }
     function imAceita(from, to) {
         if (!from || !to || from === to) return false;
         return IM_ME.is_admin ? true : (IM_NEXT[from] || []).indexOf(to) !== -1;
@@ -936,7 +936,7 @@
             }
             if (!j.success && window.Swal) Swal.fire({ icon: 'error', title: t('im-move-fail', 'Not moved'),
                 text: j.code === 'move_not_allowed' ? t('im-move-denied', 'Your desk can only move a task one step forward.')
-                    : (j.code === 'zone_not_movable' ? t('im-zone-fixed', 'Zone tasks follow the count and cannot be moved.') : (j.message || '')) });
+                    : (j.message || '') });
             emVoo = null; load();
         });
     }
