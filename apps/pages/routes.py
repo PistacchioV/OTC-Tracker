@@ -11830,8 +11830,13 @@ _API_LINKS_SEED = (
     {'SOURCE': 'API', 'USE': 'New Deals', 'PRODUCT': 'Swaps',
      'URL': _ATHENA_GETTRADES.format('Swaps'),
      'NOTES': 'Sem consumidor ainda'},
-    {'SOURCE': 'API', 'USE': 'Unwinds', 'PRODUCT': '', 'URL': '',
-     'NOTES': 'Preencher com a URL de unwinds quando ela existir'},
+    # Unwinds × NDF: a recompra de NDF de moeda vem do bloco `termination` do
+    # MESMO getTradesBySettle do Cockpit (20/10/2026), pela data de LIQUIDAÇÃO.
+    # Linha própria para a mesa poder apontá-la a outro host sem mexer no
+    # Cockpit; sem ela, a rotina usa o endereço do Daily Settlement × NDF.
+    {'SOURCE': 'API', 'USE': 'Unwinds', 'PRODUCT': 'NDF',
+     'URL': _NDFC_API_URL_FALLBACK,
+     'NOTES': 'Unwind NDF FX — o bloco termination das operações que liquidam na data'},
     # Daily Settlement › NDF (o Cockpit): o getTradesBySettle — as operações que
     # LIQUIDAM na data, não as bookadas nela. Substituiu o SETTLEMENT.xlsx do
     # Cockpit no Import da página (§421). O endereço é o que a mesa entregou
@@ -12674,10 +12679,11 @@ _MAPPING_DEFS = {
     # código — um `product=NDF` esquecido na linha traria NDF para a página de
     # FXO sem ninguém ver. O placeholder serve para a data que fica no CAMINHO.
     #
-    # A linha de Unwinds nasce SEM URL de propósito: não existe rotina de unwind
-    # ainda, e semear um endereço não conferido faria a primeira rotina a nascer
-    # chamar um endpoint inventado. Sem URL, o consumidor falha dizendo que falta
-    # cadastro; o New Deals, esse sim, cai no endereço histórico.
+    # A linha de Unwinds nasceu SEM URL: não havia rotina de unwind, e semear um
+    # endereço não conferido faria a primeira rotina chamar um endpoint
+    # inventado. Desde 20/10/2026 a linha é a do NDF, com o getTradesBySettle
+    # (a recompra de NDF de moeda), e o `upgrade` a acrescenta a quem tem o
+    # cadastro antigo.
     'api-links': {
         'label': 'API/Bob Reports Links',
         'columns': [
@@ -15157,7 +15163,7 @@ from apps.pages.features.swap_bullet import entrypoint as _f_swap_bullet        
 from apps.pages.features.swap_cashflow import entrypoint as _f_swap_cashflow      # noqa: E402,F401
 from apps.pages.features.swap_strategy import entrypoint as _f_swap_strategy    # noqa: E402,F401
 from apps.pages.features.unwinds import entrypoint as _f_unwinds                # noqa: E402,F401
-_schedule_on_start('unwind-boxscan', _f_unwinds.start_scheduler)
+_schedule_on_start('unwind-api', _f_unwinds.start_scheduler)
 from apps.pages.features.projects import entrypoint as _f_projects            # noqa: E402,F401
 
 

@@ -1620,47 +1620,44 @@ table td .btn.btn-act > i { font-size: 1rem !important; line-height: 1; }
   display: none !important;
 }
 
-// 6c. SEND — o "Contrail". Cápsula de tinta escura com avião limão; no
-// clique o avião voa deixando um rastro e o verde vem atrás; "Sent" só
-// depois que o SERVIDOR confirmou (otc.js correlaciona o pedido). Erro:
-// o verde recua com um tremor, em vermelho.
+// 6c. SEND — o "Contrail". O botão fica com a COR DELE — o Send da linha é o
+// `btn-primary` da regra do §7, o do Accrual é `btn-success` — e a animação
+// corre POR CIMA da cor padrão (mesa, 20/10/2026: a cápsula de tinta escura
+// com avião limão destoava das outras três ações da linha). No clique o avião
+// voa deixando um rastro na cor do ícone e o verde vem atrás; "Sent" só
+// depois que o SERVIDOR confirmou (otc.js correlaciona o pedido). Erro: o
+// verde recua com um tremor, em vermelho.
 .btn-row-send, .acc-act-send, .btn-send, .otc-send {
-  --otc-send-ink: #14161b;
-  --otc-send-lime: #d4f000;
   --otc-send-ok: #10b04a;
   --otc-send-err: #e5484d;
+  --otc-send-r: 999px;               // o canto do verde: pílula aqui, squircle abaixo
   --otc-fill-w: 0%;
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  color: var(--otc-send-lime) !important;
-  background: var(--otc-send-ink) !important;
-  border-color: transparent !important;
-  text-shadow: none !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .10), 0 8px 18px -10px rgba(0, 0, 0, .6) !important;
-  filter: none !important;
-  font-weight: 700;
-  letter-spacing: .08em;
   > i, > svg { transition: rotate 220ms var(--otc-ease-out), translate 220ms var(--otc-ease-out), opacity 160ms ease; }
   > i.ti-brand-telegram, > i.ti-send { rotate: 0deg; }
   &:hover > i.ti-brand-telegram, &:hover > i.ti-send, &.is-flying > i { rotate: 45deg; }
   .otc-send__fill {
     position: absolute; inset: 0; z-index: -1;
     border-radius: inherit;
-    background: var(--otc-send-ok);
-    clip-path: inset(0 calc(100% - var(--otc-fill-w)) 0 0 round 999px);
+    // o verde leva o MESMO brilho de gel do botão (`--ins-gradient`, §6a):
+    // chapado, ele parecia um adesivo por cima das outras três ações
+    background-color: var(--otc-send-ok);
+    background-image: var(--ins-gradient, none);
+    clip-path: inset(0 calc(100% - var(--otc-fill-w)) 0 0 round var(--otc-send-r));
     pointer-events: none;
   }
   .otc-send__trail {
     position: absolute; left: 30%; top: 50%; z-index: -1;
     width: 0; height: 1.5px; translate: 0 -50%;
-    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--otc-send-lime) 75%, transparent));
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, currentColor 75%, transparent));
     opacity: 0; pointer-events: none;
   }
   .otc-send__done {
     position: absolute; inset: 0; z-index: 1;
     display: grid; place-items: center;
-    color: #08240f; opacity: 0; filter: blur(4px);
+    color: #fff; opacity: 0; filter: blur(4px);
     font-weight: 750; letter-spacing: .1em; text-transform: uppercase; font-size: .78em;
     transition: opacity .22s ease .05s, filter .22s ease .05s;
     pointer-events: none;
@@ -1677,18 +1674,25 @@ table td .btn.btn-act > i { font-size: 1rem !important; line-height: 1; }
   &.is-sent {
     animation: none;
     --otc-fill-w: 100%;
+    // o próprio botão vira verde: o `overflow` corta o preenchimento na borda
+    // de DENTRO, e sem isto ficava um fio da cor de antes em volta do "Sent"
+    --otc-gel: var(--otc-send-ok);
     transition: --otc-fill-w .35s var(--otc-ease-out);
     > i, > svg:not(.otc-send__ok), .otc-send__label { opacity: 0; }
     .otc-send__done { opacity: 1; filter: none; }
   }
   &.is-failed {
     animation: otc-shake .38s var(--otc-ease-out);
-    .otc-send__fill { background: var(--otc-send-err); }
+    .otc-send__fill { background-color: var(--otc-send-err); }
   }
   &.is-resetting { --otc-fill-w: 0%; transition: --otc-fill-w .45s var(--otc-ease); }
 }
+// o squircle da linha (§6b): o verde que enche o botão segue o canto dele —
+// com o canto de pílula ele virava um círculo, e a cor do botão sobrava nas
+// quinas no "Sent"
+.btn-row-send, .acc-act-send { --otc-send-r: 10px; }
 // a versão com rótulo (toolbar, modal): pílula
-.btn-send, .otc-send, .btn:not(.btn-row-send):not(.acc-act-send).btn-send { min-width: 120px; text-transform: uppercase; font-size: 12.5px; }
+.btn-send, .otc-send, .btn:not(.btn-row-send):not(.acc-act-send).btn-send { min-width: 120px; text-transform: uppercase; font-size: 12.5px; font-weight: 700; letter-spacing: .08em; }
 @property --otc-fill-w { syntax: "<percentage>"; inherits: true; initial-value: 0%; }
 @keyframes otc-send-fly { 0% { translate: 0 0; } 12% { translate: -4px 0; } 85% { opacity: 1; } 100% { translate: 150px 0; opacity: 0; } }
 @keyframes otc-send-trail { 0% { width: 0; opacity: 0; } 30% { opacity: 1; } 100% { width: 70%; opacity: 0; } }

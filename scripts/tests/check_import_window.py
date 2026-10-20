@@ -95,14 +95,15 @@ print('\n== 5. os quatro loops consultam a janela ==')
 # estar no CORPO do while, antes do trabalho — dentro do try ele ja teria
 # custado o poll.
 # O laco do box mora em features/boxscan/commands.py desde a extracao, e o da
-# recompra em features/unwinds/commands.py: os dois se chamam `scheduler_loop`,
+# recompra (a API, desde 20/10/2026) em features/unwinds/commands.py: os dois
+# se chamam `scheduler_loop`,
 # entao a chave aqui e o PAR (arquivo, funcao) — chaveado so pelo nome, o
 # segundo laco desapareceria da varredura sem falhar nada.
 LOOPS = {
     ('apps/pages/platform/new_deals.py', '_fxo_api_scheduler_loop'): 'API de FXO',
     ('apps/pages/platform/new_deals.py', '_ndf_api_scheduler_loop'): 'API de NDF',
     ('apps/pages/features/boxscan/commands.py', 'scheduler_loop'): 'box de commodities',
-    ('apps/pages/features/unwinds/commands.py', 'scheduler_loop'): 'box da recompra',
+    ('apps/pages/features/unwinds/commands.py', 'scheduler_loop'): 'API da recompra',
 }
 achados = {}
 for rel, nome in LOOPS:

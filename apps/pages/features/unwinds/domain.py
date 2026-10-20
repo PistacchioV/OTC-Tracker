@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 """As regras puras da recompra (unwind). Sem Flask, sem banco, sem SMTP.
 
+A recompra chega pela API de liquidacao do Athena (`recompras_da_api`, o
+bloco `termination` do getTradesBySettle, desde 20/10/2026) ou, como plano B,
+pelo e-mail no dropzone. As duas viram o MESMO registro.
+
 O e-mail `BRL NDF Unwind Notification` do Athena traz DUAS tabelas
 `Atributo | Valor` — 'Before Unwind' (a operacao original) e 'After Unwind'
 (a recompra). Aqui elas viram um registro, e nada mais: o de-para para os
@@ -205,6 +209,172 @@ def contrato_por_identificador(linhas, athena_id):
         return None, None
     pos = achadas[0]
     return (str(pos.get('Contrato', '') or '').strip() or None), pos
+
+
+def posicao_pelo_contrato(linhas, contrato, visao_rank=None):
+    """A linha do Live Position NDF do contrato (o B3 ID), ou None.
+
+    E a ponte da recompra que vem pela API: ela traz o `Cetip ID`, e a posicao
+    se acha pelo `Contrato` — sem os 14 caracteres do identificador. O Live
+    Position traz o MESMO contrato na visao de cada entidade nossa (o B2B
+    Banco x Lawton aparece duas vezes), e vale a de menor `visao_rank`: a do
+    Banco antes da do fundo, a regra do catalogo (`product.domain.
+    uma_visao_por_contrato`) — a visao do fundo inverteria o papel no TER
+    0014. Quem responde o rank e o cadastro `b3-accounts`, e por isso ele
+    chega como funcao (o domain e puro); empate fica com a primeira."""
+    alvo = str(contrato or '').strip().upper()
+    if not alvo:
+        return None
+    achadas = [l for l in linhas or []
+               if str(l.get('Contrato', '') or '').strip().upper() == alvo]
+    if len(achadas) > 1 and visao_rank:
+        achadas.sort(key=visao_rank)
+    return achadas[0] if achadas else None
+
+
+# ==============================================================================
+#  A RECOMPRA PELA API  (getTradesBySettle, o bloco `termination`)
+# ==============================================================================
+# Desde 20/10/2026 a recompra chega pela MESMA API da liquidacao do Cockpit: o
+# `getTradesBySettle` da data traz o trade recomprado com um bloco
+# `termination` (uma entrada por recompra) e o `Cetip ID` do contrato. Com o
+# contrato na mao, a ponte dos 14 caracteres do Athena ID deixa de ser
+# necessaria: a posicao se acha pelo B3 ID (`posicao_pelo_contrato`).
+#
+# O de-para e o do e-mail `BRL NDF Unwind Notification`, que e gerado dos
+# mesmos campos — e por isso a recompra da API vira o MESMO registro do
+# `parse_notification`: linha, conferencia, arquivo da B3 e Termo nao sabem de
+# onde ela veio.
+#
+#   Before Unwind   <- o trade               After Unwind           <- termination
+#     Athena ID       Deal Name                Unwind Type            Partial
+#     Trade Date      Trade Date               Unwound Amount         Quantity
+#     Maturity Date   Settlement Date          Termination Rate       Termination Rate
+#     Notional        Quantity                 Pre FWD Rate           Pre FWD Rate
+#     Notional CCY    Quantity Currency        Input Termination Fee  Settlement Quantity
+#     Strike          Strike                   Client                 Other Book
+#
+# O que o e-mail tem e a API NAO: o DU — contado no ANBIMA da liquidacao da
+# recompra ate o vencimento, a conta do Unwind NDF Calculator; quem conta e
+# quem chama (`dias_uteis`), porque o domain nao le calendario —, o Future e o
+# Present Value (os campos ERRADOS do e-mail, §488), a Direction (a direcao e
+# o sinal) e o Entered By.
+#
+# O SINAL do `Settlement Quantity` e o do BANCO (positivo = recebe), a mesma
+# convencao do caixa do bloco `settlement` que o Cockpit le (§421) — conferido
+# na amostra STP-XE-10PSG8U-0-0 (+7.265,60, RECEIVE no e-mail). A conferencia
+# refaz a conta pelo lado da POSICAO e diz NOK se um dia ele vier invertido.
+
+
+def _api_chaves(d):
+    """As chaves do registro da API como o New Deals as le (`_ndf_api_norm`):
+    maiusculas, `_` e espacos viram UM espaco."""
+    out = {}
+    for k, v in (d or {}).items():
+        n = re.sub(r'[\s_]+', ' ', str(k or '').strip().upper())
+        if n and n not in out:
+            out[n] = v
+    return out
+
+
+def _api_num(v):
+    if isinstance(v, bool) or v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    return numero(v)
+
+
+def _api_txt(v):
+    """O valor como TEXTO americano, que e o que o `numero()` do e-mail le.
+    Numero sem notacao cientifica (`1e-05` perderia o expoente no `numero`)."""
+    if v is None or isinstance(v, bool):
+        return ''
+    if isinstance(v, (int, float)):
+        return ('%.10f' % v).rstrip('0').rstrip('.')
+    return str(v).strip()
+
+
+def _api_data(v):
+    """`AAAA-MM-DD` (com ou sem hora) -> o ISO; outra coisa volta como veio."""
+    t = str(v or '').strip()
+    return t[:10] if re.match(r'^\d{4}-\d{2}-\d{2}', t) else t
+
+
+def _api_verdade(v):
+    return v is True or str(v or '').strip().lower() in ('true', '1', 'yes', 'y')
+
+
+def recompras_da_api(registros, liquidacao=None, dias_uteis=None):
+    """Os registros do `getTradesBySettle` -> os registros da recompra, um por
+    entrada do bloco `termination`, no formato do `parse_notification` mais
+    `contrato` (o Cetip ID), `liquidacao` e `data_recompra` (ISO).
+
+    `liquidacao` (ISO) e a data pedida a API: so entra a recompra que LIQUIDA
+    nela. O trade traz o bloco inteiro — a recompra parcial de meses atras
+    volta junto no dia do vencimento —, e sem o filtro ela seria importada de
+    novo em todo dia em que o trade aparecesse.
+
+    `dias_uteis(inicio, fim)` conta o DU (ou devolve None); sem ele o DU fica
+    de fora e a conferencia diz que nao da para conferir. Quem filtra
+    cancelado e interbook e quem chama, pelas regras do New Deals."""
+    out = []
+    for reg in registros or []:
+        if not isinstance(reg, dict):
+            continue
+        t = _api_chaves(reg)
+        eventos = t.get('TERMINATION')
+        if isinstance(eventos, dict):
+            eventos = [eventos]
+        if not isinstance(eventos, list) or not eventos:
+            continue
+        athena_id = _api_txt(t.get('DEAL NAME')).replace('_', '-')
+        if not athena_id:
+            continue
+        venc = _api_data(t.get('SETTLEMENT DATE') or t.get('EXPIRATION SETTLEMENT DATE'))
+        nocional = _api_num(t.get('QUANTITY'))
+        antes = {
+            'Athena ID': athena_id,
+            'Trade Date': _api_data(t.get('TRADE DATE')),
+            'Maturity Date': venc,
+            'Notional': _api_txt(abs(nocional)) if nocional is not None else '',
+            'Notional CCY': _api_txt(t.get('QUANTITY CURRENCY')),
+            'Strike': _api_txt(t.get('STRIKE')),
+        }
+        cliente = _api_txt(t.get('OTHER BOOK')) or _api_txt(t.get('END COUNTERPARTY'))
+        for ev in eventos:
+            if not isinstance(ev, dict):
+                continue
+            e = _api_chaves(ev)
+            liq = _api_data(e.get('SETTLEMENT DATE'))
+            if liquidacao and liq != liquidacao:
+                continue
+            qtd = _api_num(e.get('QUANTITY'))
+            if qtd is None:
+                qtd = _api_num(e.get('TERMINATED POSITION QUANTITIES'))
+            depois = {
+                'Unwind Type': 'PARTIAL' if _api_verdade(e.get('PARTIAL')) else 'TOTAL',
+                'Unwound Amount': _api_txt(abs(qtd)) if qtd is not None else '',
+                'Termination Rate': _api_txt(e.get('TERMINATION RATE')),
+                'Pre FWD Rate': _api_txt(e.get('PRE FWD RATE')),
+                'Input Termination Fee': _api_txt(e.get('SETTLEMENT QUANTITY')),
+                'Client': cliente,
+            }
+            du = dias_uteis(liq, venc) if (dias_uteis and liq and venc) else None
+            if du is not None:
+                depois['DU'] = str(int(du))
+            out.append({
+                'athena_id': athena_id,
+                'notification_id': _api_txt(e.get('EVENT NAME')),
+                'subject_ids': [],
+                'secoes': {'before': antes, 'after': depois},
+                'pares': {'before': list(antes.items()), 'after': list(depois.items())},
+                'avisos': [],
+                'contrato': _api_txt(t.get('CETIP ID')).upper(),
+                'liquidacao': liq,
+                'data_recompra': _api_data(e.get('TRADE DATE')) or liq,
+            })
+    return out
 
 
 # ==============================================================================
@@ -992,7 +1162,16 @@ def linha_da_recompra(rec, posicao, hoje, contrato=None, omnibus=None):
     # menos o `Valor Antecipado`, que sai o saldo aberto (ver `saldo_da_posicao`).
     original = notional_original_me(antes)
     pos = dados_da_posicao(posicao, omnibus, original)
-    avisos = list((rec or {}).get('avisos') or []) + list(pos['avisos'])
+    avisos_pos = list(pos['avisos'])
+    if contrato and not pos['contrato']:
+        # A API trouxe o contrato e a posicao nao o tem: "sem contrato" seria
+        # falso — o que falta e a LINHA do Live Position (posicao do dia ainda
+        # nao carregada, contrato fora dela), e e isso que a tela tem de dizer.
+        avisos_pos = [a for a in avisos_pos if a.get('code') != 'unwind_no_contract']
+        avisos_pos.insert(0, {'code': 'unwind_contract_not_in_position',
+                              'params': {'contract': contrato},
+                              'text': 'The B3 contract %s is not in the Live Position' % contrato})
+    avisos = list((rec or {}).get('avisos') or []) + avisos_pos
     if pos.get('aviso_contraparte'):
         avisos.append(pos['aviso_contraparte'])
     fixo = fixo_em_reais(antes)
@@ -1049,7 +1228,9 @@ def linha_da_recompra(rec, posicao, hoje, contrato=None, omnibus=None):
         'EmailDirection': depois.get('Direction') or '',
         'TradeDate': antes.get('Trade Date') or '',
         'MaturityDate': antes.get('Maturity Date') or '',
-        'SettlementDate': hoje.strftime('%Y-%m-%d'),
+        # A API diz quando a recompra LIQUIDA; o e-mail nao, e ai vale o dia
+        # do import (a decisao da mesa para o campo 11 do TER 0014).
+        'SettlementDate': (rec or {}).get('liquidacao') or hoje.strftime('%Y-%m-%d'),
         'PartyAccount': pos['conta_parte'] or '',
         'CptyAccount': pos['conta_contraparte'] or '',
         'Balance': pos['saldo'],

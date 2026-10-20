@@ -26719,3 +26719,90 @@ para quem está fora recusada com o código, para o time e o Lead aceita, quem
 saiu do time segue responsável, a Tasks recebe os envolvidos, e a tela usa a
 lista nos dois lugares. `check_projects` §3 e `check_user_home` passaram a pôr
 no time quem recebe tarefa — a regra nova recusa o que eles faziam antes.
+
+## §640 — A recompra de NDF FX pela API de liquidação (2026-10-20)
+
+**"Agora as informações estão na API de settlement também, num item chamado
+`termination`, com o Cetip ID direto."** O `getTradesBySettle` da data — a
+mesma API do NDF Cockpit — traz o trade recomprado com um bloco `termination`
+(uma entrada por recompra) e o `Cetip ID` do contrato. A recompra deixa de
+depender do e-mail do Athena e, com o B3 ID na mão, da ponte dos 14
+caracteres do `Código Identificador`.
+
+**O de-para é o do e-mail, campo a campo** (`domain.recompras_da_api`): Before
+Unwind ← o trade (`Deal Name`, `Trade Date`, `Settlement Date` = vencimento,
+`Quantity`, `Quantity Currency`, `Strike`); After Unwind ← o termination
+(`Partial` → TOTAL/PARTIAL, `Quantity`, `Termination Rate`, `Pre FWD Rate`,
+`Settlement Quantity` = o Input Termination Fee) e o `Other Book` como Client.
+O registro sai no MESMO formato do `parse_notification`, então linha,
+conferência, arquivo da B3, Termo, esteira, Intrag e Cockpit não sabem de onde
+ele veio. Duas coisas que a API não traz: o **DU**, contado no ANBIMA da
+liquidação da recompra até o vencimento (a conta do Unwind NDF Calculator —
+12 na amostra, como o e-mail), e a Direction (a direção já era o sinal do
+fee, §624). **O sinal do `Settlement Quantity` foi lido como o do banco**
+(positivo = recebe), a convenção do caixa do bloco `settlement` (§421); a
+amostra STP-XE-10PSG8U-0-0 confirma (+7.265,60, RECEIVE), mas é UMA amostra:
+uma recompra a pagar vai dizer se o sinal vem negativo. Se vier invertido, o
+Check sai NOK com o valor apurado ao lado.
+
+**A posição pelo B3 ID** (`domain.posicao_pelo_contrato`): o `Contrato` do
+Live Position, na visão do Banco antes da do fundo (`_visao_rank`, a regra do
+catálogo). Contrato da API sem linha na posição avisa
+`unwind_contract_not_in_position` em vez do falso "sem contrato".
+
+**O pull** (`commands.importar_da_api`): pede a data E o dia útil ANBIMA
+seguinte — o endpoint é por LIQUIDAÇÃO e a recompra liquida em D0 ou D+1;
+pedindo só a data, a de hoje que liquida amanhã chegaria amanhã, depois do
+arquivo da B3 e do Termo. Só aceita o termination que liquida na data pedida
+(o trade traz o bloco inteiro, e a parcial de meses atrás voltaria no dia do
+vencimento), pula cancelado e perna interna pelas regras do Cockpit, grava no
+dia da RECOMPRA (o `Trade Date` do termination) e **só a recompra NOVA**: o
+laço roda a cada 30 minutos, e reimportar reescreveria a linha que a mesa
+editou (o upsert preserva Status e maker, não os valores) e reabriria uns
+quinze bancos no share por nada. A leitura do dia é estrita
+(`queries.chaves_do_dia`): banco ocupado lido como vazio faria justamente a
+reimportação. Uma data que a API não responde não derruba a outra; as duas
+falhando é erro com os motivos. Grava pelo MESMO funil do e-mail
+(`_montar_linhas` + `_gravar`).
+
+**O laço** é o mesmo slot do antigo: `scheduler_loop` registrado como
+`unwind-api`, 30 min (`OTC_UNWIND_API_POLL_MIN`), janela 08–20 BRT, sino só
+com recompra nova (`Athena API`). **A varredura do Outlook saiu** (o
+`scan_box`, a rota `/scan` e o bloco de recompra do `otc_boxscan`, com o
+`resolve_folder`, que só ela usava): dois caminhos automáticos importariam a
+mesma recompra duas vezes, e o do e-mail sobrescreveria a linha da API. O
+e-mail fica como plano B no dropzone, e não é mais arquivado na pasta Unwind.
+Na tela, o **Import com o dropzone vazio puxa da API** da Reference Date
+(`/api/unwinds/ndf/fx/import-api`, 502 com código quando a API não responde) e
+o resumo diz quantas já estavam no dia.
+
+**O endereço** é a linha `Unwinds` × NDF do `api-links` (o seed trocou a linha
+vazia por ela; o `upgrade` a acrescenta para quem tem o cadastro), com o
+Daily Settlement × NDF de plano B: o `athena_api` lê o cadastro sem `upgrade`,
+e a linha nova só chega à instância depois que alguém abre a tela /mapping.
+
+**Guardas.** `check_unwind_api.py` (novo): o de-para e o DU da amostra, o
+filtro pela liquidação, a visão do Banco, as duas datas com o timeout de
+relatório, o cancelado de fora, o dia da recompra, esteira, Pending
+Confirmation e o Cockpit de cada liquidação, o segundo pull sem reescrever a
+edição, banco ocupado subindo, a falha parcial e a total, a rota, o laço, o
+sino e o cadastro. `check_unwind_page` §1/§11/§14/§15, `check_api_links` §1 e
+`check_import_window` §5 acompanharam; `check_unwind_*`, `check_intrag_unwind`,
+`check_ndfc_api`, `check_soc_layers` e `check_notif_page_url` verdes.
+
+## §641 — O Send da linha na cor padrão (2026-10-20)
+
+**"O botão de enviar do row level tem que permanecer na mesma cor que estava
+antes. A animação deve ocorrer em cima das cores padrão."** O Contrail (§632)
+pintava o Send como uma cápsula escura com avião limão, com `!important` na
+cor, no fundo, na borda e na sombra — ao lado do Confirm, do Edit e do Delete
+em gel, ele destoava (a mesa achou "tenebroso"). Saiu a pintura: o botão fica
+com a cor dele (o `btn-primary` da regra dos botões de ação; o do Accrual
+segue `btn-success`), e o voo, o rastro, o verde do "Sent" e o vermelho do
+erro correm por cima. Três acabamentos para a animação assentar na cor
+padrão: o rastro usa a cor do ícone (`currentColor`); o verde leva o MESMO
+brilho de gel do botão (`--ins-gradient`) e o canto do squircle
+(`--otc-send-r: 10px` na linha — com o canto de pílula ele virava um círculo);
+e no "Sent" o próprio botão vira verde (`--otc-gel`), porque o `overflow`
+corta o preenchimento na borda de dentro e sobrava um fio azul em volta.
+Conferido no Chromium nos dois temas e no modo opaco.

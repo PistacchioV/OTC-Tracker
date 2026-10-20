@@ -64,7 +64,8 @@ check('a constante de fallback bate com o seed',
 check('o FXO tem endereco proprio',
       A.build_url(SEED[('New Deals', 'FXO')]['URL'], date='20260728', force_product=False),
       A.BASE_URL + A.TRADES_ENDPOINT + '?product=FXO&date=20260728')
-check('o seed do Unwinds nasce SEM URL', SEED[('Unwinds', '')]['URL'], '')
+check('o seed do Unwinds x NDF e o getTradesBySettle (a recompra, 20/10/2026)',
+      SEED[('Unwinds', 'NDF')]['URL'], R._NDFC_API_URL_FALLBACK)
 check('o Daily Settlement (NDF Cockpit) tem linha, e ela E o fallback do import',
       SEED[('Daily Settlement', 'NDF')]['URL'], R._NDFC_API_URL_FALLBACK)
 check('o fallback do Cockpit e o getTradesBySettle com a data reescrita',

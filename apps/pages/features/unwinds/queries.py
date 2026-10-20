@@ -93,6 +93,20 @@ def search(filters):
     return out
 
 
+def chaves_do_dia(ref):
+    """Os Athena IDs ja gravados no arquivo-dia de `ref` (um `date`).
+
+    Leitura ESTRITA: banco ocupado ou ilegivel SOBE, nunca vira "nao ha nada"
+    — o pull da API reimportaria entao, por cima, a recompra que a mesa ja
+    editou no dia. Arquivo ausente e o conjunto vazio."""
+    fp = persistence.day_path(datetime(ref.year, ref.month, ref.day))
+    if not _store.isfile(fp):
+        return set()
+    lst = _store.read(fp)
+    return {persistence.key_of(e) for e in (lst if isinstance(lst, list) else [])
+            if isinstance(e, dict)} - {''}
+
+
 def find(athena_id, ref_date=''):
     """(caminho, lista MUTAVEL, indice) da linha — pelo arquivo-dia de
     `ref_date` quando ela vem; senao varre a arvore."""

@@ -680,8 +680,9 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `A`/`5`/`358` (`_b3_quote_cfg`); cópia no navegador em
   `b3-quote-config.js`, `check_quote_type.py` prova a paridade.
 - **`api-links`** — uma linha por uso × produto (`New Deals` × NDF/FXO/
-  Commodities/Swaps, `Unwinds` vazio de propósito, `Recon FXO`, `Intrag DCE`,
-  `Daily Settlement` × NDF = `getTradesBySettle`); `SOURCE` API × Bob Report;
+  Commodities/Swaps, `Unwinds` × NDF = `getTradesBySettle` (a recompra de NDF
+  FX, §640), `Recon FXO`, `Intrag DCE`, `Daily Settlement` × NDF =
+  `getTradesBySettle`); `SOURCE` API × Bob Report;
   `YYYYMMDD` é a data; produto é o parâmetro da API, não a página. O
   `settlement` da API é LISTA e o valor é o primeiro item numérico de `Rolled
   Positions` (§425) — **no cross SEM BRL (USD × GBP, USD × EUR) é o SEGUNDO**:
@@ -1016,9 +1017,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   **sem escala** (§6h) — o `shown.bs.modal` dispara durante a entrada e escala
   muda a largura que o DataTables mede. Saída do Swal tem keyframe PRÓPRIO
   (`otc-swal-out`): mesmo nome com `reverse` não reinicia e o popup não fecha.
-- **O Send é o "Contrail"** (`otc.scss` §6c + `otc.js`): o botão de envio vira
-  a cápsula com o avião, que decola no request e pousa no resultado lido do
-  JSON. Não se reimplementa por página.
+- **O Send é o "Contrail"** (`otc.scss` §6c + `otc.js`): o avião decola no
+  request e o botão pousa no resultado lido do JSON. **O botão fica com a COR
+  DELE** (mesa, 20/10/2026, §641): o Send da linha é o `btn-primary` da regra
+  dos botões de ação, e o voo, o verde do "Sent" e o vermelho do erro correm
+  por cima da cor padrão — a cápsula escura com avião limão destoava das outras
+  três ações. Não se reimplementa por página.
 - **A aparência vai para o `<html>` ANTES do primeiro paint** (script
   síncrono do `partials/head-css.html`): `data-bs-theme`, `data-accent`,
   `data-wall`, `data-glass` e a classe `is-solid`, lidos de
@@ -1855,8 +1859,24 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `force_values` — o template da antecipação o tem `Fixed` em `JPMORGANBM`. Os outros produtos do
   catálogo **ainda NÃO têm** Termo, esteira, Intrag, Cockpit nem Summary.
   `check_unwind_products.py`.
-- **A ponte até o contrato é o `Código Identificador` do Live Position, e ele
-  vem de DUAS formas**: TRUNCADO nos 14 da direita (o aviso traz
+- **A recompra de NDF FX vem da API de liquidação** (mesa, 20/10/2026, §640):
+  o bloco `termination` do MESMO `getTradesBySettle` do Cockpit, com o `Cetip
+  ID` do contrato (`domain.recompras_da_api`, o de-para do e-mail campo a
+  campo; o DU é contado no ANBIMA, a API não o traz). A posição se acha pelo
+  B3 ID (`posicao_pelo_contrato`, a visão do Banco antes da do fundo). O pull
+  pede a data E o dia útil seguinte (a recompra liquida em D0 ou D+1, e o
+  endpoint é por LIQUIDAÇÃO), só aceita o termination que liquida na data
+  pedida (a parcial antiga volta junto no vencimento), grava no dia da
+  RECOMPRA e **só a NOVA** — o laço roda a cada 30 min, e reimportar
+  reescreveria a linha editada. A leitura do dia é estrita. O endereço é a
+  linha `Unwinds` × NDF do `api-links`, com o Daily Settlement de plano B (o
+  `upgrade` não alcança quem lê pelo `athena_api`). **O SINAL do `Settlement
+  Quantity` é o do banco** (positivo = recebe), conferido numa amostra só: o
+  Check diz NOK se vier invertido. O e-mail ficou como PLANO B no dropzone;
+  a varredura do Outlook saiu (dois caminhos automáticos importariam a mesma
+  recompra duas vezes). `check_unwind_api.py`.
+- **No e-mail (plano B) a ponte até o contrato é o `Código Identificador` do
+  Live Position, e ele vem de DUAS formas**: TRUNCADO nos 14 da direita (o aviso traz
   `STP-XE-10G5U5X-0-0` e a posição, `XE-10G5U5X-0-0`) ou INTEIRO
   (`ATS-4T6-2W4YU86-0-0` nos dois lados). O casamento tem TRÊS passadas
   (mesa, 02/10/2026, §621): a igualdade EXATA, os 14 da ESQUERDA dos dois lados — só
@@ -2080,45 +2100,27 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   num literal `'UNWIND'` e o `create=True` fazia nascer uma pasta com esse nome
   no Electronic Inventory, ao lado das contrapartes de verdade — o documento
   ficava salvo, a tela não acusava nada, e ele não estava onde a mesa procura.
-- **Toda ação da página toca o sino** (Import, Box Scan, Edit, Confirm, Delete,
+- **Toda ação da página toca o sino** (Import, pull da API, Edit, Confirm, Delete,
   Send, Termo salvo), porque o arquivo-dia é da mesa inteira. A exceção é o
   `dry_run` do Import: ali nada foi gravado, é a pergunta das duplicatas.
 - **Import e varredura são em LOTE** (mesa, 02/10/2026, §622): o
   `import_emails`/`import_email_uploads` lê a posição UMA vez e faz UM upsert,
   UMA passada de esteira (`_pc_save_from_deals`/`_mc_save_from_deals`: uma
-  leitura e uma escrita por banco), uma de Intrag e uma de Cockpit; o box scan
-  chama o mesmo lote e arquiva tudo numa resolução de pasta
-  (`otc_boxscan.archive_unwind_emails`). Um e-mail por vez abria cada banco
+  leitura e uma escrita por banco), uma de Intrag e uma de Cockpit; o pull da
+  API grava pelo MESMO funil (`_montar_linhas` + `_gravar`, um upsert por dia
+  de recompra). Um e-mail por vez abria cada banco
   uma vez POR RECOMPRA no share: 79 recompras passavam de uma hora. E-mail que
   falha volta em `failed` sem derrubar os outros; a tela manda os arquivos em
   fatias de 25. Caminho NOVO de gravação por recompra entra no lote, nunca num
   laço de chamadas unitárias.
-- **A varredura roda sozinha a cada 30 min**, em laço PRÓPRIO da vertical
+- **O pull roda sozinho a cada 30 min**, em laço PRÓPRIO da vertical
   (`unwinds/commands.scheduler_loop`, registrado no `routes.py` como
-  `unwind-boxscan`) e não dentro do `features/boxscan`: **feature não importa
-  feature** nesta casa — nenhuma das 49 importa, e é o `check_soc_layers` que
-  segura. O que as duas compartilham é o INTERVALO, a mesma
-  `BOX_SCAN_POLL_MIN`, para a mesa ter um botão só. A tela sempre prometeu os
-  30 minutos; até 18/09/2026 não havia laço nenhum registrado, e a recompra só
-  entrava no clique do Import. **Varredura vazia não toca o sino** (a caixa
-  está vazia quase sempre; um aviso a cada 30 min é o fim do sino), e e-mail
-  que o parser recusou vai para o log em WARNING mesmo sem linha nenhuma — ele
-  ficou no box.
-- **A varredura é no INBOX, o mesmo por onde entra o booking recap de NDF Comm
-  e Opt Comm** (`scan_unwind_box` chama o `_connect_inbox` do
-  `scan_new_deals_box`): o aviso do Athena chega na caixa de entrada, não na
-  subpasta das liquidações, que era onde a primeira versão o procurava — ali
-  ele voltava "nenhum e-mail", calado. **O ARQUIVAMENTO não acompanhou**: o
-  e-mail importado vai para a `Unwind` das liquidações
-  (`OTC_UNWIND_ARCHIVE_FOLDER`), que é o que separa o que já entrou do que
-  falta. `OTC_UNWIND_SOURCE_FOLDER` preenchida volta a varrer uma subpasta —
-  e **tupla vazia não se passa ao `resolve_folder`**: ele devolveria a RAIZ da
-  caixa, que não tem mensagem nenhuma.
-- **O box scan procura a pasta na RAIZ da caixa e depois no Inbox**
-  (`resolve_folder`), dizendo no log por onde achou; a árvore do Outlook não
-  distingue os dois níveis, e presumir um deles arquiva o e-mail numa pasta
-  nova e vazia com o nome da certa. A caixa é a `brazil.otc.ops` — a
-  `brazil_otc_settlements` está DENTRO dela.
+  `unwind-api`, `OTC_UNWIND_API_POLL_MIN`), dentro da janela de importação e
+  não dentro de outra feature: **feature não importa feature** nesta casa —
+  é o `check_soc_layers` que segura. **Pull sem recompra nova não toca o
+  sino** (quase sempre não há), e a data que a API não respondeu vai para o
+  log em WARNING mesmo sem linha nenhuma. Até 20/10/2026 o laço era a
+  varredura do Outlook (§640).
 
 ### Dashboard (o painel do `index.html`)
 
@@ -2894,7 +2896,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   (`_ndm_pending_catch_up`, claim em disco). **Os quatro schedulers de
   importação só entre 08:00 e 20:00 BRT** (`IMPORT_POLL_WINDOW`; malformado =
   sempre aberta com aviso), `continue` antes do `try` — as duas APIs da Athena,
-  o box de commodities e o box da recompra. `check_import_window.py` §5 varre
+  o box de commodities e a API da recompra. `check_import_window.py` §5 varre
   os quatro por AST, pelo PAR (arquivo, função): dois deles se chamam
   `scheduler_loop`, e chaveada só pelo nome a varredura perderia o segundo sem
   falhar nada.
@@ -3041,7 +3043,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (194 scripts)
+### `scripts/tests/` (195 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

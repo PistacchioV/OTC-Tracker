@@ -16327,22 +16327,13 @@ table td .btn.btn-act > i {
 }
 
 .btn-row-send, .acc-act-send, .btn-send, .otc-send {
-  --otc-send-ink: #14161b;
-  --otc-send-lime: #d4f000;
   --otc-send-ok: #10b04a;
   --otc-send-err: #e5484d;
+  --otc-send-r: 999px;
   --otc-fill-w: 0%;
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  color: var(--otc-send-lime) !important;
-  background: var(--otc-send-ink) !important;
-  border-color: transparent !important;
-  text-shadow: none !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 8px 18px -10px rgba(0, 0, 0, 0.6) !important;
-  filter: none !important;
-  font-weight: 700;
-  letter-spacing: 0.08em;
 }
 .btn-row-send > i, .btn-row-send > svg, .acc-act-send > i, .acc-act-send > svg, .btn-send > i, .btn-send > svg, .otc-send > i, .otc-send > svg {
   transition: rotate 220ms var(--otc-ease-out), translate 220ms var(--otc-ease-out), opacity 160ms ease;
@@ -16358,8 +16349,9 @@ table td .btn.btn-act > i {
   inset: 0;
   z-index: -1;
   border-radius: inherit;
-  background: var(--otc-send-ok);
-  clip-path: inset(0 calc(100% - var(--otc-fill-w)) 0 0 round 999px);
+  background-color: var(--otc-send-ok);
+  background-image: var(--ins-gradient, none);
+  clip-path: inset(0 calc(100% - var(--otc-fill-w)) 0 0 round var(--otc-send-r));
   pointer-events: none;
 }
 .btn-row-send .otc-send__trail, .acc-act-send .otc-send__trail, .btn-send .otc-send__trail, .otc-send .otc-send__trail {
@@ -16370,7 +16362,7 @@ table td .btn.btn-act > i {
   width: 0;
   height: 1.5px;
   translate: 0 -50%;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--otc-send-lime) 75%, transparent));
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, currentColor 75%, transparent));
   opacity: 0;
   pointer-events: none;
 }
@@ -16380,7 +16372,7 @@ table td .btn.btn-act > i {
   z-index: 1;
   display: grid;
   place-items: center;
-  color: #08240f;
+  color: #fff;
   opacity: 0;
   filter: blur(4px);
   font-weight: 750;
@@ -16416,6 +16408,7 @@ table td .btn.btn-act > i {
 .btn-row-send.is-sent, .acc-act-send.is-sent, .btn-send.is-sent, .otc-send.is-sent {
   animation: none;
   --otc-fill-w: 100%;
+  --otc-gel: var(--otc-send-ok);
   transition: --otc-fill-w 0.35s var(--otc-ease-out);
 }
 .btn-row-send.is-sent > i, .btn-row-send.is-sent > svg:not(.otc-send__ok), .btn-row-send.is-sent .otc-send__label, .acc-act-send.is-sent > i, .acc-act-send.is-sent > svg:not(.otc-send__ok), .acc-act-send.is-sent .otc-send__label, .btn-send.is-sent > i, .btn-send.is-sent > svg:not(.otc-send__ok), .btn-send.is-sent .otc-send__label, .otc-send.is-sent > i, .otc-send.is-sent > svg:not(.otc-send__ok), .otc-send.is-sent .otc-send__label {
@@ -16429,17 +16422,23 @@ table td .btn.btn-act > i {
   animation: otc-shake 0.38s var(--otc-ease-out);
 }
 .btn-row-send.is-failed .otc-send__fill, .acc-act-send.is-failed .otc-send__fill, .btn-send.is-failed .otc-send__fill, .otc-send.is-failed .otc-send__fill {
-  background: var(--otc-send-err);
+  background-color: var(--otc-send-err);
 }
 .btn-row-send.is-resetting, .acc-act-send.is-resetting, .btn-send.is-resetting, .otc-send.is-resetting {
   --otc-fill-w: 0%;
   transition: --otc-fill-w 0.45s var(--otc-ease);
 }
 
+.btn-row-send, .acc-act-send {
+  --otc-send-r: 10px;
+}
+
 .btn-send, .otc-send, .btn:not(.btn-row-send):not(.acc-act-send).btn-send {
   min-width: 120px;
   text-transform: uppercase;
   font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 
 @property --otc-fill-w {

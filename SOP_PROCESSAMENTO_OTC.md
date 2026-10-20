@@ -343,13 +343,16 @@ Registro de novos negócios de Opção de Commodities, com cache, geração Cone
 
 #### Unwinds — NDF FX
 
-Recompra (antecipação) de termo de moeda já registrado na B3. O aviso do Athena
-(*BRL NDF Unwind Notification*) chega por e-mail durante o dia — processo
-SEPARADO do lote de liquidação da manhã. A tela importa o e-mail (arrastado do
-Outlook como `.msg`/`.eml`, ou pela varredura automática do box de 30 em 30
-minutos), casa a operação com o Live Position de NDF pelo identificador,
-**confere o resultado apurado** e monta o arquivo TER 0014 (antecipação de
-contrato a termo, 133 caracteres) para o Batch Conecta.
+Recompra (antecipação) de termo de moeda já registrado na B3 — processo
+SEPARADO do lote de liquidação da manhã. A recompra entra pela **API de
+liquidação do Athena** (a mesma do NDF Cockpit), que traz o **B3 ID** do
+contrato: a tela a puxa sozinha de 30 em 30 minutos, das 08h às 20h, ou no
+**Import** com o dropzone vazio. Ela pede a data e o dia útil seguinte e grava
+só as recompras novas. A tela casa a operação com o Live Position de NDF pelo
+B3 ID, **confere o resultado apurado** e monta o arquivo TER 0014 (antecipação
+de contrato a termo, 133 caracteres) para o Batch Conecta. O e-mail do Athena
+(*BRL NDF Unwind Notification*) fica como plano B: arrastado para o dropzone
+quando a API não responder.
 
 A coluna **Check** é o veredito da conferência e tem três estados: **OK**,
 **NOK** (o valor do e-mail não bate com o recalculado) e **–** (não deu para

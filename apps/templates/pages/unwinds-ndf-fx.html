@@ -65,7 +65,7 @@
                                 </span>
                             </div>
                             <h4 class="mb-2" data-lang="unw-dropzone-title">Drop the unwind notification here, or click to upload.</h4>
-                            <p class="text-muted fst-italic mb-3" data-lang="unw-dropzone-hint">Drag the Athena e-mail straight from Outlook (.msg, .eml or .htm) — or leave it empty and click Import to scan the Outlook box. The box scan also runs on its own every 30 minutes.</p>
+                            <p class="text-muted fst-italic mb-3" data-lang="unw-dropzone-hint">Leave it empty and click Import to pull the unwinds of the Reference Date from the Athena API (the pull also runs on its own every 30 minutes) — or drop the Athena e-mail (.msg, .eml or .htm) if the API is down.</p>
                             <button class="btn btn-sm shadow btn-default" type="button" data-lang="nd-browse">Browse</button>
                         </div>
                     </form>
@@ -217,6 +217,7 @@ var ENTRIES = [], ROWS = {}, selected = new Set();
 var _TRANS = {
     en: {
         'w_unwind_no_contract': 'No contract found in the Live Position for this Athena ID',
+        'w_unwind_contract_not_in_position': 'The B3 contract of this unwind is not in the Live Position yet',
         'w_unwind_no_counterparty': 'The position identifies no counterparty',
         'w_unwind_cpty_not_registered': 'The counterparty document is not in the Reference Data — the umbrella account carries the bank as holder, so the client cannot be named',
         'w_unwind_position_unknown': 'The Live Position row could not be read',
@@ -243,10 +244,17 @@ var _TRANS = {
         'e_unwind_return_folder_missing': 'B3 return folder not found: {path}',
         'e_unwind_not_found': 'Entry not found',
         'e_unwind_only_pending': 'Only Pending unwinds can be confirmed',
-        'e_unwind_maker_is_checker': 'You edited this row — a different user must confirm it'
+        'e_unwind_maker_is_checker': 'You edited this row — a different user must confirm it',
+        'unw_import_tip': 'Pull the unwinds from the Athena API (or process the e-mails in the dropzone)',
+        'unw_api_title': 'Athena API',
+        'unw_api_pulling': 'Pulling from Athena...',
+        'unw_api_existing': '{n} already on the day — kept as they are',
+        'unw_api_date_failed': 'Settlement date {date} did not answer: {reason}',
+        'e_unwind_api_failed': 'The Athena API did not answer: {reason}'
     },
     br: {
         'w_unwind_no_contract': 'Nenhum contrato no Live Position para este Athena ID',
+        'w_unwind_contract_not_in_position': 'O contrato B3 desta recompra ainda não está no Live Position',
         'w_unwind_no_counterparty': 'A posição não identifica a contraparte',
         'w_unwind_cpty_not_registered': 'O CPF/CNPJ da contraparte não está no Reference Data — na conta guarda-chuva o titular é o banco, então o cliente não pode ser nomeado',
         'w_unwind_position_unknown': 'Não foi possível ler a linha do Live Position',
@@ -273,10 +281,17 @@ var _TRANS = {
         'e_unwind_return_folder_missing': 'Pasta de retorno da B3 não encontrada: {path}',
         'e_unwind_not_found': 'Linha não encontrada',
         'e_unwind_only_pending': 'Só recompras Pending podem ser confirmadas',
-        'e_unwind_maker_is_checker': 'Você editou esta linha — quem confirma tem de ser outro usuário'
+        'e_unwind_maker_is_checker': 'Você editou esta linha — quem confirma tem de ser outro usuário',
+        'unw_import_tip': 'Puxa as recompras da API do Athena (ou processa os e-mails do dropzone)',
+        'unw_api_title': 'API do Athena',
+        'unw_api_pulling': 'Puxando do Athena...',
+        'unw_api_existing': '{n} já estavam no dia — mantidas como estão',
+        'unw_api_date_failed': 'A liquidação de {date} não respondeu: {reason}',
+        'e_unwind_api_failed': 'A API do Athena não respondeu: {reason}'
     },
     es: {
         'w_unwind_no_contract': 'No se encontró contrato en el Live Position para este Athena ID',
+        'w_unwind_contract_not_in_position': 'El contrato B3 de esta recompra aún no está en el Live Position',
         'w_unwind_no_counterparty': 'La posición no identifica la contraparte',
         'w_unwind_cpty_not_registered': 'El CPF/CNPJ de la contraparte no está en el Reference Data — en la cuenta paraguas el titular es el banco, así que el cliente no puede nombrarse',
         'w_unwind_position_unknown': 'No se pudo leer la línea del Live Position',
@@ -303,7 +318,13 @@ var _TRANS = {
         'e_unwind_return_folder_missing': 'Carpeta de retorno de la B3 no encontrada: {path}',
         'e_unwind_not_found': 'Línea no encontrada',
         'e_unwind_only_pending': 'Solo las recompras Pending pueden confirmarse',
-        'e_unwind_maker_is_checker': 'Usted editó esta línea — quien confirma debe ser otro usuario'
+        'e_unwind_maker_is_checker': 'Usted editó esta línea — quien confirma debe ser otro usuario',
+        'unw_import_tip': 'Trae las recompras de la API de Athena (o procesa los correos del dropzone)',
+        'unw_api_title': 'API de Athena',
+        'unw_api_pulling': 'Trayendo de Athena...',
+        'unw_api_existing': '{n} ya estaban en el día — se mantienen como están',
+        'unw_api_date_failed': 'La liquidación del {date} no respondió: {reason}',
+        'e_unwind_api_failed': 'La API de Athena no respondió: {reason}'
     }
 };
 function _lang() { try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) { return 'en'; } }
@@ -480,11 +501,11 @@ $(document).ready(function () {
                 if (el) el.addEventListener('change', function () { sfSetRefDate(el.value); });
             }
 
-            // ── Import: fila do dropzone ou, se ela estiver VAZIA, o box ──
-            // Um botão só, como no NDF/Opt Commodities: a varredura do box é a
-            // rota AUTOMÁTICA do mesmo Import, não uma ação à parte. Dois
-            // botões faziam a mesa escolher entre dois caminhos que levam ao
-            // mesmo lugar.
+            // ── Import: fila do dropzone ou, se ela estiver VAZIA, a API ──
+            // Um botão só, como no NDF/Opt Commodities: o pull da API é a rota
+            // AUTOMÁTICA do mesmo Import, não uma ação à parte. Dois botões
+            // faziam a mesa escolher entre dois caminhos que levam ao mesmo
+            // lugar.
             var importWrap = document.querySelector('.importBtn');
             if (importWrap && !document.getElementById('importBtn')) {
                 var ib = document.createElement('button');
@@ -492,7 +513,7 @@ $(document).ready(function () {
                 ib.className = 'btn btn-sm btn-warning bg-gradient btn-toolbar-all btn-toolbar-import';
                 ib.setAttribute('data-bs-toggle', 'tooltip');
                 ib.setAttribute('data-bs-placement', 'bottom');
-                ib.setAttribute('data-bs-title', 'Process the e-mails in the dropzone (or scan the Outlook box if it is empty)');
+                ib.setAttribute('data-bs-title', t('unw_import_tip', 'Pull the unwinds from the Athena API (or process the e-mails in the dropzone)'));
                 ib.setAttribute('data-bs-custom-class', 'tooltip-teal');
                 ib.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
                 importWrap.appendChild(ib);
@@ -762,7 +783,7 @@ $(document).ready(function () {
                     mode: 'exact', key: sfFilterKey(SF_COLS[0], 'exact') });
     sfRenderChips();
 
-    // ── Import: a fila do dropzone; vazia, a varredura do box ─────────────
+    // ── Import: a fila do dropzone; vazia, o pull da API ─────────────────
     function runImport() {
         var btn = document.getElementById('importBtn');
         var dz = window.myDropzone || ((typeof Dropzone !== 'undefined') ? Dropzone.forElement('#myAwesomeDropzone') : null);
@@ -771,9 +792,9 @@ $(document).ready(function () {
         // (`infra/email_file.py`): a extensão aqui só evita mandar um .xlsx.
         var files = (dz && dz.files) ? dz.files.filter(function (f) { return /\.(msg|eml|html?|txt)$/i.test(f.name); }) : [];
         // Dropzone vazia = rota automática (o mesmo desenho do NDF/Opt
-        // Commodities): varrer a caixa é o que o Import faz quando não lhe
-        // deram arquivo, não outro botão.
-        if (!files.length) { return runScan(); }
+        // Commodities): puxar da API é o que o Import faz quando não lhe deram
+        // arquivo, não outro botão.
+        if (!files.length) { return runApi(); }
         btn.disabled = true;
         btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i> Importing...';
         function _restore() { btn.disabled = false; btn.innerHTML = '<i class="ti ti-upload me-1"></i> Import'; }
@@ -817,20 +838,33 @@ $(document).ready(function () {
         }).catch(function (e) { _restore(); Swal.fire({ icon: 'error', title: 'Error', text: String(e) }); });
     }
 
-    function runScan() {
+    // O pull da API: o bloco `termination` do getTradesBySettle da Reference
+    // Date e do dia útil seguinte. Entra só a recompra NOVA — a que já está no
+    // dia fica como está (a edição da mesa não é reescrita), e o resumo diz
+    // quantas eram. Data que a API não respondeu aparece como erro: "nenhuma
+    // recompra" e "a API não respondeu" não podem sair iguais.
+    function runApi() {
         var btn = document.getElementById('importBtn');
         btn.disabled = true;
-        btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i> Scanning box...';
+        btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i> ' + esc(t('unw_api_pulling', 'Pulling from Athena...'));
         function _restore() { btn.disabled = false; btn.innerHTML = '<i class="ti ti-upload me-1"></i> Import'; }
-        fetch('/api/unwinds/ndf/fx/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-                                            body: JSON.stringify({ date: refDateIso() }) })
+        fetch('/api/unwinds/ndf/fx/import-api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+                                                  body: JSON.stringify({ date: refDateIso() }) })
             .then(function (r) { return r.json(); })
             .then(function (res) {
                 _restore();
-                if (!res || !res.success) { Swal.fire({ icon: 'error', title: 'Box scan', text: (res && res.message) || 'Box scan failed' }); return; }
+                if (!res || !res.success) {
+                    var msg = erroTexto(res, 'Athena API failed');
+                    if (res && res.params && res.params.reason) msg = msg.replace('{reason}', res.params.reason);
+                    Swal.fire({ icon: 'error', title: t('unw_api_title', 'Athena API'), text: msg });
+                    return;
+                }
                 load();
-                reportImport((res.rows || []).length, res.warnings || [],
-                             (res.failed || []).map(function (f) { return (f.subject || '') + ': ' + (f.reason || ''); }));
+                var erros = (res.failed || []).map(function (f) {
+                    return t('unw_api_date_failed', 'Settlement date {date} did not answer: {reason}')
+                        .replace('{date}', _isoToDmy(f.date)).replace('{reason}', f.reason || '');
+                });
+                reportImport((res.rows || []).length, res.warnings || [], erros, res.existing || 0);
             })
             .catch(function (e) { _restore(); Swal.fire({ icon: 'error', title: 'Error', text: String(e) }); });
     }
@@ -838,10 +872,11 @@ $(document).ready(function () {
     // O resumo do import NÃO se resume a "deu certo": o que foi importado sem
     // conseguir responder algum campo aparece aqui, porque é o que vai travar
     // o envio à B3 depois.
-    function reportImport(n, warns, errors) {
+    function reportImport(n, warns, errors, existentes) {
         var linhas = (warns || []).map(avisoTexto).filter(Boolean);
         var uniq = linhas.filter(function (v, i) { return linhas.indexOf(v) === i; });
         var extra = '';
+        if (existentes) extra += '<div class="mt-1 fs-xs text-muted">' + esc(t('unw_api_existing', '{n} already on the day — kept as they are').replace('{n}', existentes)) + '</div>';
         if (uniq.length) extra += '<div class="text-start mt-2 fs-xs"><b>Check before sending:</b><ul class="mb-0 ps-3">' + uniq.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul></div>';
         if ((errors || []).length) extra += '<div class="text-start mt-2 fs-xs text-danger">' + esc(errors.join('; ')) + '</div>';
         Swal.fire({

@@ -128,7 +128,7 @@ def main():
     regras = {str(r) for r in app.url_map.iter_rules()}
     check('GET /unwinds/ndf/fx', '/unwinds/ndf/fx' in regras)
     for r in ('/api/unwinds/ndf/fx', '/api/unwinds/ndf/fx/import-file',
-              '/api/unwinds/ndf/fx/scan', '/api/unwinds/ndf/fx/preview',
+              '/api/unwinds/ndf/fx/import-api', '/api/unwinds/ndf/fx/preview',
               '/api/unwinds/ndf/fx/send-conecta', '/api/unwinds/ndf/fx/delete'):
         check('rota ' + r, r in regras)
     check('e o arquivo-dia NAO mora em cache/new deals (o Monitor varre de la)',
@@ -432,13 +432,13 @@ def main():
     corpo = pg.data.decode('utf-8')
     check('a pagina abre', pg.status_code == 200, pg.status_code)
     check('com a tabela e o dropzone', 'id="unw-table"' in corpo and 'myAwesomeDropzone' in corpo)
-    # UM botao de Import, e a varredura do box e a rota automatica dele quando
-    # a dropzone esta vazia — o mesmo desenho do NDF/Opt Commodities. Um
-    # 'Scan Box' proprio fazia a mesa escolher entre dois caminhos que levam
-    # ao mesmo lugar.
+    # UM botao de Import, e o pull da API e a rota automatica dele quando a
+    # dropzone esta vazia — o mesmo desenho do NDF/Opt Commodities (a
+    # varredura do box ate 20/10/2026). Dois botoes faziam a mesa escolher
+    # entre dois caminhos que levam ao mesmo lugar.
     check('nao existe botao Scan Box separado', 'scanBtn' not in corpo)
-    check('e o Import cai no runScan com a dropzone vazia',
-          'if (!files.length) { return runScan(); }' in corpo)
+    check('e o Import cai no runApi com a dropzone vazia',
+          'if (!files.length) { return runApi(); }' in corpo)
     api = cl.get('/api/unwinds/ndf/fx?date=2026-09-10').get_json()
     # A secao 8 deixou outra recompra neste mesmo dia: o que se prende aqui e
     # que a linha ESTA na resposta, nao quantas ha no arquivo-dia.
@@ -662,34 +662,14 @@ def main():
     sobrou = [r for r in (_ds.read(jp_ck) or []) if r.get('_nc_unwind')]
     check('o Delete tira a recompra do Cockpit', sobrou == [], [r.get('_nc_id') for r in sobrou])
 
-    print('\n== 14. a varredura do box roda sozinha ==')
-    # A tela promete "also runs on its own every 30 minutes". Ate 18/09/2026 a
-    # frase era falsa: nenhum laco estava registrado, e a recompra so entrava
-    # no clique do Import — sem erro nenhum para denunciar isso.
+    print('\n== 14. o pull automatico e o da API ==')
+    # A tela promete "also runs on its own every 30 minutes". Desde 20/10/2026
+    # o laco pede a recompra a API de liquidacao (o `check_unwind_api.py` prova
+    # o pull); a varredura do Outlook saiu, e os dois juntos importariam a
+    # mesma recompra por dois caminhos.
+    rotulos = [l for l, _ in R._SCHEDULERS]
     check('o laco esta registrado no wiring do routes',
-          any(l == 'unwind-boxscan' for l, _ in R._SCHEDULERS),
-          [l for l, _ in R._SCHEDULERS])
-    from apps.pages.features.unwinds import entrypoint as _unw_ep
-    check('e o entrypoint expoe o mesmo start_scheduler',
-          _unw_ep.start_scheduler is commands.start_scheduler)
-    check('o intervalo e o mesmo do box de New Deals (BOX_SCAN_POLL_MIN)',
-          commands.POLL_MIN == int(os.getenv('BOX_SCAN_POLL_MIN', '30') or 30),
-          commands.POLL_MIN)
-    # Varredura VAZIA nao avisa ninguem: o laco roda o dia inteiro e a caixa
-    # esta vazia quase sempre. Um sino a cada 30 min seria o fim do sino.
-    avisos = []
-    _orig_notif = R._create_notification
-    R._create_notification = lambda *a, **k: avisos.append(a)
-    try:
-        commands._avisar_varredura({'rows': [], 'failed': [], 'scanned': 0})
-        check('caixa vazia nao toca o sino', avisos == [], avisos)
-        commands._avisar_varredura({'rows': [{'AthenaID': 'X'}], 'failed': [],
-                                    'scanned': 1})
-        check('recompra importada toca o sino', len(avisos) == 1, avisos)
-        check('e o rotulo da pagina e o dos tres mapas',
-              avisos and avisos[0][3] == commands.PAGE, avisos)
-    finally:
-        R._create_notification = _orig_notif
+          'unwind-api' in rotulos and 'unwind-boxscan' not in rotulos, rotulos)
 
     print('\n== 15. o import em LOTE: varios e-mails num request (§622) ==')
     # Um e-mail por request relia o Live Position inteiro e abria uns quinze
@@ -727,31 +707,6 @@ def main():
                       content_type='multipart/form-data')
     check('lote em que NENHUM se le e 400', so_lixo.status_code == 400, so_lixo.status_code)
 
-    # A varredura do box tambem e UM lote: importa a caixa inteira de uma vez
-    # e arquiva numa chamada so (a pasta Unwind resolvida uma vez), deixando
-    # na caixa o e-mail que nao se leu.
-    from apps.pages import otc_boxscan as _bx
-    caixa = [{'html': HTML.replace('STP-XE-10G5U5X-0-0', a), 'entry_id': 'E%d' % i,
-              'subject': SUBJECT.replace('STP-XE-10G5U5X-0-0', a)} for i, a in enumerate(ids)]
-    caixa.append({'html': '<p>sem tabela</p>', 'entry_id': 'LIXO', 'subject': 'lixo'})
-    chamadas = []
-    _scan, _arq = _bx.scan_unwind_box, getattr(_bx, 'archive_unwind_emails')
-    _bx.scan_unwind_box = lambda produto: {'emails': caixa}
-    _bx.archive_unwind_emails = lambda eids: chamadas.append(list(eids)) or \
-        {e: ('trancado' if e == 'E2' else None) for e in eids}
-    coletas[:] = []
-    try:
-        vb = commands.scan_box(ref_dt=date(2026, 9, 18))
-    finally:
-        _bx.scan_unwind_box, _bx.archive_unwind_emails = _scan, _arq
-    check('a varredura importa as tres num lote so',
-          len(vb['rows']) == 3 and len(coletas) == 1, (len(vb['rows']), len(coletas)))
-    check('e arquiva numa chamada so, sem o e-mail recusado',
-          chamadas == [['E0', 'E1', 'E2']], chamadas)
-    check('o recusado volta em failed', [f['subject'] for f in vb['failed']] == ['lixo'], vb['failed'])
-    check('e o que nao arquivou vira aviso',
-          [a['params']['subject'] for a in vb['warnings'] if a.get('code') == 'unwind_archive_failed']
-          == [caixa[2]['subject']], vb['warnings'])
     R._lpndf_collect = _collect([POS])
 
     print('')

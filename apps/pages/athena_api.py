@@ -131,9 +131,10 @@ def is_available():
 # Link da API — cadastro (/mapping › API Links), não constante
 # --------------------------------------------------------------------------- #
 # Uma linha por USO + PRODUTO. Os usos são 'New Deals' (o getTrades que alimenta
-# as páginas de New Deals) e 'Unwinds' (ainda sem consumidor no código — nasce
-# VAZIA porque inventar um endereço faria a rotina chamar um endpoint que ninguém
-# conferiu). Os produtos são os do parâmetro `product` do getTrades, e não as
+# as páginas de New Deals) e 'Unwinds' (a linha do NDF é o getTradesBySettle,
+# de onde a recompra de NDF de moeda lê o bloco `termination` — a rotina chama
+# o `registered_url` com o REPORT_TIMEOUT, porque o endpoint varre o livro
+# inteiro da data). Os produtos são os do parâmetro `product` do getTrades, e não as
 # páginas: NDF é UM produto que alimenta TRÊS páginas (Vanilla, Other Publisher e
 # FWD Start), separadas pelo roteamento e não pelo endereço.
 #
@@ -500,8 +501,10 @@ def fetch_product_trades(product_key: str, date: str, session=None,
 
 def fetch_unwinds(product_key: str, date: str, session=None):
     """Unwinds de um produto numa data YYYYMMDD, pela URL cadastrada em
-    /mapping › API Links (linha Unwinds). Ainda sem consumidor: existe para a
-    rotina de unwinds nascer lendo o cadastro, e não um endereço no código."""
+    /mapping › API Links (linha Unwinds). A recompra de NDF de moeda NÃO passa
+    por aqui: o endereço dela é um relatório (getTradesBySettle) e pede o
+    `REPORT_TIMEOUT`, que este caminho não dá — ela usa o `registered_url`
+    direto (`features/unwinds/commands._api_url`)."""
     return fetch_product_trades(product_key, date, session=session, usage=USE_UNWINDS)
 
 

@@ -650,7 +650,7 @@ Depois que a B3 devolve o arquivo de retorno:
 
 **Menu › PRODUCTS › Unwinds › NDF › FX**
 
-A recompra desfaz, no todo ou em parte, um termo de moeda que já está registrado na B3. O aviso vem por e-mail do Athena (*BRL NDF Unwind Notification*) durante o dia — não é o lote da manhã da liquidação normal.
+A recompra desfaz, no todo ou em parte, um termo de moeda que já está registrado na B3. Ela entra pela **API de liquidação do Athena** — a mesma do NDF Cockpit —, que traz a recompra junto com o **B3 ID** do contrato. Não é o lote da manhã da liquidação normal: a tela puxa as recompras sozinha **de 30 em 30 minutos**, das 08h às 20h. O e-mail do Athena (*BRL NDF Unwind Notification*) continua chegando e serve de **plano B** para o dia em que a API não responder.
 
 **O ciclo está completo no sistema:** a tela importa o aviso, confere a conta e monta o arquivo da B3; a partir do import a recompra entra no Pending Confirmation, na esteira (o **Termo de Resilição** se gera no Confirmations Monitor), no NDF Cockpit e no NDF Summary do dia da liquidação, com o *Settlement Type* `UNWIND`.
 
@@ -660,9 +660,9 @@ A recompra aparece no **Intraday Monitor** (capítulo 5.1) como *Unwind NDF FX*,
 
 **Passo a passo:**
 
-1. Confira a **Reference Date** no alto — é o dia em que a recompra é gravada.
-2. **Arraste o e-mail direto do Outlook** para o dropzone — um ou vários de uma vez. Serve `.msg`, `.eml` ou o corpo salvo como `.htm`; não precisa converter nada antes.
-3. Clique em **Import**. *Com a dropzone vazia, o Import varre a caixa sozinho* — é o mesmo botão para as duas coisas. A varredura automática também roda de 30 em 30 minutos, e cada e-mail importado é arquivado na pasta **Unwind**. Os e-mails entram **em lote** (o botão mostra *Importing… n/N*): dezenas de recompras levam minutos, não horas. Um e-mail que não pôde ser lido volta com o motivo e fica no dropzone (ou no box); os outros entram normalmente.
+1. Confira a **Reference Date** no alto — é o dia das recompras que você vai puxar.
+2. Clique em **Import** com o dropzone **vazio**: a tela busca na API as recompras daquele dia — as que liquidam no próprio dia e as que liquidam no dia útil seguinte. Cada recompra é gravada no dia em que foi feita. **Só entra recompra nova**: a que já está na tela fica como está (a sua edição não é desfeita), e o resumo diz quantas eram. Se a API não responder para uma das datas, o resumo diz qual e por quê; as outras entram normalmente. Você só precisa clicar quando não quiser esperar a próxima rodada automática.
+3. **Plano B — o e-mail.** Se a API estiver fora do ar, arraste o e-mail do Athena direto do Outlook para o dropzone, um ou vários de uma vez (`.msg`, `.eml` ou o corpo salvo como `.htm`), e clique em **Import**. Os e-mails entram **em lote** (o botão mostra *Importing… n/N*). Um e-mail que não pôde ser lido volta com o motivo e fica no dropzone; os outros entram normalmente. A tela não varre mais a caixa do Outlook nem arquiva o e-mail na pasta **Unwind**.
 4. Olhe a coluna **Check** da linha:
    - **OK** (verde) — o resultado do e-mail bate com o recalculado;
    - **NOK** (vermelho) — não bate. **Não envie**: passe o mouse no badge para ver o que divergiu;
@@ -676,9 +676,9 @@ A recompra aparece no **Intraday Monitor** (capítulo 5.1) como *Unwind NDF FX*,
 
 > **Linha `Sent` ainda se edita e se reenvia.** Se a B3 recusou o arquivo ou ele sumiu da pasta, clique em **Send** de novo: o arquivo é regravado. Editar uma linha `Sent` a devolve a **Pending**, e ela só volta à B3 depois que outra pessoa aprovar. O que continua travado em `Sent` é apagar e reimportar.
 
-**O que a tela preenche sozinha, e de onde:** o **B3 ID**, a **contraparte**, a **moeda** e as **contas** não vêm do e-mail — vêm da linha do Live Position da operação, achada pelo Athena ID: primeiro o id inteiro, depois os **14 primeiros** caracteres (só quando apontam para uma linha só) e, por último, os **14 últimos**. Se a coluna **B3 ID** vier vazia, é porque a operação não foi encontrada lá: confira o *Código Identificador* no Live Position de NDF antes de qualquer outra coisa.
+**O que a tela preenche sozinha, e de onde:** o **B3 ID** vem da própria API. A **contraparte**, a **moeda**, o **lado** do banco e as **contas** vêm da linha do Live Position de NDF desse B3 ID. Os **dias úteis** (DU) até o vencimento são contados pelo calendário ANBIMA, porque a API não os traz. Se a linha avisar que o contrato **ainda não está no Live Position**, é a posição do dia que não foi carregada: carregue-a e importe de novo (apague a linha antes, se ela ainda não foi enviada). No **plano B do e-mail**, que não traz o B3 ID, a linha do Live Position é achada pelo Athena ID: primeiro o id inteiro, depois os **14 primeiros** caracteres (só quando apontam para uma linha só) e, por último, os **14 últimos**. Ali, se a coluna **B3 ID** vier vazia, confira o *Código Identificador* no Live Position de NDF.
 
-> **Uma coisa que o e-mail erra.** Em contrato com nocional em reais (*BRL fixed*), o campo *Direction* do aviso pode dizer **PAY** numa recompra **a receber** — e os campos *Future Value*, *Present Value* e *Calculated Termination Fee* vêm errados junto. A tela usa o **Input Termination Fee** e decide a direção pelo sinal **dele**, então a coluna *Direction* dela pode discordar do e-mail. Quando isso acontece, **a tela está certa** e o aviso registra a divergência.
+> **Uma coisa que o e-mail erra** (vale para o plano B). Em contrato com nocional em reais (*BRL fixed*), o campo *Direction* do aviso pode dizer **PAY** numa recompra **a receber** — e os campos *Future Value*, *Present Value* e *Calculated Termination Fee* vêm errados junto. A tela usa o **Input Termination Fee** e decide a direção pelo sinal **dele**, então a coluna *Direction* dela pode discordar do e-mail. Quando isso acontece, **a tela está certa** e o aviso registra a divergência.
 
 ### 5.11. As telas novas de Swap, de opção de EDG e das demais recompras
 

@@ -112,26 +112,30 @@ def api_unwinds_ndf_fx_import():
     return jsonify(out)
 
 
-@blueprint.route('/api/unwinds/ndf/fx/scan', methods=['POST'])
-def api_unwinds_ndf_fx_scan():
-    """Roda a varredura do box AGORA. So responde onde ha Outlook (Windows):
-    fora dele a falha volta com o MOTIVO, nunca como "nada encontrado"."""
+@blueprint.route('/api/unwinds/ndf/fx/import-api', methods=['POST'])
+def api_unwinds_ndf_fx_import_api():
+    """Puxa AGORA as recompras da Reference Date pela API de liquidacao (o
+    laco faz o mesmo a cada 30 minutos). Falha da API volta com o MOTIVO,
+    nunca como "nenhuma recompra" — as duas coisas nao podem sair iguais."""
     err = _auth()
     if err:
         return err
     ref_dt = _R()._api_ref_date(request.form.get('date') or
                                 (request.get_json(silent=True) or {}).get('date'))
     try:
-        out = commands.scan_box(ref_dt=ref_dt)
+        out = commands.importar_da_api(ref_dt=ref_dt)
+    except _store.BancoOcupado:
+        raise                           # o tratador global responde 503 com o motivo
     except Exception as exc:                                # noqa: BLE001
-        _R().log.error('[UNWIND NDF FX] box scan failed:\n%s', traceback.format_exc())
-        return jsonify({'success': False,
-                        'message': 'Box scan failed: %s: %s' % (type(exc).__name__, exc)}), 500
+        _R().log.error('[UNWIND NDF FX] API import failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'code': 'unwind_api_failed',
+                        'params': {'reason': '%s: %s' % (type(exc).__name__, exc)},
+                        'message': 'Athena API: %s: %s' % (type(exc).__name__, exc)}), 502
     if out.get('rows'):
         _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                                   'Deals Imported', PAGE,
-                                  'Outlook box: %d unwind%s' % (len(out['rows']),
-                                                                '' if len(out['rows']) == 1 else 's'))
+                                  'Athena API: %d unwind%s' % (len(out['rows']),
+                                                               '' if len(out['rows']) == 1 else 's'))
     out['success'] = True
     return jsonify(out)
 
