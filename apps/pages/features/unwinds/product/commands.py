@@ -90,8 +90,14 @@ def _linhas_das_tabelas(page, tabelas):
     O NDF de Commodities tem e-mail PROPRIO (uma tabela por perna, `Leg` ...
     `PV BRL`), e ele vem antes: lido pelo leitor generico, `Trade Date` e `FX
     Rate` bastariam para ele aceitar a tabela e montar a linha errada."""
-    if page.get('dir') == 'NDF/Commodities':
-        recap = domain.linhas_do_recap_commodities(tabelas)
+    # A opcao de Commodities tambem (mesa, 20/10/2026): o recap dela tem
+    # `Option Type` e as duas pernas, e o `Contract` (`27-Mar`) e o mes do
+    # futuro — pelo leitor generico ele virava B3 ID e o cabecalho da segunda
+    # tabela virava linha.
+    leitor = {'NDF/Commodities': domain.linhas_do_recap_commodities,
+              'Options/Commodities': domain.linhas_do_recap_opcoes_commodities}.get(page.get('dir'))
+    if leitor is not None:
+        recap = leitor(tabelas)
         if recap is not None:
             if not recap[0]:
                 raise domain.Recusa('unwind_recap_no_legs',

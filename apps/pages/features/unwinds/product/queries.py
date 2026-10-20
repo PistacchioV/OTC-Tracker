@@ -213,6 +213,12 @@ def _opcao(cel, por_nome):
     nossa, deles, aviso_conta = _contas(cel.get('Parte (Conta)'), conta)
     return {
         'contract': cel.get('Código IF', ''),
+        # O B2B (Banco x Lawton): a outra ponta tambem e NOSSA e nao e
+        # guarda-chuva. E o que separa a perna Banco do recap da perna Client.
+        'internal': bool(R._b3_account_le(deles)) and not R._b3_is_omnibus(deles),
+        # O mesmo contrato vem na visao de cada entidade nossa: vale a do Banco
+        # (o lado e as contas do OPC 0014 sao os da Parte).
+        'view_rank': _visao_rank(cel.get('Parte (Conta)')),
         'party_account': cel.get('Parte (Conta)', ''), 'cpty_account': conta,
         'our_account': nossa, 'their_account': deles,
         'counterparty': nome, 'taxid': doc if fase1.parece_documento(doc) else por_nome(nome),

@@ -104,6 +104,14 @@ _COLS_OPCAO = _HEAD + (
     ('FixingDates', 'Fixing Dates', 'text'),
 ) + _TAIL
 
+# Opcao de COMMODITIES: as mesmas colunas, mais a paridade. O e-mail de
+# recompra traz o premio em USD por unidade e o total em BRL (mesa, 20/10/2026):
+# a grade mostra os numeros como vieram, e a conferencia do premio multiplica
+# pela paridade.
+_COLS_OPCAO_COMM = tuple(
+    x for c in _COLS_OPCAO
+    for x in ((c, ('FXRate', 'FX Rate', 'rate')) if c[0] == 'UnitPremium' else (c,)))
+
 # Swap — os campos do SWAP 0014 (`swap-antecipacao`): papel (5), fator de cada
 # ponta (7/8), valor para antecipacao (11) e mantem premios (12).
 _COLS_SWAP = _HEAD + (
@@ -193,7 +201,7 @@ PAGES = dict((p['path'], p) for p in (
           'nav-commodities', position=POS_NDF, checks=_CK_TERMO),
     _page('options/fxo', 'Options', 'FXO', _COLS_OPCAO, _B3_OPCAO, 'nav-options', 'nav-fxo',
           position=POS_OPCAO, checks=_CK_PREMIO),
-    _page('options/commodities', 'Options', 'Commodities', _COLS_OPCAO, _B3_OPCAO, 'nav-options',
+    _page('options/commodities', 'Options', 'Commodities', _COLS_OPCAO_COMM, _B3_OPCAO, 'nav-options',
           'nav-commodities', position=POS_OPCAO, checks=_CK_PREMIO),
     _page('options/edg', 'Options', 'EDG', _COLS_OPCAO, _B3_OPCAO, 'nav-options', 'nav-edg',
           position=POS_OPCAO, checks=_CK_PREMIO),

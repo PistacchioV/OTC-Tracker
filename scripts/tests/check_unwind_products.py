@@ -813,6 +813,134 @@ def main():
     finally:
         R.RETURN_PATH = ret_orig
 
+    print('\n== 14. O e-mail de recompra de OPCAO de Commodities (mesa, 20/10/2026) ==')
+    # O "INTERNAL JPMorgan Trade Recap - Sugar 3-Way's MDias 14Oct26 Unwind": uma
+    # tabela por perna, SEM B3 ID. O `Contract` (27-Mar) e o mes do futuro; lido
+    # pelo leitor generico ele virava B3 ID e o cabecalho da 2a tabela, linha.
+    pg_oc = catalog.PAGES['/unwinds/options/commodities']
+    cab_oc = ['Leg', 'Client', 'Original<br>B/S', 'Direction of<br>Unwind', 'Commodity',
+              'Option<br>Type', 'Contract', 'Original Strike<br>(USD/ bsh)',
+              'Unwind Strike<br>(USD/ bsh)', 'Fixing Date', 'Original<br>Volume (lots)',
+              'Unwind<br>Volume (lots)', 'Unwind Volume<br>(bsh)', 'Settlement<br>Date',
+              'Premium (USD/<br>bsh)', 'Total Premium<br>USD', 'FX BRL/USD',
+              'Total Premium<br>BRL', 'Premium<br>Payment Date']
+
+    def _perna(leg, bs, dire, tipo, k, premio, usd, brl):
+        return [leg, 'M. Dias', bs, dire, 'ICE Sugar', tipo, '27-Mar', k, k, '16-Feb-2027',
+                '48.00', '31.00', '3,472,000.00', '17-Feb-27', premio, usd, '5.0340', brl,
+                '14-Oct-26']
+    corpo_oc = ('<html><body><p class=MsoNormal>We just closed 1 partial unwind for M.Dias.</p>'
+                '<p class=MsoNormal>Original Operation (Sales ID: D5YJ-O7YUW, D5YJ-O7YUX)</p>'
+                + _tab(cab_oc, [
+                    _perna('Client', 'Buys', 'Client Sells', 'Call', '0.1700', '0.04000000',
+                           '138,880.00', '699,121.92'),
+                    _perna('Client', 'Sells', 'Client Buys', 'Call', '0.1900', '0.02540000',
+                           '88,188.80', '443,942.42'),
+                    _perna('Client', 'Sells', 'Client Buys', 'Put', '0.1500', '0.00010000',
+                           '347.20', '1,747.80')])
+                + _tab(cab_oc, [
+                    _perna('Banco', 'Buys', 'Client Sells', 'Call', '0.1700', '0.04030242',
+                           '139,930.00', '704,407.62'),
+                    _perna('Banco', 'Sells', 'Client Buys', 'Call', '0.1900', '0.02540000',
+                           '88,188.80', '443,942.42'),
+                    _perna('Banco', 'Sells', 'Client Buys', 'Put', '0.1500', '0.00010000',
+                           '347.20', '1,747.80')])
+                + '</body></html>')
+    eml_oc = ('MIME-Version: 1.0\r\nSubject: INTERNAL JPMorgan Trade Recap - Sugar 3-Way\'s '
+              'MDias 14Oct26 Unwind\r\nContent-Type: text/html; charset=utf-8\r\n\r\n'
+              + corpo_oc).encode('utf-8')
+    # A posicao: a perna CLIENT e contrato com o cliente (guarda-chuva, o nome
+    # vem no CPF/CNPJ); a perna BANCO e o B2B Banco x Lawton, nas duas visoes.
+    # A quantidade da B3 e em unidades: 48 lotes x 112.000 = 5.376.000.
+    base_oc = dict(OPT_A, **{'Parte (Conta)': '73760009', 'Contraparte (Conta)': '73760102',
+                             'Contraparte (Nome simplificado)': 'JPMORGANBM',
+                             'CPF/CNPJ Cliente Contraparte': 'M DIAS BRANCO SA IND E COM DE ALIMENTOS',
+                             'Quantidade': '5,376,000.00', 'Quantidade Antecipada': '0.00',
+                             'Data Vencimento': '16/02/2027', 'Ativo subjacente / Moeda base': 'SBH7',
+                             'Prêmio Unitário': '0.03000000'})
+
+    def _opc(cod, tipo, k, lado, **extra):
+        return dict(base_oc, **dict({'Código IF': cod, 'Tipo de Opção': tipo,
+                                     'Strike (valor)': k, 'Posição da Parte': lado}, **extra))
+
+    def _b2b(cod, tipo, k, lado_banco):
+        outro = 'Lançador' if lado_banco == 'Titular' else 'Titular'
+        b = _opc(cod, tipo, k, lado_banco, **{'Contraparte (Conta)': '00041007',
+                                              'Contraparte (Nome simplificado)': 'INTRAGLAWTONFDO',
+                                              'CPF/CNPJ Cliente Contraparte': ''})
+        law = dict(b, **{'Parte (Conta)': '00041007', 'Contraparte (Conta)': '73760009',
+                         'Posição da Parte': outro})
+        return [law, b]                     # a visao do Lawton PRIMEIRO: vale a do Banco
+    pos_oc = ([_opc('OPCCLI1', 'Call', '0.17000000', 'Lançador'),
+               _opc('OPCCLI2', 'Call', '0.19000000', 'Titular'),
+               _opc('OPCCLI3', 'Put', '0.15000000', 'Titular')]
+              + _b2b('OPCBCO1', 'Call', '0.17000000', 'Titular')
+              + _b2b('OPCBCO2', 'Call', '0.19000000', 'Lançador')
+              + _b2b('OPCBCO3', 'Put', '0.15000000', 'Lançador')
+              # as iscas: a mesma call de outro vencimento e a de outro cliente
+              + [_opc('OPCOUTROVENC', 'Call', '0.17000000', 'Lançador',
+                      **{'Data Vencimento': '14/05/2027'}),
+                 _opc('OPCOUTROCLI', 'Call', '0.17000000', 'Lançador',
+                      **{'CPF/CNPJ Cliente Contraparte': 'OUTRO CLIENTE SA'})])
+    R._lpopt_collect = _collect(OPT_COLS, pos_oc)
+    st, j = _up(pg_oc['api'], 'MDias unwind.eml', eml_oc, dry=True, dia='2026-10-14')
+    rows = j.get('rows') or []
+    check('le as SEIS pernas (3 Client + 3 Banco) e nenhum cabecalho vira linha',
+          st == 200 and len(rows) == 6, (st, j.get('code'), len(rows), [r.get('Contract') for r in rows]))
+    rows = (rows + [{}] * 6)[:6]
+    check('o "27-Mar" do e-mail NAO e B3 ID: cada perna acha o SEU contrato no Live Position',
+          [r.get('Contract') for r in rows]
+          == ['OPCCLI1', 'OPCCLI2', 'OPCCLI3', 'OPCBCO1', 'OPCBCO2', 'OPCBCO3'],
+          [(r.get('Contract'), r.get('Warnings')) for r in rows])
+    check('   a perna Client e o cliente (o nome sai da posicao)',
+          rows[0].get('Counterparty') == 'M DIAS BRANCO SA IND E COM DE ALIMENTOS', rows[0].get('Counterparty'))
+    check('   a perna Banco e o B2B na visao do BANCO (conta e lado do Banco)',
+          [(r.get('PartyAccount'), r.get('Side')) for r in rows[3:]]
+          == [('73760009', 'Titular'), ('73760009', 'Lançador'), ('73760009', 'Lançador')],
+          [(r.get('PartyAccount'), r.get('Side')) for r in rows[3:]])
+    achou1 = [w for w in j.get('warnings') or []
+              if w.get('code') == 'unwind_matched_by_characteristics'
+              and (w.get('params') or {}).get('contrato') == 'OPCCLI1']
+    check('   a isca de outro cliente e a de outro vencimento sairam pelo DESEMPATE, que o aviso diz',
+          len(achou1) == 1 and achou1[0]['params']['criterios']
+          == 'Strike, OriginalNotional, OptionType, Client, Fixing/Settlement Date',
+          achou1 or [w.get('code') for w in j.get('warnings') or []])
+    check('quantidade em UNIDADES: recomprada 3.472.000, original 48 x 112.000',
+          (rows[0].get('UnwoundNotional'), rows[0].get('OriginalNotional')) == (3472000.0, 5376000.0),
+          (rows[0].get('UnwoundNotional'), rows[0].get('OriginalNotional')))
+    check('premio, paridade e liquidacao como vieram no e-mail',
+          (rows[0].get('UnitPremium'), rows[0].get('FXRate'), rows[0].get('SettlementDate'))
+          == (0.04, 5.034, '2026-10-14'),
+          (rows[0].get('UnitPremium'), rows[0].get('FXRate'), rows[0].get('SettlementDate')))
+    check('o sinal e o do banco: Client Sells -> paga; no B2B o contrario',
+          [r.get('Result') for r in rows]
+          == [-699121.92, 443942.42, 1747.80, 704407.62, -443942.42, -1747.80],
+          [r.get('Result') for r in rows])
+    check('   e a Direction acompanha o sinal',
+          [r.get('Direction') for r in rows] == ['PAY', 'RECEIVE', 'RECEIVE', 'RECEIVE', 'PAY', 'PAY'],
+          [r.get('Direction') for r in rows])
+    check('saldo e premio x quantidade x paridade FECHAM: Check OK nas seis',
+          [r.get('Check') for r in rows] == ['OK'] * 6,
+          [(r.get('Check'), r.get('CalcResult'), r.get('Warnings')) for r in rows])
+    check('quem paga para fechar e o lancador', {r.get('PremiumPayer') for r in rows} == {'Lançador'})
+    check('sem marca interna na linha',
+          not any(k.startswith('_') and k != '_id' for r in rows for k in r),
+          sorted({k for r in rows for k in r if k.startswith('_')}))
+    try:
+        f = PC.arquivo(pg_oc, dict(rows[0], MyNumber='1234567890'), '20261014')
+        reg = (f.get('records') or [''])[0]
+        check('o OPC 0014 da perna Client sai sem lacuna (contrato, quantidade, valor, pagador)',
+              all(x in reg for x in ('OPCCLI1', '3472000,00000000', '699121,92')), reg)
+    except PD.Recusa as exc:
+        check('o OPC 0014 da perna Client sai sem lacuna', False, exc.payload())
+    # Sem a posicao do B2B a perna Banco NAO cai no contrato do cliente.
+    R._lpopt_collect = _collect(OPT_COLS, pos_oc[:3])
+    st, j = _up(pg_oc['api'], 'MDias unwind.eml', eml_oc, dry=True, dia='2026-10-14')
+    b = ((j.get('rows') or []) + [{}] * 6)[3]
+    check('perna Banco sem B2B na posicao: fica sem contrato (nunca o do cliente)',
+          not b.get('Contract'), (b.get('Contract'), b.get('Warnings')))
+    R._lpopt_collect = _collect(OPT_COLS, [OPT_A, OPT_B])
+
     print('\n%s' % ('TUDO OK' if not FALHAS else '%d FALHA(S): %s' % (len(FALHAS), FALHAS)))
     return 1 if FALHAS else 0
 
