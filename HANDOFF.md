@@ -26524,3 +26524,74 @@ de tradução por cima (reprova o template de antes). `check_db_read_path`,
 `check_unlocked_reads`, `check_session_ip`, `check_app_version`,
 `check_notif_sid`, `check_intraday_monitor`, `check_soc_layers`,
 `check_theme_toggle` e `check_four_eyes` seguem verdes.
+
+## §636 — A troca de página lenta no JP; o calendário e os selects das Initiatives (2026-10-20)
+
+**"No ambiente do JP está muito lenta a troca de páginas."** Duas causas
+somadas, e nenhuma aparece na dev (código em disco local, Mac com GPU).
+
+*No servidor:* a instância sobe pelo waitress COM o DebugConfig — o
+ProductionConfig exige cookie seguro e ela é HTTP. Por DEBUG, o `create_app` e
+o `run.py` ligavam o `TEMPLATES_AUTO_RELOAD`, e o `_asset_v` (que já tinha a
+memória por processo "para não ir ao share") só memorizava FORA do DEBUG — ou
+seja, nunca na instância. Cada render conferia a data de cada template e de
+cada asset: ~17 `stat` por página no disco de código, que no lançador padrão é
+o share. Simulado a 50 ms por ida: 0,9–1,35 s por página antes de qualquer
+dado. A pergunta passou a ser `OTC_LIVE_RELOAD` (DEBUG **e**
+`FLASK_RUN_FROM_CLI`, que o `flask run` marca antes de importar o app): a dev
+segue recarregando, a instância não confere nada (render quente: zero idas). E
+estático pedido com o token ATUAL (`?v=` = carimbo do arquivo) sai `max-age` de
+um ano + `immutable` (`_cache_versioned_static`) — a URL só muda quando o
+arquivo muda; token escrito à mão nunca bate e segue revalidando (§170). Os
+`vendors.min.*` ganharam o token.
+
+*No navegador:* as máquinas do JPM desenham por software. Medido no Chrome sem
+GPU com a CPU 6× mais lenta, quatro trocas: 6,6 s até assentar no modo opaco e
+6,7 s no vidro, com a thread principal ocupada 2,8 s / 4,2 s. O tempo era da
+casca nova: a View Transition (fotografa a página que sai e a que entra), a
+gota da entrada (`clip-path` animado repinta a placa a cada quadro, cascata de
+até 12 × 60 ms), o título letra a letra (28 ms por letra + 520 ms) e a
+refração (um mapa por pixel + PNG para até 28 placas, de uma vez, na hora da
+carga). Agora: no modo opaco a transição é pulada (`skipTransition` no
+`pageswap`/`pagereveal`), a entrada é um esmaecer curto sem cascata e o título
+entra parado; em todo modo a cascata vai até 6 degraus e o título cabe em
+~0,3 s (`--otc-cstep`); a refração exige GPU (a mesma sonda de WebGL, agora
+`weakGpu()`, consultada em todo modo) e é calculada em fatias no tempo ocioso;
+as traduções viraram UMA busca por página (eram três em paralelo antes do
+cache encher — no JP, do share). Depois: modo opaco 3,4 s (thread 2,0 s), vidro
+6,1 s (thread 2,75 s) — no vidro o que sobra é a duração da gota, que é o
+desenho.
+
+**Initiatives: Lead e Icon que não abriam.** As listas dos dois saem da
+resposta da `/api/projects`, que no JP leva segundos; o "New initiative"
+clicado antes dela abria o modal com os dois `<select>` vazios, e o menu do
+tema não abre select sem opção. Category e Colour funcionavam porque têm cópia
+no JS. Os três abridores (`openProjectModal`, `openTaskModal`,
+`openTaskDrawer`) esperam a carga (`afterMeta`, um clique guardado por modal,
+cursor de espera); a página cuja carga falhou chama `P.metaFailed()` e o modal
+abre com o que houver.
+
+**O calendário.** O tema dava `padding: 8px` ao `.flatpickr-calendar`, que é
+`border-box` com 307,875px fixos — os mesmos da grade dos dias, e a coluna do
+sábado saía pela borda. Virou `content-box`. A lista dos meses é o `<select>`
+nativo, com fundo transparente e texto do tema: no escuro, branco sobre a
+janela branca do Windows; as `option` têm o `--otc-menu-bg`. Dentro de modal o
+calendário mora no `<body>` e o focus trap do Bootstrap devolvia ao modal todo
+foco que entrasse nele (o ano não se digitava): o foco que entra num calendário
+não chega ao trap (captura na janela, `otc.js` 3b). E o Escape do menu de
+select fechava o modal junto (o Bootstrap ouve no elemento e não olha o
+`preventDefault`): agora para no menu.
+
+**A data se digita** (mesa, 20/10/2026, no HELPER — vale para todo
+`otcDateField`): o clique seleciona a data inteira; com dia e mês o calendário
+vai ao mês (`jumpToDate`), com a data inteira e REAL ele a marca; `31/02` não é
+escrita, e ao sair do campo (blur, Enter ou o clique fora, que o flatpickr relê
+ANTES do blur) texto pela metade ou impossível volta à última data válida — o
+parse frouxo levava `31/02/2026` a 03/03 calado.
+
+**Guardas.** `check_page_switch.py` (novo): MEDE zero idas ao disco de código
+no render quente da instância, a recarga ligada no `flask run`, os cabeçalhos
+do estático por token, e prende o modo opaco leve, a refração e as Initiatives.
+`check_export_padrao.py` §5 com o comportamento novo da máscara.
+`check_theme_toggle`, `check_projects`, `check_user_home`, `check_ops_summary`,
+`check_app_version`, `check_session_role` e `check_table_center` seguem verdes.
