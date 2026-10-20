@@ -112,7 +112,9 @@ except domain.HomeError as e:
 print('\n== 2. API da Home ==')
 bia = client_for('B111111', 'Bia Lead', 'BO')
 ana = client_for('A222222', 'Ana Admin', 'ADMIN')
-st, d = call(ana, 'post', '/api/projects', {'name': 'Proj', 'lead_sid': 'A222222', 'category': 'Projects'})
+# a Bia no TIME: o responsável da tarefa sai dos envolvidos na iniciativa (§639)
+st, d = call(ana, 'post', '/api/projects', {'name': 'Proj', 'lead_sid': 'A222222', 'category': 'Projects',
+                                            'member_sids': ['B111111']})
 pid = d['project']['id']
 call(ana, 'post', '/api/projects/%s/tasks' % pid, {'title': 'Hoje', 'assignee_sid': 'B111111', 'due': T, 'priority': 'High'})
 st, d = call(bia, 'get', '/api/user-home')

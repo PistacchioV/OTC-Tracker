@@ -20,8 +20,11 @@ log = logging.getLogger('otc_tracker')
 # A chave da preferência segue `project_lead`: é o que a Settings já gravou.
 PAGE = 'Initiatives'
 LEAD_ACTION = 'Initiative Lead'
+# Quem entra no TIME da iniciativa (§639) é avisado como o Lead.
+MEMBER_ACTION = 'Initiative Member'
 # o aviso → a chave da preferência na Settings (`user_home.domain.NOTIFY_KEYS`)
 _PREF_KEY = {LEAD_ACTION: 'project_lead', 'Project Lead': 'project_lead',
+             MEMBER_ACTION: 'project_member',
              'Task Assigned': 'task_assigned', 'Task Comment': 'task_comment'}
 
 
@@ -81,24 +84,33 @@ def create_project(actor, data, people):
     p = store.mutate(go)
     log.info('[projects] %s criado por %s', p['id'], actor['sid'])
     _notify(actor, p['lead_sid'], LEAD_ACTION, p['name'])
+    for m in p.get('members') or []:
+        _notify(actor, m['sid'], MEMBER_ACTION, p['name'])
     return p
 
 
 def update_project(actor, project_id, data, people):
     def go(doc):
         p = _project(doc, project_id)
-        antes = {'status': p.get('status'), 'lead_sid': p.get('lead_sid')}
+        antes = {'status': p.get('status'), 'lead_sid': p.get('lead_sid'),
+                 'members': list(p.get('members') or [])}
         campos = domain.validate_project(data, people, current=p)
-        mudou = [k for k, v in campos.items() if p.get(k) != v]
+        mudou = [k for k, v in campos.items() if p.get(k, [] if k == 'members' else None) != v]
         p.update(campos)
+        novos = domain.new_members(antes['members'], p.get('members'))
         if 'status' in mudou:
             _event(p, actor, 'status', status=p['status'])
-        if any(k != 'status' for k in mudou):
+        if novos:
+            _event(p, actor, 'members_added', names=', '.join(m['name'] or m['sid'] for m in novos))
+        if any(k not in ('status', 'members') for k in mudou) or \
+                ('members' in mudou and not novos):
             _event(p, actor, 'edited')
-        return p, antes
-    p, antes = store.mutate(go)
+        return p, antes, novos
+    p, antes, novos = store.mutate(go)
     if p.get('lead_sid') != antes['lead_sid']:
         _notify(actor, p['lead_sid'], LEAD_ACTION, p['name'])
+    for m in novos:
+        _notify(actor, m['sid'], MEMBER_ACTION, p['name'])
     return p
 
 
@@ -124,10 +136,10 @@ def _set_done_at(task, status_antes):
 
 
 def add_task(actor, project_id, data, people):
-    campos = domain.validate_task(data, people)
-
     def go(doc):
         p = _project(doc, project_id)
+        # o responsável sai dos ENVOLVIDOS na iniciativa (§639)
+        campos = domain.validate_task(data, domain.assignable(p, people, data))
         t = dict(campos)
         t.update({'id': store.child_id(p, 'tseq', 't'), 'created_at': store.now(),
                   'created_by_sid': actor['sid'], 'created_by_name': actor['name'],
@@ -146,7 +158,7 @@ def update_task(actor, project_id, task_id, data, people):
         p = _project(doc, project_id)
         t = _child(p.get('tasks'), task_id, 'task_not_found', 'Task not found.')
         antes = {'status': t.get('status'), 'assignee_sid': t.get('assignee_sid')}
-        campos = domain.validate_task(data, people, current=t)
+        campos = domain.validate_task(data, domain.assignable(p, people, data, t), current=t)
         t.update(campos)
         _set_done_at(t, antes['status'])
         if t['status'] != antes['status']:

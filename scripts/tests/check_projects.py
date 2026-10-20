@@ -6,6 +6,7 @@ O armazém vai para um tmp (`store.FILE`), o cadastro de usuários é um stub
 (`people.users`) e o sino é um espião (`routes._create_notification`): nada
 encosta em dado real.
 """
+import io
 import os
 import sys
 import tempfile
@@ -99,7 +100,9 @@ print('\n== 2. criação ==')
 st, d = call(bia, 'post', '/api/projects', {'name': '  Recon  revamp ', 'description': 'Faster recons',
                                             'lead_sid': 'A222222', 'color': 'purple', 'icon': 'rocket',
                                             'due_date': '31/12/2026', 'status': 'On hold',
-                                            'category': 'process review'})
+                                            'category': 'process review',
+                                            # a Bia (quem cria) no TIME: é ela quem recebe tarefa (§639)
+                                            'member_sids': ['B111111']})
 check('POST 200', st, 200)
 P1 = d['project']['id']
 check('id sequencial', P1, 'PRJ-0001')
@@ -270,14 +273,47 @@ real = R._user_can_access_page
 R._user_can_access_page = lambda url: False
 st, d = call(bia, 'get', '/api/projects')
 check('sem a página Projects: 403', (st, d.get('code')), (403, 'not_allowed'))
-r = bia.get('/projects/%s' % P1)
-check('página do projeto sem acesso volta para /projects', (r.status_code, r.headers.get('Location', '')),
-      (302, '/projects'))
+r = bia.get('/initiatives/%s' % P1)
+check('página da iniciativa sem acesso volta para /initiatives', (r.status_code, r.headers.get('Location', '')),
+      (302, '/initiatives'))
 R._user_can_access_page = real
-r = bia.get('/projects/%s' % P1)
-check('página do projeto abre', r.status_code, 200)
-r = bia.get('/projects/PRJ-9999')
-check('projeto inexistente volta para a lista', r.status_code, 302)
+r = bia.get('/initiatives/%s' % P1)
+check('página da iniciativa abre', r.status_code, 200)
+r = bia.get('/initiatives/PRJ-9999')
+check('iniciativa inexistente volta para a lista', r.status_code, 302)
+# O endereço é /initiatives (§638): o antigo redireciona — favoritos, e-mails e
+# avisos já enviados chegam à MESMA iniciativa, com o `?task=` junto.
+r = bia.get('/projects')
+check('/projects redireciona para /initiatives', (r.status_code, r.headers.get('Location', '')),
+      (302, '/initiatives'))
+r = bia.get('/projects/%s?task=t3' % P1)
+check('/projects/<id>?task= redireciona para a mesma iniciativa e tarefa',
+      (r.status_code, r.headers.get('Location', '')), (302, '/initiatives/%s?task=t3' % P1))
+r = bia.get('/initiatives')
+check('a lista abre em /initiatives', r.status_code, 200)
+_navs = io.open('apps/templates/partials/sidenav.html', encoding='utf-8').read()
+check('o menu leva a /initiatives', ('href="/initiatives"' in _navs, 'href="/projects"' in _navs), (True, False))
+
+
+class _Con(object):
+    def execute(self, *a):
+        return self
+
+    def fetchone(self):
+        return ('["/projects"]', 'BO')
+
+    def close(self):
+        pass
+
+
+_orig_conn = R.get_db_connection
+R.get_db_connection = lambda readonly=False: _Con()
+try:
+    from apps.pages.platform import authz as _authz_mod
+    check('quem tem /projects gravado no acesso entra em /initiatives',
+          '/initiatives' in _authz_mod._read_user_authz('T000009')[1], True)
+finally:
+    R.get_db_connection = _orig_conn
 st, d = call(ana, 'delete', '/api/projects/%s' % P2)
 check('admin apaga', st, 200)
 st, d = call(bia, 'delete', '/api/projects/%s' % P1)
@@ -289,6 +325,75 @@ check('id não reaproveita apagado', d['project']['id'], 'PRJ-0003')
 anon = app.test_client()
 st, d = call(anon, 'get', '/api/projects')
 check('sem sessão: 401', st, 401)
+
+print('\n== 10. o TIME da iniciativa e o responsável da tarefa (§639) ==')
+# Os envolvidos além do Lead, mesmo sem tarefa — as mesmas pessoas que podem
+# liderar; quem entra é avisado no sino. E o responsável de cada tarefa sai
+# dos envolvidos: o Lead, o time e quem já tem tarefa.
+NOTIFS[:] = []
+st, d = call(bia, 'post', '/api/projects', {'name': 'Team work', 'lead_sid': 'B111111', 'category': 'Projects',
+                                            'member_sids': ['A222222', 'a222222', 'B111111']})
+check('time limpo: sem repetir e sem o Lead', (st, [m['sid'] for m in d['project'].get('members', [])]),
+      (200, ['A222222']))
+PT = d['project']['id']
+check('quem entrou no time é avisado (página Initiatives)',
+      [(n['action'], n['sid'], n['page']) for n in NOTIFS], [('Initiative Member', 'A222222', 'Initiatives')])
+st, d = call(bia, 'post', '/api/projects', {'name': 'X', 'lead_sid': 'B111111', 'category': 'Projects',
+                                            'member_sids': ['M333333']})
+check('MO não entra no time (as mesmas pessoas do Lead)', (st, d.get('code'), d.get('params')),
+      (400, 'not_eligible', {'field': 'members'}))
+st, d = call(bia, 'post', '/api/projects', {'name': 'X', 'lead_sid': 'B111111', 'category': 'Projects',
+                                            'member_sids': 'A222222'})
+check('time que não é lista é recusado', (st, d.get('code')), (400, 'bad_choice'))
+st, d = call(bia, 'get', '/api/projects/%s' % PT)
+check('o time está nas pessoas da iniciativa, mesmo sem tarefa',
+      [(p['sid'], p['open_tasks']) for p in d['project']['people']], [('B111111', 0), ('A222222', 0)])
+st, d = call(bia, 'get', '/api/projects')
+check('o cartão da lista traz o time',
+      [m['sid'] for p in d['projects'] if p['id'] == PT for m in p['members']], ['A222222'])
+
+st, d = call(bia, 'post', '/api/projects/%s/tasks' % PT, {'title': 'Para o time', 'assignee_sid': 'A222222'})
+check('tarefa para quem é do time: 200', st, 200)
+tt = [t for t in d['project']['tasks'] if t['title'] == 'Para o time'][0]
+st, d = call(bia, 'post', '/api/projects', {'name': 'Solo', 'lead_sid': 'B111111', 'category': 'Projects'})
+PS = d['project']['id']
+st, d = call(bia, 'post', '/api/projects/%s/tasks' % PS, {'title': 'Fora', 'assignee_sid': 'A222222'})
+check('tarefa para elegível FORA da iniciativa: recusa dizendo o que fazer',
+      (st, d.get('code')), (400, 'assignee_not_in_team'))
+st, d = call(bia, 'post', '/api/projects/%s/tasks' % PS, {'title': 'Do Lead', 'assignee_sid': 'B111111'})
+check('o Lead pode receber tarefa', st, 200)
+ts = d['project']['tasks'][0]
+st, d = call(bia, 'patch', '/api/projects/%s/tasks/%s' % (PS, ts['id']), {'assignee_sid': 'A222222'})
+check('trocar o responsável para quem está fora: recusa', (st, d.get('code')), (400, 'assignee_not_in_team'))
+NOTIFS[:] = []
+st, d = call(bia, 'patch', '/api/projects/%s' % PS, {'member_sids': ['A222222']})
+check('incluir no time avisa só quem entrou', [(n['action'], n['sid']) for n in NOTIFS],
+      [('Initiative Member', 'A222222')])
+check('   e a atividade diz quem entrou',
+      [(a['kind'], a['params'].get('names')) for a in d['project']['activity']][:1],
+      [('members_added', 'Ana Admin')])
+st, d = call(bia, 'patch', '/api/projects/%s/tasks/%s' % (PS, ts['id']), {'assignee_sid': 'A222222'})
+check('...e agora a tarefa passa a ela', (st, [t['assignee_sid'] for t in d['project']['tasks']]),
+      (200, ['A222222']))
+NOTIFS[:] = []
+st, d = call(bia, 'patch', '/api/projects/%s' % PS, {'member_sids': ['A222222']})
+check('salvar o time igual não avisa de novo', [n['action'] for n in NOTIFS], [])
+st, d = call(bia, 'patch', '/api/projects/%s' % PS, {'member_sids': []})
+st, d = call(bia, 'patch', '/api/projects/%s/tasks/%s' % (PS, ts['id']), {'title': 'Do Lead, revisto'})
+check('saiu do time mas segue responsável: editar a tarefa mantém', (st, d['project']['tasks'][0]['assignee_sid']),
+      (200, 'A222222'))
+st, d = call(bia, 'get', '/api/tasks')
+check('a Tasks recebe os envolvidos de cada iniciativa',
+      [p['involved'] for p in d['projects'] if p['id'] == PT], [['B111111', 'A222222']])
+check('quem já estava no time segue nele mesmo fora do BO',
+      domain._members(['X000001'], [], {'members': [{'sid': 'X000001', 'name': 'Ex BO'}]}, 'B111111'),
+      [{'sid': 'X000001', 'name': 'Ex BO'}])
+from apps.pages.features.user_home import domain as _uh                # noqa: E402
+check('na User Home a iniciativa é "minha" para quem é só do time',
+      _uh.is_mine({'lead_sid': 'B111111', 'members': [{'sid': 'A222222', 'name': 'Ana'}]}, 'a222222'), True)
+JS = io.open('apps/static/js/pages/projects-common.js', encoding='utf-8').read()
+check('a tela oferece como responsável só os envolvidos (modal e gaveta)',
+      JS.count('assigneeItems(') >= 3 and "member_sids: Pm.team.map" in JS, True)
 
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

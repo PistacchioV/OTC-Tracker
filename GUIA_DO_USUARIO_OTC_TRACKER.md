@@ -226,7 +226,7 @@ O tempo focado soma no *Focused today* e no anel *Focus*. Enquanto você está e
 | Seção | O que tem |
 |---|---|
 | **Profile** | A sua foto (ou as suas iniciais, sem foto cadastrada), nome, e-mail, mesa e SID — vêm do cadastro (3.7) e não se editam aqui |
-| **Notifications** | Liga e desliga os avisos do sino que são **para você**: *Task assigned* (uma tarefa foi passada a você), *Comments* (comentaram numa tarefa sua), *Initiative lead* (você virou líder de uma iniciativa), *Due dates* (às 08:00 do dia em que uma tarefa sua vence) e *Focus finished* (fim de uma sessão de foco) |
+| **Notifications** | Liga e desliga os avisos do sino que são **para você**: *Task assigned* (uma tarefa foi passada a você), *Comments* (comentaram numa tarefa sua), *Initiative lead* (você virou líder de uma iniciativa), *Initiative team* (você foi incluído no time de uma iniciativa), *Due dates* (às 08:00 do dia em que uma tarefa sua vence) e *Focus finished* (fim de uma sessão de foco) |
 | **Appearance** | **Theme** (*Light · Dark · Auto* — *Auto* segue o Windows), **Wallpaper** (dez papéis de parede; cada miniatura mostra a parede no tema escolhido), **Accent** (a cor de destaque dos botões e seleções), **Glass** (*Clear* mostra mais o papel de parede; *Tinted* é o padrão) e **Reduce transparency** (superfícies sólidas, sem vidro, e a troca de página sem as animações de entrada — o modo das máquinas sem placa de vídeo, onde elas pesam). O sistema liga *Reduce transparency* sozinho em máquina sem placa de vídeo ou com os **Efeitos de transparência** do Windows desligados; **desligar o botão vale sempre**, mesmo nesses casos |
 | **Focus** | A duração da **sessão**, da **pausa** e a **meta diária** de foco, com **−** e **+**. **Start** começa uma sessão agora |
 | **Data** | **Export my tasks as CSV** baixa as suas tarefas, uma por linha. **Reset to defaults** volta aparência, avisos e foco ao original |
@@ -2014,7 +2014,10 @@ Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de pa
 
 1. Clique em **New initiative**.
 2. Dê um **nome**, uma descrição, escolha a **categoria** (obrigatória), o **líder** (só Back Office e administradores podem liderar), a **cor**, o **ícone** e as datas de início e alvo.
-3. Salve. O líder recebe um aviso no sino.
+3. Em **Team**, inclua os **demais envolvidos**: escolha cada pessoa no menu *Add a person to the team…* — ela vira uma ficha com a foto; o **×** tira. Podem entrar as mesmas pessoas que podem liderar (Back Office e administradores), e o líder não precisa estar no time — ele já está na iniciativa.
+4. Salve. O líder e quem entrou no time recebem um aviso no sino.
+
+> **Para incluir alguém depois**, abra a iniciativa e clique em **Edit**: o campo **Team** é o mesmo. Quem entra no time é avisado no sino; quem sai não é.
 
 **Para filtrar:** o menu **All categories** mostra só uma categoria, com quantas iniciativas cada uma tem — os números do alto passam a contar só aquela categoria, e a escolha fica guardada para a próxima vez. **All · On going · On hold · Concluded** filtra pelo status. A **estrela** de cada cartão fixa a iniciativa na seção *Initiatives Pinned* do menu lateral.
 
@@ -2034,7 +2037,9 @@ Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de pa
 | **Burn-up** | Tarefas concluídas contra o total, ao longo da vida da iniciativa |
 | **Tasks** | As tarefas da iniciativa por status. **Add task** cria uma |
 
-**Pin** fixa a iniciativa no menu; **Edit** muda os dados, inclusive a categoria. Apagar uma iniciativa é do líder, de quem a criou ou de um administrador.
+**Pin** fixa a iniciativa no menu; **Edit** muda os dados, inclusive a categoria e o time. Apagar uma iniciativa é do líder, de quem a criou ou de um administrador.
+
+> **Quem está na iniciativa:** o líder, o **time** e quem já tem tarefa nela. É essa lista que aparece em *Overview*, e é dela que sai o **responsável** de cada tarefa (17.4). A iniciativa aparece na User Home (3.8) de todos eles.
 
 > **As pessoas aparecem com a foto.** Líder, pessoas, responsáveis das tarefas, comentários e atividade — nos cartões, na página da iniciativa, em Tasks e na User Home — mostram a foto de cada um, a mesma da barra superior. Quem ainda não tem foto cadastrada aparece com as iniciais.
 
@@ -2060,11 +2065,13 @@ Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de pa
 
 ![A gaveta da tarefa](docs/sop-screenshots/tasks-drawer.png)
 
-- O **status** muda pelo seletor do alto; **responsável**, **prazo**, **prioridade** e **estimativa** pelos campos logo abaixo.
+- O **status** muda pelo seletor do alto; **responsável**, **prazo**, **prioridade** e **estimativa** pelos campos logo abaixo. O **responsável** é escolhido entre as pessoas da iniciativa — o líder, o time e quem já tem tarefa nela.
 - **Subtasks** são os passos da tarefa — cada um com o seu círculo. **Comments** é a conversa; quem é responsável recebe um aviso.
 - Tudo grava na hora; não há botão de salvar.
 
-**New task** cria uma tarefa em qualquer iniciativa. O responsável recebe um aviso no sino, e a tarefa com prazo aparece no Calendar (13.5) e na User Home de quem a recebeu (3.8).
+**New task** cria uma tarefa em qualquer iniciativa. O menu de **responsável** mostra só as pessoas daquela iniciativa (trocar de iniciativa troca a lista). O responsável recebe um aviso no sino, e a tarefa com prazo aparece no Calendar (13.5) e na User Home de quem a recebeu (3.8).
+
+> **A pessoa não aparece no menu de responsável?** Ela ainda não está na iniciativa: inclua-a no **Team** (Edit da iniciativa) e volte à tarefa. Quem já é responsável por uma tarefa continua nela mesmo que saia do time.
 
 ---
 

@@ -27,6 +27,7 @@ DEFAULT_SETTINGS = {
         'task_assigned': True,
         'task_comment': True,
         'project_lead': True,
+        'project_member': True,           # entrou no time de uma iniciativa (§639)
         'due_dates': True,
         'focus_finished': True,
     },
@@ -134,11 +135,20 @@ def overdue(projects, sid, today):
                and t.get('due') and t['due'] < today)
 
 
+def envolvidos(project):
+    """(sid, nome) de quem está na iniciativa, na ordem: o Lead, o TIME (§639) e
+    quem tem tarefa. É a regra do `projects.domain.people` — repetida aqui
+    porque feature não importa feature —, e UMA para o "é minha?", o cartão e
+    o time da Home."""
+    out = [(project.get('lead_sid'), project.get('lead_name'))]
+    out += [(m.get('sid'), m.get('name')) for m in project.get('members') or []]
+    out += [(t.get('assignee_sid'), t.get('assignee_name')) for t in project.get('tasks') or []]
+    return [(str(s or '').upper(), n) for s, n in out if s]
+
+
 def is_mine(project, sid):
     sid = str(sid or '').upper()
-    if str(project.get('lead_sid') or '').upper() == sid:
-        return True
-    return any(str(t.get('assignee_sid') or '').upper() == sid for t in project.get('tasks') or [])
+    return any(s == sid for s, _n in envolvidos(project))
 
 
 def week(projects, today):

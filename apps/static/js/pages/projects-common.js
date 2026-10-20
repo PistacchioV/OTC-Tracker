@@ -45,6 +45,10 @@
       any_priority: 'Any priority', add_to: 'Add a task to {col}', move_to: 'Move to {col}', open_task: 'Open task',
       move_or_open: 'Move or open “{task}”', n_on_board: '{n} on the board', up_target: 'Target date', up_milestone: 'Milestone', up_empty: 'Nothing coming up.',
       lead: 'Lead',
+      team_add: 'Add a person to the team…', team_all_in: 'Everyone eligible is already in', team_remove: 'Remove from the team',
+      a_members_added: '{who} added {names} to the team',
+      e_assignee_not_in_team: 'Add this person to the initiative team before giving them a task.',
+      e_too_many_members: 'At most {max} people in the team.',
       'cat_Process Review': 'Process Review', 'cat_Tech Issue': 'Tech Issue', 'cat_Projects': 'Projects',
       'cat_B3 - Improvements': 'B3 - Improvements', 'cat_Stomp/Red': 'Stomp/Red',
       category: 'Category', all_categories: 'All categories', no_category: 'No category', choose_category: 'Choose…',
@@ -93,6 +97,10 @@
       any_priority: 'Qualquer prioridade', add_to: 'Adicionar tarefa em {col}', move_to: 'Mover para {col}', open_task: 'Abrir tarefa',
       move_or_open: 'Mover ou abrir “{task}”', n_on_board: '{n} no quadro', up_target: 'Data-alvo', up_milestone: 'Marco', up_empty: 'Nada pela frente.',
       lead: 'Líder',
+      team_add: 'Incluir uma pessoa no time…', team_all_in: 'Todos os elegíveis já estão no time', team_remove: 'Tirar do time',
+      a_members_added: '{who} incluiu {names} no time',
+      e_assignee_not_in_team: 'Inclua esta pessoa no time da iniciativa antes de lhe dar uma tarefa.',
+      e_too_many_members: 'No máximo {max} pessoas no time.',
       'cat_Process Review': 'Revisão de Processo', 'cat_Tech Issue': 'Tech Issue', 'cat_Projects': 'Projects',
       'cat_B3 - Improvements': 'B3 - Improvements', 'cat_Stomp/Red': 'Stomp/Red',
       category: 'Categoria', all_categories: 'Todas as categorias', no_category: 'Sem categoria', choose_category: 'Escolha…',
@@ -141,6 +149,10 @@
       any_priority: 'Cualquier prioridad', add_to: 'Agregar tarea en {col}', move_to: 'Mover a {col}', open_task: 'Abrir tarea',
       move_or_open: 'Mover o abrir “{task}”', n_on_board: '{n} en el tablero', up_target: 'Fecha objetivo', up_milestone: 'Hito', up_empty: 'Nada por delante.',
       lead: 'Líder',
+      team_add: 'Agregar una persona al equipo…', team_all_in: 'Todos los elegibles ya están en el equipo', team_remove: 'Quitar del equipo',
+      a_members_added: '{who} agregó a {names} al equipo',
+      e_assignee_not_in_team: 'Agregue a esta persona al equipo de la iniciativa antes de darle una tarea.',
+      e_too_many_members: 'Como máximo {max} personas en el equipo.',
       'cat_Process Review': 'Revisión de Proceso', 'cat_Tech Issue': 'Tech Issue', 'cat_Projects': 'Projects',
       'cat_B3 - Improvements': 'B3 - Improvements', 'cat_Stomp/Red': 'Stomp/Red',
       category: 'Categoría', all_categories: 'Todas las categorías', no_category: 'Sin categoría', choose_category: 'Elija…',
@@ -392,6 +404,19 @@
     }
   }
   function peopleItems() { return (meta.people || []).map(function (p) { return { value: p.sid, label: p.name }; }); }
+  // Quem pode RECEBER tarefa numa iniciativa (§639): os envolvidos nela — o
+  // Lead, o time e quem já tem tarefa —, entre os elegíveis. A página que não
+  // mandou a lista oferece todos os elegíveis; quem confere é o servidor.
+  function involvedOf(project) {
+    if (!project) return null;
+    if (Array.isArray(project.involved)) return project.involved;
+    if (Array.isArray(project.people)) return project.people.map(function (x) { return x.sid; });
+    return null;
+  }
+  function assigneeItems(project) {
+    var dentro = involvedOf(project), lista = peopleItems();
+    return dentro ? lista.filter(function (it) { return dentro.indexOf(it.value) !== -1; }) : lista;
+  }
   function dateField(el) {
     if (!el) return null;
     if (window.otcDateField) window.otcDateField(el);
@@ -424,6 +449,8 @@
     el.querySelector('#pjm-desc').value = p.description || '';
     fillSelect(el.querySelector('#pjm-lead'), peopleItems(), p.lead_sid || (meta.me && meta.me.sid) || '',
                { keep: p.lead_name });
+    Pm.team = (p.members || []).map(function (m) { return { sid: m.sid, name: m.name }; });
+    renderTeam();
     fillSelect(el.querySelector('#pjm-category'), categories().map(function (c) { return { value: c, label: tCat(c) }; }), p.category || '',
                { blank: t('choose_category') });
     fillSelect(el.querySelector('#pjm-status'), (meta.statuses || []).map(function (s) { return { value: s, label: tStatus(s) }; }), p.status || 'On going');
@@ -440,8 +467,41 @@
       el.querySelector('#pjm-delete').addEventListener('click', deleteFromModal);
       el.querySelector('#pjm-name').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); saveProjectModal(); } });
       el.addEventListener('shown.bs.modal', function () { el.querySelector('#pjm-name').focus(); });
+      // escolher no menu INCLUI no time; o × da ficha tira
+      el.querySelector('#pjm-team-add').addEventListener('change', function () {
+        var sid = this.value;
+        var pes = (meta.people || []).filter(function (x) { return x.sid === sid; })[0];
+        if (pes && !Pm.team.some(function (m) { return m.sid === sid; })) Pm.team.push({ sid: pes.sid, name: pes.name });
+        renderTeam();
+      });
+      el.querySelector('#pjm-team').addEventListener('click', function (e) {
+        var b = e.target.closest('[data-team-rm]');
+        if (!b) return;
+        var sid = b.getAttribute('data-team-rm');
+        Pm.team = Pm.team.filter(function (m) { return m.sid !== sid; });
+        renderTeam();
+      });
+      // o Lead não é do time: ele já está na iniciativa como Lead
+      el.querySelector('#pjm-lead').addEventListener('change', function () {
+        var lead = this.value;
+        Pm.team = Pm.team.filter(function (m) { return m.sid !== lead; });
+        renderTeam();
+      });
     }
     modal(el).show();
+  }
+  function renderTeam() {
+    var el = Pm.el, lead = el.querySelector('#pjm-lead').value;
+    el.querySelector('#pjm-team').innerHTML = Pm.team.map(function (m) {
+      return '<span class="pj-team__chip">' + avatar(m.sid, m.name, 'sm') + '<span>' + esc(m.name || m.sid) + '</span>' +
+        '<button type="button" class="pj-team__rm" data-team-rm="' + esc(m.sid) + '" aria-label="' + esc(t('team_remove')) + '" title="' + esc(t('team_remove')) + '">' +
+        '<i data-lucide="x"></i></button></span>';
+    }).join('');
+    var fora = peopleItems().filter(function (it) {
+      return it.value !== lead && !Pm.team.some(function (m) { return m.sid === it.value; });
+    });
+    fillSelect(el.querySelector('#pjm-team-add'), fora, '', { blank: t(fora.length ? 'team_add' : 'team_all_in') });
+    icons(el.querySelector('#pjm-team'));
   }
   function saveProjectModal() {
     var el = Pm.el, o = Pm.opts, edit = o.mode === 'edit';
@@ -450,7 +510,8 @@
       category: el.querySelector('#pjm-category').value,
       lead_sid: el.querySelector('#pjm-lead').value, color: el.querySelector('#pjm-color').value,
       icon: el.querySelector('#pjm-icon').value, start_date: readDate(el.querySelector('#pjm-start')),
-      due_date: readDate(el.querySelector('#pjm-due'))
+      due_date: readDate(el.querySelector('#pjm-due')),
+      member_sids: Pm.team.map(function (m) { return m.sid; })
     };
     if (edit) body.status = el.querySelector('#pjm-status').value;
     var btn = el.querySelector('#pjm-save'); btn.disabled = true;
@@ -480,7 +541,7 @@
     var projs = (opts.projects || []).map(function (p) { return { value: p.id, label: p.name }; });
     fillSelect(el.querySelector('#pjtm-project'), projs, opts.projectId || (projs[0] && projs[0].value) || '');
     el.querySelector('#pjtm-project-wrap').classList.toggle('d-none', !!opts.fixedProject);
-    fillSelect(el.querySelector('#pjtm-assignee'), peopleItems(), opts.assignee || (meta.me && meta.me.sid) || '', { blank: t('unassigned') });
+    taskAssignees(opts.assignee || (meta.me && meta.me.sid) || '');
     fillSelect(el.querySelector('#pjtm-priority'), (meta.priorities || []).map(function (p) { return { value: p, label: tPrio(p) }; }), 'Medium');
     fillSelect(el.querySelector('#pjtm-status'), (meta.task_statuses || []).map(function (s) { return { value: s, label: tTask(s) }; }), opts.status || 'To do');
     dateField(el.querySelector('#pjtm-due'));
@@ -489,10 +550,20 @@
     if (!el._pjWired) {
       el._pjWired = 1;
       el.querySelector('#pjtm-save').addEventListener('click', saveTaskModal);
+      // outra iniciativa, outros envolvidos
+      el.querySelector('#pjtm-project').addEventListener('change', function () {
+        taskAssignees(el.querySelector('#pjtm-assignee').value);
+      });
       el.querySelector('#pjtm-title').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); saveTaskModal(); } });
       el.addEventListener('shown.bs.modal', function () { el.querySelector('#pjtm-title').focus(); });
     }
     modal(el).show();
+  }
+  // O responsável da tarefa nova sai dos ENVOLVIDOS na iniciativa escolhida.
+  function taskAssignees(quero) {
+    var el = Tm.el, pid = el.querySelector('#pjtm-project').value;
+    var pr = (Tm.opts.projects || []).filter(function (x) { return x.id === pid; })[0];
+    fillSelect(el.querySelector('#pjtm-assignee'), assigneeItems(pr), quero || '', { blank: t('unassigned') });
   }
   function saveTaskModal() {
     var el = Tm.el, o = Tm.opts;
@@ -519,7 +590,8 @@
   }
   function drawerApply(project) {
     var t2 = (project.tasks || []).filter(function (x) { return x.id === Dr.task.id; })[0];
-    Dr.project = { id: project.id, name: project.name, color: project.color };
+    Dr.project = { id: project.id, name: project.name, color: project.color,
+                   involved: involvedOf(project) || involvedOf(Dr.project) };
     if (Dr.onChange) Dr.onChange(project);
     if (!t2) { Dr.oc.hide(); return; }
     Dr.task = t2;
@@ -542,14 +614,14 @@
     var el = drawerEl(), tk = Dr.task, pr = Dr.project;
     var chipEl = el.querySelector('#pjt-project');
     chipEl.style.setProperty('--chip', colorVar(pr.color));
-    chipEl.href = '/projects/' + encodeURIComponent(pr.id);
+    chipEl.href = '/initiatives/' + encodeURIComponent(pr.id);
     chipEl.innerHTML = '<span>' + esc(pr.name) + '</span>';
     el.querySelector('#pjt-prio-badge').innerHTML = prioBadge(tk.priority);
     var title = el.querySelector('#pjt-title');
     if (document.activeElement !== title) title.value = tk.title || '';
     $$('#pjt-status .nav-link', el).forEach(function (a) { a.classList.toggle('active', a.getAttribute('data-status') === tk.status); });
     $$('#pjt-status .nav-link', el).forEach(function (a) { a.textContent = tTask(a.getAttribute('data-status')); });
-    fillSelect(el.querySelector('#pjt-assignee'), peopleItems(), tk.assignee_sid || '', { blank: t('unassigned'), keep: tk.assignee_name });
+    fillSelect(el.querySelector('#pjt-assignee'), assigneeItems(pr), tk.assignee_sid || '', { blank: t('unassigned'), keep: tk.assignee_name });
     fillSelect(el.querySelector('#pjt-priority'), (meta.priorities || []).map(function (p) { return { value: p, label: tPrio(p) }; }), tk.priority);
     setDate(el.querySelector('#pjt-due'), tk.due || '');
     // o valor desenhado nas caixas (o Pane): avatar e nome, prazo relativo, prioridade
@@ -655,6 +727,7 @@
   function activityText(ev) {
     var p = ev.params || {};
     var params = { who: '<b>' + esc(ev.name || ev.sid) + '</b>', task: esc(p.task || ''), milestone: esc(p.milestone || ''),
+                   names: '<b>' + esc(p.names || '') + '</b>',
                    status: esc(p.status ? (_TRANS.en['st_' + p.status] !== undefined ? tStatus(p.status) : tTask(p.status)) : '') };
     var key = 'a_' + ev.kind;
     return _TRANS.en[key] !== undefined ? t(key, params) : esc(ev.kind);

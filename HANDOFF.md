@@ -26660,3 +26660,62 @@ Banco sem B2B na posição fica sem contrato — nunca o do cliente). Todos os
 `check_unwind_*`, `check_intrag_unwind`, `check_theme_toggle`,
 `check_summary_glow`, `check_page_switch`, `check_table_center` e
 `check_row_action_buttons` verdes.
+
+## §638 — A página Initiatives no endereço `/initiatives` (2026-10-20)
+
+**"O nome da página Initiatives ainda aparece no browser como :8051/projects."**
+O §633 trocou o nome na tela e deixou a URL `/projects` de propósito: o
+`Page_Access` grava a URL, e renomeá-la revogaria o acesso de quem já a tinha.
+Mas o código já tinha a saída para isso — o `authz._renomeadas` traduz na
+leitura a URL antiga gravada para a nova, e foi assim que o
+`/new-deals-monitor` virou `/intraday-monitor` (§567). Agora a página é
+`/initiatives` e `/initiatives/<id>`; `/projects` e `/projects/<id>`
+redirecionam, levando o `?task=` (favoritos, e-mails e avisos já enviados chegam
+à mesma iniciativa e à mesma tarefa); `/projects` gravado no acesso vale para
+`/initiatives`. Menu, os três mapas do sino, os links das telas (lista, página
+da iniciativa, Tasks, User Home, Calendar, a seção Initiatives Pinned) e o
+acesso da User Home apontam para o endereço novo. A API segue `/api/projects` —
+não aparece no navegador, e renomeá-la só mexeria em código.
+
+**Guardas.** `check_projects.py` §9: a página nova abre e a sem acesso volta
+para `/initiatives`, as duas rotas velhas redirecionam (com o `?task=`), o menu
+leva ao endereço novo e a allowlist com `/projects` vale para `/initiatives`.
+`check_page_switch.py` e `check_soc_layers.py` com as rotas novas;
+`check_notif_page_url`, `check_user_home`, `check_intraday_monitor` e
+`check_db_read_path` verdes.
+
+## §639 — O time da iniciativa e o responsável da tarefa entre os envolvidos (2026-10-20)
+
+**"Como adiciono mais pessoas numa iniciativa?"** Não havia como: os
+envolvidos eram só o Lead e quem tinha tarefa (`domain.people`), e quem não
+tinha tarefa não aparecia. A iniciativa ganhou o **time** (`members`, uma
+lista de {sid, name}), editado no campo **Team** do modal: um menu "Add a
+person to the team…" e as pessoas como fichas com ×. Podem entrar as mesmas
+pessoas que podem liderar (BO/Admin ativos — decisão da mesa); sem repetir e
+sem o Lead, que já está na iniciativa como Lead; quem já estava no time segue
+nele mesmo fora do BO (a regra do Lead gravado). Quem ENTRA é avisado no sino
+(`Initiative Member`, ícone de pessoas, com a preferência própria *Initiative
+team* na Settings — `project_member`), a atividade diz quem entrou
+(`members_added`), e quem sai não é avisado.
+
+**E o responsável de cada tarefa sai dos ENVOLVIDOS** (mesa, 20/10/2026): o
+Lead, o time e quem já tem tarefa (`domain.assignable`, chamado DENTRO do
+`store.mutate`, com a iniciativa lida). Elegível fora deles é 400
+`assignee_not_in_team`, que diz o que fazer — incluir no time primeiro; o
+responsável que a tarefa já tem é mantido (quem saiu do time segue dono da
+tarefa dele). Na tela, o modal de tarefa e a gaveta oferecem só os envolvidos
+daquela iniciativa (`assigneeItems`), e trocar de iniciativa no modal troca a
+lista: a Tasks e a User Home passaram a receber `involved` de cada iniciativa,
+e a página da iniciativa já tinha as `people`.
+
+**A User Home** repetia a regra de "envolvido" em três lugares (o "é minha?",
+o cartão e o time) — ela não importa o Projects. Virou uma função só,
+`user_home.domain.envolvidos`, já com o time: a iniciativa em que a pessoa é só
+do time aparece na Home dela.
+
+**Guardas.** `check_projects.py` §10: time limpo (sem repetir, sem o Lead),
+MO recusado, aviso só para quem entra, o time nas pessoas e no cartão, tarefa
+para quem está fora recusada com o código, para o time e o Lead aceita, quem
+saiu do time segue responsável, a Tasks recebe os envolvidos, e a tela usa a
+lista nos dois lugares. `check_projects` §3 e `check_user_home` passaram a pôr
+no time quem recebe tarefa — a regra nova recusa o que eles faziam antes.

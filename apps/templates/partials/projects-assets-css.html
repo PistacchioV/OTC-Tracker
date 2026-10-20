@@ -26,6 +26,20 @@
 .pj-prio--medium { background: color-mix(in srgb, var(--otc-blue) 14%, transparent); color: var(--otc-accent-ink); }
 .pj-prio--low    { background: var(--otc-fill); color: var(--otc-text-2); }
 .pj-prio svg { width: 12px; height: 12px; }
+/* o TIME no modal da iniciativa (§639): as pessoas como fichas, o menu embaixo */
+#pj-project-modal .pj-team { display: flex; flex-direction: column; gap: 8px; }
+#pj-project-modal .pj-team__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+#pj-project-modal .pj-team__chips:empty { display: none; }
+#pj-project-modal .pj-team__chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 3px 0 3px;
+  border-radius: 999px; background: var(--otc-fill); color: var(--otc-text); font: 560 13px/1 var(--otc-font);
+}
+#pj-project-modal .pj-team__rm {
+  display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0;
+  border-radius: 50%; background: transparent; color: var(--otc-text-3); cursor: pointer;
+}
+#pj-project-modal .pj-team__rm:hover { background: var(--otc-fill-2); color: var(--otc-danger); }
+#pj-project-modal .pj-team__rm svg { width: 13px; height: 13px; }
 .pj-meta { display: inline-flex; align-items: center; gap: 5px; font: 560 12.5px/1 var(--otc-font); color: var(--otc-text-2); white-space: nowrap; }
 .pj-meta svg { width: 14px; height: 14px; }
 .pj-meta.is-late { color: var(--otc-danger); }

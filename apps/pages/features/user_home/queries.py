@@ -16,10 +16,8 @@ def _card(p):
     tasks = p.get('tasks') or []
     feitas = sum(1 for t in tasks if t.get('status') == domain.DONE)
     gente, vistos = [], set()
-    for sid, nome in [(p.get('lead_sid'), p.get('lead_name'))] + \
-            [(t.get('assignee_sid'), t.get('assignee_name')) for t in tasks]:
-        sid = str(sid or '').upper()
-        if sid and sid not in vistos:
+    for sid, nome in domain.envolvidos(p):
+        if sid not in vistos:
             vistos.add(sid)
             gente.append({'sid': sid, 'name': nome or sid})
     return {'id': p['id'], 'name': p.get('name', ''), 'color': p.get('color', 'blue'),
@@ -34,10 +32,8 @@ def _team(projects, me_sid, directory, now):
     presença de agora: em foco, em reunião, livre."""
     vistos, ordem = {me_sid}, []
     for p in projects:
-        for sid, nome in [(p.get('lead_sid'), p.get('lead_name'))] + \
-                [(t.get('assignee_sid'), t.get('assignee_name')) for t in p.get('tasks') or []]:
-            sid = str(sid or '').upper()
-            if sid and sid not in vistos:
+        for sid, nome in domain.envolvidos(p):
+            if sid not in vistos:
                 vistos.add(sid)
                 ordem.append((sid, nome))
     docs = store.load_many([s for s, _n in ordem])
@@ -103,7 +99,10 @@ def home(me, now, can_projects):
                         'project_name': t['project_name']} for t in domain.open_tasks(projetos, sid)],
         'week': domain.week(projetos, today),
         'projects': domain.sort_projects([_card(p) for p in mine])[:6],
-        'projects_all': [{'id': p['id'], 'name': p.get('name', ''), 'color': p.get('color', 'blue')}
+        # `involved`: quem pode receber tarefa nela (§639) — o modal de tarefa
+        # da Home oferece só essas pessoas
+        'projects_all': [{'id': p['id'], 'name': p.get('name', ''), 'color': p.get('color', 'blue'),
+                          'involved': list(dict.fromkeys(s for s, _n in domain.envolvidos(p)))}
                          for p in projetos if p.get('status') != 'Concluded'],
         'team': _team(mine, sid, directory, now) if can_projects else [],
         'activity': domain.recent_activity(mine, 15),

@@ -92,8 +92,8 @@ _NOTIF_PAGE_URL = {
     # carregam: renomear deixaria o histórico do sino sem destino.
     'Confirmation': '/manual-confirmation/monitor',
     'Support': '/tickets-list',
-    'Projects': '/projects',
-    'Initiatives': '/projects',
+    'Projects': '/initiatives',
+    'Initiatives': '/initiatives',
     'User Home': '/user-home',
     # Nove páginas gravavam notificação SEM entrada aqui — o aviso aparecia no
     # sino e o clique não ia a lugar nenhum (o TED Release do Other Products
