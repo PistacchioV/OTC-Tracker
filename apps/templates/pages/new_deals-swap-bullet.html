@@ -487,7 +487,7 @@ $(document).ready(function() {
             if (conditionalActions) {
                 conditionalActions.innerHTML =
                     '<button class="btn btn-sm btn-soft-info btn-toolbar-all d-none" id="btnPreviewSwb" type="button" data-table-preview-selected><i class="ti ti-eye me-1"></i><span data-lang="nd-swb-btn-preview">' + t('nd-swb-btn-preview', 'Preview') + '</span></button>' +
-                    '<button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all d-none" id="btnSendSwb" type="button" data-table-send-selected><i class="ti ti-brand-telegram me-1"></i> Send</button>' +
+                    '<button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all d-none otc-send-batch" id="btnSendSwb" type="button" data-table-send-selected><i class="ti ti-brand-telegram me-1"></i> Send</button>' +
                     '<button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="btnDelSwb" type="button" data-table-delete-selected><i class="ti ti-trash me-1"></i> Delete</button>';
                 document.getElementById('btnPreviewSwb').addEventListener('click', function(){ var ids = Array.from(selected); if (ids.length) previewDeal(ids[0]); });
                 document.getElementById('btnSendSwb').addEventListener('click', function(){ sendDeals(Array.from(selected)); });

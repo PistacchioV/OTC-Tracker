@@ -1626,8 +1626,10 @@ table td .btn.btn-act > i { font-size: 1rem !important; line-height: 1; }
 // com avião limão destoava das outras três ações da linha). No clique o avião
 // voa deixando um rastro na cor do ícone e o verde vem atrás; "Sent" só
 // depois que o SERVIDOR confirmou (otc.js correlaciona o pedido). Erro: o
-// verde recua com um tremor, em vermelho.
-.btn-row-send, .acc-act-send, .btn-send, .otc-send {
+// verde recua com um tremor, em vermelho. O Send EM LOTE da barra
+// (`.otc-send-batch`, as linhas marcadas) tem a MESMA animação, sem o visual
+// de pílula com rótulo em caixa alta do `.btn-send`: a barra fica como está.
+.btn-row-send, .acc-act-send, .btn-send, .otc-send, .otc-send-batch {
   --otc-send-ok: #10b04a;
   --otc-send-err: #e5484d;
   --otc-send-r: 999px;               // o canto do verde: pílula aqui, squircle abaixo
@@ -1677,6 +1679,9 @@ table td .btn.btn-act > i { font-size: 1rem !important; line-height: 1; }
     // o próprio botão vira verde: o `overflow` corta o preenchimento na borda
     // de DENTRO, e sem isto ficava um fio da cor de antes em volta do "Sent"
     --otc-gel: var(--otc-send-ok);
+    // ...e o que não é gel (o `btn-light` do New Deals, o `btn-soft-*`) também
+    background-color: var(--otc-send-ok) !important;
+    border-color: transparent !important;
     transition: --otc-fill-w .35s var(--otc-ease-out);
     > i, > svg:not(.otc-send__ok), .otc-send__label { opacity: 0; }
     .otc-send__done { opacity: 1; filter: none; }
