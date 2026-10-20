@@ -2,7 +2,7 @@
 
 **Brazil OTC Operations · JPMorgan Chase & Co.**
 
-**Versão:** 2.6 · **Data:** 20/10/2026
+**Versão:** 2.7 · **Data:** 20/10/2026
 
 ---
 
@@ -105,9 +105,9 @@ Da esquerda para a direita:
 | **Bandeira · EN** | Troca o idioma da interface entre **EN**, **BR** e **ES** |
 | **Sino** com o número vermelho | Notificações do sistema — importações, mapeamentos, validações, envios, tarefas |
 | **Paleta** | Abre a **Aparência**: tema, papel de parede, cor de destaque e vidro — as mesmas opções de Settings (3.9) |
-| **Suas iniciais** | Abre o menu do usuário |
+| **Sua foto** (ou suas iniciais) | Abre o menu do usuário |
 
-**Para abrir o menu do usuário:** clique nas suas iniciais (o círculo colorido), no canto superior direito. O menu traz:
+**Para abrir o menu do usuário:** clique na sua foto, no canto superior direito — quem ainda não tem foto cadastrada no sistema aparece com as iniciais, num círculo colorido. O menu traz:
 
 - **Profile** — os seus dados e a sua função no sistema
 - **Settings** — o seu perfil, os avisos que você quer receber, a aparência e o foco (3.9)
@@ -123,7 +123,7 @@ Da esquerda para a direita:
 
 ![Menu lateral](docs/sop-screenshots/menu-lateral.png)
 
-O menu é uma placa **fixa** à esquerda. No alto ficam a marca e o botão **Pin / unpin menu** (o ícone de painel ao lado do nome): clique nele para **recolher** o menu e ganhar largura — um botão redondo aparece no canto superior esquerdo para abri-lo quando precisar. Clique de novo no ícone para fixá-lo. Quando o menu está fixo, o botão fica **colorido**.
+O menu é uma placa **fixa** junto à borda esquerda da janela. No alto ficam a marca e o botão **Pin / unpin menu** (o ícone de painel ao lado do nome): clique nele para **recolher** o menu — ele sai da tela e o conteúdo ocupa a largura toda. Para abri-lo quando precisar, use o botão redondo **☰** que aparece à esquerda da barra superior: o menu abre por cima do conteúdo e fecha ao escolher uma tela (ou com `Esc`). Para fixá-lo de novo, clique no ícone de painel com ele aberto. Quando o menu está fixo, o botão fica **colorido**.
 
 Logo abaixo da marca, a seção **Initiatives Pinned** mostra as iniciativas que você marcou com a **estrela** (17.3) — um clique abre a iniciativa. Ela só aparece quando há algum. No pé do menu ficam o seu nome e o seu cargo.
 
@@ -225,9 +225,9 @@ O tempo focado soma no *Focused today* e no anel *Focus*. Enquanto você está e
 
 | Seção | O que tem |
 |---|---|
-| **Profile** | Nome, e-mail, mesa e SID — vêm do cadastro (3.7) e não se editam aqui |
+| **Profile** | A sua foto (ou as suas iniciais, sem foto cadastrada), nome, e-mail, mesa e SID — vêm do cadastro (3.7) e não se editam aqui |
 | **Notifications** | Liga e desliga os avisos do sino que são **para você**: *Task assigned* (uma tarefa foi passada a você), *Comments* (comentaram numa tarefa sua), *Initiative lead* (você virou líder de uma iniciativa), *Due dates* (às 08:00 do dia em que uma tarefa sua vence) e *Focus finished* (fim de uma sessão de foco) |
-| **Appearance** | **Theme** (*Light · Dark · Auto* — *Auto* segue o Windows), **Wallpaper** (dez papéis de parede), **Accent** (a cor de destaque dos botões e seleções), **Glass** (*Clear* mostra mais o papel de parede; *Tinted* é o padrão) e **Reduce transparency** (superfícies sólidas, sem vidro — o sistema liga sozinho em máquina sem placa de vídeo) |
+| **Appearance** | **Theme** (*Light · Dark · Auto* — *Auto* segue o Windows), **Wallpaper** (dez papéis de parede; cada miniatura mostra a parede no tema escolhido), **Accent** (a cor de destaque dos botões e seleções), **Glass** (*Clear* mostra mais o papel de parede; *Tinted* é o padrão) e **Reduce transparency** (superfícies sólidas, sem vidro). O sistema liga *Reduce transparency* sozinho em máquina sem placa de vídeo ou com os **Efeitos de transparência** do Windows desligados; **desligar o botão vale sempre**, mesmo nesses casos |
 | **Focus** | A duração da **sessão**, da **pausa** e a **meta diária** de foco, com **−** e **+**. **Start** começa uma sessão agora |
 | **Data** | **Export my tasks as CSV** baixa as suas tarefas, uma por linha. **Reset to defaults** volta aparência, avisos e foco ao original |
 
@@ -2031,6 +2031,8 @@ Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de pa
 | **Tasks** | As tarefas da iniciativa por status. **Add task** cria uma |
 
 **Pin** fixa a iniciativa no menu; **Edit** muda os dados, inclusive a categoria. Apagar uma iniciativa é do líder, de quem a criou ou de um administrador.
+
+> **As pessoas aparecem com a foto.** Líder, pessoas, responsáveis das tarefas, comentários e atividade — nos cartões, na página da iniciativa, em Tasks e na User Home — mostram a foto de cada um, a mesma da barra superior. Quem ainda não tem foto cadastrada aparece com as iniciais.
 
 ### 17.4. Tasks
 
