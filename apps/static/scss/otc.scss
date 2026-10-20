@@ -614,12 +614,19 @@ html.otc-vt-nav::view-transition-new(root) { animation: none; }
   border-radius: $radius;
   box-shadow: $depth;
 }
+// A borda de luz e o brilho ficam ABAIXO do conteúdo pelo z-index NEGATIVO
+// (a placa isola as camadas dela — `isolation: isolate` no otc-glass —, então
+// o -1 não vaza para trás da tinta). Antes eles iam em 0 e cada FILHO da placa
+// ganhava `z-index: 1` para ficar por cima: o header, o body e o footer do card
+// viravam camadas FECHADAS, e o menu aberto no header (Export, Columns) ficava
+// preso nelas — o body, que vem depois, pintava a tabela por cima do menu
+// (mesa, 20/10/2026). Os filhos agora são `position: relative` sem z-index.
 @mixin otc-rim {
   &::before {
     content: "";
     position: absolute;
     inset: 0;
-    z-index: 0;
+    z-index: -1;
     padding: 1.25px;
     border-radius: inherit;
     pointer-events: none;
@@ -637,7 +644,7 @@ html.otc-vt-nav::view-transition-new(root) { animation: none; }
     content: "";
     position: absolute;
     inset: 0;
-    z-index: 0;
+    z-index: -1;
     border-radius: inherit;
     pointer-events: none;
     background:
@@ -804,7 +811,7 @@ html.otc-vt-nav::view-transition-new(root) { animation: none; }
   gap: 14px;
   padding: 18px 12px 12px;
   transition: translate var(--otc-dur-base) var(--otc-ease-out), opacity var(--otc-dur-base) var(--otc-ease);
-  > * { position: relative; z-index: 1; }
+  > * { position: relative; }
 }
 .otc-brand {
   display: flex;
@@ -1033,7 +1040,7 @@ body.otc-nav-unpinned .otc-menu-btn { display: inline-grid !important; }
   gap: 6px;
   height: 60px;
   padding: 7px;
-  > * { position: relative; z-index: 1; }
+  > * { position: relative; }
 }
 .otc-search {
   display: flex;
@@ -1305,7 +1312,7 @@ body.otc-nav-unpinned .otc-menu-btn { display: inline-grid !important; }
 }
 .offcanvas.offcanvas-end { right: var(--otc-inset); }
 .offcanvas.offcanvas-start { left: var(--otc-inset); }
-.offcanvas > * { position: relative; z-index: 1; }
+.offcanvas > * { position: relative; }
 .offcanvas.showing, .offcanvas.show:not(.hiding) { animation: otc-drawer-in 450ms var(--otc-ease-out) backwards; transform: none; }
 .offcanvas.hiding { animation: otc-drawer-out 220ms var(--otc-ease-in) forwards; transform: none; }
 .offcanvas-backdrop { background: var(--otc-scrim); &.show { opacity: 1; } }
@@ -1382,7 +1389,7 @@ body.otc-nav-unpinned .otc-menu-btn { display: inline-grid !important; }
     display: flex; align-items: center; gap: 12px;
     height: 64px; padding: 0 18px 0 20px;
     animation: otc-pop-in 420ms var(--otc-ease-out) both;
-    > * { position: relative; z-index: 1; }
+    > * { position: relative; }
     svg { width: 22px; height: 22px; color: var(--otc-text-2); flex: none; }
     input { flex: 1 1 auto; border: 0; background: transparent; outline: 0; color: var(--otc-text); font: 500 21px/1.45 var(--otc-font); letter-spacing: -.01em; }
   }
@@ -1391,7 +1398,7 @@ body.otc-nav-unpinned .otc-menu-btn { display: inline-grid !important; }
     margin-top: 8px; padding: 8px;
     max-height: min(60vh, 520px); overflow-y: auto;
     animation: otc-pop-in 420ms 30ms var(--otc-ease-out) both;
-    > * { position: relative; z-index: 1; }
+    > * { position: relative; }
   }
   .otc-palette__group { padding: 10px 12px 6px; font: 650 12px/1 var(--otc-font); letter-spacing: .06em; text-transform: uppercase; color: var(--otc-text-3); }
   .otc-palette__item {
@@ -1783,7 +1790,7 @@ table td .btn.btn-act > i { font-size: 1rem !important; line-height: 1; }
   --ins-card-title-color: var(--otc-text);
   @include otc-slab;
   margin-bottom: var(--otc-gap);
-  > * { position: relative; z-index: 1; }
+  > * { position: relative; }
 }
 .card-header, .card-footer { border: 0; background: transparent; }
 // o cabeçalho do card é FLEX centrado (como no tema antigo): 14 telas montam
@@ -2177,7 +2184,7 @@ body.otc-has-island .otc-toast { top: calc(var(--otc-inset, 16px) + 128px); }
   backdrop-filter: var(--otc-blur-thick);
   box-shadow: var(--otc-depth);
 }
-.modal-content.liquid-glass { @include otc-slab(var(--otc-glass-slab), var(--otc-blur-thick), var(--otc-r-shell)); > * { position: relative; z-index: 1; } }
+.modal-content.liquid-glass { @include otc-slab(var(--otc-glass-slab), var(--otc-blur-thick), var(--otc-r-shell)); > * { position: relative; } }
 .modal.show .modal-content { animation: otc-drop-in 560ms var(--otc-ease-out) backwards; }
 .modal-header { align-items: center; gap: 12px; .btn-close { margin: 0 0 0 auto; } }
 .modal-title { font: 650 18px/1.25 var(--otc-font); letter-spacing: -.01em; }
@@ -2828,7 +2835,7 @@ table.dataTable.dtr-inline.collapsed > tbody > tr > td.dtr-control::before { bac
   color: var(--otc-text) !important;
   padding: 26px 24px 22px !important;
   font-family: var(--otc-font) !important;
-  > * { position: relative; z-index: 1; }
+  > * { position: relative; }
   &.swal2-show { animation: otc-drop-in 520ms var(--otc-ease-out) !important; }
   &.swal2-hide { animation: otc-swal-out 200ms var(--otc-ease-in) forwards !important; }
   &.swal2-toast { border-radius: 31px !important; padding: 12px 18px !important; background-color: #000 !important; color: #fff !important; .swal2-title, .swal2-html-container { color: #fff !important; } &::before, &::after { display: none; } }
@@ -3372,7 +3379,7 @@ $cc-total: '.otc-stat--total, [class*="-widget--total"], [class*="-stat--total"]
   --tl-warn: var(--otc-orange);
   --tl-bad: var(--otc-danger);
 }
-.tl-page .tl-card { @include otc-slab; padding: var(--otc-pad); margin-bottom: var(--otc-gap); > * { position: relative; z-index: 1; } }
+.tl-page .tl-card { @include otc-slab; padding: var(--otc-pad); margin-bottom: var(--otc-gap); > * { position: relative; } }
 .tl-page .tl-card--accent { box-shadow: var(--otc-depth), inset 0 0 0 1.5px color-mix(in srgb, var(--tl-accent) 55%, transparent); }
 .tl-page .tl-card--good { box-shadow: var(--otc-depth), inset 0 0 0 1.5px color-mix(in srgb, var(--tl-ok) 55%, transparent); }
 .tl-page .tl-card--bad { box-shadow: var(--otc-depth), inset 0 0 0 1.5px color-mix(in srgb, var(--tl-bad) 55%, transparent); }
@@ -3473,7 +3480,7 @@ $cc-total: '.otc-stat--total, [class*="-widget--total"], [class*="-stat--total"]
 .dash-chart--sm { height: 260px; }
 
 // 10d. Control Panel: cards de rotina
-.cp-card { @include otc-slab; height: 100%; padding: var(--otc-pad); display: flex; flex-direction: column; gap: 10px; > * { position: relative; z-index: 1; } }
+.cp-card { @include otc-slab; height: 100%; padding: var(--otc-pad); display: flex; flex-direction: column; gap: 10px; > * { position: relative; } }
 .cp-run-btn { align-self: flex-start; }
 .cp-ce-item, .cp-acc-row { display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-radius: var(--otc-r-md); &:hover { background: var(--otc-fill-hover); } }
 .cp-dz-list { display: flex; flex-direction: column; gap: 6px; }

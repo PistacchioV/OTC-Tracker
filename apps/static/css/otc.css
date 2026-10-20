@@ -14112,7 +14112,7 @@ html.otc-vt-nav::view-transition-new(root) {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   padding: 1.25px;
   border-radius: inherit;
   pointer-events: none;
@@ -14127,14 +14127,13 @@ html.otc-vt-nav::view-transition-new(root) {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   border-radius: inherit;
   pointer-events: none;
   background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .sidenav-menu > * {
   position: relative;
-  z-index: 1;
 }
 
 .otc-brand {
@@ -14567,7 +14566,7 @@ body.otc-nav-unpinned .otc-menu-btn {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   padding: 1.25px;
   border-radius: inherit;
   pointer-events: none;
@@ -14582,14 +14581,13 @@ body.otc-nav-unpinned .otc-menu-btn {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   border-radius: inherit;
   pointer-events: none;
   background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .otc-toolbar > * {
   position: relative;
-  z-index: 1;
 }
 
 .otc-search {
@@ -14782,7 +14780,7 @@ body.otc-nav-unpinned .otc-menu-btn {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   padding: 1.25px;
   border-radius: inherit;
   pointer-events: none;
@@ -14797,7 +14795,7 @@ body.otc-nav-unpinned .otc-menu-btn {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   border-radius: inherit;
   pointer-events: none;
   background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
@@ -15170,7 +15168,7 @@ body.otc-nav-unpinned .otc-menu-btn {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   padding: 1.25px;
   border-radius: inherit;
   pointer-events: none;
@@ -15185,7 +15183,7 @@ body.otc-nav-unpinned .otc-menu-btn {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   border-radius: inherit;
   pointer-events: none;
   background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
@@ -15201,7 +15199,6 @@ body.otc-nav-unpinned .otc-menu-btn {
 
 .offcanvas > * {
   position: relative;
-  z-index: 1;
 }
 
 .offcanvas.showing, .offcanvas.show:not(.hiding) {
@@ -15387,7 +15384,7 @@ body.otc-nav-unpinned .otc-menu-btn {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   padding: 1.25px;
   border-radius: inherit;
   pointer-events: none;
@@ -15402,14 +15399,13 @@ body.otc-nav-unpinned .otc-menu-btn {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   border-radius: inherit;
   pointer-events: none;
   background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .otc-palette .otc-palette__bar > * {
   position: relative;
-  z-index: 1;
 }
 .otc-palette .otc-palette__bar svg {
   width: 22px;
@@ -15444,7 +15440,7 @@ body.otc-nav-unpinned .otc-menu-btn {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   padding: 1.25px;
   border-radius: inherit;
   pointer-events: none;
@@ -15459,14 +15455,13 @@ body.otc-nav-unpinned .otc-menu-btn {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   border-radius: inherit;
   pointer-events: none;
   background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .otc-palette .otc-palette__list > * {
   position: relative;
-  z-index: 1;
 }
 .otc-palette .otc-palette__group {
   padding: 10px 12px 6px;
@@ -16874,7 +16869,7 @@ table td .btn.btn-act > i {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   padding: 1.25px;
   border-radius: inherit;
   pointer-events: none;
@@ -16889,14 +16884,13 @@ table td .btn.btn-act > i {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   border-radius: inherit;
   pointer-events: none;
   background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .card > * {
   position: relative;
-  z-index: 1;
 }
 
 .card-header, .card-footer {
@@ -17774,7 +17768,7 @@ body.otc-has-island .otc-toast {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   padding: 1.25px;
   border-radius: inherit;
   pointer-events: none;
@@ -17789,14 +17783,13 @@ body.otc-has-island .otc-toast {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   border-radius: inherit;
   pointer-events: none;
   background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .modal-content.liquid-glass > * {
   position: relative;
-  z-index: 1;
 }
 
 .modal.show .modal-content {
@@ -19402,7 +19395,7 @@ table.dataTable.dtr-inline.collapsed > tbody > tr > td.dtr-control::before {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   padding: 1.25px;
   border-radius: inherit;
   pointer-events: none;
@@ -19417,14 +19410,13 @@ table.dataTable.dtr-inline.collapsed > tbody > tr > td.dtr-control::before {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   border-radius: inherit;
   pointer-events: none;
   background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .swal2-popup > * {
   position: relative;
-  z-index: 1;
 }
 .swal2-popup.swal2-show {
   animation: otc-drop-in 520ms var(--otc-ease-out) !important;
@@ -21040,7 +21032,7 @@ html .fc .fc-list-empty {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   padding: 1.25px;
   border-radius: inherit;
   pointer-events: none;
@@ -21055,14 +21047,13 @@ html .fc .fc-list-empty {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   border-radius: inherit;
   pointer-events: none;
   background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .tl-page .tl-card > * {
   position: relative;
-  z-index: 1;
 }
 
 .tl-page .tl-card--accent {
@@ -21505,7 +21496,7 @@ html .fc .fc-list-empty {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   padding: 1.25px;
   border-radius: inherit;
   pointer-events: none;
@@ -21520,14 +21511,13 @@ html .fc .fc-list-empty {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   border-radius: inherit;
   pointer-events: none;
   background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .cp-card > * {
   position: relative;
-  z-index: 1;
 }
 
 .cp-run-btn {

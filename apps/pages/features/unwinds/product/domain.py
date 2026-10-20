@@ -380,6 +380,117 @@ def linhas_do_recap_commodities(tabelas):
     return linhas, avisos
 
 
+# ── O e-mail de recompra de OPCAO de Commodities (mesa, 20/10/2026) ──────────
+# O "INTERNAL JPMorgan Trade Recap - <estrutura> Unwind": uma tabela por perna,
+# `Leg · Client · Original B/S · Direction of Unwind · Commodity · Option Type ·
+# Contract · Original Strike · Unwind Strike · Fixing Date · Original Volume
+# (lots) · Unwind Volume (lots) · Unwind Volume (<unidade>) · Settlement Date ·
+# Premium (USD/<unidade>) · Total Premium USD · FX BRL/USD · Total Premium BRL ·
+# Premium Payment Date`. O e-mail NAO traz o B3 ID: o `Contract` dele (`27-Mar`)
+# e o vencimento do FUTURO, e lido como B3 ID enchia a grade de lixo — quem acha
+# o contrato e o Live Position, pelas caracteristicas (o padrao do NDF).
+#
+#   * `Client` e a perna FACING o cliente; `Banco` e o B2B Banco x Lawton. Cada
+#     uma so casa com o SEU tipo de contrato (`_leg`): a mesma opcao existe nas
+#     duas, com strike e volume iguais, e sem isso as duas seriam "ambiguas";
+#   * a QUANTIDADE e na unidade da mercadoria (a da B3, o nocional total do New
+#     Deals): `Unwind Volume (<unidade>)`, e a original pela mesma razao
+#     unidade/lote (48 lotes x 3.472.000/31);
+#   * o SINAL e o do banco: na perna Client, `Client Sells` = o banco recompra e
+#     PAGA; na perna Banco o B2B anda ao contrario (o banco desfaz com o fundo o
+#     que desfez com o cliente). O valor e o `Total Premium BRL`;
+#   * quem paga para fechar e sempre o LANCADOR (a opcao comprada vale; quem a
+#     vendeu devolve o valor) — e o `Premium Payer` do OPC 0014;
+#   * os numeros ficam os do E-MAIL (premio em USD por unidade, a paridade na
+#     coluna FX Rate), como no NDF (§570).
+_RECAP_OPC_PERNAS = ('client', 'banco')
+
+
+def _rotulo_recap_opc(h):
+    """O rotulo com a UNIDADE: as duas `Unwind Volume` so se separam por ela."""
+    t = norm(h)
+    if t.startswith('unwindvolume'):
+        return 'unwindlots' if 'lot' in t else 'unwindunits'
+    if t.startswith('originalvolume'):
+        return 'originallots' if 'lot' in t else 'originalunits'
+    return _rotulo_recap(h)
+
+
+def linhas_do_recap_opcoes_commodities(tabelas):
+    """(linhas, avisos) do e-mail de recompra de opcao de Commodities, ou None
+    quando nenhuma tabela tem o cabecalho dele (`Leg` + `Option Type`)."""
+    linhas, avisos, achou = [], [], False
+    for t in tabelas or []:
+        mapa = None
+        for n, r in enumerate(t or [], start=1):
+            cab = [_rotulo_recap_opc(h) for h in r]
+            if cab and cab[0] == 'leg':
+                # cada `Leg ...` e um cabecalho NOVO (as pernas coladas numa
+                # tabela so), como no NDF
+                if 'optiontype' in cab:
+                    achou = True
+                    mapa = dict((c, i) for i, c in reversed(list(enumerate(cab))))
+                else:
+                    mapa = None
+                continue
+            if mapa is None:
+                continue
+            cel = lambda k: (r[mapa[k]] if k in mapa and mapa[k] < len(r) else '')   # noqa: E731
+            perna = norm(cel('leg'))
+            if perna not in _RECAP_OPC_PERNAS:
+                continue
+            linha = {'_sheet_row': n, '_leg': perna, '_client': texto(cel('client')),
+                     '_dates': [d for d in (data_iso(cel('fixingdate')),
+                                            data_iso(cel('settlementdate'))) if d]}
+            tipo = norm(cel('optiontype'))
+            if tipo in ('call', 'put'):
+                linha['OptionType'] = tipo.capitalize()
+            k = numero(cel('originalstrike'), taxa=True)
+            if k is not None:
+                linha['Strike'] = k
+            lotes_o, lotes_u = numero(cel('originallots')), numero(cel('unwindlots'))
+            unid_u = numero(cel('unwindunits'))
+            if unid_u is not None:
+                linha['UnwoundNotional'] = unid_u
+            unid_o = numero(cel('originalunits'))
+            if unid_o is None and lotes_o is not None and lotes_u and unid_u is not None:
+                unid_o = round(lotes_o * unid_u / lotes_u, 6)
+            if unid_o is not None:
+                linha['OriginalNotional'] = unid_o
+            premio = numero(cel('premium'), taxa=True)
+            if premio is not None:
+                linha['UnitPremium'] = premio
+            fx = numero(cel('fxbrlusd'), taxa=True)
+            if fx is not None:
+                linha['FXRate'] = fx
+            pago = data_iso(cel('premiumpaymentdate'))
+            if pago:
+                linha['SettlementDate'] = pago
+            total = numero(cel('totalpremiumbrl'))
+            if total is None:
+                usd = numero(cel('totalpremiumusd'))
+                total = usd * fx if (usd is not None and fx is not None) else None
+            dire = norm_nome(cel('directionofunwind')).split()
+            sinal = None
+            if len(dire) >= 2 and dire[0] == 'CLIENT':
+                sinal = -1 if dire[-1].startswith('SELL') else (1 if dire[-1].startswith('BUY') else None)
+                if sinal is not None and perna == 'banco':
+                    sinal = -sinal
+            if total is not None:
+                if sinal is None:
+                    avisos.append(aviso('unwind_recap_no_sign',
+                                        'Row %d: could not tell whether the bank pays or receives'
+                                        % n, linha=n))
+                else:
+                    linha['Result'] = round(abs(total) * sinal, 2)
+            if premio:
+                linha['PremiumPayer'] = 'Lançador'
+            linhas.append(linha)
+    if not achou:
+        return None
+    return linhas, avisos
+
+
 # As recompras do catálogo que têm esteira e Termo de Resilição (mesa,
 # 28/09/2026): pasta da página -> o source da esteira (o Product Type do
 # Pending Confirmation).
@@ -576,7 +687,45 @@ def ao_mostrado(linha, pos):
     """Tira as marcas internas da linha depois do casamento. Os numeros ficam
     os do E-MAIL (mesa, 28/09/2026): o casamento aceita o valor arredondado,
     mas a grade mostra o que a mesa mandou — nao o valor exato da posicao."""
-    linha.pop('_shown', None)
+    for k in ('_shown', '_leg', '_client', '_dates'):
+        linha.pop(k, None)
+
+
+def _da_perna(linha, posicoes):
+    """So os contratos do tipo da PERNA (o recap de opcao, `_leg`): `client` e
+    contrato com cliente; `banco` e o B2B com entidade nossa (o Lawton), que
+    a `queries` marca como `internal`. Sem perna, todos."""
+    perna = linha.get('_leg')
+    if perna == 'client':
+        return [p for p in posicoes or [] if not p.get('internal')]
+    if perna == 'banco':
+        return [p for p in posicoes or [] if p.get('internal')]
+    return list(posicoes or [])
+
+
+def _desempatar(linha, achadas):
+    """(contratos, pistas usadas) quando MAIS DE UM casou pelos criterios. O
+    e-mail traz o que nao e criterio porque nao bate letra a letra com a
+    posicao: o cliente abreviado (`M. Dias`) e as datas da opcao (o fixing ou a
+    liquidacao — qual delas a B3 chama de vencimento depende do registro). Cada
+    pista so estreita: a que eliminaria todos e ignorada, e o resultado ainda
+    tem de ser UNICO para casar."""
+    usadas = []
+    nome = norm(linha.get('_client'))
+    datas = set(linha.get('_dates') or ())
+    pistas = []
+    if nome and linha.get('_leg') != 'banco':           # no B2B o "Client" nao e a contraparte
+        pistas.append(('Client', lambda p: nome in norm(p.get('counterparty'))))
+    if datas:
+        pistas.append(('Fixing/Settlement Date', lambda p: p.get('maturity') in datas))
+    for rotulo, pista in pistas:
+        if len(achadas) <= 1:
+            break
+        restam = [p for p in achadas if pista(p)]
+        if restam and len(restam) < len(achadas):
+            achadas = restam
+            usadas.append(rotulo)
+    return achadas, usadas
 
 
 def casar_por_caracteristicas(linha, posicoes):
@@ -598,6 +747,7 @@ def casar_por_caracteristicas(linha, posicoes):
                            % (MIN_CRITERIOS, ', '.join(nomes) or '-'),
                            minimo=MIN_CRITERIOS, criterios=', '.join(nomes))
     mostrado = linha.get('_shown') or {}
+    posicoes = _da_perna(linha, posicoes)
     achadas = uma_visao_por_contrato(
         [p for p in posicoes or []
          if all(_casa(linha.get(c), p.get(k), m) for c, k, m in usados)])
@@ -607,6 +757,8 @@ def casar_por_caracteristicas(linha, posicoes):
         achadas = uma_visao_por_contrato(
             [p for p in posicoes or []
              if all(_casa(linha.get(c), p.get(k), m, mostrado.get(c)) for c, k, m in usados)])
+    achadas, pistas = _desempatar(linha, achadas)
+    nomes = nomes + pistas
     if len(achadas) == 1:
         return achadas[0], aviso('unwind_matched_by_characteristics',
                                  'B3 ID %s found in the Live Position by %s'
@@ -722,18 +874,25 @@ def _termo(linha, page):
     return True, None
 
 
-def _premio(linha):
+def _premio(linha, page):
+    """O valor financeiro = quantidade x premio unitario, levado a reais pela
+    paridade quando a pagina a tem (a opcao de Commodities: premio em USD por
+    unidade, resultado em BRL — os numeros do e-mail); nas outras, x 1."""
     q = numero(linha.get('UnwoundNotional'))
     unit = numero(linha.get('UnitPremium'), taxa=True)
     if unit is None:
         unit = numero(linha.get('UnitPrice'), taxa=True)
     informado = numero(linha.get('Result'))
+    fx = fx_da_linha(linha, page)
     faltam = [n for n, v in (('UnwoundNotional', q), ('UnitPremium', unit),
-                             ('Result', informado)) if v is None]
+                             ('FXRate', fx), ('Result', informado)) if v is None]
     if faltam:
         return None, aviso('unwind_check_missing', 'Missing to check the amount: '
                            + ', '.join(faltam), teste='premio', campos=', '.join(faltam))
-    calc = abs(q) * unit
+    # Na ORDEM de quem fez a conta: o total na moeda do premio vai a centavos e
+    # so entao a reais (`139,930.00 x 5.0340 = 704,407.62` no e-mail; sem o
+    # arredondamento do meio, 1 centavo a mais e um NOK que nao existe).
+    calc = round(abs(q) * unit, 2) * fx
     if abs(abs(informado) - calc) > TOLERANCIA:
         return False, aviso('unwind_amount_mismatch',
                             'Settlement amount does not match quantity x unit premium',
@@ -752,7 +911,7 @@ def conferir(linha, page):
         elif teste == 'termo':
             r, a = _termo(linha, page)
         elif teste == 'premio':
-            r, a = _premio(linha)
+            r, a = _premio(linha, page)
         else:
             r, a = None, aviso('unwind_check_unknown', 'Unknown check ' + teste, teste=teste)
         resultados.append(r)

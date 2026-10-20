@@ -26595,3 +26595,68 @@ do estático por token, e prende o modo opaco leve, a refração e as Initiative
 `check_export_padrao.py` §5 com o comportamento novo da máscara.
 `check_theme_toggle`, `check_projects`, `check_user_home`, `check_ops_summary`,
 `check_app_version`, `check_session_role` e `check_table_center` seguem verdes.
+
+## §637 — Menu que abria por baixo da tabela; o e-mail de recompra de opção de Commodities (2026-10-20)
+
+**"Não dá para ver o que tem no dropdown."** O Export e o Columns do Pending
+Confirmation abriam POR BAIXO da tabela: as linhas, os botões de ação e a
+célula selecionada atravessavam o menu. O fundo era opaco (alpha 1); o defeito
+era de CAMADA. A placa de vidro (`otc-slab`) desenha a borda de luz (::before)
+e o brilho (::after) por pseudo-elemento em `z-index: 0`, e para o conteúdo
+ficar por cima cada FILHO da placa ganhava `position: relative; z-index: 1`
+(dez regras `> * {…}`: card, menu lateral, barra do topo, offcanvas, modal,
+Swal, cards do Control Panel e das Tools, paleta). Com isso header, body e
+footer do card viravam camadas FECHADAS: o z-index do menu (2002) só valia
+dentro do header, e o body, depois no DOM com o mesmo 1, pintava a tabela por
+cima. A regra que já existia (`:has(.dropdown-menu.show)` sobe a PLACA) resolve
+entre placas, não dentro de uma. Correção na raiz: borda e brilho em
+`z-index: -1` (a placa já é `isolation: isolate`, o -1 não vaza para trás da
+tinta) e os filhos `position: relative` sem z-index — o conteúdo segue acima do
+brilho e nenhum filho prende menu. No Accrual e no MtM Swap o menu era CORTADO
+na borda do cartão: `.acc-tcard { overflow: hidden }` no CSS da página, sem
+função (a tabela tem `scrollX`); saiu, e o cartão com menu aberto sobe acima do
+vizinho. Uma varredura abriu os 192 menus das 96 telas do menu e conferiu, item
+a item, pelo `elementFromPoint`, se o menu é o que está por cima: 49 encobertos
+em 20 telas antes, zero depois (claro/vidro e escuro/opaco).
+
+**O e-mail de recompra de OPÇÃO de Commodities** ("INTERNAL JPMorgan Trade
+Recap - Sugar 3-Way's MDias 14Oct26 Unwind") caía no leitor GENÉRICO de e-mail,
+que pega a primeira tabela com colunas da página: o `Contract` dele (`27-Mar`,
+o mês do FUTURO) virou B3 ID e o cabeçalho da segunda tabela virou linha. Ele
+ganhou leitor PRÓPRIO, no padrão do NDF (§570):
+`domain.linhas_do_recap_opcoes_commodities`, chamado antes do genérico para a
+pasta `Options/Commodities`. Uma tabela por perna; só `Client` (a facing o
+cliente) e `Banco` (o B2B Banco × Lawton). Sem B3 ID no e-mail, o contrato sai
+do Live Position por características (Strike, quantidade original, Call/Put), e
+cada perna só casa com o SEU tipo de contrato (`_leg`): a mesma opção existe
+nas duas com strike e volume iguais. A posição de opções passou a dizer
+`internal` (a outra ponta é nossa e não é guarda-chuva — o B2B) e `view_rank`
+(sem ele, o B2B que vem nas duas visões podia cair na do Lawton, invertendo
+contas e lado no OPC 0014). Mais de um candidato: o nome do cliente (`M. Dias`
+contido no da posição, só na perna Client) e as datas da opção (fixing ou
+liquidação) DESEMPATAM, cada pista só estreita, e o aviso diz quais usou;
+continua exigindo candidato único. Quantidade em UNIDADES da mercadoria (a da
+B3): `Unwind Volume (<unidade>)`, e a original pela razão unidade/lote (48 ×
+3.472.000/31). Os números ficam os do E-MAIL — prêmio em USD por unidade e a
+paridade na coluna FX Rate, nova SÓ nesta página —, e a conferência do prêmio
+multiplica pela paridade, na ordem de quem fez a conta (total em USD a
+centavos, depois × FX). O sinal é o do banco: na perna Client, `Client Sells` =
+o banco recompra e paga; no B2B o contrário (o banco desfaz com o Lawton o que
+desfez com o cliente). Quem paga para fechar é o LANÇADOR (`Premium Payer`). O
+valor de liquidação é o `Total Premium BRL` e a liquidação, a `Premium Payment
+Date`.
+
+**A conferir com a mesa:** o OPC 0014 vai com o prêmio unitário do e-mail (USD)
+no campo 9 e o valor em BRL no 10. Se a B3 pedir o unitário em reais, é o
+campo 9 que muda.
+
+**Guardas.** `check_dropdown_layers.py` (novo): no SCSS e no CSS compilado
+nenhum filho de placa ganha z-index, e no Chromium, com o `otc.css` de verdade,
+o menu aberto no header fica por cima do body nos dois temas e no modo opaco.
+`check_unwind_products.py` §14: o e-mail do print (as seis pernas, cada uma no
+seu contrato, as iscas de outro vencimento e outro cliente fora pelo
+desempate, unidades, sinais, Check OK nas seis, OPC 0014 sem lacuna, e a perna
+Banco sem B2B na posição fica sem contrato — nunca o do cliente). Todos os
+`check_unwind_*`, `check_intrag_unwind`, `check_theme_toggle`,
+`check_summary_glow`, `check_page_switch`, `check_table_center` e
+`check_row_action_buttons` verdes.

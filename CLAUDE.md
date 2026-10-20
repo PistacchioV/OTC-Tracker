@@ -994,6 +994,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   cor ANTIGA no meio da animação e a sonda mente.
 - **`backdrop-filter` cria contexto de empilhamento**: `z-index` vai no
   WRAPPER, nunca no menu; o `.wrapper` fica sem `z-index`.
+- **Filho de placa NUNCA ganha `z-index`** (§637): a borda de luz e o brilho
+  da placa ficam em `z-index: -1` (ela é `isolation: isolate`), e o conteúdo
+  fica por cima sem camada própria. Com `> * { z-index: 1 }` o header do card
+  virava camada fechada e o menu aberto nele (Export, Columns) ia para BAIXO
+  da tabela do body. E cartão com menu não leva `overflow: hidden` — corta o
+  menu na borda. `check_dropdown_layers.py`.
 - **Dentro de uma raiz de backdrop o desfoque do filho não amostra nada**:
   dropdown dentro de card tem fundo SÓLIDO; modal/offcanvas/toast/Swal pendem do
   `<body>`.
@@ -1776,6 +1782,14 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   (`unw-col-original-quantity`), não do campo. **A chave da linha é o `_id`
   interno** (coluna escondida, a última): NDF/Opção de Commodities e FXO chegam
   sem identificador.
+- **A OPÇÃO de Commodities também tem e-mail PRÓPRIO** (mesa, 20/10/2026,
+  §637; `domain.linhas_do_recap_opcoes_commodities`): o "Trade Recap … Unwind",
+  uma tabela por perna, `Client` (facing o cliente) e `Banco` (o B2B Banco ×
+  Lawton), SEM B3 ID — o `Contract` dele (`27-Mar`) é o mês do futuro. Cada
+  perna casa só com o SEU tipo de contrato (`_leg` × `internal` da posição);
+  nome do cliente e datas da opção só DESEMPATAM. Quantidade em unidades (a da
+  B3), números do e-mail (prêmio em USD, coluna FX Rate só nesta página), sinal
+  do banco (no B2B o contrário da perna Client), pagador = o lançador.
 - **O backend das onze é UM, e o produto é parâmetro**
   (`features/unwinds/product/` + `infra/product_store.py`, §526): pasta
   (`dir`), posição (`position`: swap/option/ndf/None), conferências (`checks`)
@@ -3013,7 +3027,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (193 scripts)
+### `scripts/tests/` (194 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
