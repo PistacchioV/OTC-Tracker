@@ -138,7 +138,7 @@ recusa subir se o `config.py` ficou para trás num pull (§9).
 | Camada | O que é |
 |---|---|
 | `apps/pages/routes.py` (~13,6 mil linhas) | casca e plataforma miúda: sessão/authz-endpoints, sino, `_MAPPING_DEFS`, leitores `_ndfc_*`/`_ndfsum_*`/`_ndfadv_*`, Daily Settlement `_ds_*`, wiring das features e os ALIASES (`_x = _pf_anbima._x`) |
-| `apps/pages/platform/` (18 módulos) | infra horizontal: `anbima`, `authz`, `db`, `dates`, `json_cache`, `mail`, `email_validation`, `notifications` e os motores `settlement`, `confirmations`, `counterparty`, `forecast`, `electronic_inventory`, `manual_confirmation`, `file_interpreter`, `pending_confirmation`, `operations_b3`, `new_deals` |
+| `apps/pages/platform/` (25 módulos) | infra horizontal: `anbima`, `authz`, `db`, `dates`, `json_cache`, `mail`, `email_validation`, `notifications`, `task_runs`, `user_photos` (a foto `images/users/<sid>.jpg`, uma listagem por minuto) e os motores `settlement`, `confirmations`, `counterparty`, `forecast`, `electronic_inventory`, `manual_confirmation`, `file_interpreter`, `pending_confirmation`, `operations_b3`, `new_deals` |
 | `apps/pages/features/<nome>/` (49 verticais) | `entrypoint.py` (rotas) · `commands.py` (escrita) · `queries.py` (leitura) · `domain.py` (regras puras) · `infra/` — todas em desenho fino; não existe mais `engine.py` |
 | `apps/pages/database_access.py` | a camada de banco: permit + lock de arquivo + farol de eventos (§4) |
 | `data_store.py` · `duck_read.py` · `json_to_duckdb.py` | o ARMAZÉM (o `DATA_DIR` como sistema de arquivos virtual sobre os DuckDB), a fachada de leitura com os nomes antigos, o motor de conversão (§4) |
