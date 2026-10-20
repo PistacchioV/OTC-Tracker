@@ -488,6 +488,16 @@ A tela se atualiza sozinha a cada minuto.
 3. Percorra as colunas **Late** e **To do** do quadro e abra cada tarefa pelo cartão dela.
 4. Para saber **qual produto** segura uma zona, desça até **Detail by product** e procure os números na coluna **Open**. Clique na linha para abrir a tela do produto já filtrada por aquele dia.
 
+**Passo a passo — marcar uma tarefa à mão (arrastar o cartão):**
+
+1. No quadro **Today's tasks**, clique no cartão e **arraste** para a coluna desejada. Durante o arrasto, as colunas em que você não pode soltar ficam apagadas.
+2. Solte. O aviso preto no alto confirma (por exemplo, *Completed: Recon Pay/Rec*) e oferece **Undo**.
+3. O cartão passa a mostrar a marca **Manual · <quem> <hora>**: o ajuste vale por cima do cálculo do sistema **naquele dia**. Serve para toda tarefa, inclusive as três zonas (B3 Registration, Confirmations e Intrag).
+4. **Quem pode:** o Back Office anda **um passo à frente** (*To do* → *In progress*; *In progress* ou *Late* → *Completed*); o administrador move para qualquer coluna.
+5. Para devolver a tarefa ao cálculo do sistema, o administrador clica em **↺ auto** no cartão.
+
+> **O ajuste manual vale também para o e-mail das 19h.** Tarefa marcada como concluída à mão sai da lista de pendências do aviso — use quando a tarefa foi resolvida por fora do sistema, e não para esconder o que ainda está em aberto. As contagens por produto, embaixo, continuam as do sistema.
+
 > **A Intrag conta desde o import.** A operação que vai virar linha na Intrag aparece na zona Intrag como **Awaiting B3 ID** assim que entra nas telas de New Deals, e sai quando chega ao **Success**.
 
 > **Produto sem movimento não some: ele fica recolhido.** No fim de cada zona há uma linha dizendo quantos produtos não tiveram nada importado hoje; clique nela para abrir a lista.
@@ -1263,6 +1273,14 @@ Este bloco acompanha a confirmação depois que a operação já está registrad
 > **Confirmação de MGT contra cliente não tem callback**: ela não recebe a marca
 > `no callback` e o **Mark as sent** não a retém.
 
+**Passo a passo — arrastar o item para a etapa seguinte:**
+
+1. Clique no item e **arraste** para o cartão da etapa seguinte. Durante o arrasto, os cartões em que você pode soltar ficam destacados; os outros, apagados. Para marcar como enviada ao cliente, solte na faixa **Drop here: sent to the client (Ok)**, que aparece embaixo durante o arrasto.
+2. Soltar **assina a etapa**, como os botões fariam: de *Pending Legal* para o OTC é soltar do Legal; de *Pending OTC* em diante é a validação da sua mesa; de *Pending FepWeb* para **Ok** é o *Mark as sent*.
+3. Se o prazo da etapa já passou, o sistema pede a **justificativa** antes de assinar. E *Pending FepWeb* → **Ok** sem a data do callback é recusado, como no **Mark as sent**.
+4. O aviso preto no alto confirma o que foi feito.
+5. **Quem pode:** cada mesa move só os itens da **sua** etapa, e um passo à frente. O administrador move para qualquer cartão — inclusive **para trás**, o que **reabre** a confirmação: as validações daquela etapa em diante são limpas.
+
 ### 9.5. A tela de validação
 
 **Como se chega:** pelo botão **Validate** (ou **View**) de um item do Confirmations Monitor. Ela abre com o **PDF do documento de um lado** e o **checklist da etapa do outro**.
@@ -1393,6 +1411,12 @@ A página são **três cartões verticais**, um por mesa da esteira:
 2. Cada item mostra o cliente, o tipo de documento, a entidade, o CNPJ, o status, a data da solicitação e o **aging em dias úteis**, que fica âmbar a partir de 5 e vermelho a partir de 15.
 3. A etiqueta **derived** ao lado do status significa que a mesa foi **deduzida** pelo primeiro carimbo que falta, e não lida de um cadastro. Para fixar a mesa de um status, cadastre-o em **Mapping › `cgd-stage`** (13.3).
 4. Clique em **Open Tracking Docs** para ir à tabela completa.
+
+**Passo a passo — mover um documento de mesa (arrastar):**
+
+1. Arraste o item para o cartão da mesa seguinte — de **Legal** ou **OTC** para **CEM MO**. Para concluir o CEM MO, solte na faixa **Drop here: Complete (CEM MO)**, que aparece embaixo durante o arrasto.
+2. Soltar **abre o formulário daquela etapa** — nada é carimbado sem ele: saindo do Legal, o envio do **Taxonomy**; saindo do OTC, o modal do OTC (CGD abonado, datas e B3 ID); na faixa de conclusão, o **Complete** do CEM MO.
+3. **Quem pode:** cada mesa move só os documentos da **sua** fila. O administrador move para qualquer cartão; para trás, o sistema pede confirmação e **desfaz o carimbo** daquela etapa.
 
 > **Só entra nos cartões o documento que ainda está em andamento.** O que está `Active` terminou; o que está `Inactive` ou `Cancelado` foi encerrado. Nenhum dos dois é pendência de ninguém, e por isso nenhum aparece nas filas — antes, o encerrado caía na fila do **Legal** (a primeira etapa sem carimbo em quem nunca começou) e ficava lá envelhecendo no topo da lista. Os contadores desses grupos estão nos **chips do Tracking Docs** (10.2).
 >
