@@ -43,7 +43,7 @@
       open_done: '{open} open · {done} done', no_tasks: 'No tasks yet — add the first one.', hide: 'Hide', show: 'Show',
       done: 'Done', total: 'Total', open_across: '{n} open across {m} projects', all_projects: 'All projects',
       any_priority: 'Any priority', add_to: 'Add a task to {col}', move_to: 'Move to {col}', open_task: 'Open task',
-      move_or_open: 'Move or open “{task}”', n_on_board: '{n} on the board',
+      move_or_open: 'Move or open “{task}”', n_on_board: '{n} on the board', up_target: 'Target date', up_milestone: 'Milestone', up_empty: 'Nothing coming up.',
       lead: 'Lead',
       a_created: '{who} created the project', a_status: '{who} set the status to {status}',
       a_edited: '{who} edited the project', a_task_added: '{who} added “{task}”',
@@ -88,7 +88,7 @@
       open_done: '{open} em aberto · {done} concluídas', no_tasks: 'Nenhuma tarefa ainda — adicione a primeira.', hide: 'Ocultar', show: 'Mostrar',
       done: 'Concluídas', total: 'Total', open_across: '{n} em aberto em {m} projetos', all_projects: 'Todos os projetos',
       any_priority: 'Qualquer prioridade', add_to: 'Adicionar tarefa em {col}', move_to: 'Mover para {col}', open_task: 'Abrir tarefa',
-      move_or_open: 'Mover ou abrir “{task}”', n_on_board: '{n} no quadro',
+      move_or_open: 'Mover ou abrir “{task}”', n_on_board: '{n} no quadro', up_target: 'Data-alvo', up_milestone: 'Marco', up_empty: 'Nada pela frente.',
       lead: 'Líder',
       a_created: '{who} criou o projeto', a_status: '{who} mudou o status para {status}',
       a_edited: '{who} editou o projeto', a_task_added: '{who} adicionou “{task}”',
@@ -133,7 +133,7 @@
       open_done: '{open} abiertas · {done} hechas', no_tasks: 'Aún no hay tareas — agrega la primera.', hide: 'Ocultar', show: 'Mostrar',
       done: 'Hechas', total: 'Total', open_across: '{n} abiertas en {m} proyectos', all_projects: 'Todos los proyectos',
       any_priority: 'Cualquier prioridad', add_to: 'Agregar tarea en {col}', move_to: 'Mover a {col}', open_task: 'Abrir tarea',
-      move_or_open: 'Mover o abrir “{task}”', n_on_board: '{n} en el tablero',
+      move_or_open: 'Mover o abrir “{task}”', n_on_board: '{n} en el tablero', up_target: 'Fecha objetivo', up_milestone: 'Hito', up_empty: 'Nada por delante.',
       lead: 'Líder',
       a_created: '{who} creó el proyecto', a_status: '{who} cambió el estado a {status}',
       a_edited: '{who} editó el proyecto', a_task_added: '{who} agregó “{task}”',
@@ -490,6 +490,15 @@
     fillSelect(el.querySelector('#pjt-assignee'), peopleItems(), tk.assignee_sid || '', { blank: t('unassigned'), keep: tk.assignee_name });
     fillSelect(el.querySelector('#pjt-priority'), (meta.priorities || []).map(function (p) { return { value: p, label: tPrio(p) }; }), tk.priority);
     setDate(el.querySelector('#pjt-due'), tk.due || '');
+    // o valor desenhado nas caixas (o Pane): avatar e nome, prazo relativo, prioridade
+    el.querySelector('#pjt-assignee-view').innerHTML = tk.assignee_sid
+      ? avatar(tk.assignee_sid, tk.assignee_name, 'sm') + '<span>' + esc(tk.assignee_name || personName(tk.assignee_sid)) + '</span>'
+      : '<span class="is-muted">' + esc(t('unassigned')) + '</span>';
+    var dd = due(tk.due, tk.status === 'Done');
+    el.querySelector('#pjt-due-view').innerHTML = '<i data-lucide="calendar"></i>' + (tk.due
+      ? '<span class="' + (dd && dd.late ? 'is-late' : '') + '">' + esc(dd ? dd.text : '') + ' · ' + esc(fmtShort(tk.due)) + '</span>'
+      : '<span class="is-muted">' + esc(t('no_date')) + '</span>');
+    el.querySelector('#pjt-priority-view').innerHTML = '<i data-lucide="flag"></i><span>' + esc(tPrio(tk.priority || 'Medium')) + '</span>';
     var est = el.querySelector('#pjt-estimate');
     if (document.activeElement !== est) est.value = tk.estimate == null ? '' : tk.estimate;
     var subs = tk.subtasks || [];

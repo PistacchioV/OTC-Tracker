@@ -92,3 +92,8 @@ def all_tasks():
                                 t.get('project_id', ''), t.get('id', '')))
     projetos.sort(key=lambda p: (_STATUS_ORDER.get(p['status'], 9), p['name'].lower()))
     return tarefas, projetos
+
+
+def calendar_events():
+    """As datas de todos os projetos, para o Calendar (`domain.calendar_events`)."""
+    return domain.calendar_events(store.load()['projects'])

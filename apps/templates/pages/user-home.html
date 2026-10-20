@@ -1,0 +1,263 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}User Home{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
+{% include 'partials/projects-assets-css.html' %}
+<style>
+/* User Home (Intraday › User Home, §632) — a Home do Pane: o dia de UMA pessoa.
+   As placas são `*-panel` (o vidro vem do tema); aqui só a composição. */
+#uh-page .uh-grid { display: grid; gap: 18px; margin-bottom: 18px; }
+#uh-page .uh-grid--top { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#uh-page .uh-grid--mid { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); }
+#uh-page .uh-grid--bot { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+@media (max-width: 1280px) { #uh-page .uh-grid--top { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 960px) { #uh-page .uh-grid--top, #uh-page .uh-grid--mid, #uh-page .uh-grid--bot { grid-template-columns: minmax(0, 1fr); } }
+#uh-page [class*="-panel"].uh-p { padding: 20px; min-height: 0; display: flex; flex-direction: column; }
+#uh-page .uh-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+#uh-page .uh-head .pj-sec-sub { max-width: 260px; }
+
+/* Today — os anéis */
+#uh-page .uh-rings { flex: 1; display: flex; align-items: center; justify-content: center; gap: 28px; min-height: 230px; }
+#uh-page .uh-rings svg { width: 168px; height: 168px; flex: none; rotate: -90deg; }
+#uh-page .uh-rings circle { fill: none; stroke-width: 13; stroke-linecap: round; }
+#uh-page .uh-rings .is-track { opacity: .22; }
+#uh-page .uh-rings .is-bar { transition: stroke-dashoffset 1.1s var(--otc-ease-out); }
+#uh-page .uh-legend { display: flex; flex-direction: column; gap: 14px; }
+#uh-page .uh-legend > div { border-left: 3px solid var(--c); padding-left: 12px; }
+#uh-page .uh-legend span { display: block; font: 600 12.5px/1.2 var(--otc-font); color: var(--otc-text-2); }
+#uh-page .uh-legend b { font: 700 22px/1.15 var(--otc-font-display); letter-spacing: -.02em; color: var(--otc-text); font-variant-numeric: tabular-nums; }
+#uh-page .uh-legend small { font: 600 13px/1 var(--otc-font); color: var(--otc-text-2); }
+
+/* Up next */
+#uh-page .uh-next { border-radius: 20px; padding: 14px 16px; margin-bottom: 12px;
+  background: color-mix(in srgb, var(--otc-accent) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--otc-accent) 30%, transparent); }
+#uh-page .uh-next__when { font: 600 12.5px/1.2 var(--otc-font); color: var(--otc-text-2); }
+#uh-page .uh-next__when b { color: var(--otc-text); }
+#uh-page .uh-next__title { font: 650 19px/1.2 var(--otc-font-display); letter-spacing: -.01em; margin: 4px 0 4px; color: var(--otc-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#uh-page .uh-next__meta { font-size: 13px; color: var(--otc-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#uh-page .uh-next__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; min-height: 32px; }
+#uh-page .uh-evs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+#uh-page .uh-evs li { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-radius: 12px; }
+#uh-page .uh-evs li::before { content: ""; width: 3px; align-self: stretch; border-radius: 2px; background: var(--c, var(--otc-accent)); }
+#uh-page .uh-evs b { flex: 1; min-width: 0; font: 650 14px/1.3 var(--otc-font); color: var(--otc-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#uh-page .uh-evs span { font: 560 13px/1 var(--otc-font); color: var(--otc-text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#uh-page .uh-evs li.is-past b, #uh-page .uh-evs li.is-past span { opacity: .55; }
+#uh-page .uh-sync-note { margin-top: auto; padding-top: 10px; font-size: 12px; color: var(--otc-text-3); display: flex; align-items: center; gap: 6px; }
+#uh-page .uh-sync-note svg { width: 13px; height: 13px; }
+
+/* Focus */
+#uh-page .uh-seg { display: inline-flex; padding: 3px; border-radius: var(--otc-r-pill); background: var(--otc-fill); }
+#uh-page .uh-seg button { border: 0; background: none; padding: 5px 11px; border-radius: var(--otc-r-pill); font: 600 13px/1 var(--otc-font); color: var(--otc-text-2); }
+#uh-page .uh-seg button.is-on { background: var(--otc-glass-thick); color: var(--otc-text); box-shadow: var(--otc-shadow), var(--otc-inner-hl); }
+#uh-page .uh-seg button:disabled { opacity: .5; }
+#uh-page .uh-focus { display: flex; align-items: center; gap: 22px; flex: 1; }
+#uh-page .uh-timer { position: relative; width: 104px; height: 104px; flex: none; display: grid; place-items: center; text-align: center; }
+#uh-page .uh-timer svg { position: absolute; inset: 0; rotate: -90deg; }
+#uh-page .uh-timer circle { fill: none; stroke-width: 7; stroke-linecap: round; }
+#uh-page .uh-timer .is-track { stroke: var(--otc-fill); }
+#uh-page .uh-timer .is-bar { stroke: var(--otc-orange); transition: stroke-dashoffset .9s linear; }
+#uh-page .uh-timer b { display: block; font: 650 24px/1 var(--otc-font-display); letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--otc-text); }
+#uh-page .uh-timer small { font: 600 12px/1.6 var(--otc-font); color: var(--otc-text-2); }
+#uh-page .uh-focus__side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+#uh-page .uh-focus__side .pj-label { margin: 0; }
+#uh-page .uh-focus__btns { display: flex; gap: 8px; }
+#uh-page .uh-focus__btns .btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+#uh-page .uh-focus__btns svg { width: 15px; height: 15px; }
+#uh-page .uh-focused { margin-top: 16px; padding: 12px 14px; border-radius: 16px; background: var(--otc-fill); }
+#uh-page .uh-focused > div:first-child { display: flex; justify-content: space-between; font: 650 13px/1.2 var(--otc-font); color: var(--otc-text-2); }
+#uh-page .uh-focused > div:first-child b { color: var(--otc-text); }
+#uh-page .uh-bar { height: 5px; border-radius: 3px; background: var(--otc-fill); overflow: hidden; margin-top: 9px; }
+#uh-page .uh-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--c, var(--otc-accent)); transition: width .8s var(--otc-ease-out); }
+
+/* My tasks */
+#uh-page .uh-tasks { list-style: none; margin: 0; padding: 0; }
+#uh-page .uh-tasks li { display: flex; align-items: center; gap: 12px; padding: 10px 4px; border-top: 1px solid var(--otc-sep); cursor: pointer; border-radius: 12px; }
+#uh-page .uh-tasks li:first-child { border-top: 0; }
+#uh-page .uh-tasks li:hover { background: var(--otc-fill-hover); }
+#uh-page .uh-tasks__body { flex: 1; min-width: 0; }
+#uh-page .uh-tasks__title { font: 650 15px/1.3 var(--otc-font); color: var(--otc-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#uh-page .uh-tasks li.is-done .uh-tasks__title { text-decoration: line-through; color: var(--otc-text-3); }
+#uh-page .uh-tasks__meta { display: flex; align-items: center; gap: 8px; margin-top: 5px; min-width: 0; }
+#uh-page .uh-tasks__meta .otc-chip { max-width: 60%; overflow: hidden; }
+#uh-page .uh-tasks__meta .otc-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#uh-page .uh-check { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 1.6px solid var(--otc-text-3); background: none; display: grid; place-items: center; padding: 0; color: transparent; transition: background var(--otc-dur-fast), border-color var(--otc-dur-fast); }
+#uh-page .uh-check svg { width: 14px; height: 14px; }
+#uh-page .uh-check:hover { border-color: var(--otc-accent-ink); }
+#uh-page .uh-check.is-on { background: var(--otc-accent); border-color: var(--otc-accent); color: #fff; }
+
+/* This week */
+#uh-page .uh-week-sum { display: flex; align-items: baseline; gap: 8px; margin-bottom: 14px; }
+#uh-page .uh-week-sum b { font: 700 28px/1 var(--otc-font-display); letter-spacing: -.02em; color: var(--otc-text); }
+#uh-page .uh-week-sum span { font-size: 14px; color: var(--otc-text-2); }
+#uh-page .uh-delta { font: 650 13px/1 var(--otc-font); }
+#uh-page .uh-delta.is-up { color: var(--otc-green); }
+#uh-page .uh-delta.is-down { color: var(--otc-danger); }
+#uh-page .uh-bars { flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; min-height: 260px; }
+#uh-page .uh-bars > div { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+#uh-page .uh-bars .uh-track { flex: 1; position: relative; border-radius: 12px; overflow: hidden;
+  background: linear-gradient(rgba(255, 255, 255, .62), rgba(255, 255, 255, .34)); }
+[data-bs-theme="dark"] #uh-page .uh-bars .uh-track { background: linear-gradient(rgba(0, 0, 0, .10), rgba(0, 0, 0, .32)); }
+#uh-page .uh-bars .uh-fill { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 12px; background: color-mix(in srgb, var(--otc-accent) 60%, transparent); transition: height 1s var(--otc-ease-out); }
+#uh-page .uh-bars .is-today .uh-fill { background: linear-gradient(rgba(255, 255, 255, .42), transparent 55%), var(--otc-accent-ink);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .6), inset 0 -1px 2px rgba(0, 0, 0, .12), 0 8px 16px -10px var(--otc-accent-ink); }
+#uh-page .uh-bars .uh-n { position: absolute; left: 0; right: 0; text-align: center; font: 700 13px/1 var(--otc-font); color: #fff; bottom: 8px; }
+#uh-page .uh-bars label { text-align: center; font: 600 12.5px/1 var(--otc-font); color: var(--otc-text-2); }
+#uh-page .uh-bars .is-today label { color: var(--otc-text); }
+
+/* Projects */
+#uh-page .uh-projs { list-style: none; margin: 0; padding: 0; }
+#uh-page .uh-projs li { border-top: 1px solid var(--otc-sep); }
+#uh-page .uh-projs li:first-child { border-top: 0; }
+#uh-page .uh-projs a { display: grid; grid-template-columns: 40px minmax(0, 1.4fr) minmax(80px, 1fr) 44px auto; align-items: center; gap: 14px; padding: 11px 4px; color: inherit; text-decoration: none; border-radius: 14px; }
+#uh-page .uh-projs a:hover { background: var(--otc-fill-hover); }
+#uh-page .uh-projs .otc-icon-tile { width: 40px; height: 40px; border-radius: 12px; }
+#uh-page .uh-projs .otc-icon-tile svg { width: 19px; height: 19px; }
+#uh-page .uh-projs b { display: block; font: 650 15px/1.25 var(--otc-font); color: var(--otc-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#uh-page .uh-projs small { font-size: 13px; color: var(--otc-text-2); }
+#uh-page .uh-projs .uh-pct { font: 650 13px/1 var(--otc-font); text-align: right; font-variant-numeric: tabular-nums; }
+#uh-page .uh-projs .uh-bar { margin-top: 0; }
+
+/* Right now */
+#uh-page .uh-people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+#uh-page .uh-people li { display: flex; align-items: center; gap: 12px; }
+#uh-page .uh-people .uh-av { position: relative; flex: none; }
+#uh-page .uh-people .uh-av::after { content: ""; position: absolute; right: -1px; bottom: -1px; width: 11px; height: 11px; border-radius: 50%; background: var(--dot); box-shadow: 0 0 0 2px var(--otc-solid); }
+#uh-page .uh-people b { display: block; font: 650 14.5px/1.25 var(--otc-font); color: var(--otc-text); }
+#uh-page .uh-people small { font-size: 13px; color: var(--otc-text-2); }
+#uh-page .uh-acts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+#uh-page .uh-acts li { display: flex; gap: 10px; align-items: flex-start; }
+#uh-page .uh-acts p { margin: 0; font-size: 13.5px; line-height: 1.4; color: var(--otc-text); }
+#uh-page .uh-acts small { font-size: 12px; color: var(--otc-text-2); }
+#uh-page .uh-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 22px 10px; color: var(--otc-text-2); font-size: 14px; }
+#uh-page .uh-empty svg { width: 30px; height: 30px; color: var(--otc-text-3); }
+#uh-page .uh-scroll { overflow: auto; max-height: 420px; margin: 0 -4px; padding: 0 4px; }
+#uh-page #uh-sync svg { transition: rotate .6s var(--otc-ease); }
+#uh-page #uh-sync.is-busy svg { animation: uh-spin 1s linear infinite; }
+@keyframes uh-spin { to { rotate: 360deg; } }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="uh-page" class="container-fluid">
+
+    <div class="page-title-head">
+        <div class="flex-grow-1 min-w-0">
+            <h4 id="uh-hello">&nbsp;</h4>
+            <p class="otc-page-sub" id="uh-sub">&nbsp;</p>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="javascript: void(0);">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="javascript: void(0);" data-lang="nav-intraday">Intraday</a></li>
+                <li class="breadcrumb-item active" data-lang="nav-user-home">User Home</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="otc-page-bar">
+        <div class="otc-stats">
+            <div class="otc-stat otc-stat--total" style="--hue: var(--otc-accent)">
+                <span class="otc-stat__label" data-lang="uh-done-today">Done today</span>
+                <span><span class="otc-stat__value" id="uh-n-done">–</span> <span class="otc-stat__suffix" id="uh-n-done-of"></span></span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-green)">
+                <span class="otc-stat__label" data-lang="uh-focus-today">Focus today</span>
+                <span class="otc-stat__value" id="uh-n-focus">–</span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-danger)" id="uh-overdue-tile">
+                <span class="otc-stat__label" data-lang="uh-overdue">Overdue</span>
+                <span class="otc-stat__value" id="uh-n-overdue">–</span>
+            </div>
+        </div>
+        <div class="otc-page-actions">
+            <button type="button" class="btn btn-secondary rounded-pill d-inline-flex align-items-center gap-2" id="uh-sync">
+                <i data-lucide="refresh-cw"></i><span data-lang="uh-sync">Sync</span>
+            </button>
+            <button type="button" class="btn btn-secondary rounded-pill d-inline-flex align-items-center gap-2 d-none" id="uh-new-task">
+                <i data-lucide="plus"></i><span data-lang="tsk-new">New task</span>
+            </button>
+            <button type="button" class="btn btn-primary rounded-pill d-inline-flex align-items-center gap-2 d-none" id="uh-next-btn">
+                <i data-lucide="video"></i><span id="uh-next-label"></span>
+            </button>
+        </div>
+    </div>
+
+    <div class="uh-grid uh-grid--top">
+        <div class="uh-today-panel uh-p">
+            <div class="uh-head"><div><h5 class="pj-sec-title" data-lang="uh-today">Today</h5><p class="pj-sec-sub" data-lang="uh-close-rings">Close your rings</p></div></div>
+            <div class="uh-rings" id="uh-rings"></div>
+        </div>
+
+        <div class="uh-next-panel uh-p">
+            <div class="uh-head"><h5 class="pj-sec-title" data-lang="uh-up-next">Up next</h5><a href="/holidays-calendar" class="pjd-link" data-lang="holidays-calendar">Calendar</a></div>
+            <div id="uh-next" class="d-flex flex-column flex-grow-1"></div>
+        </div>
+
+        <div class="uh-focus-panel uh-p" id="focus">
+            <div class="uh-head">
+                <div><h5 class="pj-sec-title" data-lang="uh-focus">Focus</h5><p class="pj-sec-sub" data-lang="uh-island">The island keeps the time</p></div>
+                <div class="uh-seg" id="uh-presets"></div>
+            </div>
+            <div class="uh-focus">
+                <div class="uh-timer" id="uh-timer">
+                    <svg viewBox="0 0 104 104"><circle class="is-track" cx="52" cy="52" r="47"/><circle class="is-bar" cx="52" cy="52" r="47"/></svg>
+                    <div><b id="uh-timer-txt">25:00</b><small id="uh-timer-state"></small></div>
+                </div>
+                <div class="uh-focus__side">
+                    <span class="pj-label" data-lang="uh-focus-on">Focus on</span>
+                    <select class="form-select" id="uh-focus-task"></select>
+                    <div class="uh-focus__btns" id="uh-focus-btns"></div>
+                </div>
+            </div>
+            <div class="uh-focused">
+                <div><span data-lang="uh-focused-today">Focused today</span><b id="uh-focused-txt"></b></div>
+                <div class="uh-bar" style="--c: var(--otc-orange)"><span id="uh-focused-bar" style="width:0"></span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="uh-grid uh-grid--mid">
+        <div class="uh-tasks-panel uh-p">
+            <div class="uh-head"><div><h5 class="pj-sec-title" data-lang="uh-my-tasks">My tasks</h5><p class="pj-sec-sub" data-lang="uh-due-today-late">Due today and late</p></div><a href="/tasks" class="pjd-link" data-lang="uh-all-tasks">All tasks</a></div>
+            <div class="uh-scroll"><ul class="uh-tasks" id="uh-tasks"></ul></div>
+        </div>
+        <div class="uh-week-panel uh-p">
+            <div class="uh-head"><div><h5 class="pj-sec-title" data-lang="uh-this-week">This week</h5><p class="pj-sec-sub" data-lang="uh-team-finished">Tasks the team finished</p></div><a href="/tasks" class="pjd-link" aria-label="Tasks"><i data-lucide="arrow-up-right"></i></a></div>
+            <div class="uh-week-sum" id="uh-week-sum"></div>
+            <div class="uh-bars" id="uh-bars"></div>
+        </div>
+    </div>
+
+    <div class="uh-grid uh-grid--bot">
+        <div class="uh-projects-panel uh-p">
+            <div class="uh-head"><h5 class="pj-sec-title" data-lang="projects">Projects</h5><a href="/projects" class="pjd-link" data-lang="uh-see-all">See all</a></div>
+            <ul class="uh-projs" id="uh-projs"></ul>
+        </div>
+        <div class="uh-now-panel uh-p">
+            <div class="uh-head">
+                <h5 class="pj-sec-title" data-lang="uh-right-now">Right now</h5>
+                <div class="uh-seg" id="uh-now-seg">
+                    <button type="button" class="is-on" data-now="team" data-lang="uh-team">Team</button>
+                    <button type="button" data-now="activity" data-lang="uh-activity">Activity</button>
+                </div>
+            </div>
+            <div class="uh-scroll" id="uh-now"></div>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block modal %}
+{% include 'partials/projects-modals.html' %}
+{% endblock modal %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/projects-common.js?v={{ asset_v('js/pages/projects-common.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/user-home.js?v={{ asset_v('js/pages/user-home.js') }}"></script>
+{% endblock extra_javascript %}

@@ -1,7 +1,7 @@
 /**
  * Template Name: OTC Tracker - Admin & Dashboard Template
  * By (Author): JPMorgan Chase
- * Module/App (File Name): Apps Holidays Calendar
+ * Module/App (File Name): Apps Calendar (feriados + as datas dos projetos)
  */
 
 /**
@@ -45,16 +45,19 @@ const HC_TRANS = {
           saveErr: 'Save error', saveErrText: 'Could not save holiday',
           saved: 'Holiday saved', savedHtml: '{t} added to {c}',
           netErr: 'Network error', netErrText: 'Could not save the holiday.',
+          projTarget: 'Target', milestone: 'Milestone',
           calCreated: 'Calendar created', calCreatedHtml: '{c} · {n} holiday(s) imported' },
     br: { holiday: 'Feriado', date: 'Data',
           saveErr: 'Erro ao salvar', saveErrText: 'Não foi possível salvar o feriado',
           saved: 'Feriado salvo', savedHtml: '{t} adicionado ao {c}',
           netErr: 'Erro de rede', netErrText: 'Não foi possível salvar o feriado.',
+          projTarget: 'Alvo', milestone: 'Marco',
           calCreated: 'Calendário criado', calCreatedHtml: '{c} · {n} feriado(s) importado(s)' },
     es: { holiday: 'Feriado', date: 'Fecha',
           saveErr: 'Error al guardar', saveErrText: 'No se pudo guardar el feriado',
           saved: 'Feriado guardado', savedHtml: '{t} agregado a {c}',
           netErr: 'Error de red', netErrText: 'No se pudo guardar el feriado.',
+          projTarget: 'Objetivo', milestone: 'Hito',
           calCreated: 'Calendario creado', calCreatedHtml: '{c} · {n} feriado(s) importado(s)' },
 };
 function hcT(k) { return (HC_TRANS[HC_LANG] || HC_TRANS.en)[k] || HC_TRANS.en[k]; }
@@ -168,6 +171,15 @@ class CalendarSchedule {
     }
 
     onEventClick(info) {
+        // Data de PROJETO (alvo, marco, tarefa): abre o projeto — e a tarefa, na
+        // gaveta. Não é feriado: nem o popup nem o modal de edição valem aqui.
+        const xp = info.event.extendedProps || {};
+        if (xp.pj) {
+            let url = '/projects/' + encodeURIComponent(xp.project_id);
+            if (xp.kind === 'task' && xp.id) url += '?task=' + encodeURIComponent(xp.id);
+            window.location.href = url;
+            return;
+        }
         // Se for um feriado carregado do JSON (tem extendedProps.calendar)
         if (info.event.extendedProps && info.event.extendedProps.calendar) {
             const calendar = info.event.extendedProps.calendar;
@@ -398,6 +410,7 @@ class CalendarSchedule {
         });
 
         self.calendarObj.render();
+        self.initProjectDates();
         
         // Log de resumo
         console.log(`📅 Calendário de Feriados carregado com ${defaultEvents.length} eventos`);
@@ -672,6 +685,44 @@ class CalendarSchedule {
                 btnSave.disabled = false;
                 btnSave.innerHTML = original;
             }
+        });
+    }
+
+    /** As datas dos PROJETOS como fonte própria de eventos (somente leitura):
+     *  alvo do projeto, marcos e prazo das tarefas em aberto. Lidas ao vivo —
+     *  a data mudada no projeto aparece aqui na próxima carga, sem cópia. A
+     *  chave da barra lateral liga/desliga, guardada por navegador. */
+    async initProjectDates() {
+        const self = this;
+        const box = document.getElementById('hc-pj-toggle');
+        const KEY = '__OTC_HC_PROJECTS__';
+        let on = true;
+        try { on = localStorage.getItem(KEY) !== '0'; } catch (e) {}
+        if (box) box.checked = on;
+        let eventos = [];
+        try {
+            const r = await fetch('/api/projects/calendar', {credentials: 'same-origin'});
+            const d = r.ok ? await r.json() : {};
+            eventos = (d.events || []).map(function (e) {
+                const cor = /^(blue|purple|pink|orange|green|teal|indigo|yellow)$/.test(e.color) ? e.color : 'blue';
+                const pref = e.kind === 'project' ? '⚑ ' : (e.kind === 'milestone' ? '◆ ' : '');
+                return {
+                    title: pref + (e.kind === 'project' ? e.project_name : e.title),
+                    start: e.date, allDay: true, editable: false,
+                    classNames: ['hc-cal-pj', 'hc-pj-c-' + cor].concat(e.done ? ['hc-pj-done'] : []),
+                    extendedProps: {pj: true, kind: e.kind, project_id: e.project_id, id: e.id || ''}
+                };
+            });
+        } catch (e) { eventos = []; }
+        const liga = function () {
+            const src = self.calendarObj.getEventSourceById('pj');
+            if (src) src.remove();
+            if (box ? box.checked : true) self.calendarObj.addEventSource({id: 'pj', events: eventos});
+        };
+        liga();
+        if (box) box.addEventListener('change', function () {
+            try { localStorage.setItem(KEY, box.checked ? '1' : '0'); } catch (e) {}
+            liga();
         });
     }
 

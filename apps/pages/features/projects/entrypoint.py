@@ -203,6 +203,18 @@ def api_tasks_list():
     return jsonify(out)
 
 
+@blueprint.route('/api/projects/calendar', methods=['GET'])
+def api_projects_calendar():
+    """As datas dos projetos, marcos e tarefas em aberto para o Calendar. Quem
+    não tem Projects nem Tasks recebe a lista VAZIA (e não 403): o Calendar é
+    dos feriados e abre do mesmo jeito para quem não vê projeto nenhum."""
+    if not session.get('authenticated'):
+        return _err('not_authenticated', 'Not authenticated', 401)
+    if not _can_see():
+        return jsonify({'success': True, 'events': []})
+    return jsonify({'success': True, 'events': queries.calendar_events()})
+
+
 # ── API: tarefas de um projeto ─────────────────────────────────────────────────────────────
 
 @blueprint.route('/api/projects/<project_id>/tasks', methods=['POST'])

@@ -1,6 +1,6 @@
 {% extends 'layouts/vertical.html' %}
 
-{% block title %}Holidays Calendar{% endblock title %}
+{% block title %}Calendar{% endblock title %}
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
@@ -38,6 +38,20 @@
 .fc-list-event:is([class*="-subtle"], [class*="hc-cal-"]) { background: transparent !important; }
 .fc-list-event:is([class*="-subtle"], [class*="hc-cal-"]) .fc-list-event-dot { border-color: var(--hc-c) !important; }
 .fc-list-event:is([class*="-subtle"], [class*="hc-cal-"]) a { color: var(--hc-c) !important; }
+/* datas dos projetos: a pílula dos feriados na cor do PROJETO, com a barra à
+   esquerda para não se confundir com feriado; marco feito sai riscado */
+:is(.fc-event, .fc-list-event).hc-pj-c-blue   { --hc-c: var(--otc-blue); }
+:is(.fc-event, .fc-list-event).hc-pj-c-purple { --hc-c: var(--otc-purple); }
+:is(.fc-event, .fc-list-event).hc-pj-c-pink   { --hc-c: var(--otc-pink); }
+:is(.fc-event, .fc-list-event).hc-pj-c-orange { --hc-c: var(--otc-orange); }
+:is(.fc-event, .fc-list-event).hc-pj-c-green  { --hc-c: var(--otc-green); }
+:is(.fc-event, .fc-list-event).hc-pj-c-teal   { --hc-c: var(--otc-teal); }
+:is(.fc-event, .fc-list-event).hc-pj-c-indigo { --hc-c: var(--otc-indigo); }
+:is(.fc-event, .fc-list-event).hc-pj-c-yellow { --hc-c: #b45309; }
+[data-bs-theme="dark"] :is(.fc-event, .fc-list-event).hc-pj-c-yellow { --hc-c: var(--otc-yellow); }
+.fc-event.hc-cal-pj { box-shadow: inset 3px 0 0 var(--hc-c) !important; cursor: pointer; }
+.fc-event.hc-pj-done :is(.fc-event-title, .fc-event-main) { text-decoration: line-through; opacity: .7; }
+.hc-pj-toggle { display: flex; align-items: center; gap: 8px; margin: 12px 2px 2px; padding-top: 12px; border-top: 1px solid var(--otc-sep); font-size: 13px; color: var(--otc-text-2); cursor: pointer; }
 
 /* Os dois painéis: a lista de calendários e a grade, placas separadas */
 .hc-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: var(--otc-gap); align-items: start; }
@@ -78,14 +92,14 @@
                 <i class="ti ti-calendar-event"></i>
             </div>
             <div>
-                <h4 class="fs-xl fw-bold m-0">Holidays Calendar</h4>
+                <h4 class="fs-xl fw-bold m-0" data-lang="holidays-calendar">Calendar</h4>
             </div>
         </div>
         <div class="text-end">
             <ol class="breadcrumb m-0 py-0">
                 <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
                 <li class="breadcrumb-item"><a href="javascript:void(0);">Apps</a></li>
-                <li class="breadcrumb-item active">Holidays Calendar</li>
+                <li class="breadcrumb-item active" data-lang="holidays-calendar">Calendar</li>
             </ol>
         </div>
     </div>
@@ -108,6 +122,14 @@
                 <div id="external-events">
                     <p class="hc-sidebar-hint" data-lang="hc-hint">Drag a calendar to a date, or click a date to create a new holiday.</p>
                 </div>
+                {# As datas dos PROJETOS (alvo, marcos, prazo das tarefas em aberto)
+                   entram como uma fonte à parte, lida ao vivo de /api/projects/calendar
+                   — nunca no registro de feriados, que é o que conta os dias úteis
+                   do app inteiro. A chave liga e desliga, por pessoa. #}
+                <label class="form-check form-switch hc-pj-toggle mb-0">
+                    <input class="form-check-input" type="checkbox" id="hc-pj-toggle" checked>
+                    <span class="form-check-label" data-lang="hc-pj-toggle">Projects and tasks</span>
+                </label>
             </div>
         </div> <!-- end card-->
         <div class="card hc-cal-card">

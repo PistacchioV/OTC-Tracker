@@ -7,7 +7,7 @@
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content liquid-glass">
             <div class="modal-header py-2">
-                <h5 class="modal-title fs-6"><i class="ti ti-folder me-1"></i><span id="pjm-title" data-lang="pj-new">New project</span></h5>
+                <h5 class="modal-title fs-6"><i class="ti ti-folder me-1"></i><span id="pjm-title">New project</span></h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
@@ -118,11 +118,22 @@
             <a class="nav-link" href="#" data-status="In review">In review</a>
             <a class="nav-link" href="#" data-status="Done">Done</a>
         </div>
+        {# As caixas mostram o VALOR como o Pane (avatar e nome, ícone e prazo
+           relativo); o campo de verdade fica por cima, invisível, e é ele que
+           abre o menu (o do otc.js, abaixo da caixa) e o calendário. #}
         <div class="pj-drawer__boxes">
-            <div class="pjd-box"><span class="pj-label" data-lang="pj-f-assignee">Assignee</span><select class="form-select" id="pjt-assignee"></select></div>
-            <div class="pjd-box"><span class="pj-label" data-lang="pj-f-taskdue">Due</span><input type="text" class="form-control otc-datefield" id="pjt-due" placeholder="dd/mm/yyyy" autocomplete="off"></div>
-            <div class="pjd-box"><span class="pj-label" data-lang="pj-f-priority">Priority</span><select class="form-select" id="pjt-priority"></select></div>
-            <div class="pjd-box"><span class="pj-label" data-lang="pj-f-estimate">Estimate (hours)</span><input type="text" class="form-control" id="pjt-estimate" inputmode="decimal" autocomplete="off"></div>
+            <label class="pjd-box pj-fbox"><span class="pj-label" data-lang="pj-f-assignee">Assignee</span>
+                <span class="pj-fbox__val" id="pjt-assignee-view"></span>
+                <select class="form-select pj-fbox__input" id="pjt-assignee" aria-label="Assignee"></select></label>
+            <label class="pjd-box pj-fbox"><span class="pj-label" data-lang="pj-f-taskdue">Due</span>
+                <span class="pj-fbox__val" id="pjt-due-view"></span>
+                <input type="text" class="form-control otc-datefield pj-fbox__input" id="pjt-due" placeholder="dd/mm/yyyy" autocomplete="off" aria-label="Due"></label>
+            <label class="pjd-box pj-fbox"><span class="pj-label" data-lang="pj-f-priority">Priority</span>
+                <span class="pj-fbox__val" id="pjt-priority-view"></span>
+                <select class="form-select pj-fbox__input" id="pjt-priority" aria-label="Priority"></select></label>
+            <label class="pjd-box pj-fbox pj-fbox--text"><span class="pj-label" data-lang="pj-f-estimate">Estimate (hours)</span>
+                <span class="pj-fbox__val"><i data-lucide="clock"></i>
+                <input type="text" class="form-control" id="pjt-estimate" inputmode="decimal" autocomplete="off" data-lang-placeholder="pj-ph-estimate" placeholder="e.g. 2"></span></label>
         </div>
 
         <div class="pj-h"><span data-lang="pj-subtasks">Subtasks</span><span class="otc-count" id="pjt-sub-count">0/0</span></div>
