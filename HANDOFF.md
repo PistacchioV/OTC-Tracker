@@ -26128,3 +26128,81 @@ no `title`), `check_pc_widgets`, `check_recon_fxo`, `check_quotes`,
 `check_b3_pattern`, `check_export_advanced` (o `temDia` no `jsc`) e
 `check_req_cache` falham igual antes desta mudança; `check_swap_bullet`
 falhava só com os dados do worktree.
+
+## §631 — Intraday › Projects e Tasks; totais escuros; ícone do título automático (2026-10-20)
+
+**O pedido.** Uma área de PROJETOS do time no desenho do Pane (a lista de
+Projects e a página de um projeto do demo como modelo), uma TASKS em quadro com
+arrastar e soltar, as duas num grupo novo do menu, **Intraday** — junto com o
+**Monitor** (o Intraday Monitor, que saiu de Dashboards e manteve a URL). No
+caminho: o ícone ao lado do título em toda tela, o card de TOTAL mais escuro em
+toda tela com cards de contagem, a seção Pinned só com projetos, e três
+correções pequenas (logo e X do popup de feriado, rótulos de atalho de Mac).
+
+**Projects (`features/projects/`).** Vertical fina como a do Support Center:
+`domain` puro (validação, progresso, próximo marco, pessoas, burn-up),
+`queries`, `commands`, `entrypoint` e `infra/` (o armazém e o cadastro).
+- **Um documento só no armazém**, `projects/projects.json` (no BANCO, §434),
+  com `seq` gravado: `PRJ-0001…`, e id de projeto APAGADO não volta — senão o
+  projeto fixado na barra de alguém passaria a abrir outro. Tarefa, marco,
+  subtarefa e comentário têm contador dentro do pai, pelo mesmo motivo.
+  Leitura ESTRITA: ocupado sobe (503), nunca "não há projeto" (§436).
+- **Lead e responsável**: usuários `Active` com papel BO ou ADMIN (pedido da
+  mesa), mais a própria sessão quando ela é BO/Admin/master — o admin fora do
+  cadastro (o master, a dev) também lidera. Lead gravado que saiu do BO
+  continua válido na edição (não se recusa o Save por isso).
+- **Status**: On going · On hold · Concluded (o filtro da lista é All + os três).
+- **Acesso**: a API vale para quem tem `/projects` OU `/tasks` — as duas telas
+  mostram o mesmo trabalho e a Tasks move as tarefas dos projetos. A página
+  `/projects/<id>` não está no menu (o `enforce_page_access` não a vê) e confere
+  na rota. Apagar o projeto é do Lead, de quem criou e do admin/master.
+- **Atividade ESTRUTURADA** (`kind` + `params`), traduzida na tela (§486).
+- **Sino** (`page = 'Projects'`, nos três mapas): Lead nomeado, tarefa
+  atribuída e comentário na tarefa de alguém — nunca para quem fez.
+- Toda escrita devolve o PROJETO inteiro e a tela se redesenha dele.
+
+**Tasks.** Todas as tarefas de todos os projetos (`/api/tasks`), em quadro por
+status (HTML5 drag and drop entre colunas; o menu "…" do card faz o mesmo no
+toque) ou em lista agrupada, com os filtros do Pane: projeto, "Mine only",
+prioridade e texto. Dentro da coluna não há ordem manual — é a do prazo. O
+card sob o mouse vira camada própria (`translate`): com o menu aberto ele sobe
+(`z-index`), senão o card de baixo cobria o menu — o teste de interação achou.
+
+**Peças comuns** (`projects-common.js`, `partials/projects-*.html`): o modal do
+projeto, o "New task" e a GAVETA da tarefa (status em segmento, responsável,
+prazo, prioridade, estimativa, subtarefas, comentários) servem às três telas.
+
+**Pinned só com projetos.** As páginas fixadas e o editor delas saíram (a mesa:
+"não ficou legal"). A estrela do card fixa o projeto (no navegador, por SID,
+com nome e cor); a lista e a página do projeto ATUALIZAM a lista ao carregar —
+renomeado se corrige, apagado sai. Vazia, a seção some. O botão de fixar o
+MENU agora tem cor quando o menu está fixo (sinal visual pedido pela mesa).
+
+**Ícone do título automático.** 61 das 95 telas do menu não tinham o ladrilho
+de ícone ao lado do título. Em vez de 61 templates, o `layouts/vertical.html`
+copia para o `.page-title-head` o ícone do item no menu lateral (submenu sem
+ícone herda o do grupo; fora do menu, o do menu do usuário), num script
+síncrono logo depois do conteúdo — no `otc.js` o título já teria sido pintado
+e pularia. Accrual e MtM ganharam o cabeçalho padrão (eles não tinham
+`.page-title-head`), com o título curto ("Swap Accrual").
+
+**Cards de contagem.** A animação do KPI (contar, piscar quando MUDA, subir no
+hover) vale para os cards de número de toda tela (`*-widget__value`, Accrual,
+Tracking Docs, recons). A primeira carga não pisca — o card que nasce com "0"
+e recebe o número do dia não "mudou". Valor com decimal, moeda ou % não conta
+(contava multiplicado por cem no meio do caminho). O card de TOTAL é PREENCHIDO
+e mais escuro, por UMA regra do tema que pega `.otc-stat--total` e os
+`*-widget--total`/`*-stat--total`/`.ops-recon--total`/`.widget-total`/
+`.fxo-w-total` que as telas já tinham.
+
+**Correções.** O popup de feriado escolhia o logo pelo tema do SISTEMA
+(`prefers-color-scheme`), não do app: macOS escuro + app claro dava logo
+branco no vidro claro. O X do mesmo popup não fechava: o conteúdo, sem margem,
+vinha depois no DOM e cobria o botão. O SweetAlert de sucesso pintava três
+máscaras na cor sólida do popup, que no vidro viravam um disco deslocado. A
+busca dizia `⌘K`: a mesa é Windows — `Ctrl+K` (o atalho aceita os dois).
+
+**Guardas.** `check_projects.py` (novo: criação, quem lidera, tarefas,
+subtarefas, comentários, marcos, progresso, burn-up, sino, acesso e quem
+apaga) e `check_theme_toggle` §5 (o layout copia o ícone do menu, antes do
+rodapé).

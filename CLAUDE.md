@@ -958,6 +958,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   lente desliza pelo `otc.js`). O cabeçalho dos widgets de número
   (`x-widget__head` · `__icon` · `__title`) é do tema: a tela declara só o que
   difere (ícone de 40px, título em caixa alta, margem).
+- **O ladrilho de ícone ao lado do título é AUTOMÁTICO**: o `layouts/vertical.html`
+  copia para o `.page-title-head` o ícone da tela no menu lateral (item de
+  submenu sem ícone herda o do grupo; fora do menu, o do menu do usuário),
+  num script síncrono logo depois do conteúdo — no `otc.js` o título já teria
+  sido pintado e pularia. Tela nova não escreve nada; tela que desenha o
+  próprio (`-product-icon`, `<i class="ti">` no h4) fica com o dela.
 - **Tabela em painel PRÓPRIO (fora de `.card`) tinha o topo do cabeçalho
   CORTADO** (§486): o `.table-responsive` (`overflow:auto`) cortava o checkbox
   e a primeira linha do rótulo. Está resolvido NA RAIZ, no `otc.scss` §7
@@ -1011,6 +1017,15 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   blur, alfa não é material: superfícies viram cor SÓLIDA (§11 do SCSS);
   token do modo vai como `:root.is-solid` (+ o par escuro). Valide forçando
   `'reduced'`.
+- **Card de contagem tem a animação do KPI em TODA tela** (§631): o `otc.js`
+  (`initStats`) faz contar e piscar todo `.otc-stat__value`,
+  `*-widget__value`, `.acc-stat__value`, `.ob-stat__n` e `.widget-val`, e o
+  tema dá o hover. A primeira carga não pisca. **O card de TOTAL é
+  preenchido e mais escuro** por uma regra só do tema: tela nova marca o
+  card com `otc-stat--total` (ou `x-widget--total`) e não escreve cor.
+- **A seção Pinned da barra é só de PROJETOS** (§631): `window.otcPins`
+  (`has`/`toggle`/`sync`), chave `otc_pinned_projects_<SID>`. Não há mais
+  página fixada nem editor.
 - Cor só de tema claro precisa do par `[data-bs-theme=dark]`.
 
 ---
@@ -1215,8 +1230,8 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   recompra espelhada é de termo de moeda — a de opção e a de swap caem na mesma
   página. As `intrag-unwind-dce-*` continuam cada uma na família do SEU produto:
   essas sim são uma tela por produto.
-- **O Monitor é o INTRADAY MONITOR** (`/intraday-monitor`, Dashboards › KPI;
-  §567): as tarefas do dia em cima (catálogo `domain.TASKS`, agenda de dias e
+- **O Monitor é o INTRADAY MONITOR** (`/intraday-monitor`, Intraday › Monitor;
+  §567, §631): as tarefas do dia em cima (catálogo `domain.TASKS`, agenda de dias e
   horário limite no card `intradaytasks` do Control Panel), o detalhe produto ×
   status embaixo. Recon conclui ao RODAR no dia, zona com ZERO em aberto (a
   regra do aviso das 19h, `queries._fechados`). Quem diz que a recon rodou é o
@@ -2384,6 +2399,22 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   Aging decrescente numérico; tipo por coluna, máscara `#,##0.00` invariante;
   planilha vazia VAI; `Conterparty Name` é grafia de contrato.
 
+### Intraday › Projects e Tasks (§631)
+
+- **Um documento só** (`features/projects/infra/store.py`,
+  `projects/projects.json` no armazém), ler → alterar → gravar dentro do
+  `store.mutate`; o id (`PRJ-0001`) e os ids filhos são CONTADORES gravados —
+  apagado nunca volta (o projeto fixado na barra de alguém abriria outro).
+- **Lead e responsável = usuários Active com papel BO ou ADMIN**, mais a
+  própria sessão BO/Admin/master (`queries.eligible`). Regra da mesa.
+- **A API vale para `/projects` OU `/tasks`** (`entrypoint._can_see`): a Tasks
+  move as tarefas dos projetos. A página `/projects/<id>` confere na rota —
+  o `enforce_page_access` não a vê (não está no menu).
+- Toda escrita devolve o PROJETO inteiro; a tela se redesenha dele. Atividade
+  e erro saem ESTRUTURADOS (`kind`/`code` + params), traduzidos no
+  `projects-common.js`. Chave de tradução das telas é `pj-*`/`tsk-*` — `tk-*`
+  é do Support Center.
+
 ### Pending Confirmation
 
 - **O Dashboard (`/dashboard-pending-confirmation`, Pending Confirmation ›
@@ -2856,7 +2887,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (187 scripts)
+### `scripts/tests/` (188 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
