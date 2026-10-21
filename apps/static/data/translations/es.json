@@ -3073,5 +3073,6 @@
   "unw-col-equity-leg": "Pata Equity",
   "unw-col-funding-leg": "Pata Funding",
   "unw-col-unwind-settlement": "Recompra → Liquidación",
-  "unw-preview-hint-cards": "Doble clic en una tarjeta para ver el archivo de la B3"
+  "unw-preview-hint-cards": "Doble clic en una tarjeta para ver el archivo de la B3",
+  "unw-col-vbr": "VBR"
 }

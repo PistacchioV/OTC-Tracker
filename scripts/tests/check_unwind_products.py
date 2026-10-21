@@ -308,26 +308,27 @@ def main():
     print('\n== 5. Swap CEM: papel pela conta MENOR, parcial pede Mantem Premios ==')
     pg_swap = catalog.PAGES['/unwinds/swap/cem']
     # Ponta 1 e a conta MENOR: 55555005 (deles) < 73760009 (nossa) -> somos a
-    # Ponta 2, e o fator NOSSO e o Factor Leg 2. Caixa do banco = nocional x
-    # (nosso - deles) = 400.000 x (1,05 - 1,10) = -20.000,00.
+    # Ponta 2, e o fator NOSSO e o Factor Leg 2. Caixa do banco = VBR x (nosso
+    # - deles) (§660: o fator e valor / VBR + 1) = 1.000.000 x (1,05 - 1,10).
     csv_sw = (b'B3 ID;Unwound Notional;Factor Leg 1;Factor Leg 2;Settlement Amount;Unwind Date\n'
-              b'SWP0001;400000;1.10000000;1.05000000;-20000.00;21/09/2026\n')
+              b'SWP0001;400000;1.10000000;1.05000000;-50000.00;21/09/2026\n')
     st, j = _up(pg_swap['api'], 'swap.csv', csv_sw)
     s = (j.get('rows') or [{}])[0]
     check('import 200', st == 200, j)
     check('papel pela CONTA MENOR (a nossa 73760009 > 55555005: Ponta 2), LOB, contraparte e Party pela conta',
           (s.get('Role'), s.get('LOB'), s.get('Counterparty'), s.get('Party'))
           == ('Ponta 2', 'CEM', 'EMPRESA Y SA', 'JPM'), s)
-    check('saldo da posicao e caixa pelos fatores: Check OK',
-          s.get('OriginalNotional') == 1000000.0 and s.get('Check') == 'OK', s.get('Warnings'))
+    check('saldo da posicao, o VBR (valor base - antecipado) e o caixa pelos fatores: Check OK',
+          s.get('OriginalNotional') == 1000000.0 and s.get('VBR') == 1000000.0 and s.get('Check') == 'OK',
+          (s.get('VBR'), s.get('Warnings')))
     from apps.pages.features.unwinds.product import domain as PD
     check('a regra do papel: a nossa MENOR e Ponta 1 (00); a MAIOR, Ponta 2 (01); sem conta, None',
           (PD.papel_pela_conta('73760.00-9', '74220005'), PD.papel_pela_conta('73760009', '00041.00-7'),
            PD.papel_pela_conta('', '1')) == ('00', '01', None))
-    ruim = dict(s, Result=-19000.0, Role='Ponta 2', UnwoundNotional=400000.0, FactorLeg1=1.1, FactorLeg2=1.05)
+    ruim = dict(s, Result=-19000.0, Role='Ponta 2', VBR=1000000.0, FactorLeg1=1.1, FactorLeg2=1.05)
     ck, av = PD.conferir(ruim, pg_swap)
-    check('caixa que os fatores nao dao: NOK, e o OTC Tracker Result diz o calculado',
-          ck == 'NOK' and PD.resultado_calculado(av) == -20000.0, (ck, av))
+    check('caixa que os fatores nao dao: NOK, e o OTC Tracker Result diz o calculado (VBR x diferenca)',
+          ck == 'NOK' and PD.resultado_calculado(av) == -50000.0, (ck, av))
     r = cl.get(pg_swap['api'] + '/preview?id=%s&date=2026-09-21' % s.get('_id'))
     check('parcial sem Mantem Premios: recusa com codigo',
           r.status_code == 422 and 'Mantém Prêmios' in ((r.get_json() or {}).get('params') or {}).get('campos', ''),

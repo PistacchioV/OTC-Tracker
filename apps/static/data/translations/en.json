@@ -3073,5 +3073,6 @@
   "unw-col-equity-leg": "Equity Leg",
   "unw-col-funding-leg": "Funding Leg",
   "unw-col-unwind-settlement": "Unwind → Settlement",
-  "unw-preview-hint-cards": "Double-click a card to preview the B3 file"
+  "unw-preview-hint-cards": "Double-click a card to preview the B3 file",
+  "unw-col-vbr": "VBR"
 }

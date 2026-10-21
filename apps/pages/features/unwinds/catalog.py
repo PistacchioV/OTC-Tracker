@@ -132,6 +132,8 @@ _COLS_SWAP = _HEAD + (
     ('Role', 'Role', 'text'),
     ('OriginalNotional', 'Original Notional', 'money'),
     ('UnwoundBefore', 'Unwound Before', 'money'),
+    # o Valor Base Remanescente do Live Position: a base dos fatores (§660)
+    ('VBR', 'VBR', 'money'),
     ('Shares', 'Shares', 'qty'),
     ('Strike', 'Original Strike', 'rate'),
     ('UnwindPrice', 'Unwind Price', 'rate'),
@@ -197,6 +199,7 @@ _CARDS_SWAP = {
               ['UnwindDate,SettlementDate', 'Unwind → Settlement', 'daterange'],
               ['Shares', 'Shares', 'qty'], ['Strike', 'Original Strike', 'rate'],
               ['UnwindPrice', 'Unwind Price', 'rate'], ['UnwoundNotional', 'Unwound Notional', 'money'],
+              ['VBR', 'VBR', 'money'], ['UnwoundBefore', 'Unwound Before', 'money'],
               ['EquityLeg', 'Equity Leg', 'money'], ['FundingLeg', 'Funding Leg', 'money'],
               ['FactorLeg1', 'Factor Leg 1', 'rate'], ['FactorLeg2', 'Factor Leg 2', 'rate'],
               ['Result', 'Settlement Amount', 'money']],

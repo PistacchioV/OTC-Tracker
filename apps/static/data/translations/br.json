@@ -3073,5 +3073,6 @@
   "unw-col-equity-leg": "Perna Equity",
   "unw-col-funding-leg": "Perna Funding",
   "unw-col-unwind-settlement": "Recompra → Liquidação",
-  "unw-preview-hint-cards": "Duplo clique num card para ver o arquivo da B3"
+  "unw-preview-hint-cards": "Duplo clique num card para ver o arquivo da B3",
+  "unw-col-vbr": "VBR"
 }
