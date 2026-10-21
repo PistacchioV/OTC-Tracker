@@ -27664,3 +27664,35 @@ sidenav"; "o lugar inicial do botão do lado esquerdo do topbar".
 `check_fab_favorites.py` (32 checks): o lugar inicial ao lado da barra e o
 painel abaixo, o arrasto ao MEIO da página que fica ali, o painel que cabe na
 janela, o formato antigo convertido, e a ordem em blocos.
+
+## §660 — Recompra de swap: o fator da leg é valor ÷ VBR + 1; Party e Counterparty pelo Live Position (2026-10-21)
+
+Mesa: "o fator da leg precisa ser calculado no unwind swap: valor de liquidação
+÷ VBR + 1, arredondado na 8ª casa; o VBR dá para puxar no Live Position Swap" e
+"o Party e o Counterparty dá para puxar do Live Position também".
+
+- **O fator** (`recalcular_swap`): `round(valor de liquidação da leg / VBR + 1,
+  8)` — a mesma regra do fator do Swap VCP (§452). O valor vai com o sinal de
+  quem RECEBE a curva (`LegSides`, §657); o VBR é o **Valor Base Remanescente**
+  do DPOSICAO-SWAP (coluna 15, `queries._swap` → `vbr`; coluna vazia = valor
+  base − antecipado), achado pelo CETIP ID. Antes a base era o nocional
+  recomprado (ações × strike). Na recompra TOTAL os dois coincidem e nada muda;
+  na PARCIAL a base passa a ser o VBR do contrato inteiro. Sem posição não há
+  VBR — e não há fator: o Check diz que falta, em vez de chutar a base.
+- **VBR é coluna** da recompra de swap (e fato do card), vinda da posição, e
+  editável: o Edit do VBR refaz os fatores (`CAMPOS_ECONOMICOS`). Ações novas
+  refazem só o nocional recomprado (o campo 11), não mais o fator.
+- **O Check `fatores`** refaz o caixa por **VBR × (fator nosso − fator
+  deles)** — a conta inversa do fator —, na tolerância do arredondamento.
+- **Party e Counterparty** saem do Live Position pela MESMA cascata da tela
+  Swap Characteristics: o CPF/CNPJ pelo Reference Data e, sem ele, a conta
+  CETIP pelo B3 ACCOUNT do Reference Data (`_lp_cpty_by_account`, que recusa
+  guarda-chuva e conta ambígua). A ordem antiga da contraparte era conta
+  primeiro; a Party era o nome do cadastro `b3-accounts`, que agora é só o
+  plano B (com a LE).
+
+`check_unwind_swap_trs.py` (35): o fator só com VBR, o da parcial sobre o VBR
+do contrato, o arquivo da #9 com os fatores do VBR, o Edit do VBR, e a cascata
+de nomes (documento vence a conta; sem documento, a conta; a Party pela conta do
+Live Position antes do `b3-accounts`). O `check_unwind_products` §5 passou à
+conta pelo VBR.
