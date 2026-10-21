@@ -20,7 +20,8 @@ de Commodities e FXO chegam SEM identificador, e a operacao se acha por
 casamento de caracteristicas contra o Live Position.
 
 Tipos de coluna: `text` · `date` · `money` (#,##0.00) · `rate` (as casas que
-tem — taxa nao e valor) · `status` · `check`.
+tem — taxa nao e valor) · `qty` (quantidade: milhar, sem casas fixas) ·
+`status` · `check`.
 """
 
 import re
@@ -114,17 +115,34 @@ _COLS_OPCAO_COMM = tuple(
 
 # Swap — os campos do SWAP 0014 (`swap-antecipacao`): papel (5), fator de cada
 # ponta (7/8), valor para antecipacao (11) e mantem premios (12).
+#
+# O VALOR PARA ANTECIPACAO (campo 11) e o `UnwoundNotional`: o nocional que sai
+# do contrato — no TRS da EDG, acoes x strike original (mesa, 21/10/2026, §657).
+# E dele que a posicao soma o `Valor Antecipado`. O `Result` e o CAIXA da
+# recompra com o sinal do BANCO (o "A + B" do e-mail), que e o que a Direction,
+# o Check dos fatores e a mesa conferem — ate 21/10 a coluna se chamava "Unwind
+# Amount" e ia no campo 11.
 _COLS_SWAP = _HEAD + (
+    ('InstrumentID', 'Instrument ID', 'text'),
+    ('Party', 'Party', 'text'),
     ('LOB', 'LOB', 'text'),
+    ('UnwindType', 'Total / Partial', 'text'),
     ('OurCurve', 'Our Curve', 'text'),
     ('CptyCurve', 'Cpty Curve', 'text'),
     ('Role', 'Role', 'text'),
     ('OriginalNotional', 'Original Notional', 'money'),
     ('UnwoundBefore', 'Unwound Before', 'money'),
+    ('Shares', 'Shares', 'qty'),
+    ('Strike', 'Original Strike', 'rate'),
+    ('UnwindPrice', 'Unwind Price', 'rate'),
     ('UnwoundNotional', 'Unwound Notional', 'money'),
+    ('EquityLeg', 'Equity Leg', 'money'),
+    ('FundingLeg', 'Funding Leg', 'money'),
     ('FactorLeg1', 'Factor Leg 1', 'rate'),
     ('FactorLeg2', 'Factor Leg 2', 'rate'),
-    ('Result', 'Unwind Amount', 'money'),
+    ('Result', 'Settlement Amount', 'money'),
+    # O caixa que os FATORES dao, SO quando nao bate com o informado.
+    ('CalcResult', 'OTC Tracker Result', 'money'),
     ('KeepPremium', 'Keep Premium', 'text'),
 ) + _TAIL
 
@@ -153,6 +171,9 @@ POS_SWAP, POS_OPCAO, POS_NDF = 'swap', 'option', 'ndf'
 #   `premio`  — o valor financeiro = quantidade x premio (ou preco) unitario.
 # OK so sai quando TODAS rodaram e fecharam; uma que nao rodou e '-'.
 _CK_SWAP = ('balance',)
+#   `fatores` — o caixa refeito pelos fatores das duas pontas (nocional x
+#               (fator nosso − fator deles)) bate com o `Result` (§657).
+_CK_SWAP_B3 = ('balance', 'fatores')
 _CK_TERMO = ('balance', 'termo')
 _CK_PREMIO = ('balance', 'premio')
 
@@ -161,9 +182,30 @@ _CK_PREMIO = ('balance', 'premio')
 # .msg/.eml le a tabela do corpo com as MESMAS colunas abaixo (rotulos ou
 # campos); sem ela, `unwind_email_table_unknown`.
 
+# Os CARDS (mesa, 21/10/2026, §657): as recompras de SWAP sao uma operacao por
+# card, como as telas de swap do New Deals (`deal-cards.js`, §650) — a DataTable
+# segue escondida por baixo como a fonte do Export. `title` = o primeiro campo
+# com valor; `subtitle` = os campos com valor, juntos; `facts` = [campo, rotulo,
+# tipo] (`daterange` = 'Inicio,Fim'; a chave de traducao sai do rotulo, como a
+# da coluna); `meta` = [[campo, rotulo]] no pe; `lob` = a pilula CEM/EDG.
+_CARDS_SWAP = {
+    'title': ['Counterparty', 'Contract'],
+    'subtitle': ['UnwindType', 'DealID'],
+    'facts': [['DealID', 'Deal ID', 'text'], ['Contract', 'B3 ID', 'text'],
+              ['InstrumentID', 'Instrument ID', 'text'], ['Role', 'Role', 'text'],
+              ['Party', 'Party', 'text'], ['Counterparty', 'Counterparty', 'text'],
+              ['UnwindDate,SettlementDate', 'Unwind → Settlement', 'daterange'],
+              ['Shares', 'Shares', 'qty'], ['Strike', 'Original Strike', 'rate'],
+              ['UnwindPrice', 'Unwind Price', 'rate'], ['UnwoundNotional', 'Unwound Notional', 'money'],
+              ['EquityLeg', 'Equity Leg', 'money'], ['FundingLeg', 'Funding Leg', 'money'],
+              ['FactorLeg1', 'Factor Leg 1', 'rate'], ['FactorLeg2', 'Factor Leg 2', 'rate'],
+              ['Result', 'Settlement Amount', 'money']],
+    'meta': [['MyNumber', 'Meu Número']],
+}
+
 
 def _page(path, group, product, columns, b3=None, group_lang='', product_lang='',
-          position=None, checks=_CK_SWAP):
+          position=None, checks=_CK_SWAP, cards=None, recap=None):
     slug = path.strip('/').replace('/', '-')
     nome = (group + ' ' + product).strip()
     return {
@@ -186,6 +228,11 @@ def _page(path, group, product, columns, b3=None, group_lang='', product_lang=''
         'suffix': '_unwind' + re.sub(r'[^a-z0-9]', '', nome.lower()) + '.json',
         'position': position,
         'checks': list(checks),
+        # `cards`: a tela em cards (None = a tabela de sempre); `recap`: o
+        # leitor de e-mail PROPRIO do produto (`product/domain.LEITORES_RECAP`)
+        'cards': (dict(cards, lob=dict(cards.get('lob') or {'field': 'LOB'}, fallback=product))
+                  if cards else None),
+        'recap': recap,
         'backend': True,
     }
 
@@ -194,9 +241,11 @@ def _page(path, group, product, columns, b3=None, group_lang='', product_lang=''
 # proposito: e a pagina da Fase 1.
 PAGES = dict((p['path'], p) for p in (
     _page('swap/cem', 'Swap', 'CEM', _COLS_SWAP, _B3_SWAP, 'nav-swap',
-          position=POS_SWAP, checks=_CK_SWAP),
+          position=POS_SWAP, checks=_CK_SWAP_B3, cards=_CARDS_SWAP),
+    # O TRS da EDG chega no "Internal Recap - <ticker> TRS onshore Unwind"
+    # (mesa, 21/10/2026, §657): uma tranche por coluna, com o CETIP ID.
     _page('swap/edg', 'Swap', 'EDG', _COLS_SWAP, _B3_SWAP, 'nav-swap', 'nav-edg',
-          position=POS_SWAP, checks=_CK_SWAP),
+          position=POS_SWAP, checks=_CK_SWAP_B3, cards=_CARDS_SWAP, recap='swap-trs'),
     _page('ndf/commodities', 'NDF', 'Commodities', _COLS_TERMO_COMM, _B3_TERMO, 'nav-ndf',
           'nav-commodities', position=POS_NDF, checks=_CK_TERMO),
     _page('options/fxo', 'Options', 'FXO', _COLS_OPCAO, _B3_OPCAO, 'nav-options', 'nav-fxo',

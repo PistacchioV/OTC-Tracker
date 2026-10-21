@@ -60,11 +60,11 @@ def _linhas_do_arquivo(page, filename, dados):
         raise domain.Recusa('unwind_file_too_large', 'File too large')
     if _e_email(dados):
         try:
-            html, _assunto = email_file.ler(filename, dados)
+            html, assunto = email_file.ler(filename, dados)
         except ValueError as exc:
             raise domain.Recusa('unwind_email_unreadable', 'Could not read the e-mail: %s' % exc,
                                 motivo=str(exc))
-        return _linhas_das_tabelas(page, email_file.tabelas(html)) + ('email',)
+        return _linhas_das_tabelas(page, email_file.tabelas(html), assunto) + ('email',)
     try:
         rows, fmt = _R()._latam_read_rows(dados)
     except RuntimeError as exc:                         # .xls sem o xlrd: diz o que instalar
@@ -81,7 +81,7 @@ def _linhas_do_arquivo(page, filename, dados):
     return linhas, avisos, fmt
 
 
-def _linhas_das_tabelas(page, tabelas):
+def _linhas_das_tabelas(page, tabelas, assunto=''):
     """(linhas, avisos) da tabela do corpo do e-mail — o trecho do Excel que a
     mesa colou, com as MESMAS colunas da planilha (rotulos ou campos da grade).
     Vale a primeira tabela que tem o cabecalho da pagina E alguma linha: o corpo
@@ -96,6 +96,16 @@ def _linhas_das_tabelas(page, tabelas):
     # tabela virava linha.
     leitor = {'NDF/Commodities': domain.linhas_do_recap_commodities,
               'Options/Commodities': domain.linhas_do_recap_opcoes_commodities}.get(page.get('dir'))
+    # O recap do TRS da EDG (§657) e uma tabela TRANSPOSTA — uma tranche por
+    # coluna — e a data da recompra vem no ASSUNTO.
+    proprio = domain.LEITORES_RECAP.get(page.get('recap') or '')
+    if proprio is not None:
+        recap = proprio(tabelas, assunto)
+        if recap is not None:
+            if not recap[0]:
+                raise domain.Recusa('unwind_recap_no_tranches',
+                                    'The e-mail has no tranche with a CETIP ID to import')
+            return recap
     if leitor is not None:
         recap = leitor(tabelas)
         if recap is not None:
@@ -125,6 +135,14 @@ def _completar_linha(page, linha, posicoes, ref_iso):
     campos = catalog.fields(page)
     if 'UnwindDate' in campos and not linha.get('UnwindDate'):
         linha['UnwindDate'] = ref_iso
+    # O recap diz a liquidacao em dias uteis ("em D+1", §657): conta no ANBIMA.
+    d_mais = linha.pop('_d_mais', None)
+    if d_mais and 'SettlementDate' in campos and not linha.get('SettlementDate'):
+        base = _R()._parse_date_any(linha.get('UnwindDate') or ref_iso)
+        if base is not None:
+            liq = _R()._anbima_add_biz(base, int(d_mais))
+            if liq is not None:
+                linha['SettlementDate'] = liq.strftime('%Y-%m-%d')
     if 'SettlementDate' in campos and not linha.get('SettlementDate'):
         linha['SettlementDate'] = linha.get('UnwindDate') or ref_iso
     if page.get('position'):
@@ -148,6 +166,18 @@ def _completar_linha(page, linha, posicoes, ref_iso):
                     'unwind_lob_differs_from_page',
                     'The Live Position says LOB %s, this is the %s page' % (pos['lob'], page['label']),
                     lob=pos['lob'], pagina=page['label']))
+    if _e_swap(page):
+        # Com o PAPEL da posicao, os fatores de cada curva viram os da Ponta 1 e
+        # da Ponta 2 (§657). O Result que veio (o "A + B" do e-mail, a planilha)
+        # fica: refazer pela soma das pernas trocaria o centavo do e-mail.
+        domain.recalcular_swap(linha)
+        informado = domain.tipo_informado(linha.get('UnwindType'))
+        pelo_saldo = domain.total_ou_parcial_pelo_saldo(linha)
+        if informado and pelo_saldo and informado != pelo_saldo:
+            avisos.append(domain.aviso(
+                'unwind_type_differs',
+                'The e-mail says %s, the Live Position balance says %s' % (informado, pelo_saldo),
+                informado=linha.get('UnwindType'), saldo=pelo_saldo))
     if 'DU' in campos and linha.get('DU') in (None, '') and linha.get('MaturityDate'):
         du = queries.dias_uteis(linha.get('SettlementDate') or linha.get('UnwindDate'),
                                 linha['MaturityDate'])
@@ -239,13 +269,22 @@ def importar(page, filename, dados, ref, dry_run=False):
 
 # ── Edicao, 4-olhos, delete ──────────────────────────────────────────────────
 
+def _e_swap(page):
+    """A pagina e de swap com arquivo da B3 (o SWAP 0014): os fatores e o
+    nocional se refazem (`domain.recalcular_swap`)."""
+    return ((page or {}).get('b3') or {}).get('layout') == 'swap-antecipacao'
+
+
 def _refazer_calculos(page, linha, mudou, kinds):
     """Dado ECONOMICO mudado no Edit refaz as contas da linha (mesa,
     28/09/2026): o DU quando uma data mudou, o Result pela formula do termo e
-    a Direction pelo sinal dele. O que a pessoa digitou no mesmo Save VENCE —
-    Result, DU ou Direction editados a mao ficam, e o Check confere."""
+    a Direction pelo sinal dele; no swap, o nocional, os fatores e o caixa
+    (§657). O que a pessoa digitou no mesmo Save VENCE — Result, DU, fatores ou
+    Direction editados a mao ficam, e o Check confere."""
     if not (mudou & set(domain.CAMPOS_ECONOMICOS)):
         return
+    if _e_swap(page):
+        domain.recalcular_swap(linha, mudou)
     if 'DU' in kinds and 'DU' not in mudou and \
             mudou & {'UnwindDate', 'SettlementDate', 'MaturityDate'} and linha.get('MaturityDate'):
         du = queries.dias_uteis(linha.get('SettlementDate') or linha.get('UnwindDate'),

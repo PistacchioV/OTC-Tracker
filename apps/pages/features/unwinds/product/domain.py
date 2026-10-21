@@ -171,7 +171,7 @@ def valor_da_celula(v, kind):
     if kind == 'date':
         d = data_iso(v)
         return (d, None) if d else (texto(v), 'unwind_bad_date')
-    if kind in ('money', 'rate'):
+    if kind in ('money', 'rate', 'qty'):
         n = numero(v, taxa=(kind == 'rate'))
         return (n, None) if n is not None else (texto(v), 'unwind_bad_number')
     return texto(v), None
@@ -491,6 +491,227 @@ def linhas_do_recap_opcoes_commodities(tabelas):
     return linhas, avisos
 
 
+# ── O e-mail de recompra de SWAP da EDG: o TRS onshore (mesa, 21/10/2026) ────
+# O "Internal Recap - <ticker> TRS onshore Unwind (20-Oct-26)" (§657) e UMA
+# tabela TRANSPOSTA: os rotulos na primeira coluna e uma TRANCHE por coluna
+# (`#1`…`#n`; o `TOTAL` nao e operacao):
+#
+#   Unwind Parcial/Total · Data de execução original · Deal ID · Instrumento ID ·
+#   CETIP ID · Número de ações · Strike Original · Preço de Unwind ·
+#   (A) Perna Equity (RDOR Recebe) ajustado para 1 dia de DI ·
+#   (B) Perna Funding (RDOR Paga DI + 0.50%) ajustado para 1 dia de DI ·
+#   (A + B) Valor Total de Liquidação (RDOR Recebe em D+1)
+#
+#   * o CETIP ID e o B3 ID — o contrato se acha no Live Position por ele;
+#   * o NOCIONAL recomprado e acoes x strike original (o campo 11 do SWAP 0014);
+#   * as pernas vem na visao de QUEM o rotulo nomeia ("RDOR Recebe": o valor e
+#     o que o cliente ganha nela). A perna que ele RECEBE e a curva DELE, a que
+#     ele PAGA e a NOSSA; o que cada curva acumulou e o valor com o sinal de quem
+#     a recebe, e o FATOR e 1 + acumulado / nocional (8 casas) — com os dois a B3
+#     refaz o caixa: nocional x (fator nosso − fator deles) = o (A + B) do banco;
+#   * o (A + B) e o CAIXA, e o `Result` leva o sinal do BANCO (o cliente recebe
+#     = o banco paga = negativo); o "D+n" do rotulo da a liquidacao;
+#   * a data da recompra e a do ASSUNTO ("(20-Oct-26)");
+#   * a parcial NAO mantem os premios (a planilha da mesa: `IF(TOTAL;"  ";"01")`).
+
+_TRS_ROTULOS = (
+    # (prefixo do rotulo normalizado, chave)
+    ('unwindparcialtotal', 'tipo'), ('unwindtotalparcial', 'tipo'),
+    ('datadeexecucaooriginal', 'trade'), ('originaltradedate', 'trade'),
+    ('dealid', 'deal'), ('instrumentoid', 'instr'), ('instrumentid', 'instr'),
+    ('cetipid', 'cetip'), ('b3id', 'cetip'),
+    ('numerodeacoes', 'acoes'), ('quantidadedeacoes', 'acoes'), ('numberofshares', 'acoes'),
+    ('strikeoriginal', 'strike'), ('originalstrike', 'strike'),
+    ('precodeunwind', 'preco'), ('unwindprice', 'preco'),
+)
+_BANCO_RE = re.compile(r'\b(JPM|JPMC|JPMORGAN|J P MORGAN|BANCO|BANK)\b')
+_VERBO_RE = re.compile(r'^(.*?)\b(RECEBE|RECEIVES|RECEIVE|PAGA|PAYS|PAY)\b')
+_ASSUNTO_DATA_RE = re.compile(r'\((\d{1,2}-[A-Za-z]{3}-\d{2,4})\)')
+_PERNA_RE = re.compile(r'^\(\s*([AB])\s*\)')
+_TOTAL_RE = re.compile(r'^\(\s*A\s*\+\s*B\s*\)', re.I)
+
+
+def _quem_e_verbo(rotulo):
+    """('cliente'|'banco', 'recebe'|'paga') do parentese do rotulo — "(RDOR
+    Recebe)", "(RDOR Paga DI + 0.50%)", "(JPM Receives)" —, ou None."""
+    for trecho in re.findall(r'\(([^()]*)\)', str(rotulo or '')):
+        m = _VERBO_RE.match(norm_nome(trecho))
+        if m and m.group(1).strip():
+            quem = 'banco' if _BANCO_RE.search(m.group(1)) else 'cliente'
+            return quem, ('recebe' if m.group(2).startswith('RECE') else 'paga')
+    return None
+
+
+def _outro(quem):
+    return 'banco' if quem == 'cliente' else 'cliente'
+
+
+def linhas_do_recap_swap_trs(tabelas, assunto=''):
+    """(linhas, avisos) do recap de recompra do TRS da EDG, ou None quando
+    nenhuma tabela tem as linhas dele (`CETIP ID` + `Número de ações`)."""
+    dia = None
+    m = _ASSUNTO_DATA_RE.search(str(assunto or ''))
+    if m:
+        dia = data_iso(m.group(1))
+    for t in tabelas or []:
+        rot = [(texto(r[0]) if r else '') for r in t or []]
+        chaves = {}
+        pernas, total = {}, None
+        for i, r0 in enumerate(rot):
+            n = norm(r0)
+            if not n:
+                continue
+            if _TOTAL_RE.match(r0) or n.startswith('abvalortotal') or 'valortotaldeliquidacao' in n:
+                total = i
+                continue
+            mp = _PERNA_RE.match(r0)
+            if mp:
+                campo = ('EquityLeg' if 'equity' in n else 'FundingLeg' if 'funding' in n
+                         else ('EquityLeg' if mp.group(1).upper() == 'A' else 'FundingLeg'))
+                pernas[campo] = i
+                continue
+            for pref, k in _TRS_ROTULOS:
+                if n.startswith(pref) and k not in chaves:
+                    chaves[k] = i
+                    break
+        if 'cetip' not in chaves or 'acoes' not in chaves:
+            continue
+        cab = next((r for r in t if r and norm(r[0]) == 'tranche'), t[0])
+        largura = max(len(r) for r in t)
+        avisos, linhas = [], []
+        lados = {}
+        visoes = set()
+        for campo, i in pernas.items():
+            qv = _quem_e_verbo(rot[i])
+            if qv is not None:
+                visoes.add(qv[0])
+                lados[campo] = qv[0] if qv[1] == 'recebe' else _outro(qv[0])
+        visao = visoes.pop() if len(visoes) == 1 else None
+        if visao:
+            lados['visao'] = visao
+        qv_total = _quem_e_verbo(rot[total]) if total is not None else None
+        d_mais = re.search(r'D\s*\+\s*(\d+)', rot[total], re.I) if total is not None else None
+
+        def cel(r, j):
+            row = t[r] if r is not None and r < len(t) else []
+            return row[j] if j < len(row) else ''
+
+        for j in range(1, largura):
+            nome = texto(cel(t.index(cab), j)) if cab in t else ''
+            if norm(nome) == 'total':
+                continue
+            contrato = texto(cel(chaves['cetip'], j))
+            if not contrato and not texto(cel(chaves['acoes'], j)):
+                continue
+            num = re.sub(r'\D', '', nome) or str(j)
+            linha = {'_sheet_row': int(num)}
+            if not contrato:
+                avisos.append(aviso('unwind_recap_no_cetip',
+                                    'Tranche %s: the e-mail has no CETIP ID' % (nome or j),
+                                    linha=int(num)))
+                continue
+            linha['Contract'] = contrato
+            for k, campo in (('deal', 'DealID'), ('instr', 'InstrumentID')):
+                v = texto(cel(chaves.get(k), j)) if k in chaves else ''
+                if v:
+                    linha[campo] = v
+            tipo = tipo_informado(cel(chaves.get('tipo'), j)) if 'tipo' in chaves else None
+            if tipo:
+                linha['UnwindType'] = 'Total' if tipo == 'total' else 'Partial'
+                if tipo == 'parcial':
+                    linha['KeepPremium'] = 'Não'
+            d = data_iso(cel(chaves.get('trade'), j)) if 'trade' in chaves else None
+            if d:
+                linha['TradeDate'] = d
+            if dia:
+                linha['UnwindDate'] = dia
+            for k, campo, taxa in (('acoes', 'Shares', False), ('strike', 'Strike', True),
+                                   ('preco', 'UnwindPrice', True)):
+                v = numero(cel(chaves.get(k), j), taxa=taxa) if k in chaves else None
+                if v is not None:
+                    linha[campo] = v
+            for campo, i in pernas.items():
+                v = numero(cel(i, j))
+                if v is not None:
+                    linha[campo] = v
+            if lados:
+                linha['LegSides'] = dict(lados)
+            mudou = set()
+            tv = numero(cel(total, j)) if total is not None else None
+            if tv is not None and qv_total is not None:
+                quem, verbo = qv_total
+                recebe = tv if verbo == 'recebe' else -tv
+                linha['Result'] = round(recebe if quem == 'banco' else -recebe, 2)
+                mudou.add('Result')
+            if d_mais:
+                linha['_d_mais'] = int(d_mais.group(1))
+            recalcular_swap(linha, mudou)
+            if 'FactorOurs' not in linha or 'Result' not in linha:
+                avisos.append(aviso('unwind_recap_no_sign',
+                                    'Tranche %s: could not tell whether the bank pays or receives'
+                                    % num, linha=int(num)))
+            linhas.append(linha)
+        return linhas, avisos
+    return None
+
+
+def recalcular_swap(linha, mudou=()):
+    """O nocional, os fatores e o caixa do swap a partir do que a linha TEM
+    (§657) — no import do recap e no Edit que muda acoes, strike, pernas ou
+    papel. O que a pessoa digitou no MESMO Save vence (`mudou`): nocional,
+    Result e fatores editados a mao ficam, e o Check confere.
+
+      nocional = acoes x strike original;
+      fator de cada curva = 1 + acumulado / nocional (o acumulado e o valor da
+        perna com o sinal de quem RECEBE a curva — `LegSides`);
+      Result (o banco) = a soma das pernas na visao do banco;
+      Factor Leg 1/2 = o fator da Ponta 1 e o da Ponta 2, pelo papel.
+
+    O nocional e o caixa so se refazem VAZIOS ou quando o que os forma mudou
+    (acoes/strike; as pernas): o Edit so do papel nao troca o (A + B) do
+    e-mail pela soma das pernas, que difere dele no centavo. Muta e devolve a
+    linha."""
+    mudou = set(mudou or ())
+
+    def _vazio(c):
+        return linha.get(c) in (None, '')
+
+    q, k = numero(linha.get('Shares')), numero(linha.get('Strike'), taxa=True)
+    if q is not None and k is not None and 'UnwoundNotional' not in mudou and \
+            (_vazio('UnwoundNotional') or mudou & {'Shares', 'Strike'}):
+        linha['UnwoundNotional'] = round(abs(q) * k, 2)
+    vr = numero(linha.get('UnwoundNotional'))
+    lados = linha.get('LegSides') or {}
+    visao = lados.get('visao')
+    fatores, valores = {}, []
+    if visao in ('cliente', 'banco'):
+        for campo in ('EquityLeg', 'FundingLeg'):
+            v, quem = numero(linha.get(campo)), lados.get(campo)
+            if v is None or quem not in ('cliente', 'banco'):
+                continue
+            valores.append(v)
+            if vr:
+                acumulado = v if quem == visao else -v
+                fatores[quem] = round(1.0 + acumulado / abs(vr), 8)
+    if 'banco' in fatores and 'cliente' in fatores:
+        linha['FactorOurs'], linha['FactorTheirs'] = fatores['banco'], fatores['cliente']
+    if len(valores) == 2 and 'Result' not in mudou and \
+            (_vazio('Result') or mudou & {'EquityLeg', 'FundingLeg'}):
+        soma = valores[0] + valores[1]
+        linha['Result'] = round(soma if visao == 'banco' else -soma, 2)
+    papel = papel_swap(linha.get('Role'))
+    nosso = numero(linha.get('FactorOurs'), taxa=True)
+    deles = numero(linha.get('FactorTheirs'), taxa=True)
+    if papel and nosso is not None and deles is not None and not (mudou & {'FactorLeg1', 'FactorLeg2'}):
+        linha['FactorLeg1'], linha['FactorLeg2'] = (nosso, deles) if papel == '00' else (deles, nosso)
+    return linha
+
+
+# O leitor de e-mail PROPRIO de cada pagina (`catalog` -> `recap`): recebe as
+# tabelas e o assunto.
+LEITORES_RECAP = {'swap-trs': linhas_do_recap_swap_trs}
+
+
 # As recompras do catálogo que têm esteira e Termo de Resilição (mesa,
 # 28/09/2026): pasta da página -> o source da esteira (o Product Type do
 # Pending Confirmation).
@@ -550,6 +771,8 @@ _DA_POSICAO = (
     ('DealID', 'deal_id', 'text'),
     ('Counterparty', 'counterparty', 'name'),
     ('TaxID', 'taxid', 'doc'),
+    # a NOSSA entidade, dona da conta (o nome do Reference Data no b3-accounts)
+    ('Party', 'party', 'name'),
     ('OriginalNotional', 'original', 'num'),
     ('UnwoundBefore', 'before', 'num'),
     ('Strike', 'strike', 'rate'),
@@ -900,6 +1123,31 @@ def _premio(linha, page):
     return True, None
 
 
+def _fatores(linha):
+    """O caixa refeito pelos FATORES (§657): nocional x (fator nosso − fator
+    deles), com o nosso e o deles pelo papel (Ponta 1 = Factor Leg 1). E a
+    conta que a B3 faz com o SWAP 0014 — o que o arquivo leva tem de dar o
+    caixa combinado. A tolerancia e a do arredondamento dos fatores na 8a
+    casa (nocional x 1e-8 em cada um), mais o centavo."""
+    vr = numero(linha.get('UnwoundNotional'))
+    f1 = numero(linha.get('FactorLeg1'), taxa=True)
+    f2 = numero(linha.get('FactorLeg2'), taxa=True)
+    papel = papel_swap(linha.get('Role'))
+    res = numero(linha.get('Result'))
+    faltam = [n for n, v in (('UnwoundNotional', vr), ('FactorLeg1', f1), ('FactorLeg2', f2),
+                             ('Role', papel), ('Result', res)) if v is None]
+    if faltam:
+        return None, aviso('unwind_check_missing', 'Missing to check the factors: '
+                           + ', '.join(faltam), teste='fatores', campos=', '.join(faltam))
+    nosso, deles = (f1, f2) if papel == '00' else (f2, f1)
+    calc = abs(vr) * (nosso - deles)
+    if abs(calc - res) > TOLERANCIA + abs(vr) * 2e-8:
+        return False, aviso('unwind_factor_mismatch',
+                            'Settlement amount does not match notional x (our factor - their factor)',
+                            informado=res, calculado=round(calc, 2))
+    return True, None
+
+
 def conferir(linha, page):
     """(veredito, avisos). `OK` so quando TODAS as conferencias da pagina
     rodaram e fecharam; uma que nao fecha e `NOK`; uma que nao pode rodar (falta
@@ -912,6 +1160,8 @@ def conferir(linha, page):
             r, a = _termo(linha, page)
         elif teste == 'premio':
             r, a = _premio(linha, page)
+        elif teste == 'fatores':
+            r, a = _fatores(linha)
         else:
             r, a = None, aviso('unwind_check_unknown', 'Unknown check ' + teste, teste=teste)
         resultados.append(r)
@@ -929,7 +1179,9 @@ def conferir(linha, page):
 # O que, mudado no Edit, refaz as contas da linha (`commands._refazer_calculos`).
 CAMPOS_ECONOMICOS = ('OriginalNotional', 'UnwoundBefore', 'UnwoundNotional', 'Strike',
                      'TerminationRate', 'FXRate', 'PreFWDRate', 'DU', 'Currency',
-                     'UnwindDate', 'SettlementDate', 'MaturityDate')
+                     'UnwindDate', 'SettlementDate', 'MaturityDate',
+                     # o swap (§657): acoes, pernas e papel refazem nocional e fatores
+                     'Shares', 'EquityLeg', 'FundingLeg', 'Role')
 
 
 def mesmo_valor(a, b):
@@ -941,7 +1193,7 @@ def mesmo_valor(a, b):
     return texto(a) == texto(b)
 
 
-_DIVERGENCIAS = ('unwind_result_mismatch', 'unwind_amount_mismatch')
+_DIVERGENCIAS = ('unwind_result_mismatch', 'unwind_amount_mismatch', 'unwind_factor_mismatch')
 
 
 def resultado_calculado(avisos):
@@ -1011,7 +1263,14 @@ def _posicional(layout, valores, obrigatorios, faltas):
 
 
 def total_ou_parcial(linha):
-    """'total', 'parcial' ou None (nao da para dizer): total e o saldo ZERAR."""
+    """'total', 'parcial' ou None (nao da para dizer): total e o saldo ZERAR.
+    Sem saldo para conferir, vale o que o e-mail DISSE (`UnwindType`, o
+    "Unwind Parcial/Total" do recap do TRS, §657)."""
+    tp = total_ou_parcial_pelo_saldo(linha)
+    return tp if tp is not None else tipo_informado(linha.get('UnwindType'))
+
+
+def total_ou_parcial_pelo_saldo(linha):
     orig = numero(linha.get('OriginalNotional'))
     antes = numero(linha.get('UnwoundBefore'))
     if antes is None and linha.get('PositionFound'):
@@ -1020,6 +1279,30 @@ def total_ou_parcial(linha):
     if None in (orig, antes, agora):
         return None
     return 'total' if (orig - antes - abs(agora)) <= TOLERANCIA else 'parcial'
+
+
+def tipo_informado(v):
+    """`Total`/`Parcial`/`Partial` -> 'total'/'parcial', ou None."""
+    t = norm(v)
+    if t == 'total':
+        return 'total'
+    if t in ('parcial', 'partial'):
+        return 'parcial'
+    return None
+
+
+def papel_pela_conta(nossa, deles):
+    """O PAPEL no swap pela CONTA: '00' (Ponta 1) quando a NOSSA e a de menor
+    numero, '01' (Ponta 2) quando e a maior — o criterio do manual (4.2.12: "a
+    conta do participante que tiver o MENOR numero sera a ponta 01"), o mesmo
+    do 0897 do Swap Bullet (`swap_deal_ticket._ponta`) e da planilha de
+    antecipacao da mesa (`IF(VALUE(nossa)>VALUE(deles);"01";"00")`). None sem
+    as duas contas. Ate 21/10/2026 o papel era "Ponta 1 se a conta Participante
+    da posicao e nossa", o que so acerta quando a nossa e a menor (§657)."""
+    a, b = digitos(nossa).lstrip('0'), digitos(deles).lstrip('0')
+    if not a or not b:
+        return None
+    return '01' if int(a) > int(b) else '00'
 
 
 def papel_swap(v):
@@ -1060,18 +1343,26 @@ SWAP_REGISTRO = (
 
 
 def campos_swap_0014(linha, participante, hoje_ymd):
-    """SWAP 0014 (`swap-antecipacao`, §4.2.10). O valor para antecipacao OU os
-    dois fatores; `Mantem Premios` so na antecipacao PARCIAL (o manual: "nao deve
-    ser preenchido em caso de antecipacao total")."""
+    """SWAP 0014 (`swap-antecipacao`, §4.2.10) na forma da planilha de
+    antecipacao da mesa (§657): o valor para antecipacao e o NOCIONAL que sai
+    do contrato (`UnwoundNotional`; no TRS, acoes x strike original) com os
+    DOIS fatores; a Data Antecipacao e o dia em que o arquivo e gerado (o
+    `TODAY()` da planilha — o recap chega no fim da tarde e o arquivo vai no
+    dia seguinte, que e o D+1 da liquidacao), e a Data de Liquidacao (13,
+    opcional) vai em branco, como na planilha. `Mantem Premios` so na
+    antecipacao PARCIAL (o manual: "nao deve ser preenchido em caso de
+    antecipacao total")."""
     faltas = []
     papel = papel_swap(linha.get('Role'))
     if papel is None:
         faltas.append('5 Papel (Role: %s)' % (linha.get('Role') or '-'))
     f1 = numero(linha.get('FactorLeg1'), taxa=True)
     f2 = numero(linha.get('FactorLeg2'), taxa=True)
-    valor = numero(linha.get('Result'))
-    if valor is None and (f1 is None or f2 is None):
-        faltas.append('11 Valor Para Antecipação (or 7/8 factors)')
+    if f1 is None or f2 is None:
+        faltas.append('7/8 Fator para Antecipação (Factor Leg 1 / Factor Leg 2)')
+    valor = numero(linha.get('UnwoundNotional'))
+    if valor is None:
+        faltas.append('11 Valor Para Antecipação (Unwound Notional)')
     mantem = None
     tp = total_ou_parcial(linha)
     if tp is None:
@@ -1081,12 +1372,10 @@ def campos_swap_0014(linha, participante, hoje_ymd):
         mantem = _sim_nao(linha.get('KeepPremium'))
         if mantem is None:
             faltas.append('12 Mantém Prêmios (Keep Premium is required on a partial unwind)')
-    antecip = _ymd(linha.get('UnwindDate')) or hoje_ymd
     reg = _posicional(SWAP_REGISTRO, {
         '1': 'SWAP', '2': '1', '3': '0014', '4': linha.get('Contract'), '5': papel,
-        '6': linha.get('MyNumber'), '7': f1, '8': f2, '9': antecip, '10': '',
-        '11': None if valor is None else abs(valor), '12': mantem,
-        '13': _ymd(linha.get('SettlementDate')) or '',
+        '6': linha.get('MyNumber'), '7': f1, '8': f2, '9': hoje_ymd, '10': '',
+        '11': None if valor is None else abs(valor), '12': mantem, '13': '',
     }, ('4', '6', '9'), faltas)
     hdr = _posicional(SWAP_HEADER, {'1': 'SWAP', '2': '0', '3': '0014', '4': participante,
                                     '5': hoje_ymd, '6': '00001', '7': ''}, ('4',), faltas)

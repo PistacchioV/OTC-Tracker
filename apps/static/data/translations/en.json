@@ -3063,5 +3063,15 @@
   "nd-card-dblclick": "Double-click to preview the B3 files",
   "nd-card-empty": "No operations for these filters.",
   "nd-card-party": "Party",
-  "nd-card-counterparty": "Counterparty"
+  "nd-card-counterparty": "Counterparty",
+  "unw-col-instrument-id": "Instrument ID",
+  "unw-col-party": "Party",
+  "unw-col-total-partial": "Total / Partial",
+  "unw-col-shares": "Shares",
+  "unw-col-original-strike": "Original Strike",
+  "unw-col-unwind-price": "Unwind Price",
+  "unw-col-equity-leg": "Equity Leg",
+  "unw-col-funding-leg": "Funding Leg",
+  "unw-col-unwind-settlement": "Unwind → Settlement",
+  "unw-preview-hint-cards": "Double-click a card to preview the B3 file"
 }

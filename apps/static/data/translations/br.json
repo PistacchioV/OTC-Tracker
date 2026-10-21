@@ -3063,5 +3063,15 @@
   "nd-card-dblclick": "Duplo clique para ver os arquivos da B3",
   "nd-card-empty": "Nenhuma operação para estes filtros.",
   "nd-card-party": "Parte",
-  "nd-card-counterparty": "Contraparte"
+  "nd-card-counterparty": "Contraparte",
+  "unw-col-instrument-id": "Instrumento ID",
+  "unw-col-party": "Parte",
+  "unw-col-total-partial": "Total / Parcial",
+  "unw-col-shares": "Ações",
+  "unw-col-original-strike": "Strike Original",
+  "unw-col-unwind-price": "Preço de Unwind",
+  "unw-col-equity-leg": "Perna Equity",
+  "unw-col-funding-leg": "Perna Funding",
+  "unw-col-unwind-settlement": "Recompra → Liquidação",
+  "unw-preview-hint-cards": "Duplo clique num card para ver o arquivo da B3"
 }

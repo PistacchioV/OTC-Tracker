@@ -270,16 +270,20 @@ def _swap(row):
                'antecipado': n('Valor Antecipado'), 'ident': n('Código Identificador'),
                'curva': (n('Curva Parte'), n('Curva Contraparte'))}
     if R._b3_account_le(cel['parte']):
-        nossa, deles, doc, papel, curvas, aviso_conta = (
-            cel['parte'], cel['cp'], cel['doc_cp'], 'Ponta 1', cel['curva'], None)
+        nossa, deles, doc, curvas, aviso_conta = (
+            cel['parte'], cel['cp'], cel['doc_cp'], cel['curva'], None)
     elif R._b3_account_le(cel['cp']):
-        nossa, deles, doc, papel, curvas, aviso_conta = (
-            cel['cp'], cel['parte'], cel['doc_parte'], 'Ponta 2', cel['curva'][::-1], None)
+        nossa, deles, doc, curvas, aviso_conta = (
+            cel['cp'], cel['parte'], cel['doc_parte'], cel['curva'][::-1], None)
     else:
-        nossa, deles, doc, papel, curvas = cel['parte'], cel['cp'], cel['doc_cp'], '', cel['curva']
+        nossa, deles, doc, curvas = cel['parte'], cel['cp'], cel['doc_cp'], cel['curva']
         aviso_conta = domain.aviso('unwind_party_not_ours',
                                    'Neither account of the swap is in B3 Accounts (%s / %s)'
                                    % (cel['parte'], cel['cp']), conta=cel['parte'])
+    # O PAPEL e o da CONTA MENOR (manual 4.2.12, a planilha da mesa — §657),
+    # nao "a Participante e nossa": so coincidem quando a nossa e a menor.
+    papel = {'00': 'Ponta 1', '01': 'Ponta 2'}.get(
+        domain.papel_pela_conta(nossa, deles) if not aviso_conta else None, '')
     aviso_cpty = None
     nome_doc = R._lp_cpty_name_by_taxid(doc) if domain.digitos(doc) else ''
     if R._b3_is_omnibus(deles):
@@ -297,6 +301,8 @@ def _swap(row):
     return {
         'contract': cel['contrato'], 'party_account': cel['parte'], 'cpty_account': cel['cp'],
         'our_account': nossa, 'their_account': deles, 'role': papel,
+        # a NOSSA entidade: o nome dela no Reference Data (b3-accounts), senao a LE
+        'party': (R._b3_account_refdata_name(nossa) or R._b3_account_le(nossa)) if not aviso_conta else '',
         'counterparty': nome, 'taxid': R._lp_fmt_cnpj(doc) if domain.digitos(doc) else '',
         'original': _sf.numero_da_posicao(cel['base']),
         'before': _sf.numero_da_posicao(cel['antecipado']) or 0.0,
