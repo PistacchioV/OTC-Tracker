@@ -2295,11 +2295,52 @@ def _apply_groups(groups, pend_pay, pend_rec, settled):
         moved = [pools[tbl][i] for tbl, i in picks]
         for tbl, i in sorted(picks, key=lambda p: -p[1]):
             pools[tbl].pop(i)
-        for r in moved:
-            settled.append(dict(r, status='Settled', manual_match=g.get('id', ''),
-                                matched_by=g.get('user', ''), matched_at=g.get('at', '')))
+        settled.append(_manual_settled_row(g, moved))
         applied += 1
     return applied
+
+
+def _manual_settled_row(group, moved):
+    """O grupo do match manual como UMA linha do Settled (mesa, 21/10/2026).
+
+    Eram as linhas soltas, uma por perna — a do JPM sem cliente e a do cliente
+    sem JPM —, e o Settled mostrava como duas liquidações o que é um casamento
+    só. A linha junta: o lado JPM (contraparte, produto, total) e o lado do
+    cliente (nome, total, sistema e conta), com a diferença Cliente − JPM como
+    no `_detail_row`. As pernas originais vão inteiras em `manual_rows`: o que
+    cada uma era não se perde."""
+    def soma(campo):
+        vals = [_num(r.get(campo)) for r in moved if r.get(campo) not in ('', None)]
+        return round(sum(vals), 2) if vals else ''
+
+    def juntos(campo, linhas):
+        vistos = []
+        for r in linhas:
+            v = str(r.get(campo) or '').strip()
+            if v and v not in vistos:
+                vistos.append(v)
+        return ' / '.join(vistos)
+
+    jpm = [r for r in moved if r.get('jpm_value') not in ('', None)]
+    cli = [r for r in moved if r.get('client_value') not in ('', None)]
+    lado = jpm or cli
+    jv, cv = soma('jpm_value'), soma('client_value')
+    return {
+        'le': juntos('le', lado) or 'JPM',
+        'product': juntos('product', lado),
+        'jpm_cpty': juntos('jpm_cpty', jpm),
+        'client': juntos('client', cli),
+        'pay_receive': juntos('pay_receive', lado),
+        'jpm_value': jv, 'client_value': cv,
+        'sistema': juntos('sistema', cli), 'snumconta': juntos('snumconta', cli),
+        'difference': round(cv - jv, 2) if jv != '' and cv != '' else (cv if jv == '' else -jv),
+        'status': 'Settled',
+        'comment': juntos('comment', moved),
+        'branch': next((r.get('branch') for r in moved if r.get('branch')), False),
+        'manual_match': group.get('id', ''), 'matched_by': group.get('user', ''),
+        'matched_at': group.get('at', ''),
+        'manual_rows': [dict(r) for r in moved],
+    }
 
 
 def _apply_manual_matches(recon_date, pend_pay, pend_rec, settled):
@@ -2384,7 +2425,38 @@ def _manual_match_locked(recon_date, pay_idx, rec_idx, user, sid):
                          hist.setdefault('pending_receivement', []), hist.setdefault('settled', [])):
             routes._atomic_write_json(hp, hist)
             data = hist
-    return data, group
+    # A tela recebe o dia como o `load_last` o daria: num dia gravado antes da
+    # linha única, os matches anteriores também saem numa linha.
+    return _junta_manuais(data), group
+
+
+def _junta_manuais(data):
+    """O dia gravado ANTES da linha única do match manual (21/10/2026) guarda as
+    pernas soltas no Settled. Para a tela e o e-mail do End process elas viram a
+    mesma linha que o `_manual_settled_row` monta hoje — sem regravar nada (o
+    próximo Run já grava a linha única). Devolve o payload."""
+    settled = (data or {}).get('settled')
+    if not settled or not any(r.get('manual_match') and not r.get('manual_rows') for r in settled):
+        return data
+    grupos, ordem = {}, []
+    for r in settled:
+        mid = r.get('manual_match') if not r.get('manual_rows') else None
+        if mid:
+            if mid not in grupos:
+                grupos[mid] = []
+                ordem.append(('g', mid))
+            grupos[mid].append(r)
+        else:
+            ordem.append(('r', r))
+    out = []
+    for tipo, v in ordem:
+        if tipo == 'r':
+            out.append(v)
+            continue
+        linhas = grupos[v]
+        out.append(_manual_settled_row({'id': v, 'user': linhas[0].get('matched_by', ''),
+                                        'at': linhas[0].get('matched_at', '')}, linhas))
+    return dict(data, settled=out)
 
 
 def load_last(recon_date=''):
@@ -2394,12 +2466,12 @@ def load_last(recon_date=''):
         p = _history_path(recon_date)
         if p and _store.exists(p):
             try:
-                return _store.read(p)
+                return _junta_manuais(_store.read(p))
             except Exception:
                 pass
     data = _load_flat(recon_date)
     if data:
-        return data
+        return _junta_manuais(data)
     return {'success': True, 'summary': [], 'pending_payment': [],
             'pending_receivement': [], 'settled': []}
 
