@@ -27637,3 +27637,30 @@ na impressão.
 `check_fab_favorites.py` (novo, 27 checks). O Guia do Usuário (3.5) explica o
 botão; a 5.11 ganhou o recap do TRS e os cards das recompras de swap (§657) e o
 Trade Date editável (§656).
+
+## §659 — Favoritos: o botão vai para QUALQUER lugar, nasce ao lado da barra do topo e agrupa como o menu (2026-10-21)
+
+A mesa, sobre o §658: "não é possível levar o botão para qualquer lugar? só nas
+bordas laterais?"; "as páginas favoritadas segregadas por blocos igual no
+sidenav"; "o lugar inicial do botão do lado esquerdo do topbar".
+
+- **Posição livre.** Solto, o botão FICA onde foi solto (dentro da janela) —
+  não encosta mais na borda. `__OTC_FAB_POS__` passou a `{x, y}` em FRAÇÃO da
+  área útil da janela (sobrevive a outro tamanho de janela); o formato do §658
+  (`side` + `y`) vira a borda equivalente.
+- **Lugar inicial**: sem posição gravada, 12px à ESQUERDA da barra do topo
+  (`.app-topbar`), centrado na altura dela; um `ResizeObserver` na barra o
+  acompanha quando ela muda de largura (idioma, janela) até a pessoa o arrastar.
+- **O painel abre para onde há espaço**: com o botão no terço de cima da janela
+  (o lugar inicial), ABAIXO dele; no de baixo, ACIMA; no meio, ao LADO — alinhado
+  à borda do botão do lado em que cabe.
+- **Blocos como o menu lateral** (`menuIndex`): os favoritos se agrupam pelos
+  títulos de seção do PRIMEIRO nível do menu (Main, Apps, Reconciliations,
+  Documentation, Products, Regulatory, Data Base), na ordem do menu, e dentro do
+  bloco na ordem do menu (não na de entrada); o título do bloco tem o desenho do
+  título de seção do menu (`.otc-fab__group`). Página fora do menu (a de uma
+  iniciativa) vai em "Others", no fim.
+
+`check_fab_favorites.py` (32 checks): o lugar inicial ao lado da barra e o
+painel abaixo, o arrasto ao MEIO da página que fica ali, o painel que cabe na
+janela, o formato antigo convertido, e a ordem em blocos.
