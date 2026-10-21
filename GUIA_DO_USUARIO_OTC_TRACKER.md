@@ -155,9 +155,9 @@ O menu é em **níveis**: um item com **›** à direita tem submenu. Clicar nel
 
 > Os itens marcados **(em construção)** aparecem no menu mas ainda não têm tela: clicar neles devolve uma página de "não encontrado". Os marcados **(tela pronta; importação em construção)** abrem normalmente, com a grade e as colunas do produto, mas ainda não importam nem enviam — a tela avisa isso em vez de falhar. A lista completa está no anexo 18.3.
 
-**Favoritos — o botão "+" flutuante.** Em toda tela há um botão redondo com um **+** por cima da página, como o do iPad. Clique nele para abrir os **Favoritos**: **Favoritar esta página** guarda a tela em que você está (a estrela fica acesa), e a lista abaixo leva direto a qualquer favorito — com o nome e o caminho do menu. Para tirar um favorito, passe o mouse sobre ele e clique no **×** (o aviso preto que aparece tem **Desfazer**). Os favoritos são **seus** e ficam gravados no sistema: aparecem iguais em qualquer máquina em que você entrar.
+**Favoritos — o botão "+" flutuante.** Em toda tela há um botão redondo com um **+** por cima da página, como o do iPad — de início ao lado esquerdo da barra superior. Clique nele para abrir os **Favoritos**: **Favoritar esta página** guarda a tela em que você está (a estrela fica acesa), e a lista leva direto a qualquer favorito, **separada nos mesmos blocos do menu lateral** (Products, Data Base…) e na ordem do menu, com o nome e o caminho de cada tela. O que não está no menu (a página de uma iniciativa) aparece em **Others**. Para tirar um favorito, passe o mouse sobre ele e clique no **×** (o aviso preto que aparece tem **Desfazer**). Os favoritos são **seus** e ficam gravados no sistema: aparecem iguais em qualquer máquina em que você entrar.
 
-O botão **se arrasta**: segure e leve para onde ele não atrapalhe; ao soltar, ele encosta na borda mais perto e fica naquele lugar nas próximas telas. Parado, ele fica mais transparente. **Esc** ou um clique fora fecham o painel.
+O botão **se arrasta para qualquer lugar da tela**: segure e leve para onde ele não atrapalhe; ele fica onde você soltar, também nas próximas telas. Parado, ele fica mais transparente. **Esc** ou um clique fora fecham o painel.
 
 ### 3.6. Por que uma tela não aparece no seu menu
 

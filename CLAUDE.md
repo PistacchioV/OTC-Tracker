@@ -1145,10 +1145,14 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   foco chama `otcFocus.start`, nunca conta tempo por conta própria.
 - **Os FAVORITOS são o botão flutuante** (`window.otcFab`, otc.js §3f, mesa
   21/10/2026, §658): o "AssistiveTouch" do iPad no material da casa — o botão
-  de vidro redondo com o "+" (vira "×" aberto), que se ARRASTA (captura no
-  `pointerdown`; solto, encosta na borda mais perto; `__OTC_FAB_POS__` guarda
-  borda + altura em FRAÇÃO da janela) e esmaece parado. O painel favorita a
-  página atual e lista os favoritos: a lista é do SID no documento da User
+  de vidro redondo com o "+" (vira "×" aberto), que se ARRASTA para QUALQUER
+  lugar e fica onde foi solto (§659; captura no `pointerdown`;
+  `__OTC_FAB_POS__` guarda `x`/`y` em FRAÇÃO da área útil da janela), nasce à
+  ESQUERDA da barra do topo enquanto não há lugar gravado, e esmaece parado. O
+  painel abre abaixo, acima ou ao lado conforme a altura do botão, favorita a
+  página atual e lista os favoritos em BLOCOS como o menu lateral (os títulos
+  de seção do primeiro nível, na ordem do menu — `menuIndex`; fora do menu,
+  "Others"): a lista é do SID no documento da User
   Home (`/api/user-home/favorites`, `domain.clean_favorites`: só caminho deste
   app, sem repetir, até 24) e o navegador guarda uma CÓPIA
   (`otc_favorites_<SID>`) para desenhar sem ir ao share — o servidor é lido
