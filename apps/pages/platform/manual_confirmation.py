@@ -79,7 +79,12 @@ _MC_CONFIRMATION_SOURCES = {'NDF COMM', 'OPTION COMM', 'OPTION', 'NDF FWD START'
                             # A recompra de NDF de Commodities (mesa,
                             # 28/09/2026): o mesmo Termo, a família do backfill
                             # é `Unwind NDF Commodities`.
-                            'UNWIND NDF COMM'}
+                            'UNWIND NDF COMM',
+                            # A Opção de Commodities e o Swap EDG (mesa,
+                            # 21/10/2026): toda recompra contra CLIENTE tem o
+                            # Termo; famílias `Unwind Options Commodities` e
+                            # `Unwind Swap EDG` no backfill.
+                            'UNWIND OPTION COMM', 'UNWIND SWAP'}
 
 
 # LOB da linha espelhada. As duas telas gravavam 'CEM' para tudo, e a mesa de

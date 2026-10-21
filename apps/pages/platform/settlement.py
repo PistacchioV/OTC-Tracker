@@ -563,16 +563,100 @@ def _ops_swap_settling(opb3):
     return titulos, by_titulo
 
 
+def _ops_swap_unwind_rows(settle_ref):
+    """As RECOMPRAS de swap da EDG que liquidam em `settle_ref`, lidas UMA vez
+    para o Trade Level e para o Settlement Advice (mesa, 21/10/2026 — o desenho
+    do NDF de Commodities): a vertical é a autoridade, e o contrato delas sai
+    da leitura do Operations B3 nos dois lugares, senão o mesmo caixa sairia
+    duas vezes.
+
+    O Resultado Bruto é o caixa do e-mail (`Result`, sinal do banco); as duas
+    curvas são as pernas na visão do banco (`curvas_do_banco`, na vertical). O
+    IR é o do SWAP (`_ops_swap_ir_rate`): exceção por cliente, só quando quem
+    recebe é a contraparte, faixa pelo prazo do TRADE até ESTA liquidação — a
+    mesma conta das outras linhas de swap. A perna do FUNDO (o B2B com a
+    Atacama) liquida e fica na tela; sai do documento e da TED (`fundo`)."""
+    from apps.pages import routes
+    try:
+        motor = routes._unwind_engine()
+        unw = motor.swap_edg_settlement_rows(settle_ref) or []
+    except Exception:                                       # noqa: BLE001
+        log.warning('[ops-trade] recompras de swap do dia ficaram de fora:\n%s',
+                    traceback.format_exc())
+        return []
+    alvo = settle_ref.date() if hasattr(settle_ref, 'hour') else settle_ref
+
+    def _data(v):
+        d = routes._parse_date_any(v)
+        return d.date() if hasattr(d, 'hour') else d
+
+    out = []
+    for u in unw:
+        cliente = str(u.get('Counterparty') or '').strip()
+        le = routes._b3_account_le(u.get('PartyAccount'))
+        legal = ((str(routes._ndf_le_row(le).get('NAME', '') or '').strip() if le else '')
+                 or str(u.get('Party') or '').strip() or le or '')
+        bruto = u.get('_settlement')
+        op_dt = _data(u.get('TradeDate'))
+        prazo = (alvo - op_dt).days if op_dt else None
+        rate = _ops_swap_ir_rate(cliente, prazo, _ops_cpty_receives('', bruto))
+        ir = None if (rate is None or bruto is None) else abs(bruto) * rate
+        liq = None if (bruto is None or ir is None) else (bruto - ir if bruto >= 0 else bruto + ir)
+        try:
+            fundo = bool(motor.e_do_fundo(u))
+        except Exception:                                   # noqa: BLE001
+            fundo = False
+        out.append({
+            'contract': str(u.get('Contract') or '').strip(),
+            'internal_id': str(u.get('_chave') or ''),
+            'counterparty': cliente,
+            'legal': legal,
+            'lob': str(u.get('LOB') or 'EDG').strip().upper() or 'EDG',
+            'underlying': str(u.get('InstrumentID') or '').strip().upper(),
+            'trade_date': op_dt, 'maturity': _data(u.get('MaturityDate')), 'prazo': prazo,
+            'original': routes._conf_to_float(u.get('OriginalNotional')),
+            'unwound': routes._conf_to_float(u.get('UnwoundNotional')),
+            'our_curve': str(u.get('OurCurve') or '').strip().upper(),
+            'cpty_curve': str(u.get('CptyCurve') or '').strip().upper(),
+            'curva_banco': u.get('_curva_banco'), 'curva_cliente': u.get('_curva_cliente'),
+            'bruto': bruto, 'rate': rate, 'ir': ir, 'liquido': liq,
+            'fundo': fundo or _ops_is_internal_cpty(cliente),
+            'taxid': str(u.get('TaxID') or ''),
+        })
+    return out
+
+
+def _ops_swap_unwind_trade_row(u, by_titulo):
+    """A recompra de swap como linha do Trade Level (`_ops_swap_unwind_rows`)."""
+    from apps.pages import routes
+    vals = [routes._conf_to_float(r.get('Valor')) for r in by_titulo.get(u['contract'].upper(), [])]
+    vals = [v for v in vals if v is not None]
+    b3 = sum(vals) if vals else None
+    s = u['bruto']
+    diff = None if (s is None or b3 is None) else s - b3
+    return {
+        'status': 'OK' if (diff is not None and abs(diff) <= _OPS_RECON_TOL) else 'Check',
+        'lob': u['lob'], 'counterparty': u['counterparty'], 'settle_type': 'UNWIND',
+        'internal_id': u['internal_id'], 'id_b3': u['contract'], 'product': 'SWAP',
+        'type': u['underlying'],
+        'settlement': _ops_fmt_amt(s), 'settlement_b3': _ops_fmt_amt(b3),
+        'tax_income': _ops_fmt_amt(u['ir']), 'difference': _ops_fmt_amt(diff),
+        '_settle_n': s, '_tax_n': u['ir'], '_b3_n': b3, '_legal': u['legal'],
+        '_no_advice': u['fundo'],
+    }
+
+
 def _ops_swap_trade_rows(settle_ref):
     """Linhas de SWAP do Trade Level para a data de liquidação `settle_ref`."""
     from apps.pages import routes
     ref_dt = datetime(settle_ref.year, settle_ref.month, settle_ref.day)
+    unw = _ops_swap_unwind_rows(settle_ref)
+    unw_contratos = {u['contract'].upper() for u in unw if u['contract']}
     _jp, opb3 = routes._opb3_load(ref_dt)
-    if not opb3:
-        return []
-    titulos, by_titulo = _ops_swap_settling(opb3)
+    titulos, by_titulo = _ops_swap_settling(opb3) if opb3 else ([], {})
+    titulos = [(t, r) for t, r in titulos if t.upper() not in unw_contratos]
     if not titulos:
-        return []
+        return [_ops_swap_unwind_trade_row(u, by_titulo) for u in unw]
 
     # Fontes auxiliares — lidas UMA vez cada, não por linha.
     tipo_maps = routes._opb3_tipo_maps(ref_dt)                       # Título → identificador (LOB)
@@ -764,6 +848,7 @@ def _ops_swap_trade_rows(settle_ref):
             # efeito colateral desta correção.
             '_no_advice': bool(eq) and _ops_is_internal_cpty(counterparty, eq.get('spn', '')),
         })
+    out.extend(_ops_swap_unwind_trade_row(u, by_titulo) for u in unw)
     return out
 
 
@@ -904,6 +989,9 @@ def _ops_opt_trade_rows(settle_ref):
             '_tax_n': r.get('ir'),
             '_b3_n': b3,
             '_legal': r.get('legal', ''),
+            # A recompra contra fundo nosso (o B2B) liquida e fica na tela; sai
+            # só do documento e da TED (mesa, 21/10/2026 — vai para a Intrag).
+            '_no_advice': bool(r.get('no_advice')),
         })
     return out
 

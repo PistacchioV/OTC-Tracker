@@ -1316,18 +1316,22 @@ def build_swap_settlement_emails(rows, headers, headers_premium, ref_date=None):
         name = str(r.get('counterparty', '') or '').strip()
         if not name or _is_lawton(name) or _is_jpmorgan(name):
             continue
-        groups.setdefault((name, _ndf_legal_class(r.get('legal')), bool(r.get('premium'))),
-                          []).append(r)
+        # A RECOMPRA é aviso PRÓPRIO (mesa, 21/10/2026 — a regra do termo e da
+        # opção): nunca neta com o diferencial, tem tabela e assunto dela.
+        groups.setdefault((name, _ndf_legal_class(r.get('legal')), bool(r.get('premium')),
+                           bool(r.get('unwind'))), []).append(r)
 
     drafts = []
-    for (name, le, premium), items in sorted(groups.items()):
+    for (name, le, premium, unwind), items in sorted(groups.items()):
+        # A linha da recompra traz o SEU cabeçalho (`headers`).
         drafts.append(_swap_settlement_email(
             items, name, le, premium, ref_date, cpd,
-            headers_premium if premium else headers))
+            items[0].get('headers') or (headers_premium if premium else headers), unwind=unwind))
     return drafts
 
 
-def _swap_settlement_email(items, contraparte, le_class, premium, ref_date, cpd, headers):
+def _swap_settlement_email(items, contraparte, le_class, premium, ref_date, cpd, headers,
+                           unwind=False):
     bruto = sum(float(t.get('bruto') or 0.0) for t in items)
     ir = sum(float(t.get('ir') or 0.0) for t in items)
     final = sum(float(t.get('liquido') or 0.0) for t in items)
@@ -1400,15 +1404,20 @@ def _swap_settlement_email(items, contraparte, le_class, premium, ref_date, cpd,
              _ep('Vimos confirmar a(s) liquidação(ões) da(s) operação(ões) de derivativos abaixo especificada(s):'))
     html = _email_shell('Liquidação de Operação de Derivativo', ref_date, intro, body_html)
 
-    subject = 'Liquidação de Operação de Derivativo (Swap) - {} - {}'.format(
-        ref_date, _subject_cpty(contraparte, taxid))
+    subject = 'Liquidação de Operação de Derivativo (Swap){} - {} - {}'.format(
+        _UNWIND_SUBJECT_TAG if unwind else '', ref_date, _subject_cpty(contraparte, taxid))
     if premium:
         subject = '(Pagamento de Prêmio) ' + subject
+    if unwind:
+        subject = _UNWIND_SUBJECT_PREFIX + subject
     if le_class == 'MGT':
         subject += ' x JPMORGAN CHASE'
 
-    return {'subject': subject, 'html': html, 'cc': 'Liquidação', 'to': to_emails,
-            'counterparty': contraparte}
+    draft = {'subject': subject, 'html': html, 'cc': 'Liquidação', 'to': to_emails,
+             'counterparty': contraparte}
+    if unwind:
+        draft['importance'] = 'high'
+    return draft
 
 
 # ──────────────────────────────────────────────────────────────────────────

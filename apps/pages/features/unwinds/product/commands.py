@@ -658,8 +658,15 @@ def confirmation_deal(page, linha, ref):
         'UnwoundBRL': abs(res) if res is not None else None,
         'XmlFxRate': (linha or {}).get('FXRate'),
         'XmlCcy': l['MoedaDoContrato'],
+        # O produto RECOMPRADO no XML (`tipoOperacao`): opção e swap se
+        # declaram como as confirmações deles; o termo segue NDF.
+        'XmlTipo': domain.XML_TIPO.get(page.get('dir'), 'NDF'),
         '_page': page['path'],
     })
+    if page.get('dir') == 'Swap/EDG':
+        # A LOB da linha da esteira é a do deal (`_lob_for_source`): sem ela o
+        # swap da EDG cairia na regra por produto, que diz CEM.
+        deal['LOB'] = str((linha or {}).get('LOB') or 'EDG').strip().upper() or 'EDG'
     return deal
 
 
@@ -740,14 +747,21 @@ def termo_carimbar(chaves, ref_date, doc_path, pdf_path, link='', sid=''):
     return achadas
 
 
-def settlement_rows(ref):
-    """As recompras de NDF de Commodities que LIQUIDAM em `ref` (a regra da
-    Fase 1: entram desde o IMPORT; sem resultado ou sem direção apurada ficam
-    de fora, avisando). O sinal é o do Summary — negativo é o banco pagando."""
+def settlement_rows(ref, dirs=None):
+    """As recompras do catálogo que LIQUIDAM em `ref` (a regra da Fase 1:
+    entram desde o IMPORT; sem resultado ou sem direção apurada ficam de fora,
+    avisando). O sinal é o do Summary — negativo é o banco pagando.
+
+    `dirs` recorta as páginas: cada liquidação lê SÓ o seu produto — o aviso
+    de termo (e o Pay/Rec, que as lê como COMM TER) o NDF de Commodities, o de
+    opção a Opção de Commodities, o de swap o Swap EDG. Sem o recorte, a
+    recompra de opção entraria no aviso de termo."""
     from datetime import timedelta
     alvo = _dia(ref)
     out = []
     for page in paginas_com_esteira():
+        if dirs is not None and page.get('dir') not in dirs:
+            continue
         for n in range(SETTLEMENT_LOOKBACK_DIAS + 1):
             dia = alvo - timedelta(days=n)
             for l in queries.entries(page, dia.strftime('%Y-%m-%d')):
@@ -764,6 +778,8 @@ def settlement_rows(ref):
                     _R().log.warning('[UNWIND %s] %s fora da liquidação de %s: sem resultado '
                                      'ou sem direção apurada', page['label'], chave(l), alvo)
                     continue
+                banco, cliente = domain.curvas_do_banco(l)
                 out.append(dict(l, _settlement=abs(res) if direcao == 'RECEIVE' else -abs(res),
-                                _chave=chave(l), _page=page['path']))
+                                _chave=chave(l), _page=page['path'],
+                                _curva_banco=banco, _curva_cliente=cliente))
     return out

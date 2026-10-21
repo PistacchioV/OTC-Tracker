@@ -1829,6 +1829,10 @@ def _conf_unwind_legs(deal, subj):
     Sem a taxa não há perna estrangeira que se possa afirmar — a operação fica
     de fora do XML com aviso, como qualquer outra sem strike."""
     brl = _conf_to_float(deal.get('UnwoundBRL'))
+    # O swap é registrado em REAIS: não há perna estrangeira, e o
+    # `_conf_ndf_xml` com a moeda BRL a deixa vazia (a regra do `_conf_swap_legs`).
+    if str(deal.get('XmlCcy') or '').strip().upper() == 'BRL':
+        return (0.0, brl) if brl is not None else None
     # Na recompra de MERCADORIA a taxa que leva os reais à moeda do contrato é
     # o FX da recompra (`XmlFxRate`), não o preço da mercadoria.
     taxa = _conf_to_float(deal.get('XmlFxRate') or deal.get('TerminationRate'))
@@ -1848,6 +1852,18 @@ def _conf_unwind_xml(picked, merc, ref):
     # A moeda é a do grupo no termo de moeda; na recompra de MERCADORIA o grupo
     # é a mercadoria, e a moeda estrangeira é a do contrato (`XmlCcy`).
     ccy = (str(picked[0][0].get('XmlCcy') or '').strip() if picked else '') or merc
-    return _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='Termo_Resilicao',
-                         warn_no_spot=False, legs_fn=_conf_unwind_legs, ccy=ccy,
-                         evento='RE')
+    # O produto RECOMPRADO declara o tipo (mesa, 21/10/2026): a opção de
+    # commodities é `OPTION` e o swap `SWAP`, como as confirmações deles; o
+    # termo (de moeda ou de mercadoria) segue `NDF`.
+    tipos = {str(d.get('XmlTipo') or 'NDF').strip().upper() for d, _s in picked} or {'NDF'}
+    tipo = sorted(tipos)[0]
+    numero, xml, avisos = _conf_ndf_xml(picked, merc, ref, tipo=tipo, prefixo='Termo_Resilicao',
+                                        warn_no_spot=False, legs_fn=_conf_unwind_legs, ccy=ccy,
+                                        evento='RE')
+    if len(tipos) > 1:
+        # Mesma contraparte e mesmo ativo no dia, em produtos diferentes: o
+        # Anexo I lista todos, mas o XML declara UM tipo — dizer, não escolher calado.
+        avisos = list(avisos or []) + [
+            'Este Termo junta recompras de produtos diferentes ({}): o XML saiu como {} — '
+            'confira antes de mandar ao FepWeb.'.format(', '.join(sorted(tipos)), tipo)]
+    return numero, xml, avisos

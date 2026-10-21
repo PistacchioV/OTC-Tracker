@@ -524,8 +524,10 @@ src = (open(os.path.join(ROOT, 'apps', 'pages', 'routes.py'), encoding='utf-8').
               encoding='utf-8').read())
 check('nenhuma linha do Trade Level compara com literal',
       "abs(diff) < 0.01" in src, False)
-check('as tres familias usam a constante',
-      src.count("abs(diff) <= _OPS_RECON_TOL"), 3)
+# Quatro: as tres familias e a linha da RECOMPRA de swap (21/10/2026), que
+# compara com a MESMA constante.
+check('as tres familias e a recompra de swap usam a constante',
+      src.count("abs(diff) <= _OPS_RECON_TOL"), 4)
 
 # Familia sem linha no Trade Level = `na`: nao ha divergencia, ha conta que ainda
 # nao e feita. Pintar de ambar leria como erro de dado.

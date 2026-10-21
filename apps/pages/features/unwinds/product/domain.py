@@ -712,6 +712,33 @@ def recalcular_swap(linha, mudou=()):
     return linha
 
 
+def curvas_do_banco(linha):
+    """(Curva Banco, Curva Cliente) da recompra de swap, na visao do BANCO — as
+    colunas do aviso de liquidacao de swap (mesa, 21/10/2026).
+
+    Cada perna do recap vem na visao de QUEM o rotulo nomeia (`LegSides`, §657)
+    e vale para quem RECEBE aquela curva (a regra do fator em
+    `recalcular_swap`): a perna que o banco recebe e a Curva Banco, como veio;
+    a que o cliente recebe, vista pelo banco, e a Curva Cliente com o sinal
+    trocado. As duas somadas dao o `Result` (o caixa, sinal do banco). Perna
+    que falta fica None — vazio no aviso, nunca zero."""
+    lados = (linha or {}).get('LegSides') or {}
+    visao = lados.get('visao')
+    banco = cliente = None
+    if visao not in ('cliente', 'banco'):
+        return banco, cliente
+    for campo in ('EquityLeg', 'FundingLeg'):
+        v, quem = numero((linha or {}).get(campo)), lados.get(campo)
+        if v is None or quem not in ('cliente', 'banco'):
+            continue
+        recebe = v if quem == visao else -v          # o que QUEM recebe a curva recebe
+        if quem == 'banco':
+            banco = round((banco or 0.0) + recebe, 2)
+        else:
+            cliente = round((cliente or 0.0) - recebe, 2)
+    return banco, cliente
+
+
 # O leitor de e-mail PROPRIO de cada pagina (`catalog` -> `recap`): recebe as
 # tabelas e o assunto.
 LEITORES_RECAP = {'swap-trs': linhas_do_recap_swap_trs}
@@ -719,8 +746,19 @@ LEITORES_RECAP = {'swap-trs': linhas_do_recap_swap_trs}
 
 # As recompras do catálogo que têm esteira e Termo de Resilição (mesa,
 # 28/09/2026): pasta da página -> o source da esteira (o Product Type do
-# Pending Confirmation).
-PAGINAS_COM_TERMO = {'NDF/Commodities': 'UNWIND NDF COMM'}
+# Pending Confirmation). A Opção de Commodities e o Swap EDG entram no mesmo
+# desenho (mesa, 21/10/2026): "tudo que for recompra contra CLIENTE terá o
+# Termo de Resilição; o que for contra Atacama e Lawton tem o arquivo da
+# Intrag" — o MESMO Termo, mesmo modelo e mesmas colunas, só os valores mudam
+# com o produto (`para_o_termo`).
+PAGINAS_COM_TERMO = {'NDF/Commodities': 'UNWIND NDF COMM',
+                     'Options/Commodities': 'UNWIND OPTION COMM',
+                     'Swap/EDG': 'UNWIND SWAP'}
+
+# O que o XML do FepWeb declara no `tipoOperacao` do Termo, pelo produto
+# RECOMPRADO — os mesmos códigos das confirmações de cada um (`OPTION` da opção
+# de commodities, `SWAP` do swap). O termo segue `NDF`, como sempre.
+XML_TIPO = {'Options/Commodities': 'OPTION', 'Swap/EDG': 'SWAP'}
 
 
 def chave_da_esteira(linha):
@@ -733,13 +771,34 @@ def chave_da_esteira(linha):
 
 def para_o_termo(page, linha):
     """A linha no formato que a Fase 1 lê (Termo, esteira): o `AthenaID` é a
-    chave da esteira e a "moeda" do agrupamento é a MERCADORIA — o eixo
-    contraparte × ativo das confirmações de NDF de Commodities (§457)."""
+    chave da esteira e a "moeda" do agrupamento é o ATIVO — o eixo
+    contraparte × ativo das confirmações (§457).
+
+    Os valores mudam com o produto, as colunas do Anexo I não (mesa,
+    21/10/2026):
+      * NDF de Commodities — a MERCADORIA; o recomprado é quantidade;
+      * Opção de Commodities — a mercadoria é o `Underlying` (a página não tem
+        `Commodity`), e o recomprado também é quantidade (unidades): ele vai
+        em `Commodity` para o Termo imprimir só o número, como no termo; a
+        moeda do contrato é o DÓLAR do prêmio (`FXRate` é BRL/USD);
+      * Swap EDG — o recomprado é Valor Base em REAIS (ações × strike), e o
+        eixo é BRL: o swap é registrado em reais."""
     l = dict(linha or {})
+    pasta = (page or {}).get('dir')
+    if pasta == 'Options/Commodities':
+        ativo = texto(l.get('Underlying')).upper()
+        l['Commodity'] = ativo
+        moeda_contrato = 'USD'
+    elif pasta == 'Swap/EDG':
+        ativo = 'BRL'
+        moeda_contrato = 'BRL'
+    else:
+        ativo = (texto(l.get('Commodity')) or texto(l.get('Currency'))).upper()
+        moeda_contrato = texto((linha or {}).get('Currency')).upper()
     l.update({
         'AthenaID': chave_da_esteira(linha),
-        'Currency': (texto(l.get('Commodity')) or texto(l.get('Currency'))).upper(),
-        'MoedaDoContrato': texto((linha or {}).get('Currency')).upper(),
+        'Currency': ativo,
+        'MoedaDoContrato': moeda_contrato,
         'ClientAcronym': '',
         '_page': page['path'],
     })

@@ -126,17 +126,27 @@ check(abs(group['net'] - (-0.40)) < 1e-9, 'soma -1000 - 500,40 + 1500 = -0,40')
 check(len(data['pending_payment']) == 2 and len(data['pending_receivement']) == 1,
       'as três linhas saem das pendências')
 manual = [r for r in data['settled'] if r.get('manual_match') == group['id']]
-check(len(manual) == 3 and all(r['status'] == 'Settled' for r in manual), 'e entram no Settled como Settled')
-check(all(r.get('matched_by') == 'Tester' for r in manual), 'com quem casou')
+# UMA linha por casamento (mesa, 21/10/2026): eram as pernas soltas — a do
+# JPM sem cliente e a do cliente sem JPM —, e o Settled mostrava como várias
+# liquidações o que é um casamento só.
+check(len(manual) == 1 and manual[0]['status'] == 'Settled', 'e entram no Settled como UMA linha Settled')
+m = manual[0] if manual else {}
+check((m.get('jpm_cpty'), m.get('client')) == ('SUZANO SA', 'SUZANO S.A. / SUZANO SA'),
+      'a linha junta o lado JPM e o lado do cliente')
+check((m.get('jpm_value'), m.get('client_value')) == (-1000.0, 999.6),
+      'com o total de cada lado')
+check(abs(m.get('difference', 0) - 1999.6) < 1e-9, 'e a diferenca Cliente - JPM')
+check(len(m.get('manual_rows') or []) == 3, 'as tres pernas originais ficam guardadas na linha')
+check(m.get('matched_by') == 'Tester', 'com quem casou')
 saved = RP._load_flat(DATE, strict=True)
-check(len(saved['settled']) == 3, 'o resultado do dia foi regravado')
+check(len(saved['settled']) == 1, 'o resultado do dia foi regravado')
 
 # 3 · o grupo sobrevive a um novo Run (reaplicado sobre as pendências recalculadas)
 fresh = _seed()   # o Run regrava o dia do zero; o arquivo dos matches não é tocado pelo Run
 MEM[RP._manual_path(DATE)] = {'groups': [group]}
 pp, pr, st = fresh['pending_payment'], fresh['pending_receivement'], fresh['settled']
 n = RP._apply_manual_matches(DATE, pp, pr, st)
-check(n == 1 and len(pp) == 2 and len(pr) == 1 and len(st) == 3, 'Run seguinte reaplica o match')
+check(n == 1 and len(pp) == 2 and len(pr) == 1 and len(st) == 1, 'Run seguinte reaplica o match (uma linha)')
 
 # 4 · grupo cujas linhas sumiram não é aplicado pela metade
 fresh = _seed()
@@ -164,8 +174,31 @@ check(group['kind'] == 'pair' and abs(group['net']) < 1e-6,
       'Σ JPM = Σ Client → casa como pair, diferença zero')
 check([r['client_value'] for r in data['pending_payment']] == [-136927600.63],
       'as três saem do Pending Payment')
-check(len([r for r in data['settled'] if r.get('manual_match') == group['id']]) == 3,
-      'e entram no Settled')
+_um = [r for r in data['settled'] if r.get('manual_match') == group['id']]
+check(len(_um) == 1 and _um[0]['jpm_value'] == -395276712.58 and _um[0]['client_value'] == -395276712.58
+      and _um[0]['difference'] == 0.0 and len(_um[0]['manual_rows']) == 3,
+      'e entram no Settled numa linha so: duas pernas JPM somadas contra a do cliente')
+
+# O dia gravado ANTES da linha unica guarda as pernas soltas: a leitura da tela
+# e do e-mail (`load_last` -> `_junta_manuais`) as junta, sem regravar — o
+# caso do relato (MARFRIG: EQUITIES no JPM, NDF na linha do cliente).
+_antigo = {'settled': [
+    {'jpm_cpty': 'OUTRO', 'jpm_value': -10.0, 'client_value': -10.0, 'status': 'Settled'},
+    {'le': 'JPM', 'product': 'EQUITIES', 'jpm_cpty': 'MARFRIG GLOBAL FOODS S.A.', 'client': '',
+     'jpm_value': 11234828.85, 'client_value': '', 'pay_receive': 'Receive', 'status': 'Settled',
+     'manual_match': 'G1', 'matched_by': 'Ana'},
+    {'le': 'JPM', 'product': 'NDF', 'jpm_cpty': '', 'client': 'MARFRIG GLOBAL FOODS S.A',
+     'jpm_value': '', 'client_value': 11234840.08, 'pay_receive': 'Receive', 'status': 'Settled',
+     'sistema': 'SDConta - conta externa', 'snumconta': '237-2372-270008',
+     'manual_match': 'G1', 'matched_by': 'Ana'}]}
+_j = RP._junta_manuais(_antigo)['settled']
+check(len(_j) == 2 and _j[0]['jpm_cpty'] == 'OUTRO', 'dia antigo: as pernas soltas do grupo viram uma linha, o resto fica')
+check((_j[1]['product'], _j[1]['jpm_cpty'], _j[1]['client'], _j[1]['jpm_value'], _j[1]['client_value'],
+       _j[1]['snumconta'], _j[1]['matched_by']) ==
+      ('EQUITIES', 'MARFRIG GLOBAL FOODS S.A.', 'MARFRIG GLOBAL FOODS S.A', 11234828.85, 11234840.08,
+       '237-2372-270008', 'Ana'), '...com o produto e a contraparte do JPM e o cliente, a conta e os totais')
+check(len(_antigo['settled']) == 3, '...sem mexer no que esta gravado')
+check(RP._junta_manuais(RP._junta_manuais(_antigo))['settled'] == _j, 'juntar de novo nao muda nada')
 
 # O fundo da casa com DUAS grafias (mesa, 21/10/2026): "ATACAMA MULTIMERCADO" no
 # lado JPM e o nome por extenso no extrato. O servidor junta pelo `_norm_cpty`;

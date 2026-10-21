@@ -1605,7 +1605,7 @@
   // as paredes, na ordem da tela. A MINIATURA de cada uma não mora aqui: é o
   // `--w-art` do otc.scss §2b, pela mesma paleta da parede e no tema atual
   // (`data-art`) — escrita aqui, ela tinha uma versão só e não seguia o tema
-  var WALLS = ['ash', 'sand', 'sage', 'aurora', 'smoke', 'tide', 'bloom', 'ember', 'grove', 'dusk'];
+  var WALLS = ['ash', 'sand', 'sage', 'aurora', 'smoke', 'tide', 'bloom', 'ember', 'grove', 'dusk', 'canyon', 'fjord', 'glacier'];
   otcUI.accents = ACCENTS;
   otcUI.walls = WALLS;
   function initAppearance() {

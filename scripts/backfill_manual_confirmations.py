@@ -136,6 +136,14 @@ FAMILIES = {
     'Unwind NDF Commodities': {'root': 'unwinds', 'dir': ('NDF', 'Commodities'),
                                'source': 'UNWIND NDF COMM', 'key': 'deal',
                                'unwind_page': 'ndf/commodities'},
+    # A Opção de Commodities e o Swap EDG (mesa, 21/10/2026): o mesmo Termo,
+    # pelo mesmo `confirmation_deal` do import.
+    'Unwind Options Commodities': {'root': 'unwinds', 'dir': ('Options', 'Commodities'),
+                                   'source': 'UNWIND OPTION COMM', 'key': 'deal',
+                                   'unwind_page': 'options/commodities'},
+    'Unwind Swap EDG': {'root': 'unwinds', 'dir': ('Swap', 'EDG'),
+                        'source': 'UNWIND SWAP', 'key': 'deal',
+                        'unwind_page': 'swap/edg'},
 }
 
 
@@ -247,7 +255,14 @@ def main():
                 # tradutor do import a põe no formato da esteira (o dia é o do
                 # arquivo, que o import grava no `ImportedAt`).
                 from apps.pages.features.unwinds import catalog as _ucat
+                from apps.pages.features.unwinds import commands as _ufase1
                 from apps.pages.features.unwinds.product import commands as _ucmd
+                # Contra fundo nosso (o B2B com Atacama/Lawton) não há Termo nem
+                # esteira — vai para a Intrag (§580). O import já pulava; o
+                # backfill mandava a recompra do fundo para a esteira.
+                if _ufase1.e_do_fundo(deal):
+                    fora_regra += 1
+                    continue
                 dia = R._parse_date_any(str(deal.get('ImportedAt') or '')[:10]) \
                     or R._parse_date_any(deal.get('UnwindDate'))
                 deal = _ucmd.confirmation_deal(_ucat.page(cfg['unwind_page']), deal, dia)
