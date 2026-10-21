@@ -796,7 +796,10 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   sem funil = cabeçalho vazio, checkbox, Actions ou `searchable: false`;
   tabela fora com `data-excel-filter="off"`; `serverSide` e `searching:
   false` ficam de fora (a segunda desliga TODA filtragem — são as tabelas
-  ocultas do Export). **O funil é uma PEÇA do flex do cabeçalho** do
+  ocultas do Export). **O funil só alcança DataTable**: lista montada à mão
+  fica sem ele — era a Support Center › Tickets List, que virou DataTable
+  (§662) com a busca e o Filter By no `ext.search` (o `column().search()` o
+  funil zera a cada draw). **O funil é uma PEÇA do flex do cabeçalho** do
   DataTables 2 (`.dt-column-header`: título · funil · ícone de ordenação),
   nunca absoluto no canto do th: nas telas que fixam a largura da coluna
   no CSS (as Intrag, o Reference Data) ele ficava POR CIMA do texto. O

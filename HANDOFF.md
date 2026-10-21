@@ -27727,3 +27727,38 @@ fica escondida — e não havia filtro NENHUM na tela.
 `check_unwind_catalog`: toda página tem a barra e a busca responde JSON.
 `check_unwind_swap_trs` §4: o chip padrão, a busca pelo B3 ID atravessando dois
 dias (API e tela) e o Edit de um card de OUTRO dia gravando no dia dele.
+
+## §662 — Support Center › Tickets List ganha o funil "de Excel" (2026-10-21)
+
+Relato: "na página de tickets list coloque o filtro que foi inserido nas
+tabelas de New Deals etc.". O funil do cabeçalho (`excel-filter.js`, §591) se
+liga sozinho a toda DataTable, e a lista de tickets NÃO era DataTable: o
+`tickets-list.html` montava o `<tbody>` à mão, com paginação, ordenação pelo
+cabeçalho e filtros próprios. Por isso ela era a única tabela do app sem o
+funil, sem erro nenhum.
+
+- **A grade virou DataTable** (`initTable`), com os dados do `/api/tickets` em
+  objetos. Cada coluna desenha o HTML de antes na exibição e ordena por um
+  valor próprio (`coluna(desenho, ordena)`): Priority pela severidade e Status
+  pela fila (`PRIORITY_RANK`/`STATUS_RANK`), o ID pelo `seq`, as datas pelo ISO
+  cru. A abertura pela FILA continua (`order` no Status) e o desempate pelo ID
+  mais antigo em QUALQUER ordenação é o `orderFixed.post`.
+- **A busca e o Filter By (Status, Priority) seguem como eram**, no
+  `$.fn.dataTable.ext.search` da própria tabela (mesmos campos, tags
+  inclusive). Não pelo `column().search()`: o `removeFilterRows` do funil o zera
+  a cada draw. O per page é o `page.len` (`all` = −1); paginação e "Showing" são
+  do DataTables, com a frase da casa (`tk-showing`/`tk-of`); tabela vazia e
+  filtro sem resultado têm frases próprias (`tk-none`, `tk-none-match` nova).
+- **O funil lê o TEXTO da célula**, e o avatar tinha as iniciais como texto
+  ("GL Giulliano…" seria o valor do filtro): elas saem de `data-initials` por
+  `::before`, e um espaço separa nome e SID (o flex não o mostra).
+- **O Export continua no espelho escondido** (as células são HTML; o arquivo
+  sai do `exportRow`), agora preenchido com as linhas que a grade mostra:
+  `rows({search:'applied', order:'applied'})` — busca, Filter By, funis e
+  ordenação.
+
+`check_tickets` §21 prende a lista como DataTable, sem `searching: false` nem
+`data-excel-filter="off"`, Actions fora do funil, o Filter By no `ext.search` e
+a chave `tk-none-match` nas três línguas. Conferido no Chromium: oito funis, a
+lista do Requested By sem as iniciais, o funil de Status combinado com o Filter
+By, a ordem da fila e a busca pela tag.

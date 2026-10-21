@@ -390,6 +390,25 @@ check('a pagina ainda responde 200', master.get('/tickets-list').status_code, 20
 st, d = jget(master, '/api/tickets')
 check('API ainda responde', (st, d['tickets']), (200, []))
 
+print('\n== 21. a lista e DataTable: o funil "de Excel" se liga sozinho ==')
+# O excel-filter.js so alcanca DataTable. A lista era montada a mao (paginacao,
+# ordenacao e filtros proprios) e ficou sem o funil que toda tabela do app tem
+# (mesa, 21/10/2026). Voltar a montar a mao, ou desligar o funil, o tira de novo.
+_tpl = io.open(os.path.join(ROOT, 'apps', 'templates', 'pages', 'tickets-list.html'),
+               encoding='utf-8').read()
+check('#tk-table vira DataTable', '$(tableNode).DataTable(' in _tpl, True)
+check('   sem data-excel-filter="off"', 'data-excel-filter="off"' in _tpl, False)
+check('   e com busca ligada (searching: false desliga o funil)',
+      'searching: false' in _tpl.split('function initTable')[1].split('function renderCounts')[0], False)
+check('   a coluna Actions fica fora do funil (searchable: false)',
+      'coluna(actionsCell' in _tpl and 'searchable: false' in _tpl.split('coluna(actionsCell')[1][:200], True)
+check('   Filter By pelo ext.search, nao column().search() (o funil o zera a cada draw)',
+      ('$.fn.dataTable.ext.search.push' in _tpl, '.column(' in _tpl), (True, False))
+for _lg in ('en', 'br', 'es'):
+    _tr = json.load(io.open(os.path.join(ROOT, 'apps', 'static', 'data', 'translations', _lg + '.json'),
+                            encoding='utf-8'))
+    check('   tk-none-match em %s' % _lg, bool(_tr.get('tk-none-match')), True)
+
 shutil.rmtree(TMP, ignore_errors=True)
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)
