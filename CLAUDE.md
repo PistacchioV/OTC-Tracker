@@ -3193,7 +3193,13 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 - **O `start-otc-tracker.bat` sobe com DUPLO CLIQUE, sem DevShell** (§628): o
   app roda no 3.13 e no 3.12, e o `.bat` **procura o 3.13 PRIMEIRO e, sem ele,
   o 3.12** (§653) — em cada um, o PRÓPRIO em `%LOCALAPPDATA%\OTC-Tracker\
-  python313`/`python312` e depois o do usuário, pelo `HKCU`. Máquina que já
+  python313`/`python312`, depois o do usuário, pelo `HKCU`, e por último o
+  `python` do PATH na versão certa — o do **DevShell**, que não se registra no
+  `HKCU` (§667); o `OTC_PYTHON` (caminho do `python.exe`) vence a busca toda.
+  **Em parte das máquinas a política de grupo BARRA o instalador do
+  python.org** ("This program is blocked by group policy", §667): ali o Python
+  é o do DevShell (`ds tool install python3.12`) — abrir o `.bat` de dentro do
+  DevShell, ou `setx OTC_PYTHON` uma vez. Máquina que já
   sobe pelo 3.12 fica nele até ganhar um 3.13 (para migrar: um 3.13 do
   usuário, ou apagar a `python312` — o `.bat` instala o 3.13 sozinho). Sem
   Python nenhum ele instala o 3.13 (`PY313_VERSION`) e, sem o instalador dele,

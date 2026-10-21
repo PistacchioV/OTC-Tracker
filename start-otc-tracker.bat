@@ -77,12 +77,21 @@ set "LNK_SHARE=%~dp0%OTC_NOME%.lnk"
 if not exist "%ICON%" if exist "%ICON_SHARE%" copy /y "%ICON_SHARE%" "%ICON%" >nul
 if not exist "%APP_STATE_DIR%\atalho %OTC_NOME%.ok" if exist "%ICON%" call :cria_atalho
 
-rem O Python: o 3.13 e, sem ele, o 3.12 -- em cada um, o proprio e depois o
-rem instalado para o usuario.  Sem nenhum, instala o 3.13; se o instalador
-rem dele nao vier (nem do share, nem do download), o 3.12.  Uma maquina que ja
-rem sobe pelo 3.12 so muda quando ganhar um 3.13.
-set "ERRO=Nao consegui instalar o Python %PY313_VERSION% nem o %PY312_VERSION% - os motivos estao nos avisos acima. Para nao depender da internet, coloque o python-%PY313_VERSION%-amd64.exe na pasta installers ao lado deste .bat, no share."
-call :acha_python 3.13
+rem O Python: o 3.13 e, sem ele, o 3.12 -- em cada um, o proprio, o instalado
+rem para o usuario e o do PATH, que e o do DevShell.  Sem nenhum, instala o
+rem 3.13; se o instalador dele nao vier (nem do share, nem do download), o
+rem 3.12.  Uma maquina que ja sobe pelo 3.12 so muda quando ganhar um 3.13.
+rem
+rem A politica de grupo do JPM BARRA o instalador do python.org em parte das
+rem maquinas ("This program is blocked by group policy", 21/10/2026): ali o
+rem Python vem do DevShell -- `ds tool install python3.12`, o caminho liberado
+rem pela TI e o que o .bat usava antes do HANDOFF 628 --, e o .bat o acha no
+rem PATH.  Fora do DevShell o PATH pode nao te-lo: OTC_PYTHON com o caminho do
+rem python.exe vence toda a busca (uma vez por usuario: setx OTC_PYTHON "...").
+set "ERRO=Nao consegui instalar o Python %PY313_VERSION% nem o %PY312_VERSION% - os motivos estao nos avisos acima. Se o Windows disse 'blocked by group policy', esta maquina nao deixa rodar o instalador: instale o Python pelo DevShell - ds tool install python3.12 - e abra este .bat de dentro do DevShell, ou grave uma vez o caminho do python.exe com: setx OTC_PYTHON seguido do caminho - e abra de novo."
+if defined OTC_PYTHON if exist "%OTC_PYTHON%" set "PY=%OTC_PYTHON%"
+if defined OTC_PYTHON if not defined PY echo [AVISO] OTC_PYTHON aponta para "%OTC_PYTHON%", que nao existe - procurando outro Python.
+if not defined PY call :acha_python 3.13
 if not defined PY call :acha_python 3.12
 if not defined PY call :instala_python %PY313_VERSION% 3.13
 if not defined PY call :instala_python %PY312_VERSION% 3.12
@@ -226,9 +235,10 @@ goto :eof
 :acha_python
 rem %1 = a versao menor (3.13, 3.12).  Primeiro o Python PROPRIO do OTC
 rem Tracker, na pasta python313/python312; senao um ja instalado para ESTE
-rem usuario, pelo registro.  O de todos os usuarios fica de fora: em Program
-rem Files o pip precisaria de admin.  Achou, deixa o %%PY%%; senao, o deixa
-rem como estava, vazio.
+rem usuario, pelo registro; senao o do PATH (o DevShell).  O de todos os
+rem usuarios so entra pelo PATH, por ultimo: em Program Files o pip nao
+rem escreve, e cai sozinho na pasta do usuario.  Achou, deixa o %%PY%%; senao,
+rem o deixa como estava, vazio.
 set "PY_MINOR=%~1"
 set "PY_TAG=%PY_MINOR:.=%"
 if exist "%APP_STATE_DIR%\python%PY_TAG%\python.exe" set "PY=%APP_STATE_DIR%\python%PY_TAG%\python.exe"
@@ -236,6 +246,17 @@ if defined PY goto :eof
 set "PY_REG="
 for /f "tokens=1,2,*" %%A in ('reg query "HKCU\Software\Python\PythonCore\%PY_MINOR%\InstallPath" /v ExecutablePath 2^>nul') do if /i "%%A"=="ExecutablePath" set "PY_REG=%%C"
 if defined PY_REG if exist "%PY_REG%" set "PY=%PY_REG%"
+if defined PY goto :eof
+rem Por ultimo o python do PATH -- o do DevShell, que nao se registra no HKCU.
+rem So vale o da versao pedida; o "python" da Microsoft Store (WindowsApps) e
+rem um atalho que abre a loja, nao um Python, e fica de fora.
+for /f "delims=" %%P in ('where python 2^>nul') do if not defined PY call :testa_python "%%P"
+goto :eof
+
+:testa_python
+rem %1 = um python.exe candidato do PATH; vira o %%PY%% se for da %%PY_MINOR%%.
+echo "%~1" | findstr /l /i /c:"WindowsApps" >nul && goto :eof
+"%~1" -c "import sys; sys.exit(not sys.version.startswith('%PY_MINOR%.'))" >nul 2>&1 && set "PY=%~1"
 goto :eof
 
 :instala_python
@@ -266,7 +287,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "if ((Get-AuthenticodeSig
 echo Instalando - leva um ou dois minutos...
 start "" /wait "%INSTALLER%" /quiet InstallAllUsers=0 TargetDir="%PY_DIR%" PrependPath=0 AssociateFiles=0 Shortcuts=0 Include_launcher=0 InstallLauncherAllUsers=0 Include_doc=0 Include_test=0 Include_tcltk=0 Include_pip=1
 call :acha_python %PY_MINOR%
-if not defined PY echo [AVISO] O instalador do Python %PY_FULL% terminou sem deixar o python.exe - o log fica em %TEMP%, nos arquivos Python*.log.
+if not defined PY echo [AVISO] O instalador do Python %PY_FULL% terminou sem deixar o python.exe. Se o Windows disse "blocked by group policy", a politica desta maquina barra o instalador - o caminho e o Python do DevShell, no [ERRO] abaixo. Senao, o log fica em %TEMP%, nos arquivos Python*.log.
 goto :eof
 
 :sem_download
