@@ -454,7 +454,7 @@ $(document).ready(function() {
             if(!r.isConfirmed) return;
             var _itens = toDelete.map(function(r){
                 var d = table.row(r.rowIdx).data() || [];
-                return { deal_id: r.id, trade_date: (d[START_DATE_COL] || '') };
+                return { deal_id: r.id, trade_date: dayOf(d) };
             });
             // A linha so sai da tela DEPOIS de sair do arquivo. Removendo
             // antes, o Delete era so visual: voltava no F5 e o re-import a
@@ -480,7 +480,7 @@ $(document).ready(function() {
             if(!r.isConfirmed) return;
             var d = table.row(tr[0]).data() || [];
             otcIntragDelete('swap', [{ deal_id: (d[ID_COL] || ''),
-                                        trade_date: (d[START_DATE_COL] || '') }])
+                                        trade_date: dayOf(d) }])
                 .then(function(resp){ table.row(tr[0]).remove().draw(false); otcIntragDeleteWarn(resp); })
                 .catch(function(err){ Swal.fire({ icon:'error', title:'Delete failed',
                     text:String(err && err.message || err), confirmButtonColor:'#dc3545' }); });
@@ -491,11 +491,16 @@ $(document).ready(function() {
     // Row data array: [0]=checkbox, [1]=actions, [2]=status, [3]=Intrag ID,
     // [4..ID_COL-1]=36 data cols, [ID_COL]=id.
     var START_DATE_COL = 6;              // table col of Data Início (data idx 2 + 4)
+    // O dia do ARQUIVO de cada linha (o Trade Date do swap, §656), que a API
+    // devolve em `_day`: é por ele que Edit/Approve/Delete/Send acham a linha.
+    // A Data Início é coluna da linha e é OUTRA data (o Effective da Cetes).
+    var DAY_BY_ID = {};
+    function dayOf(d) { return (d && DAY_BY_ID[d[ID_COL]]) || (d && d[START_DATE_COL]) || ''; }
     var SENDABLE_STATUS = { 'New': 1, 'Approved': 1 };
 
     function _intragRowData(d) { return d ? d.slice(4, ID_COL) : []; }   // 36 data cols
     function _itemFromRow(d) {
-        return { deal_id: (d[ID_COL] || ''), status: (d[2] || 'New'), cells: _intragRowData(d) };
+        return { deal_id: (d[ID_COL] || ''), status: (d[2] || 'New'), day: dayOf(d), cells: _intragRowData(d) };
     }
 
     function sendIntragItems(items) {
@@ -518,7 +523,7 @@ $(document).ready(function() {
             if (!r.isConfirmed) return;
             fetch('/api/intrag/swap/send-file', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ items: items.map(function(it){ return { deal_id: it.deal_id, cells: it.cells }; }) })
+                body: JSON.stringify({ items: items.map(function(it){ return { deal_id: it.deal_id, day: it.day, cells: it.cells }; }) })
             }).then(function(resp){ return resp.json(); }).then(function(res) {
                 if (res.success) {
                     // Reflect the New/Approved → Sent transition in the table.
@@ -570,7 +575,7 @@ $(document).ready(function() {
             if(!r.isConfirmed) return;
             fetch('/api/intrag/swap/approve', {
                 method:'POST', headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ deal_id: d[ID_COL]||'', trade_date: d[START_DATE_COL]||'' })
+                body: JSON.stringify({ deal_id: d[ID_COL]||'', trade_date: dayOf(d) })
             }).then(function(resp){ return resp.json().then(function(j){ return {ok:resp.ok, data:j}; }); })
               .then(function(o){
                 if(o.ok && o.data.success){
@@ -616,7 +621,7 @@ $(document).ready(function() {
             var fields={}; ENTRY_FIELDS.forEach(function(f,i){ fields[f]=vals[i]; });
             fetch('/api/intrag/swap/edit', {
                 method:'POST', headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ deal_id: id, trade_date: vals[2], fields: fields })
+                body: JSON.stringify({ deal_id: id, trade_date: dayOf(prevData), fields: fields })
             }).then(function(resp){ return resp.json(); })
               .then(function(){ _applyRow('Pending'); if (window.fetchNotifications) window.fetchNotifications(); })
               .catch(function(){ _applyRow('Pending'); });   // client-only row: still mark Pending
@@ -647,9 +652,12 @@ $(document).ready(function() {
         sfActive=[], sfKbdIdx=-1;
 
     var SF_COLS = [
-        // Data Início — special: drives the API date param (dtCol:-1 = not a DT column search)
-        { label: 'Data Início',                     type: 'date',   dtCol: -1,  isDate: true },
+        // Trade Date — special: drives the API date param (dtCol:-1 = not a DT
+        // column search). É o dia do ARQUIVO da linha, o Trade Date do swap
+        // (§656); a Data Início virou um filtro de coluna como as outras.
+        { label: 'Trade Date',                      type: 'date',   dtCol: -1,  isDate: true },
         // date columns applied via DT column search after load (data cols shifted +4)
+        { label: 'Data Início',                     type: 'date',   dtCol: 6  },
         { label: 'Data Vencimento',                 type: 'date',   dtCol: 7  },
         { label: 'Data de Pagamento do prêmio',     type: 'date',   dtCol: 15 },
         { label: 'Data de Cotação',                 type: 'date',   dtCol: 26 },
@@ -840,8 +848,10 @@ $(document).ready(function() {
             .then(function(r){return r.json();})
             .then(function(data){
                 table.clear();
+                DAY_BY_ID = {};
                 if (data.success && data.entries && data.entries.length) {
                     data.entries.forEach(function(entry) {
+                        if (entry._deal && entry._day) DAY_BY_ID[entry._deal] = entry._day;
                         var row=['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">',
                                  _swapActions(), entry.status||'New',
                                  entry.intrag_id!=null?String(entry.intrag_id):''];
@@ -922,13 +932,10 @@ $(document).ready(function() {
         sfDropdown.style.display = 'none';
     });
 
-    // Pre-add the Data Início chip and auto-load. O link do Intraday Monitor
-    // (?date=) abre AQUELE dia; sem ele, de HOJE em diante (§655): a linha
-    // mora no dia da Data Início, e o swap de início futuro (a Cetes com
-    // Effective D+1) mapeado hoje ficava invisível com "só hoje".
-    var _linkDmy = window.otcLinkDmy && window.otcLinkDmy();
-    if (_linkDmy) sfAddFilter(SF_COLS[0], _linkDmy);
-    else sfAddFilter(SF_COLS[0], _todayDmy(), 'from');
+    // Pre-add today's Trade Date chip (o dia do link do Intraday Monitor,
+    // ?date=, quando há) and auto-load. A linha mora no dia do TRADE DATE
+    // (§656): a mapeada hoje aparece hoje, mesmo com a Data Início futura.
+    sfAddFilter(SF_COLS[0], ((window.otcLinkDmy && window.otcLinkDmy()) || _todayDmy()));
     document.getElementById('sfSearchBtn').click();
 });
 </script>

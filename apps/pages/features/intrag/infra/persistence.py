@@ -102,8 +102,9 @@ def _intrag_ndf_persist(entry, td):
 
 def _intrag_swap_persist(entry, td):
     """Append/update uma entrada no day-file da Intrag Swap (chave = _deal).
-    O dia é a **Data Início** do swap: é por ela que a página localiza a
-    linha (`trade_date` = Data Início no edit/approve) e agrupa o envio."""
+    O dia é o **Trade Date** do swap (mesa, 21/10/2026, §656) — NÃO a Data
+    Início, que é coluna da linha: a página pesquisa pelo dia do arquivo, e a
+    API devolve esse dia em `_day` para o Edit/Approve/Send acharem a linha."""
     _intrag_day_persist(INTRAG_SWAP_CACHE_DIR, '_intrag_swap.json', 'INTRAG SWAP', entry, td)
 
 

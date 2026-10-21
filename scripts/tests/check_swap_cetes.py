@@ -274,8 +274,8 @@ def main():
         check('B3 ID e Success pelo Meu Número', lst[i]['B3ID'] == '26J09990001' and lst[i]['Status'] == 'Success'
               and res_map and res_map[0]['saved'])
         check('o retorno todo consumido é apagado', not os.path.exists(os.path.join(ret_dir, 'RET_SWAP.txt')))
-        check('uma linha da Intrag Swap, no dia da Data de Início', len(gravadas) == 1
-              and gravadas[0][1] == datetime(2026, 10, 22))
+        check('uma linha da Intrag Swap, no dia do TRADE DATE (não no Effective, 22/10)', len(gravadas) == 1
+              and gravadas[0][1] == datetime(2026, 10, 20))
         e = gravadas[0][0] if gravadas else {}
         check('na carteira do LAWTON, Parte Lawton × Banco, valor base em reais',
               (e.get('carteira'), e.get('parte'), e.get('contraparte'), e.get('base_value'), e.get('b3_id'))
@@ -288,9 +288,10 @@ def main():
         check('as 36 colunas da Intrag Swap', all(k in e for k in __import__(
             'apps.pages.platform.swap_deal_ticket', fromlist=['x']).INTRAG_SWAP_FIELDS))
 
-        # A gravação DE VERDADE (sem o espião) e a tela da Intrag Swap (§655): a
-        # linha mora no dia da Data Início (22/10, o Effective), e a página abria
-        # SÓ no dia de hoje — mapeada em 20/10, a Cetes "não fluía" para a Intrag.
+        # A gravação DE VERDADE (sem o espião) e a tela da Intrag Swap (§656): a
+        # linha morava no dia da Data Início (22/10, o Effective) e a página
+        # abria no dia de hoje — mapeada em 20/10, a Cetes "não fluía" para a
+        # Intrag. Ela mora no dia do TRADE DATE, e a API diz esse dia (`_day`).
         from apps.pages.features.intrag.infra import persistence as ipers
         dir_antes = ipers.INTRAG_SWAP_CACHE_DIR
         ipers.INTRAG_SWAP_CACHE_DIR = os.path.join(tmp, 'intrag-swap')
@@ -300,17 +301,28 @@ def main():
                 with c.session_transaction() as s:
                     s.update({'authenticated': True, 'user_sid': 'A111111', 'user_role': 'ADMIN',
                               'session_ip': '127.0.0.1'})
-                so_hoje = c.get('/api/intrag/swap?date=2026-10-20').get_json()['entries']
-                de_hoje = c.get('/api/intrag/swap?date_from=2026-10-20').get_json()['entries']
+                no_td = c.get('/api/intrag/swap?date=2026-10-20').get_json()['entries']
+                no_inicio = c.get('/api/intrag/swap?date=2026-10-22').get_json()['entries']
+                faixa = c.get('/api/intrag/swap?date_from=2026-10-01').get_json()['entries']
+                ok_edit = c.post('/api/intrag/swap/edit', json={'deal_id': d['_id'], 'trade_date': '2026-10-20',
+                                                                'fields': {'premio': '0'}}).status_code
         finally:
             ipers.INTRAG_SWAP_CACHE_DIR = dir_antes
-        check('a linha da Intrag Swap é gravada no arquivo-dia da Data Início (22/10)',
-              os.path.isfile(os.path.join(tmp, 'intrag-swap', '2026', '10', '20261022_intrag_swap.json')))
-        check('procurada SÓ no dia do mapping (20/10) não aparece; de 20/10 em diante, aparece',
-              so_hoje == [] and [x.get('_deal') for x in de_hoje] == [d['_id']])
+        check('a linha da Intrag Swap é gravada no arquivo-dia do TRADE DATE (20/10), não no do Effective (22/10)',
+              os.path.isfile(os.path.join(tmp, 'intrag-swap', '2026', '10', '20261020_intrag_swap.json'))
+              and not os.path.exists(os.path.join(tmp, 'intrag-swap', '2026', '10', '20261022_intrag_swap.json')))
+        check('pesquisada no Trade Date ela aparece, com a Data Início 22/10 na coluna; no dia do Effective, não',
+              [(x.get('_deal'), x.get('start_date')) for x in no_td] == [(d['_id'], '2026-10-22')] and no_inicio == [])
+        check('a API diz o dia do ARQUIVO de cada linha (`_day`), no dia e na faixa',
+              [x.get('_day') for x in no_td] == ['2026-10-20'] and [x.get('_day') for x in faixa] == ['2026-10-20'])
+        check('o Edit acha a linha pelo dia do Trade Date', ok_edit == 200)
         itpl = io.open(os.path.join(RAIZ, 'apps', 'templates', 'pages', 'intrag-swap.html'), encoding='utf-8').read()
-        check('a Intrag Swap abre de HOJE em diante (o link do Monitor segue no dia exato)',
-              "sfAddFilter(SF_COLS[0], _todayDmy(), 'from')" in itpl and 'if (_linkDmy) sfAddFilter(SF_COLS[0], _linkDmy)' in itpl)
+        check('a Intrag Swap pesquisa pelo Trade Date e abre no dia de hoje (ou no do link do Monitor)',
+              "{ label: 'Trade Date',                      type: 'date',   dtCol: -1,  isDate: true }" in itpl
+              and "sfAddFilter(SF_COLS[0], ((window.otcLinkDmy && window.otcLinkDmy()) || _todayDmy()));" in itpl)
+        check('Edit/Approve/Delete/Send mandam o dia da LINHA (`_day`), não a coluna Data Início',
+              itpl.count('trade_date: dayOf(') == 4 and 'day: dayOf(d)' in itpl and 'day: it.day' in itpl
+              and 'trade_date: (d[START_DATE_COL]' not in itpl and 'trade_date: d[START_DATE_COL]' not in itpl)
 
     print('== 7. a página: catálogo, cadastro, menu, notificação, Monitor ==')
     p = catalog.page('/new_deals-swap-cetes')

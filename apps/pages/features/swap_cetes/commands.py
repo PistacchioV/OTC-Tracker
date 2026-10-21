@@ -510,8 +510,10 @@ def _quote_date(deal):
 
 def b3_mapped(deal):
     """O deal ganhou B3 ID → a linha da Intrag Swap na visão do Lawton (a
-    carteira dele, INTRAGJP552), no dia da Data de Início. A falha vai para o
-    log com o traceback e não derruba a gravação da página."""
+    carteira dele, INTRAGJP552), no dia do TRADE DATE (mesa, 21/10/2026, §656:
+    o Effective da Cetes é em geral futuro, e no dia dele a linha não aparecia
+    no dia do mapping). A falha vai para o log com o traceback e não derruba a
+    gravação da página."""
     if not str(deal.get('B3ID') or '').strip():
         return
     try:
@@ -519,9 +521,9 @@ def b3_mapped(deal):
         if erros:
             raise ValueError('; '.join(domain.lacuna_texts(erros)))
         entry = domain.intrag_entry(deal, leg_rows, _quote_date(deal))
-        start = domain.parse_date(deal.get('StartDate')) or domain.parse_date(deal.get('TradeDate'))
-        start_dt = datetime(start.year, start.month, start.day) if start else None
-        _R()._intrag_engine()._save_intrag_swap_entry(entry, start_dt)
+        td = domain.parse_date(deal.get('TradeDate')) or domain.parse_date(deal.get('StartDate'))
+        day = datetime(td.year, td.month, td.day) if td else None
+        _R()._intrag_engine()._save_intrag_swap_entry(entry, day)
     except Exception:                                       # noqa: BLE001
         import traceback
         _R().log.warning('[SWAP CETES] post-mapping flow failed for %s:\n%s', deal.get('B3ID'),
