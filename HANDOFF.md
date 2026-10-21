@@ -27696,3 +27696,31 @@ do contrato, o arquivo da #9 com os fatores do VBR, o Edit do VBR, e a cascata
 de nomes (documento vence a conta; sem documento, a conta; a Party pela conta do
 Live Position antes do `b3-accounts`). O `check_unwind_products` §5 passou à
 conta pelo VBR.
+
+## §661 — As telas de recompra do catálogo ganham o filtro inteligente (2026-10-21)
+
+Relato: "na página de unwind swap tá faltando a barra de filtro inteligente". As
+onze telas do catálogo (`unwinds-product.html`) carregavam só o dia da
+Reference Date, com o funil da tabela; nas de swap, em cards (§657), a tabela
+fica escondida — e não havia filtro NENHUM na tela.
+
+- **A barra** é a mesma da Fase 1 (§620) e das telas de New Deals: chips, a
+  busca por coluna (texto, número e data com DE/ATÉ, lista colada pelo
+  `sf-multi.js`), o chip padrão da **Reference Date** (o dia do arquivo-dia,
+  `_day`; o deep-link `?date=` do Monitor vale). O campo Reference Date da barra
+  de ferramentas move o chip (`sfSetRefDate`) e segue sendo o dia do Import e do
+  Mapping B3 ID.
+- **A busca** é `POST <api>/cache/search` (`product/queries.search`, ação nova no
+  `_PRODUCT_ACTIONS`): a árvore DO produto (`product_store.cache_dir`), só os
+  dias que os chips do dia permitem (`_faixa_do_dia` da Fase 1), leitura ESTRITA
+  (§608), o `_deal_matches` — e cada linha volta com `_day`.
+- **As ações mandam o dia DA LINHA** (`dayOf`): Confirm, Edit, Delete, Send e o
+  Preview — da grade e do card. Sem isso, a recompra de outro dia que a busca
+  trouxe daria "not found" (o `find` procura no dia que recebe).
+- O `load` passou a esperar o filtro estar montado (`setTimeout(load, 0)` no
+  `initComplete`, como na Fase 1): o DataTables pode chamar o `initComplete`
+  antes de o código da barra rodar.
+
+`check_unwind_catalog`: toda página tem a barra e a busca responde JSON.
+`check_unwind_swap_trs` §4: o chip padrão, a busca pelo B3 ID atravessando dois
+dias (API e tela) e o Edit de um card de OUTRO dia gravando no dia dele.
