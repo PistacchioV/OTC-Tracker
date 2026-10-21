@@ -65,6 +65,11 @@
       e_comment_required: 'Write the comment first.', e_project_not_found: 'Initiative not found.',
       e_task_not_found: 'Task not found — it may have been deleted.', e_milestone_not_found: 'Milestone not found.',
       e_subtask_not_found: 'Subtask not found.', e_not_allowed: 'You are not allowed to do this.',
+      new_event: 'New event', edit_event: 'Edit event', del_event_q: 'Delete this event?',
+      del_event_txt: 'It leaves the Milestones card, Coming up and the Calendar.',
+      ev_Milestone: 'Milestone', ev_Meeting: 'Meeting', ev_Deadline: 'Deadline', ev_Review: 'Review', 'ev_Go-live': 'Go-live',
+      all_day: 'All day', len_min: '{n} min', len_h: '{h} h', len_hm: '{h} h {m}',
+      e_bad_time: 'Invalid time — use hh:mm.',
       e_generic: 'Could not save. Try again.', e_title: 'Not saved'
     },
     br: {
@@ -117,6 +122,11 @@
       e_comment_required: 'Escreva o comentário primeiro.', e_project_not_found: 'Iniciativa não encontrada.',
       e_task_not_found: 'Tarefa não encontrada — pode ter sido apagada.', e_milestone_not_found: 'Marco não encontrado.',
       e_subtask_not_found: 'Subtarefa não encontrada.', e_not_allowed: 'Você não tem permissão para isso.',
+      new_event: 'Novo evento', edit_event: 'Editar evento', del_event_q: 'Apagar este evento?',
+      del_event_txt: 'Ele sai do card Marcos, do Próximos e do Calendar.',
+      ev_Milestone: 'Marco', ev_Meeting: 'Reunião', ev_Deadline: 'Prazo', ev_Review: 'Revisão', 'ev_Go-live': 'Go-live',
+      all_day: 'Dia inteiro', len_min: '{n} min', len_h: '{h} h', len_hm: '{h} h {m}',
+      e_bad_time: 'Hora inválida — use hh:mm.',
       e_generic: 'Não foi possível salvar. Tente de novo.', e_title: 'Não salvo'
     },
     es: {
@@ -169,6 +179,11 @@
       e_comment_required: 'Escribe el comentario primero.', e_project_not_found: 'Iniciativa no encontrada.',
       e_task_not_found: 'Tarea no encontrada — puede haber sido eliminada.', e_milestone_not_found: 'Hito no encontrado.',
       e_subtask_not_found: 'Subtarea no encontrada.', e_not_allowed: 'No tienes permiso para hacer esto.',
+      new_event: 'Nuevo evento', edit_event: 'Editar evento', del_event_q: '¿Eliminar este evento?',
+      del_event_txt: 'Sale de la tarjeta Hitos, de Próximos y del Calendar.',
+      ev_Milestone: 'Hito', ev_Meeting: 'Reunión', ev_Deadline: 'Plazo', ev_Review: 'Revisión', 'ev_Go-live': 'Go-live',
+      all_day: 'Todo el día', len_min: '{n} min', len_h: '{h} h', len_hm: '{h} h {m}',
+      e_bad_time: 'Hora inválida — usa hh:mm.',
       e_generic: 'No se pudo guardar. Inténtalo de nuevo.', e_title: 'No guardado'
     }
   };
@@ -441,6 +456,9 @@
     if (afterMeta('project', function () { openProjectModal(opts); })) return;
     var el = Pm.el || (Pm.el = document.getElementById('pj-project-modal'));
     if (!el) return;
+    // Editar sem a iniciativa CARREGADA abria o modal em branco (§648): quem
+    // chama espera a carga; aqui só não abre.
+    if (opts.mode === 'edit' && !(opts.project && opts.project.id)) return;
     Pm.opts = opts;
     var p = opts.project || {};
     var edit = opts.mode === 'edit';
@@ -578,6 +596,90 @@
       .then(function (d) { modal(el).hide(); if (o.onSaved) o.onSaved(d.project); })
       .catch(fail)
       .then(function () { btn.disabled = false; });
+  }
+
+  // ── Modal do evento (o MARCO da iniciativa) ─────────────────────────────
+  // Novo pelo "New event" da página; o clique num marco abre o mesmo modal
+  // para editar, dar por atingido ou apagar (o card só mostra, §648). Sem
+  // hora o evento é do dia inteiro: a duração se desliga, e o servidor a
+  // ignora.
+  var Em = { el: null, opts: null };
+  var EVENT_TYPES = ['Milestone', 'Meeting', 'Deadline', 'Review', 'Go-live'];
+  var EVENT_LENGTHS = [15, 30, 45, 60, 90, 120, 180, 240];
+  function tEvent(v) { return t('ev_' + (v || 'Milestone')); }
+  function lengthLabel(n) {
+    n = +n;
+    if (!n) return '';
+    if (n < 60) return t('len_min', { n: n });
+    var h = Math.floor(n / 60), m = n % 60;
+    return m ? t('len_hm', { h: h, m: m }) : t('len_h', { h: h });
+  }
+  // hh:mm digitando só os números: os dois-pontos se escrevem sozinhos
+  function timeMask(inp) {
+    var d = String(inp.value || '').replace(/\D/g, '').slice(0, 4);
+    inp.value = d.length > 2 ? d.slice(0, 2) + ':' + d.slice(2) : d;
+  }
+  function eventLengthState() {
+    var el = Em.el;
+    el.querySelector('#pjem-length').disabled = !String(el.querySelector('#pjem-time').value || '').trim();
+  }
+  function openEventModal(opts) {
+    if (afterMeta('event', function () { openEventModal(opts); })) return;
+    var el = Em.el || (Em.el = document.getElementById('pj-event-modal'));
+    if (!el || !(opts.project && opts.project.id)) return;
+    Em.opts = opts;
+    var m = opts.milestone || {}, edit = !!m.id;
+    el.querySelector('#pjem-heading').textContent = edit ? t('edit_event') : t('new_event');
+    el.querySelector('#pjem-title').value = m.title || '';
+    dateField(el.querySelector('#pjem-date'));
+    setDate(el.querySelector('#pjem-date'), edit ? (m.date || '') : isoToday());
+    el.querySelector('#pjem-time').value = m.time || '';
+    fillSelect(el.querySelector('#pjem-length'), (meta.event_lengths || EVENT_LENGTHS).map(function (n) {
+      return { value: String(n), label: lengthLabel(n) }; }), String(m.length || 30));
+    fillSelect(el.querySelector('#pjem-type'), (meta.event_types || EVENT_TYPES).map(function (v) {
+      return { value: v, label: tEvent(v) }; }), m.type || 'Milestone');
+    el.querySelector('#pjem-project').value = opts.project.name || '';
+    el.querySelector('#pjem-where').value = m.where || '';
+    el.querySelector('#pjem-done').checked = !!m.done;
+    el.querySelector('#pjem-done-wrap').classList.toggle('d-none', !edit);
+    el.querySelector('#pjem-delete').classList.toggle('d-none', !edit);
+    eventLengthState();
+    if (!el._pjWired) {
+      el._pjWired = 1;
+      el.querySelector('#pjem-save').addEventListener('click', saveEventModal);
+      el.querySelector('#pjem-delete').addEventListener('click', deleteEventFromModal);
+      var hora = el.querySelector('#pjem-time');
+      hora.addEventListener('input', function () { timeMask(hora); eventLengthState(); });
+      el.querySelector('#pjem-title').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); saveEventModal(); } });
+      el.addEventListener('shown.bs.modal', function () { el.querySelector('#pjem-title').focus(); });
+    }
+    modal(el).show();
+  }
+  function eventUrl(o, m) {
+    return '/api/projects/' + encodeURIComponent(o.project.id) + '/milestones' + (m && m.id ? '/' + encodeURIComponent(m.id) : '');
+  }
+  function saveEventModal() {
+    var el = Em.el, o = Em.opts, m = o.milestone || {};
+    var body = {
+      title: el.querySelector('#pjem-title').value, date: readDate(el.querySelector('#pjem-date')),
+      time: el.querySelector('#pjem-time').value, length: el.querySelector('#pjem-length').value,
+      type: el.querySelector('#pjem-type').value, where: el.querySelector('#pjem-where').value
+    };
+    if (m.id) body.done = el.querySelector('#pjem-done').checked;
+    var btn = el.querySelector('#pjem-save'); btn.disabled = true;
+    api(m.id ? 'PATCH' : 'POST', eventUrl(o, m), body)
+      .then(function (d) { modal(el).hide(); if (o.onSaved) o.onSaved(d.project); })
+      .catch(fail)
+      .then(function () { btn.disabled = false; });
+  }
+  function deleteEventFromModal() {
+    var o = Em.opts, m = o.milestone;
+    confirmDelete(t('del_event_q'), t('del_event_txt')).then(function (ok) {
+      if (!ok) return;
+      api('DELETE', eventUrl(o, m))
+        .then(function (d) { modal(Em.el).hide(); if (o.onSaved) o.onSaved(d.project); toast(t('deleted')); })
+        .catch(fail);
+    });
   }
 
   // ── Gaveta da tarefa ────────────────────────────────────────────────────
@@ -741,6 +843,7 @@
     parse: parse, diffDays: diffDays, fmtDate: fmtDate, fmtShort: fmtShort, due: due, inDays: inDays, ago: ago,
     avatar: avatar, avatars: avatars, personName: personName, prioBadge: prioBadge, chip: chip,
     openProjectModal: openProjectModal, openTaskModal: openTaskModal, openTaskDrawer: openTaskDrawer,
+    openEventModal: openEventModal, tEvent: tEvent, lengthLabel: lengthLabel,
     activityText: activityText
   };
 })();

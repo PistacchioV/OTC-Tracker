@@ -60,6 +60,11 @@
             <button type="button" class="btn btn-secondary rounded-pill d-inline-flex align-items-center gap-2" id="pjd-edit">
                 <i data-lucide="pencil"></i><span data-lang="pj-edit">Edit</span>
             </button>
+            {# O EVENTO da iniciativa é um MARCO (mesa, 21/10/2026): nasce aqui e
+               aparece no card Milestones, no Coming up e no Calendar. #}
+            <button type="button" class="btn btn-secondary rounded-pill d-inline-flex align-items-center gap-2" id="pjd-new-event">
+                <i data-lucide="calendar-plus"></i><span data-lang="pj-new-event">New event</span>
+            </button>
         </div>
     </div>
 
@@ -85,16 +90,14 @@
                 <div class="pjd-people mt-2" id="pjd-people"></div>
             </div>
 
+            {# Os marcos SÓ SE MOSTRAM aqui (mesa, 21/10/2026): criar é o New
+               event da barra; o clique num marco abre o mesmo modal, que é
+               onde ele se edita, se dá por atingido ou se apaga. #}
             <div class="pjd-sec-panel">
                 <div class="pjd-sec-head">
                     <div><h5 class="pj-sec-title" data-lang="pj-milestones">Milestones</h5><p class="pj-sec-sub" id="pjd-ms-sub"></p></div>
                 </div>
                 <ul class="pjd-ms" id="pjd-ms"></ul>
-                <div class="pjd-ms-add">
-                    <input type="text" class="form-control" id="pjd-ms-title" maxlength="200" data-lang-placeholder="pj-ph-ms" placeholder="New milestone" autocomplete="off">
-                    <input type="text" class="form-control otc-datefield pjd-ms-date" id="pjd-ms-date" placeholder="dd/mm/yyyy" autocomplete="off">
-                    <button type="button" class="btn btn-secondary rounded-pill" id="pjd-ms-add" data-lang="pj-add">Add</button>
-                </div>
             </div>
 
             {# Coming up: os marcos em aberto (os EVENTOS do projeto) pela data,

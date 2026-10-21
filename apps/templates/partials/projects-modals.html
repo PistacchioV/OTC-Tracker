@@ -1,7 +1,8 @@
-{# As três peças de edição do Intraday (Projects, página do projeto, Tasks): o
-   modal do projeto, o modal "New task" e a gaveta da tarefa. Quem as preenche
-   e grava é o `projects-common.js` (OtcPj.openProjectModal / openTaskModal /
-   openTaskDrawer). Modais no padrão da casa (liquid-glass, §7). #}
+{# As peças de edição do Intraday (Projects, página do projeto, Tasks): o
+   modal do projeto, o modal "New task", o modal do evento (o marco) e a gaveta
+   da tarefa. Quem as preenche e grava é o `projects-common.js`
+   (OtcPj.openProjectModal / openTaskModal / openEventModal / openTaskDrawer).
+   Modais no padrão da casa (liquid-glass, §7). #}
 
 <div class="modal fade" id="pj-project-modal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
@@ -111,6 +112,64 @@
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
                 <button type="button" class="btn btn-sm btn-success" id="pjtm-save" title="Save"><i class="ti ti-device-floppy"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# O EVENTO da iniciativa (mesa, 21/10/2026) — é o MARCO do card Milestones.
+   Novo pelo "New event" da página; o clique num marco abre o mesmo modal para
+   editar, dar por atingido ou apagar. Sem hora o evento é do dia inteiro, e a
+   duração fica desligada. #}
+<div class="modal fade" id="pj-event-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content liquid-glass">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fs-6"><i class="ti ti-calendar-plus me-1"></i><span id="pjem-heading">New event</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjem-title" data-lang="pj-f-title">Title</label>
+                        <input type="text" class="form-control" id="pjem-title" maxlength="200" autocomplete="off" data-lang-placeholder="pj-ph-event" placeholder="e.g. Go-live review">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjem-date" data-lang="pj-f-date">Date</label>
+                        <input type="text" class="form-control otc-datefield" id="pjem-date" placeholder="dd/mm/yyyy" autocomplete="off">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjem-time" data-lang="pj-f-time">Starts</label>
+                        <input type="text" class="form-control" id="pjem-time" inputmode="numeric" maxlength="5" placeholder="hh:mm" autocomplete="off">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjem-length" data-lang="pj-f-length">Length</label>
+                        <select class="form-select" id="pjem-length"></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjem-type" data-lang="pj-f-type">Type</label>
+                        <select class="form-select" id="pjem-type"></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjem-project" data-lang="pj-f-project">Initiative</label>
+                        <input type="text" class="form-control" id="pjem-project" readonly tabindex="-1">
+                    </div>
+                    <div class="col-md-6 d-none" id="pjem-done-wrap">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjem-done" data-lang="pj-f-reached">Reached</label>
+                        <div class="form-check form-switch mt-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="pjem-done">
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fs-xs text-muted mb-1" for="pjem-where" data-lang="pj-f-where">Where</label>
+                        <input type="text" class="form-control" id="pjem-where" maxlength="200" autocomplete="off" data-lang-placeholder="pj-ph-where" placeholder="Video call">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-outline-danger me-auto d-none" id="pjem-delete" title="Delete event"><i class="ti ti-trash"></i></button>
+                <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+                <button type="button" class="btn btn-sm btn-success" id="pjem-save" title="Save"><i class="ti ti-device-floppy"></i></button>
             </div>
         </div>
     </div>

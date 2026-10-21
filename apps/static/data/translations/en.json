@@ -2967,7 +2967,6 @@
   "pj-started": "Started",
   "pj-people": "People",
   "pj-milestones": "Milestones",
-  "pj-ph-ms": "New milestone",
   "pj-activity": "Recent activity",
   "pj-burnup": "Burn-up",
   "pj-burnup-sub": "Tasks done against the total, over the initiative’s life",
@@ -3041,5 +3040,14 @@
   "st-data-sub": "What is yours in the OTC Tracker",
   "st-export": "Export my tasks as CSV",
   "st-reset": "Reset to defaults",
-  "st-reset-sub": "Look, notifications and focus back to the original"
+  "st-reset-sub": "Look, notifications and focus back to the original",
+  "pj-new-event": "New event",
+  "pj-f-date": "Date",
+  "pj-f-time": "Starts",
+  "pj-f-length": "Length",
+  "pj-f-type": "Type",
+  "pj-f-where": "Where",
+  "pj-ph-where": "Video call",
+  "pj-ph-event": "e.g. Go-live review",
+  "pj-f-reached": "Reached"
 }

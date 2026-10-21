@@ -8,6 +8,7 @@ encosta em dado real.
 """
 import io
 import os
+import re
 import sys
 import tempfile
 from datetime import date, datetime, timedelta
@@ -209,6 +210,55 @@ check('atividade registra o marco', d['project']['activity'][0]['kind'], 'milest
 check('atividade é ESTRUTURADA', d['project']['activity'][0]['params'], {'milestone': 'Spec signed'})
 st, d = call(bia, 'post', '/api/projects/%s/milestones' % P1, {'title': ''})
 check('marco sem título', d.get('code'), 'title_required')
+
+print('\n== 5b. o marco é o EVENTO da iniciativa (New event, §648) ==')
+st, d = call(bia, 'post', '/api/projects/%s/milestones' % P1,
+             {'title': 'Design review', 'date': '21/12/2026', 'time': '19:30', 'length': '45',
+              'type': 'meeting', 'where': '  Video   call '})
+ev = [m for m in d['project']['milestones'] if m['title'] == 'Design review'][0]
+check('o evento grava hora, duração, tipo (canônico) e local (limpo)',
+      (st, ev['date'], ev['time'], ev['length'], ev['type'], ev['where']),
+      (200, '2026-12-21', '19:30', 45, 'Meeting', 'Video call'))
+st, d = call(bia, 'post', '/api/projects/%s/milestones' % P1, {'title': 'Kick-off', 'date': '2026-12-21', 'time': '9:05'})
+ko = [m for m in d['project']['milestones'] if m['title'] == 'Kick-off'][0]
+check('hora normalizada e duração padrão (30 min) com hora', (ko['time'], ko['length'], ko['type']), ('09:05', 30, 'Milestone'))
+check('no mesmo dia, pela hora', [m['title'] for m in d['project']['milestones'] if m['date'] == '2026-12-21'],
+      ['Kick-off', 'Design review'])
+st, d = call(bia, 'post', '/api/projects/%s/milestones' % P1, {'title': 'Dia todo', 'date': '2026-12-22', 'length': '90'})
+dt = [m for m in d['project']['milestones'] if m['title'] == 'Dia todo'][0]
+check('sem hora é o dia inteiro: sem duração', (dt['time'], dt['length']), ('', None))
+for corpo, code in (({'title': 'X', 'time': '25:00'}, 'bad_time'), ({'title': 'X', 'time': 'abc'}, 'bad_time'),
+                    ({'title': 'X', 'time': '10:00', 'length': '50'}, 'bad_choice'),
+                    ({'title': 'X', 'type': 'Party'}, 'bad_choice')):
+    st, d = call(bia, 'post', '/api/projects/%s/milestones' % P1, corpo)
+    check('recusa %r -> %s' % (corpo, code), (st, d.get('code')), (400, code))
+st, d = call(bia, 'patch', '/api/projects/%s/milestones/%s' % (P1, ev['id']), {'where': 'Room 3', 'done': True})
+ev2 = [m for m in d['project']['milestones'] if m['id'] == ev['id']][0]
+check('editar só o local mantém o resto e dá por atingido',
+      (ev2['title'], ev2['time'], ev2['length'], ev2['type'], ev2['where'], ev2['done']),
+      ('Design review', '19:30', 45, 'Meeting', 'Room 3', True))
+st, d = call(bia, 'patch', '/api/projects/%s/milestones/%s' % (P1, ev['id']), {'time': ''})
+ev3 = [m for m in d['project']['milestones'] if m['id'] == ev['id']][0]
+check('tirar a hora tira a duração', (ev3['time'], ev3['length']), ('', None))
+for m in (ev, ko, dt):
+    call(bia, 'delete', '/api/projects/%s/milestones/%s' % (P1, m['id']))
+st, d = call(bia, 'get', '/api/projects/%s' % P1)
+check('a página recebe as listas do modal', (d.get('event_types'), d.get('event_lengths')),
+      (domain.EVENT_TYPES, domain.EVENT_LENGTHS))
+check('o Calendar recebe a hora do evento',
+      domain.calendar_events([{'id': 'X', 'name': 'N', 'milestones': [
+          {'id': 'm1', 'title': 'R', 'date': '2026-11-03', 'time': '10:00'}]}])[0]['time'], '10:00')
+
+TPL_PJ = io.open(os.path.join(ROOT, 'apps', 'templates', 'pages', 'projects-detail.html'), encoding='utf-8').read()
+JS_PJ = io.open(os.path.join(ROOT, 'apps', 'static', 'js', 'pages', 'project-detail.js'), encoding='utf-8').read()
+check('a página tem o New event', 'id="pjd-new-event"' in TPL_PJ, True)
+check('o card de marcos só mostra (sem o Add nem os campos)',
+      [x for x in ('pjd-ms-add', 'pjd-ms-title', 'pjd-ms-date') if x in TPL_PJ + JS_PJ], [])
+# o Edit clicado antes da carga abria o modal em branco (o `state.p` vazio
+# guardado no clique): os botões da barra esperam a iniciativa carregada.
+check('Edit, New event e Add task esperam a carga',
+      [b for b in ('pjd-edit', 'pjd-new-event', 'pjd-add-task')
+       if not re.search(r"\$\('%s'\)\.addEventListener\('click', carregada\(" % b, JS_PJ)], [])
 
 print('\n== 6. edição do projeto ==')
 st, d = call(mo, 'patch', '/api/projects/%s' % P1, {'status': 'On going'})

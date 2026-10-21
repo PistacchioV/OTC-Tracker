@@ -34,6 +34,16 @@ CATEGORIES = ['Process Review', 'Tech Issue', 'Projects', 'B3 - Improvements', '
 # 19/10/2026). O master é admin para todo efeito.
 LEAD_ROLES = ('BO', 'ADMIN', 'MASTER')
 
+# O MARCO é o EVENTO da iniciativa (mesa, 21/10/2026): nasce do "New event"
+# da página, com hora, duração, tipo e local — só o título é obrigatório. Tipo
+# e duração são LISTA FECHADA (o tipo é gravado em inglês e traduzido na tela,
+# `ev_<tipo>`); a duração, em minutos, só existe com hora.
+EVENT_TYPES = ['Milestone', 'Meeting', 'Deadline', 'Review', 'Go-live']
+DEFAULT_EVENT_TYPE = 'Milestone'
+EVENT_LENGTHS = [15, 30, 45, 60, 90, 120, 180, 240]
+DEFAULT_EVENT_LENGTH = 30
+MAX_WHERE = 200
+
 MAX_NAME = 120
 MAX_DESCRIPTION = 600
 MAX_TITLE = 200
@@ -247,12 +257,44 @@ def _estimate(value):
     return round(v, 2)
 
 
+MILESTONE_FIELDS = ('title', 'date', 'time', 'length', 'type', 'where')
+
+
 def validate_milestone(data):
+    """O marco — o EVENTO da iniciativa. Sem hora ele é do dia inteiro, e aí
+    não tem duração; com hora e sem duração, vale a padrão (30 min)."""
     data = data or {}
     title = clean_text(data.get('title'), MAX_TITLE)
     if not title:
         raise ProjectError('title_required', 'Give the milestone a title.')
-    return {'title': title, 'date': iso_date(data.get('date'), 'date')}
+    hora = _hhmm(data.get('time'))
+    return {'title': title, 'date': iso_date(data.get('date'), 'date'),
+            'time': hora,
+            'length': _event_length(data.get('length')) if hora else None,
+            'type': _choice(data.get('type'), EVENT_TYPES, DEFAULT_EVENT_TYPE, 'type'),
+            'where': clean_text(data.get('where'), MAX_WHERE)}
+
+
+def _hhmm(value):
+    s = str(value or '').strip()
+    if not s:
+        return ''
+    m = re.match(r'^(\d{1,2}):(\d{2})$', s)
+    if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
+        raise ProjectError('bad_time', 'Invalid time in "time" — use hh:mm.', field='time')
+    return '%02d:%02d' % (int(m.group(1)), int(m.group(2)))
+
+
+def _event_length(value):
+    if value is None or str(value).strip() == '':
+        return DEFAULT_EVENT_LENGTH
+    try:
+        n = int(str(value).strip())
+    except ValueError:
+        n = None
+    if n not in EVENT_LENGTHS:
+        raise ProjectError('bad_choice', 'Invalid value for "length".', field='length')
+    return n
 
 
 # ── Quem pode ─────────────────────────────────────────────────────────────────
@@ -283,10 +325,16 @@ def progress(project):
     return int(round(100.0 * done / len(tasks)))
 
 
+def milestone_order(m):
+    """Pela data e, no mesmo dia, pela hora (o do dia inteiro vem antes); sem
+    data vai para o fim."""
+    return (m.get('date') or '9999-12-31', m.get('time') or '', m.get('id', ''))
+
+
 def next_milestone(project):
     """O primeiro marco em aberto, pela data (sem data vai para o fim)."""
     abertos = [m for m in project.get('milestones') or [] if not m.get('done')]
-    abertos.sort(key=lambda m: (m.get('date') or '9999-12-31', m.get('id', '')))
+    abertos.sort(key=milestone_order)
     return abertos[0] if abertos else None
 
 
@@ -411,7 +459,7 @@ def calendar_events(projects):
         for m in p.get('milestones') or []:
             if m.get('date'):
                 out.append(dict(base, kind='milestone', date=m['date'], title=m.get('title', ''),
-                                id=m.get('id', ''), done=bool(m.get('done'))))
+                                id=m.get('id', ''), done=bool(m.get('done')), time=m.get('time', '')))
         for t in p.get('tasks') or []:
             if t.get('due') and t.get('status') != DONE:
                 out.append(dict(base, kind='task', date=t['due'], title=t.get('title', ''),

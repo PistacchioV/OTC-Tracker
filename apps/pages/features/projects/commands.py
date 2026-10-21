@@ -270,10 +270,11 @@ def update_milestone(actor, project_id, ms_id, data):
     def go(doc):
         p = _project(doc, project_id)
         m = _child(p.get('milestones'), ms_id, 'milestone_not_found', 'Milestone not found.')
-        if 'title' in data or 'date' in data:
-            campos = domain.validate_milestone({'title': data.get('title', m.get('title')),
-                                                'date': data.get('date', m.get('date'))})
-            m.update(campos)
+        # Edição do evento: o que não veio no pedido fica como estava.
+        if any(k in data for k in domain.MILESTONE_FIELDS):
+            atual = {k: m.get(k) for k in domain.MILESTONE_FIELDS}
+            atual.update({k: data[k] for k in domain.MILESTONE_FIELDS if k in data})
+            m.update(domain.validate_milestone(atual))
             p['updated_at'] = store.now()
         if 'done' in data:
             novo = bool(data.get('done'))

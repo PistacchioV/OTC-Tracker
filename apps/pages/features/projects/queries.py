@@ -53,8 +53,7 @@ def detail(project, today, dir_=None):
     tarefas = sorted(project.get('tasks') or [], key=lambda t: (
         _TASK_ORDER.get(t.get('status'), 9), _PRIO_ORDER.get(t.get('priority'), 9),
         t.get('due') or '9999-12-31', t.get('id', '')))
-    marcos = sorted(project.get('milestones') or [],
-                    key=lambda m: (m.get('date') or '9999-12-31', m.get('id', '')))
+    marcos = sorted(project.get('milestones') or [], key=domain.milestone_order)
     nxt = domain.next_milestone(project)
     feitas = sum(1 for t in tarefas if t.get('status') == domain.DONE)
     out = dict(domain.summary(project))
