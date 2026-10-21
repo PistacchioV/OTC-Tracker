@@ -2837,6 +2837,16 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   `unwind_rows`): casa pelo Trade Id (exato ou os 14 da direita) ou, sem ele,
   por contraparte (sem pontuação e sufixo societário) + valor dentro de R$ 1,00,
   cada recompra UMA perna. Vertical ilegível não derruba a recon (avisa no log).
+- **Pay/Rec: o SWAP casa e liquida até R$20** (`_TOL_SWAP`, 21/10/2026, §665):
+  o lado interno sai líquido do IR regressivo do cadastro, e o pago difere em
+  alguns reais. A janela larga é uma passada PRÓPRIA no fim do `_reconcile`
+  (`_swap_mate`), depois dos exatos e dos centavos — o casamento é só por
+  VALOR, e no meio do laço o swap roubaria o par exato de quem vem depois. Ela
+  exige o MESMO sentido e prefere a mesma contraparte (`_cpty_key`). Quem diz
+  que é swap é o lado JPM (a perna do cliente chega pelo SPB como NDF). O
+  carry-forward e o match manual usam a mesma janela (`_manual_tol`: todo o
+  lado JPM da seleção SWAP; a tela recebe `data-match-tol-swap`). O resto
+  segue no R$1. `check_payrec_swap_tol.py`.
 - **Pay/Rec: o botão Match casa À MÃO o que o motor deixou solto** (mesa,
   02/10/2026, §617/§623): duas ou mais linhas marcadas do Pending Payment e/ou
   do Pending Receivement, só as de UM lado (a que tem JPM e cliente já foi
@@ -3262,7 +3272,7 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (205 scripts)
+### `scripts/tests/` (206 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

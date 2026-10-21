@@ -28,7 +28,8 @@ def reconciliation_payrec():
         ref_date = link
     return render_template('pages/reconciliation-payrec.html',
                            segment='reconciliation-payrec', ref_date=ref_date,
-                           match_tol=queries.match_tolerance())
+                           match_tol=queries.match_tolerance(),
+                           match_tol_swap=queries.match_tolerance_swap())
 
 
 @blueprint.route('/reconciliation-payrec/data')

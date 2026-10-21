@@ -521,6 +521,9 @@
   // da mesma contraparte. O servidor confere tudo de novo — o JS é conveniência.
   var matchSel = {};
   var MATCH_TOL = parseFloat(page.getAttribute('data-match-tol')) || 1;
+  // Todo o lado JPM da seleção em SWAP → a janela do motor para o swap
+  // (`_manual_tol` no servidor; quem diz o produto é o lado JPM).
+  var MATCH_TOL_SWAP = parseFloat(page.getAttribute('data-match-tol-swap')) || MATCH_TOL;
 
   function toNum(v) {
     if (typeof v === 'number') return v;
@@ -548,7 +551,8 @@
       var p = k.split(':');
       if (p[0] !== tableKey || !matchSel[k]) return;
       var i = parseInt(p[1], 10), r = (arr || [])[i], sv = r && sideValue(r);
-      if (sv) out.push({ index: i, cpty: sv.cpty, value: sv.value, side: sv.side, table: tableKey });
+      if (sv) out.push({ index: i, cpty: sv.cpty, value: sv.value, side: sv.side, table: tableKey,
+                         product: String(r.product || '').trim().toUpperCase() });
     });
     return out.sort(function (a, b) { return a.index - b.index; });
   }
@@ -588,7 +592,8 @@
     var cli = all.filter(function (r) { return r.side === 'client'; });
     var totJ = sum(jpm), totCl = sum(cli);
     var r2 = function (v) { return Math.round(v * 100) / 100; };
-    var fits = function (v) { return Math.abs(v) <= MATCH_TOL + 1e-9; };
+    var tol = jpm.length && jpm.every(function (r) { return r.product === 'SWAP'; }) ? MATCH_TOL_SWAP : MATCH_TOL;
+    var fits = function (v) { return Math.abs(v) <= tol + 1e-9; };
     // A MESMA regra do servidor (`_manual_balance`): JPM × Client fecha pela
     // diferença; linhas que se compensam (§617), pela soma.
     var diff = r2(totJ - totCl), soma = r2(totJ + totCl);
@@ -617,7 +622,7 @@
       '</table></div>' +
       '<div class="pr-match-sum">' + esc(t(usaDiff ? 'matchDiff' : 'matchSum')) + ': <b class="' + (net < 0 ? 'pr-neg' : '') + '">' + fmtNum(net) + '</b>' +
         '<span class="pr-match-chip ' + (within ? 'ok' : 'no') + '">' + esc(t(within ? 'matchWithin' : 'matchOver')) +
-        ' · ' + esc(t('matchTol')) + ' ' + fmtNum(MATCH_TOL) + '</span></div>' +
+        ' · ' + esc(t('matchTol')) + ' ' + fmtNum(tol) + '</span></div>' +
       (sameCpty ? '' : '<div class="pr-match-err">' + esc(fmtParams(t('e_match_cpty_differs'),
         { names: keys.map(function (k) { return names[k] || '—'; }).join(', ') })) + '</div>');
     var allowed = within && sameCpty;
