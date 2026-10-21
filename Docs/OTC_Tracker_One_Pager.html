@@ -96,7 +96,7 @@
   svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
   .flow-card { margin-top: 10px; }
-  .flow { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; counter-reset: step; }
+  .flow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; counter-reset: step; }
   .step {
     position: relative; background: var(--fill); border-radius: var(--r-md); padding: 10px 12px 11px;
   }
@@ -177,7 +177,7 @@
     body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     /* Folha larga e compacta, reduzida para caber numa página: medida no
        Chromium (1700px de layout × zoom ≈ a largura útil do A4 deitado). */
-    .sheet { width: 1700px !important; max-width: none; padding: 0; zoom: .625 !important; }
+    .sheet { width: 1700px !important; max-width: none; padding: 0; zoom: .61 !important; }
     .hero { padding: 12px 18px; }
     .lede { max-width: none; }
     .kpis { margin-top: 8px; gap: 10px; }
@@ -275,6 +275,11 @@
         <div class="step__head"><span class="tile" style="--hue:var(--purple)"><svg viewBox="0 0 24 24"><path d="M7 7h12l-3-3"/><path d="M17 17H5l3 3"/></svg></span>
           <div><div class="step__n">06</div><div class="step__title"><span lang="pt">Reconciliação</span><span lang="en">Reconciliation</span></div></div></div>
         <p><span lang="pt">Pay/Rec, FXO, CGD, Comitente e FepWeb × Athena.</span><span lang="en">Pay/Rec, FXO, CGD, custodian and FepWeb vs. Athena.</span></p>
+      </div>
+      <div class="step">
+        <div class="step__head"><span class="tile" style="--hue:var(--amber)"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span>
+          <div><div class="step__n">07</div><div class="step__title"><span lang="pt">Regulatório</span><span lang="en">Regulatory</span></div></div></div>
+        <p><span lang="pt">Accrual e MtM de fim de mês: arquivos B3/CETIP gerados e conciliados com o retorno da B3. e-Financeira e WHT em desenvolvimento.</span><span lang="en">Month-end Accrual and MtM: B3/CETIP files generated and reconciled with B3 returns. e-Financeira and WHT in development.</span></p>
       </div>
     </div>
     <div class="products">
