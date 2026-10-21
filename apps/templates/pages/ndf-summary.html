@@ -255,7 +255,7 @@
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table id="ops-summary-table" class="table table-hover align-middle w-100">
+                        <table id="ops-summary-table" class="table table-hover align-middle w-100" data-export-name="NDF Summary - Settlement Summary">
                             <thead>
                                 <tr>
                                     <th style="width:36px"><input type="checkbox" class="form-check-input ops-cb-all"></th>
@@ -317,7 +317,7 @@
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table id="ops-trade-table" class="table table-hover align-middle w-100">
+                        <table id="ops-trade-table" class="table table-hover align-middle w-100" data-export-name="NDF Summary - Trade Level">
                             <thead>
                                 <tr>
                                     <th style="width:36px"><input type="checkbox" class="form-check-input ops-cb-all"></th>
@@ -457,18 +457,6 @@ document.addEventListener('DOMContentLoaded', function () {
         return row;
     }
 
-    // ── Nome dos arquivos de Export ─────────────────────────────────────────
-    // Sao duas tabelas na mesma pagina, entao o nome diz as duas coisas: a tela
-    // e o card. A data sai do campo da tela (dd/mm/aaaa) em AAAAMMDD, que e o
-    // formato com que o Advanced Export carimba os arquivos dele.
-    var EXPORT_PAGE = 'NDF Summary';
-    var EXPORT_CARD = { 'ops-summary-table': 'Settlement Summary', 'ops-trade-table': 'Trade Level' };
-    function refDateFlat() {
-        var el = document.getElementById('ops-ref-date');
-        var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(((el && el.value) || '').trim());
-        return m ? m[3] + m[2] + m[1] : '';
-    }
-
     // ── Per-table setup ─────────────────────────────────────────────────────
     // `fixedOrder` é o índice da coluna que manda na ordem — e ela fica TRAVADA:
     // nenhuma coluna aceita clique, e a tabela abre e permanece ordenada por
@@ -519,24 +507,18 @@ document.addEventListener('DOMContentLoaded', function () {
             modifier: { search: 'applied', order: 'applied', page: 'all' },
             format: { body: opsExportCell }
         };
-        // O nome do arquivo e o do DOCUMENTO — pagina, card e a data de
-        // referencia da tela, no formato do Advanced Export (` - AAAAMMDD`).
-        // Baixava `ops-summary-table.csv`: o id da <table>, que nao diz nem de
-        // que tela nem de que dia o arquivo e.
-        var expBase = EXPORT_PAGE + ' - ' + (EXPORT_CARD[id] || id);
-        function expName() {
-            var d = refDateFlat();
-            return expBase + (d ? ' - ' + d : '');
-        }
+        // O nome do arquivo e o padrao da casa (`export-advanced.js`), com o
+        // CARD no lugar da pagina: `data-export-name` do <table>, porque
+        // "Trade Level" sozinho existe nos dois Summaries.
         // O `;` e o BOM do CSV vem do export antigo: e o que faz o Excel pt-BR
         // abrir o arquivo com as colunas separadas e os acentos vivos.
         new $.fn.dataTable.Buttons(dt, { buttons: [
-            { extend: 'copyHtml5',  name: 'copy',  exportOptions: expOpts, title: expName },
-            { extend: 'csvHtml5',   name: 'csv',   exportOptions: expOpts, filename: expName,
+            { extend: 'copyHtml5',  name: 'copy',  exportOptions: expOpts },
+            { extend: 'csvHtml5',   name: 'csv',   exportOptions: expOpts,
               fieldSeparator: ';', bom: true },
-            { extend: 'excelHtml5', name: 'excel', exportOptions: expOpts, filename: expName },
-            { extend: 'print',      name: 'print', exportOptions: expOpts, title: expName },
-            { extend: 'pdfHtml5',   name: 'pdf',   exportOptions: expOpts, filename: expName,
+            { extend: 'excelHtml5', name: 'excel', exportOptions: expOpts },
+            { extend: 'print',      name: 'print', exportOptions: expOpts },
+            { extend: 'pdfHtml5',   name: 'pdf',   exportOptions: expOpts,
               orientation: 'landscape', pageSize: 'A4' }
         ] });
         $toolbar.find('.ops-export-item').on('click', function (e) {
@@ -550,7 +532,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // que o empilhamento de dias le. O recorte de colunas e linhas, que e a
         // outra metade do Advanced Export, vale desde ja.
         if (window.otcExportAdvanced) otcExportAdvanced('#' + id, {
-            menu: '#' + id + '-export-menu', name: expBase, skip: [0, 1]
+            menu: '#' + id + '-export-menu', skip: [0, 1]
         });
         var $delBtn = $toolbar.find('.ops-del');
 

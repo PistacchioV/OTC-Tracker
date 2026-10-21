@@ -217,6 +217,9 @@ def api_settings_export_tasks():
                     dmy(t.get('due')), t.get('estimate') if t.get('estimate') is not None else '',
                     '%d of %d' % (sum(1 for s in subs if s.get('done')), len(subs)) if subs else '',
                     dmy(t.get('created_at')), dmy(t.get('done_at'))])
-    nome = 'My Tasks - %s - %s.csv' % (me['name'] or me['sid'], _now()[:10].replace('-', ''))
+    # O padrão de nome de todo export de tabela (mesa, 21/10/2026): `<página ou
+    # tabela> - OTC Tracker - OTC Processing System` — o mesmo do
+    # `export-advanced.js` no navegador.
+    nome = 'My Tasks - OTC Tracker - OTC Processing System.csv'
     return Response('\ufeff' + buf.getvalue(), mimetype='text/csv; charset=utf-8',
                     headers={'Content-Disposition': "attachment; filename*=UTF-8''" + quote(nome)})

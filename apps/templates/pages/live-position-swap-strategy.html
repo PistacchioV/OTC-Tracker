@@ -296,7 +296,6 @@ function erroTexto(res, padrao) {
 }
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function _isoToDmy(s){var m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?(m[3]+'/'+m[2]+'/'+m[1]):String(s||'');}
-function _todayYmd(){var d=new Date();return d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2);}
 
 // `Complete` = a consulta de dados da estratégia já veio; `Pending` = só a lista.
 var STATUS_META = { 'Complete': 'bg-success text-white', 'Pending': 'bg-warning text-dark' };
@@ -312,8 +311,6 @@ $(document).ready(function () {
     }
     function fmtExport(data) { return (data == null ? '' : String(data)).replace(/<[^>]*>/g, '').trim(); }
     var EXPORT_COLS = [2, 3, 4, 5, 6, 7];
-    // O nome do arquivo é o do DOCUMENTO (§7): a tela e o dia em que se exportou.
-    function exportName() { return 'Swap-Strategy-' + _todayYmd(); }
     var PAGINATE = { paginate: { first:'<i class="ti ti-chevrons-left"></i>', previous:'<i class="ti ti-chevron-left"></i>', next:'<i class="ti ti-chevron-right"></i>', last:'<i class="ti ti-chevrons-right"></i>' } };
 
     var table = window.sstTable = $('#sst-table').DataTable({
@@ -340,11 +337,11 @@ $(document).ready(function () {
             extend: 'collection', text: '<i class="ti ti-download me-1"></i> Export',
             className: 'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all', autoClose: true, fade: 0,
             buttons: [
-                { extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', title: exportName, exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
-                { extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV', className:'dropdown-item', bom:true, fieldSeparator:';', title: exportName, exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
-                { extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', title: exportName, exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
-                { extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', title: exportName, exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
-                { extend:'pdf',   text:'<i class="ti ti-file-text me-1"></i> PDF', className:'dropdown-item', title: exportName, orientation:'landscape', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} }
+                { extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
+                { extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV', className:'dropdown-item', bom:true, fieldSeparator:';', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
+                { extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
+                { extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} },
+                { extend:'pdf',   text:'<i class="ti ti-file-text me-1"></i> PDF', className:'dropdown-item', orientation:'landscape', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}} }
             ]
         }],
         language: PAGINATE,

@@ -901,25 +901,10 @@
             columns: function (idx) { return idx >= OFFSET && table.column(idx).visible(); },
             modifier: { page: 'all', search: 'applied', order: 'applied' }
         };
-        // O título é lido A CADA export (função, não string): a data da recon
-        // muda pelo campo, e um título calculado uma vez ficaria preso à data em
-        // que a página abriu.
-        function titulo() { return 'Recon FXO ' + ($('#fxo-date').val() || ''); }
-
-        // O NOME DO ARQUIVO segue o padrão do app — o título da página —, que é o
-        // default do DataTables quando ninguém mexe (`filename: '*'`). Aqui ele
-        // precisa ser escrito de propósito: vendo `filename: '*'` ao lado de um
-        // `title` PRÓPRIO (a recon põe a data no cabeçalho do documento), o
-        // Buttons passa a usar o título como nome, e o arquivo saía
-        // `Recon FXO 2026-08-13.xlsx` em vez do padrão. Devolvendo '*' de dentro
-        // de uma função, quem resolve o coringa continua sendo o Buttons.
-        function nomeExport() { return '*'; }
-        // O CSV é montado à mão logo acima, então ele aplica a regra sozinho: o
-        // mesmo título e a mesma limpeza de caracteres que o Buttons faz.
-        function nomeArquivo() {
-            return (document.title || 'export')
-                .replace(/[^a-zA-Z0-9_\u00A1-\uFFFF\.,\-_ !\(\)]/g, '').trim();
-        }
+        // Nome e título do arquivo: o padrão da casa (`export-advanced.js`),
+        // que decide pelos cinco botões. O CSV, montado à mão acima, pergunta o
+        // nome ao mesmo helper — senão sairia diferente dos outros quatro.
+        function nomeArquivo() { return window.otcExportName ? otcExportName('#fxo-table') : 'FXO Reconciliation'; }
 
         // O Buttons é criado SOB DEMANDA e amarrado à instância atual da tabela.
         // `buildTable` destrói e recria a DataTable quando as colunas chegam do
@@ -931,10 +916,10 @@
             if (btns) { try { btns.destroy(); } catch (e) {} }
             btns = new $.fn.dataTable.Buttons(table, {
                 buttons: [
-                    { extend: 'excel', title: titulo, filename: nomeExport, exportOptions: expOpts },
-                    { extend: 'print', title: titulo, exportOptions: expOpts },
+                    { extend: 'excel', exportOptions: expOpts },
+                    { extend: 'print', exportOptions: expOpts },
                     // A recon tem ~38 colunas: retrato cortaria a tabela em silêncio.
-                    { extend: 'pdf', title: titulo, filename: nomeExport,
+                    { extend: 'pdf',
                       orientation: 'landscape', pageSize: 'A3', exportOptions: expOpts,
                       customize: function (doc) {
                           doc.defaultStyle.fontSize = 6;

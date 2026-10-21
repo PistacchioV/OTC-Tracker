@@ -876,15 +876,26 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   e PDF pelo pdfmake, carregados só no clique (§556). Célula
   editável sai pelo VALUE do campo, num `format.body` (o texto de um `<input>`
   é vazio, e a coluna sairia em branco) — modelo em `formatExportData`.
-  **O nome do arquivo é o do DOCUMENTO** — tela, card quando há mais de um, e a
-  data de referência em `AAAAMMDD`, que é como o Advanced Export carimba os
-  dele —, nunca o id da `<table>`: `ops-summary-table.csv` não diz nem de que
-  tela nem de que dia é. Página com duas tabelas passa `name` explícito, senão
-  as duas baixam o mesmo nome (o `defaultName` é o título da página).
-  `check_export_padrao.py` prende as três coisas, no estilo do
-  `check_modal_standard`: a LISTA de quem já está fora (quinze telas com o menu
-  pela metade, o `reconciliation-fxo` com Csv/Copy próprios, o
-  `index-b3-results` com quatro tabelas e um nome só) não pode crescer.
+  **O nome do arquivo é UM padrão: `<Página ou tabela> - OTC Tracker - OTC
+  Processing System`** (mesa, 21/10/2026, §664) — `Reference Data - OTC
+  Tracker - OTC Processing System.xlsx`, no /mapping o CADASTRO (`API-Bob
+  Reports Links - …`), sem data. Quem decide é o `export-advanced.js`
+  (`patchNames`): ele embrulha os cinco botões (Copy, CSV, Excel, Print, PDF)
+  no clique e põe o mesmo texto como TÍTULO dentro do arquivo (linha 1 do
+  Excel, topo do PDF/Print). A PÁGINA é o `{% block title %}` (o `<title>`
+  antes do " | ", em inglês — o `<h4>` é traduzido; travessão vira espaço), e
+  por isso página que exporta TEM o bloco. A TABELA é o `data-export-name` do
+  `<table>` — página com mais de uma o declara em cada uma (Summaries, Index B3
+  Results, Intrag DCE Swap, Accrual/MtM por LOB); o `name` do
+  `otcExportAdvanced` escreve nele. **Página não escreve `title`/`filename`
+  em botão de export** (seria ignorado); export que não é do Buttons (o
+  /mapping, o CSV da Recon FXO) chama `otcExportName`/`otcExportTitle`, e o CSV
+  gerado no servidor (bases das Tools, My Tasks) usa o mesmo sufixo. A barra
+  vira hífen no NOME e fica no título. `check_export_padrao.py` §3 (estático) e
+  `check_export_name.py` (executa o export no Chromium). O mesmo guarda prende,
+  no estilo do `check_modal_standard`, a LISTA de quem está fora do menu (quinze
+  telas com o menu pela metade, o `reconciliation-fxo` com Csv/Copy próprios),
+  que não pode crescer.
 - **Alinhamento com `scrollX` são TRÊS coisas**: `columns.adjust()` depois de
   todo draw (+ passe atrasado 150 ms + `resize`); `autoWidth: true`; regras de
   `th` repetidas nos clones com `white-space: normal`.
@@ -3251,7 +3262,7 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (204 scripts)
+### `scripts/tests/` (205 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

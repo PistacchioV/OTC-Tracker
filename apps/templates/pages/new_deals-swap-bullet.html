@@ -351,11 +351,11 @@ $(document).ready(function() {
             extend:'collection', text:'<i class="ti ti-download me-1"></i> Export',
             className:'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all', autoClose:true, fade:0,
             buttons:[
-                {extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', title:'New Deals — Swap Bullet', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}}},
-                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',   className:'dropdown-item', bom:true, fieldSeparator:';', title:'New Deals — Swap Bullet', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}}},
-                {extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', title:'New Deals — Swap Bullet', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}}},
-                {extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', title:'New Deals — Swap Bullet', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}}},
-                {extend:'pdf',   text:'<i class="ti ti-file-text me-1"></i> PDF',   className:'dropdown-item', title:'New Deals — Swap Bullet', orientation:'landscape', pageSize:'A3', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}}}
+                {extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}}},
+                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',   className:'dropdown-item', bom:true, fieldSeparator:';', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}}},
+                {extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}}},
+                {extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}}},
+                {extend:'pdf',   text:'<i class="ti ti-file-text me-1"></i> PDF',   className:'dropdown-item', orientation:'landscape', pageSize:'A3', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}}}
             ]
         }],
         language: PAGINATE,
@@ -1156,7 +1156,7 @@ $(document).ready(function() {
     })();
     document.getElementById('sfSearchBtn').addEventListener('click', function() { sfApply(); });
 
-    if (window.otcExportAdvanced) otcExportAdvanced('#swb-table', { name: 'New Deals — Swap Bullet' });
+    if (window.otcExportAdvanced) otcExportAdvanced('#swb-table');
 });
 </script>
 {% endblock extra_javascript %}

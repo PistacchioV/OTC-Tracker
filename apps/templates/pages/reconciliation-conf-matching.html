@@ -481,14 +481,9 @@
         menuColunas();
     }
 
-    function refFlat() { return String($('#cfm-date').val() || '').replace(/-/g, ''); }
-    // O nome do arquivo é o do DOCUMENTO: tela + data de referência AAAAMMDD.
-    function expName() { return 'Conf Matching ' + refFlat(); }
-
     function botoes() {
+        // Nome e título do arquivo: o padrão da casa (`export-advanced.js`).
         var comuns = {
-            title: function () { return 'Conf. Matching ' + ($('#cfm-date-display').val() || ''); },
-            filename: expName,
             exportOptions: {
                 columns: ':visible:not(.cfm-noexp)',
                 // Com linhas marcadas, exporta SÓ as marcadas; sem nenhuma, tudo
@@ -513,7 +508,7 @@
         if (window.otcExportAdvanced) {
             // O endpoint do intervalo é o MESMO que a tela consulta para um dia.
             otcExportAdvanced('#cfm-table', {
-                name: 'Conf Matching', skip: [0, IDX_ACTIONS], menu: '#cfm-export-menu',
+                skip: [0, IDX_ACTIONS], menu: '#cfm-export-menu',
                 daily: { url: '/api/reconciliation-conf-matching/data', param: 'recon_date' }
             });
         }

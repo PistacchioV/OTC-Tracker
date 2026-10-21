@@ -27800,3 +27800,72 @@ autocontido, que se abre no navegador ou se manda por e-mail.
 
 Conferido no Chromium: sem rolagem de 1280×680 a 1920×960 (a borda de baixo
 da folha a ~2 px da janela) e PDF de uma página em EN e PT.
+
+## §664 — Um nome só para todo arquivo exportado: `<Página ou tabela> - OTC Tracker - OTC Processing System` (2026-10-21)
+
+Pedido da mesa: padronizar o nome dos arquivos que as tabelas exportam —
+`Reference Data - OTC Tracker - OTC Processing System`, e no /mapping o
+cadastro (`API/BOB Reports - …`).
+
+**Por que não havia padrão.** Cada tela decidia o seu nome, e a maioria não
+decidia nada: o DataTables Buttons usa o `<title>` da aba quando ninguém diz
+outra coisa, e o arquivo saía `Reference Data  OTC Tracker - Sistema de Gestão
+OTC.xlsx` (o `|` removido, dois espaços). As que diziam inventavam cada uma uma
+forma: `track-confirmations`, `Unwinds-NDF-FX-20261021`,
+`Reconciliation_Comitente`, `Intrag Option`, `MTM CEM 21/10/2026`,
+`mapping_api-links`, `term_sofr_20260101_20261021` — e o §461 tinha fixado a
+data `AAAAMMDD` no nome, que o padrão novo não leva.
+
+**O que mudou.**
+- **Um lugar decide**: `export-advanced.js` (`patchNames`) embrulha o `action`
+  dos cinco botões (`copyHtml5`, `csvHtml5`, `excelHtml5`, `pdfHtml5`, `print`)
+  e, no clique, escreve `filename` e `title` pelo padrão — o que a página
+  escrevesse é ignorado, e por isso os `title`/`filename` das telas saíram (um
+  `title: 'Intrag Option'` que não vale nada mente para quem lê). O Buttons
+  copia o `action` na construção do botão; o `print` vem num arquivo à parte
+  que a Tickets List e a Quotes carregam DEPOIS do helper, então a passada se
+  repete no `options.dt` (o primeiro evento da inicialização de toda tabela).
+- **O título dentro do arquivo é o mesmo texto** (linha 1 do Excel, topo do PDF
+  e do Print, 1ª linha do Copy) — era o `<title>` da aba, com "Sistema de
+  Gestão OTC".
+- **A página é o `{% block title %}`**, não o `<h4>`: o I18nManager traduz o
+  cabeçalho, e o mesmo export sairia com um nome em cada máquina. O travessão
+  de "Intrag — NDF" vira espaço (o separador do padrão é o hífen). Ajustados os
+  títulos que não diziam o nome da tela: `Accrual — Swap` → `Swap Accrual`,
+  `MtM — Swap` → `Swap MtM`, `Dashboard — Pending Confirmation` → `Pending
+  Confirmation Dashboard`, e o `reconciliation-comitente.html` não tinha bloco.
+- **A tabela é o `data-export-name`**, onde a página tem mais de uma: os dois
+  Summaries (`NDF Summary - Trade Level`; "Trade Level" sozinho existe nos dois,
+  e os arquivos teriam o mesmo nome), Index B3 Results (quatro abas — a dívida
+  do §461 paga), Intrag DCE Swap (Legs/Cashflows), Accrual e MtM (uma tabela
+  por LOB). O `name` do `otcExportAdvanced` passou a ser isso: o rótulo da
+  tabela, escrito no atributo.
+- **Sem data**, inclusive no Advanced Export (`finalName` = o campo; saíram o
+  `defaultName`, o `todayIso` e o `flatDay`). O intervalo pedido está nas linhas
+  (a coluna Reference Date), e quem renomeia no campo continua mandando — o
+  botão temporário vai com `otcOwnName` para o embrulho não reescrevê-lo.
+- **A barra vira hífen no nome** (`API-Bob Reports Links - …`): não existe em
+  nome de arquivo, e o Buttons simplesmente a apagava (`APIBob`). No título ela
+  fica.
+- **Fora do Buttons**: o /mapping (SheetJS, pdfmake, CSV próprios) e o CSV da
+  Recon FXO chamam `otcExportName`/`otcExportTitle` (o /mapping passou a
+  carregar o `export-advanced.js`), pelo rótulo do cadastro em INGLÊS
+  (`typeOf(CUR).label`); os CSVs do servidor — as três bases das Tools (Term
+  SOFR, SOFR Index, Euribor, `_nome_export`) e o My Tasks da User Home — usam o
+  mesmo sufixo. Documento que não é tabela (memória de cálculo, confirmações,
+  arquivos da B3, `.eml`) segue com o nome próprio.
+
+**Guardas.** `check_export_padrao.py` §3 (reescrito): o sufixo e os cinco
+botões no helper, nenhuma página com `title`/`filename` em botão de export,
+cada tabela das páginas com várias com rótulo, toda página que exporta com
+`{% block title %}`, o /mapping e a Recon FXO pelo helper, os CSVs do servidor.
+`check_export_name.py` (novo) EXECUTA o export no Chromium — nome do download,
+linha de título do Excel, h1 do Print com o `print` carregado depois, o
+`data-export-name`, a barra, o Advanced Export com e sem nome digitado. O
+`check_export_advanced.py` (jsc) cobre as funções de nome; ele estava sem rodar
+desde que o `finalName` passou a ler o `temDia` (ReferenceError no harness), e
+voltando a rodar mostra dois FAILs ANTERIORES a isto — a segunda passada dos
+dias que falham (§562) mudou a contagem do `fetchDays` e o teste não acompanhou.
+
+Conferido no app (5005): Reference Data (Excel e CSV), /mapping › API/Bob
+Reports Links (CSV) e NDF Summary › Trade Level (Excel), com o título na A1.

@@ -166,7 +166,7 @@
                 </div>
                 <div class="card-body" style="padding-top:10px;">
                     <div class="table-responsive">
-                        <table class="table table-striped dt-responsive align-middle mb-0 dces-table" id="intrag-dces-legs">
+                        <table class="table table-striped dt-responsive align-middle mb-0 dces-table" id="intrag-dces-legs" data-export-name="Intrag DCE Swap - Legs">
                             <thead class="thead-sm text-uppercase fs-xxs">
                                 <tr class="text-uppercase fs-xxs" id="dcesLegsHead">
                                     <th style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0 dces-cb-all" type="checkbox" id="selectAll"></th>
@@ -198,7 +198,7 @@
                 </div>
                 <div class="card-body" style="padding-top:10px;">
                     <div class="table-responsive">
-                        <table class="table table-striped dt-responsive align-middle mb-0 dces-table" id="intrag-dces-flows">
+                        <table class="table table-striped dt-responsive align-middle mb-0 dces-table" id="intrag-dces-flows" data-export-name="Intrag DCE Swap - Cashflows">
                             <thead class="thead-sm text-uppercase fs-xxs">
                                 <tr class="text-uppercase fs-xxs" id="dcesFlowsHead"><th></th></tr>
                                 <tr class="dces-filter-row" id="dcesFlowsFilter"><th></th></tr>
@@ -345,16 +345,18 @@ $(document).ready(function() {
         if (node) { var inp=$(node).find('input[type!="checkbox"]'); if (inp.length) return inp.val()||''; }
         return (data==null?'':String(data)).replace(/<[^>]*>/g,'').trim();
     }
-    function exportButtons(cols, title) {
+    // Nome e título do arquivo: o padrão da casa (`export-advanced.js`), com a
+    // TABELA (Legs/Cashflows) no `data-export-name` de cada <table>.
+    function exportButtons(cols) {
         return [{
             extend:'collection', text:'<i class="ti ti-download me-1"></i> Export',
             className:'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all', autoClose:true, fade:0,
             buttons:[
-                {extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', title:title, exportOptions:{columns:cols,format:{body:fmtExport}}},
-                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',   className:'dropdown-item', bom:true, fieldSeparator:';', title:title, exportOptions:{columns:cols,format:{body:fmtExport}}},
-                {extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', title:title, exportOptions:{columns:cols,format:{body:fmtExport}}},
-                {extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', title:title, exportOptions:{columns:cols,format:{body:fmtExport}}},
-                {extend:'pdf',   text:'<i class="ti ti-file-text me-1"></i> PDF',   className:'dropdown-item', title:title, orientation:'landscape', pageSize:'A3', exportOptions:{columns:cols,format:{body:fmtExport}}}
+                {extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', exportOptions:{columns:cols,format:{body:fmtExport}}},
+                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',   className:'dropdown-item', bom:true, fieldSeparator:';', exportOptions:{columns:cols,format:{body:fmtExport}}},
+                {extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', exportOptions:{columns:cols,format:{body:fmtExport}}},
+                {extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', exportOptions:{columns:cols,format:{body:fmtExport}}},
+                {extend:'pdf',   text:'<i class="ti ti-file-text me-1"></i> PDF',   className:'dropdown-item', orientation:'landscape', pageSize:'A3', exportOptions:{columns:cols,format:{body:fmtExport}}}
             ]
         }];
     }
@@ -383,7 +385,7 @@ $(document).ready(function() {
             { visible: false, targets: [L_ID] }
         ],
         dom: "<'row'<'col-sm-12'tr>>" + "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
-        buttons: exportButtons(range(2, L_ID - 1), 'Intrag DCE Swap — Legs'),
+        buttons: exportButtons(range(2, L_ID - 1)),
         language: PAGINATE,
         drawCallback: function() {
             var api = this.api();
@@ -425,7 +427,7 @@ $(document).ready(function() {
         select: { style:'os', items:'cell' },
         columnDefs: [ { visible: false, targets: [F_ID] } ],
         dom: "<'row'<'col-sm-12'tr>>" + "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
-        buttons: exportButtons(range(0, F_ID - 1), 'Intrag DCE Swap — Cashflows'),
+        buttons: exportButtons(range(0, F_ID - 1)),
         language: PAGINATE,
         initComplete: function() { wireColumnFilters(this.api(), 'dcesFlowsFilter'); }
     });

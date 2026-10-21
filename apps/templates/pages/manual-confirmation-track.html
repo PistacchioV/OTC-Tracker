@@ -891,12 +891,11 @@
         new $.fn.dataTable.Buttons(table, { buttons: [
             { extend: 'copyHtml5',  name: 'copy',  exportOptions: opts },
             { extend: 'csvHtml5',   name: 'csv',   exportOptions: opts,
-              filename: 'track-confirmations', fieldSeparator: ';', bom: true },
-            { extend: 'excelHtml5', name: 'excel', exportOptions: opts,
-              filename: 'track-confirmations' },
+              fieldSeparator: ';', bom: true },
+            { extend: 'excelHtml5', name: 'excel', exportOptions: opts },
             { extend: 'print',      name: 'print', exportOptions: opts },
             { extend: 'pdfHtml5',   name: 'pdf',   exportOptions: opts,
-              filename: 'track-confirmations', orientation: 'landscape', pageSize: 'A4' }
+              orientation: 'landscape', pageSize: 'A4' }
         ] });
     }
 

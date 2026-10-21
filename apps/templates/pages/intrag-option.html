@@ -355,10 +355,10 @@ $(document).ready(function() {
             className:'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all',
             autoClose:true, fade:0,
             buttons:[
-                {extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', title:'Intrag Option', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
-                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',   className:'dropdown-item', bom:true, title:'Intrag Option', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
-                {extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', title:'Intrag Option', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
-                {extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', title:'Intrag Option', exportOptions:{columns:exportCols(),format:{body:fmtExport}}}
+                {extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',   className:'dropdown-item', bom:true, exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}}
             ]
         }],
         language: { paginate: { first:'<i class="ti ti-chevrons-left"></i>', previous:'<i class="ti ti-chevron-left"></i>', next:'<i class="ti ti-chevron-right"></i>', last:'<i class="ti ti-chevrons-right"></i>' } },

@@ -96,40 +96,122 @@ for nome, marca in (('other-products-swap-vcp.html', 'vcp'), ('reconciliation-cg
     check('  %s tem Clear Filters alcancando as duas copias' % nome,
           bool(re.search(r'container\(\)\)[\s\S]{0,400}?\.find\([^)]*filter', texto, re.I)), True)
 
-# ── 3. Nome do arquivo quando a pagina exporta mais de uma tabela ───────────
-print('=== 3. Nome do arquivo (§461) ===')
-DUAS_TABELAS_SEM_NOME = {
-    # Quatro tabelas, quatro downloads com o titulo da pagina. Divida registrada.
-    'index-b3-results.html': 4,
+# ── 3. O NOME do arquivo exportado (mesa, 21/10/2026) ──────────────────────
+# Um padrao so, em toda tabela que exporta:
+#     <Pagina ou tabela> - OTC Tracker - OTC Processing System
+# Quem decide e o `export-advanced.js`, no clique dos cinco botoes. Cada tela
+# inventava o seu (o titulo da aba com "| OTC Tracker - Sistema de Gestao OTC",
+# `track-confirmations`, `Unwinds-NDF-FX-20261021`...), e um `title`/`filename`
+# escrito na pagina hoje seria ignorado — codigo que mente. O
+# `check_export_name.py` EXECUTA o export e confere o arquivo baixado.
+print('=== 3. Nome do arquivo (padrao da casa) ===')
+SUFIXO = ' - OTC Tracker - OTC Processing System'
+XA_SRC = io.open(os.path.join(ROOT, 'apps', 'static', 'js', 'export-advanced.js'), encoding='utf-8').read()
+check('  o helper define o sufixo do padrao', ("var EXPORT_SUFFIX = '%s';" % SUFIXO) in XA_SRC, True)
+check('  ...e embrulha os cinco botoes',
+      "var NAMED_BUTTONS = ['copyHtml5', 'csvHtml5', 'excelHtml5', 'pdfHtml5', 'print'];" in XA_SRC, True)
+check('  ...de novo no options.dt (o print que carrega depois)',
+      "jQuery(document).on('options.dt', patchNames);" in XA_SRC, True)
+check('  ...e expoe o nome para o export que nao e do Buttons',
+      'window.otcExportName = exportFile;' in XA_SRC and 'window.otcExportTitle = exportTitle;' in XA_SRC, True)
+check('  o Advanced Export nao carimba mais data no nome',
+      'flatDay(' not in XA_SRC and 'todayIso(' not in XA_SRC, True)
+
+TIPOS = ('copy', 'copyHtml5', 'csv', 'csvHtml5', 'excel', 'excelHtml5', 'pdf', 'pdfHtml5', 'print')
+
+
+def _objeto(texto, pos):
+    """O objeto `{...}` que contem `pos`, so o primeiro nivel (sub-objetos achatados)."""
+    ini = texto.rfind('{', 0, pos)
+    prof, i = 0, ini
+    while i < len(texto):
+        if texto[i] == '{':
+            prof += 1
+        elif texto[i] == '}':
+            prof -= 1
+            if prof == 0:
+                break
+        i += 1
+    corpo = texto[ini + 1:i]
+    for _ in range(4):
+        corpo = re.sub(r'\{[^{}]*\}', '{}', corpo)
+    return corpo
+
+
+escreve = []
+for nome, texto in fontes():
+    for m in re.finditer(r"""extend\s*:\s*(['"]?)(\w+)\1""", texto):
+        if m.group(1) and m.group(2) not in TIPOS:
+            continue
+        corpo = _objeto(texto, m.start())
+        for k in ('title', 'filename'):
+            if re.search(r'\b%s\s*:' % k, corpo):
+                escreve.append('%s:%d %s' % (nome, texto[:m.start()].count('\n') + 1, k))
+check('  nenhuma pagina escreve title/filename num botao de export', escreve, [])
+
+# Pagina com MAIS DE UMA tabela: cada uma diz qual e (`data-export-name`), senao
+# as duas baixam com o mesmo nome. "Trade Level" existe nos dois Summaries, por
+# isso a pagina vem junto.
+ROTULOS = {
+    'ndf-summary.html': ['NDF Summary - Settlement Summary', 'NDF Summary - Trade Level'],
+    'other-products-summary.html': ['Other Products Summary - Settlement Summary',
+                                    'Other Products Summary - Trade Level'],
+    'index-b3-results.html': ['Index B3 Results - Underlying Assets', 'Index B3 Results - VCP',
+                              'Index B3 Results - Domain', 'Index B3 Results - Swap Index'],
+    'intrag-dce-swap.html': ['Intrag DCE Swap - Legs', 'Intrag DCE Swap - Cashflows'],
 }
+for nome, rotulos in sorted(ROTULOS.items()):
+    texto = io.open(os.path.join(PAGINAS, nome), encoding='utf-8').read()
+    check('  %s nomeia cada tabela' % nome,
+          [r for r in rotulos if ('data-export-name="%s"' % r) not in texto], [])
+for nome, pagina in (('accrual-swap.html', 'Swap Accrual'), ('mtm-swap.html', 'Swap MtM')):
+    texto = io.open(os.path.join(PAGINAS, nome), encoding='utf-8').read()
+    check('  %s nomeia a tabela de cada LOB' % nome,
+          ("setAttribute('data-export-name', '%s - ' + lob.name)" % pagina) in texto, True)
+
+# Duas chamadas do Advanced Export na mesma pagina sem rotulo = dois arquivos
+# com o mesmo nome. Rotulo e o `name` da chamada ou o `data-export-name`.
 sem_nome = {}
 for nome, texto in fontes():
     chamadas = list(re.finditer(r'otcExportAdvanced\(', texto))
-    if len(chamadas) < 2:
+    if len(chamadas) < 2 or 'data-export-name' in texto:
         continue
-    n = 0
-    for m in chamadas:
-        trecho = texto[m.end():m.end() + 260]
-        if 'name:' not in trecho:
-            n += 1
+    n = sum(1 for m in chamadas if 'name:' not in texto[m.end():m.end() + 260])
     if n >= 2:
         sem_nome[nome] = n
-check('  so as telas conhecidas exportam duas tabelas com o mesmo nome',
-      sem_nome, DUAS_TABELAS_SEM_NOME)
+check('  nenhuma pagina exporta duas tabelas com o mesmo nome', sem_nome, {})
 
-# As duas telas do §461 carimbam tela + card + data no nome.
-for nome, pagina in (('other-products-summary.html', 'Other Products Summary'),
-                     ('ndf-summary.html', 'NDF Summary')):
+# O titulo da pagina e o NOME dela (o `{% block title %}`, em ingles): pagina
+# que exporta sem ele baixaria "Export - OTC Tracker - ...".
+sem_titulo = []
+for nome in sorted(os.listdir(PAGINAS)):
+    if not nome.endswith('.html'):
+        continue
     texto = io.open(os.path.join(PAGINAS, nome), encoding='utf-8').read()
-    check('  %s nomeia o arquivo pelo documento' % nome,
-          ("EXPORT_PAGE = '%s'" % pagina) in texto and 'EXPORT_CARD' in texto, True)
-    check('  %s carimba a data de referencia (AAAAMMDD)' % nome,
-          'function refDateFlat()' in texto and 'function expName()' in texto, True)
-    check('  %s tem os cinco itens de export' % nome,
-          sorted(set(re.findall(r"""data-btn=['"](\w+)['"]""", texto))),
-          ['copy', 'csv', 'excel', 'pdf', 'print'])
-    check('  %s exporta a celula editavel pelo VALUE' % nome,
-          'function opsExportCell(' in texto and 'format: { body: opsExportCell }' in texto, True)
+    if ('buttons.html5' in texto or 'tools-assets-js' in texto or 'otcExportName' in texto) \
+            and not re.search(r'{% block title %}\s*\S', texto):
+        sem_titulo.append(nome)
+check('  toda pagina que exporta tem {% block title %}', sem_titulo, [])
+
+# Os exports que NAO sao do Buttons perguntam o nome ao mesmo helper.
+MAPA = io.open(os.path.join(PAGINAS, 'mapping.html'), encoding='utf-8').read()
+check('  /mapping: nome = o CADASTRO no padrao (rotulo em ingles)',
+      'function exportFile() { return otcExportName(typeOf(CUR).label); }' in MAPA
+      and 'function exportTitle() { return otcExportTitle(typeOf(CUR).label); }' in MAPA, True)
+check('  /mapping: CSV, Excel e PDF saem com esse nome',
+      all(x in MAPA for x in ("exportFile() + '.csv'", "exportFile() + '.xlsx'", "exportFile() + '.pdf'"))
+      and 'mapping_' not in MAPA, True)
+check('  /mapping carrega o export-advanced.js (o helper do nome)', 'js/export-advanced.js' in MAPA, True)
+FXO = io.open(os.path.join(PAGINAS, 'reconciliation-fxo.html'), encoding='utf-8').read()
+check('  Recon FXO: o CSV proprio pergunta o nome ao helper', "otcExportName('#fxo-table')" in FXO, True)
+
+# Os CSVs gerados no SERVIDOR (as bases das Tools, as minhas tarefas).
+TOOLS = io.open(os.path.join(ROOT, 'apps', 'pages', 'features', 'tools', 'entrypoint.py'), encoding='utf-8').read()
+check('  Tools: as tres bases em CSV no padrao',
+      ("return '%%s%s.csv' %% tela" % SUFIXO) in TOOLS
+      and all(("_nome_export('%s')" % x) in TOOLS for x in ('Term SOFR', 'SOFR Index', 'Euribor')), True)
+UH = io.open(os.path.join(ROOT, 'apps', 'pages', 'features', 'user_home', 'entrypoint.py'), encoding='utf-8').read()
+check('  User Home: My Tasks no padrao', ("'My Tasks%s.csv'" % SUFIXO) in UH, True)
 
 # ── 4. O menu de Export completo ───────────────────────────────────────────
 # Copy · CSV · Excel · Print · PDF. As telas abaixo nasceram com o menu pela
