@@ -68,13 +68,16 @@
     function norm(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
     function keyOf(v) { var s = norm(v); return s === '' ? BLANK : s; }
 
-    // Texto da célula como a tela mostra: o HTML de exibição, sem tags.
+    // Texto da célula como a tela mostra: o HTML de exibição, sem tags — e a
+    // pílula de status em Proper, como o `otc.js` a desenha (§649), senão o
+    // funil listaria "SENT" para uma célula que diz "Sent".
     var _tmp = document.createElement('div');
     function cellText(html) {
         if (html == null) return '';
         var s = String(html);
         if (s.indexOf('<') === -1 && s.indexOf('&') === -1) return s;
         _tmp.innerHTML = s;
+        if (window.otcProperize && s.indexOf('otc-status') !== -1) window.otcProperize(_tmp);
         return _tmp.textContent || '';
     }
 

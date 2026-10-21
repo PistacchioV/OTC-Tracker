@@ -450,7 +450,7 @@
         return 'text-bg-secondary';
     }
     function badge(s) {
-        return s ? '<span class="badge rounded-pill ' + statusClass(s) + ' bg-gradient">' +
+        return s ? '<span class="badge otc-status rounded-pill ' + statusClass(s) + ' bg-gradient">' +
                    esc(s) + '</span>' : '';
     }
 
@@ -521,11 +521,11 @@
         var etapas = (r._stages && r._stages.length ? r._stages
                       : (r._stage ? [r._stage] : []));
         var pills = etapas.map(function (s) {
-            return '<span class="badge rounded-pill ' + (STAGE_BADGE[s] || 'text-bg-secondary') +
+            return '<span class="badge otc-status rounded-pill ' + (STAGE_BADGE[s] || 'text-bg-secondary') +
                    ' bg-gradient me-1">' + esc(s) + '</span>';
         }).join('');
         td.push('<td>' + (pills ? pills + marca
-                          : (r._closed ? '<span class="badge rounded-pill text-bg-secondary bg-gradient">' +
+                          : (r._closed ? '<span class="badge otc-status rounded-pill text-bg-secondary bg-gradient">' +
                                          esc(t('finalized')) + '</span>' : '')) + '</td>');
         COLS.forEach(function (c) {
             var v = r[c];

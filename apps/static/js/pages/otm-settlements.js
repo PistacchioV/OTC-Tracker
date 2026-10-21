@@ -72,9 +72,9 @@
   // pelo HTML ordenaria pela classe do CSS.
   function statusBadge(status) {
     var s = String(status || 'OK').toLowerCase();
-    if (s === 'pending') return '<span data-st="pending" class="badge text-bg-warning bg-gradient">' + esc(t('pending')) + '</span>';
-    if (s === 'new')     return '<span data-st="new" class="badge bg-info text-white bg-gradient">' + esc(t('newst')) + '</span>';
-    return '<span data-st="ok" class="badge text-bg-success bg-gradient">' + esc(t('ok')) + '</span>';
+    if (s === 'pending') return '<span data-st="pending" class="badge otc-status text-bg-warning bg-gradient">' + esc(t('pending')) + '</span>';
+    if (s === 'new')     return '<span data-st="new" class="badge otc-status bg-info text-white bg-gradient">' + esc(t('newst')) + '</span>';
+    return '<span data-st="ok" class="badge otc-status text-bg-success bg-gradient">' + esc(t('ok')) + '</span>';
   }
 
   // Ordem por URGÊNCIA, não alfabética: o que precisa de ação primeiro. `New` é

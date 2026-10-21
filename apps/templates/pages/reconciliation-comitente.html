@@ -295,7 +295,7 @@ function sBadge(s) {
     // diverge de verdade (vermelho). Status fora do mapa cai no cinza.
     const m = { New:'text-bg-secondary', Check:'text-bg-warning', OK:'text-bg-success', Amend:'text-bg-danger' };
     const t = String(s || '—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    return `<span class="badge rounded-pill bg-gradient ${m[s]||'text-bg-secondary'}">${t}</span>`;
+    return `<span class="badge otc-status rounded-pill bg-gradient ${m[s]||'text-bg-secondary'}">${t}</span>`;
 }
 
 /* ── Score cell helper ───────────────────────────────────────────── */

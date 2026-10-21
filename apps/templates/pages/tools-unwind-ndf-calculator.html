@@ -128,8 +128,8 @@
                         <p class="tl-sub">{% if r.direcao == 'RECEIVE' %}<span data-lang="tl-bank-receives">the bank receives</span>{% elif r.direcao == 'PAY' %}<span data-lang="tl-bank-pays">the bank pays</span>{% else %}<span data-lang="tl-unw-nothing">nothing settles — the termination rate is the strike</span>{% endif %}</p>
                     </div>
                     <div class="d-flex flex-column align-items-end gap-1">
-                        {% if r.direcao %}<span class="badge rounded-pill {{ 'text-bg-success' if r.direcao == 'RECEIVE' else 'text-bg-warning' }} bg-gradient">{{ r.direcao }}</span>{% endif %}
-                        {% if r.total is not none %}<span class="badge rounded-pill text-bg-secondary bg-gradient">{% if r.total %}<span data-lang="tl-unw-total">Total unwind</span>{% else %}<span data-lang="tl-unw-partial">Partial unwind</span>{% endif %}</span>{% endif %}
+                        {% if r.direcao %}<span class="badge otc-status rounded-pill {{ 'text-bg-success' if r.direcao == 'RECEIVE' else 'text-bg-warning' }} bg-gradient">{{ r.direcao }}</span>{% endif %}
+                        {% if r.total is not none %}<span class="badge otc-status rounded-pill text-bg-secondary bg-gradient">{% if r.total %}<span data-lang="tl-unw-total">Total unwind</span>{% else %}<span data-lang="tl-unw-partial">Partial unwind</span>{% endif %}</span>{% endif %}
                     </div>
                 </div>
                 <div class="tl-stats mt-3">

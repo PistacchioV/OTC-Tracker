@@ -452,7 +452,7 @@ var STATUS_META = { 'Imported': { cls: 'bg-info text-white' }, 'Pending': { cls:
 function statusBadge(status) {
     var txt = String(status == null ? '' : status).replace(/<[^>]*>/g, '').trim() || 'Imported';
     var m = STATUS_META[txt] || STATUS_META['Imported'];
-    return '<span class="badge ' + m.cls + ' bg-gradient">' + esc(txt) + '</span>';
+    return '<span class="badge otc-status ' + m.cls + ' bg-gradient">' + esc(txt) + '</span>';
 }
 // O Check é o veredito de TRÊS estados do `conferir_apuracao` — não existe
 // "passou por omissão": '-' é "não deu para conferir", e não é verde.
@@ -460,7 +460,7 @@ function checkBadge(v, warns) {
     var txt = String(v || '-').trim();
     var cls = txt === 'OK' ? 'text-bg-success' : (txt === 'NOK' ? 'text-bg-danger' : 'text-bg-secondary');
     var tip = (warns || []).map(avisoTexto).filter(Boolean).join(' · ');
-    return '<span class="badge ' + cls + ' bg-gradient"' +
+    return '<span class="badge otc-status ' + cls + ' bg-gradient"' +
         (tip ? ' data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="' + esc(tip) + '"' : '') +
         '>' + esc(txt) + '</span>';
 }

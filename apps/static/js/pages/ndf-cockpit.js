@@ -88,7 +88,7 @@
   // Server sentinel for a blank CD_CETIP_RETURN with no match in Live Position NDF.
   var MISSING_B3 = '__MISSING_B3_ID__';
   function cellHtml(v) {
-    if (v === MISSING_B3) return '<span class="badge text-bg-warning bg-gradient">Missing B3 ID</span>';
+    if (v === MISSING_B3) return '<span class="badge otc-status text-bg-warning bg-gradient">Missing B3 ID</span>';
     return esc(v);
   }
 
@@ -101,10 +101,10 @@
   // recompras do dia pelo nome.
   function statusBadge(status, unwind) {
     var s = String(status || 'OK').toLowerCase();
-    var b = (s === 'pending') ? '<span class="badge text-bg-warning bg-gradient">' + esc(t('pending')) + '</span>'
-          : (s === 'new')     ? '<span class="badge bg-info text-white bg-gradient">' + esc(t('newst')) + '</span>'
-                              : '<span class="badge text-bg-success bg-gradient">' + esc(t('ok')) + '</span>';
-    if (unwind) b += ' <span class="badge bg-secondary-subtle text-secondary bg-gradient ndfc-unwind">'
+    var b = (s === 'pending') ? '<span class="badge otc-status text-bg-warning bg-gradient">' + esc(t('pending')) + '</span>'
+          : (s === 'new')     ? '<span class="badge otc-status bg-info text-white bg-gradient">' + esc(t('newst')) + '</span>'
+                              : '<span class="badge otc-status text-bg-success bg-gradient">' + esc(t('ok')) + '</span>';
+    if (unwind) b += ' <span class="badge otc-status bg-secondary-subtle text-secondary bg-gradient ndfc-unwind">'
                      + esc(t('unwind')) + '</span>';
     return b;
   }

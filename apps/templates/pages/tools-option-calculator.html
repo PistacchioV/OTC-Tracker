@@ -120,8 +120,8 @@
                         <p class="tl-sub">{% if not r.exercida %}<span data-lang="tl-opt-otm">out of the money — the option is not exercised</span>{% elif r.direcao_exercicio == 'RECEIVE' %}<span data-lang="tl-bank-receives">the bank receives</span>{% else %}<span data-lang="tl-bank-pays">the bank pays</span>{% endif %}</p>
                     </div>
                     <div class="d-flex flex-column align-items-end gap-1">
-                        <span class="badge rounded-pill {{ 'text-bg-success' if r.exercida else 'text-bg-secondary' }} bg-gradient">{% if r.exercida %}<span data-lang="tl-opt-itm">In the money</span>{% else %}<span data-lang="tl-opt-otm-s">Out of the money</span>{% endif %}</span>
-                        {% if r.direcao_exercicio %}<span class="badge rounded-pill {{ 'text-bg-success' if r.direcao_exercicio == 'RECEIVE' else 'text-bg-warning' }} bg-gradient">{{ r.direcao_exercicio }}</span>{% endif %}
+                        <span class="badge otc-status rounded-pill {{ 'text-bg-success' if r.exercida else 'text-bg-secondary' }} bg-gradient">{% if r.exercida %}<span data-lang="tl-opt-itm">In the money</span>{% else %}<span data-lang="tl-opt-otm-s">Out of the money</span>{% endif %}</span>
+                        {% if r.direcao_exercicio %}<span class="badge otc-status rounded-pill {{ 'text-bg-success' if r.direcao_exercicio == 'RECEIVE' else 'text-bg-warning' }} bg-gradient">{{ r.direcao_exercicio }}</span>{% endif %}
                     </div>
                 </div>
                 <div class="tl-stats mt-3">

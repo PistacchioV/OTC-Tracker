@@ -110,10 +110,10 @@
   // Generated=primary (linha que já virou e-mail de mensageria).
   function statusBadge(status) {
     var s = String(status || 'New').toLowerCase();
-    if (s === 'pending')   return '<span class="badge text-bg-warning bg-gradient">' + esc(t('pending')) + '</span>';
-    if (s === 'ok')        return '<span class="badge text-bg-success bg-gradient">' + esc(t('ok')) + '</span>';
-    if (s === 'generated') return '<span class="badge text-bg-primary bg-gradient">' + esc(t('generated')) + '</span>';
-    return '<span class="badge bg-info text-white bg-gradient">' + esc(t('newst')) + '</span>';
+    if (s === 'pending')   return '<span class="badge otc-status text-bg-warning bg-gradient">' + esc(t('pending')) + '</span>';
+    if (s === 'ok')        return '<span class="badge otc-status text-bg-success bg-gradient">' + esc(t('ok')) + '</span>';
+    if (s === 'generated') return '<span class="badge otc-status text-bg-primary bg-gradient">' + esc(t('generated')) + '</span>';
+    return '<span class="badge otc-status bg-info text-white bg-gradient">' + esc(t('newst')) + '</span>';
   }
 
   function metaOf(r) {

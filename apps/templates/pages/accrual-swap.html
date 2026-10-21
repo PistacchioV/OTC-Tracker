@@ -384,9 +384,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: var(--otc-accent-soft) !impor
             var id = row ? String(row[row.length - 1]) : '';
             var rc = accRecon[id];
             if (rc && rc[leg]) {
-                if (rc[leg].ok) return '<span class="badge rounded-pill text-bg-success bg-gradient">' + esc(v) + '</span>';
+                if (rc[leg].ok) return '<span class="badge otc-status rounded-pill text-bg-success bg-gradient">' + esc(v) + '</span>';
                 var reg = rc[leg].reg || '—';
-                return '<span class="badge rounded-pill text-bg-danger bg-gradient" title="' + esc(t('acc-recon-registered', 'Registered') + ': ' + reg) + '">' + esc(v) + '</span>';
+                return '<span class="badge otc-status rounded-pill text-bg-danger bg-gradient" title="' + esc(t('acc-recon-registered', 'Registered') + ': ' + reg) + '">' + esc(v) + '</span>';
             }
             return esc(v);
         };
@@ -414,7 +414,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: var(--otc-accent-soft) !impor
         s = s || 'New';
         var key = String(s).toLowerCase();
         var cls = ACC_STATUS_BADGE[key] || 'text-bg-info';
-        return '<span class="badge ' + cls + ' bg-gradient">' + esc(t('acc-st-' + key, s)) + '</span>';
+        return '<span class="badge otc-status ' + cls + ' bg-gradient">' + esc(t('acc-st-' + key, s)) + '</span>';
     }
     // Action buttons — same style/colours as the New Deals pages (Bootstrap
     // solid circular buttons + Tabler icons): edit=info, delete=danger, send=primary.

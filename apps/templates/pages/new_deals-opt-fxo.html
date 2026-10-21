@@ -656,7 +656,7 @@ function dealJsonToRow(deal) {
         'Canceled': 'text-bg-dark'
     };
     var st = deal.Status || 'New';
-    var statusHtml = '<span class="badge ' + (STATUS_BADGE[st] || 'text-bg-info') + ' bg-gradient">' + st + '</span>';
+    var statusHtml = '<span class="badge otc-status ' + (STATUS_BADGE[st] || 'text-bg-info') + ' bg-gradient">' + st + '</span>';
     // Amend vindo da API: o backend grava em AmendChanged os nomes dos campos
     // alterados; aqui viram índices de coluna para o drawCallback pintar as
     // células (mesmo mecanismo do amend por e-mail).
@@ -1404,11 +1404,11 @@ $(document).ready(function() {
                                 if (result.status === 'Success') {
                                     table.cell(node, 4).data(result.b3_id || '');
                                     table.cell(node, 2).data(
-                                        '<span class="badge text-bg-success bg-gradient">Success</span>'
+                                        '<span class="badge otc-status text-bg-success bg-gradient">Success</span>'
                                     );
                                 } else if (result.status === 'Error') {
                                     table.cell(node, 2).data(
-                                        '<span class="badge text-bg-danger bg-gradient">Error</span>'
+                                        '<span class="badge otc-status text-bg-danger bg-gradient">Error</span>'
                                     );
                                 }
                             });
@@ -2447,7 +2447,7 @@ $(document).ready(function() {
                             })(item.data, dealName, sendChanges, capturedCli);
                         }
                         table.cell(item.rowIdx, STATUS_COL_INDEX).data(
-                            '<span class="badge badge-sent bg-gradient">Sent</span>'
+                            '<span class="badge otc-status badge-sent bg-gradient">Sent</span>'
                         );
                     });
                     selectedRowIds.clear();
@@ -2552,8 +2552,8 @@ $(document).ready(function() {
                 var newStatus = isStatusCol ? 'Approved' : 'Pending';
                 table.cell(rowIdx, STATUS_COL_INDEX).data(
                     isStatusCol
-                        ? '<span class="badge text-bg-secondary bg-gradient">Approved</span>'
-                        : '<span class="badge text-bg-warning bg-gradient">Pending</span>'
+                        ? '<span class="badge otc-status text-bg-secondary bg-gradient">Approved</span>'
+                        : '<span class="badge otc-status text-bg-warning bg-gradient">Pending</span>'
                 );
                 changedFields['Status'] = newStatus;
                 // Whoever edits (→Pending) or approves (→Approved) becomes the new Maker
@@ -2758,7 +2758,7 @@ $(document).ready(function() {
     // MISSING INDEX B3 BADGE HELPERS
     // ========================================================================
 
-    var MISSING_B3_BADGE_HTML = '<span class="badge rounded-pill bg-danger missing-b3-badge" style="font-size:0.74em;vertical-align:middle">Missing Index B3</span>';
+    var MISSING_B3_BADGE_HTML = '<span class="badge otc-status rounded-pill bg-danger missing-b3-badge" style="font-size:0.74em;vertical-align:middle">Missing Index B3</span>';
 
     var _b3OrigStatusOPT = {};
 
@@ -3220,7 +3220,7 @@ $(document).ready(function() {
         // Status always becomes Pending after an edit
         if (currentStatus !== 'Pending') {
             if (statusNode) {
-                $(statusNode).html('<span class="badge text-bg-warning bg-gradient">Pending</span>');
+                $(statusNode).html('<span class="badge otc-status text-bg-warning bg-gradient">Pending</span>');
             }
         }
         changedFields['Status'] = 'Pending';
@@ -3309,7 +3309,7 @@ $(document).ready(function() {
             var directStatus = directToApproved ? 'Approved' : 'Pending';
             var directBadge  = directToApproved ? 'text-bg-secondary' : 'text-bg-warning';
             if (statusNode) {
-                $(statusNode).html('<span class="badge ' + directBadge + ' bg-gradient">' + directStatus + '</span>');
+                $(statusNode).html('<span class="badge otc-status ' + directBadge + ' bg-gradient">' + directStatus + '</span>');
             }
             table.cell(tr[0], 28).data(CURRENT_USER_SID);
             var pendRowId = _sh(table.cell(tr[0], 3).data()) || '';
@@ -3351,7 +3351,7 @@ $(document).ready(function() {
                 return;
             }
             if (statusNode) {
-                $(statusNode).html('<span class="badge text-bg-secondary bg-gradient">Approved</span>');
+                $(statusNode).html('<span class="badge otc-status text-bg-secondary bg-gradient">Approved</span>');
             }
             // Approver becomes the new Maker → next step (Send) must be a different user
             table.cell(tr[0], 28).data(CURRENT_USER_SID);
@@ -3456,7 +3456,7 @@ $(document).ready(function() {
                         }).catch(function(err) { console.warn('Cache PATCH failed:', err); });
                     }
                     table.cell(tr[0], STATUS_COL_INDEX).data(
-                        '<span class="badge badge-sent bg-gradient">Sent</span>'
+                        '<span class="badge otc-status badge-sent bg-gradient">Sent</span>'
                     );
                     table.draw(false);
                 } else {

@@ -148,10 +148,10 @@
   function statusBadge(v) {
     var s = String(v || '').toLowerCase();
     var cls, label = v;
-    if (isJustified(v)) { cls = 'badge-justified'; label = t('justified'); }
-    else if (s.indexOf('settl') !== -1) { cls = 'badge-settled'; }
-    else { cls = 'badge-pending'; }
-    return '<span class="badge-status ' + cls + '">' + esc(label) + '</span>';
+    if (isJustified(v)) { cls = 'text-bg-primary'; label = t('justified'); }
+    else if (s.indexOf('settl') !== -1) { cls = 'text-bg-success'; }
+    else { cls = 'text-bg-warning'; }
+    return '<span class="badge otc-status badge-status ' + cls + '">' + esc(label) + '</span>';
   }
 
   // Justify mode: revealed when the operator chooses to justify pending items

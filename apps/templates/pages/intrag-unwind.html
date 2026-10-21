@@ -169,7 +169,7 @@ var STATUS_META = { 'New': { cls: 'bg-secondary text-white' }, 'Pending': { cls:
 function statusBadge(status) {
     var txt = String(status == null ? '' : status).replace(/<[^>]*>/g, '').trim() || 'New';
     var m = STATUS_META[txt] || STATUS_META['New'];
-    return '<span class="badge ' + m.cls + ' bg-gradient">' + esc(txt) + '</span>';
+    return '<span class="badge otc-status ' + m.cls + ' bg-gradient">' + esc(txt) + '</span>';
 }
 
 (function buildHead() {

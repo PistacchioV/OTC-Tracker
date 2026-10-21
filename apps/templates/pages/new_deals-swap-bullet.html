@@ -261,7 +261,7 @@ var STATUS_META = {
 function statusBadge(status) {
     var txt = (status == null ? '' : String(status)).replace(/<[^>]*>/g, '').trim() || 'New';
     var m = STATUS_META[txt] || STATUS_META['New'];
-    return '<span class="badge ' + m.cls + ' bg-gradient">' + esc(txt) + '</span>';
+    return '<span class="badge otc-status ' + m.cls + ' bg-gradient">' + esc(txt) + '</span>';
 }
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function t(key, fallback) {

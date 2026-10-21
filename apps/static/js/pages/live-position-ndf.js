@@ -144,7 +144,7 @@
       }).join('') + '</tr>';
     document.querySelector('#lnndf-table thead').innerHTML = titleRow + filterRow;
 
-    var statusBadge = '<span class="badge bg-secondary-subtle text-secondary">' + esc(t('status')) + '</span>';
+    var statusBadge = '<span class="badge otc-status bg-secondary-subtle text-secondary">' + esc(t('status')) + '</span>';
     // Botão Edit no squircle padrão (spec .ops-row-act) — edita SÓ o Codigo
     // Identificador. Linha sem Contrato não tem chave para endereçar o edit.
     function actionCell(r) {

@@ -413,7 +413,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: var(--otc-accent-soft) !impor
     function reconPill(v, ok, title) {
         var cls = ok ? 'text-bg-success' : 'text-bg-danger';
         var ttl = title ? ' title="' + esc(title) + '"' : '';
-        return '<span class="badge rounded-pill ' + cls + ' bg-gradient"' + ttl + '>' + esc(v) + '</span>';
+        return '<span class="badge otc-status rounded-pill ' + cls + ' bg-gradient"' + ttl + '>' + esc(v) + '</span>';
     }
     // Valor MTM cell → recon pill: green when the page value matches the
     // ConsultaInformacoesAtualizMID file, red (tooltip = file value) on divergence.
@@ -453,7 +453,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: var(--otc-accent-soft) !impor
         s = s || 'New';
         var key = String(s).toLowerCase();
         var cls = ACC_STATUS_BADGE[key] || 'text-bg-info';
-        return '<span class="badge ' + cls + ' bg-gradient">' + esc(t('acc-st-' + key, s)) + '</span>';
+        return '<span class="badge otc-status ' + cls + ' bg-gradient">' + esc(t('acc-st-' + key, s)) + '</span>';
     }
     // Action buttons — same style/colours as the New Deals pages (Bootstrap
     // solid circular buttons + Tabler icons): edit=info, delete=danger, send=primary.

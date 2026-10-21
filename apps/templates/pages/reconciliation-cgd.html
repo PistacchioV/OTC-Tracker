@@ -313,7 +313,7 @@
         var m = { pending_b3: 'text-bg-danger', pending_action: 'text-bg-warning',
                   only_b3: 'text-bg-primary', justified: 'text-bg-info',
                   matched: 'text-bg-success' };
-        return '<span class="badge rounded-pill ' + (m[r.bucket] || 'text-bg-secondary') +
+        return '<span class="badge otc-status rounded-pill ' + (m[r.bucket] || 'text-bg-secondary') +
                ' bg-gradient">' + esc(r.check) + '</span>';
     }
 

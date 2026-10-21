@@ -253,7 +253,7 @@ var STATUS_META = {
 function statusBadge(status) {
     var txt = (status == null ? '' : String(status)).replace(/<[^>]*>/g, '').trim() || 'New';
     var m = STATUS_META[txt] || STATUS_META['New'];
-    return '<span class="badge ' + m.cls + ' bg-gradient">' + esc(txt) + '</span>';
+    return '<span class="badge otc-status ' + m.cls + ' bg-gradient">' + esc(txt) + '</span>';
 }
 // Erros (`e_<code>`) e lacunas (`w_<code>`) chegam do servidor por CÓDIGO +
 // params (§486); `{nome}` no texto é o param. O `message`/`text` do servidor

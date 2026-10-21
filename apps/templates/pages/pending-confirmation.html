@@ -2176,7 +2176,7 @@ $(document).ready(function() {
             // (white text). Other statuses keep plain text. _pcStrip recovers "Ok"
             // from the span, so filtering / persistence stay unaffected.
             if (col.label === 'Status' && raw.trim().toLowerCase() === 'ok') {
-                cells.push('<span class="badge rounded-pill text-bg-success bg-gradient">' + sfEscape(raw.trim()) + '</span>');
+                cells.push('<span class="badge otc-status rounded-pill text-bg-success bg-gradient">' + sfEscape(raw.trim()) + '</span>');
             } else {
                 cells.push(sfEscape(raw));
             }

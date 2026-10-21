@@ -183,7 +183,7 @@
                         <div class="tl-big">R$ {{ r.liquidacao | abs | tl_money(2) }}</div>
                         <p class="tl-sub">{% if r.direcao == 'RECEIVE' %}<span data-lang="tl-bank-receives">the bank receives</span>{% elif r.direcao == 'PAY' %}<span data-lang="tl-bank-pays">the bank pays</span>{% else %}<span data-lang="tl-nothing-settles">nothing settles — the fixing is the forward rate</span>{% endif %}</p>
                     </div>
-                    {% if r.direcao %}<span class="badge rounded-pill {{ 'text-bg-success' if r.direcao == 'RECEIVE' else 'text-bg-warning' }} bg-gradient">{{ r.direcao }}</span>{% endif %}
+                    {% if r.direcao %}<span class="badge otc-status rounded-pill {{ 'text-bg-success' if r.direcao == 'RECEIVE' else 'text-bg-warning' }} bg-gradient">{{ r.direcao }}</span>{% endif %}
                 </div>
                 <div class="tl-stats mt-3">
                     {% if resultado.mercadoria %}

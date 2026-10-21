@@ -290,7 +290,7 @@ function statusBadge(status) {
     var s = 'New';
     for (var k in NDF_STATUS_META) { if (txt.toLowerCase() === k.toLowerCase()) { s = k; break; } }
     var m = NDF_STATUS_META[s];
-    return '<span class="badge ' + m.cls + ' bg-gradient" data-lang="' + m.lang + '">' + s + '</span>';
+    return '<span class="badge otc-status ' + m.cls + ' bg-gradient" data-lang="' + m.lang + '">' + s + '</span>';
 }
 // Actions cell — edit / delete / send + approve (approve shown only when Pending,
 // toggled in drawCallback).

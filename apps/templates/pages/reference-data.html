@@ -429,7 +429,7 @@ $(document).ready(function () {
         else if (st === 'PENDING INACTIVE') { cls = 'text-bg-danger';    lbl = 'Pend. Inactive'; }
         else if (st === 'PENDING DELETE')   { cls = 'text-bg-danger';    lbl = 'Pend. Delete'; }
         else                                { cls = 'text-bg-warning';   lbl = 'Pending'; }
-        return '<span class="badge rounded-pill pill-badge ' + cls + '">' + lbl + '</span>';
+        return '<span class="badge otc-status rounded-pill pill-badge ' + cls + '">' + lbl + '</span>';
     }
 
     function checkboxCell() {
@@ -778,7 +778,7 @@ $(document).ready(function () {
     /* A "Pending" badge shown on the main row when the double-click details carry
        something awaiting approval (so it's visible without opening the popup). */
     function detailsPendingBadge() {
-        return '<span class="badge rounded-pill pill-badge text-bg-warning" ' +
+        return '<span class="badge otc-status rounded-pill pill-badge text-bg-warning" ' +
                'title="Pending approval in details — double-click to review">Pending</span>';
     }
 
@@ -1192,7 +1192,7 @@ $(document).ready(function () {
 
     function _accBadge(status){
         var active = String(status).toLowerCase() === 'active';
-        return '<span class="badge ' + (active ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning') +
+        return '<span class="badge otc-status ' + (active ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning') +
             '" data-lang="' + (active ? 'rd-cp-acc-active' : 'rd-cp-acc-pending') + '">' + (active ? 'Active' : 'Pending') + '</span>';
     }
     function _accLabel(a){

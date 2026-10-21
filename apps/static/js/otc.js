@@ -1509,6 +1509,47 @@
   }
 
   // ==========================================================================
+  // 9c. Pílula de STATUS (mesa, 21/10/2026, §649): o texto em Proper, a regra
+  // do PROPER (PRI.MAIÚSCULA) do Excel — maiúscula a letra que vem depois de
+  // qualquer coisa que não é letra, minúscula a que vem depois de letra:
+  // "SENT" → "Sent", "Pending OTC" → "Pending Otc", "Unmatched B3" fica. Vale
+  // para toda pílula marcada `otc-status`, as que existem e as que nascem
+  // depois (redraw de tabela, tradução do I18nManager); o DADO não muda, só o
+  // que a tela mostra. Fundo e texto branco são do tema (otc.scss §6d). O funil
+  // do Excel e o export passam pela mesma função (`otcProperize`).
+  // ==========================================================================
+  function otcProper(s) {
+    return String(s == null ? '' : s).toLocaleLowerCase()
+      .replace(/(^|[^\p{L}])(\p{L})/gu, function (m, a, b) { return a + b.toLocaleUpperCase(); });
+  }
+  function properize(root) {
+    if (!root || root.nodeType !== 1) return;
+    var els = root.classList.contains('otc-status') ? [root] : [];
+    Array.prototype.push.apply(els, root.querySelectorAll('.otc-status'));
+    els.forEach(function (el) {
+      var w = doc.createTreeWalker(el, NodeFilter.SHOW_TEXT), n, p;
+      while ((n = w.nextNode())) {
+        p = otcProper(n.nodeValue);
+        if (p !== n.nodeValue) n.nodeValue = p;     // igual: nada a fazer, sem laço
+      }
+    });
+  }
+  window.otcProper = otcProper;
+  window.otcProperize = properize;
+  function initStatusPills() {
+    properize(doc.body);
+    if (!window.MutationObserver) return;
+    new MutationObserver(function (muts) {
+      for (var i = 0; i < muts.length; i++) {
+        var m = muts[i], t = m.type === 'characterData' ? m.target.parentNode : m.target;
+        var host = t && t.closest ? t.closest('.otc-status') : null;
+        if (host) { properize(host); continue; }
+        for (var j = 0; j < m.addedNodes.length; j++) properize(m.addedNodes[j]);
+      }
+    }).observe(doc.body, { childList: true, subtree: true, characterData: true });
+  }
+
+  // ==========================================================================
   // 10. SEND — o "Contrail"
   // ==========================================================================
   // O avião voa no clique, mas "Sent" só aparece depois que o SERVIDOR
@@ -1770,6 +1811,7 @@
     initLiquidGlass();
     initEntrance();
     initStats();
+    initStatusPills();
 
     window.otcI18n = new I18nManager();
     window.applyTranslations = function () { return window.otcI18n.applyTranslations(); };

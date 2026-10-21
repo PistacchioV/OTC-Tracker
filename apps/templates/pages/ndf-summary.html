@@ -653,7 +653,7 @@ document.addEventListener('DOMContentLoaded', function () {
             card.querySelector('[data-recon-intv]').textContent = r.int_value || '0.00';
             var badge = card.querySelector('[data-recon-badge]');
             var ok = !!r.matched;
-            badge.className = 'ops-recon-badge ' + (ok ? 'is-ok' : 'is-check');
+            badge.className = 'ops-recon-badge otc-status ' + (ok ? 'is-ok text-bg-success' : 'is-check text-bg-danger');
             badge.innerHTML = ok
                 ? '<i class="ti ti-check"></i>' + t('ndf-r-ok', 'OK')
                 : '<i class="ti ti-alert-triangle"></i>' + t('ndf-r-check', 'Check');
@@ -678,16 +678,16 @@ document.addEventListener('DOMContentLoaded', function () {
     // NDF Cockpit, e é por ela que a mesa separa as duas coisas na tela.
     function statusBadge(ok, unwind) {
         var b = (ok === null || ok === undefined)
-            ? '<span class="badge text-bg-secondary bg-gradient rounded-pill">—</span>'
-            : (ok ? '<span class="badge text-bg-success bg-gradient rounded-pill">OK</span>'
-                  : '<span class="badge text-bg-danger bg-gradient rounded-pill">Check</span>');
-        if (unwind) b += ' <span class="badge bg-secondary-subtle text-secondary bg-gradient rounded-pill">'
+            ? '<span class="badge otc-status text-bg-secondary bg-gradient rounded-pill">—</span>'
+            : (ok ? '<span class="badge otc-status text-bg-success bg-gradient rounded-pill">OK</span>'
+                  : '<span class="badge otc-status text-bg-danger bg-gradient rounded-pill">Check</span>');
+        if (unwind) b += ' <span class="badge otc-status bg-secondary-subtle text-secondary bg-gradient rounded-pill">'
                          + esc(t('ndfsum-unwind', 'Unwind')) + '</span>';
         return b;
     }
     // Standard status pill for the Settlement Summary rows (New → Generated → Sent).
     function pill(text, cls) {
-        return '<span class="badge ' + cls + ' bg-gradient rounded-pill">' + text + '</span>';
+        return '<span class="badge otc-status ' + cls + ' bg-gradient rounded-pill">' + text + '</span>';
     }
     function statusPill(status) {
         if (status === 'Sent')      return pill('Sent', 'text-bg-primary');
