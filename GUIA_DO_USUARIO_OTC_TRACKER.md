@@ -741,7 +741,7 @@ A tela de **Swap Bullet** e a de **Swap Cashflow** ganharam as informações que
 2. Cada operação vira um **card**: tranche e bloco, o período, a taxa fixa, o notional em dólar, o fx de referência, o **Notional (BRL)** e quem paga a fixa. O swap na B3 é sempre em **reais**: o valor base é o *usd notional* × o *fx rate for reference*.
 3. Confira e clique em **Confirm** (✓). O **duplo clique** no card mostra os dois arquivos da B3, o do **Banco** e o do **Lawton**.
 4. **Send** grava os dois arquivos na pasta *Batch Conecta › New*: `73760009.SWAP_CETES_BANCO.txt` e `00041007.SWAP_CETES_LAWTON.txt`.
-5. Com o retorno da B3 na pasta, o botão verde **Mapping B3 ID** traz o CETIP ID: o card fica **Success** e a operação vai para a **Intrag › Swap**, na visão do Lawton.
+5. Com o retorno da B3 na pasta, o botão verde **Mapping B3 ID** traz o CETIP ID: o card fica **Success** e a operação vai para a **Intrag › Swap**, na visão do Lawton, **no dia do Trade Date** (veja a Intrag — Swap, no capítulo da Intrag).
 
 > **O que cada perna é na B3** — a curva, o código da VCP (17182 para o SOFR, 21 para o Dólar) e o texto da descrição — fica no cadastro **/mapping › Swap Cetes — Legs**. Se o e-mail trouxer uma perna que o cadastro não conhece, o card avisa e o Send recusa até alguém cadastrá-la.
 
@@ -1558,6 +1558,8 @@ As telas **NDF**, **Option** e **Swap** trazem as operações no leiaute que a I
 3. **Add Row +** inclui uma operação à mão.
 4. **Export** baixa o conjunto para conferência.
 
+> **Na Intrag — Swap, a linha mora no dia do Trade Date.** A tela abre com a ficha **Trade Date** de hoje: o swap mapeado hoje aparece hoje, mesmo quando a **Data Início** (o *Effective* da Cetes, por exemplo) é uma data futura — ela continua na coluna dela e pode ser usada como filtro. O **Send** gera um arquivo `Intrag-Swap-AAAAMMDD` por dia de Trade Date. As linhas criadas antes desta regra continuam no dia da Data Início delas.
+
 **O ciclo da linha (NDF e Option):** a operação chega como **`New`**, o **Send** gera o arquivo e a marca **`Sent`**, e o que fecha o ciclo é o **Intrag ID** — com ele preenchido, a linha fica **`Success`**. Há dois jeitos de preenchê-lo:
 
 - **Mapping Intrag ID** (o botão verde da barra): lê o CSV de retorno na pasta de export, casa pelo **B3 ID** e preenche a coluna das linhas casadas — cada uma vai a `Success`.
@@ -2005,7 +2007,7 @@ Este merece um passo a passo próprio, porque tem uma opção que os outros não
 
 **Passo a passo — acompanhar:**
 
-1. Filtre por **Status** (New · In Progress · Pending · Resolved · Closed) ou por **Priority**.
+1. Filtre por **Status** (New · In Progress · Pending · Resolved · Closed) ou por **Priority** em **Filter By**, ou pelo **funil** de qualquer coluna, como em toda tabela (ver 4.3).
 2. Procure em **Search tickets...**.
 3. Clique no chamado para abrir os detalhes, onde ficam o histórico e os comentários.
 
