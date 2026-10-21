@@ -15,7 +15,7 @@ pandas>=2.0
 openpyxl>=3.1             # .xlsx read/write (load_workbook, styles)
 xlrd>=2.0.1               # .xls BINARIO (Excel 97-2003) - o Latam Desk Position vem assim
 extract-msg>=0.45         # parse Outlook .msg files
-duckdb>=0.10              # in-process analytical SQL
+duckdb>=0.10,<2           # in-process analytical SQL; <2: a DB created by 2.0 does not open on 1.x, and db/ on the share is shared by every instance (HANDOFF 651)
 portalocker==3.2.0        # cross-process shared/exclusive database file locks
 
 # --- HTTP ---------------------------------------------------------------------

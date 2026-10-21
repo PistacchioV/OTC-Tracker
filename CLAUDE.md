@@ -1008,6 +1008,13 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   num script síncrono logo depois do conteúdo — no `otc.js` o título já teria
   sido pintado e pularia. Tela nova não escreve nada; tela que desenha o
   próprio (`-product-icon`, `<i class="ti">` no h4) fica com o dela.
+- **A mesma página em DOIS lugares do menu: um DONO, o resto é atalho com
+  `data-nav-alias`** (mesa, 21/10/2026, §654). O menu (`otc.js`,
+  `findActive`) acendia a PRIMEIRA folha com o endereço — Intrag › DCE ›
+  Option abria New Deals › DCE › Option. Hoje acende o item CLICADO (lembrado
+  na aba, `__OTC_NAV_PICK__`) e, aberta por favorito ou link, o dono; o
+  ladrilho do título também procura o dono. Link novo que repete um endereço
+  do menu leva a marca, senão o `check_nav_alias.py` recusa.
 - **Tabela em painel PRÓPRIO (fora de `.card`) tinha o topo do cabeçalho
   CORTADO** (§486): o `.table-responsive` (`overflow:auto`) cortava o checkbox
   e a primeira linha do rótulo. Está resolvido NA RAIZ, no `otc.scss` §7
@@ -1489,7 +1496,14 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   for reference); o mesmo Meu Número nas duas visões. Página do catálogo em
   cards, com o **Mapping B3 ID** (`mapping`) e sem Econ. Affirmation; no
   Success, a **Intrag Swap na visão do LAWTON** (INTRAGJP552). O que cada
-  perna é na B3 é o cadastro `swap-cetes-leg`. `check_swap_cetes.py`.
+  perna é na B3 é o cadastro `swap-cetes-leg`. **No `.msg` do Outlook o bloco
+  chega uma CÉLULA por linha** (§652): a tabela põe um `<p class=MsoNormal>`
+  dentro de cada `<td>`, e o `html_to_lines` quebra em cada parágrafo — `#9`,
+  `cetip usd irs`, `booking:`, `F Talioli`. O `domain.blocks` lê as duas
+  formas; o `html_to_lines` NÃO foi mudado (o Trade Recap do Swap Cashflow
+  depende do parágrafo por linha). Corpo em texto puro se quebra no
+  `email_reader`, nunca no `html_to_lines` (qualquer `<mailto:…>` o faria ler
+  como HTML e juntar tudo numa linha). `check_swap_cetes.py`.
 - **Swap Cashflow é o backend do swap da CEM** (`features/swap_cashflow/`,
   §526). O Deal Ticket é o MESMO do Bullet, e feature não importa feature:
   parser, visões, 0897, lacunas, Intrag e o deal das confirmações moram em
@@ -3052,11 +3066,15 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   do §322 nunca chegou nele. Copie o do repositório por cima do que está no
   share; o que a instância executa é o de lá, e o `otc-tracker.ico` vai junto,
   na mesma pasta.
-- **O `start-otc-tracker.bat` sobe com DUPLO CLIQUE, sem DevShell** (§628): um
-  Python 3.12 PRÓPRIO em `%LOCALAPPDATA%\OTC-Tracker\python312` (ou o 3.12 que
-  o usuário já tem, pelo `HKCU`), instalado sem admin a partir de
-  `Application\installers\` ou do python.org, e só se o instalador for
-  ASSINADO; `PIP_INDEX_URL` no Artifactory; o retrato do requirements DENTRO da
+- **O `start-otc-tracker.bat` sobe com DUPLO CLIQUE, sem DevShell** (§628): o
+  app roda no 3.13 e no 3.12, e o `.bat` **procura o 3.13 PRIMEIRO e, sem ele,
+  o 3.12** (§653) — em cada um, o PRÓPRIO em `%LOCALAPPDATA%\OTC-Tracker\
+  python313`/`python312` e depois o do usuário, pelo `HKCU`. Máquina que já
+  sobe pelo 3.12 fica nele até ganhar um 3.13 (para migrar: um 3.13 do
+  usuário, ou apagar a `python312` — o `.bat` instala o 3.13 sozinho). Sem
+  Python nenhum ele instala o 3.13 (`PY313_VERSION`) e, sem o instalador dele,
+  o 3.12 — sem admin, a partir de `Application\installers\` ou do python.org,
+  e só se o instalador for ASSINADO; `PIP_INDEX_URL` no Artifactory; o retrato do requirements DENTRO da
   pasta do Python; o navegador abre quando o servidor RESPONDE; e atalhos com
   o `otc-tracker.ico` no Desktop e na pasta `Application` (alvo `cmd.exe /c`,
   para poder FIXAR; uma vez por máquina e por lançador, `atalho <nome>.ok`). O
@@ -3102,7 +3120,10 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   999, but we can only read 64-68"), e o armazém cria `.db` o tempo todo — uma
   máquina adiantada faria bancos que as outras leem como ILEGÍVEIS. Troca de
   Python (o 3.13 foi verificado: o app sobe e a suíte passa) não obriga a
-  trocar o DuckDB; troca de DuckDB é de todas as máquinas juntas.
+  trocar o DuckDB; troca de DuckDB é de todas as máquinas juntas. Por isso o
+  `requirements.txt` diz **`duckdb>=0.10,<2`** (§653): o PyPI já entrega o
+  2.0.0, e todo Python NOVO (o 3.13 que o `.bat` instala) faz `pip install`
+  do zero. Subir o teto é decisão de todas as instâncias juntas.
 
 ---
 
@@ -3136,7 +3157,7 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (200 scripts)
+### `scripts/tests/` (201 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

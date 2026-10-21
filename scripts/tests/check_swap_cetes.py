@@ -86,6 +86,28 @@ NDF = [('booking', 'F Talioli'), ('value date', '15-Apr-27'), ('mxn amount', '1,
        ('direction', 'chase ny sells usdmxn to jpm oc')]
 HTML = '<html><body><p>Hi all</p>' + _bloco(8, 'offshore intercompany ndf', NDF) + _bloco(9, 'cetip usd irs', IRS) + '</body></html>'
 
+
+def _celula(txt, negrito=False):
+    """A célula como o Outlook a escreve: um <p class=MsoNormal> DENTRO do
+    <td> — o html_to_lines quebra em cada parágrafo, e cada célula vira uma
+    linha (o e-mail real da mesa, tranche 111)."""
+    corpo = ('<b>%s</b>' % txt) if (negrito and txt) else txt
+    return ("<td nowrap valign=bottom style='padding:0cm 5.4pt 0cm 5.4pt'><p class=MsoNormal>"
+            "<span style='color:black'>%s<o:p></o:p></span></p></td>" % (corpo or '<o:p>&nbsp;</o:p>'))
+
+
+def _bloco_outlook(num, titulo, kv):
+    rows = '<tr>' + _celula('#%s' % num, True) + _celula(titulo, True) + '</tr>'
+    rows += ''.join('<tr>' + _celula(a + ':') + _celula(b) + '</tr>' for a, b in kv)
+    return "<table class=MsoNormalTable border=0 cellspacing=0 cellpadding=0>" + rows + '</table><p class=MsoNormal>&nbsp;</p>'
+
+
+# o NDF com uma célula VAZIA (facing:) e um valor com DOIS-PONTOS (fixing:)
+NDF_OUTLOOK = [('facing', ''), ('booking', 'F Talioli'), ('fixing', 'wmr ldn: 4pm'), ('direction', 'chase ny sells usdmxn to jpm oc')]
+HTML_OUTLOOK = ("<html><body><div class=WordSection1><p class=MsoNormal>Hi all</p>"
+                + _bloco_outlook(8, 'offshore intercompany ndf', NDF_OUTLOOK)
+                + _bloco_outlook(9, 'cetip usd irs', IRS) + '</div></body></html>')
+
 # o deal do EXEMPLO da mesa (os campos que o arquivo dela carrega)
 EX_DEAL = {'Status': 'New', 'LE': 'JPM', 'LOB': 'CEM', 'TradeDate': '2026-10-21', 'StartDate': '2026-07-30',
            'MaturityDate': '2027-01-21', 'NotionalUSD': '111050000.00', 'FxRate': '5.1168', 'FixedRate': '3.943',
@@ -134,6 +156,28 @@ def main():
     txt = 'Subject: x\n\n#9 cetip usd irs\n' + '\n'.join('%s: %s' % kv for kv in IRS)
     dt = commands.parse_upload('corpo.txt', txt.encode('utf-8'), '2026-10-20')[0]
     check('o corpo solto (texto) também é lido', len(dt) == 1 and dt[0]['Notional'] == '395001854.00')
+    _a, linhas_ol = email_reader.read('tranche 111.eml', _eml(HTML_OUTLOOK))
+    check('a tabela do OUTLOOK chega uma célula por linha (o <p> dentro do <td>)',
+          linhas_ol[1:5] == ['#8', 'offshore intercompany ndf', 'facing:', 'booking:'])
+    bl = domain.blocks(linhas_ol)
+    check('…e o bloco é lido mesmo assim: #9 cetip usd irs, com os mesmos campos',
+          [(b['num'], b['title']) for b in bl] == [('8', 'offshore intercompany ndf'), ('9', 'cetip usd irs')]
+          and bl[1]['fields'] == dict(IRS))
+    check('célula vazia não engole o rótulo seguinte; valor com dois-pontos não vira rótulo',
+          bl[0]['fields'] == {'booking': 'F Talioli', 'fixing': 'wmr ldn: 4pm',
+                              'direction': 'chase ny sells usdmxn to jpm oc'})
+    do = commands.parse_upload('tranche 111.eml', _eml(HTML_OUTLOOK), '2026-10-20')[0]
+    check('o deal do e-mail do Outlook é o MESMO do e-mail de uma linha por rótulo',
+          len(do) == 1 and {k: do[0][k] for k in ('_id', 'Notional', 'FixedPayer', 'StartDate', 'FixedRate')}
+          == {k: d[k] for k in ('_id', 'Notional', 'FixedPayer', 'StartDate', 'FixedRate')})
+    plano = ('From: Kimura <mailto:kimura@example.com>\r\nSee <https://example.com/x>\r\n\r\n#9\tcetip usd irs\r\n'
+             + '\r\n'.join('%s:\t%s' % kv for kv in IRS))
+    dp = commands.parse_upload('corpo.txt', plano.encode('utf-8'), '2026-10-20')[0]
+    check('corpo em TEXTO com <mailto:> e TAB entre as células: lido linha a linha, não como HTML',
+          len(dp) == 1 and dp[0]['Notional'] == '395001854.00')
+    celulas = 'x\n\n#9\n\ncetip usd irs\n\n' + '\n\n'.join('%s:\n\n%s' % kv for kv in IRS)
+    dc = commands.parse_upload('corpo.txt', celulas.encode('utf-8'), '2026-10-20')[0]
+    check('texto com uma célula por linha também', len(dc) == 1 and dc[0]['FixedRate'] == '4.228')
     check('"lawton pays fix" inverte; sem direction, o "we pay" fixo é o Banco',
           domain.fixed_payer('lawton (cetesbra) pays fix vs banco (cetesbra)') == 'LAWTON'
           and domain.fixed_payer('', 'USD Fixed rate') == 'BANCO' and domain.fixed_payer('', '') == '')

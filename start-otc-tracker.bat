@@ -12,14 +12,16 @@ rem  Application).  DUPLO CLIQUE e pronto: NAO precisa do DevShell.
 rem
 rem  O que o DevShell dava, e o que este .bat faz no lugar (08/10/2026):
 rem
-rem   - o Python 3.12 do `ds tool install`: um Python PROPRIO do OTC Tracker
-rem     em %LOCALAPPDATA%\OTC-Tracker\python312, instalado so para este
-rem     usuario, sem admin, na primeira vez.  Se a maquina ja tem um Python
-rem     3.12 instalado para o usuario, ele e usado no lugar.  O instalador sai
-rem     da pasta installers ao lado deste .bat no share, sem internet, ou do
-rem     python.org pelo proxy do sistema.  So roda se for um instalador
-rem     ASSINADO: uma pagina de bloqueio do proxy salva com o nome do .exe
-rem     nunca e executada.
+rem   - o Python do `ds tool install`: o app roda no 3.13 e no 3.12 (HANDOFF
+rem     651/652), e o .bat procura o 3.13 PRIMEIRO e, sem ele, o 3.12 -- quem
+rem     ja sobe pelo 3.12 continua nele.  Em cada versao, o Python PROPRIO do
+rem     OTC Tracker em %LOCALAPPDATA%\OTC-Tracker\python313 (ou python312) e,
+rem     sem ele, um ja instalado para o usuario.  Sem nenhum dos dois, instala
+rem     o 3.13 so para este usuario, sem admin; sem o instalador do 3.13, o do
+rem     3.12.  O instalador sai da pasta installers ao lado deste .bat no
+rem     share, sem internet, ou do python.org pelo proxy do sistema.  So roda
+rem     se for um instalador ASSINADO: uma pagina de bloqueio do proxy salva
+rem     com o nome do .exe nunca e executada.
 rem   - o pip configurado: PIP_INDEX_URL no Artifactory, o mesmo de onde o
 rem     awmpy sempre veio, a nao ser que a maquina ja defina outro.
 rem   - o localproxy-cfg: nao e instalado.  O app nao depende dele -- o Quotes
@@ -49,11 +51,12 @@ echo [TIME] inicio do .bat            %TIME%
 
 set "SHARE_ROOT=\\NAWEST.ad.jpmorganchase.com\LAC\BRA\intra\Confirmation\Derivativos\OTC Tracker\Application"
 set "APP_STATE_DIR=%LOCALAPPDATA%\OTC-Tracker"
-set "PY_VERSION=3.12.10"
-set "PY_DIR=%APP_STATE_DIR%\python312"
-set "PY=%PY_DIR%\python.exe"
-set "PY_INSTALLER=python-%PY_VERSION%-amd64.exe"
-if not defined OTC_PYTHON_URL set "OTC_PYTHON_URL=https://www.python.org/ftp/python/%PY_VERSION%/%PY_INSTALLER%"
+rem As duas versoes que o app aceita, na ordem em que sao procuradas, com o
+rem instalador EXATO que o .bat poe na pasta propria de cada uma.
+set "PY313_VERSION=3.13.14"
+set "PY312_VERSION=3.12.10"
+if not defined OTC_PYTHON_FTP set "OTC_PYTHON_FTP=https://www.python.org/ftp/python"
+set "PY="
 set "ARTIFACTORY_PYPI=https://artifacts.jpmchase.net/artifactory/api/pypi/pypi/simple/"
 if not defined PIP_INDEX_URL set "PIP_INDEX_URL=%ARTIFACTORY_PYPI%"
 set "PIP_DISABLE_PIP_VERSION_CHECK=1"
@@ -74,16 +77,18 @@ set "LNK_SHARE=%~dp0%OTC_NOME%.lnk"
 if not exist "%ICON%" if exist "%ICON_SHARE%" copy /y "%ICON_SHARE%" "%ICON%" >nul
 if not exist "%APP_STATE_DIR%\atalho %OTC_NOME%.ok" if exist "%ICON%" call :cria_atalho
 
-rem O Python: o proprio; senao um 3.12 ja instalado para o usuario; senao
-rem instala.  Depois de instalar, a segunda consulta ao registro cobre o
-rem instalador que ATUALIZOU um 3.12 existente no lugar dele, ignorando a
-rem pasta pedida -- e o que o instalador do python.org faz.
-set "ERRO=Nao consegui instalar o Python %PY_VERSION%. O log do instalador fica em %TEMP%, nos arquivos Python*.log."
-if not exist "%PY%" call :python_do_usuario
-if not exist "%PY%" call :instala_python
-if not exist "%PY%" call :python_do_usuario
-if not exist "%PY%" goto :falha
+rem O Python: o 3.13 e, sem ele, o 3.12 -- em cada um, o proprio e depois o
+rem instalado para o usuario.  Sem nenhum, instala o 3.13; se o instalador
+rem dele nao vier (nem do share, nem do download), o 3.12.  Uma maquina que ja
+rem sobe pelo 3.12 so muda quando ganhar um 3.13.
+set "ERRO=Nao consegui instalar o Python %PY313_VERSION% nem o %PY312_VERSION% - os motivos estao nos avisos acima. Para nao depender da internet, coloque o python-%PY313_VERSION%-amd64.exe na pasta installers ao lado deste .bat, no share."
+call :acha_python 3.13
+if not defined PY call :acha_python 3.12
+if not defined PY call :instala_python %PY313_VERSION% 3.13
+if not defined PY call :instala_python %PY312_VERSION% 3.12
+if not defined PY goto :falha
 echo [INFO] Python: %PY%
+"%PY%" --version
 echo [TIME] python conferido          %TIME%
 
 set "ERRO=Nao consegui ler a versao em %SHARE_ROOT%\link.txt"
@@ -218,38 +223,58 @@ set "ESPELHO_OK=1"
 echo [TIME] codigo espelhado local    %TIME%
 goto :eof
 
-:python_do_usuario
-rem Um Python 3.12 ja instalado para ESTE usuario, pelo registro.  O de todos
-rem os usuarios fica de fora: em Program Files o pip precisaria de admin.
+:acha_python
+rem %1 = a versao menor (3.13, 3.12).  Primeiro o Python PROPRIO do OTC
+rem Tracker, na pasta python313/python312; senao um ja instalado para ESTE
+rem usuario, pelo registro.  O de todos os usuarios fica de fora: em Program
+rem Files o pip precisaria de admin.  Achou, deixa o %%PY%%; senao, o deixa
+rem como estava, vazio.
+set "PY_MINOR=%~1"
+set "PY_TAG=%PY_MINOR:.=%"
+if exist "%APP_STATE_DIR%\python%PY_TAG%\python.exe" set "PY=%APP_STATE_DIR%\python%PY_TAG%\python.exe"
+if defined PY goto :eof
 set "PY_REG="
-for /f "tokens=1,2,*" %%A in ('reg query "HKCU\Software\Python\PythonCore\3.12\InstallPath" /v ExecutablePath 2^>nul') do if /i "%%A"=="ExecutablePath" set "PY_REG=%%C"
+for /f "tokens=1,2,*" %%A in ('reg query "HKCU\Software\Python\PythonCore\%PY_MINOR%\InstallPath" /v ExecutablePath 2^>nul') do if /i "%%A"=="ExecutablePath" set "PY_REG=%%C"
 if defined PY_REG if exist "%PY_REG%" set "PY=%PY_REG%"
 goto :eof
 
 :instala_python
+rem %1 = a versao exata (3.13.14), %2 = a menor (3.13).  Instala na pasta
+rem PROPRIA e procura de novo, pela pasta e pelo registro: o instalador do
+rem python.org que ATUALIZA um Python da mesma versao menor ja instalado
+rem ignora a pasta pedida.  Falhou, diz o motivo num AVISO e volta sem o
+rem %%PY%% -- quem chama tenta a versao seguinte.
+set "PY_FULL=%~1"
+set "PY_MINOR=%~2"
+set "PY_TAG=%PY_MINOR:.=%"
+set "PY_DIR=%APP_STATE_DIR%\python%PY_TAG%"
+set "PY_INSTALLER=python-%PY_FULL%-amd64.exe"
+set "PY_URL=%OTC_PYTHON_FTP%/%PY_FULL%/%PY_INSTALLER%"
 echo.
-echo Primeira vez nesta maquina: instalando o Python %PY_VERSION% do OTC Tracker
+echo Primeira vez nesta maquina: instalando o Python %PY_FULL% do OTC Tracker
 echo em %PY_DIR% - so para este usuario, sem admin.
 set "INSTALLER=%SHARE_ROOT%\installers\%PY_INSTALLER%"
 if exist "%INSTALLER%" goto :confere_instalador
 set "INSTALLER=%TEMP%\%PY_INSTALLER%"
-echo Baixando %OTC_PYTHON_URL%
+echo Baixando %PY_URL%
 rem Pelo proxy do sistema e com as credenciais do Windows: primeiro o
 rem Invoke-WebRequest, e se ele falhar o BITS, que autentica sozinho no proxy.
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference = 'SilentlyContinue'; try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}; try { [Net.WebRequest]::DefaultWebProxy.Credentials = [Net.CredentialCache]::DefaultNetworkCredentials } catch {}; try { Invoke-WebRequest -Uri $env:OTC_PYTHON_URL -OutFile $env:INSTALLER -UseBasicParsing; exit 0 } catch { Write-Host $_.Exception.Message }; try { Start-BitsTransfer -Source $env:OTC_PYTHON_URL -Destination $env:INSTALLER; exit 0 } catch { Write-Host $_.Exception.Message }; exit 1" || goto :sem_download
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference = 'SilentlyContinue'; try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}; try { [Net.WebRequest]::DefaultWebProxy.Credentials = [Net.CredentialCache]::DefaultNetworkCredentials } catch {}; try { Invoke-WebRequest -Uri $env:PY_URL -OutFile $env:INSTALLER -UseBasicParsing; exit 0 } catch { Write-Host $_.Exception.Message }; try { Start-BitsTransfer -Source $env:PY_URL -Destination $env:INSTALLER; exit 0 } catch { Write-Host $_.Exception.Message }; exit 1" || goto :sem_download
 
 :confere_instalador
 powershell -NoProfile -ExecutionPolicy Bypass -Command "if ((Get-AuthenticodeSignature -LiteralPath $env:INSTALLER).Status -ne 'Valid') { exit 1 }" || goto :instalador_invalido
 echo Instalando - leva um ou dois minutos...
 start "" /wait "%INSTALLER%" /quiet InstallAllUsers=0 TargetDir="%PY_DIR%" PrependPath=0 AssociateFiles=0 Shortcuts=0 Include_launcher=0 InstallLauncherAllUsers=0 Include_doc=0 Include_test=0 Include_tcltk=0 Include_pip=1
+call :acha_python %PY_MINOR%
+if not defined PY echo [AVISO] O instalador do Python %PY_FULL% terminou sem deixar o python.exe - o log fica em %TEMP%, nos arquivos Python*.log.
 goto :eof
 
 :sem_download
-set "ERRO=Nao consegui baixar o Python. Coloque o %PY_INSTALLER% na pasta installers ao lado deste .bat, no share, e rode de novo."
+echo [AVISO] Nao consegui baixar o Python %PY_FULL% - coloque o %PY_INSTALLER% na pasta installers ao lado deste .bat, no share.
 goto :eof
 
 :instalador_invalido
-set "ERRO=O %INSTALLER% nao e um instalador assinado do Python. Apague-o e rode de novo."
+echo [AVISO] O %INSTALLER% nao e um instalador assinado do Python - apague-o e rode de novo.
 goto :eof
 
 :falha

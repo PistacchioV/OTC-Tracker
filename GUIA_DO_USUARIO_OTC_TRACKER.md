@@ -147,7 +147,7 @@ O menu é em **níveis**: um item com **›** à direita tem submenu. Clicar nel
 | **PRODUCTS › New Deals › Swap** | Bullet · Cashflow |
 | **PRODUCTS › New Deals › NDF** | FWD Start · Other Publisher · Vanilla · Commodities |
 | **PRODUCTS › New Deals › Options** | FXO · Commodities · EDG *(tela pronta; importação em construção)* |
-| **PRODUCTS › New Deals** | COE *(em construção)* · **DCE** (Deliverable Forward · Option · Swap — abrem as telas da Intrag › DCE, capítulo 11) |
+| **PRODUCTS › New Deals** | COE *(em construção)* · **DCE** (Deliverable Forward · NDF · Option · Swap — abrem as telas da Intrag › DCE, capítulo 11) |
 | **PRODUCTS › Unwinds** | **Swap** (CEM · EDG) · **NDF** (FX · Commodities) · **Options** (FXO · Commodities · EDG) · COE · **DCE** (Deliverable Forward · NDF · Option · Swap) *(NDF › FX e NDF › Commodities com o ciclo completo; as demais importam, conferem e enviam à B3 — ver 5.11)* |
 | **PRODUCTS › Intrag** | NDF · Option · Swap · Unwind · **DCE** (Option · Swap · NDF · DFW) |
 | **REGULATORY** | e-Financeira (KAPITAL · ATHENA-NDF · ATHENA-FXO · PYRAMID) *(em construção)* · Accrual · MtM · WHT *(em construção)* |
@@ -1565,7 +1565,7 @@ As telas **NDF**, **Option** e **Swap** trazem as operações no leiaute que a I
 
 ### Intrag — DCE
 
-**Menu › PRODUCTS › Intrag › DCE** (também pelo **Menu › PRODUCTS › New Deals › DCE**)
+**Menu › PRODUCTS › Intrag › DCE** (também pelo **Menu › PRODUCTS › New Deals › DCE**). As duas entradas abrem a MESMA tela, e o menu lateral fica aberto no caminho que você clicou; aberta por um favorito ou por um link, ela aparece em Intrag › DCE.
 
 ![Intrag DCE Swap](docs/sop-screenshots/intrag-dce-swap.png)
 

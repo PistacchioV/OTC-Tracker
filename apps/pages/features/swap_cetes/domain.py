@@ -83,6 +83,7 @@ def le_pair(view):
 # ── O e-mail ─────────────────────────────────────────────────────────────────
 
 _HEAD = re.compile(r'^#\s*(\d{1,3})\s*[:.)\-]?\s+(\S.*?)\s*$')
+_HEAD_NUM = re.compile(r'^#\s*(\d{1,3})\s*[:.)\-]?$')     # o "#9" sozinho: o título é a linha seguinte
 _KV = re.compile(r'^([A-Za-z][A-Za-z0-9 /&().%\-]*?)\s*:\s*(.*?)\s*$')
 _TRANCHE = re.compile(r'tranche\s*#?\s*(\d+)', re.I)
 
@@ -106,20 +107,50 @@ def _label(s):
 def blocks(lines):
     """As linhas do corpo → [{num, title, fields: {rótulo: valor}}], um por
     bloco `#N título`. O que vem antes do primeiro bloco (saudação, o
-    resumo da tranche) fica de fora."""
-    out, cur = [], None
+    resumo da tranche) fica de fora.
+
+    O bloco chega de DUAS formas, e as duas valem: a linha inteira (`#9
+    cetip usd irs`, `booking: F Talioli`) ou uma CÉLULA por linha — a tabela
+    do Outlook põe um `<p class=MsoNormal>` dentro de cada `<td>`, e o
+    `html_to_lines` quebra em cada parágrafo: `#9`, `cetip usd irs`,
+    `booking:`, `F Talioli`. Aí o `#9` sozinho espera o título na linha
+    seguinte, e o rótulo sem valor espera o valor. A linha que vem depois de
+    um rótulo é o valor dele, a menos que seja outro rótulo sem valor (o
+    anterior estava vazio) ou um rótulo CONHECIDO com valor (a forma
+    inteira) — assim um valor com dois-pontos não vira rótulo."""
+    out, cur, num, rotulo = [], None, None, None
     for ln in lines or []:
         txt = str(ln or '').strip()
+        if not txt:
+            continue
+        if num is not None:
+            cur = {'num': num, 'title': txt, 'fields': {}}
+            out.append(cur)
+            num = None
+            continue
         m = _HEAD.match(txt)
         if m:
             cur = {'num': m.group(1), 'title': m.group(2).strip(), 'fields': {}}
             out.append(cur)
+            rotulo = None
+            continue
+        m = _HEAD_NUM.match(txt)
+        if m:
+            num, rotulo = m.group(1), None
             continue
         if cur is None:
             continue
         kv = _KV.match(txt)
-        if kv and kv.group(2):
+        par = bool(kv and kv.group(2))
+        if rotulo is not None and not (kv and not par) and not (par and _label(kv.group(1)) in LABELS):
+            cur['fields'].setdefault(rotulo, txt)
+            rotulo = None
+            continue
+        if par:
             cur['fields'].setdefault(_label(kv.group(1)), kv.group(2).strip())
+            rotulo = None
+        elif kv:
+            rotulo = _label(kv.group(1))
     return out
 
 

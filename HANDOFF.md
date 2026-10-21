@@ -27316,3 +27316,101 @@ biblioteca que precisa ser atualizada?". Verificado, sem mudar código:
   DuckDB na versão da instância até todas as máquinas migrarem juntas.
 - **O lançador** é amarrado ao 3.12 (`PY_VERSION=3.12.10`, a pasta `python312`, o
   registro `HKCU\…\PythonCore\3.12`, o instalador em `Application\installers`).
+
+## §652 — Swap Cetes: o `.msg` do Outlook chega uma CÉLULA por linha (2026-10-21, correção)
+
+Relato da mesa: o import do e-mail real ("Cetes & associated trades - ##new
+trade, tranche 111.msg") respondia "Nothing to import — the e-mail has no
+"cetip usd irs" block", com o `#9 cetip usd irs` ali no corpo.
+
+**Causa.** No HTML do Outlook a tabela põe um `<p class=MsoNormal><span>…`
+DENTRO de cada `<td>`, e o `swap_deal_ticket.html_to_lines` quebra a linha em
+cada `<p>`. O bloco chegava assim: `#9`, `cetip usd irs`, `booking:`,
+`F Talioli` — cada célula numa linha. O `domain.blocks` só reconhecia o
+cabeçalho e o `rótulo: valor` na MESMA linha, e não achava bloco nenhum. O
+`check_swap_cetes` passou porque a tabela de teste tinha o texto solto no
+`<td>`, sem o `<p>` que o Outlook escreve.
+
+**Correção** (`swap_cetes/domain.blocks`): as duas formas valem. O `#9`
+sozinho espera o título na linha seguinte; o rótulo sem valor espera o valor.
+A linha depois de um rótulo é o valor dele, a menos que seja outro rótulo sem
+valor (o anterior estava vazio, como o `facing:` em branco) ou um rótulo
+CONHECIDO com valor (a forma de uma linha) — assim um valor com dois-pontos
+(`wmr ldn: 4pm`) não vira rótulo. O `html_to_lines` NÃO mudou: ele é do Trade
+Recap do Swap Cashflow (§555), que depende do parágrafo por linha, e juntar a
+linha da tabela quebraria o e-mail que vem dentro de uma tabela de layout.
+
+**E o corpo em texto puro** (`.msg` sem HTML, o `.txt` solto) agora se quebra
+no `email_reader._texto`: o `html_to_lines` trata como HTML qualquer texto com
+`<`, e o texto do Outlook traz `<mailto:…>` e `<https://…>` — o e-mail inteiro
+viraria UMA linha. O solto só é HTML com uma tag de verdade (`_HTML`).
+
+`check_swap_cetes` §1 ganhou o e-mail no formato do Outlook (célula com
+`<p class=MsoNormal><span>…<o:p>`, célula vazia, valor com dois-pontos), o
+texto com `<mailto:>` e TAB entre células, e o texto com uma célula por linha.
+O teste novo reprova o `blocks` anterior no mesmo ponto do relato.
+
+## §653 — O lançador procura o Python 3.13 e, sem ele, o 3.12 (2026-10-21)
+
+Pedido da mesa: o `.bat` procura o 3.13 e, se não achar, o 3.12 — o app roda
+nos dois (§651), e quem já sobe pelo 3.12 não é afetado.
+
+`start-otc-tracker.bat`: `:acha_python <3.13|3.12>` procura o PRÓPRIO
+(`%LOCALAPPDATA%\OTC-Tracker\python313`/`python312`) e depois o do usuário
+(`HKCU\…\PythonCore\<versão>`); a ordem é 3.13 → 3.12. Sem nenhum,
+`:instala_python` instala o 3.13 (`PY313_VERSION=3.13.14`, que tem instalador
+Windows no python.org) e, se ele não vier — nem do `Application\installers`,
+nem do download, ou não for assinado —, o 3.12 (`PY312_VERSION=3.12.10`). Cada
+tentativa que falha diz o motivo num `[AVISO]` e devolve o controle; o
+`[ERRO]` final só sai quando as duas falharam. A primeira linha depois da
+escolha imprime o `python --version`. O `OTC_PYTHON_URL` (um endereço só, sem
+uso documentado) virou `OTC_PYTHON_FTP`, a base do espelho, porque agora são
+dois instaladores. O `start-otc-tracker_naeast.bat` não mudou: só liga o
+espelho e chama este.
+
+**O que isso faz nas máquinas.** Quem tem a `python312` própria continua nela
+— o 3.13 PRÓPRIO só nasce numa máquina sem Python nenhum. Quem tem um 3.13
+instalado para o próprio usuário passa a usá-lo (e instala as dependências
+nele uma vez: o retrato do requirements mora na pasta de cada Python). Para
+migrar uma máquina: um 3.13 do usuário, ou apagar a `python312` (o `.bat`
+instala o 3.13). Para a máquina nova não tentar o download, o
+`python-3.13.14-amd64.exe` vai na pasta `Application\installers` do share.
+
+**O DuckDB fica abaixo do 2** (`duckdb>=0.10,<2` no `requirements.txt`): o
+PyPI já entrega o 2.0.0, e todo Python NOVO faz `pip install` do zero — a
+primeira máquina no 3.13 criaria no `db/` do share bancos que o 1.x das outras
+não abre (§651). O teto é o que torna o "sem impacto nos demais" verdade; sobe
+quando TODAS as instâncias subirem juntas. A mudança do `requirements.txt` faz
+cada máquina rodar o `pip install` uma vez na próxima subida (o retrato muda);
+quem já está no 1.x fica onde está.
+
+## §654 — O menu acende o item CLICADO: Intrag › DCE abria New Deals › DCE (2026-10-21, correção)
+
+Relato da mesa: "clico em Intrag › DCE › Option e abre New Deals › DCE ›
+Option"; antes, "cadê a página de NDF Intrag - DCE NDF?".
+
+**Causa.** As quatro telas da Intrag › DCE (DFW, NDF, Option, Swap) têm atalho
+em New Deals › DCE com o MESMO endereço (`/intrag-dce-*`). O menu em
+drill-down (`otc.js`, `findActive`) acendia a PRIMEIRA folha com o endereço
+da página, e New Deals vem antes de Intrag: qualquer que fosse o clique, o
+menu abria em New Deals › DCE. Em 15/09 (`74a04fd1`) o mesmo relato, com o
+NDF, foi "resolvido" APAGANDO o item de New Deals — o sintoma, não a causa: as
+outras três seguiram com o defeito e o NDF "sumiu" para quem o procurava em
+New Deals.
+
+**Correção.** O `findActive` agora junta TODAS as folhas do endereço e, com
+mais de uma, escolhe: a CLICADA — o clique na folha grava em
+`sessionStorage.__OTC_NAV_PICK__` a cadeia de submenus até ela
+(`aria-controls` de cada ramo + o endereço) — e, sem clique (favorito, link
+do e-mail, o `deep-link`), o DONO: a cópia sem `data-nav-alias`. No sidenav
+as quatro de New Deals › DCE levam a marca, e o NDF VOLTOU para lá. O ladrilho
+de ícone do título (`layouts/vertical.html`) procura também o link dono antes
+— hoje sem efeito visível (as quatro telas da DCE desenham o próprio ícone no
+h4), mas é a mesma regra para a próxima página em dois menus.
+
+`check_nav_alias.py` (novo): no sidenav, todo endereço repetido na árvore tem
+UM dono e o resto é atalho marcado; no Chromium, com a página RENDERIZADA pelo
+app (sidenav e `otc.js` de verdade, servidos por `page.route`): aberta direto
+acende Intrag › DCE, clicada em New Deals acende New Deals, clicada em Intrag
+volta a Intrag, e o NDF acende em New Deals quando clicado lá. Com o `otc.js`
+anterior o teste reprova os dois primeiros casos do relato.
