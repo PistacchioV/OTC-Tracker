@@ -27969,3 +27969,45 @@ ruído de float, manual, pendente, um lado só, dia sem `difference`). Conferido
 Chromium contra o servidor local com o `/data` interceptado: funil filtrando e
 sobrevivendo ao Edit → Cancel, seleção e Swal do Match, claro e escuro, 1500 e
 1920px.
+
+## §667 — `start-otc-tracker.bat`: a política de grupo barra o instalador do Python, e o `.bat` não achava o do DevShell (2026-10-21)
+
+Relato: na máquina do V823465 o `start-otc-tracker.bat` (o que não é o NAEAST)
+parava em
+
+    Baixando https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe
+    Instalando - leva um ou dois minutos...
+    This program is blocked by group policy. For more information, contact your system administrator.
+    [AVISO] O instalador do Python 3.12.10 terminou sem deixar o python.exe ...
+
+**O que aconteceu.** O §628 trocou o Python do DevShell (`ds tool install
+python3.12`) por um Python PRÓPRIO instalado pelo `.bat`, e registrou como
+pergunta aberta "o AppLocker deixar rodar o instalador". A resposta, nessa
+máquina, é não: o instalador baixado para o `%TEMP%` é barrado pela política
+(a mensagem é a das Software Restriction Policies). E o `.bat` só procurava o
+Python próprio (`%LOCALAPPDATA%\OTC-Tracker\python31x`) e o registrado no
+`HKCU\Software\Python\PythonCore` — o do DevShell, que fica no PATH (é o
+`python` que o `.bat` antigo chamava) e não se registra ali, era invisível. Sem
+achar nada, ele ia para o instalador. O NAEAST que funciona na mesma pasta é,
+muito provavelmente, uma cópia de ANTES do §628, que ainda subia pelo `python`
+do DevShell; o NAEAST atual chama este `.bat` e falharia igual.
+
+**O que mudou.**
+- `:acha_python` procura, depois do próprio e do `HKCU`, o `python` do PATH
+  (`where python`), aceitando só o da versão pedida (`:testa_python`, pela
+  `sys.version`) e pulando o atalho da Microsoft Store (`WindowsApps`). Ordem
+  3.13 → 3.12 como antes. Um Python de todos os usuários no PATH também entra —
+  por último; o pip, sem escrita em Program Files, cai sozinho no `--user`.
+- `OTC_PYTHON` (o caminho de um `python.exe`) vence a busca toda — para a
+  máquina em que o DevShell não põe o Python no PATH fora da janela dele:
+  `setx OTC_PYTHON <caminho>` uma vez por usuário. Apontando para arquivo que
+  não existe, avisa e segue procurando.
+- As mensagens dizem o que fazer quando a política barra: o `[AVISO]` do
+  instalador e o `[ERRO]` final apontam o DevShell (`ds tool install
+  python3.12`, abrir o `.bat` de dentro dele) ou o `OTC_PYTHON`.
+
+**Não testado no Windows** (a dev é macOS; `check_bat_blocks.py` passa, CRLF e
+ASCII conferidos). A máquina do relato responde: dentro do DevShell, `where
+python` tem de mostrar o Python 3.12/3.13 — e é ele que o `.bat` vai usar. Se o
+DevShell não o tiver, `ds tool install python3.12`. O pip instala as
+dependências nele uma vez (o retrato fica na pasta desse Python).
