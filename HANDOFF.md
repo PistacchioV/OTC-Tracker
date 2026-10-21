@@ -27029,3 +27029,123 @@ New Deals conferidos à parte com as operações do cache da dev
 (`00041007.FWDSTART_LAWTON.txt`, `73760009.FWDSTART_BANCO.txt`,
 `73760009.OTHERPUBLISHER_BANCO.txt`, `73760009.TCO_BANCO.txt`).
 
+
+## §647 — Os spinners no movimento reduzido: mil voltas por segundo (2026-10-21)
+
+**"Replique um spinning num botão para ver como está rodando: ele continua
+'loucão', rodando super rápido, e não num movimento contínuo, sentido
+horário."** O §644 tinha posto todo ícone que gira em 1,2 s por volta e
+conferido na dev — e na mesa nada mudou. A causa não era o ritmo: era a regra
+de MOVIMENTO REDUZIDO do tema (seção 11 do `otc.scss`):
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 1ms !important; … }
+    }
+
+As máquinas do JP têm as animações do Windows desligadas (o "ajustar para
+melhor desempenho"), e o Chrome lê isso como `prefers-reduced-motion:
+reduce`. Num giro `infinite`, 1 ms por volta são MIL voltas por segundo: cada
+quadro pinta o ícone num ângulo qualquer, e o olho vê um ícone tremendo, rápido
+e sem sentido — mais vezes "para trás" que para a frente. O `!important`
+passava por cima dos 1,2 s, e por isso o §644 não alcançou a mesa. O próprio
+Bootstrap, nesse modo, só DESACELERA o spinner (1,5 s); a regra da casa o
+desfigurava.
+
+**Como se viu.** Uma bancada no Chromium com os quatro tipos de spinner da casa
+dentro de botões (o anel do Bootstrap, o `ti-loader-2`, o refresh `.is-busy`,
+o `ti-loader`), o ângulo de cada um medido quadro a quadro. Normal: sempre para
+a frente. Com `reduced_motion='reduce'`: `animationDuration` = `0.001s` e o
+ângulo saltando de 60° a 170° entre quadros, 52 a 68 recuos em 99 quadros.
+Depois da correção, no mesmo modo: 1,2 s por volta, zero recuos, zero quadros
+parados; e, congelando 24 quadros de uma volta, a abertura do arco anda 15° ± 2
+por passo (sem excentricidade: o glifo está centrado). Travar a thread
+principal por 3 s não parou o giro — não era a CPU.
+
+**A correção.** O movimento reduzido não toca no que diz "estou trabalhando":
+a lista `$otc-progress` (os ícones que giram, o refresh ocupado, o anel do
+Bootstrap, o `.otc-spin`, os pontinhos do `dt-processing`, o voo do Send
+`.is-flying`) fica FORA da regra, que passou a `:where(:not(…))` — peso ZERO,
+como era o `*`, senão venceria o `!important` da entrada `.otc-enter` — e o
+resto ganhou `animation-iteration-count: 1`: a animação infinita que é enfeite
+(o marquee do About, os pulsos do 2FA) roda uma vez e para, em vez de piscar.
+
+**O que a bancada mostrou além disso.**
+- **O anel do Bootstrap ficou fora do §644**: `spinner-border` (42 usos, nos
+  Summaries, Advices, Index B3, Pending Confirmation, Cockpit, Tools…) girava
+  a .75 s. Agora no `--otc-spin-dur`.
+- **O `spinner-border-sm` dos botões tinha 1,6rem**: o tema dá 1,6rem ao
+  `.spinner-border` com a MESMA especificidade e depois do Bootstrap, e isso
+  passava por cima do `-sm`. O anel saía com 25,6 px num botão de texto de
+  15 px, girando grande. Volta a 1rem, e dentro do `.btn` com a cor do texto
+  (era o azul de destaque sobre o azul do botão).
+- **O refresh ocupado girava contra as próprias setas**: o `ti-refresh` tem as
+  setas no sentido anti-horário e se repete a cada meia volta — girando no
+  horário, parecia ir ao contrário e no dobro do ritmo. Ocupado, o glifo é o
+  arco do `ti-loader-2` (`.is-busy > i.ti::before`), e o `.is-busy` vale
+  também para `svg` (o Sync da User Home, Lucide `refresh-cw`, que gira no
+  sentido das setas).
+- **Quatro telas tinham giro próprio**, fora do ritmo e da exceção: Accrual e
+  MtM (`accSpin` a .8 s e .65 s), Electronic Inventory (`.ei-spin` a .7 s),
+  User Home (`uh-spin` a 1 s) e o anel do 2FA (`tfa-spin` a 1,1 s). Todas
+  passaram à classe `.otc-spin` do tema; o Lucide mantém a classe ao trocar o
+  `<i>` pelo `svg`.
+
+**Guarda.** `check_send_contrail.py`: §5 cobre os seis tipos a 1,2 s, o arco no
+refresh ocupado e o anel pequeno do botão (1rem, cor do texto); §6, com o
+movimento reduzido, os seis seguindo infinitos a 1,2 s, o enfeite infinito
+rodando uma vez a `0.001s`, a entrada com o fade de 150 ms e o voo do Send com
+os tempos dele; §7 varre as telas e recusa giro infinito declarado nelas
+(keyframes com `rotate` ou o `otc-spin` com ritmo próprio) — rodado contra o
+commit anterior, acusa os cinco.
+
+## §648 — Initiatives: o New event cria os marcos; o Edit não abre mais em branco (2026-10-21)
+
+**"Precisa adicionar o botão de New event na página das initiatives criadas.
+Esses eventos serão os milestones do card dele. Tire o botão de Add dele e
+deixe o card apenas para mostrar."** (com o "New event" do Pane de modelo:
+Title, Date, Starts, Length, Type, Project, Where.)
+
+**O marco É o evento.** Não nasceu uma entidade nova: o marco ganhou os campos
+do evento — `time` (hh:mm, normalizada: `9:05` → `09:05`), `length` (minutos,
+lista fechada `EVENT_LENGTHS` = 15…240; padrão 30 quando há hora), `type`
+(`EVENT_TYPES` = Milestone, Meeting, Deadline, Review, Go-live; gravado em
+inglês, traduzido `ev_<tipo>`; padrão Milestone) e `where` (texto limpo, 200).
+Sem hora o evento é do DIA INTEIRO e não tem duração — o servidor a descarta,
+e a tela desliga o campo. As duas listas vão no `meta` da página. O PATCH muda
+só o que veio (`MILESTONE_FIELDS`); o marco antigo, sem tipo, lê-se como
+Milestone. No mesmo dia a ordem é pela hora (`milestone_order`, também a do
+"próximo marco"). O Calendar recebe a `time` e a mostra na frente do título.
+
+**A página.** O botão **New event** fica na barra, ao lado do Pin e do Edit, e
+abre o modal no padrão da casa (`pj-event-modal`, liquid-glass; a iniciativa
+aparece só para leitura — o evento é desta). A hora se digita só com os
+números (`1930` → `19:30`). **O card Milestones só mostra**: saíram o campo de
+adicionar, o círculo clicável e o ×; cada marco mostra a data, a hora com a
+duração, o "em n dias"/Done, o tipo e o local. O clique (ou Enter) num marco
+abre o MESMO modal em edição, com o switch **Reached** e o Delete — sem isso
+não haveria como dar um marco por atingido ou apagá-lo. O Coming up diz o TIPO
+do evento e a hora.
+
+**"No Edit initiative, as informações que já foram inseridas ao criar a
+iniciativa têm que permanecer no modal."** Com a página carregada, o Edit vinha
+completo — conferido com uma iniciativa criada com todos os campos. O defeito
+é o clique ANTES da carga, que na instância leva segundos (dados no share):
+o handler montava `{project: state.p}` no CLIQUE, com o `state.p` ainda nulo;
+o `afterMeta` guardava esse pedido e o reabria quando as listas chegavam — e
+a página chama o `setMeta` ANTES do `render`, então nem ali o projeto existia.
+O modal abria como "Edit initiative" com tudo em branco (cor azul, ícone
+pasta, sem time). Reproduzido atrasando o fetch em 4 s dentro da página.
+Agora Edit, New event e Add task passam por `carregada()`: com a iniciativa
+carregada abrem na hora, sem ela esperam a carga (`state.loading`) com o
+cursor de espera, e não abrem se a carga falhou. O `openProjectModal` em modo
+edição sem iniciativa recusa abrir, de guarda. O Add task tinha o mesmo
+defeito (`projects: [null]`).
+
+**Guarda.** `check_projects.py` §5b: o evento com todos os campos, hora e
+duração padrão, a ordem pela hora, o dia inteiro sem duração, as recusas
+(`bad_time` para `25:00`/`abc`, `bad_choice` para 50 min e tipo fora da
+lista), o PATCH parcial mantendo o resto e dando por atingido, tirar a hora
+tirando a duração, as listas no `meta`, a hora no Calendar; e, no fonte, o New
+event na página, o card sem o Add, e os três botões com `carregada(`.
+Conferido no Chromium: o Edit clicado durante a carga atrasada abre
+preenchido; New event → card → clique → edição → Reached → Delete.
