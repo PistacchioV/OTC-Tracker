@@ -27590,3 +27590,50 @@ do Outlook e a posição, o SWAP 0014 campo a campo, o Edit e os cards no
 Chromium. O `check_unwind_products` §5 passou à regra nova (papel pela conta
 menor, nocional no 11, fatores, Data Antecipação = hoje, liquidação em branco)
 e o `check_unwind_catalog` aceita o `qty`.
+
+## §658 — Favoritos: o botão flutuante "+" da casca (2026-10-21)
+
+Pedido da mesa: "uma barra expansível, estilo a do iPad, que é um mais; ao
+clicar abre as opções; ela deve poder ser movida pelo usuário pela página; nela
+a função de favoritar as páginas para acesso rápido" — "mantendo sempre o padrão
+visual da aplicação".
+
+**O botão** (`otc.js` §3f, `window.otcFab`; estilo no `otc.scss`, logo depois
+do toast) é o AssistiveTouch no material da casa: o botão de VIDRO redondo
+(`--otc-glassbtn-*` sobre `--otc-glass-chrome`, o `--otc-blur`), com o "+"
+desenhado em CSS que gira para "×" aberto. Nasce em toda página do layout
+(onde há o menu lateral), na borda direita a 78% da altura.
+- **Arrasta**: o ponteiro é capturado já no `pointerdown` — sem isso um arrasto
+  rápido saía de cima do botão antes dos 6px que separam clique de arrasto, e os
+  movimentos iam para a página. Solto, ele encosta na borda mais perto; o lugar
+  (`__OTC_FAB_POS__`) é a borda + a altura em FRAÇÃO da janela, que sobrevive a
+  janela de outro tamanho. O clique que encerra um arrasto não abre o painel.
+- **Esmaece parado** (3,5 s, `is-idle`), como o do iPad; volta no hover/foco.
+- **Fecha** no Esc, no clique fora e quando é arrastado.
+
+**O painel** é a placa grossa (`--otc-glass-thick` + `--otc-blur-thick`), que o
+modo opaco (§11) torna sólida sozinho: "Favorites" com o botão **Add this
+page** (a estrela acende em amarelo, "In favorites"), e a lista — o ícone do
+menu no ladrilho da casa (`.otc-icon-tile`), o nome e o caminho. Nome e ícone
+saem do menu DONO, no idioma de quem vê (`pageLeaf` prefere o item sem
+`data-nav-alias`, a regra do §654 — "Option" é Intrag › DCE, não o atalho de New
+Deals); página fora do menu (a de uma iniciativa) usa o título gravado. Remover
+é o × da linha, com o aviso da casa e o **Undo** (`otcToast`). Favorito que o
+menu tem e a pessoa não alcança mais (allowlist) não aparece. Os links entram
+no pré-carregamento do menu (Speculation Rules do `vertical.html`).
+
+**A lista é do SID**, no documento da User Home (`user-home/<SID>.json`, chave
+`favorites`; `/api/user-home/favorites` GET/POST): acompanha a pessoa em
+qualquer máquina e instância. `domain.clean_favorites` aceita só caminho deste
+app (nada de `//host`, `http:`, `javascript:`, `/api/`, espaço ou aspas — o
+link é um `href` direto), sem repetir, até 24, rótulo enxuto. O navegador guarda
+uma CÓPIA (`otc_favorites_<SID>`) para desenhar na hora — cada página carregada
+não pode custar uma ida ao share — e o servidor é lido quando o painel abre; o
+evento `storage` mantém as abas iguais.
+
+Fica em `z-index` 1040: abaixo de modal (1055) e offcanvas, que o cobrem; some
+na impressão.
+
+`check_fab_favorites.py` (novo, 27 checks). O Guia do Usuário (3.5) explica o
+botão; a 5.11 ganhou o recap do TRS e os cards das recompras de swap (§657) e o
+Trade Date editável (§656).

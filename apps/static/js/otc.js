@@ -38,9 +38,18 @@
   // Textos que este arquivo insere depois do load (o I18nManager traduz uma
   // vez só): mapa local, como em toda página da casa.
   var _TRANS = {
-    en: { sent: 'Sent', search: 'Search pages…', none: 'No page matches', goto: 'Go to page', pinned: 'Pinned', customize: 'Customize', menu: 'Menu' },
-    br: { sent: 'Enviado', search: 'Buscar páginas…', none: 'Nenhuma página encontrada', goto: 'Ir para a página', pinned: 'Fixados', customize: 'Personalizar', menu: 'Menu' },
-    es: { sent: 'Enviado', search: 'Buscar páginas…', none: 'Ninguna página encontrada', goto: 'Ir a la página', pinned: 'Fijados', customize: 'Personalizar', menu: 'Menú' }
+    en: { sent: 'Sent', search: 'Search pages…', none: 'No page matches', goto: 'Go to page', pinned: 'Pinned', customize: 'Customize', menu: 'Menu',
+          fab: 'Quick access', favs: 'Favorites', favAdd: 'Add this page', favIn: 'In favorites', favRemove: 'Remove',
+          favEmpty: 'No favorites yet. Tap the star to add this page.', favAdded: 'Added to favorites',
+          favRemoved: 'Removed from favorites', favErr: 'Favorites could not be saved', favDrag: 'Quick access — drag to move' },
+    br: { sent: 'Enviado', search: 'Buscar páginas…', none: 'Nenhuma página encontrada', goto: 'Ir para a página', pinned: 'Fixados', customize: 'Personalizar', menu: 'Menu',
+          fab: 'Acesso rápido', favs: 'Favoritos', favAdd: 'Favoritar esta página', favIn: 'Nos favoritos', favRemove: 'Remover',
+          favEmpty: 'Nenhum favorito ainda. Toque na estrela para adicionar esta página.', favAdded: 'Adicionado aos favoritos',
+          favRemoved: 'Removido dos favoritos', favErr: 'Não foi possível salvar os favoritos', favDrag: 'Acesso rápido — arraste para mover' },
+    es: { sent: 'Enviado', search: 'Buscar páginas…', none: 'Ninguna página encontrada', goto: 'Ir a la página', pinned: 'Fijados', customize: 'Personalizar', menu: 'Menú',
+          fab: 'Acceso rápido', favs: 'Favoritos', favAdd: 'Agregar esta página', favIn: 'En favoritos', favRemove: 'Quitar',
+          favEmpty: 'Aún no hay favoritos. Toque la estrella para agregar esta página.', favAdded: 'Agregado a favoritos',
+          favRemoved: 'Quitado de favoritos', favErr: 'No se pudieron guardar los favoritos', favDrag: 'Acceso rápido — arrastre para mover' }
   };
   function t(k) { var m = _TRANS[lang()] || _TRANS.en; return m[k] || _TRANS.en[k] || k; }
 
@@ -988,6 +997,294 @@
   window.otcToast = otcToast;
 
   // ==========================================================================
+  // 3f. O BOTÃO FLUTUANTE de favoritos (mesa, 21/10/2026, §658) — o
+  // "AssistiveTouch" do iPad: um "+" por cima da página, que a pessoa ARRASTA
+  // para onde quiser (solto, encosta na borda mais perto e lembra o lugar,
+  // `__OTC_FAB_POS__`); parado, esmaece. O clique abre o painel: favoritar a
+  // página atual e a lista dos favoritos, na ordem em que entraram.
+  //
+  // A lista é do SID, no documento da User Home (`/api/user-home/favorites`):
+  // acompanha a pessoa em qualquer máquina e instância. O navegador guarda uma
+  // CÓPIA (`otc_favorites_<SID>`) para desenhar na hora — cada página carregada
+  // não pode custar uma ida ao share —, e o servidor é lido quando o painel
+  // abre. O rótulo e o ícone saem do MENU, no idioma de quem vê; fora do menu
+  // (a página de uma iniciativa) vale o título da página, gravado junto.
+  // ==========================================================================
+  var FAB_POS_KEY = '__OTC_FAB_POS__', FAB_SIZE = 52, FAB_MARGIN = 14, FAB_IDLE_MS = 3500;
+  var FAB_STAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg>';
+  var Fab = { el: null, btn: null, panel: null, open: false, list: null, fetched: false, idleT: null };
+
+  function fabSid() {
+    var box = doc.querySelector('.otc-pinned[data-sid]');
+    return box ? (box.getAttribute('data-sid') || '').trim().toUpperCase() : '';
+  }
+  function favKey() { return 'otc_favorites_' + (fabSid() || 'anon'); }
+  function favCache() {
+    if (Fab.list) return Fab.list;
+    try {
+      var v = JSON.parse(localStorage.getItem(favKey()) || '[]');
+      Fab.list = Array.isArray(v) ? v.filter(function (o) { return o && typeof o.url === 'string'; }) : [];
+    } catch (e) { Fab.list = []; }
+    return Fab.list;
+  }
+  function favSetCache(list) {
+    Fab.list = (list || []).slice();
+    try { localStorage.setItem(favKey(), JSON.stringify(Fab.list)); } catch (e) {}
+  }
+  // O link DONO da página no menu (o atalho leva `data-nav-alias`, §654).
+  function navLinkOf(href) {
+    var sel = '.sidenav-menu .side-nav:not(.dd-panel) a.side-nav-link[href="' + href.replace(/"/g, '') + '"]';
+    return doc.querySelector(sel + ':not([data-nav-alias])') || doc.querySelector(sel);
+  }
+  // O ícone da página: o do item ou, num submenu, o do grupo — a mesma regra
+  // do ladrilho do título (`layouts/vertical.html`).
+  function navIconOf(href) {
+    var a = navLinkOf(href);
+    for (var li = a && a.closest('.side-nav-item'); li; li = li.parentElement && li.parentElement.closest('.side-nav-item')) {
+      var ic = li.querySelector(':scope > a.side-nav-link .menu-icon > :first-child');
+      if (ic) return ic.cloneNode(true);
+    }
+    return null;
+  }
+  // A folha do menu com o endereço — a do DONO quando a página está em dois
+  // lugares (o atalho leva `data-nav-alias`, §654): "Option" é Intrag › DCE,
+  // não o atalho de New Deals › DCE.
+  function pageLeaf(href) {
+    var dono = null, atalho = null;
+    (function walk(nodes, trail) {
+      (nodes || []).forEach(function (n) {
+        if (n.kind === 'leaf' && n.href === href) {
+          var o = { href: n.href, label: labelOf(n), trail: trail.slice() };
+          if (n.a && n.a.hasAttribute('data-nav-alias')) { if (!atalho) atalho = o; }
+          else if (!dono) dono = o;
+        } else if (n.kind === 'branch') walk(n.children, trail.concat([labelOf(n)]));
+      });
+    })(Nav.tree, []);
+    return dono || atalho;
+  }
+  function pageTitle() {
+    var h = doc.querySelector('.content-page .page-title-head h4, .content-page .page-title-head h5');
+    var txt = h ? h.textContent.replace(/\s+/g, ' ').trim() : '';
+    return txt || String(doc.title || '').replace(/\s*[|·—-]\s*OTC Tracker\s*$/i, '').trim();
+  }
+  function favLabel(o) {
+    var l = pageLeaf(o.url);
+    return l ? l.label : (o.label || o.url);
+  }
+  function favTrail(o) {
+    var l = pageLeaf(o.url);
+    return l && l.trail.length ? l.trail.join(' › ') : '';
+  }
+  function favHas(url) { return favCache().some(function (o) { return o.url === url; }); }
+  // Favorito que o menu tem e a pessoa não alcança mais (allowlist) não aparece.
+  function favVisible(o) { return !pageLeaf(o.url) || isAllowed(o.url); }
+
+  function favPersist(list, done) {
+    favSetCache(list);
+    fabRender();
+    fetch('/api/user-home/favorites', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ favorites: list })
+    }).then(function (r) { return r.json(); }).then(function (res) {
+      if (!res || !res.success) throw new Error((res && res.code) || 'save failed');
+      favSetCache(res.favorites || []);
+      fabRender();
+      if (done) done();
+    }).catch(function () { otcToast(t('favErr'), { error: true }); });
+  }
+  function favFetch() {
+    if (Fab.fetched) return;
+    Fab.fetched = true;
+    fetch('/api/user-home/favorites', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (res) { if (res && res.success) { favSetCache(res.favorites || []); fabRender(); } })
+      .catch(function () { Fab.fetched = false; });
+  }
+  function favToggleCurrent() {
+    var url = curPath(), list = favCache().slice();
+    if (favHas(url)) {
+      var antes = list.slice();
+      list = list.filter(function (o) { return o.url !== url; });
+      favPersist(list);
+      otcToast(t('favRemoved'), { undo: function () { favPersist(antes); } });
+    } else {
+      var l = pageLeaf(url);
+      list.push({ url: url, label: l ? l.label : pageTitle() });
+      favPersist(list);
+      otcToast(t('favAdded'));
+    }
+  }
+  function favRemove(url) {
+    var antes = favCache().slice();
+    favPersist(antes.filter(function (o) { return o.url !== url; }));
+    otcToast(t('favRemoved'), { undo: function () { favPersist(antes); } });
+  }
+
+  function fabRender() {
+    if (!Fab.panel) return;
+    var url = curPath(), on = favHas(url);
+    var lista = favCache().filter(favVisible);
+    var star = Fab.panel.querySelector('.otc-fab__star');
+    star.classList.toggle('is-on', on);
+    star.setAttribute('aria-pressed', on ? 'true' : 'false');
+    star.querySelector('span').textContent = on ? t('favIn') : t('favAdd');
+    Fab.panel.querySelector('.otc-fab__title').textContent = t('favs');
+    var ul = Fab.panel.querySelector('.otc-fab__list');
+    ul.innerHTML = lista.map(function (o) {
+      var trail = favTrail(o);
+      return '<li><a class="otc-fab__item' + (o.url === url ? ' is-current' : '') + '" href="' + esc(o.url) + '">' +
+        '<span class="otc-fab__ico otc-icon-tile" data-ico="' + esc(o.url) + '"></span>' +
+        '<span class="otc-fab__txt"><b>' + esc(favLabel(o)) + '</b>' + (trail ? '<small>' + esc(trail) + '</small>' : '') + '</span></a>' +
+        '<button type="button" class="otc-fab__del" data-url="' + esc(o.url) + '" aria-label="' + esc(t('favRemove')) + '" title="' + esc(t('favRemove')) + '">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg></button></li>';
+    }).join('');
+    $$('.otc-fab__ico[data-ico]', ul).forEach(function (s) {
+      var ic = navIconOf(s.getAttribute('data-ico'));
+      if (ic) s.appendChild(ic); else s.innerHTML = FAB_STAR;
+    });
+    Fab.panel.querySelector('.otc-fab__empty').hidden = lista.length > 0;
+    Fab.panel.querySelector('.otc-fab__empty').textContent = t('favEmpty');
+    Fab.btn.setAttribute('aria-label', t('fab'));
+    Fab.btn.title = t('favDrag');
+    if (Fab.open) fabPlacePanel();
+  }
+
+  // ── Posição: encostada numa borda, a altura como FRAÇÃO da janela ─────────
+  function fabPos() {
+    try {
+      var p = JSON.parse(localStorage.getItem(FAB_POS_KEY) || 'null');
+      if (p && (p.side === 'left' || p.side === 'right') && p.y >= 0 && p.y <= 1) return p;
+    } catch (e) {}
+    return { side: 'right', y: 0.78 };
+  }
+  function fabApply(p) {
+    var w = window.innerWidth, h = window.innerHeight;
+    var x = p.side === 'left' ? FAB_MARGIN : w - FAB_SIZE - FAB_MARGIN;
+    var y = FAB_MARGIN + p.y * Math.max(0, h - FAB_SIZE - 2 * FAB_MARGIN);
+    Fab.el.style.left = Math.round(x) + 'px';
+    Fab.el.style.top = Math.round(y) + 'px';
+    Fab.el.setAttribute('data-side', p.side);
+  }
+  function fabPlacePanel() {
+    var r = Fab.el.getBoundingClientRect(), pn = Fab.panel;
+    var w = Math.min(320, window.innerWidth - 2 * FAB_MARGIN);
+    pn.style.width = w + 'px';
+    var left = Fab.el.getAttribute('data-side') === 'left' ? r.right + 10 : r.left - 10 - w;
+    left = Math.max(FAB_MARGIN, Math.min(left, window.innerWidth - w - FAB_MARGIN));
+    var ph = pn.offsetHeight;
+    var top = Math.max(FAB_MARGIN, Math.min(r.top + r.height / 2 - ph / 2, window.innerHeight - ph - FAB_MARGIN));
+    pn.style.left = Math.round(left) + 'px';
+    pn.style.top = Math.round(top) + 'px';
+  }
+  function fabIdle() {
+    clearTimeout(Fab.idleT);
+    Fab.el.classList.remove('is-idle');
+    if (Fab.open) return;
+    Fab.idleT = setTimeout(function () { if (!Fab.open) Fab.el.classList.add('is-idle'); }, FAB_IDLE_MS);
+  }
+  function fabSetOpen(on) {
+    Fab.open = !!on;
+    Fab.el.classList.toggle('is-open', Fab.open);
+    Fab.btn.setAttribute('aria-expanded', Fab.open ? 'true' : 'false');
+    Fab.panel.hidden = !Fab.open;
+    if (Fab.open) { favFetch(); fabRender(); fabPlacePanel(); }
+    fabIdle();
+  }
+
+  function initFab() {
+    if (!navSource() || doc.querySelector('.otc-fab')) return;
+    var wrap = doc.createElement('div');
+    wrap.className = 'otc-fab';
+    wrap.innerHTML =
+      '<button type="button" class="otc-fab__btn" aria-expanded="false" aria-haspopup="dialog"><span class="otc-fab__plus" aria-hidden="true"></span></button>' +
+      '<div class="otc-fab__panel" role="dialog" hidden>' +
+        '<div class="otc-fab__head"><b class="otc-fab__title"></b>' +
+          '<button type="button" class="otc-fab__star" aria-pressed="false">' + FAB_STAR + '<span></span></button></div>' +
+        '<ul class="otc-fab__list"></ul><p class="otc-fab__empty"></p>' +
+      '</div>';
+    doc.body.appendChild(wrap);
+    Fab.el = wrap;
+    Fab.btn = wrap.querySelector('.otc-fab__btn');
+    Fab.panel = wrap.querySelector('.otc-fab__panel');
+    fabApply(fabPos());
+    fabRender();
+    fabIdle();
+
+    // Arrastar: o ponteiro move o botão depois de 6px (antes disso é clique);
+    // ao soltar, encosta na borda mais perto e a posição fica gravada.
+    var drag = null, moveu = false;
+    Fab.btn.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      var r = wrap.getBoundingClientRect();
+      drag = { x: e.clientX, y: e.clientY, l: r.left, t: r.top, id: e.pointerId };
+      moveu = false;
+      // a captura JÁ no toque: um arrasto rápido sai de cima do botão antes
+      // dos 6px, e sem ela os movimentos iriam para a página
+      try { Fab.btn.setPointerCapture(e.pointerId); } catch (er) {}
+      fabIdle();
+    });
+    Fab.btn.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!moveu && Math.abs(dx) + Math.abs(dy) < 6) return;
+      if (!moveu) {
+        moveu = true;
+        if (Fab.open) fabSetOpen(false);
+        wrap.classList.add('is-dragging');
+      }
+      var x = Math.max(0, Math.min(drag.l + dx, window.innerWidth - FAB_SIZE));
+      var y = Math.max(0, Math.min(drag.t + dy, window.innerHeight - FAB_SIZE));
+      wrap.style.left = x + 'px';
+      wrap.style.top = y + 'px';
+    });
+    function solta(e) {
+      if (!drag || (e && e.pointerId !== drag.id)) return;
+      drag = null;
+      if (!moveu) return;
+      wrap.classList.remove('is-dragging');
+      var r = wrap.getBoundingClientRect();
+      var livre = Math.max(1, window.innerHeight - FAB_SIZE - 2 * FAB_MARGIN);
+      var p = { side: (r.left + r.width / 2) < window.innerWidth / 2 ? 'left' : 'right',
+                y: Math.max(0, Math.min(1, (r.top - FAB_MARGIN) / livre)) };
+      try { localStorage.setItem(FAB_POS_KEY, JSON.stringify(p)); } catch (er) {}
+      fabApply(p);
+      fabIdle();
+    }
+    Fab.btn.addEventListener('pointerup', solta);
+    Fab.btn.addEventListener('pointercancel', solta);
+    Fab.btn.addEventListener('click', function (e) {
+      if (moveu) { moveu = false; e.preventDefault(); return; }
+      fabSetOpen(!Fab.open);
+    });
+
+    Fab.panel.addEventListener('click', function (e) {
+      if (e.target.closest('.otc-fab__star')) { favToggleCurrent(); return; }
+      var del = e.target.closest('.otc-fab__del');
+      if (del) { e.preventDefault(); favRemove(del.getAttribute('data-url')); }
+    });
+    doc.addEventListener('pointerdown', function (e) {
+      if (Fab.open && !wrap.contains(e.target) && !e.target.closest('.otc-toast')) fabSetOpen(false);
+    });
+    doc.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && Fab.open) { fabSetOpen(false); Fab.btn.focus(); }
+    });
+    wrap.addEventListener('pointerenter', fabIdle);
+    wrap.addEventListener('focusin', fabIdle);
+    window.addEventListener('resize', function () { fabApply(fabPos()); if (Fab.open) fabPlacePanel(); });
+    // Outra aba mudou os favoritos: a cópia daqui acompanha.
+    window.addEventListener('storage', function (e) {
+      if (e.key === favKey()) { Fab.list = null; fabRender(); }
+      if (e.key === FAB_POS_KEY) fabApply(fabPos());
+    });
+    window.addEventListener('otc:language-changed', fabRender);
+  }
+  window.otcFab = {
+    open: function () { if (Fab.el) fabSetOpen(true); },
+    close: function () { if (Fab.el) fabSetOpen(false); }
+  };
+
+  // ==========================================================================
   // 3e. A ILHA do foco (o "island" do Pane): uma pílula preta sob a barra do
   // topo com o anel e o tempo, em QUALQUER página, enquanto há sessão. O estado
   // fica no localStorage (a ilha conta sem ir ao servidor e acompanha as abas
@@ -1826,9 +2123,11 @@
 
     buildNav();
     renderPinned();
+    initFab();
     accessThen(function () {
       if (Nav.allowed) buildNav();
       renderPinned();
+      fabRender();
       if (window.otcI18n) window.otcI18n.applyTranslations();
     });
 

@@ -2230,6 +2230,88 @@ body.otc-has-island .otc-toast { top: calc(var(--otc-inset, 16px) + 128px); }
 @keyframes otc-toast-in { from { opacity: 0; translate: 0 -10px; scale: .96; } to { opacity: 1; translate: 0 0; scale: 1; } }
 @keyframes otc-toast-out { to { opacity: 0; translate: 0 -8px; } }
 
+// ── O botão flutuante de favoritos (otc.js §3f, §658) ───────────────────────
+// O "AssistiveTouch" do iPad no material da casa: o botão de VIDRO
+// (`--otc-glassbtn-*`) redondo, com o "+" desenhado em CSS que vira "×" aberto;
+// parado, esmaece (`is-idle`). O painel é a placa GROSSA
+// (`--otc-glass-thick` + `--otc-blur-thick`), que o modo opaco (§11) torna
+// sólida sozinho. Fica ABAIXO de modal e offcanvas (1045+), que o cobrem.
+.otc-fab {
+  position: fixed; z-index: 1040; width: 52px; height: 52px;
+  transition: left var(--otc-dur-spring) var(--otc-spring), top var(--otc-dur-spring) var(--otc-spring);
+  &.is-dragging { transition: none; }
+}
+.otc-fab__btn {
+  width: 52px; height: 52px; padding: 0; border: 0; border-radius: 50%;
+  display: grid; place-items: center; color: var(--otc-text);
+  cursor: grab; touch-action: none; user-select: none;
+  background-color: var(--otc-glass-chrome); background-image: var(--otc-glassbtn-bg);
+  -webkit-backdrop-filter: var(--otc-blur); backdrop-filter: var(--otc-blur);
+  box-shadow: var(--otc-glassbtn-shadow), var(--otc-shadow);
+  transition: opacity var(--otc-dur-base) var(--otc-ease), scale var(--otc-dur-fast) var(--otc-spring);
+  &:hover { background-image: var(--otc-glassbtn-bg-hover); }
+  &:active { scale: .94; }
+  &:focus-visible { outline: 2px solid var(--otc-accent); outline-offset: 3px; }
+}
+.otc-fab.is-idle .otc-fab__btn { opacity: .45; }
+.otc-fab.is-dragging .otc-fab__btn { cursor: grabbing; scale: 1.06; box-shadow: var(--otc-glassbtn-shadow), var(--otc-shadow-lift); }
+.otc-fab__plus {
+  position: relative; width: 20px; height: 20px;
+  transition: rotate var(--otc-dur-spring) var(--otc-spring);
+  &::before, &::after { content: ""; position: absolute; left: 50%; top: 50%; width: 20px; height: 2.6px; border-radius: 2px; background: currentColor; translate: -50% -50%; }
+  &::after { rotate: 90deg; }
+}
+.otc-fab.is-open .otc-fab__plus { rotate: 45deg; }
+.otc-fab__panel {
+  position: fixed; z-index: 1041; padding: 12px;
+  border: 1px solid var(--otc-sep); border-radius: var(--otc-r-card-sm);
+  background: var(--otc-glass-thick); color: var(--otc-text);
+  -webkit-backdrop-filter: var(--otc-blur-thick); backdrop-filter: var(--otc-blur-thick);
+  box-shadow: var(--otc-shadow-lift);
+  animation: otc-fab-in var(--otc-dur-base) var(--otc-ease-out) both;
+  &[hidden] { display: none; }
+}
+@keyframes otc-fab-in { from { opacity: 0; scale: .96; } to { opacity: 1; scale: 1; } }
+.otc-fab__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 4px 10px; }
+.otc-fab__title { font: 650 15px/1.2 var(--otc-font); }
+.otc-fab__star {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 10px;
+  border: 0; border-radius: var(--otc-r-pill); background: var(--otc-fill); color: var(--otc-text-2);
+  font: 600 12.5px/1 var(--otc-font); cursor: pointer; white-space: nowrap;
+  transition: background-color var(--otc-dur-fast) var(--otc-ease), color var(--otc-dur-fast) var(--otc-ease);
+  svg { width: 16px; height: 16px; flex: none; }
+  &:hover { color: var(--otc-text); }
+  &.is-on { background: color-mix(in srgb, var(--otc-yellow) 18%, transparent); color: var(--otc-text);
+    svg { fill: var(--otc-yellow); stroke: var(--otc-yellow); } }
+}
+.otc-fab__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: min(56vh, 420px); overflow-y: auto;
+  li { position: relative; } }
+.otc-fab__item {
+  display: flex; align-items: center; gap: 10px; min-width: 0; padding: 7px 38px 7px 7px;
+  border-radius: var(--otc-r-sm); color: var(--otc-text); text-decoration: none;
+  transition: background-color var(--otc-dur-fast) var(--otc-ease);
+  &:hover { background: var(--otc-fill); color: var(--otc-text); }
+  &.is-current { background: color-mix(in srgb, var(--otc-accent) 12%, transparent); }
+}
+.otc-fab__ico { width: 30px; height: 30px; font-size: 16px;
+  svg { width: 16px; height: 16px; } }
+.otc-fab__txt { display: grid; min-width: 0;
+  b { font: 600 13.5px/1.25 var(--otc-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  small { font-size: 11.5px; color: var(--otc-text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
+.otc-fab__del {
+  position: absolute; right: 6px; top: 50%; translate: 0 -50%;
+  width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center;
+  background: transparent; color: var(--otc-text-3); cursor: pointer; opacity: 0;
+  transition: opacity var(--otc-dur-fast) var(--otc-ease), background-color var(--otc-dur-fast) var(--otc-ease);
+  svg { width: 14px; height: 14px; }
+  &:hover { background: var(--otc-fill); color: var(--otc-danger); }
+  &:focus-visible { opacity: 1; outline: 2px solid var(--otc-accent); }
+}
+.otc-fab__list li:hover .otc-fab__del { opacity: 1; }
+@media (hover: none) { .otc-fab__del { opacity: 1; } }
+.otc-fab__empty { margin: 4px 4px 2px; font-size: 12.5px; line-height: 1.4; color: var(--otc-text-2); }
+@media print { .otc-fab { display: none !important; } }
+
 // o menu do <select> (otc.js §3b): abaixo do campo, na largura dele
 .otc-select-menu {
   position: fixed !important; margin: 0 !important; z-index: 2070;
