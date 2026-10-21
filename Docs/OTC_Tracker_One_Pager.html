@@ -40,7 +40,7 @@
   }
   :root[data-lang="pt"] [lang="en"], :root[data-lang="en"] [lang="pt"] { display: none !important; }
 
-  .sheet { margin: 0 auto; padding: 14px 28px 10px; }
+  .sheet { margin: 0 auto; padding: 16px 112px 12px; }
 
   /* ── cabeçalho ─────────────────────────────────────────── */
   .hero {
@@ -383,7 +383,9 @@
 
     // Encaixe na janela: num computador a página inteira cabe na altura da
     // janela, sem rolagem. A folha é medida sem zoom numa largura W/z (mais
-    // larga, mais baixa) e reduzida por z até caber; três passadas convergem.
+    // larga, mais baixa) e reduzida por z até caber. O z é o MAIOR que cabe,
+    // por busca binária: a altura muda com a largura (o texto quebra menos),
+    // e uma conta direta oscila e deixa sobra embaixo.
     // No celular (ou janela muito baixa) ela rola normalmente.
     var desk = window.matchMedia('(min-width: 900px) and (min-height: 480px)');
     var MIN_ZOOM = 0.5;
@@ -391,14 +393,14 @@
       sheet.style.zoom = '';
       sheet.style.width = '';
       if (!desk.matches) return;
-      var W = root.clientWidth, H = window.innerHeight, z = 1;
-      for (var i = 0; i < 3; i++) {
-        sheet.style.width = (W / z) + 'px';
-        z = Math.min(1, (H - 2) / sheet.offsetHeight);
-      }
-      if (z < MIN_ZOOM) { sheet.style.width = ''; return; }
-      sheet.style.width = (W / z) + 'px';
-      sheet.style.zoom = String(z);
+      var W = root.clientWidth, H = window.innerHeight - 2;
+      function cabe(z) { sheet.style.width = (W / z) + 'px'; return sheet.offsetHeight * z <= H; }
+      if (!cabe(MIN_ZOOM)) { sheet.style.width = ''; return; }
+      var lo = MIN_ZOOM, hi = 1;
+      if (cabe(1)) { lo = 1; }
+      else { for (var i = 0; i < 14; i++) { var m = (lo + hi) / 2; if (cabe(m)) lo = m; else hi = m; } }
+      sheet.style.width = (W / lo) + 'px';
+      sheet.style.zoom = String(lo);
     }
     var pend = 0;
     function refit() { cancelAnimationFrame(pend); pend = requestAnimationFrame(fit); }
