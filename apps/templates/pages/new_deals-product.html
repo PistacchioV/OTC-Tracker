@@ -1067,7 +1067,7 @@ $(document).ready(function() {
             ? '<i class="ti ti-edit me-1"></i>' + t('nd-prod-modal-edit', 'Edit Deal') + ' — ' + esc(PAGE.name) + ' · ' + esc(entry.Deal || entry.Client || '')
             : '<i class="ti ti-plus me-1"></i>' + t('nd-prod-modal-add', 'Add Deal') + ' — ' + esc(PAGE.name);
         var e = entry || $.extend({}, PAGE.defaults || {});
-        var html = '<div class="col-md-2">' + '<label class="form-label fs-xs text-muted mb-1" data-lang="nd-col-trade-date">Trade Date</label><input type="text" class="form-control form-control-sm swb-date" id="swb-f-TradeDate" data-f="TradeDate" value="' + esc(isEdit ? _isoToDmy(e.TradeDate) : (apiRefDate() || _todayIso())) + '" placeholder="dd/mm/aaaa" autocomplete="off"' + (isEdit ? ' readonly' : '') + '></div>';
+        var html = '<div class="col-md-2">' + '<label class="form-label fs-xs text-muted mb-1" data-lang="nd-col-trade-date">Trade Date</label><input type="text" class="form-control form-control-sm swb-date" id="swb-f-TradeDate" data-f="TradeDate" value="' + esc(isEdit ? (e.TradeDate || '') : (apiRefDate() || _todayIso())) + '" placeholder="dd/mm/aaaa" autocomplete="off"></div>';
         html += '<div class="col-md-2">' + fieldInput('LE', 'LE', e.LE || 'JPM') + '</div>' +
                 '<div class="col-md-2">' + fieldInput('LOB', 'LOB', e.LOB || '') + '</div>' +
                 '<div class="col-md-2">' + fieldInput('Deal', 'Deal', e.Deal || '') + '</div>' +
@@ -1169,7 +1169,9 @@ $(document).ready(function() {
         var dealId = $(modalEl).data('dealId') || null;
         var fields = readModal();
         var url, payload;
-        if (dealId) { url = PAGE.api + '/edit'; delete fields.TradeDate; payload = { deal_id: dealId, trade_date: (DEALS[dealId] && DEALS[dealId].TradeDate) || '', changes: fields }; }
+        // o Trade Date também se EDITA (mesa, 21/10/2026, §656): `trade_date` é o dia ATUAL,
+        // por onde o servidor acha a linha; o novo vai em `changes` e a muda de arquivo-dia
+        if (dealId) { url = PAGE.api + '/edit'; payload = { deal_id: dealId, trade_date: (DEALS[dealId] && DEALS[dealId].TradeDate) || '', changes: fields }; }
         else { url = PAGE.api + '/add'; payload = { trade_date: fields.TradeDate, fields: fields }; }
         fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify(payload) })
         .then(function(resp){ return resp.json().then(function(j){ return {ok:resp.ok, data:j}; }); })

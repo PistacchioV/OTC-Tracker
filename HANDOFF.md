@@ -27461,3 +27461,132 @@ assim; §7 cobra o formato dos cards (Deal/B3 ID primeiro e fora do pé, as
 pontas e a pílula da Cetes, LOB fixa e não editável); §8 desenha a pílula no
 Chromium (CEM, sem a marca de status; LOB vazia sem pílula).
 `check_new_deals_catalog.py`: a Cetes oferece só CEM, as outras CEM e EDG.
+
+## §656 — A Intrag Swap no dia do TRADE DATE; o Trade Date se edita nos cards de swap; a máscara em toda data do modal (2026-10-21)
+
+Mesa: "não tem que aparecer na data de início e sim no trade date"; e "ao
+clicar em editar no card de swap precisa habilitar o campo de trade date; todos
+os campos que contêm data têm que selecionar o conteúdo inteiro ao clicar, com
+a máscara dd/mm/yyyy para digitar só os números".
+
+**Intrag Swap: o dia da linha é o TRADE DATE** (substitui a saída do §655, que
+abria a tela "de hoje em diante"). Os dois pontos que gravam a linha — o B2B do
+Bullet/Cashflow (`platform/swap_new_deals.b3_mapped`) e a Cetes
+(`swap_cetes.commands.b3_mapped`) — passam o Trade Date (a Data Início é só o
+plano B do deal sem ele). A Data Início continua COLUNA da linha. O que
+dependia dela como CHAVE do dia mudou junto, porque Edit, Approve e Send
+achavam a linha mandando a coluna Data Início como `trade_date`:
+- a API `/api/intrag/swap` devolve o dia do ARQUIVO de cada linha em `_day`;
+- a página guarda esse dia (`DAY_BY_ID`/`dayOf`) e o manda no Edit, Approve,
+  Delete e Send — a coluna Data Início só como plano B;
+- o Send agrupa um `Intrag-Swap-AAAAMMDD.txt` por esse dia (pasta do dia);
+- o chip que comanda a pesquisa virou **Trade Date** (exato, hoje ou o dia do
+  link do Intraday Monitor); a Data Início virou filtro de coluna.
+Linha criada ANTES disto continua no arquivo-dia da Data Início dela (a
+pesquisa daquele dia a acha). Os testes do Bullet e do Cashflow cobram o dia
+novo (16/09, com a Data Início 15/09 na coluna); o `check_swap_cetes` §6 grava
+de verdade, pesquisa pela API (no Trade Date aparece, no Effective não, `_day`
+no dia e na faixa) e edita pela rota.
+
+**O Trade Date se edita no modal dos cards** (Bullet, Cashflow, Cetes). Ele
+era `readonly` na edição e nascia com o valor em dd/mm/aaaa — e o
+`otcDateField` guarda ISO no input original, então nem a máscara pegava. O Save
+o manda em `changes` (o `trade_date` do payload segue sendo o dia ATUAL, por
+onde a linha é achada) e o `edit` dos três backends MUDA a operação de
+arquivo-dia (`persistence.move_day`: o destino primeiro, depois a origem — o
+pior caso é a linha nos dois dias, nunca em nenhum; Trade Date em branco ou
+ilegível fica o anterior). O dia é a chave: a busca, Confirm/Send/Delete e o
+Intraday Monitor a acham por ele.
+
+**A máscara em TODA data do modal.** O resto já tinha (`otcDateField` →
+`otcDateMask`: clique seleciona tudo, só números, barras automáticas). O
+cronograma do Cashflow, porém, mostrava 01/01/2026: o `openModal` ligava o
+helper por CLASSE depois de montar os fluxos e pegava também o campo visível
+de cada um (o altInput herda a classe do original), que virava um SEGUNDO
+picker e relia "22/10/2026" como ISO. A guarda mora no HELPER
+(`export-advanced.js`: campo com `_otcMask` já é o altInput de outro picker e
+é recusado) e vale para toda página com esse desenho.
+
+`check_swap_edit_dates.py` (novo): as três páginas RENDERIZADAS pelo app, com
+uma operação semeada — Trade Date editável, toda data um picker com a máscara,
+nenhum picker dobrado, o cronograma com as datas certas, o clique seleciona a
+data inteira, `22102026` → 22/10/2026, e o Save muda a operação do 21/10 para o
+22/10.
+
+## §657 — Recompra de SWAP da EDG pelo recap do TRS; Unwinds › Swap em cards; o SWAP 0014 na forma da planilha da mesa (2026-10-21)
+
+Mesa: "estamos tendo diversas recompras de swap EDG no padrão do e-mail anexo
+(Internal Recap - FLRY3 TRS onshore Unwind); adicione esse padrão de leitura;
+altere para cards a página de Unwind › Swaps, com Party, Counterparty, ids; o
+CETIP ID está no e-mail; o valor recomprado é o número de ações × strike
+original, e as curvas A e B viram fator para o arquivo". Junto veio a planilha
+de antecipação da mesa (as fórmulas do SWAP 0014).
+
+**O recap** (`product/domain.linhas_do_recap_swap_trs`, flag `recap:
+'swap-trs'` na página `swap/edg`) é UMA tabela TRANSPOSTA: rótulos na primeira
+coluna, uma tranche por coluna (`#1`…`#9`; o `TOTAL` não é operação). Por
+tranche: CETIP ID → `Contract` (o B3 ID: a posição se acha por ele), Deal ID,
+Instrumento ID (coluna nova), Data de execução original → Trade Date, ações,
+strike original, preço de unwind, as pernas (A) Equity e (B) Funding e o (A +
+B). A data da recompra é a do ASSUNTO (`(20-Oct-26)`) e a liquidação, o "D+n"
+do rótulo do total, em dias úteis ANBIMA.
+
+**As contas.** Nocional recomprado = ações × strike original (o campo 11; é a
+soma deste campo que a posição chama de Valor Antecipado). As pernas vêm na
+visão de QUEM o rótulo nomeia: "(RDOR Recebe)" diz que o valor é o que o
+cliente ganha na perna equity; "(RDOR Paga DI + 0.50%)", que a funding é o que
+ele paga (negativa). A perna que o cliente RECEBE é a curva DELE; a que ele
+PAGA é a NOSSA. O que cada curva acumulou é o valor com o sinal de quem a
+recebe, e o **fator = 1 + acumulado ÷ nocional**, na 8ª casa. Com eles a B3 refaz
+o caixa: nocional × (fator nosso − fator deles) = o (A + B) do banco. Na
+tranche #1: nocional 3.338.928,00, fator nosso 1,01436481, deles 1,35353696,
+caixa −1.132.471,39 — exatamente o e-mail. O arredondamento dos fatores na 8ª
+casa pode dar até ~3 centavos de diferença (a #4 dá −1.131.760,52 contra
+−1.131.760,49); a B3 liquida pelos fatores, e a planilha da mesa tem a mesma
+diferença. O `Result` é o (A + B) do e-mail com o sinal do BANCO (o cliente
+recebe = o banco paga = negativo), e **não** a soma das pernas — que difere no
+centavo. O recap escrito na visão do banco ("JPM Paga") dá o mesmo resultado.
+
+**O SWAP 0014 na forma da planilha da mesa** (`campos_swap_0014`):
+- **papel pela CONTA MENOR** — Ponta 1 (`00`) = a conta de menor número
+  (manual 4.2.12; o `_ponta` do 0897 do Bullet; a fórmula da planilha
+  `IF(VALUE(nossa)>VALUE(deles);"01";"00")`). Era "Ponta 1 se a Participante
+  da posição é nossa", que só acerta quando a nossa é a menor
+  (`queries._swap` → `domain.papel_pela_conta`);
+- fatores 7/8 = o da curva da Ponta 1 e o da Ponta 2 (`recalcular_swap`, pelo
+  papel);
+- **campo 11 = o NOCIONAL** (`UnwoundNotional`). Ia o `Result`, que se chamava
+  "Unwind Amount"; a coluna virou **Settlement Amount** (o caixa) e o
+  `CalcResult` mostra o caixa dos fatores quando não bate;
+- Data Antecipação = o dia em que o arquivo é GERADO (o `TODAY()` da
+  planilha: o recap chega no fim da tarde, o arquivo vai no D+1, que é a
+  liquidação); Liquidante e Data de Liquidação (13, opcional) em branco;
+- Mantém Prêmios só na parcial, `01` (não) no recap — a planilha:
+  `IF(TOTAL;"  ";"01")`;
+- os dois fatores e o nocional são obrigatórios (o "valor OU fatores" saiu).
+
+**O Check** ganhou `fatores` (`_CK_SWAP_B3`, nas páginas de swap com arquivo):
+o caixa refeito pelos fatores bate com o `Result` na tolerância do
+arredondamento. "Total" do e-mail × saldo da posição que diz parcial vira aviso
+(`unwind_type_differs`). No Edit, ações/strike refazem o nocional e os
+fatores; pernas, o caixa; o papel sozinho troca os fatores de ponta sem mexer
+no caixa (`recalcular_swap` só refaz nocional/caixa vazios ou com o insumo
+mudado).
+
+**As telas de Unwinds › Swap (CEM e EDG) são CARDS** (flag `cards` do
+catálogo, o `deal-cards.js` do §650): título = a contraparte, Deal ID, B3 ID,
+Instrument ID, papel, **Party** (a nossa entidade — o nome do Reference Data da
+conta no `b3-accounts`) e **Counterparty**, recompra → liquidação, ações,
+strikes, nocional, as pernas, os fatores (sempre com 8 casas) e o caixa com a
+direção; a pílula da LOB (o fallback é o produto da página); o Check ao lado do
+status. A DataTable fica escondida como fonte do Export. As ações do card e da
+linha são as MESMAS funções (`approveRow`/`openEdit`/`deleteRows`/`sendRows`/
+`previewRow`, por id). Colunas novas do swap: Instrument ID, Party, Total /
+Partial, Shares (tipo novo `qty`), Original Strike, Unwind Price, Equity Leg,
+Funding Leg, OTC Tracker Result.
+
+`check_unwind_swap_trs.py` (novo, 31 checks): leitor, import pela API com o .eml
+do Outlook e a posição, o SWAP 0014 campo a campo, o Edit e os cards no
+Chromium. O `check_unwind_products` §5 passou à regra nova (papel pela conta
+menor, nocional no 11, fatores, Data Antecipação = hoje, liquidação em branco)
+e o `check_unwind_catalog` aceita o `qty`.

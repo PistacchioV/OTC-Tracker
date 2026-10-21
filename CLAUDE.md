@@ -962,7 +962,20 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   PRIMEIROS fatos, à vista mesmo em branco (`—`)** — no pé, que só mostra o que
   tem valor, sumiam justamente quando faltavam (§655). A **pílula da LOB**
   (`lob: fn(e)`, CEM teal × EDG roxo, `.otc-deal-card__lob`) é SUAVE e sem a
-  marca `otc-status`: não é status, e o Proper a leria "Cem".
+  marca `otc-status`: não é status, e o Proper a leria "Cem". **O Edit do card
+  edita o Trade Date** (§656): ele vai em `changes`, o `trade_date` do payload
+  segue sendo o dia ATUAL (por onde a linha é achada), e o `edit` dos três
+  backends a MUDA de arquivo-dia (`persistence.move_day`: destino primeiro;
+  em branco fica o anterior). `check_swap_edit_dates.py`.
+- **A linha da Intrag Swap mora no dia do TRADE DATE, não da Data Início**
+  (mesa, 21/10/2026, §656): os dois pontos que a gravam (o B2B do
+  Bullet/Cashflow no `swap_new_deals.b3_mapped`, a Cetes) passam o Trade Date.
+  A Data Início é COLUNA da linha — na Cetes é o Effective, em geral futuro, e
+  no dia dele a linha "não fluía" para a Intrag no dia do mapping. A página
+  pesquisa pelo chip **Trade Date** (o dia do arquivo; a Data Início virou
+  filtro de coluna) e a API devolve esse dia em `_day`, que Edit, Approve,
+  Delete e Send mandam de volta (`dayOf` na página) — nunca a coluna Data
+  Início. O Send agrupa um arquivo `Intrag-Swap-AAAAMMDD` por esse dia.
 - **Autocomplete nunca é `<datalist>`**: dropdown próprio abaixo do campo, mesma
   largura, `max-height` ~220px, item por `mousedown` (antes do `blur`),
   reemitindo `input`/`change` (`mapAttachDrop`, `.ar-ac-drop`).
@@ -983,8 +996,14 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   vai ao mês; data inteira e real → marca); `31/02` e texto pela metade voltam
   à última data válida ao sair do campo — o parse frouxo do flatpickr os lia
   como outra data (§636). A mesma regra da Quotes (§508) mora aqui no HELPER,
-  não na página.
-  `check_export_padrao.py` §5.
+  não na página. **O input ORIGINAL guarda ISO** (`dateFormat: 'Y-m-d'`): campo
+  que nasce com `dd/mm/aaaa` no `value` não vira data no picker — era o Trade
+  Date do Edit dos swaps. E o altInput HERDA a classe do original: página que
+  liga o helper por classe depois de montar parte do formulário pegava também
+  os campos visíveis, e cada um virava um SEGUNDO picker que relia a data como
+  ISO (o cronograma do Cashflow mostrava 01/01/2026) — o helper hoje recusa
+  campo que já é altInput (`_otcMask`, §656).
+  `check_export_padrao.py` §5, `check_swap_edit_dates.py`.
 
 ### Layout e vidro
 
@@ -1451,8 +1470,8 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   recusava (`Campo 126 conteúdo inválido`, com `â€“` na linha).
   **O B3 ID novo na linha é o MAPEAMENTO** (§481): Status `Success` sem
   passar por Pending, e `commands.b3_mapped` dispara — no B2B a linha da
-  **Intrag Swap** (visão da ATACAMA, carteira INTRAGJP633, arquivo-dia da
-  Data Início, 36 campos = `ENTRY_FIELDS` da página); contra cliente o
+  **Intrag Swap** (visão da ATACAMA, carteira INTRAGJP633, arquivo-dia do
+  TRADE DATE — §656, abaixo —, 36 campos = `ENTRY_FIELDS` da página); contra cliente o
   **Pending Confirmation + esteira** pela porta de sempre
   (`_pc_save_from_deal`), Produto `SWAP` com Opção de Arrependimento e
   `SWAP CORPORATE` sem, chave = B3 ID, LOB do deal (EDG), ativo = curva
@@ -1499,10 +1518,7 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   leva a curva que RECEBE; o **Valor Base é em REAIS** (USD notional × fx rate
   for reference); o mesmo Meu Número nas duas visões. Página do catálogo em
   cards, com o **Mapping B3 ID** (`mapping`) e sem Econ. Affirmation; no
-  Success, a **Intrag Swap na visão do LAWTON** (INTRAGJP552) — no arquivo-dia
-  da **Data Início** (o Effective, em geral FUTURO), por isso a Intrag Swap
-  abre **de HOJE em diante** e não "só hoje" (§655: mapeada, a linha "não
-  fluía"). A Cetes é **SEMPRE CEM** (`domain.LOB`: fora do `EDITABLE`, o
+  Success, a **Intrag Swap na visão do LAWTON** (INTRAGJP552). A Cetes é **SEMPRE CEM** (`domain.LOB`: fora do `EDITABLE`, o
   `refresh` a repõe), e o card diz Party = Banco e Counterparty = Lawton. O que cada
   perna é na B3 é o cadastro `swap-cetes-leg`. **No `.msg` do Outlook o bloco
   chega uma CÉLULA por linha** (§652): a tabela põe um `<p class=MsoNormal>`
@@ -1877,6 +1893,27 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   nome do cliente e datas da opção só DESEMPATAM. Quantidade em unidades (a da
   B3), números do e-mail (prêmio em USD, coluna FX Rate só nesta página), sinal
   do banco (no B2B o contrário da perna Client), pagador = o lançador.
+- **A recompra de SWAP da EDG chega no recap do TRS** (mesa, 21/10/2026, §657;
+  `domain.linhas_do_recap_swap_trs`, flag `recap: 'swap-trs'` no catálogo): o
+  "Internal Recap - <ticker> TRS onshore Unwind (20-Oct-26)" é UMA tabela
+  TRANSPOSTA — rótulos na 1ª coluna, uma TRANCHE por coluna (`TOTAL` fora) —, e
+  o **CETIP ID é o B3 ID** (a posição se acha por ele). Nocional recomprado =
+  **ações × strike original** (o campo 11). As pernas vêm na visão de QUEM o
+  rótulo nomeia (`(RDOR Recebe)`/`(RDOR Paga …)`/`(JPM Paga)`): a perna que o
+  cliente RECEBE é a curva DELE, a que ele PAGA é a NOSSA, e o **fator de cada
+  curva = 1 + acumulado ÷ nocional** (8 casas; o acumulado é o valor com o sinal
+  de quem recebe a curva — `LegSides`). Com os dois, nocional × (fator nosso −
+  fator deles) = o (A + B) do banco, que é o `Result` (o caixa, sinal do banco)
+  e vem do TOTAL do e-mail — refazê-lo pela soma das pernas trocaria o centavo,
+  e por isso `recalcular_swap` só refaz nocional/caixa vazios ou com o insumo
+  mudado. A data é a do ASSUNTO, a liquidação o "D+n" do rótulo (ANBIMA), a
+  parcial NÃO mantém prêmios. O Check ganhou `fatores` (`_CK_SWAP_B3`): o caixa
+  refeito pelos fatores bate com o `Result` na tolerância do arredondamento na
+  8ª casa (nocional × 2e-8 + 1 centavo — a B3 liquida pelos fatores, e é até
+  ~3 centavos do e-mail). **As duas telas de swap (CEM e EDG) são CARDS**
+  (`deal-cards.js`, flag `cards` do catálogo): ids, Party/Counterparty, a pílula
+  da LOB, o Check junto do status; a DataTable fica escondida como fonte do
+  Export. `check_unwind_swap_trs.py`.
 - **O backend das onze é UM, e o produto é parâmetro**
   (`features/unwinds/product/` + `infra/product_store.py`, §526): pasta
   (`dir`), posição (`position`: swap/option/ndf/None), conferências (`checks`)
@@ -1915,8 +1952,14 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   `Sent` não se sobrescreve. Check de três estados (`balance`, `termo`,
   `premio`): OK só com TODAS rodando e fechando. Arquivo da B3 pelo motor do
   File Interpreter: TER 0014 (quantidade no 9, paridade no 14), SWAP 0014
-  (**111** caracteres pela soma do template, não os 99 que o manual imprime;
-  papel pela conta NOSSA; Mantém Prêmios só na parcial) e OPC 0014 (contas do
+  (**111** caracteres pela soma do template, não os 99 que o manual imprime; na
+  forma da PLANILHA DE ANTECIPAÇÃO da mesa, §657: **papel pela CONTA MENOR** —
+  Ponta 1 = a de menor número, manual 4.2.12, o `_ponta` do 0897 do Bullet;
+  era "a Participante é nossa", que só acerta quando a nossa é a menor —,
+  fatores 7/8 = a curva da Ponta 1 e a da Ponta 2, **campo 11 = o NOCIONAL**
+  (`UnwoundNotional`, nunca o caixa), Data Antecipação = o dia em que o arquivo
+  é GERADO (o `TODAY()` da planilha), Liquidante e Data de Liquidação (13) em
+  branco, Mantém Prêmios só na parcial) e OPC 0014 (contas do
   REGISTRO, modalidade da posição). **O TER 0014 é o MESMO para asiático e não
   asiático** (mesa, 28/09/2026): as datas de verificação não vão (campo 16 =
   `000`); só a média asiática PONDERADA da opção ainda recusa. COE/DCE não têm
@@ -3165,7 +3208,7 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (201 scripts)
+### `scripts/tests/` (203 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

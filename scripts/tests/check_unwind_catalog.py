@@ -58,7 +58,7 @@ def main():
         check(path + ': cabeca fixa, Status primeiro', campos[:5] == cabeca, campos[:5])
         check(path + ': campo sem repeticao', len(campos) == len(set(campos)))
         check(path + ': tipos conhecidos',
-              all(c[2] in ('text', 'date', 'money', 'rate', 'status', 'check') for c in p['columns']))
+              all(c[2] in ('text', 'date', 'money', 'rate', 'qty', 'status', 'check') for c in p['columns']))
         check(path + ': escondida que existe', all(h in campos for h in p['hidden']))
         check(path + ': termina no Check', campos[-1] == 'Check')
         check(path + ': a chave nao e coluna de tela', p['key'] not in campos)

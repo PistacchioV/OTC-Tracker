@@ -29,11 +29,15 @@
 #unw-table :is(th, td):nth-child(6), #unw-table_wrapper .dt-scroll-head th:nth-child(6) { width: 230px; min-width: 230px; text-align: left; padding-left: 10px; }
 /* o aviso da linha: por que a recompra não pode ir para a B3 */
 .unw-warn { color: var(--otc-danger); cursor: help; }
+/* Modo CARDS (§657, as recompras de swap): a DataTable fica por baixo como a
+   fonte do Export — some só a área da tabela e o rodapé dela. */
+.unw-cards-mode #unw-table_wrapper .nd-table-area,
+.unw-cards-mode #unw-table_wrapper .nd-table-foot { display: none !important; }
 </style>
 {% endblock extra_css %}
 
 {% block page_content %}
-<div class="container-fluid" data-content="">
+<div class="container-fluid{% if page.cards %} unw-cards-mode{% endif %}" data-content="">
     <div class="page-title-head d-flex align-items-center">
         <div class="flex-grow-1">
             <h4 class="fs-xl fw-bold m-0 d-flex align-items-center gap-2">
@@ -104,6 +108,7 @@
 
                 <div class="card-header">
                     <div class="d-flex align-items-center gap-2">
+                        {% if not page.cards %}
                         <label class="form-label mb-0" data-lang="b3-show">Show</label>
                         <select class="form-select form-select-sm" style="width: 80px;" data-table-set-rows-per-page>
                             <option value="50" selected>50</option>
@@ -112,7 +117,8 @@
                             <option value="200">200</option>
                         </select>
                         <label class="form-label mb-0" data-lang="b3-entries">entries</label>
-                        {% if page.b3 %}<span class="text-muted fs-xs ms-auto d-none d-lg-inline"><span data-lang="unw-preview-hint-generic">Double-click a row to preview the B3 file</span> ({{ page.b3.label }} · {{ page.b3.length }})</span>{% endif %}
+                        {% endif %}
+                        {% if page.b3 %}<span class="text-muted fs-xs ms-auto d-none d-lg-inline">{% if page.cards %}<span data-lang="unw-preview-hint-cards">Double-click a card to preview the B3 file</span>{% else %}<span data-lang="unw-preview-hint-generic">Double-click a row to preview the B3 file</span>{% endif %} ({{ page.b3.label }} · {{ page.b3.length }})</span>{% endif %}
                     </div>
                 </div>
 
@@ -132,6 +138,14 @@
                             <tbody></tbody>
                         </table>
                     </div>
+                    {% if page.cards %}
+                    {# Os CARDS (§657): uma recompra por card; a seleção é a mesma do Send/Delete em lote. #}
+                    <div class="otc-deal-cards-bar">
+                        <label><input class="form-check-input form-check-input-light mt-0" type="checkbox" id="cardsSelectAll">
+                            <span data-lang="nd-cards-select-all">Select all</span></label>
+                    </div>
+                    <div id="unwCards"></div>
+                    {% endif %}
                 </div>
 
             </div>
@@ -181,6 +195,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/file-preview.js?v={{ asset_v('js/file-preview.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/deal-cards.js?v={{ asset_v('js/deal-cards.js') }}"></script>
 <script>
 // ── O contrato da página vem do CATÁLOGO (features/unwinds/catalog.py) ─────
 // Uma tela para todos os produtos: o que muda entre eles é só este objeto.
@@ -264,7 +279,11 @@ var _TRANS = {
         'w_unwind_no_counterparty': 'The position identifies no counterparty',
         'w_unwind_party_not_ours': 'Account {conta} of the position is not in B3 Accounts',
         'w_unwind_already_sent': 'Row {contrato} was already sent to B3 and was kept as it is',
-        'w_unwind_check_unknown': 'Unknown check {teste}'
+        'w_unwind_check_unknown': 'Unknown check {teste}',
+        'e_unwind_recap_no_tranches': 'The e-mail has no tranche with a CETIP ID to import',
+        'w_unwind_recap_no_cetip': 'the e-mail has no CETIP ID for this tranche',
+        'w_unwind_factor_mismatch': 'The settlement amount {informado} does not match notional × (our factor − their factor) = {calculado}',
+        'w_unwind_type_differs': 'The e-mail says {informado}, the Live Position balance says {saldo}'
     },
     br: {
         'unw_imported': 'Importado',
@@ -332,7 +351,11 @@ var _TRANS = {
         'w_unwind_no_counterparty': 'A posição não identifica a contraparte',
         'w_unwind_party_not_ours': 'A conta {conta} da posição não está no B3 Accounts',
         'w_unwind_already_sent': 'A linha {contrato} já foi enviada à B3 e ficou como estava',
-        'w_unwind_check_unknown': 'Conferência desconhecida {teste}'
+        'w_unwind_check_unknown': 'Conferência desconhecida {teste}',
+        'e_unwind_recap_no_tranches': 'O e-mail não tem tranche com CETIP ID para importar',
+        'w_unwind_recap_no_cetip': 'o e-mail não traz o CETIP ID desta tranche',
+        'w_unwind_factor_mismatch': 'O valor de liquidação {informado} não bate com nocional × (fator nosso − fator deles) = {calculado}',
+        'w_unwind_type_differs': 'O e-mail diz {informado}, o saldo do Live Position diz {saldo}'
     },
     es: {
         'unw_imported': 'Importado',
@@ -400,7 +423,11 @@ var _TRANS = {
         'w_unwind_no_counterparty': 'La posición no identifica a la contraparte',
         'w_unwind_party_not_ours': 'La cuenta {conta} de la posición no está en B3 Accounts',
         'w_unwind_already_sent': 'La línea {contrato} ya fue enviada a la B3 y quedó como estaba',
-        'w_unwind_check_unknown': 'Verificación desconocida {teste}'
+        'w_unwind_check_unknown': 'Verificación desconocida {teste}',
+        'e_unwind_recap_no_tranches': 'El correo no tiene tramo con CETIP ID para importar',
+        'w_unwind_recap_no_cetip': 'el correo no trae el CETIP ID de este tramo',
+        'w_unwind_factor_mismatch': 'El valor de liquidación {informado} no coincide con nocional × (factor nuestro − factor de ellos) = {calculado}',
+        'w_unwind_type_differs': 'El correo dice {informado}, el saldo del Live Position dice {saldo}'
     }
 };
 function _lang() { try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) { return 'en'; } }
@@ -443,6 +470,13 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){retur
 function _isoToDmy(s){var m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?(m[3]+'/'+m[2]+'/'+m[1]):String(s||'');}
 function _todayDmy(){var d=new Date();return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();}
 function fmtMoney(v){var n=parseFloat(String(v==null?'':v).replace(/[^\d.\-]/g,''));if(isNaN(n))return v==null?'':String(v);return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+// Quantidade (`qty`, as ações do swap): milhar, sem casas fixas.
+function fmtQty(v){var n=parseFloat(String(v==null?'':v).replace(/[^\d.\-]/g,''));if(isNaN(n))return v==null?'':String(v);return n.toLocaleString('en-US',{maximumFractionDigits:6});}
+// O fator do SWAP 0014 vai à B3 com OITO casas: a tela mostra as oito (1.01436480,
+// não 1.0143648 — o zero final some do número e parece outra precisão).
+var CASAS_FIXAS = { FactorLeg1: 8, FactorLeg2: 8 };
+function fmtFixo(v, n){var x=parseFloat(String(v==null?'':v).replace(/[^\d.\-]/g,''));return isNaN(x)?(v==null?'':String(v)):x.toFixed(n);}
+function _colKey(label){return 'unw-col-' + String(label).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');}
 
 // Os quatro estados da linha. `Pending` é amarelo porque é o único que PEDE
 // alguma coisa de alguém: uma edição esperando o segundo par de olhos.
@@ -499,12 +533,68 @@ $(document).ready(function () {
     // O nome do arquivo é o do DOCUMENTO: tela + data de referência (§7).
     function exportName() { return PAGE.export_name + '-' + (refDateIso() || '').replace(/-/g, ''); }
 
+    // ── Os CARDS (§657): o que o catálogo declara em `cards` ─────────────
+    // Uma recompra por card, com as ações da linha (as MESMAS funções da
+    // grade) e o duplo clique = o preview do arquivo da B3. Criado ANTES da
+    // DataTable: o `initComplete` dela já carrega o dia.
+    var cards = null;
+    if (PAGE.cards && window.otcDealCards) {
+        var CS = PAGE.cards;
+        var cardVal = function (e, f, kind) {
+            if (kind === 'daterange') {
+                var p = f.split(','), a = _isoToDmy(e[p[0]] || ''), b = _isoToDmy(e[p[1]] || '');
+                return (a || b) ? (a || '—') + ' → ' + (b || '—') : '';
+            }
+            var v = e[f];
+            if (v == null || String(v).trim() === '') return '';
+            if (f === 'Result') return fmtMoney(v) + (e.Direction ? ' · ' + e.Direction : '');
+            if (CASAS_FIXAS[f]) return fmtFixo(v, CASAS_FIXAS[f]);
+            if (kind === 'money') return fmtMoney(v);
+            if (kind === 'qty') return fmtQty(v);
+            if (kind === 'date') return _isoToDmy(v);
+            return String(v);
+        };
+        cards = otcDealCards({
+            el: '#unwCards', selected: selected, t: t,
+            key: function (e) { return String(e[PAGE.key]); },
+            title: function (e) {
+                var f = (CS.title || []).filter(function (c) { return e[c] != null && String(e[c]).trim(); })[0];
+                return f ? String(e[f]) : String(e[PAGE.key]);
+            },
+            subtitle: function (e) {
+                return (CS.subtitle || []).map(function (c) {
+                    var v = e[c] == null ? '' : String(e[c]).trim();
+                    return !v ? '' : (c === 'DealID' ? 'Deal ' + v : v);
+                }).filter(Boolean).join(' · ');
+            },
+            status: function (e) { return statusBadge(e.Status) + checkBadge(e.Check, e.Warnings); },
+            lob: function (e) { var l = CS.lob || {}; return l.fixed || String(e[l.field] || l.fallback || '').trim(); },
+            facts: (CS.facts || []).map(function (f) {
+                return { label: t(_colKey(f[1]), f[1]), wide: f[2] === 'daterange',
+                         value: function (e) { return cardVal(e, f[0], f[2]); } };
+            }),
+            meta: function (e) {
+                return (CS.meta || []).map(function (m) { var v = e[m[0]]; return v ? m[1] + ' ' + v : ''; })
+                    .filter(Boolean).join(' · ');
+            },
+            onConfirm: function (k) { approveRow(k); },
+            onEdit: function (k) { openEdit(k); },
+            onDelete: function (k) { deleteRows([k]); },
+            onSend: function (k) { sendRows([k]); },
+            onPreview: function (k) { previewRow(k); },
+            onSelect: function () { syncSelectAll(); if (window.unwTable) window.unwTable.draw(false); }
+        });
+        $(document).on('change', '#cardsSelectAll', function () { cards.selectAll(this.checked); });
+    }
+
     var columnDefs = [{ orderable: false, targets: [0, 1] },
                       { targets: C_KEY, visible: false, searchable: false }];
     UNW_FIELDS.forEach(function (f, i) {
         var target = i + C_OFF;
         if (UNW_KIND[f] === 'date') columnDefs.push({ targets: target, render: function (d, type) { return type === 'display' ? _isoToDmy(d) : (d || ''); } });
         if (UNW_KIND[f] === 'money') columnDefs.push({ targets: target, render: function (d, type) { return type === 'display' ? fmtMoney(d) : (d || ''); } });
+        if (UNW_KIND[f] === 'qty') columnDefs.push({ targets: target, render: function (d, type) { return type === 'display' ? fmtQty(d) : (d || ''); } });
+        if (CASAS_FIXAS[f]) columnDefs.push({ targets: target, render: function (d, type) { return type === 'display' && d !== '' && d != null ? fmtFixo(d, CASAS_FIXAS[f]) : (d || ''); } });
         if (f === 'Status') columnDefs.push({ targets: target, render: function (d, type) { return type === 'display' ? statusBadge(d) : (d || 'Imported'); } });
         if (f === 'Check') columnDefs.push({ targets: target, render: function (d, type, row) { return type === 'display' ? checkBadge(d, (ROWS[row[C_KEY]] || {}).Warnings) : (d || ''); } });
     });
@@ -526,8 +616,8 @@ $(document).ready(function () {
             ">" +
             "<'ms-auto'>" +
             ">" +
-            "<'row'<'col-sm-12'tr>>" +
-            "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+            "<'row nd-table-area'<'col-sm-12'tr>>" +
+            "<'d-md-flex justify-content-between align-items-center mt-2 nd-table-foot'ip>",
         buttons: [{
             extend: 'collection', text: '<i class="ti ti-download me-1"></i> Export',
             className: 'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all', autoClose: true, fade: 0,
@@ -567,7 +657,7 @@ $(document).ready(function () {
             });
 
             var columnToggleWrapper = document.querySelector('.columnToggleWrapper');
-            if (columnToggleWrapper) {
+            if (columnToggleWrapper && !PAGE.cards) {
                 var dd = document.createElement('div'); dd.className = 'dropdown';
                 dd.innerHTML = '<button class="btn btn-sm btn-soft-primary dropdown-toggle btn-toolbar-all" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside"><i class="ti ti-columns me-1"></i> Columns</button>' +
                     '<ul class="dropdown-menu" id="columnToggleMenu" style="max-height:60vh;overflow-y:auto;">' +
@@ -719,12 +809,15 @@ $(document).ready(function () {
     }
     function renderAll() {
         table.clear(); ROWS = {};
+        var lista = [];
         ENTRIES.forEach(function (e) {
             if (!e || !e[PAGE.key]) return;
+            if (!ROWS[e[PAGE.key]]) lista.push(e);
             ROWS[e[PAGE.key]] = e;
             table.row.add(rowOf(e));
         });
         table.draw(false);
+        if (cards) { cards.render(lista); syncSelectAll(); }
         setTimeout(function () { table.columns.adjust(); }, 100);
     }
 
@@ -827,7 +920,7 @@ $(document).ready(function () {
 
     // ── Preview do arquivo da B3 (otcFilePreview, §480) ────────────────────
     // Produto sem layout da B3 no catálogo (COE, DCE) não tem o que prever.
-    function previewRow(aid, tr) {
+    function previewRow(aid) {
         var e = ROWS[aid]; if (!e || !PAGE.b3) return;
         fetch(PAGE.api + '/preview?id=' + encodeURIComponent(aid) + '&date=' + encodeURIComponent(refDateIso()),
               { credentials: 'same-origin' })
@@ -845,15 +938,15 @@ $(document).ready(function () {
                                  fields: f.fields, header: f.header, records: f.records };
                     }), t: t,
                     // O rodapé da casa (Export · Edit · Close), o mesmo do New Deals.
-                    buttons: { download: 'raw', edit: !!tr },
-                    onEdit: function () { $(tr).find('.btn-row-edit').trigger('click'); }
+                    buttons: { download: 'raw', edit: true },
+                    onEdit: function () { openEdit(aid); }
                 });
             })
             .catch(function (err) { Swal.fire({ icon: 'error', title: 'Error', text: 'Request failed: ' + err.message }); });
     }
     $('#unw-table tbody').on('dblclick', 'tr', function (e) {
         if ($(e.target).closest('td').index() <= 1) return;
-        var d = table.row(this).data(); if (d) previewRow(d[C_KEY], this);
+        var d = table.row(this).data(); if (d) previewRow(d[C_KEY]);
     });
 
     function sendRows(ids) {
@@ -906,7 +999,8 @@ $(document).ready(function () {
     }
     function syncSelectAll() {
         var total = Object.keys(ROWS).length, sel = selected.size;
-        $('#selectAll').each(function () {
+        if (cards) cards.sync();
+        $('#selectAll, #cardsSelectAll').each(function () {
             if (sel === 0) { this.checked = false; this.indeterminate = false; }
             else if (sel >= total) { this.checked = true; this.indeterminate = false; }
             else { this.checked = false; this.indeterminate = true; }
@@ -949,9 +1043,13 @@ $(document).ready(function () {
     $('#unw-table tbody').on('click', '.btn-row-edit', function (e) {
         e.preventDefault();
         var d = table.row($(this).closest('tr')).data();
-        if (!d) return;
-        var row = ROWS[d[C_KEY]] || {};
-        _editId = d[C_KEY]; _editOrig = {};
+        if (d) openEdit(d[C_KEY]);
+    });
+    // O Edit da LINHA e o do CARD são o mesmo: o modal pela chave.
+    function openEdit(id) {
+        var row = ROWS[id];
+        if (!row) return;
+        _editId = id; _editOrig = {};
         var box = document.getElementById('unwEditFields');
         box.innerHTML = UNW_COLS.filter(function (c) { return !NAO_EDITA[c[0]]; }).map(function (c) {
             var v = row[c[0]] == null ? '' : String(row[c[0]]);
@@ -969,7 +1067,7 @@ $(document).ready(function () {
         document.getElementById('unwEditTitle').textContent = t('unw_edit_row', 'Edit Row') +
             (row.Contract || row.DealID ? ' — ' + (row.Contract || row.DealID) : '');
         bootstrap.Modal.getOrCreateInstance(document.getElementById('unwEditModal')).show();
-    });
+    }
     $('#unwEditModal').on('hidden.bs.modal', function () {
         $('#unwEditFields input.unw-edit[data-f]').each(function () { if (this._flatpickr) this._flatpickr.destroy(); });
         document.getElementById('unwEditFields').innerHTML = '';
@@ -1004,10 +1102,13 @@ $(document).ready(function () {
     $('#unw-table tbody').on('click', '.btn-row-approve', function (e) {
         e.preventDefault();
         var d = table.row($(this).closest('tr')).data();
-        if (!d) return;
+        if (d) approveRow(d[C_KEY]);
+    });
+    // O Confirm da LINHA e o do CARD são o mesmo.
+    function approveRow(id) {
         fetch(PAGE.api + '/approve', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                                                credentials: 'same-origin',
-                                               body: JSON.stringify({ id: d[C_KEY], date: refDateIso() }) })
+                                               body: JSON.stringify({ id: id, date: refDateIso() }) })
             .then(function (r) { return r.json(); })
             .then(function (res) {
                 if (!res || !res.success) {
@@ -1018,7 +1119,7 @@ $(document).ready(function () {
                 load();
             })
             .catch(function (err) { Swal.fire({ icon: 'error', title: 'Error', text: String(err) }); });
-    });
+    }
 
     // Seleção de célula em TODA tabela (§7).
     if (window.otcCellCopy) otcCellCopy('#unw-table', { skip: [0, 1] });

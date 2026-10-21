@@ -3063,5 +3063,15 @@
   "nd-card-dblclick": "Doble clic para ver los archivos de la B3",
   "nd-card-empty": "Ninguna operación para estos filtros.",
   "nd-card-party": "Parte",
-  "nd-card-counterparty": "Contraparte"
+  "nd-card-counterparty": "Contraparte",
+  "unw-col-instrument-id": "Instrumento ID",
+  "unw-col-party": "Parte",
+  "unw-col-total-partial": "Total / Parcial",
+  "unw-col-shares": "Acciones",
+  "unw-col-original-strike": "Strike Original",
+  "unw-col-unwind-price": "Precio de Unwind",
+  "unw-col-equity-leg": "Pata Equity",
+  "unw-col-funding-leg": "Pata Funding",
+  "unw-col-unwind-settlement": "Recompra → Liquidación",
+  "unw-preview-hint-cards": "Doble clic en una tarjeta para ver el archivo de la B3"
 }

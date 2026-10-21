@@ -413,8 +413,8 @@ def _main(R, app, catalog, bullet, bullet_q, commands, domain, entrypoint, queri
     check('cliente: Success, e a porta do Pending Confirmation com SWAP (Opção de Arrependimento), Pending OTC, chave B3 ID, LOB CEM',
           m6 and d6['Status'] == 'Success' and len(calls) == 1 and calls[0][1:] == ('SWAP', 'Pending OTC', '26F04329911', 'SWAP')
           and calls[0][0]['LOB'] == 'CEM' and calls[0][0]['TaxID'] == '58160789000128')
-    check('B2B: a linha da Intrag Swap (visão da Atacama), da Data Início', m7 and len(intrag) == 1
-          and intrag[0][0]['b3_id'] == '26F04329912' and intrag[0][1] == datetime(2026, 9, 15))
+    check('B2B: a linha da Intrag Swap (visão da Atacama), no dia do TRADE DATE (§656)', m7 and len(intrag) == 1
+          and intrag[0][0]['b3_id'] == '26F04329912' and intrag[0][1] == datetime(2026, 9, 16))
     confs = R._swap_cashflow_engine().confirmation_deals(datetime(2026, 9, 16))
     check('a segregação das confirmações recebe o cashflow contra cliente (o B2B fica fora)',
           [c['B3_ID'] for c in confs] == ['26F04329911'])

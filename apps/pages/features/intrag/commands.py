@@ -141,13 +141,14 @@ def _save_intrag_ndf_entry(deal):
     persistence._intrag_ndf_persist(entry, td)
 
 
-def _save_intrag_swap_entry(entry, start_dt=None):
-    """A linha da Intrag Swap que o Swap Bullet montou (o B2B com B3 ID, na
-    visão da Atacama — `swap_bullet.domain.intrag_swap_entry`) → o day-file
-    da Data Início. Aqui só se grava; a regra é de quem conhece o deal."""
+def _save_intrag_swap_entry(entry, day=None):
+    """A linha da Intrag Swap que um swap montou (o B2B do Bullet/Cashflow na
+    visão da Atacama, a Cetes na do Lawton) → o day-file de `day`, que é o
+    TRADE DATE do deal (§656). Aqui só se grava; a regra é de quem conhece o
+    deal."""
     if not isinstance(entry, dict) or not entry.get('_deal'):
         raise ValueError('intrag swap entry without _deal')
-    persistence._intrag_swap_persist(dict(entry), start_dt)
+    persistence._intrag_swap_persist(dict(entry), day)
 
 
 def _save_intrag_unwind_entry(**kwargs):

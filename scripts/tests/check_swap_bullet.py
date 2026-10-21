@@ -567,10 +567,12 @@ def main():
     d11 = commands.edit(b2b['_id'], '2026-09-16', {'B3ID': '26F04329902'}, sid='F666666')
     check('B3 ID novo é MAPEAMENTO: Status Success (não Pending), com quem mapeou anotado',
           d11 is not None and d11['Status'] == 'Success' and d11['MappedBy'] == 'F666666')
-    fp_i, ents_i, ii = IQ._find_intrag_swap_entry(b2b['_id'], '2026-09-15')
-    check('B2B com B3 ID → linha da Intrag Swap no arquivo-dia da Data Início, New, carteira da Atacama',
+    fp_i, ents_i, ii = IQ._find_intrag_swap_entry(b2b['_id'], '2026-09-16')
+    # o dia é o TRADE DATE (16/09), não a Data Início (15/09) — mesa, §656
+    check('B2B com B3 ID → linha da Intrag Swap no arquivo-dia do TRADE DATE, New, carteira da Atacama',
           ii is not None and ents_i[ii]['b3_id'] == '26F04329902' and ents_i[ii]['carteira'] == 'INTRAGJP633'
-          and ents_i[ii]['status'] == 'New' and fp_i.endswith('20260915_intrag_swap.json') and ents_i[ii]['_client'] == b2b['Client'])
+          and ents_i[ii]['status'] == 'New' and fp_i.endswith('20260916_intrag_swap.json') and ents_i[ii]['_client'] == b2b['Client']
+          and ents_i[ii]['start_date'] == '2026-09-15')
     # Contra cliente: a mesma porta das outras páginas (o `_pc_save_from_deal`,
     # que pula perna interna e chama a esteira).
     calls = []

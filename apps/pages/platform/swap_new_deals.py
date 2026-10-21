@@ -419,9 +419,11 @@ def b3_mapped(deal, tag='SWAP'):
     try:
         if _dtk.is_b2b(deal):
             entry = _dtk.intrag_swap_entry(deal, codes_for(deal))
-            start = _dtk.parse_date(deal.get('StartDate')) or _dtk.parse_date(deal.get('TradeDate'))
-            start_dt = datetime(start.year, start.month, start.day) if start else None
-            _R()._intrag_engine()._save_intrag_swap_entry(entry, start_dt)
+            # o dia da linha na Intrag Swap é o TRADE DATE (mesa, 21/10/2026,
+            # §656); a Data Início é só o plano B do deal sem Trade Date
+            td = _dtk.parse_date(deal.get('TradeDate')) or _dtk.parse_date(deal.get('StartDate'))
+            day = datetime(td.year, td.month, td.day) if td else None
+            _R()._intrag_engine()._save_intrag_swap_entry(entry, day)
         else:
             tipo = _dtk.confirmation_source(deal)
             # A mesma porta das outras páginas: o `_pc_save_from_deal` pula a

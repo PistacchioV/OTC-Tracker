@@ -470,6 +470,16 @@ def api_intrag_swap():
     date_to   = request.args.get('date_to', '').strip()    # YYYY-MM-DD (range end)
     suffix = '_intrag_swap.json'
     entries = []
+
+    # O dia do ARQUIVO de cada linha vai junto em `_day` (§656): é o Trade
+    # Date do swap, e não sai de coluna nenhuma — a Data Início é outra data.
+    # Edit/Approve/Send o devolvem para achar a linha sem varrer a árvore.
+    def _com_dia(lst, dia):
+        return [dict(e, _day=dia) for e in (lst or []) if isinstance(e, dict)]
+
+    def _dia_do_nome(fname):
+        d = _R()._parse_date_any(fname[:8])
+        return d.strftime('%Y-%m-%d') if d else ''
     if date_from or date_to:
         d_from = _R()._parse_date_any(date_from)
         d_to   = _R()._parse_date_any(date_to)
@@ -488,7 +498,7 @@ def api_intrag_swap():
                 continue
             if d_to and fdate > d_to:
                 continue
-            entries.extend(_R()._day_json(fp, mtime, size))
+            entries.extend(_com_dia(_R()._day_json(fp, mtime, size), fdate.strftime('%Y-%m-%d')))
     elif date_str:
         try:
             ref = datetime.strptime(date_str, '%Y-%m-%d')
@@ -497,8 +507,7 @@ def api_intrag_swap():
             if _store.isfile(fp):
                 from apps.pages import duck_read       # DB-only (fase 3)
                 entries = duck_read.day_records(fp)
-                if not isinstance(entries, list):
-                    entries = []
+                entries = _com_dia(entries if isinstance(entries, list) else [], ref.strftime('%Y-%m-%d'))
         except Exception as exc:
             _R().log.warning('[INTRAG SWAP] date load error date=%r: %s', date_str, exc)
     else:
@@ -507,8 +516,8 @@ def api_intrag_swap():
         # UMA abertura de banco para todos os dias enumerados, em vez de
         # uma por dia: eles são tabelas do MESMO banco do produto (§4).
         _R()._day_prefetch(_dias)
-        for fp, _fname, mtime, size in _dias:
-            entries.extend(_R()._day_json(fp, mtime, size))
+        for fp, fname, mtime, size in _dias:
+            entries.extend(_com_dia(_R()._day_json(fp, mtime, size), _dia_do_nome(fname)))
     return jsonify({'success': True, 'entries': entries})
 
 @blueprint.route('/api/intrag/swap/send-file', methods=['POST'])
@@ -516,8 +525,10 @@ def api_intrag_swap_send_file():
     """Generate the Intrag Swap .txt file(s) from the selected rows and flip
     New/Approved → Sent. Same standard folder as NDF; file Intrag-Swap-YYYYMMDD.txt.
 
-    Body: { "items": [ { "deal_id": str, "cells": [...36...] } ] }. Rows are
-    grouped by Data Início (data col index 2) — one file per date."""
+    Body: { "items": [ { "deal_id": str, "day": "YYYY-MM-DD", "cells": [...36...] } ] }.
+    Rows are grouped by `day` — the row's day-file, i.e. the swap's Trade Date
+    (§656) — one file per date; without it, by Data Início (data col index 2),
+    as before."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'message': 'Not authenticated'}), 401
 
@@ -541,10 +552,11 @@ def api_intrag_swap_send_file():
         if not cells:
             continue
         td_raw = cells[START_DATE_IDX] if len(cells) > START_DATE_IDX else ''
-        ref = _R()._parse_date_any(td_raw) or datetime.now()
+        dia = str(it.get('day') or '').strip()
+        ref = _R()._parse_date_any(dia) or _R()._parse_date_any(td_raw) or datetime.now()
         groups.setdefault(ref.strftime('%Y%m%d'), {'ref': ref, 'rows': []})['rows'].append(cells)
         if it.get('deal_id'):
-            sent_ids.append((it['deal_id'], td_raw))
+            sent_ids.append((it['deal_id'], dia or td_raw))
 
     if not groups:
         return jsonify({'success': False, 'message': 'No valid rows provided'}), 400

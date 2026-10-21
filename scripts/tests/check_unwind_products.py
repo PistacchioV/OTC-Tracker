@@ -14,8 +14,10 @@ FXO/Commodities/EDG, COE, DCE x4) tem UM servidor, dirigido pelo catalogo
      CPF/CNPJ), saldo e strike; o Check refaz o termo e FECHA; o TER 0014 tem 133;
   4. Options FXO SEM B3 ID: casa por caracteristicas so com candidato UNICO;
      ambiguo NAO chuta e o Check fica '-' (nunca OK por omissao);
-  5. Swap CEM: papel pela conta nossa, antecipacao parcial exige Mantem Premios,
-     o SWAP 0014 tem a largura que o template soma;
+  5. Swap CEM: papel pela CONTA MENOR (manual 4.2.12, §657), antecipacao parcial
+     exige Mantem Premios, o SWAP 0014 tem a largura que o template soma, leva o
+     NOCIONAL no campo 11 e os dois fatores, e o Check confere o caixa pelos
+     fatores;
   6. dry-run -> duplicatas, sem gravar e sem sino; 4-olhos (Pending, o proprio
      nao aprova, Pending nao se envia); Send grava no Batch Conecta e vira Sent;
      enviada nao se apaga nem se sobrescreve no re-import;
@@ -303,17 +305,29 @@ def main():
           r.status_code == 422 and (r.get_json() or {}).get('code') == 'unwind_b3_missing',
           r.get_json())
 
-    print('\n== 5. Swap CEM: papel pela conta nossa, parcial pede Mantem Premios ==')
+    print('\n== 5. Swap CEM: papel pela conta MENOR, parcial pede Mantem Premios ==')
     pg_swap = catalog.PAGES['/unwinds/swap/cem']
-    csv_sw = (b'B3 ID;Unwound Notional;Unwind Amount;Unwind Date\n'
-              b'SWP0001;400000;12345.67;21/09/2026\n')
+    # Ponta 1 e a conta MENOR: 55555005 (deles) < 73760009 (nossa) -> somos a
+    # Ponta 2, e o fator NOSSO e o Factor Leg 2. Caixa do banco = nocional x
+    # (nosso - deles) = 400.000 x (1,05 - 1,10) = -20.000,00.
+    csv_sw = (b'B3 ID;Unwound Notional;Factor Leg 1;Factor Leg 2;Settlement Amount;Unwind Date\n'
+              b'SWP0001;400000;1.10000000;1.05000000;-20000.00;21/09/2026\n')
     st, j = _up(pg_swap['api'], 'swap.csv', csv_sw)
     s = (j.get('rows') or [{}])[0]
     check('import 200', st == 200, j)
-    check('papel Ponta 1 (a Participante e nossa), LOB e contraparte pela conta',
-          (s.get('Role'), s.get('LOB'), s.get('Counterparty')) == ('Ponta 1', 'CEM', 'EMPRESA Y SA'), s)
-    check('saldo da posicao e Check do saldo',
+    check('papel pela CONTA MENOR (a nossa 73760009 > 55555005: Ponta 2), LOB, contraparte e Party pela conta',
+          (s.get('Role'), s.get('LOB'), s.get('Counterparty'), s.get('Party'))
+          == ('Ponta 2', 'CEM', 'EMPRESA Y SA', 'JPM'), s)
+    check('saldo da posicao e caixa pelos fatores: Check OK',
           s.get('OriginalNotional') == 1000000.0 and s.get('Check') == 'OK', s.get('Warnings'))
+    from apps.pages.features.unwinds.product import domain as PD
+    check('a regra do papel: a nossa MENOR e Ponta 1 (00); a MAIOR, Ponta 2 (01); sem conta, None',
+          (PD.papel_pela_conta('73760.00-9', '74220005'), PD.papel_pela_conta('73760009', '00041.00-7'),
+           PD.papel_pela_conta('', '1')) == ('00', '01', None))
+    ruim = dict(s, Result=-19000.0, Role='Ponta 2', UnwoundNotional=400000.0, FactorLeg1=1.1, FactorLeg2=1.05)
+    ck, av = PD.conferir(ruim, pg_swap)
+    check('caixa que os fatores nao dao: NOK, e o OTC Tracker Result diz o calculado',
+          ck == 'NOK' and PD.resultado_calculado(av) == -20000.0, (ck, av))
     r = cl.get(pg_swap['api'] + '/preview?id=%s&date=2026-09-21' % s.get('_id'))
     check('parcial sem Mantem Premios: recusa com codigo',
           r.status_code == 422 and 'Mantém Prêmios' in ((r.get_json() or {}).get('params') or {}).get('campos', ''),
@@ -328,9 +342,12 @@ def main():
     larg = PC._largura_do_bloco('swap-antecipacao', 'registro')
     check('SWAP 0014 na largura que o TEMPLATE soma', r.status_code == 200 and len(rec) == larg,
           (r.status_code, len(rec), larg, pj))
-    check('contrato, papel 00, valor e mantem premios 00',
-          rec[10:21] == 'SWP0001    ' and rec[21:23] == '00' and rec[85:101] == '0000000001234567'
-          and rec[101:103] == '00', rec)
+    check('contrato, papel 01, os dois fatores, Data Antecipacao = HOJE, nocional no 11, '
+          'mantem premios 00 e a liquidacao (13) em branco — a planilha da mesa',
+          rec[10:21] == 'SWP0001    ' and rec[21:23] == '01'
+          and rec[33:51] == '000000000110000000' and rec[51:69] == '000000000105000000'
+          and rec[69:77] == PC._hoje().strftime('%Y%m%d') and rec[77:85] == ' ' * 8
+          and rec[85:101] == '0000000040000000' and rec[101:103] == '00' and rec[103:111] == ' ' * 8, rec)
     st, j = _post(pg_swap['api'] + '/send-conecta', {'items': [{'id': s['_id']}], 'date': '2026-09-21'})
     check('Pending NAO e enviavel', st == 400 and j.get('code') == 'unwind_nothing_sent', (st, j))
     st, j = _post(pg_swap['api'] + '/approve', {'id': s['_id'], 'date': '2026-09-21'})

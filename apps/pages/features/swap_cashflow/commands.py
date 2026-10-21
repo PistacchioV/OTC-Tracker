@@ -428,6 +428,7 @@ def edit(deal_id, trade_date, changes, sid=''):
         if idx is None:
             return None, False
         d = lst[idx]
+        td_antes = d.get('TradeDate') or ''
         before_text = _dtk.vcp_text(d)
         spn_antes = str(d.get('SPN') or '').strip()
         b3_antes = str(d.get('B3ID') or '').strip()
@@ -464,7 +465,16 @@ def edit(deal_id, trade_date, changes, sid=''):
             d['Status'] = 'Pending'
             d['Maker'] = sid
             d['Checker'] = ''
-        persistence.write_day(fp, lst)
+        # Trade Date editado = a operação MUDA de arquivo-dia (§656); em branco
+        # ou ilegível, fica o anterior
+        td = _dtk.parse_date(d.get('TradeDate'))
+        if not td:
+            d['TradeDate'] = td_antes
+            td = _dtk.parse_date(td_antes)
+        if td:
+            persistence.move_day(fp, lst, idx, datetime(td.year, td.month, td.day))
+        else:
+            persistence.write_day(fp, lst)
     if mapped:
         b3_mapped(d)
     return d, mapped
