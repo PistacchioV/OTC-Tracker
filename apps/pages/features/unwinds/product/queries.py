@@ -47,6 +47,37 @@ def entries(page, date_str):
             if isinstance(e, dict) and e.get(catalog.KEY_FIELD)]
 
 
+# A busca do FILTRO INTELIGENTE (mesa, 21/10/2026, §661): o MESMO contrato da
+# Fase 1 e das páginas de New Deals (`filters` = [{field, type, value, mode}]
+# pelo `_deal_matches`), sobre os arquivos-dia DO PRODUTO. Cada linha volta com
+# `_day` — o dia do arquivo-dia em que mora, que as ações mandam de volta (o
+# `find` procura nele). Os chips do dia limitam os dias LIDOS; leitura ESTRITA
+# (§608): banco ocupado ou ilegível SOBE, nunca vira tela vazia.
+CAMPO_DIA = '_day'
+
+
+def search(page, filters):
+    from apps.pages.features.unwinds import queries as fase1_queries
+    R = _R()
+    desde, ate = fase1_queries._faixa_do_dia(filters)
+    dias = list(R._day_files(product_store.cache_dir(page), page['suffix'], desde, ate, strict=True))
+    R._day_prefetch(dias)
+    out = []
+    for fp, fname, mtime, size in dias:
+        fdate = R._parse_date_any(fname[:8])
+        if fdate is None or (desde and fdate < desde) or (ate and fdate > ate):
+            continue
+        dia = fdate.strftime('%Y-%m-%d')
+        for e in R._day_json(fp, mtime, size, strict=True) or []:
+            if not (isinstance(e, dict) and e.get(catalog.KEY_FIELD)):
+                continue
+            linha = dict(e)
+            linha[CAMPO_DIA] = dia
+            if R._deal_matches(linha, filters):
+                out.append(linha)
+    return out
+
+
 def find(page, row_id, date_str):
     """(caminho, lista MUTAVEL, indice) da linha `_id` no arquivo-dia; sem data
     ou sem linha, (caminho|None, [], None). Leitura FRESCA do armazem (nao o

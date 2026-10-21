@@ -1936,6 +1936,16 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   (`deal-cards.js`, flag `cards` do catálogo): ids, Party/Counterparty, a pílula
   da LOB, o Check junto do status; a DataTable fica escondida como fonte do
   Export. `check_unwind_swap_trs.py`.
+- **As onze telas do catálogo carregam pelo FILTRO INTELIGENTE** (mesa,
+  21/10/2026, §661) — o mesmo da Fase 1 (§620) e das telas de New Deals: a
+  barra de chips entre o dropzone e a grade, o chip padrão da Reference Date
+  (o dia do arquivo, `_day`; o campo Reference Date da barra de ferramentas o
+  move e continua sendo o dia do Import), e `POST <api>/cache/search`
+  (`product/queries.search`, a árvore DO produto, leitura estrita, o
+  `_deal_matches`). As ações da linha e do card mandam o `_day` DA LINHA
+  (`dayOf`) — uma recompra de outro dia que a busca trouxe não está no dia da
+  Reference Date. No modo cards (as de swap) a barra é o único filtro: o funil
+  é da tabela, que fica escondida.
 - **O backend das onze é UM, e o produto é parâmetro**
   (`features/unwinds/product/` + `infra/product_store.py`, §526): pasta
   (`dir`), posição (`position`: swap/option/ndf/None), conferências (`checks`)

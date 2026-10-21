@@ -83,6 +83,13 @@ def main():
         check(path + ': os quatro botoes da casa',
               all(c in corpo for c in ('btn-row-approve', 'btn-row-edit',
                                        'btn-row-delete', 'btn-row-send')))
+        # o filtro inteligente (§661): a barra e a busca que ela chama
+        check(path + ': a barra do filtro inteligente',
+              'id="smartFilter"' in corpo and "PAGE.api + '/cache/search'" in corpo)
+        rs = cl.post(p['api'] + '/cache/search', json={'filters': [
+            {'field': '_day', 'type': 'date', 'value': '04/01/2021', 'mode': 'exact'}]})
+        check(path + ': a busca responde JSON (vazia no dia sem arquivo)',
+              rs.status_code == 200 and (rs.get_json() or {}).get('entries') == [], (rs.status_code, rs.get_data()[:200]))
 
     print('\n== 4. a Fase 1 e o que o catalogo nao conhece ==')
     fx = cl.get('/unwinds/ndf/fx').data.decode('utf-8')

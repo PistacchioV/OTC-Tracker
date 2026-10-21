@@ -303,7 +303,7 @@ As colunas de **caixa de seleção** e de **Actions** não têm funil — não h
 
 **Para ordenar:** clique no **nome** da coluna, no cabeçalho. Clique de novo para inverter. Números ordenam como número (`9,00` antes de `1.000,00`) e datas como data (`05/01/2027` depois de `25/09/2026`), não como texto — vale também para a lista de valores do funil.
 
-### 4.4. A busca por fichas (New Deals, Unwinds NDF FX e Pending Confirmation)
+### 4.4. A busca por fichas (New Deals, Unwinds e Pending Confirmation)
 
 Algumas telas trazem, acima da tabela, um campo largo com o texto *"Type a letter for text fields, or a number / date for value fields…"*. Ele busca **no servidor**, e não só no que está carregado.
 
@@ -713,6 +713,8 @@ A recompra aparece no **Intraday Monitor** (capítulo 5.1) como *Unwind NDF FX*,
 **Party** (a nossa entidade) e **Counterparty** também vêm do **Live Position**, com o mesmo nome que a tela *Swap Characteristics* mostra. A data da recompra é a do **assunto** do e-mail e a liquidação é o **D+1** que o e-mail diz, em dia útil. A recompra **Parcial** vai sem manter os prêmios. O **Check** confere o saldo do contrato e se os fatores dão o caixa do e-mail (a B3 liquida pelos fatores, com 8 casas — pode haver diferença de alguns centavos para o e-mail). Se o e-mail diz *Total* e o saldo do Live Position diz que sobra contrato, a tela avisa.
 
 O arquivo de antecipação da B3 (SWAP 0014) segue a planilha da mesa: o papel é o da **conta de menor número** (Ponta 1), os dois fatores vão na ponta de cada um, o valor recomprado no campo de valor e a data de antecipação é o **dia em que o arquivo é gerado**.
+
+> **Todas as telas de recompra têm a barra de busca por fichas** (a mesma da 4.4): ela abre com a ficha da **Reference Date** de hoje e aceita qualquer coluna — digite um **B3 ID** para achar a recompra daquele contrato em **qualquer dia**. O campo *Reference Date* da barra de ferramentas troca a ficha do dia e continua sendo o dia em que o **Import** grava.
 
 > **As telas de Unwinds › Swap (CEM e EDG) também são cards**: o card mostra Deal ID, B3 ID, Instrument ID, o papel, **Party** (a nossa entidade) e **Counterparty**, as datas da recompra e da liquidação, ações, strikes, valor recomprado, as duas pernas, os fatores e o Settlement Amount com a direção. Os botões e o duplo clique funcionam como nas telas de swap do New Deals.
 
