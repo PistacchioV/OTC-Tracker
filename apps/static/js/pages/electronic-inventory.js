@@ -367,7 +367,7 @@
             // share — hidden as soon as the iframe fires 'load'.
             body.innerHTML =
                 '<div class="ei-preview-loading" id="eiPvLoad">' +
-                    '<div class="ei-spin"></div>' +
+                    '<div class="ei-spin otc-spin"></div>' +
                     '<div class="fs-sm">Loading PDF…</div>' +
                     '<div class="fs-xxs text-muted text-truncate px-3" style="max-width:90%">' + esc(d.name) + '</div>' +
                 '</div>' +

@@ -1562,9 +1562,16 @@ body.otc-nav-unpinned .otc-menu-btn { display: inline-grid !important; }
 // máquinas do JP, sem GPU, a tela perde quadros durante o request, e giro
 // rápido com poucos quadros anda aos trancos ou parece voltar. O tema antigo
 // girava a 2 s. Um ritmo só para todo ícone que gira.
+// Spinner próprio de tela (anel de CSS, svg do Lucide) leva a classe
+// `.otc-spin`, em vez de declarar keyframes e ritmo próprios.
 :root { --otc-spin-dur: 1.2s; }
 @keyframes otc-spin { to { rotate: 360deg; } }
-i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline-block; animation: otc-spin var(--otc-spin-dur) linear infinite; }
+.otc-spin, i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline-block; animation: otc-spin var(--otc-spin-dur) linear infinite; }
+// O que diz "estou trabalhando" fica FORA do movimento reduzido (seção 11
+// do arquivo): as máquinas do JP têm as animações do Windows desligadas, e o
+// `animation-duration: 1ms` de lá, num giro `infinite`, eram MIL voltas por
+// segundo — cada quadro num ângulo qualquer, rápido e sem sentido (§647).
+$otc-progress: ".otc-spin, .ti-spin, .ti-loader, .ti-loader-2, .ti-loader-3, .is-busy > .ti, .is-busy > svg, .spinner-border, .spinner-grow, .dt-processing *, .is-flying";
 
 // "ao vivo": bolinha verde que pulsa + a hora da última leitura (telas que
 // se atualizam sozinhas); `.is-fail` quando a última leitura falhou
@@ -1576,8 +1583,11 @@ i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline
 }
 @keyframes otc-live-pulse { 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 @media (prefers-reduced-motion: no-preference) { .otc-live > i { animation: otc-live-pulse 2.4s var(--otc-ease-out) infinite; } }
-// botão de ícone ocupado (Refresh em curso): o ícone gira
-.is-busy > i.ti { display: inline-block; animation: otc-spin var(--otc-spin-dur) linear infinite; }
+// botão de ícone ocupado (Refresh em curso): o ícone vira o ARCO do loader e
+// gira. O refresh tem as setas no sentido ANTI-horário e se repete a cada meia
+// volta: girando no horário, parecia ir ao contrário e no dobro do ritmo (§647).
+.is-busy > i.ti, .is-busy > svg { display: inline-block; animation: otc-spin var(--otc-spin-dur) linear infinite; }
+.is-busy > i.ti::before { content: "\f226"; }
 
 // 6b. Botões de AÇÃO DE LINHA: o squircle padrão, para TODAS as tabelas.
 // Só a GEOMETRIA leva !important: o `display` vai SEM, senão venceria o
@@ -2311,7 +2321,13 @@ body.otc-has-island .otc-toast { top: calc(var(--otc-inset, 16px) + 128px); }
   backdrop-filter: var(--otc-blur-thick);
   box-shadow: var(--otc-depth);
 }
-.spinner-border, .spinner-grow { --ins-spinner-width: 1.6rem; --ins-spinner-height: 1.6rem; color: var(--otc-accent-ink); }
+// O anel do Bootstrap no ritmo da casa (girava a .75 s). O `-sm` volta ao
+// tamanho dele — a regra de cima, mesma especificidade e depois do Bootstrap,
+// dava ao spinner dos botões 1,6rem, maior que o texto ao lado — e, dentro do
+// botão, o anel é da cor do TEXTO dele (azul-claro no azul sumia) (§647).
+.spinner-border, .spinner-grow { --ins-spinner-width: 1.6rem; --ins-spinner-height: 1.6rem; --ins-spinner-animation-speed: var(--otc-spin-dur); color: var(--otc-accent-ink); }
+.spinner-border-sm, .spinner-grow-sm { --ins-spinner-width: 1rem; --ins-spinner-height: 1rem; }
+.btn :is(.spinner-border, .spinner-grow) { color: inherit; }
 .placeholder { border-radius: var(--otc-r-xs); background-color: var(--otc-fill-2); }
 
 // 6k. Avatares
@@ -3606,10 +3622,18 @@ $cc-total: '.otc-stat--total, [class*="-widget--total"], [class*="-stat--total"]
 // dos sinais do modo AUTOMÁTICO (head-css.html e o `decideSolid` do otc.js),
 // e vira a mesma `is-solid`. Como `@media` ele deixava tudo sólido com o
 // switch "Reduce transparency" DESLIGADO, sem nada que o desfizesse.
+// Movimento reduzido (Windows com as animações desligadas — o "melhor
+// desempenho" das máquinas do JP): a animação termina na hora e o que é
+// INFINITO roda uma vez só. Sem o `iteration-count`, o infinito virava mil
+// ciclos por segundo e PISCAVA. Fica de fora o que diz "estou trabalhando"
+// (`$otc-progress`, §6a): ele segue no ritmo dele — o próprio Bootstrap só
+// desacelera o spinner nesse modo (§647). O `:where` deixa a regra com peso
+// ZERO, como era o `*`: senão venceria o `!important` do `.otc-enter` abaixo.
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  :where(:not(#{$otc-progress})), :where(:not(#{$otc-progress}))::before, :where(:not(#{$otc-progress}))::after {
     animation-duration: 1ms !important;
     animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
   .otc-enter, .otc-title-char, .otc-enter-soft { animation: otc-fade-in 150ms ease both !important; }
