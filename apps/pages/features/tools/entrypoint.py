@@ -565,6 +565,13 @@ def api_tools_business_days():
     return jsonify({'success': True, 'days': int(dias), 'calendar': 'ANBIMA'})
 
 
+def _nome_export(tela):
+    """O padrão de nome de todo export de tabela (mesa, 21/10/2026): `<página
+    ou tabela> - OTC Tracker - OTC Processing System` — o mesmo que o
+    `export-advanced.js` dá aos botões de Export das telas."""
+    return '%s - OTC Tracker - OTC Processing System.csv' % tela
+
+
 @blueprint.route('/tools/term-sofr/csv')
 def tools_term_sofr_csv():
     """A curva IMPORTADA em CSV — o que a tela mostra. Exportar a base do Fed
@@ -585,7 +592,7 @@ def tools_term_sofr_csv():
         linha = tabela[d]
         w.writerow([d.strftime('%d/%m/%Y')]
                    + ['{:.5f}'.format(linha[c] * 100) if c in linha else '' for c in campos])
-    nome = 'term_sofr_{:%Y%m%d}_{:%Y%m%d}.csv'.format(base.inicio, base.fim)
+    nome = _nome_export('Term SOFR')
     return Response('\ufeff' + buf.getvalue(), content_type='text/csv; charset=utf-8',
                     headers={'Content-Disposition': 'attachment; filename="{}"'.format(nome)})
 
@@ -609,7 +616,7 @@ def tools_sofr_index_csv():
         w.writerow([d.strftime('%d/%m/%Y')]
                    + ['{:.5f}'.format(linha[c] * 100) if c in linha else '' for c in campos]
                    + ['{:.8f}'.format(linha['indice']) if 'indice' in linha else ''])
-    nome = 'sofr_{:%Y%m%d}_{:%Y%m%d}.csv'.format(historico.inicio, historico.fim)
+    nome = _nome_export('SOFR Index')
     return Response('\ufeff' + buf.getvalue(), content_type='text/csv; charset=utf-8',
                     headers={'Content-Disposition': 'attachment; filename="{}"'.format(nome)})
 
@@ -657,7 +664,7 @@ def tools_euribor_csv():
         w.writerow([d.strftime('%d/%m/%Y')]
                    + ['{:.3f}'.format(tabela[d][t] * 100) if t in tabela[d] else ''
                       for t in curva.tenores])
-    nome = 'euribor_{:%Y%m%d}_{:%Y%m%d}.csv'.format(curva.inicio, curva.fim)
+    nome = _nome_export('Euribor')
     return Response('\ufeff' + buf.getvalue(), content_type='text/csv; charset=utf-8',
                     headers={'Content-Disposition': 'attachment; filename="{}"'.format(nome)})
 

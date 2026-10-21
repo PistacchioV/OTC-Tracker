@@ -1,6 +1,6 @@
 {% extends 'layouts/vertical.html' %}
 
-{% block title %}MtM — Swap{% endblock title %}
+{% block title %}Swap MtM{% endblock title %}
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet"/>
@@ -482,7 +482,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: var(--otc-accent-soft) !impor
                             .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
                 return /^#?(NULL!?|N\/A|REF!|VALUE!|DIV\/0!|NAME\?|NUM!)$/i.test(v) ? '' : v;
             } } };
-        var xtitle = 'MTM ' + lob.name + (currentDate ? ' ' + currentDate : '');
+        // Uma tabela por LOB: o nome do arquivo diz qual (o padrão da casa,
+        // `export-advanced.js`, lê o `data-export-name`).
+        dt.table().node().setAttribute('data-export-name', 'Swap MtM - ' + lob.name);
         try {
             new $.fn.dataTable.Buttons(dt, {
                 buttons: [{
@@ -491,11 +493,11 @@ table.dt-acc tbody tr.acc-row-sel td { background: var(--otc-accent-soft) !impor
                     className: 'btn btn-sm btn-info bg-gradient dropdown-toggle acc-export-btn',
                     autoClose: true,
                     buttons: [
-                        { extend: 'copy',  text: '<i class="ti ti-copy me-1 fs-lg align-middle"></i> Copy',            className: 'dropdown-item', exportOptions: xopts, title: xtitle },
-                        { extend: 'csv',   text: '<i class="ti ti-file-type-csv me-1 fs-lg align-middle"></i> CSV',     className: 'dropdown-item', bom: true, exportOptions: xopts, title: xtitle },
-                        { extend: 'excel', text: '<i class="ti ti-file-spreadsheet me-1 fs-lg align-middle"></i> Excel', className: 'dropdown-item', exportOptions: xopts, title: xtitle },
-                        { extend: 'print', text: '<i class="ti ti-printer me-1 fs-lg align-middle"></i> Print',         className: 'dropdown-item', exportOptions: xopts, title: xtitle },
-                        { extend: 'pdf',   text: '<i class="ti ti-file-text me-1 fs-lg align-middle"></i> PDF',          className: 'dropdown-item', exportOptions: xopts, title: xtitle }
+                        { extend: 'copy',  text: '<i class="ti ti-copy me-1 fs-lg align-middle"></i> Copy',            className: 'dropdown-item', exportOptions: xopts },
+                        { extend: 'csv',   text: '<i class="ti ti-file-type-csv me-1 fs-lg align-middle"></i> CSV',     className: 'dropdown-item', bom: true, exportOptions: xopts },
+                        { extend: 'excel', text: '<i class="ti ti-file-spreadsheet me-1 fs-lg align-middle"></i> Excel', className: 'dropdown-item', exportOptions: xopts },
+                        { extend: 'print', text: '<i class="ti ti-printer me-1 fs-lg align-middle"></i> Print',         className: 'dropdown-item', exportOptions: xopts },
+                        { extend: 'pdf',   text: '<i class="ti ti-file-text me-1 fs-lg align-middle"></i> PDF',          className: 'dropdown-item', exportOptions: xopts }
                     ]
                 }]
             });

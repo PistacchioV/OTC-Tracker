@@ -323,15 +323,15 @@ $(document).ready(function() {
             className:'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all',
             autoClose:true, fade:0,
             buttons:[
-                {extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', title:'Intrag DCE NDF', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
-                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',   className:'dropdown-item', bom:true, title:'Intrag DCE NDF', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
-                {extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', title:'Intrag DCE NDF', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
-                {extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', title:'Intrag DCE NDF', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',   className:'dropdown-item', bom:true, exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
                 // O menu do padrão é Copy · CSV · Excel · Print · PDF (§7). A página
                 // nasceu do molde da Option, que está na lista de quem tem o menu
                 // pela metade — legado dela, não desta: tela nova entra completa,
                 // senão a lista de exceções cresce a cada página criada.
-                {extend:'pdf',   text:'<i class="ti ti-file-type-pdf me-1"></i> PDF', className:'dropdown-item', title:'Intrag DCE NDF', orientation:'landscape', pageSize:'A3', exportOptions:{columns:exportCols(),format:{body:fmtExport}}}
+                {extend:'pdf',   text:'<i class="ti ti-file-type-pdf me-1"></i> PDF', className:'dropdown-item', orientation:'landscape', pageSize:'A3', exportOptions:{columns:exportCols(),format:{body:fmtExport}}}
             ]
         }],
         language: { paginate: { first:'<i class="ti ti-chevrons-left"></i>', previous:'<i class="ti ti-chevron-left"></i>', next:'<i class="ti ti-chevron-right"></i>', last:'<i class="ti ti-chevrons-right"></i>' } },

@@ -1,6 +1,6 @@
 {% extends 'layouts/vertical.html' %}
 
-{% block title %}Dashboard — Pending Confirmation{% endblock title %}
+{% block title %}Pending Confirmation Dashboard{% endblock title %}
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
@@ -228,12 +228,6 @@
         return '<thead>' + top + sub + '</thead><tfoot>' + foot + '</tfoot>';
     }
 
-    function hoje() {
-        var d = new Date();
-        return d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2);
-    }
-    // O nome do DOCUMENTO com a data em AAAAMMDD (§7), nunca o id da tabela.
-    function expName() { return 'Pending Confirmation Dashboard ' + hoje(); }
     function exportOpts() {
         // `export`: o número cru (a tela desenha 0 como vazio) e o rodapé junto.
         return { columns: ':visible', orthogonal: 'export', modifier: { page: 'all' } };
@@ -241,8 +235,7 @@
     function exportButtons() {
         function item(ext, icon, label) {
             return { extend: ext, text: '<i class="ti ' + icon + ' me-1 fs-lg align-middle"></i> ' + label,
-                     className: 'dropdown-item', footer: true, title: 'Pending Confirmation Dashboard',
-                     filename: expName, exportOptions: exportOpts() };
+                     className: 'dropdown-item', footer: true, exportOptions: exportOpts() };
         }
         return [{
             extend: 'collection',
@@ -333,7 +326,7 @@
         });
         $('#pcd-export-slot').empty().append(DT.buttons().container());
         // Advanced no fim do menu; o cadastro de pendências não tem arquivo-dia.
-        if (window.otcExportAdvanced) otcExportAdvanced('#pcd-table', { name: expName() });
+        if (window.otcExportAdvanced) otcExportAdvanced('#pcd-table');
         if (window.otcCellCopy) otcCellCopy('#pcd-table');
     }
 

@@ -17,7 +17,8 @@
  * Uso, DEPOIS de a DataTable existir:
  *
  *     otcExportAdvanced('#minha-tabela', {
- *         name:  'reference-data',   // nome do arquivo (sem extensão)
+ *         name:  'Trade Level',      // SÓ na página com mais de uma tabela:
+ *                                    // o rótulo dela no nome do arquivo
  *         skip:  [0, 1],             // colunas que nunca se exportam
  *         menu:  '#meuDropdownUl',   // só quando o dropdown é markup da página
  *         daily: '/api/operations-b3/data'          // ou:
@@ -217,6 +218,93 @@
             return action.call(this, e, dt, button, config, cb);
         };
     })();
+
+    /* ── O NOME de todo arquivo exportado (mesa, 21/10/2026) ─────────────────
+     * Um padrão só, em toda tabela que exporta:
+     *
+     *     <Página ou tabela> - OTC Tracker - OTC Processing System
+     *
+     * `Reference Data - OTC Tracker - OTC Processing System.xlsx`; no /mapping,
+     * o CADASTRO (`API/BOB Reports - …`). Cada tela inventava o seu — o título
+     * da aba com "| OTC Tracker - Sistema de Gestão OTC" (o padrão do Buttons),
+     * `track-confirmations`, `Unwinds-NDF-FX-20261021`, `Reconciliation_
+     * Comitente` — e o arquivo na pasta de downloads não dizia de onde vinha.
+     *
+     * Quem decide é ESTE helper, no clique, para os cinco botões (Copy, CSV,
+     * Excel, Print, PDF) de toda página: o `title`/`filename` que a página
+     * escrevesse seria ignorado, e por isso ela não escreve (o
+     * `check_export_padrao.py` §3 recusa). O título que vai DENTRO do arquivo
+     * (a linha 1 do Excel, o topo do PDF e do Print, a 1ª linha do Copy) é o
+     * mesmo texto.
+     *
+     * A PÁGINA é o `{% block title %}` (a parte do `<title>` antes do " | "):
+     * é o nome em INGLÊS de toda tela, e o `<h4>` do cabeçalho não serve — o
+     * I18nManager o traduz, e o mesmo export sairia "Dados de Referência" numa
+     * máquina e "Reference Data" na outra. O travessão de "Intrag — NDF" vira
+     * espaço: o separador do padrão é o hífen, e os dois juntos não se leem.
+     *
+     * A TABELA é o `data-export-name` do `<table>`, para a página com mais de
+     * uma (os Summaries, Index B3 Results, Accrual/MtM por LOB) ou cujo nome
+     * muda (o cadastro aberto no /mapping). O `name` do `otcExportAdvanced`
+     * escreve nele — é a mesma pergunta.
+     *
+     * A barra não existe em nome de arquivo (`API/BOB Reports` → `API-BOB
+     * Reports`); no TÍTULO ela fica. */
+    var EXPORT_SUFFIX = ' - OTC Tracker - OTC Processing System';
+
+    function pageName() {
+        var s = String(document.title || '').split(' | ')[0];
+        return s.replace(/\s+[—–]\s+/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+    function exportLabel(x) {
+        if (x && x.jquery) x = x[0];
+        if (typeof x === 'string' && !/^[#.]/.test(x)) return x.replace(/\s+/g, ' ').trim() || pageName() || 'Export';
+        var node = typeof x === 'string' ? document.querySelector(x) : x;
+        var own = node && node.getAttribute ? (node.getAttribute('data-export-name') || '').trim() : '';
+        return own || pageName() || 'Export';
+    }
+    function exportTitle(x) { return exportLabel(x) + EXPORT_SUFFIX; }
+    /* A MESMA limpeza que o Buttons faz ao montar o nome, para o nome que se
+       mostra (o campo do Advanced Export) ser o do arquivo de verdade. */
+    function exportFile(x) {
+        return exportTitle(x).replace(/\s*[\/\\]\s*/g, '-')
+                             .replace(/[^a-zA-Z0-9_¡-￿., \-!()]/g, '')
+                             .replace(/\s+/g, ' ').trim();
+    }
+    // Para o export que não é do Buttons (o /mapping, a Recon FXO): aceita o
+    // nó/seletor da tabela ou o rótulo da tabela em texto.
+    window.otcExportName = exportFile;
+    window.otcExportTitle = exportTitle;
+
+    var NAMED_BUTTONS = ['copyHtml5', 'csvHtml5', 'excelHtml5', 'pdfHtml5', 'print'];
+    /* O Buttons copia o `action` na construção do botão: o embrulho tem de
+       existir antes do primeiro `new Buttons`. O `print` vem num arquivo à
+       parte, que duas telas carregam DEPOIS deste — por isso a passada se
+       repete no `options.dt` de toda tabela, o primeiro evento da
+       inicialização (antes de ela montar os botões). */
+    function patchNames() {
+        var ext = window.jQuery && jQuery.fn && jQuery.fn.dataTable &&
+                  jQuery.fn.dataTable.ext && jQuery.fn.dataTable.ext.buttons;
+        if (!ext) return;
+        NAMED_BUTTONS.forEach(function (k) {
+            var def = ext[k];
+            if (!def || typeof def.action !== 'function' || def._otcNamed) return;
+            def._otcNamed = true;
+            var action = def.action;
+            def.action = function (e, dt, button, config, cb) {
+                // O Advanced Export manda o nome do campo dele (que a pessoa
+                // pode ter reescrito) e marca o botão: ali o nome já é decidido.
+                if (!config.otcOwnName) {
+                    var node = dt.table().node();
+                    config.title = exportTitle(node);
+                    config.filename = exportFile(node);
+                }
+                return action.call(this, e, dt, button, config, cb);
+            };
+        });
+    }
+    patchNames();
+    if (window.jQuery) jQuery(document).on('options.dt', patchNames);
 
     var STYLE_ID = 'otc-expadv-style';
     var MODAL_ID = 'otcExpAdvModal';
@@ -610,41 +698,12 @@
         return out;
     }
 
-    /* Nome do arquivo: o título da página, que é como a pessoa chama a tela.
-       O id da tabela é o último recurso — `ref-data-table` não é o nome de
-       nada que se mande por e-mail.
-
-       Ele sai LEGÍVEL ("Live Position NDF"), e não em slug: o padrão do app é
-       o do anexo do BACC (`EA Metrics - 20260824.xlsx`) — nome como se lê, um
-       hífen, a data compacta —, e é esse nome que a mesa procura na pasta de
-       downloads. O slug minúsculo com hífens era o nome do arquivo de código,
-       não o do documento. A limpeza é a MESMA classe de caracteres que o
-       DataTables aceita ao montar o nome, para o campo mostrar o nome que o
-       arquivo vai ter de verdade. */
-    function defaultName(node) {
-        var h = document.querySelector('.page-title-head h4, .page-title-head h5');
-        var s = h ? h.textContent : '';
-        s = String(s || node.id || 'export').replace(/\s+/g, ' ').trim();
-        // Colapsar de novo depois da limpeza: o que foi tirado do meio
-        // (a barra de "Confirmations / Track") deixa dois espaços.
-        return s.replace(/[^a-zA-Z0-9_\u00A1-\uFFFF., \-!()]/g, '')
-                .replace(/\s+/g, ' ').trim() || 'export';
-    }
-
     /* A extensão por formato. `print` e `copyHtml5` não produzem arquivo — e é
        por isso que eles não ganham nem nome nem aviso de fim: a janela de
        impressão e o balão do próprio Buttons já são a resposta deles. */
     var EXT = { excelHtml5: '.xlsx', csvHtml5: '.csv', pdfHtml5: '.pdf' };
 
     function pad2(n) { return (n < 10 ? '0' : '') + n; }
-    /* Hoje pelo relógio LOCAL. O `ymd()` das datas do intervalo é UTC de
-       propósito (ele lê data ISO), e usá-lo aqui carimbaria o dia seguinte em
-       toda exportação feita depois das 21h no Brasil. */
-    function todayIso() {
-        var d = new Date();
-        return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
-    }
-    function flatDay(iso) { return String(iso || '').replace(/-/g, ''); }
 
     /* O aviso de fim. O arquivo baixa fora da tela e nada dizia que o processo
        acabou — num intervalo grande a espera se lê como travamento. Guard no
@@ -681,7 +740,11 @@
         $el.find('#xaFormat').html(fmts.map(function (f) {
             return '<option value="' + f.v + '">' + esc(f.l) + '</option>';
         }).join(''));
-        var baseName = opts.name || 'export';
+        // O nome do padrão (`<página ou tabela> - OTC Tracker - OTC Processing
+        // System`), lido na hora de abrir: o rótulo da tabela pode ter mudado.
+        var node0 = dt.table().node();
+        var baseName = exportFile(node0);
+        var baseTitle = exportTitle(node0);
         $el.find('#xaName').val(baseName);
 
         var colOpts = '<option value="">' + esc(t('colPick')) + '</option>' +
@@ -830,23 +893,14 @@
             return keep;
         }
 
-        /* O nome final: o do campo mais a data, no padrão do app
-           (`EA Metrics - 20260824.xlsx`). Com intervalo vão as DUAS pontas —
-           é o que distingue uma extração de duas semanas da do dia. O carimbo
-           só entra enquanto o campo está como nasceu: quem renomeou à mão
-           quis aquele nome, e não aquele nome mais uma data.
-
-           Sem intervalo a data é a de HOJE, a da extração, e não a do dado na
-           tela: a data de referência da página não chega aqui (cada tela a
-           guarda do seu jeito), e inventar uma seria carimbar de errado. */
+        /* O nome final é o do CAMPO: o padrão da casa, ou o que a pessoa
+           escreveu por cima. Sem data — o padrão não leva (mesa, 21/10/2026),
+           e o intervalo pedido está nas linhas (a coluna Reference Date). A
+           limpeza é a do Buttons, para o aviso dizer o nome que o arquivo tem. */
         function finalName(o) {
-            if (o.name !== baseName) return o.name;
-            var a = o.dayFrom || o.dayTo, b = o.dayTo || o.dayFrom;
-            if (temDia && a) {
-                return baseName + ' - ' + flatDay(a) +
-                       (b && b !== a ? ' a ' + flatDay(b) : '');
-            }
-            return baseName + ' - ' + flatDay(todayIso());
+            return String(o.name || baseName).replace(/\s*[\/\\]\s*/g, '-')
+                .replace(/[^a-zA-Z0-9_\u00A1-\uFFFF., \-!()]/g, '')
+                .replace(/\s+/g, ' ').trim() || baseName;
         }
 
         /* A primeira linha do aviso é o NOME do arquivo que acabou de baixar —
@@ -1186,6 +1240,7 @@
                var o = read();
                if (!o.cols.length || dayRangeError(o)) return;
                o.name = finalName(o);
+               o.title = baseTitle;
                if (rango && (o.dayFrom || o.dayTo)) { runRange(o); return; }
                if (daily && (o.dayFrom || o.dayTo)) { runDaily(o); return; }
                if (!lastKeep.length) return;
@@ -1218,6 +1273,8 @@
             extend: o.format,
             name: BTN_NAME,
             filename: o.name,
+            title: o.title,
+            otcOwnName: true,           // o nome já foi decidido no modal
             header: o.header,
             footer: false,
             exportOptions: {
@@ -1785,7 +1842,9 @@
         if (node.getAttribute('data-otc-expadv') === '1') return true;   // idempotente
         node.setAttribute('data-otc-expadv', '1');
 
-        if (!opts.name) opts.name = defaultName(node);
+        // `name` é o rótulo da TABELA (a página com mais de uma): vai para o
+        // `data-export-name`, que é de onde os cinco botões também o leem.
+        if (opts.name) node.setAttribute('data-export-name', opts.name);
         if (!opts.skip) opts.skip = [];
 
         if (opts.menu) {

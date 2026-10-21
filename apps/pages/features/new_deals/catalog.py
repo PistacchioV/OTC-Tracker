@@ -213,7 +213,6 @@ def _page(slug, group, product, columns, **kw):
         'name': nome,
         'title': 'New Deals — ' + nome,
         'label': nome,                       # o rotulo `page` das notificacoes (§8)
-        'export_name': 'New-Deals-' + nome.replace(' ', '-'),
         'group': group, 'product': product,
         'group_lang': '', 'product_lang': '',
         'columns': [list(c) for c in columns],

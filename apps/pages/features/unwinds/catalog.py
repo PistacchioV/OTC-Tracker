@@ -217,7 +217,6 @@ def _page(path, group, product, columns, b3=None, group_lang='', product_lang=''
         'slug': 'unwinds-' + slug,
         'title': 'Unwinds — ' + nome,
         'label': 'Unwind ' + nome,          # o rotulo `page` das notificacoes (§8)
-        'export_name': 'Unwinds-' + nome.replace(' ', '-'),
         'group': group, 'group_lang': group_lang,
         'product': product, 'product_lang': product_lang,
         'columns': [list(c) for c in columns],

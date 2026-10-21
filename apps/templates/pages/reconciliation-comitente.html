@@ -1,5 +1,7 @@
 {% extends "layouts/vertical.html" %}
 
+{% block title %}Comitente Reconciliation{% endblock title %}
+
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
@@ -493,7 +495,6 @@ $(document).ready(function() {
                             extend: 'csv',
                             text: '<i class="ti ti-file-type-csv me-1 fs-lg align-middle"></i> CSV',
                             className: 'dropdown-item',
-                            title: 'Reconciliation_Comitente',
                             bom: true,
                             exportOptions: { columns: ':visible', modifier: { page: 'all' }, orthogonal: 'export', format: { body: formatExportData } }
                         },
@@ -501,21 +502,18 @@ $(document).ready(function() {
                             extend: 'excel',
                             text: '<i class="ti ti-file-spreadsheet me-1 fs-lg align-middle"></i> Excel',
                             className: 'dropdown-item',
-                            title: 'Reconciliation_Comitente',
                             exportOptions: { columns: ':visible', modifier: { page: 'all' }, orthogonal: 'export', format: { body: formatExportData } }
                         },
                         {
                             extend: 'print',
                             text: '<i class="ti ti-printer me-1 fs-lg align-middle"></i> Print',
                             className: 'dropdown-item',
-                            title: 'Reconciliation Comitente',
                             exportOptions: { columns: ':visible', modifier: { page: 'all' }, orthogonal: 'export', format: { body: formatExportData } }
                         },
                         {
                             extend: 'pdf',
                             text: '<i class="ti ti-file-text me-1 fs-lg align-middle"></i> PDF',
                             className: 'dropdown-item',
-                            title: 'Reconciliation Comitente',
                             orientation: 'landscape',
                             pageSize: 'A3',
                             exportOptions: { columns: ':visible', modifier: { page: 'all' }, orthogonal: 'export', format: { body: formatExportData } }

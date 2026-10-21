@@ -152,6 +152,8 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js?v={{ asset_v('js/table-std.js') }}"></script>
+{# O nome do arquivo exportado é o padrão da casa (`otcExportName`/`otcExportTitle`). #}
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
 <script>
 (function () {
     'use strict';
@@ -497,7 +499,7 @@
         var blob = new Blob(['﻿' + toCsv(exportMatrix())], { type: 'text/csv;charset=utf-8' });
         var a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'mapping_' + CUR + '.csv';
+        a.download = exportFile() + '.csv';
         document.body.appendChild(a); a.click();
         setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
     });
@@ -526,7 +528,12 @@
         });
         return LIBS[src];
     }
-    function exportTitle() { return 'Mapping - ' + t(typeOf(CUR).lang, typeOf(CUR).label); }
+    // O nome do arquivo é o padrão da casa com o CADASTRO no lugar da página
+    // (`API/Bob Reports Links - OTC Tracker - OTC Processing System`), pelo
+    // rótulo em INGLÊS: traduzido, o mesmo cadastro baixaria com um nome em
+    // cada máquina.
+    function exportTitle() { return otcExportTitle(typeOf(CUR).label); }
+    function exportFile() { return otcExportName(typeOf(CUR).label); }
     function exportFail() {
         if (window.Swal) Swal.fire({ icon: 'error', title: t('map-export-failed', 'Export failed') });
     }
@@ -555,7 +562,7 @@
             });
             var wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Mapping');
-            XLSX.writeFile(wb, 'mapping_' + CUR + '.xlsx');
+            XLSX.writeFile(wb, exportFile() + '.xlsx');
         }).catch(exportFail);
     });
     document.getElementById('mapExportPrint').addEventListener('click', function (e) {
@@ -600,7 +607,7 @@
                         th: { fontSize: 7, bold: true, alignment: 'center', fillColor: '#eeeeee' },
                         td: { fontSize: 7, alignment: 'center' }
                     }
-                }).download('mapping_' + CUR + '.pdf');
+                }).download(exportFile() + '.pdf');
             }).catch(exportFail);
     });
 
