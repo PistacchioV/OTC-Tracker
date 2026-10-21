@@ -1,15 +1,9 @@
 <!doctype html>
-<html lang="pt-BR" data-lang="pt">
+<html lang="en" data-lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OTC Tracker One Pager</title>
-<script>
-  // Idioma lembrado por quem abre (PT padrão). Falha de storage não impede nada.
-  (function () {
-    try { var l = localStorage.getItem('otc1p_lang'); if (l === 'en' || l === 'pt') document.documentElement.setAttribute('data-lang', l); } catch (e) {}
-  })();
-</script>
 <style>
   :root {
     --blue: #2f7cf6;
@@ -219,8 +213,8 @@
     </div>
     <div class="meta">
       <div class="lang" role="group" aria-label="Idioma / Language">
-        <button type="button" data-set-lang="pt" aria-pressed="true">PT</button>
-        <button type="button" data-set-lang="en" aria-pressed="false">EN</button>
+        <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+        <button type="button" data-set-lang="pt" aria-pressed="false">PT</button>
       </div>
       <div class="meta__row">
         <span class="pill pill--live"><span lang="pt">Em produção</span><span lang="en">Live</span></span>
@@ -236,7 +230,7 @@
     <div class="kpi" style="--hue:var(--teal)"><div class="kpi__value">50–70</div><div class="kpi__label"><span lang="pt">liquidações por dia</span><span lang="en">settlements per day</span></div></div>
     <div class="kpi" style="--hue:var(--indigo)"><div class="kpi__value">~15</div><div class="kpi__label"><span lang="pt">confirmações por dia</span><span lang="en">confirmations per day</span></div></div>
     <div class="kpi" style="--hue:var(--purple)"><div class="kpi__value">12</div><div class="kpi__label"><span lang="pt">rotinas automáticas agendadas</span><span lang="en">scheduled automated routines</span></div></div>
-    <div class="kpi" style="--hue:var(--orange)"><div class="kpi__value">48</div><div class="kpi__label"><span lang="pt">tabelas de regras mantidas pela mesa, sem código</span><span lang="en">rule tables maintained by the desk, no code</span></div></div>
+    <div class="kpi" style="--hue:var(--orange)"><div class="kpi__value">48</div><div class="kpi__label"><span lang="pt">tabelas de regras mantidas pela equipe de Operações, sem código</span><span lang="en">rule tables maintained by the Operations team, no code</span></div></div>
     <div class="kpi" style="--hue:var(--green)"><div class="kpi__value">204</div><div class="kpi__label"><span lang="pt">testes automatizados</span><span lang="en">automated tests</span></div></div>
   </section>
   <p class="source">
@@ -301,7 +295,7 @@
       <ul class="list">
         <li><span lang="pt"><strong>Um fluxo único e auditável</strong> no lugar de planilhas, fluxos Alteryx e controles por e-mail.</span><span lang="en"><strong>One auditable workflow</strong> replacing spreadsheets, Alteryx workflows and e-mail-based controls.</span></li>
         <li><span lang="pt"><strong>Alternativa interna a sistemas de terceiros:</strong> sem licença por volume e sem fila de customização de fornecedor.</span><span lang="en"><strong>An in-house alternative to vendor systems:</strong> no per-volume licensing and no vendor customization queue.</span></li>
-        <li><span lang="pt"><strong>Regra nova vira cadastro, não projeto:</strong> a mesa mantém os de-para na tela e a mudança vale na hora.</span><span lang="en"><strong>A new rule is a screen entry, not a project:</strong> the desk maintains its mappings and changes apply immediately.</span></li>
+        <li><span lang="pt"><strong>Regra nova vira cadastro, não projeto:</strong> a equipe de Operações mantém os de-para na tela e a mudança vale na hora.</span><span lang="en"><strong>A new rule is a screen entry, not a project:</strong> the Operations team maintains its mappings and changes apply immediately.</span></li>
         <li><span lang="pt"><strong>Cerca de 100 telas em um só lugar,</strong> em português, inglês e espanhol.</span><span lang="en"><strong>About 100 screens in one place,</strong> in English, Portuguese and Spanish.</span></li>
       </ul>
       <div class="sub"><span lang="pt">Integrações</span><span lang="en">Integrations</span></div>
@@ -323,7 +317,7 @@
         <span lang="pt">Controles e governança</span><span lang="en">Controls &amp; governance</span></h2>
       <ul class="list">
         <li><span lang="pt"><strong>Maker-checker em toda operação:</strong> quem importa ou edita não aprova nem envia.</span><span lang="en"><strong>Maker-checker on every trade:</strong> whoever imports or edits cannot approve or send.</span></li>
-        <li><span lang="pt"><strong>Segregação por mesa:</strong> cada etapa da confirmação é assinada só pela sua mesa, com prazo em dias úteis e justificativa obrigatória após o SLA.</span><span lang="en"><strong>Segregation by team:</strong> each confirmation stage is signed only by its own team, with business-day deadlines and mandatory justification after the SLA.</span></li>
+        <li><span lang="pt"><strong>Segregação por equipe:</strong> cada etapa da confirmação é assinada só pela sua equipe (OTC, MO, FO), com prazo em dias úteis e justificativa obrigatória após o SLA.</span><span lang="en"><strong>Segregation by team:</strong> each confirmation stage is signed only by its own team (OTC, MO, FO), with business-day deadlines and mandatory justification after the SLA.</span></li>
         <li><span lang="pt"><strong>Acesso por SID</strong> com código por e-mail; permissão por papel e por página.</span><span lang="en"><strong>SID-based access</strong> with an e-mail code; permissions by role and by page.</span></li>
         <li><span lang="pt"><strong>Trilha de auditoria permanente:</strong> maker, checker, data/hora e status de cada etapa.</span><span lang="en"><strong>Permanent audit trail:</strong> maker, checker, timestamp and status of every stage.</span></li>
         <li><span lang="pt"><strong>Arquivos da B3 e XML FepWeb</strong> conferidos byte a byte por testes automatizados.</span><span lang="en"><strong>B3 files and FepWeb XML</strong> checked byte by byte by automated tests.</span></li>
@@ -339,7 +333,7 @@
         <li><span lang="pt"><strong>E-mail automático de pendências</strong> às 19:00, 19:30 e 20:00.</span><span lang="en"><strong>Automatic outstanding-items e-mail</strong> at 7:00, 7:30 and 8:00 pm (BRT).</span></li>
         <li><span lang="pt"><strong>Confirmações com SLA</strong> de D+3 (OTC), D+4 (MO) e D+6 (FO), e cobrança automática às segundas e quintas.</span><span lang="en"><strong>Confirmation SLAs</strong> of T+3 (OTC), T+4 (MO) and T+6 (FO), with automatic chasers on Mondays and Thursdays.</span></li>
         <li><span lang="pt"><strong>Relatório BACC EA Metrics</strong> enviado automaticamente às 16:00.</span><span lang="en"><strong>BACC EA Metrics report</strong> sent automatically at 4:00 pm.</span></li>
-        <li><span lang="pt"><strong>Avisos no sino para a mesa da vez:</strong> cada confirmação avisa a mesa em que ela caiu.</span><span lang="en"><strong>In-app alerts for the team on point:</strong> each confirmation notifies the team it now sits with.</span></li>
+        <li><span lang="pt"><strong>Avisos no sino para a equipe da vez:</strong> cada confirmação avisa a equipe com quem ela está.</span><span lang="en"><strong>In-app alerts for the team on point:</strong> each confirmation notifies the team it now sits with.</span></li>
       </ul>
     </section>
   </div>
@@ -388,12 +382,11 @@
       document.querySelectorAll('[data-set-lang]').forEach(function (b) {
         b.setAttribute('aria-pressed', String(b.getAttribute('data-set-lang') === l));
       });
-      try { localStorage.setItem('otc1p_lang', l); } catch (e) {}
     }
     document.querySelectorAll('[data-set-lang]').forEach(function (b) {
       b.addEventListener('click', function () { set(b.getAttribute('data-set-lang')); });
     });
-    set(root.getAttribute('data-lang') === 'en' ? 'en' : 'pt');
+    set('en');   // abre sempre em inglês; o PT é a troca
   })();
 </script>
 </body>
