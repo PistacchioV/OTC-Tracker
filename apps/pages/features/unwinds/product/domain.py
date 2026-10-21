@@ -506,9 +506,11 @@ def linhas_do_recap_opcoes_commodities(tabelas):
 #   * o NOCIONAL recomprado e acoes x strike original (o campo 11 do SWAP 0014);
 #   * as pernas vem na visao de QUEM o rotulo nomeia ("RDOR Recebe": o valor e
 #     o que o cliente ganha nela). A perna que ele RECEBE e a curva DELE, a que
-#     ele PAGA e a NOSSA; o que cada curva acumulou e o valor com o sinal de quem
-#     a recebe, e o FATOR e 1 + acumulado / nocional (8 casas) — com os dois a B3
-#     refaz o caixa: nocional x (fator nosso − fator deles) = o (A + B) do banco;
+#     ele PAGA e a NOSSA; o valor de liquidacao de cada perna vai com o sinal de
+#     quem a recebe, e o FATOR e valor / VBR + 1, na 8a casa (mesa, 21/10/2026,
+#     §660 — o VBR e o Valor Base Remanescente do Live Position, a mesma regra do
+#     fator do Swap VCP); com os dois, VBR x (fator nosso − fator deles) = o
+#     (A + B) do banco. Sem a posicao nao ha VBR, e sem VBR nao ha fator;
 #   * o (A + B) e o CAIXA, e o `Result` leva o sinal do BANCO (o cliente recebe
 #     = o banco paga = negativo); o "D+n" do rotulo da a liquidacao;
 #   * a data da recompra e a do ASSUNTO ("(20-Oct-26)");
@@ -646,7 +648,7 @@ def linhas_do_recap_swap_trs(tabelas, assunto=''):
             if d_mais:
                 linha['_d_mais'] = int(d_mais.group(1))
             recalcular_swap(linha, mudou)
-            if 'FactorOurs' not in linha or 'Result' not in linha:
+            if not lados.get('visao') or 'Result' not in linha:
                 avisos.append(aviso('unwind_recap_no_sign',
                                     'Tranche %s: could not tell whether the bank pays or receives'
                                     % num, linha=int(num)))
@@ -657,13 +659,16 @@ def linhas_do_recap_swap_trs(tabelas, assunto=''):
 
 def recalcular_swap(linha, mudou=()):
     """O nocional, os fatores e o caixa do swap a partir do que a linha TEM
-    (§657) — no import do recap e no Edit que muda acoes, strike, pernas ou
-    papel. O que a pessoa digitou no MESMO Save vence (`mudou`): nocional,
-    Result e fatores editados a mao ficam, e o Check confere.
+    (§657) — no import do recap (com a posicao, que da o VBR) e no Edit que
+    muda acoes, strike, pernas, VBR ou papel. O que a pessoa digitou no MESMO
+    Save vence (`mudou`): nocional, Result e fatores editados a mao ficam, e o
+    Check confere.
 
-      nocional = acoes x strike original;
-      fator de cada curva = 1 + acumulado / nocional (o acumulado e o valor da
-        perna com o sinal de quem RECEBE a curva — `LegSides`);
+      nocional = acoes x strike original (o campo 11 do SWAP 0014);
+      fator de cada leg = round(valor de liquidacao / VBR + 1, 8) (mesa,
+        21/10/2026, §660): o valor vai com o sinal de quem RECEBE a curva
+        (`LegSides`) e o VBR e o Valor Base Remanescente do Live Position —
+        sem VBR nao ha fator;
       Result (o banco) = a soma das pernas na visao do banco;
       Factor Leg 1/2 = o fator da Ponta 1 e o da Ponta 2, pelo papel.
 
@@ -680,7 +685,7 @@ def recalcular_swap(linha, mudou=()):
     if q is not None and k is not None and 'UnwoundNotional' not in mudou and \
             (_vazio('UnwoundNotional') or mudou & {'Shares', 'Strike'}):
         linha['UnwoundNotional'] = round(abs(q) * k, 2)
-    vr = numero(linha.get('UnwoundNotional'))
+    vbr = numero(linha.get('VBR'))
     lados = linha.get('LegSides') or {}
     visao = lados.get('visao')
     fatores, valores = {}, []
@@ -690,9 +695,9 @@ def recalcular_swap(linha, mudou=()):
             if v is None or quem not in ('cliente', 'banco'):
                 continue
             valores.append(v)
-            if vr:
-                acumulado = v if quem == visao else -v
-                fatores[quem] = round(1.0 + acumulado / abs(vr), 8)
+            if vbr:
+                liquidacao = v if quem == visao else -v
+                fatores[quem] = round(liquidacao / abs(vbr) + 1.0, 8)
     if 'banco' in fatores and 'cliente' in fatores:
         linha['FactorOurs'], linha['FactorTheirs'] = fatores['banco'], fatores['cliente']
     if len(valores) == 2 and 'Result' not in mudou and \
@@ -775,6 +780,8 @@ _DA_POSICAO = (
     ('Party', 'party', 'name'),
     ('OriginalNotional', 'original', 'num'),
     ('UnwoundBefore', 'before', 'num'),
+    # o VBR do swap (Valor Base Remanescente): a base dos fatores (§660)
+    ('VBR', 'vbr', 'num'),
     ('Strike', 'strike', 'rate'),
     ('TradeDate', 'trade_date', 'text'),
     ('MaturityDate', 'maturity', 'text'),
@@ -1124,17 +1131,17 @@ def _premio(linha, page):
 
 
 def _fatores(linha):
-    """O caixa refeito pelos FATORES (§657): nocional x (fator nosso − fator
-    deles), com o nosso e o deles pelo papel (Ponta 1 = Factor Leg 1). E a
-    conta que a B3 faz com o SWAP 0014 — o que o arquivo leva tem de dar o
-    caixa combinado. A tolerancia e a do arredondamento dos fatores na 8a
-    casa (nocional x 1e-8 em cada um), mais o centavo."""
-    vr = numero(linha.get('UnwoundNotional'))
+    """O caixa refeito pelos FATORES (§657/§660): VBR x (fator nosso − fator
+    deles), com o nosso e o deles pelo papel (Ponta 1 = Factor Leg 1) — a
+    conta inversa do fator (valor de liquidacao / VBR + 1): o que o arquivo
+    leva tem de dar o caixa combinado. A tolerancia e a do arredondamento dos
+    fatores na 8a casa (VBR x 1e-8 em cada um), mais o centavo."""
+    vr = numero(linha.get('VBR'))
     f1 = numero(linha.get('FactorLeg1'), taxa=True)
     f2 = numero(linha.get('FactorLeg2'), taxa=True)
     papel = papel_swap(linha.get('Role'))
     res = numero(linha.get('Result'))
-    faltam = [n for n, v in (('UnwoundNotional', vr), ('FactorLeg1', f1), ('FactorLeg2', f2),
+    faltam = [n for n, v in (('VBR', vr), ('FactorLeg1', f1), ('FactorLeg2', f2),
                              ('Role', papel), ('Result', res)) if v is None]
     if faltam:
         return None, aviso('unwind_check_missing', 'Missing to check the factors: '
@@ -1143,7 +1150,7 @@ def _fatores(linha):
     calc = abs(vr) * (nosso - deles)
     if abs(calc - res) > TOLERANCIA + abs(vr) * 2e-8:
         return False, aviso('unwind_factor_mismatch',
-                            'Settlement amount does not match notional x (our factor - their factor)',
+                            'Settlement amount does not match VBR x (our factor - their factor)',
                             informado=res, calculado=round(calc, 2))
     return True, None
 
@@ -1180,8 +1187,9 @@ def conferir(linha, page):
 CAMPOS_ECONOMICOS = ('OriginalNotional', 'UnwoundBefore', 'UnwoundNotional', 'Strike',
                      'TerminationRate', 'FXRate', 'PreFWDRate', 'DU', 'Currency',
                      'UnwindDate', 'SettlementDate', 'MaturityDate',
-                     # o swap (§657): acoes, pernas e papel refazem nocional e fatores
-                     'Shares', 'EquityLeg', 'FundingLeg', 'Role')
+                     # o swap (§657/§660): acoes, pernas, VBR e papel refazem
+                     # nocional e fatores
+                     'Shares', 'EquityLeg', 'FundingLeg', 'Role', 'VBR')
 
 
 def mesmo_valor(a, b):

@@ -707,10 +707,10 @@ A recompra aparece no **Intraday Monitor** (capítulo 5.1) como *Unwind NDF FX*,
 **A recompra de Swap da EDG lê o recap do TRS** (*Internal Recap - <ativo> TRS onshore Unwind (dd-Mmm-aa)*): arraste o e-mail inteiro para o dropzone de **Unwinds › Swap › EDG**. A tabela dele tem uma **tranche por coluna** (a coluna TOTAL é ignorada) e o **CETIP ID** de cada uma — é por ele que a tela acha o contrato no Live Position e traz contraparte, saldo e contas. Para cada tranche a tela calcula:
 
 - o **valor recomprado** = número de ações × strike original (é o valor que vai para a B3);
-- o **fator de cada curva** = 1 + o que a perna acumulou ÷ valor recomprado, com 8 casas — a perna que o cliente **recebe** (no exemplo, a Equity) é a curva dele, a que ele **paga** (a Funding) é a nossa;
+- o **fator de cada perna** = valor de liquidação da perna ÷ **VBR** + 1, arredondado na 8ª casa — o **VBR** (Valor Base Remanescente) vem do **Live Position Swap**, pelo CETIP ID; a perna que o cliente **recebe** (no exemplo, a Equity) é a curva dele, a que ele **paga** (a Funding) é a nossa;
 - o **Settlement Amount** = o (A + B) do e-mail, com o sinal do banco (o cliente recebe = **PAY**).
 
-A data da recompra é a do **assunto** do e-mail e a liquidação é o **D+1** que o e-mail diz, em dia útil. A recompra **Parcial** vai sem manter os prêmios. O **Check** confere o saldo do contrato e se os fatores dão o caixa do e-mail (a B3 liquida pelos fatores, com 8 casas — pode haver diferença de alguns centavos para o e-mail). Se o e-mail diz *Total* e o saldo do Live Position diz que sobra contrato, a tela avisa.
+**Party** (a nossa entidade) e **Counterparty** também vêm do **Live Position**, com o mesmo nome que a tela *Swap Characteristics* mostra. A data da recompra é a do **assunto** do e-mail e a liquidação é o **D+1** que o e-mail diz, em dia útil. A recompra **Parcial** vai sem manter os prêmios. O **Check** confere o saldo do contrato e se os fatores dão o caixa do e-mail (a B3 liquida pelos fatores, com 8 casas — pode haver diferença de alguns centavos para o e-mail). Se o e-mail diz *Total* e o saldo do Live Position diz que sobra contrato, a tela avisa.
 
 O arquivo de antecipação da B3 (SWAP 0014) segue a planilha da mesa: o papel é o da **conta de menor número** (Ponta 1), os dois fatores vão na ponta de cada um, o valor recomprado no campo de valor e a data de antecipação é o **dia em que o arquivo é gerado**.
 

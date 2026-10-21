@@ -258,6 +258,7 @@ def _swap(row):
                'doc_parte': c(_SWAP_DOC_PARTE), 'cp': c(_sf.POS['conta_cp']),
                'doc_cp': c(_sf.POS['doc_cp']), 'inicio': c(_sf.POS['inicio']),
                'venc': c(_sf.POS['vencimento']), 'base': c(_sf.POS['valor_base']),
+               'remanescente': c(_sf.POS['remanescente']),
                'antecipado': c(_SWAP_ANTECIPADO), 'ident': c(_sf.POS['identificador']),
                'curva': (c(_sf.POS['nome_classe'][0]) or c(_sf.POS['indice'][0]),
                          c(_sf.POS['nome_classe'][1]) or c(_sf.POS['indice'][1]))}
@@ -267,6 +268,7 @@ def _swap(row):
                'doc_parte': n('CPF/CNPJ Cliente Parte'), 'cp': n('Contraparte'),
                'doc_cp': n('CPF/CNPJ Cliente Contraparte'), 'inicio': n('Data início'),
                'venc': n('Data vencimento'), 'base': n('Valor base'),
+               'remanescente': n('Valor Base Remanescente'),
                'antecipado': n('Valor Antecipado'), 'ident': n('Código Identificador'),
                'curva': (n('Curva Parte'), n('Curva Contraparte'))}
     if R._b3_account_le(cel['parte']):
@@ -284,27 +286,45 @@ def _swap(row):
     # nao "a Participante e nossa": so coincidem quando a nossa e a menor.
     papel = {'00': 'Ponta 1', '01': 'Ponta 2'}.get(
         domain.papel_pela_conta(nossa, deles) if not aviso_conta else None, '')
+    # Party e Counterparty: a MESMA cascata da tela Live Position › Swap
+    # Characteristics (§660) — o CPF/CNPJ pelo Reference Data e, quando ele não
+    # resolve, a conta CETIP pelo B3 ACCOUNT do Reference Data (o índice que
+    # recusa a conta GUARDA-CHUVA e a conta com mais de um nome). Sem nome, a
+    # contraparte fica VAZIA avisando — nunca o titular da conta (§513).
+    def _nome_lp(doc_, conta_):
+        n = R._lp_cpty_name_by_taxid(doc_) if domain.digitos(doc_) else ''
+        return n or R._lp_cpty_by_account(conta_)
+
     aviso_cpty = None
-    nome_doc = R._lp_cpty_name_by_taxid(doc) if domain.digitos(doc) else ''
-    if R._b3_is_omnibus(deles):
-        nome = nome_doc
-        if not nome:
+    nome = _nome_lp(doc, deles)
+    if not nome:
+        if R._b3_is_omnibus(deles):
             aviso_cpty = domain.aviso('unwind_cpty_not_registered',
                                       'The counterparty %s is not in the Reference Data' % doc,
                                       taxid=doc)
-    else:
-        nome = R._lp_cpty_by_account(deles) or nome_doc
-        if not nome:
+        else:
             aviso_cpty = domain.aviso('unwind_no_counterparty',
                                       'The position identifies no counterparty', conta=deles)
+    # o NOSSO lado: o documento dele (o da Parte quando a Parte é nossa) e a
+    # conta; o nome do cadastro `b3-accounts` e a LE são só o plano B
+    doc_nosso = cel['doc_parte'] if nossa == cel['parte'] else cel['doc_cp']
+    party = ''
+    if not aviso_conta:
+        party = (_nome_lp(doc_nosso, nossa) or R._b3_account_refdata_name(nossa)
+                 or R._b3_account_le(nossa))
     ident = str(cel['ident'] or '').strip().upper()
+    # O VBR (`Valor Base Remanescente`, a coluna 15): a base dos FATORES da
+    # recompra (§660). Coluna vazia vale o valor base menos o ja antecipado.
+    base = _sf.numero_da_posicao(cel['base'])
+    vbr = _sf.numero_da_posicao(cel['remanescente'])
+    if vbr is None and base is not None:
+        vbr = base - (_sf.numero_da_posicao(cel['antecipado']) or 0.0)
     return {
         'contract': cel['contrato'], 'party_account': cel['parte'], 'cpty_account': cel['cp'],
         'our_account': nossa, 'their_account': deles, 'role': papel,
-        # a NOSSA entidade: o nome dela no Reference Data (b3-accounts), senao a LE
-        'party': (R._b3_account_refdata_name(nossa) or R._b3_account_le(nossa)) if not aviso_conta else '',
+        'party': party,
         'counterparty': nome, 'taxid': R._lp_fmt_cnpj(doc) if domain.digitos(doc) else '',
-        'original': _sf.numero_da_posicao(cel['base']),
+        'original': base, 'vbr': vbr,
         'before': _sf.numero_da_posicao(cel['antecipado']) or 0.0,
         'trade_date': _sf.iso(cel['inicio']), 'maturity': _sf.iso(cel['venc']),
         # O `Codigo Identificador` do swap guarda a LOB (§427), nao um id.

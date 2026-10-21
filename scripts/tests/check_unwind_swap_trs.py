@@ -7,16 +7,19 @@ TRANSPOSTA: rotulos na primeira coluna, uma TRANCHE por coluna, com o CETIP ID
 
   1. o LEITOR (`product/domain.linhas_do_recap_swap_trs`), com a tabela do e-mail
      da mesa (tranches #1-#9 do RDOR, 20/10/2026): uma recompra por tranche, o
-     TOTAL fora; nocional = acoes x strike original; o fator de cada curva = 1 +
-     acumulado / nocional, com quem RECEBE cada perna dito pelo rotulo ("RDOR
-     Recebe" / "RDOR Paga"); o caixa refeito pelos fatores e o (A + B) do e-mail
-     AO CENTAVO; a parcial nao mantem premios; a data do ASSUNTO; o D+1;
+     TOTAL fora; nocional = acoes x strike original; o fator de cada leg =
+     round(valor de liquidacao / VBR + 1, 8) (§660 — o VBR e o Valor Base
+     Remanescente do Live Position; sem ele nao ha fator), com quem RECEBE cada
+     perna dito pelo rotulo ("RDOR Recebe" / "RDOR Paga"); VBR x (fator nosso −
+     fator deles) = o (A + B) do e-mail; a parcial nao mantem premios; a data
+     do ASSUNTO; o D+1;
   2. o IMPORT pela API, com o .eml no formato do Outlook (`<p class=MsoNormal>`
      dentro de cada `<td>`) e a posicao: papel pela CONTA MENOR (Ponta 1 =
      menor, manual 4.2.12), os fatores na Ponta certa, Party/Counterparty pela
      conta, a liquidacao no dia util seguinte, Check OK, o total do e-mail que
      o saldo desmente avisado, e o SWAP 0014 campo a campo — a planilha da mesa;
-  3. o EDIT: acoes novas refazem nocional e fatores; o papel sozinho troca os
+  3. o EDIT: acoes novas refazem o nocional (o fator e do VBR e fica); VBR novo
+     refaz os fatores; o papel sozinho troca os
      fatores de ponta SEM trocar o centavo do caixa do e-mail;
   4. a TELA em cards (Chromium, a pagina RENDERIZADA pelo app): um card por
      recompra, com os ids, Party/Counterparty e a pilula da LOB; o Edit do card
@@ -105,10 +108,11 @@ def _digitos(v):
     return ''.join(ch for ch in str(v or '') if ch.isdigit())
 
 
-def _posicao(contrato, cpty, base):
+def _posicao(contrato, cpty, base, doc='06047087000139'):
     return {'Contrato': contrato, 'Participante': '73760009', 'Contraparte': cpty,
-            'CPF/CNPJ Cliente Contraparte': '06047087000139', 'Data início': '23/12/2025',
+            'CPF/CNPJ Cliente Contraparte': doc, 'Data início': '23/12/2025',
             'Data vencimento': '23/12/2027', 'Valor base': '%.2f' % base, 'Valor Antecipado': '0',
+            'Valor Base Remanescente': '%.2f' % base,
             'Código Identificador': 'EDG', 'Curva Parte': 'DI', 'Curva Contraparte': 'ACAO RDOR3'}
 
 
@@ -134,18 +138,27 @@ def main():
     check('nocional = acoes x strike original (159.300 x 20,96)', l1['UnwoundNotional'] == 3338928.0)
     check('o caixa e o (A + B) do e-mail com o sinal do BANCO (o RDOR recebe = o banco paga)',
           l1['Result'] == -1132471.39 and l9['Result'] == -1172282.06)
-    check('fator da curva NOSSA (funding, o RDOR paga) e da DELE (equity, o RDOR recebe), 8 casas',
-          (l1['FactorOurs'], l1['FactorTheirs']) == (1.01436481, 1.35353696), (l1.get('FactorOurs'), l1.get('FactorTheirs')))
-    # A B3 refaz o caixa pelos fatores, e cada fator vai na 8a casa: meio
-    # 1e-8 x nocional em cada um (no #4, 3 centavos) — a tolerancia do Check.
+    check('sem o VBR (a posicao ainda nao foi lida) nao ha fator', 'FactorOurs' not in l1 and 'FactorLeg1' not in l1)
+    f1 = PD.recalcular_swap(dict(l1, VBR=3338928.0))
+    check('com o VBR, fator de cada leg = valor de liquidacao / VBR + 1 na 8a casa: o NOSSO (funding, '
+          'o RDOR paga) e o DELE (equity, o RDOR recebe)',
+          (f1['FactorOurs'], f1['FactorTheirs']) == (round(47963.05 / 3338928 + 1, 8), round(1180434.45 / 3338928 + 1, 8))
+          == (1.01436481, 1.35353696), (f1.get('FactorOurs'), f1.get('FactorTheirs')))
+    f9 = PD.recalcular_swap(dict(l9, VBR=2 * 3456304.0))
+    check('na parcial a base e o VBR do contrato, nao o recomprado (#9 com VBR = 2x)',
+          (f9['FactorOurs'], f9['FactorTheirs']) == (round(49649.14 / 6912608 + 1, 8), round(1221931.20 / 6912608 + 1, 8)),
+          (f9.get('FactorOurs'), f9.get('FactorTheirs')))
+    # A conta inversa: VBR x (nosso - deles) = o caixa. Cada fator vai na 8a
+    # casa: meio 1e-8 x VBR em cada um (no #4, 3 centavos) — a tolerancia do Check.
     for l in linhas:
-        caixa = l['UnwoundNotional'] * (l['FactorOurs'] - l['FactorTheirs'])
-        if abs(caixa - l['Result']) > PD.TOLERANCIA + l['UnwoundNotional'] * 2e-8:
+        l = PD.recalcular_swap(dict(l, VBR=l['UnwoundNotional']))
+        caixa = l['VBR'] * (l['FactorOurs'] - l['FactorTheirs'])
+        if abs(caixa - l['Result']) > PD.TOLERANCIA + l['VBR'] * 2e-8:
             check('o caixa pelos fatores bate com o e-mail (%s)' % l['Contract'], False,
                   (round(caixa, 2), l['Result']))
             break
     else:
-        check('as nove tranches: nocional x (fator nosso - fator deles) = o (A + B) do e-mail '
+        check('as nove tranches: VBR x (fator nosso - fator deles) = o (A + B) do e-mail '
               '(no arredondamento dos fatores)', True)
     check('a parcial (#9) nao mantem premios; a total nao diz nada',
           (l9['UnwindType'], l9.get('KeepPremium'), l1['UnwindType'], l1.get('KeepPremium'))
@@ -162,7 +175,7 @@ def main():
            ['Strike Original', '20.96'], ['(A) Perna Equity (JPM Paga)', '-1,180,434.45'],
            ['(B) Perna Funding (JPM Recebe DI + 0.50%)', '47,963.05'],
            ['(A + B) Valor Total de Liquidação (JPM Paga em D+1)', '1,132,471.39']]
-    lj = PD.linhas_do_recap_swap_trs([jpm], ASSUNTO)[0][0]
+    lj = PD.recalcular_swap(dict(PD.linhas_do_recap_swap_trs([jpm], ASSUNTO)[0][0], VBR=3338928.0))
     check('o mesmo recap na visao do BANCO ("JPM Paga") da o mesmo sinal e os mesmos fatores',
           (lj.get('Result'), lj.get('FactorOurs'), lj.get('FactorTheirs')) == (-1132471.39, 1.01436481, 1.35353696),
           (lj.get('Result'), lj.get('FactorOurs'), lj.get('FactorTheirs')))
@@ -174,11 +187,16 @@ def main():
     persistence.cache_root = lambda: raiz
     R.CONECTA_NEW_PATH = os.path.join(tmp, 'conecta')
     R._b3_account_le = lambda a: {'73760009': 'JPM'}.get(_digitos(a).zfill(8), '')
-    R._b3_account_refdata_name = lambda a: {'73760009': 'BANCO J.P. MORGAN S/A'}.get(_digitos(a).zfill(8), '')
+    # Party e Counterparty pela cascata do Live Position (§660): o CPF/CNPJ pelo
+    # Reference Data e, sem ele, a conta pelo B3 ACCOUNT; o nome do cadastro
+    # b3-accounts e so o plano B da Party. Os nomes diferem de proposito, para
+    # o teste dizer de onde cada um saiu.
+    R._b3_account_refdata_name = lambda a: {'73760009': 'NOME DO B3-ACCOUNTS'}.get(_digitos(a).zfill(8), '')
     R._b3_is_omnibus = lambda a: False
     R._b3_participant_name = lambda le: {'JPM': 'JPMORGANBM'}.get(le, '')
-    R._lp_cpty_by_account = lambda a: 'REDE DOR SAO LUIZ SA' if _digitos(a) else ''
-    R._lp_cpty_name_by_taxid = lambda d: ''
+    R._lp_cpty_by_account = lambda a: {'74220005': 'REDE DOR (PELA CONTA)', '00012345': 'REDE DOR (PELA CONTA)',
+                                       '73760009': 'BANCO J.P. MORGAN S/A'}.get(_digitos(a).zfill(8), '')
+    R._lp_cpty_name_by_taxid = lambda d: 'REDE DOR SAO LUIZ SA' if _digitos(d) == '06047087000139' else ''
     R._create_notification = lambda *a, **k: None
     PC._hoje = lambda: date(2026, 10, 21)
     # A posicao: o RDOR na conta 74220005 (maior que a nossa: somos a Ponta 1),
@@ -188,7 +206,9 @@ def main():
     pos = []
     for c in TABELA[5][1:10]:
         base = vr[c] * (2 if c in ('25L04197405', '26A01719958') else 1)
-        pos.append(_posicao(c, '00012345' if c == '25L03938191' else '74220005', base))
+        # o #2 vem SEM documento: a contraparte sai da conta
+        pos.append(_posicao(c, '00012345' if c == '25L03938191' else '74220005', base,
+                            doc='' if c == '25L03938191' else '06047087000139'))
     SF.swap_day_file = lambda tpl, ref=None: ('/nao/existe.json', '261020')
     R._db_day_records = lambda p: [dict(x) for x in pos]
 
@@ -212,9 +232,12 @@ def main():
           (a.get('FactorLeg1'), a.get('FactorLeg2')) == (1.01436481, 1.35353696)
           and (b.get('FactorLeg1'), b.get('FactorLeg2')) == (b.get('FactorTheirs'), b.get('FactorOurs')),
           (a.get('FactorLeg1'), a.get('FactorLeg2'), b.get('FactorLeg1'), b.get('FactorLeg2')))
-    check('Party (a nossa entidade) e Counterparty pela conta; LOB da posicao',
+    check('Party e Counterparty pela cascata do Live Position: o documento vence a conta; '
+          'a Party pela conta do Live Position, antes do b3-accounts; LOB da posicao',
           (a.get('Party'), a.get('Counterparty'), a.get('LOB')) == ('BANCO J.P. MORGAN S/A', 'REDE DOR SAO LUIZ SA', 'EDG'),
           (a.get('Party'), a.get('Counterparty'), a.get('LOB')))
+    check('sem documento na posicao (#2), a contraparte sai da CONTA',
+          b.get('Counterparty') == 'REDE DOR (PELA CONTA)', b.get('Counterparty'))
     check('recompra em 20/10 (o assunto), liquidacao no dia util seguinte (21/10), direcao PAY',
           (a.get('UnwindDate'), a.get('SettlementDate'), a.get('Direction')) == ('2026-10-20', '2026-10-21', 'PAY'))
     check('Check OK (saldo e fatores) nas que fecham',
@@ -233,8 +256,11 @@ def main():
           and rec[101:103] == '  ' and rec[103:] == ' ' * 8, (rr.status_code, rec))
     rr = cl.get(pg['api'] + '/preview?id=%s&date=2026-10-21' % n9.get('_id'))
     rec9 = (((rr.get_json() or {}).get('files') or [{}])[0].get('records') or [''])[0]
-    check('a parcial (#9): Mantem Premios 01 (nao), o nocional recomprado no 11',
-          rec9[101:103] == '01' and rec9[85:101] == '0000000345630400', rec9)
+    check('a parcial (#9): Mantem Premios 01 (nao), o nocional recomprado no 11, os fatores sobre o VBR '
+          'do Live Position (6.912.608,00)',
+          rec9[101:103] == '01' and rec9[85:101] == '0000000345630400' and n9.get('VBR') == 6912608.0
+          and rec9[33:51] == '%018d' % round(round(49649.14 / 6912608 + 1, 8) * 1e8)
+          and rec9[51:69] == '%018d' % round(round(1221931.20 / 6912608 + 1, 8) * 1e8), (rec9, n9.get('VBR')))
     rr = cl.get(pg['api'] + '/preview?id=%s&date=2026-10-21' % b.get('_id'))
     rec2 = (((rr.get_json() or {}).get('files') or [{}])[0].get('records') or [''])[0]
     check('o #2 (Ponta 2): papel 01 e o fator DELES (equity) na Ponta 1',
@@ -245,9 +271,20 @@ def main():
                                                        'fields': {'Shares': '159,000'}}),
                  content_type='application/json')
     e = (st.get_json() or {}).get('row') or {}
-    check('acoes novas refazem o nocional e os fatores; o caixa do e-mail fica',
-          e.get('UnwoundNotional') == 3332640.0 and e.get('FactorLeg1') == round(1 + 47963.05 / 3332640, 8)
+    check('acoes novas refazem o nocional; os fatores sao do VBR e ficam; o caixa do e-mail fica',
+          e.get('UnwoundNotional') == 3332640.0 and e.get('FactorLeg1') == 1.01436481
           and e.get('Result') == -1132471.39 and e.get('Check') == 'OK', e)
+    st = cl.post(pg['api'] + '/edit', data=json.dumps({'id': a['_id'], 'date': '2026-10-21',
+                                                       'fields': {'VBR': '3,400,000.00'}}),
+                 content_type='application/json')
+    ev = (st.get_json() or {}).get('row') or {}
+    check('VBR novo refaz os fatores (valor / VBR + 1, 8 casas)',
+          ev.get('FactorLeg1') == round(47963.05 / 3400000 + 1, 8)
+          and ev.get('FactorLeg2') == round(1180434.45 / 3400000 + 1, 8) and ev.get('Check') == 'OK', ev)
+    st = cl.post(pg['api'] + '/edit', data=json.dumps({'id': a['_id'], 'date': '2026-10-21',
+                                                       'fields': {'VBR': '3,338,928.00'}}),
+                 content_type='application/json')
+    e = (st.get_json() or {}).get('row') or {}
     st = cl.post(pg['api'] + '/edit', data=json.dumps({'id': a['_id'], 'date': '2026-10-21',
                                                        'fields': {'Role': 'Ponta 2'}}),
                  content_type='application/json')

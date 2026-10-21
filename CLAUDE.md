@@ -1918,16 +1918,21 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   **ações × strike original** (o campo 11). As pernas vêm na visão de QUEM o
   rótulo nomeia (`(RDOR Recebe)`/`(RDOR Paga …)`/`(JPM Paga)`): a perna que o
   cliente RECEBE é a curva DELE, a que ele PAGA é a NOSSA, e o **fator de cada
-  curva = 1 + acumulado ÷ nocional** (8 casas; o acumulado é o valor com o sinal
-  de quem recebe a curva — `LegSides`). Com os dois, nocional × (fator nosso −
-  fator deles) = o (A + B) do banco, que é o `Result` (o caixa, sinal do banco)
+  leg = round(valor de liquidação ÷ VBR + 1, 8)** (mesa, §660: o VBR é o `Valor
+  Base Remanescente` do Live Position Swap, a coluna 15 — a mesma regra do fator
+  do Swap VCP; o valor vai com o sinal de quem recebe a curva — `LegSides`; sem
+  posição não há VBR e não há fator). Com os dois, VBR × (fator nosso − fator
+  deles) = o (A + B) do banco, que é o `Result` (o caixa, sinal do banco)
   e vem do TOTAL do e-mail — refazê-lo pela soma das pernas trocaria o centavo,
   e por isso `recalcular_swap` só refaz nocional/caixa vazios ou com o insumo
   mudado. A data é a do ASSUNTO, a liquidação o "D+n" do rótulo (ANBIMA), a
   parcial NÃO mantém prêmios. O Check ganhou `fatores` (`_CK_SWAP_B3`): o caixa
-  refeito pelos fatores bate com o `Result` na tolerância do arredondamento na
-  8ª casa (nocional × 2e-8 + 1 centavo — a B3 liquida pelos fatores, e é até
-  ~3 centavos do e-mail). **As duas telas de swap (CEM e EDG) são CARDS**
+  refeito pelos fatores (VBR × diferença) bate com o `Result` na tolerância do
+  arredondamento na 8ª casa (VBR × 2e-8 + 1 centavo — até ~3 centavos do
+  e-mail). **Party e Counterparty saem do Live Position**, pela MESMA cascata
+  da tela Swap Characteristics (§660): o CPF/CNPJ pelo Reference Data e, sem
+  ele, a conta CETIP pelo B3 ACCOUNT (que recusa guarda-chuva e conta ambígua);
+  na Party o nome do `b3-accounts` e a LE são só o plano B. **As duas telas de swap (CEM e EDG) são CARDS**
   (`deal-cards.js`, flag `cards` do catálogo): ids, Party/Counterparty, a pílula
   da LOB, o Check junto do status; a DataTable fica escondida como fonte do
   Export. `check_unwind_swap_trs.py`.
