@@ -1143,6 +1143,19 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 - **O foco é a ILHA** (`window.otcFocus`, otc.js §3e): estado no localStorage,
   servidor avisado a cada passo (`/api/user-home/focus`). Tela nova que inicia
   foco chama `otcFocus.start`, nunca conta tempo por conta própria.
+- **Os FAVORITOS são o botão flutuante** (`window.otcFab`, otc.js §3f, mesa
+  21/10/2026, §658): o "AssistiveTouch" do iPad no material da casa — o botão
+  de vidro redondo com o "+" (vira "×" aberto), que se ARRASTA (captura no
+  `pointerdown`; solto, encosta na borda mais perto; `__OTC_FAB_POS__` guarda
+  borda + altura em FRAÇÃO da janela) e esmaece parado. O painel favorita a
+  página atual e lista os favoritos: a lista é do SID no documento da User
+  Home (`/api/user-home/favorites`, `domain.clean_favorites`: só caminho deste
+  app, sem repetir, até 24) e o navegador guarda uma CÓPIA
+  (`otc_favorites_<SID>`) para desenhar sem ir ao share — o servidor é lido
+  quando o painel abre. Nome e ícone saem do menu DONO (`pageLeaf`, a regra do
+  §654), no idioma de quem vê; o rótulo gravado é só o plano B. Remover tem o
+  Undo da pílula (`otcToast`). Fica em 1040: abaixo de modal e offcanvas.
+  `check_fab_favorites.py`.
 - **O papel de parede é o SVG do Pane** (`partials/wallpaper.html`, cores em
   `--w-*` no otc.scss §2b, sem bolhas). O "leitoso" do claro era ele, não o
   vidro (§632) — antes de mexer em alfa de vidro, MEÇA o pixel atrás da placa.
@@ -2658,7 +2671,8 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 ### Intraday › User Home e Settings (§632)
 
 - **Um documento por USUÁRIO** (`user-home/<SID>.json`, `features/user_home`):
-  eventos do Outlook, foco e as preferências da Settings. As duas páginas são
+  eventos do Outlook, foco, as preferências da Settings e os FAVORITOS do botão
+  flutuante (§658). As duas páginas são
   pessoais e estão no `_ALWAYS_ALLOWED_PATHS`.
 - **Os projetos chegam pelo `routes`** (`_projects_doc`/`_projects_directory`/
   `_projects_meta`) e o Projects pergunta pelo `_user_wants(sid, chave)` antes
@@ -3208,7 +3222,7 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (203 scripts)
+### `scripts/tests/` (204 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

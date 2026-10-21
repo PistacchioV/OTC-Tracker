@@ -155,6 +155,10 @@ O menu é em **níveis**: um item com **›** à direita tem submenu. Clicar nel
 
 > Os itens marcados **(em construção)** aparecem no menu mas ainda não têm tela: clicar neles devolve uma página de "não encontrado". Os marcados **(tela pronta; importação em construção)** abrem normalmente, com a grade e as colunas do produto, mas ainda não importam nem enviam — a tela avisa isso em vez de falhar. A lista completa está no anexo 18.3.
 
+**Favoritos — o botão "+" flutuante.** Em toda tela há um botão redondo com um **+** por cima da página, como o do iPad. Clique nele para abrir os **Favoritos**: **Favoritar esta página** guarda a tela em que você está (a estrela fica acesa), e a lista abaixo leva direto a qualquer favorito — com o nome e o caminho do menu. Para tirar um favorito, passe o mouse sobre ele e clique no **×** (o aviso preto que aparece tem **Desfazer**). Os favoritos são **seus** e ficam gravados no sistema: aparecem iguais em qualquer máquina em que você entrar.
+
+O botão **se arrasta**: segure e leve para onde ele não atrapalhe; ao soltar, ele encosta na borda mais perto e fica naquele lugar nas próximas telas. Parado, ele fica mais transparente. **Esc** ou um clique fora fecham o painel.
+
 ### 3.6. Por que uma tela não aparece no seu menu
 
 O acesso é **por página**. Um administrador monta a sua lista de páginas em *Page Access* (capítulo 15.2), e o menu mostra **só** o que está nessa lista.
@@ -700,6 +704,18 @@ A recompra aparece no **Intraday Monitor** (capítulo 5.1) como *Unwind NDF FX*,
 
 **A recompra de opção de Commodities também lê o e-mail da mesa** (o *INTERNAL JPMorgan Trade Recap … Unwind*): arraste o e-mail inteiro para o dropzone. Ele traz uma tabela por perna — **Client** (a operação com o cliente) e **Banco** (o B2B Banco × Lawton) — e **não traz o B3 ID**: a coluna *Contract* dele (`27-Mar`) é o mês do futuro, não o contrato da B3. A tela acha cada operação no Live Position pelas características (strike, quantidade original, Call/Put), e cada perna só casa com o seu tipo de contrato — a perna Client com o contrato do cliente, a Banco com o B2B. Quando mais de um contrato serve, o nome do cliente e as datas da opção desempatam; se ainda sobrar mais de um, a linha fica sem B3 ID e o aviso pede que você o preencha. A quantidade sai em **unidades** da mercadoria (a da B3), e os números ficam os do e-mail: o prêmio em USD por unidade e a paridade na coluna **FX Rate**. O sinal é o do banco (na perna Client, *Client Sells* = o banco paga; no B2B, o contrário).
 
+**A recompra de Swap da EDG lê o recap do TRS** (*Internal Recap - <ativo> TRS onshore Unwind (dd-Mmm-aa)*): arraste o e-mail inteiro para o dropzone de **Unwinds › Swap › EDG**. A tabela dele tem uma **tranche por coluna** (a coluna TOTAL é ignorada) e o **CETIP ID** de cada uma — é por ele que a tela acha o contrato no Live Position e traz contraparte, saldo e contas. Para cada tranche a tela calcula:
+
+- o **valor recomprado** = número de ações × strike original (é o valor que vai para a B3);
+- o **fator de cada curva** = 1 + o que a perna acumulou ÷ valor recomprado, com 8 casas — a perna que o cliente **recebe** (no exemplo, a Equity) é a curva dele, a que ele **paga** (a Funding) é a nossa;
+- o **Settlement Amount** = o (A + B) do e-mail, com o sinal do banco (o cliente recebe = **PAY**).
+
+A data da recompra é a do **assunto** do e-mail e a liquidação é o **D+1** que o e-mail diz, em dia útil. A recompra **Parcial** vai sem manter os prêmios. O **Check** confere o saldo do contrato e se os fatores dão o caixa do e-mail (a B3 liquida pelos fatores, com 8 casas — pode haver diferença de alguns centavos para o e-mail). Se o e-mail diz *Total* e o saldo do Live Position diz que sobra contrato, a tela avisa.
+
+O arquivo de antecipação da B3 (SWAP 0014) segue a planilha da mesa: o papel é o da **conta de menor número** (Ponta 1), os dois fatores vão na ponta de cada um, o valor recomprado no campo de valor e a data de antecipação é o **dia em que o arquivo é gerado**.
+
+> **As telas de Unwinds › Swap (CEM e EDG) também são cards**: o card mostra Deal ID, B3 ID, Instrument ID, o papel, **Party** (a nossa entidade) e **Counterparty**, as datas da recompra e da liquidação, ações, strikes, valor recomprado, as duas pernas, os fatores e o Settlement Amount com a direção. Os botões e o duplo clique funcionam como nas telas de swap do New Deals.
+
 **New Deals › Swap › Cashflow** importa o Deal Ticket e gera os arquivos da B3; **New Deals › Options › EDG** ainda só abre a grade.
 
 Duas coisas para saber desde já:
@@ -709,7 +725,7 @@ Duas coisas para saber desde já:
 
 A tela de **Swap Bullet** e a de **Swap Cashflow** ganharam as informações que o *Deal Ticket* da CEM traz e o da EDG não trazia: **FX Início**, **Valor Base em moeda estrangeira**, **Cotação**, **DCC** e **Cupom Limpo** de cada curva, o bloco de **Atualização de Notional** e as **Observações**. No deal da EDG esses campos ficam em branco. No *Cashflow*, o **cronograma de fluxos** (data inicial, data de pagamento, amortização, dias úteis e corridos, data do fixing) é editado dentro do modal da operação; na grade aparece só a quantidade de fluxos.
 
-> **As telas de Swap mostram uma operação por card** (Bullet, Cashflow e Cetes), no lugar da tabela de dezenas de colunas. Cada card traz o status, quem é a operação, as datas, os valores e as curvas, e os botões de sempre — **Confirm**, **Edit**, **Delete** e **Send**. A caixa no canto do card seleciona; **Select all** seleciona todos, e os botões **Send** e **Delete** da barra agem sobre os selecionados. O **duplo clique** no card abre o preview dos arquivos da B3. O **Export** continua o mesmo, com todas as colunas.
+> **As telas de Swap mostram uma operação por card** (Bullet, Cashflow e Cetes), no lugar da tabela de dezenas de colunas. Cada card traz o status, a **LOB** (CEM/EDG), o **Deal** e o **B3 ID** (com "—" enquanto estão em branco), as datas, os valores e as curvas, e os botões de sempre — **Confirm**, **Edit**, **Delete** e **Send**. No **Edit**, o **Trade Date** também se altera — a operação passa para o dia novo. A caixa no canto do card seleciona; **Select all** seleciona todos, e os botões **Send** e **Delete** da barra agem sobre os selecionados. O **duplo clique** no card abre o preview dos arquivos da B3. O **Export** continua o mesmo, com todas as colunas.
 
 ### 5.12. Swap Cetes — o "cetip usd irs" das Cetes
 
