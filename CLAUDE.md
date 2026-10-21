@@ -958,7 +958,11 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   ações, e a **DataTable fica por baixo, escondida, como a fonte do Export da
   casa** (some só `.nd-table-area`/`.nd-table-foot`). Um card por OPERAÇÃO (a
   chave interna). No catálogo é a flag `cards` com `title`/`subtitle`/`facts`/
-  `meta`; NDF e Opções seguem em tabela.
+  `meta`/`lob`; NDF e Opções seguem em tabela. **Deal e B3 ID são os dois
+  PRIMEIROS fatos, à vista mesmo em branco (`—`)** — no pé, que só mostra o que
+  tem valor, sumiam justamente quando faltavam (§655). A **pílula da LOB**
+  (`lob: fn(e)`, CEM teal × EDG roxo, `.otc-deal-card__lob`) é SUAVE e sem a
+  marca `otc-status`: não é status, e o Proper a leria "Cem".
 - **Autocomplete nunca é `<datalist>`**: dropdown próprio abaixo do campo, mesma
   largura, `max-height` ~220px, item por `mousedown` (antes do `blur`),
   reemitindo `input`/`change` (`mapAttachDrop`, `.ar-ac-drop`).
@@ -1495,7 +1499,11 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   leva a curva que RECEBE; o **Valor Base é em REAIS** (USD notional × fx rate
   for reference); o mesmo Meu Número nas duas visões. Página do catálogo em
   cards, com o **Mapping B3 ID** (`mapping`) e sem Econ. Affirmation; no
-  Success, a **Intrag Swap na visão do LAWTON** (INTRAGJP552). O que cada
+  Success, a **Intrag Swap na visão do LAWTON** (INTRAGJP552) — no arquivo-dia
+  da **Data Início** (o Effective, em geral FUTURO), por isso a Intrag Swap
+  abre **de HOJE em diante** e não "só hoje" (§655: mapeada, a linha "não
+  fluía"). A Cetes é **SEMPRE CEM** (`domain.LOB`: fora do `EDITABLE`, o
+  `refresh` a repõe), e o card diz Party = Banco e Counterparty = Lawton. O que cada
   perna é na B3 é o cadastro `swap-cetes-leg`. **No `.msg` do Outlook o bloco
   chega uma CÉLULA por linha** (§652): a tabela põe um `<p class=MsoNormal>`
   dentro de cada `<td>`, e o `html_to_lines` quebra em cada parágrafo — `#9`,

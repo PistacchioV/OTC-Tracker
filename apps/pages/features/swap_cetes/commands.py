@@ -278,8 +278,9 @@ def send(items, sid='', download=False):
 
 # ── Edição / esteira ─────────────────────────────────────────────────────────
 
+# a LOB fica de fora: a Cetes é sempre CEM (`domain.LOB`, §655)
 EDITABLE = tuple(k for k in domain.FIELDS if k not in ('Maker', 'Checker', 'Notional')) + (
-    'TradeDate', 'LOB', 'Deal', 'B3ID')
+    'TradeDate', 'Deal', 'B3ID')
 
 
 def _apply_fields(d, fields):

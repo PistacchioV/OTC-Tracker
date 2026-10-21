@@ -550,9 +550,13 @@ $(document).ready(function() {
         el: '#swbCards', selected: selected, t: t,
         key: function(e){ return e._id; },
         title: function(e){ return e.Client || e.ClientDT || e._id; },
-        subtitle: function(e){ return [e.LE === 'ATACAMA' ? 'B2B Banco × Atacama' : '', e.LOB || '', e.Type || ''].filter(Boolean).join(' · '); },
+        subtitle: function(e){ return [e.LE === 'ATACAMA' ? 'B2B Banco × Atacama' : '', e.Type || ''].filter(Boolean).join(' · '); },
         status: function(e){ return statusBadge(e.Status); },
+        lob: function(e){ return String(e.LOB || '').trim(); },
+        // Deal e B3 ID primeiro e SEMPRE (§655): vazios, mostram '—'
         facts: [
+            { label: t('nd-col-deal', 'Deal'), value: function(e){ return e.Deal || ''; } },
+            { label: t('nd-col-b3-id', 'B3 ID'), value: function(e){ return e.B3ID || ''; } },
             { label: t('nd-swb-col-startdate', 'Start') + ' → ' + t('nd-swb-col-maturitydate', 'Maturity'), wide: true,
               value: function(e){ var a = _isoToDmy(e.StartDate || ''), b = _isoToDmy(e.MaturityDate || ''); return (a || b) ? (a || '—') + ' → ' + (b || '—') : ''; } },
             { label: t('nd-swb-col-notional', 'Notional'), value: function(e){ return e.Notional ? fmtMoney(e.Notional) + (e.Currency ? ' ' + e.Currency : '') : ''; } },
@@ -560,7 +564,7 @@ $(document).ready(function() {
             { label: t('nd-swb-col-curvea', 'Curve A'), value: function(e){ return _curva(e, 'A'); } },
             { label: t('nd-swb-col-curveb', 'Curve B'), value: function(e){ return _curva(e, 'B'); } }
         ],
-        meta: function(e){ return [e.B3ID ? 'B3 ID ' + e.B3ID : '', e.Deal ? 'Deal ' + e.Deal : '', e.SPN ? 'SPN ' + e.SPN : ''].filter(Boolean).join(' · '); },
+        meta: function(e){ return e.SPN ? 'SPN ' + e.SPN : ''; },
         canConfirm: function(e){ var st = e.Status || 'New'; return st === 'New' || st === 'Pending' || st === 'Amend'; },
         canSend: function(e){ var st = e.Status || 'New'; return st === 'New' || st === 'Approved'; },
         onConfirm: function(k){ confirmDeal(k); },

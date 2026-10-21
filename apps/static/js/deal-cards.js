@@ -14,6 +14,7 @@
  *   var cards = otcDealCards({
  *     el: '#swbCards', selected: selected, key: function (e) { return e._id; },
  *     title: fn(e) → texto, subtitle: fn(e) → texto, status: fn(e) → HTML,
+ *     lob: fn(e) → 'CEM' | 'EDG' | ''      // a pílula da LOB, antes do status
  *     facts: [{label, value: fn(e) → texto, wide: bool}], meta: fn(e) → texto,
  *     canConfirm: fn(e), canSend: fn(e), t: fn(chave, padrão),
  *     onConfirm / onEdit / onDelete / onSend / onPreview: fn(chave),
@@ -30,6 +31,14 @@
     });
   }
   function tr(o, k, d) { return (o.t && o.t(k, d)) || d; }
+
+  // A LOB do card (CEM/EDG): pílula PRÓPRIA, sem a marca `otc-status` — não é
+  // status, e o Proper do §649 a leria como "Cem". A cor sai do tema, pelo
+  // `data-lob`; LOB vazia não desenha nada.
+  function pilulaLob(v) {
+    v = String(v == null ? '' : v).trim().toUpperCase();
+    return v ? '<span class="otc-deal-card__lob" data-lob="' + esc(v.toLowerCase()) + '">' + esc(v) + '</span>' : '';
+  }
 
   function botao(cls, cor, icone, titulo, tipCls) {
     return '<a href="#" class="btn ' + cor + ' btn-sm rounded-circle ' + cls + '" data-bs-toggle="tooltip" ' +
@@ -62,6 +71,7 @@
           ' aria-label="' + esc(tr(o, 'nd-card-select', 'Select')) + '">' +
           '<div class="otc-deal-card__title"><b>' + esc(o.title(e)) + '</b>' +
             (o.subtitle ? '<small>' + esc(o.subtitle(e)) + '</small>' : '') + '</div>' +
+          pilulaLob(o.lob ? o.lob(e) : '') +
           (o.status ? o.status(e) : '') +
         '</div>' +
         '<dl class="otc-deal-card__facts">' + facts + '</dl>' +

@@ -3061,5 +3061,7 @@
   "nd-card-send": "Enviar",
   "nd-card-select": "Seleccionar",
   "nd-card-dblclick": "Doble clic para ver los archivos de la B3",
-  "nd-card-empty": "Ninguna operación para estos filtros."
+  "nd-card-empty": "Ninguna operación para estos filtros.",
+  "nd-card-party": "Parte",
+  "nd-card-counterparty": "Contraparte"
 }

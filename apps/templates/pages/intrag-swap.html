@@ -922,8 +922,13 @@ $(document).ready(function() {
         sfDropdown.style.display = 'none';
     });
 
-    // Pre-add today's Data Início chip and auto-load
-    sfAddFilter(SF_COLS[0], ((window.otcLinkDmy && window.otcLinkDmy()) || _todayDmy()));
+    // Pre-add the Data Início chip and auto-load. O link do Intraday Monitor
+    // (?date=) abre AQUELE dia; sem ele, de HOJE em diante (§655): a linha
+    // mora no dia da Data Início, e o swap de início futuro (a Cetes com
+    // Effective D+1) mapeado hoje ficava invisível com "só hoje".
+    var _linkDmy = window.otcLinkDmy && window.otcLinkDmy();
+    if (_linkDmy) sfAddFilter(SF_COLS[0], _linkDmy);
+    else sfAddFilter(SF_COLS[0], _todayDmy(), 'from');
     document.getElementById('sfSearchBtn').click();
 });
 </script>

@@ -27414,3 +27414,50 @@ app (sidenav e `otc.js` de verdade, servidos por `page.route`): aberta direto
 acende Intrag › DCE, clicada em New Deals acende New Deals, clicada em Intrag
 volta a Intrag, e o NDF acende em New Deals quando clicado lá. Com o `otc.js`
 anterior o teste reprova os dois primeiros casos do relato.
+
+## §655 — Cards de swap: Deal, B3 ID, LOB e as pontas; a Cetes sempre CEM; a Intrag Swap de hoje em diante (2026-10-21)
+
+Pedidos da mesa: "no card de swaps coloque um campo para Deal e para o B3 ID,
+mesmo que em branco"; "um badge pill de CEM/EDG pela LOB, Cetes = CEM sempre";
+"Party e Counterparty no card, que é Banco e Lawton". E o relato: "fiz o
+mapping, ficou Success, porém não fluiu para a Intrag Swap".
+
+**Os cards** (Bullet, Cashflow, Cetes — `deal-cards.js`, §650). Deal e B3 ID
+estavam no PÉ do card, que só mostra o que tem valor: some justamente quando
+a mesa procura o número que falta. Viraram os dois PRIMEIROS fatos (fato vazio
+mostra `—`) e saíram do pé (no Bullet e no Cashflow o pé ficou com o SPN; na
+Cetes, com o Meu Número). O fato do catálogo ganhou a 4ª posição opcional, a
+CHAVE de tradução (`nd-col-deal`/`nd-col-b3-id`, as da grade — em pt é
+"Negócio"), e o tipo `fixed` (o próprio campo é o texto). A Cetes mostra
+**Party = Banco** e **Counterparty = o `Client` do deal (Lawton)**, chaves
+`nd-card-party`/`nd-card-counterparty`. A **pílula da LOB** é opção do
+componente (`lob: fn(e)`), desenhada antes do status: SUAVE (a do status é
+cheia e branca, §649) e SEM a marca `otc-status` — o Proper a leria como
+"Cem". A cor é do tema (`otc.scss`, `.otc-deal-card__lob[data-lob]`: CEM
+teal, EDG roxo); LOB vazia não desenha nada (o Cashflow sem LOB é lacuna,
+`swc_no_lob`, e não se chuta). A LOB saiu do subtítulo, onde ficaria repetida.
+
+**A Cetes é SEMPRE CEM** (`swap_cetes.domain.LOB`): a LOB saiu do `EDITABLE`
+dos commands, o select da tela só oferece CEM, e o `refresh` a repõe na linha
+antiga gravada com outra. É ela que vai no campo 116 do 0301 e que põe a
+operação no card CEM do Intraday Monitor; a pílula da Cetes é fixa
+(`{'fixed': 'CEM'}`).
+
+**"Não fluiu para a Intrag Swap" — o código fluiu; a tela não mostrava.**
+Reproduzido de ponta a ponta com a gravação REAL (o §6 do teste usava um
+espião no `_save_intrag_swap_entry`): a linha nasce, mas no arquivo-dia da
+**Data Início** (o Effective da Cetes — no e-mail da mesa, 22-Oct-26, D+1), e
+a Intrag Swap abria com o chip `Data Início = hoje`. Mapeada em 21/10, a linha
+estava em 22/10. Mudar o dia da gravação NÃO é a saída: Edit, Approve e Send
+da Intrag Swap localizam a linha pela coluna Data Início (`START_DATE_COL` →
+`_find_intrag_swap_entry`). A tela é que passou a abrir **de HOJE em diante**
+(`FROM Data Início`, `date_from` — o servidor já aceitava o intervalo aberto);
+o link do Intraday Monitor (`?date=`) segue abrindo o dia exato. Vale para o
+Bullet também, cuja Intrag nasce na mesma regra.
+
+`check_swap_cetes.py`: §6 grava de verdade e prova pela API que a linha NÃO
+aparece "só no dia do mapping" e aparece "de hoje em diante", e que a tela abre
+assim; §7 cobra o formato dos cards (Deal/B3 ID primeiro e fora do pé, as
+pontas e a pílula da Cetes, LOB fixa e não editável); §8 desenha a pílula no
+Chromium (CEM, sem a marca de status; LOB vazia sem pílula).
+`check_new_deals_catalog.py`: a Cetes oferece só CEM, as outras CEM e EDG.
