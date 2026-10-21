@@ -19294,6 +19294,25 @@ table.dataTable td.dt-control::before, table.dataTable th.dt-control::before {
   min-width: 0;
 }
 
+/* O "select all" do cabeçalho não pode ficar EMBAIXO do ícone de ordenação
+   (21/10/2026). Coluna que não ordena ganha do DataTables 2 um
+   `span.dt-column-order` VAZIO de 12px, e o `excel-filter.js` reserva o mesmo
+   tanto à esquerda para centrar o título: num `<th>` de 50px o título encolhia
+   a 0px, o checkbox transbordava e o span, pintado depois, ficava por cima —
+   o clique caía nele e o checkbox não marcava (Intrag NDF/Option/Swap, DCE).
+   Sem ordenação o span sai do layout (e o funil, que mede só o que se vê,
+   deixa de reservar); e o título com um campo dentro nunca encolhe abaixo
+   dele, mesmo numa coluna que ordena. */
+th.dt-orderable-none .dt-column-order {
+  display: none;
+}
+
+.dt-column-title:has(> input, > .form-check) {
+  flex-shrink: 0;
+  min-width: -moz-max-content;
+  min-width: max-content;
+}
+
 div.dt-buttons > .btn, div.dt-buttons > .dt-button {
   margin: 0 !important;
 }
