@@ -661,7 +661,7 @@ escolhido, os outros dois se preenchem). **`file`** aponta para um JSON já
 existente (o `swap-index` edita o mesmo `SwapIndex.json` do Index Results —
 declare as colunas extras, senão o POST as derruba).
 
-São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities-b3`,
+São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-ndf`, `commodities-b3`,
 `publisher-ndf`, `le-accronym`, `le-spn`, `bank-name`, `fxo-conv-rate`,
 `ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`,
 `manual-conf-validation`, `manual-conf-sla`, `fxo-internal-cpty`,
@@ -695,6 +695,11 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `settlement` da API é LISTA e o valor é o primeiro item numérico de `Rolled
   Positions` (§425) — **no cross SEM BRL (USD × GBP, USD × EUR) é o SEGUNDO**:
   ali o primeiro é o notional da moeda (mesa, 22/09/2026; `_ndfc_api_rolled`).
+- **`swap-cetes-leg`** (§650) — a perna do e-mail das Cetes (`we pay`/`we rec`,
+  token; `Exact` vence `Contains`, o mais longo vence) → curva B3, Tipo/Classe
+  da VCP, se leva a taxa FIXA (`RATE`) e o texto da Descrição com `{fx}`,
+  `{rate}`, `{dn}`. Exatamente uma das duas pernas é fixa; perna sem linha é
+  lacuna (`swt_leg_unmapped`) e o Send recusa.
 - **`fxo-internal-cpty`** — `INVERT DIRECTION = Yes` é a perna espelhada e só
   entra com Ctpty e Dir os dois NOK; `USE = Disregard` corta ANTES do merge, por
   `_nome_cru`, nas DUAS colunas de contraparte, avisando no painel. O `upgrade`
@@ -945,6 +950,15 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   cru de cada aba, com o `file_name` e o `encoding` dela (`cp1252` onde a B3
   conta bytes, §480) — e o Edit é um `onEdit` que dispara o Edit da LINHA
   (some junto, em `Sent`). `check_file_preview_buttons.py`.
+- **As telas de SWAP são CARDS, não tabela** (mesa, 21/10/2026, §650): Bullet,
+  Cashflow e Cetes mostram uma operação por card (`static/js/deal-cards.js` +
+  `otc.scss` §6e `.otc-deal-card`) — caixa de seleção, status, os números, os
+  quatro botões de linha da casa pelo status, Select all, duplo clique =
+  preview. O componente só DESENHA: a página segue dona dos dados e das
+  ações, e a **DataTable fica por baixo, escondida, como a fonte do Export da
+  casa** (some só `.nd-table-area`/`.nd-table-foot`). Um card por OPERAÇÃO (a
+  chave interna). No catálogo é a flag `cards` com `title`/`subtitle`/`facts`/
+  `meta`; NDF e Opções seguem em tabela.
 - **Autocomplete nunca é `<datalist>`**: dropdown próprio abaixo do campo, mesma
   largura, `max-height` ~220px, item por `mousedown` (antes do `blur`),
   reemitindo `input`/`change` (`mapAttachDrop`, `.ar-ac-drop`).
@@ -1467,6 +1481,15 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   as genéricas `/api/new-deals/<product>/cache/search` e `/send-conecta` casam o
   slug como `product` e respondem "Unknown product". O `opt-edg` segue em
   stub (`cache/search` vazio, o resto 501 `nd_backend_pending`).
+- **Swap Cetes** (`features/swap_cetes/`, §650): o `#N cetip usd irs` do e-mail
+  das Cetes (Banco × Lawton) → o 0301 na **versão 1** do layout
+  (`swap-pagamento-final`, header 38 + registro 1899 — não o v3 do Bullet),
+  nas visões do Banco e do Lawton, byte a byte com o arquivo da mesa. A Parte
+  leva a curva que RECEBE; o **Valor Base é em REAIS** (USD notional × fx rate
+  for reference); o mesmo Meu Número nas duas visões. Página do catálogo em
+  cards, com o **Mapping B3 ID** (`mapping`) e sem Econ. Affirmation; no
+  Success, a **Intrag Swap na visão do LAWTON** (INTRAGJP552). O que cada
+  perna é na B3 é o cadastro `swap-cetes-leg`. `check_swap_cetes.py`.
 - **Swap Cashflow é o backend do swap da CEM** (`features/swap_cashflow/`,
   §526). O Deal Ticket é o MESMO do Bullet, e feature não importa feature:
   parser, visões, 0897, lacunas, Intrag e o deal das confirmações moram em
@@ -3074,6 +3097,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   outro módulo entra na lista.
 - Cada pessoa roda a própria instância sobre o MESMO `db/` do share — é por
   isso que toda disputa de arquivo entre "instâncias vizinhas" existe.
+- **A versão do DuckDB tem de ser a MESMA em todas as instâncias** (§651): um
+  banco CRIADO por uma versão nova (o 2.0) não abre na antiga ("version number
+  999, but we can only read 64-68"), e o armazém cria `.db` o tempo todo — uma
+  máquina adiantada faria bancos que as outras leem como ILEGÍVEIS. Troca de
+  Python (o 3.13 foi verificado: o app sobe e a suíte passa) não obriga a
+  trocar o DuckDB; troca de DuckDB é de todas as máquinas juntas.
 
 ---
 
@@ -3107,7 +3136,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (199 scripts)
+### `scripts/tests/` (200 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

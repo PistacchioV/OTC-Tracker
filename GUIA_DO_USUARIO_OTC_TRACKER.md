@@ -255,6 +255,8 @@ De cima para baixo:
 | **Linhas** | Os dados. A 1ª coluna costuma ser a caixa de seleção e a 2ª os botões de ação |
 | **Rodapé** | *Showing 1 to N of M entries* à esquerda e a paginação à direita |
 
+> **O status é uma pílula colorida com o texto em branco**, em toda tela: a cor diz o estado (verde concluído, amarelo pendente, vermelho com problema…) e o texto vem sempre com a **primeira letra de cada palavra maiúscula** — *Sent*, *Pending*, *Ok*, *Nok*, e também *Pending Otc* ou *Missing Fepweb*, mesmo quando o nome do status tem sigla. O filtro do funil e o arquivo exportado escrevem o status do mesmo jeito.
+
 ### 4.2. A barra de ferramentas
 
 Os botões são sempre os mesmos, com as mesmas cores, em todas as telas que os têm:
@@ -451,6 +453,8 @@ O **sino** da barra superior mostra em vermelho quantos avisos você tem. O sist
 | NDF › **Commodities** | Termo de mercadoria |
 | Options › **FXO** | Opção de câmbio |
 | Options › **Commodities** | Opção de mercadoria |
+
+As telas de **Swap** — **Bullet**, **Cashflow** e **Cetes** — seguem o mesmo fluxo, mas mostram uma operação por **card** em vez da tabela (5.11 e 5.12).
 
 ### 5.1. Intraday Monitor — por onde começar o dia
 
@@ -670,11 +674,11 @@ A recompra aparece no **Intraday Monitor** (capítulo 5.1) como *Unwind NDF FX*,
 2. Clique em **Import** com o dropzone **vazio**: a tela busca na API as recompras daquele dia — as que liquidam no próprio dia e as que liquidam no dia útil seguinte. Cada recompra é gravada no dia em que foi feita. **Só entra recompra nova**: a que já está na tela fica como está (a sua edição não é desfeita), e o resumo diz quantas eram. Se a API não responder para uma das datas, o resumo diz qual e por quê; as outras entram normalmente. Você só precisa clicar quando não quiser esperar a próxima rodada automática.
 3. **Plano B — o e-mail.** Se a API estiver fora do ar, arraste o e-mail do Athena direto do Outlook para o dropzone, um ou vários de uma vez (`.msg`, `.eml` ou o corpo salvo como `.htm`), e clique em **Import**. Os e-mails entram **em lote** (o botão mostra *Importing… n/N*). Um e-mail que não pôde ser lido volta com o motivo e fica no dropzone; os outros entram normalmente. A tela não varre mais a caixa do Outlook nem arquiva o e-mail na pasta **Unwind**.
 4. Olhe a coluna **Check** da linha:
-   - **OK** (verde) — o resultado do e-mail bate com o recalculado;
-   - **NOK** (vermelho) — não bate. **Não envie**: passe o mouse no badge para ver o que divergiu;
+   - **Ok** (verde) — o resultado do e-mail bate com o recalculado;
+   - **Nok** (vermelho) — não bate. **Não envie**: passe o mouse no badge para ver o que divergiu;
    - **–** (cinza) — não deu para conferir (faltou um valor no e-mail, ou a operação não foi encontrada no Live Position). Também não envie.
 
-   > **O valor que liquida é sempre o do e-mail.** O Check só confere: mesmo com **NOK**, o que vai para o NDF Cockpit, o Settlement Summary, o Pay/Rec, a Intrag e o Termo de Resilição é o **Input Termination Fee** do aviso, com o sinal dele — nunca o valor da coluna *OTC Tracker Result*. Editar strike, taxa ou dias úteis refaz só o Check; para mudar o valor que liquida, edite a coluna **Result**.
+   > **O valor que liquida é sempre o do e-mail.** O Check só confere: mesmo com **Nok**, o que vai para o NDF Cockpit, o Settlement Summary, o Pay/Rec, a Intrag e o Termo de Resilição é o **Input Termination Fee** do aviso, com o sinal dele — nunca o valor da coluna *OTC Tracker Result*. Editar strike, taxa ou dias úteis refaz só o Check; para mudar o valor que liquida, edite a coluna **Result**.
 5. **Duplo clique na linha** abre o arquivo da B3 campo a campo, com o texto cru embaixo. É aqui que se confere antes de mandar. O rodapé tem **Export** (baixa o arquivo para conferir, sem enviar), **Edit** e **Close** — o mesmo nas demais telas de recompra.
 6. Selecione a linha e clique em **Send** para gravar o arquivo no Batch Conecta. A linha vira **Sent** e deixa de poder ser apagada.
 
@@ -704,6 +708,24 @@ Duas coisas para saber desde já:
 - **As colunas das recompras foram montadas a partir do arquivo de antecipação da B3 de cada produto** (swap, opção e termo) e ainda estão em validação com a mesa. Se faltar ou sobrar uma coluna, avise — é um ajuste simples.
 
 A tela de **Swap Bullet** e a de **Swap Cashflow** ganharam as informações que o *Deal Ticket* da CEM traz e o da EDG não trazia: **FX Início**, **Valor Base em moeda estrangeira**, **Cotação**, **DCC** e **Cupom Limpo** de cada curva, o bloco de **Atualização de Notional** e as **Observações**. No deal da EDG esses campos ficam em branco. No *Cashflow*, o **cronograma de fluxos** (data inicial, data de pagamento, amortização, dias úteis e corridos, data do fixing) é editado dentro do modal da operação; na grade aparece só a quantidade de fluxos.
+
+> **As telas de Swap mostram uma operação por card** (Bullet, Cashflow e Cetes), no lugar da tabela de dezenas de colunas. Cada card traz o status, quem é a operação, as datas, os valores e as curvas, e os botões de sempre — **Confirm**, **Edit**, **Delete** e **Send**. A caixa no canto do card seleciona; **Select all** seleciona todos, e os botões **Send** e **Delete** da barra agem sobre os selecionados. O **duplo clique** no card abre o preview dos arquivos da B3. O **Export** continua o mesmo, com todas as colunas.
+
+### 5.12. Swap Cetes — o "cetip usd irs" das Cetes
+
+**Menu › PRODUCTS › New Deals › Swap › Cetes**
+
+**Para que serve:** registrar na B3 o swap USD × SOFR das Cetes entre o **Banco** e o **Lawton**, a partir do e-mail *Cetes & associated trades - ##new trade, tranche N*.
+
+**Passo a passo:**
+
+1. Arraste o e-mail (`.msg` ou `.eml`) para o dropzone e clique em **Import**. A tela lê só o bloco **cetip usd irs**; os outros blocos da tranche (o NDF offshore, o FX cash…) aparecem como ignorados.
+2. Cada operação vira um **card**: tranche e bloco, o período, a taxa fixa, o notional em dólar, o fx de referência, o **Notional (BRL)** e quem paga a fixa. O swap na B3 é sempre em **reais**: o valor base é o *usd notional* × o *fx rate for reference*.
+3. Confira e clique em **Confirm** (✓). O **duplo clique** no card mostra os dois arquivos da B3, o do **Banco** e o do **Lawton**.
+4. **Send** grava os dois arquivos na pasta *Batch Conecta › New*: `73760009.SWAP_CETES_BANCO.txt` e `00041007.SWAP_CETES_LAWTON.txt`.
+5. Com o retorno da B3 na pasta, o botão verde **Mapping B3 ID** traz o CETIP ID: o card fica **Success** e a operação vai para a **Intrag › Swap**, na visão do Lawton.
+
+> **O que cada perna é na B3** — a curva, o código da VCP (17182 para o SOFR, 21 para o Dólar) e o texto da descrição — fica no cadastro **/mapping › Swap Cetes — Legs**. Se o e-mail trouxer uma perna que o cadastro não conhece, o card avisa e o Send recusa até alguém cadastrá-la.
 
 ---
 
