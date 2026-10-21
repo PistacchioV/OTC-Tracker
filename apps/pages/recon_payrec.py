@@ -2184,11 +2184,15 @@ def _justify_locked(recon_date, table, index, comment, status):
 # são reaplicados no fim de todo Run: o Run refaz o dia do zero, e gravados só
 # no resultado do dia eles sumiriam no Run seguinte, com o par voltando a Pending.
 _MANUAL_TOL = _TOL_SETTLED
-# Seleção em que TODA linha do lado JPM é SWAP casa na janela do motor para o
-# swap (`_TOL_SWAP`): o par que ele aceitaria sozinho não pode ser recusado à
-# mão. Quem diz o produto é o lado JPM, como no motor — a perna do cliente
-# chega pelo SPB como NDF.
+# Seleção em que TODA linha do lado JPM é SWAP ou EQUITIES casa na janela do
+# motor para o swap (`_TOL_SWAP`, R$20): o par que ele aceitaria sozinho não
+# pode ser recusado à mão. O EQUITIES entra a pedido da mesa (21/10/2026) — o
+# swap de equity do cashflows e o da Atacama; no MOTOR ele segue no R$1 (§665).
+# Quem diz o produto é o lado JPM, como no motor — a perna do cliente chega pelo
+# SPB como NDF. A tela recebe a lista (`data-match-tol-swap-products`) e escolhe
+# pela mesma regra.
 _MANUAL_TOL_SWAP = _TOL_SWAP
+_MANUAL_TOL_SWAP_PRODUCTS = ('SWAP', 'EQUITIES')
 _MANUAL_DIR = os.path.join(_CACHE_DIR, 'manual-matches')
 
 
@@ -2216,7 +2220,7 @@ def _row_side_value(r):
 def _manual_tol(jpm_products):
     """A tolerância do match manual pelos produtos das linhas JPM da seleção."""
     prods = [str(p or '').strip().upper() for p in jpm_products]
-    return _MANUAL_TOL_SWAP if prods and all(p == 'SWAP' for p in prods) else _MANUAL_TOL
+    return _MANUAL_TOL_SWAP if prods and all(p in _MANUAL_TOL_SWAP_PRODUCTS for p in prods) else _MANUAL_TOL
 
 
 def _manual_balance(tot_jpm, tot_client, has_jpm, has_client, tol=_MANUAL_TOL):

@@ -167,6 +167,52 @@ check([r['client_value'] for r in data['pending_payment']] == [-136927600.63],
 check(len([r for r in data['settled'] if r.get('manual_match') == group['id']]) == 3,
       'e entram no Settled')
 
+# O fundo da casa com DUAS grafias (mesa, 21/10/2026): "ATACAMA MULTIMERCADO" no
+# lado JPM e o nome por extenso no extrato. O servidor junta pelo `_norm_cpty`;
+# a TELA não juntava e travava o botão — a paridade das duas cópias vem abaixo.
+_ATA_EXT = 'ATACAMA FUNDO DE INVESTIMENTO FINANCEIRO MULTIMERCADO CREDITO PRIVADO'
+MEM.clear()
+_eq = lambda **k: dict(_row('Pay', **k), product='EQUITIES')
+RP._persist(DATE, {'success': True, 'summary': [], 'settled': [], 'pending_receivement': [],
+                   'pending_payment': [_eq(jpm_cpty='ATACAMA MULTIMERCADO', jv=-5497456.68),
+                                       _row('Pay', client=_ATA_EXT, cv=-5497471.68)]}, strict=True)
+data, group = RP.manual_match(DATE, [0, 1], [], user='Tester')
+check(group['kind'] == 'pair' and abs(group['net'] - 15.0) < 1e-6,
+      'Atacama × o nome por extenso: mesma contraparte, e EQUITIES casa até R$20 (R$15)')
+
+import io                                                                      # noqa: E402
+import json as _json                                                          # noqa: E402
+import shutil as _shutil                                                      # noqa: E402
+import subprocess as _sp                                                      # noqa: E402
+_JS = io.open(os.path.join(ROOT, 'apps', 'static', 'js', 'pages', 'reconciliation-payrec.js'),
+              encoding='utf-8').read()
+
+
+def _fn(nome):
+    ini = _JS.index('function %s(' % nome)
+    j, prof = _JS.index('{', ini), 0
+    while True:
+        prof += {'{': 1, '}': -1}.get(_JS[j], 0)
+        if prof == 0:
+            return _JS[ini:j + 1]
+        j += 1
+
+
+NOMES = ['ATACAMA MULTIMERCADO', _ATA_EXT, 'Atacama Fundo de Investimento', 'LAWTON MULTIMERCADO EXCLUSIVO',
+         'LAWTON FIM', 'BANCO J.P. MORGAN S/A', 'BCO J.P MORGAN', 'SUZANO SA', 'SUZANO S.A.',
+         'Cargill Agrícola S A', 'VALE SA', '', 'BANCO SAFRA S.A.']
+_node = _shutil.which('node')
+if not _node:
+    print('--   node nao encontrado: a paridade JS x Python nao foi executada')
+else:
+    prog = (_fn('normCpty') + '\n' + _fn('cptyKey') + '\n' + 'var N = ' + _json.dumps(NOMES) + ';\n'
+            'console.log(JSON.stringify(N.map(function (n) { return cptyKey(normCpty(n)); })));')
+    saida = _sp.run([_node, '-e', prog], capture_output=True, text=True)
+    js_keys = _json.loads(saida.stdout) if saida.returncode == 0 else saida.stderr
+    py_keys = [RP._cpty_key(RP._norm_cpty(n)) for n in NOMES]
+    check(js_keys == py_keys, 'a chave da contraparte e a MESMA no JS e no servidor (%d nomes)' % len(NOMES))
+    check(js_keys[0] == js_keys[1] == js_keys[2], 'as tres grafias do Atacama dao a mesma chave na tela')
+
 os.makedirs = _orig_makedirs
 print()
 print('TUDO OK' if not fails else '%d FALHA(S)' % len(fails))
