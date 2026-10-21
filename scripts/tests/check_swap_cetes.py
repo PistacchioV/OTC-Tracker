@@ -288,6 +288,30 @@ def main():
         check('as 36 colunas da Intrag Swap', all(k in e for k in __import__(
             'apps.pages.platform.swap_deal_ticket', fromlist=['x']).INTRAG_SWAP_FIELDS))
 
+        # A gravação DE VERDADE (sem o espião) e a tela da Intrag Swap (§655): a
+        # linha mora no dia da Data Início (22/10, o Effective), e a página abria
+        # SÓ no dia de hoje — mapeada em 20/10, a Cetes "não fluía" para a Intrag.
+        from apps.pages.features.intrag.infra import persistence as ipers
+        dir_antes = ipers.INTRAG_SWAP_CACHE_DIR
+        ipers.INTRAG_SWAP_CACHE_DIR = os.path.join(tmp, 'intrag-swap')
+        try:
+            commands.b3_mapped(lst[i])
+            with app.test_client() as c:
+                with c.session_transaction() as s:
+                    s.update({'authenticated': True, 'user_sid': 'A111111', 'user_role': 'ADMIN',
+                              'session_ip': '127.0.0.1'})
+                so_hoje = c.get('/api/intrag/swap?date=2026-10-20').get_json()['entries']
+                de_hoje = c.get('/api/intrag/swap?date_from=2026-10-20').get_json()['entries']
+        finally:
+            ipers.INTRAG_SWAP_CACHE_DIR = dir_antes
+        check('a linha da Intrag Swap é gravada no arquivo-dia da Data Início (22/10)',
+              os.path.isfile(os.path.join(tmp, 'intrag-swap', '2026', '10', '20261022_intrag_swap.json')))
+        check('procurada SÓ no dia do mapping (20/10) não aparece; de 20/10 em diante, aparece',
+              so_hoje == [] and [x.get('_deal') for x in de_hoje] == [d['_id']])
+        itpl = io.open(os.path.join(RAIZ, 'apps', 'templates', 'pages', 'intrag-swap.html'), encoding='utf-8').read()
+        check('a Intrag Swap abre de HOJE em diante (o link do Monitor segue no dia exato)',
+              "sfAddFilter(SF_COLS[0], _todayDmy(), 'from')" in itpl and 'if (_linkDmy) sfAddFilter(SF_COLS[0], _linkDmy)' in itpl)
+
     print('== 7. a página: catálogo, cadastro, menu, notificação, Monitor ==')
     p = catalog.page('/new_deals-swap-cetes')
     check('a página está no catálogo, em CARDS, com o Mapping e sem o Econ. Affirmation',
