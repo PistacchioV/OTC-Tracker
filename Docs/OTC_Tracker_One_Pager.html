@@ -29,6 +29,7 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; }
+  @media screen and (min-width: 900px) and (min-height: 480px) { body { overflow-x: hidden; } }
   body {
     background: var(--bg);
     background-image: radial-gradient(1200px 500px at 0% -10%, rgba(47, 124, 246, .10), transparent 60%),
@@ -39,23 +40,23 @@
   }
   :root[data-lang="pt"] [lang="en"], :root[data-lang="en"] [lang="pt"] { display: none !important; }
 
-  .sheet { max-width: 1600px; margin: 0 auto; padding: 20px 18px 18px; }
+  .sheet { margin: 0 auto; padding: 10px 12px 8px; }
 
   /* ── cabeçalho ─────────────────────────────────────────── */
   .hero {
     display: grid; grid-template-columns: 1fr auto; gap: 20px; align-items: start;
     background: var(--card); border-radius: var(--r-lg); box-shadow: var(--shadow);
-    padding: 22px 26px; position: relative; overflow: hidden;
+    padding: 14px 20px; position: relative; overflow: hidden;
   }
   .hero::before {
     content: ""; position: absolute; inset: 0 0 auto 0; height: 4px;
     background: linear-gradient(90deg, var(--navy), var(--blue) 45%, var(--teal));
   }
   .brand { display: flex; gap: 18px; align-items: center; }
-  .brand img { width: 92px; height: auto; flex: none; }
+  .brand img { width: 80px; height: auto; flex: none; }
   .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
-  h1 { margin: 2px 0 6px; font-size: 38px; line-height: 1.05; letter-spacing: -.02em; }
-  .lede { margin: 0; max-width: 860px; font-size: 16.5px; color: var(--text-2); }
+  h1 { margin: 1px 0 4px; font-size: 34px; line-height: 1.05; letter-spacing: -.02em; }
+  .lede { margin: 0; max-width: 1100px; font-size: 16px; color: var(--text-2); }
   .meta { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; max-width: 330px; }
   .meta .lang { flex-basis: auto; margin-left: auto; }
   .meta__row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
@@ -74,19 +75,19 @@
   .lang button[aria-pressed="true"] { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(16, 24, 40, .12); }
 
   /* ── números ───────────────────────────────────────────── */
-  .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-top: 14px; }
+  .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 10px; }
   .kpi {
     background: var(--card); border-radius: var(--r-md); box-shadow: var(--shadow);
-    padding: 14px 16px 13px; position: relative; overflow: hidden;
+    padding: 10px 14px 10px; position: relative; overflow: hidden;
   }
   .kpi::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--hue); }
   .kpi__value { font-size: 30px; font-weight: 750; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--hue); line-height: 1.1; }
   .kpi__label { font-size: 13.5px; color: var(--text-2); margin-top: 3px; }
-  .source { margin: 7px 2px 0; font-size: 12px; color: var(--text-3); }
+  .source { margin: 5px 2px 0; font-size: 12px; color: var(--text-3); }
 
   /* ── blocos ────────────────────────────────────────────── */
-  .card { background: var(--card); border-radius: var(--r-lg); box-shadow: var(--shadow); padding: 18px 20px; }
-  .h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; font-size: 16.5px; font-weight: 700; letter-spacing: -.005em; }
+  .card { background: var(--card); border-radius: var(--r-lg); box-shadow: var(--shadow); padding: 14px 18px; }
+  .h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font-size: 16.5px; font-weight: 700; letter-spacing: -.005em; }
   .tile {
     width: 30px; height: 30px; border-radius: 9px; flex: none; display: grid; place-items: center; color: #fff;
     background: linear-gradient(135deg, color-mix(in srgb, var(--hue) 78%, #fff), var(--hue));
@@ -94,10 +95,10 @@
   .tile svg { width: 17px; height: 17px; }
   svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-  .flow-card { margin-top: 14px; }
+  .flow-card { margin-top: 10px; }
   .flow { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; counter-reset: step; }
   .step {
-    position: relative; background: var(--fill); border-radius: var(--r-md); padding: 12px 13px 13px;
+    position: relative; background: var(--fill); border-radius: var(--r-md); padding: 10px 12px 11px;
   }
   .step:not(:last-child)::after {
     content: ""; position: absolute; right: -9px; top: 26px; width: 8px; height: 8px;
@@ -107,7 +108,7 @@
   .step__n { font-size: 11.5px; font-weight: 700; color: var(--text-3); }
   .step__title { font-size: 14.5px; font-weight: 700; }
   .step p { margin: 0; font-size: 13.5px; color: var(--text-2); }
-  .products { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; align-items: center; }
+  .products { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center; }
   .products__label { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); margin-right: 4px; }
   .chip {
     display: inline-flex; align-items: center; padding: 4px 11px; border-radius: 999px; font-size: 13px;
@@ -118,19 +119,17 @@
   }
   .chip b { font-weight: 700; margin-right: 4px; }
 
-  .grid3 { display: grid; grid-template-columns: 1fr 1.25fr; gap: 14px; margin-top: 14px; }
-  .wide { margin-top: 14px; }
-  ul.list--cols { grid-template-columns: repeat(3, 1fr); column-gap: 26px; row-gap: 9px; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1.35fr; gap: 14px; margin-top: 14px; }
-  ul.list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1.08fr 1.18fr; gap: 10px; margin-top: 10px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1.35fr; gap: 10px; margin-top: 10px; }
+  ul.list { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
   ul.list li { position: relative; padding-left: 18px; font-size: 14px; color: var(--text-2); }
   ul.list li::before {
     content: ""; position: absolute; left: 2px; top: .52em; width: 7px; height: 7px; border-radius: 2px;
     background: var(--hue, var(--blue)); opacity: .85;
   }
   ul.list li strong { color: var(--text); font-weight: 650; }
-  .integrations { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
-  .sub { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); margin: 14px 0 6px; }
+  .integrations { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .sub { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); margin: 12px 0 6px; }
 
   .watch { background: linear-gradient(180deg, rgba(227, 160, 8, .10), rgba(227, 160, 8, .03)), var(--card); border: 1px solid rgba(227, 160, 8, .28); box-shadow: none; }
   .watch p { margin: 0; font-size: 14px; color: var(--text-2); }
@@ -143,7 +142,7 @@
 
   .foot {
     display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: baseline;
-    margin-top: 14px; padding: 0 4px; font-size: 12.5px; color: var(--text-3);
+    margin-top: 8px; padding: 0 4px; font-size: 12.5px; color: var(--text-3);
   }
   .foot strong { color: var(--text-2); font-weight: 650; }
   .conf { font-weight: 700; letter-spacing: .06em; text-transform: uppercase; font-size: 11.5px; }
@@ -153,7 +152,8 @@
     .kpis { grid-template-columns: repeat(3, 1fr); }
     .flow { grid-template-columns: repeat(3, 1fr); }
     .step:nth-child(3n)::after { display: none; }
-    ul.list--cols { grid-template-columns: repeat(2, 1fr); }
+    .grid3 { grid-template-columns: 1fr 1fr; }
+    .grid3 > :last-child { grid-column: 1 / -1; }
   }
   @media screen and (max-width: 720px) {
     .sheet { padding: 16px; }
@@ -167,7 +167,7 @@
     .kpis { grid-template-columns: repeat(2, 1fr); }
     .flow { grid-template-columns: 1fr; }
     .step::after { display: none; }
-    .grid3, .grid2, ul.list--cols { grid-template-columns: 1fr; }
+    .grid3, .grid2 { grid-template-columns: 1fr; }
     .chip { white-space: normal; }
   }
 
@@ -177,9 +177,7 @@
     body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     /* Folha larga e compacta, reduzida para caber numa página: medida no
        Chromium (1700px de layout × zoom ≈ a largura útil do A4 deitado). */
-    .sheet { width: 1700px; max-width: none; padding: 0; zoom: .61; }
-    /* o texto em português é mais longo: um pouco mais de redução */
-    :root[data-lang="pt"] .sheet { zoom: .59; }
+    .sheet { width: 1700px !important; max-width: none; padding: 0; zoom: .625 !important; }
     .hero { padding: 12px 18px; }
     .lede { max-width: none; }
     .kpis { margin-top: 8px; gap: 10px; }
@@ -188,10 +186,9 @@
     .card { padding: 12px 16px; }
     .flow { gap: 8px; }
     .step { padding: 10px 11px; }
-    .flow-card, .grid3, .grid2, .wide { margin-top: 8px; }
+    .flow-card, .grid3, .grid2 { margin-top: 8px; }
     .h2 { margin-bottom: 7px; }
     ul.list { gap: 4px; }
-    ul.list--cols { row-gap: 6px; }
     .products, .integrations { margin-top: 8px; }
     .sub { margin: 9px 0 5px; }
     .foot { margin-top: 7px; }
@@ -293,7 +290,7 @@
     </div>
   </section>
 
-  <!-- 4. Por que · Controles -->
+  <!-- 4. Por que · Controles · Visibilidade -->
   <div class="grid3">
     <section class="card" style="--hue:var(--blue)">
       <h2 class="h2"><span class="tile" style="--hue:var(--blue)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 12h.01"/></svg></span>
@@ -331,23 +328,22 @@
       </ul>
     </section>
 
+    <section class="card" style="--hue:var(--teal)">
+      <h2 class="h2"><span class="tile" style="--hue:var(--teal)"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M7 12l3-3 2 2 4-4"/></svg></span>
+        <span lang="pt">Visibilidade do dia</span><span lang="en">Daily visibility</span></h2>
+      <ul class="list">
+        <li><span lang="pt"><strong>Intraday Monitor:</strong> as tarefas do dia com prazo, progresso e quem executou cada uma.</span><span lang="en"><strong>Intraday Monitor:</strong> the day's tasks with deadlines, progress and who ran each one.</span></li>
+        <li><span lang="pt"><strong>E-mails automáticos:</strong> pendências às 19:00, 19:30 e 20:00, e o relatório BACC EA Metrics às 16:00.</span><span lang="en"><strong>Automatic e-mails:</strong> outstanding items at 7:00, 7:30 and 8:00 pm (BRT), and the BACC EA Metrics report at 4:00 pm.</span></li>
+        <li><span lang="pt"><strong>Confirmations Monitor:</strong> quadro por etapa, com SLA de D+3 (OTC), D+4 (MO) e D+6 (FO) em dias úteis, justificativa obrigatória após o prazo e cobrança automática às segundas e quintas.</span><span lang="en"><strong>Confirmations Monitor:</strong> a board by stage, with SLAs of T+3 (OTC), T+4 (MO) and T+6 (FO) business days, mandatory justification once breached and automatic chasers on Mondays and Thursdays.</span></li>
+        <li><span lang="pt"><strong>Dashboard de Pending Confirmation:</strong> as confirmações em aberto por grupo econômico, responsável e tipo de assinatura, atualizado sozinho.</span><span lang="en"><strong>Pending Confirmation dashboard:</strong> open confirmations by economic group, owner and signature type, refreshed automatically.</span></li>
+        <li><span lang="pt"><strong>Resumos de liquidação:</strong> B3 × interno a cada data de liquidação, em quantidade e valor.</span><span lang="en"><strong>Settlement summaries:</strong> B3 vs. internal for each settlement date, by count and amount.</span></li>
+        <li><span lang="pt"><strong>Acompanhamento do Onboarding:</strong> a situação da documentação de cada cliente, etapa a etapa, com o aging em dias úteis.</span><span lang="en"><strong>Onboarding tracking:</strong> each client's documentation status, stage by stage, with ageing in business days.</span></li>
+        <li><span lang="pt"><strong>Initiatives e Tasks:</strong> acompanhamento dos projetos — responsável, equipe, tarefas, marcos e um quadro de tarefas.</span><span lang="en"><strong>Initiatives &amp; Tasks:</strong> project tracking — lead, team, tasks, milestones and a task board.</span></li>
+        <li><span lang="pt"><strong>User Home:</strong> o dia de cada pessoa — reuniões, tarefas próprias e um aviso às 08:00 do que vence no dia.</span><span lang="en"><strong>User Home:</strong> each person's day — meetings, own tasks and an 8:00 am reminder of what is due.</span></li>
+        <li><span lang="pt"><strong>Avisos no sino para a equipe da vez:</strong> cada confirmação avisa a equipe com quem ela está.</span><span lang="en"><strong>In-app alerts for the team on point:</strong> each confirmation notifies the team it now sits with.</span></li>
+      </ul>
+    </section>
   </div>
-
-  <section class="card wide" style="--hue:var(--teal)">
-    <h2 class="h2"><span class="tile" style="--hue:var(--teal)"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M7 12l3-3 2 2 4-4"/></svg></span>
-      <span lang="pt">Visibilidade do dia</span><span lang="en">Daily visibility</span></h2>
-    <ul class="list list--cols">
-      <li><span lang="pt"><strong>Intraday Monitor:</strong> as tarefas do dia com prazo, progresso e quem executou cada uma.</span><span lang="en"><strong>Intraday Monitor:</strong> the day's tasks with deadlines, progress and who ran each one.</span></li>
-      <li><span lang="pt"><strong>E-mails automáticos:</strong> pendências às 19:00, 19:30 e 20:00, e o relatório BACC EA Metrics às 16:00.</span><span lang="en"><strong>Automatic e-mails:</strong> outstanding items at 7:00, 7:30 and 8:00 pm (BRT), and the BACC EA Metrics report at 4:00 pm.</span></li>
-      <li><span lang="pt"><strong>Confirmations Monitor:</strong> quadro por etapa, com SLA de D+3 (OTC), D+4 (MO) e D+6 (FO) em dias úteis, justificativa obrigatória após o prazo e cobrança automática às segundas e quintas.</span><span lang="en"><strong>Confirmations Monitor:</strong> a board by stage, with SLAs of T+3 (OTC), T+4 (MO) and T+6 (FO) business days, mandatory justification once breached and automatic chasers on Mondays and Thursdays.</span></li>
-      <li><span lang="pt"><strong>Dashboard de Pending Confirmation:</strong> as confirmações em aberto por grupo econômico, responsável e tipo de assinatura, atualizado sozinho.</span><span lang="en"><strong>Pending Confirmation dashboard:</strong> open confirmations by economic group, owner and signature type, refreshed automatically.</span></li>
-      <li><span lang="pt"><strong>Resumos de liquidação:</strong> B3 × interno a cada data de liquidação, em quantidade e valor.</span><span lang="en"><strong>Settlement summaries:</strong> B3 vs. internal for each settlement date, by count and amount.</span></li>
-      <li><span lang="pt"><strong>Acompanhamento do Onboarding:</strong> a situação da documentação de cada cliente, etapa a etapa, com o aging em dias úteis.</span><span lang="en"><strong>Onboarding tracking:</strong> each client's documentation status, stage by stage, with ageing in business days.</span></li>
-      <li><span lang="pt"><strong>Initiatives e Tasks:</strong> acompanhamento dos projetos — responsável, equipe, tarefas, marcos e um quadro de tarefas.</span><span lang="en"><strong>Initiatives &amp; Tasks:</strong> project tracking — lead, team, tasks, milestones and a task board.</span></li>
-      <li><span lang="pt"><strong>User Home:</strong> o dia de cada pessoa — reuniões, tarefas próprias e um aviso às 08:00 do que vence no dia.</span><span lang="en"><strong>User Home:</strong> each person's day — meetings, own tasks and an 8:00 am reminder of what is due.</span></li>
-      <li><span lang="pt"><strong>Avisos no sino para a equipe da vez:</strong> cada confirmação avisa a equipe com quem ela está.</span><span lang="en"><strong>In-app alerts for the team on point:</strong> each confirmation notifies the team it now sits with.</span></li>
-    </ul>
-  </section>
 
   <!-- 5. Risco e pedido -->
   <div class="grid2">
@@ -383,12 +379,42 @@
 <script>
   (function () {
     var root = document.documentElement;
+    var sheet = document.querySelector('.sheet');
+
+    // Encaixe na janela: num computador a página inteira cabe na altura da
+    // janela, sem rolagem. A folha é medida sem zoom numa largura W/z (mais
+    // larga, mais baixa) e reduzida por z até caber; três passadas convergem.
+    // No celular (ou janela muito baixa) ela rola normalmente.
+    var desk = window.matchMedia('(min-width: 900px) and (min-height: 480px)');
+    var MIN_ZOOM = 0.5;
+    function fit() {
+      sheet.style.zoom = '';
+      sheet.style.width = '';
+      if (!desk.matches) return;
+      var W = root.clientWidth, H = window.innerHeight, z = 1;
+      for (var i = 0; i < 3; i++) {
+        sheet.style.width = (W / z) + 'px';
+        z = Math.min(1, (H - 2) / sheet.offsetHeight);
+      }
+      if (z < MIN_ZOOM) { sheet.style.width = ''; return; }
+      sheet.style.width = (W / z) + 'px';
+      sheet.style.zoom = String(z);
+    }
+    var pend = 0;
+    function refit() { cancelAnimationFrame(pend); pend = requestAnimationFrame(fit); }
+    window.addEventListener('resize', refit);
+    window.addEventListener('load', refit);
+    // A impressão tem a própria folha (CSS @media print); ao voltar, reencaixa.
+    window.addEventListener('beforeprint', function () { sheet.style.zoom = ''; sheet.style.width = ''; });
+    window.addEventListener('afterprint', refit);
+
     function set(l) {
       root.setAttribute('data-lang', l);
       root.setAttribute('lang', l === 'en' ? 'en' : 'pt-BR');
       document.querySelectorAll('[data-set-lang]').forEach(function (b) {
         b.setAttribute('aria-pressed', String(b.getAttribute('data-set-lang') === l));
       });
+      fit();     // o português é mais longo: a altura muda com o idioma
     }
     document.querySelectorAll('[data-set-lang]').forEach(function (b) {
       b.addEventListener('click', function () { set(b.getAttribute('data-set-lang')); });
