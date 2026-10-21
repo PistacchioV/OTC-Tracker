@@ -204,7 +204,7 @@ exista no módulo (`__module__` mente sob `functools.wraps`; quem diz é o
 ### Onde cada coisa vive
 
 - **`Config.DATA_DIR`** — a raiz dos CAMINHOS de dado: arquivos-dia
-  (`cache/<rotina>/.../AAAA/MM/DD`), os 45 cadastros do `/mapping`
+  (`cache/<rotina>/.../AAAA/MM/DD`), os 48 cadastros do `/mapping`
   (`mappings/`), `RefData.json`, `CounterpartyDetails.json`, calendários,
   templates do File Interpreter, tickets, control-panel. O app fala nesses
   caminhos `.json`, mas desde §434 o CONTEÚDO vive nos bancos (seção
@@ -645,7 +645,14 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
 
 Entrada em `_MAPPING_DEFS` (`key → {label, columns, seed[, file, upgrade]}`) +
 item no `TYPES` de `mapping.html`. Arquivo em `static/data/mappings/<key>.json`
-(versionado; `BaseMoeda.json` também está lá). `_mapping_rows(key)` semeia na
+(versionado; `BaseMoeda.json` também está lá) — é a SEED que a subida importa
+para o banco, não o cadastro. Três nascem SÓ do `seed` do `_MAPPING_DEFS`, sem
+`.json` (`opb3-msg-asset`, `swap-cetes-leg`, `swap-bullet-curve`), e isso não é
+falta. **O app não grava mais JSON aqui** (§434): um `.json` de cadastro
+não versionado num checkout é sobra da gravação em disco de antes de
+09/09/2026 (na dev o `DATA_DIR` é o próprio checkout), e quando o arquivo
+passa a ser versionado o `git pull` recusa (`untracked working tree file would
+be overwritten`) — renomeie o solto e puxe (§671). `_mapping_rows(key)` semeia na
 primeira leitura e cacheia por mtime — **edição vale no request seguinte, sem
 restart**. **Banco ocupado SOBE, nunca vira seed** (§548): o Save
 substitui a lista inteira, e o seed lido como cadastro seria gravado por cima.
