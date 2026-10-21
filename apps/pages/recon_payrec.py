@@ -1628,12 +1628,71 @@ def _split_tables(details):
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
+# ── UM arquivo por TIPO na pasta de insumos (mesa, 21/10/2026) ───────────────
+# O tipo é o do `_classify_source` (cashflows, FXO Detail, RLDOCREC,
+# HistoricoMensagens JPM, HistoricoMensagens MGT, rlctahis…), que lê o NOME
+# por dentro: `HistoricoMensagensJPM_20261021 (1).csv` — a cópia que o Windows
+# numera — é o mesmo tipo do original. Com dois do mesmo tipo na pasta o Run lia
+# OS DOIS, e o mesmo dinheiro entrava duas vezes (ou o extrato de ontem junto
+# com o de hoje). Fica o salvo por ÚLTIMO e os outros são apagados; arquivo de
+# tipo que a recon não conhece não entra na disputa.
+def _saved_at(path):
+    """Quando o arquivo chegou à pasta. No Windows, copiar pelo Explorer
+    PRESERVA a data de modificação do original, e quem diz a chegada é a de
+    CRIAÇÃO; gravar por cima do mesmo nome muda só a de modificação. Vale a
+    mais recente das duas. A criação é o `st_birthtime` (Windows desde o 3.12,
+    macOS); o `st_ctime` — que no Windows ainda é a criação, mas está obsoleto
+    para isso — fica para quem não tem o outro."""
+    try:
+        st = os.stat(path)
+        return max(st.st_mtime, getattr(st, 'st_birthtime', st.st_ctime))
+    except OSError:
+        return 0.0
+
+
+def _one_per_kind(paths, prefer=()):
+    """Os caminhos que ficam: um por tipo, o mais recente; os outros do mesmo
+    tipo são APAGADOS da pasta. `prefer` (em ordem) são os que acabaram de chegar
+    pelo dropzone: vencem os que já estavam lá, e entre eles vence o último do
+    lote. Apagar pode falhar (o cashflows aberto no Excel trava o arquivo no
+    Windows): aí ele fica na pasta, avisado no log, e o Run não o lê."""
+    rank = {p: i for i, p in enumerate(prefer)}
+    by_kind, kept = {}, []
+    for p in paths:
+        kind = _classify_source(os.path.basename(p))
+        if kind == 'unknown':
+            kept.append(p)
+            continue
+        by_kind.setdefault(kind, []).append(p)
+    for kind, ps in by_kind.items():
+        ps.sort(key=lambda p: (rank.get(p, -1), _saved_at(p)))
+        kept.append(ps[-1])
+        for old in ps[:-1]:
+            try:
+                os.remove(old)
+                _LOG.warning('[payrec] %s: arquivo mais antigo do mesmo tipo apagado da pasta: %s (fica %s)',
+                             kind, os.path.basename(old), os.path.basename(ps[-1]))
+            except OSError as e:
+                _LOG.warning('[payrec] %s: nao consegui apagar %s (fica %s, e ele nao e lido): %s',
+                             kind, os.path.basename(old), os.path.basename(ps[-1]), e)
+    return kept
+
+
+def _input_files():
+    """Os arquivos da pasta de insumos (sem subpastas)."""
+    return sorted(p for p in glob.glob(os.path.join(_INPUT_BASE, '*.*')) if os.path.isfile(p))
+
+
 def _persist_uploads(files):
     """Save the dropzone uploads into the same folder the 'import from folder'
     button reads from (_INPUT_BASE), so a manual run leaves the input folder in
     the same state as a folder run. Returns [(name, path-or-FileStorage)]: the
     saved on-disk path when the write succeeds, else the in-memory FileStorage so
-    the reconciliation still runs even when the folder is unreachable/read-only."""
+    the reconciliation still runs even when the folder is unreachable/read-only.
+
+    UM arquivo por tipo (`_one_per_kind`): o que chega SUBSTITUI o do mesmo tipo
+    que já estava na pasta, com qualquer nome, e dois do mesmo tipo no mesmo lote
+    ficam no último."""
     items = []
     can_save = False
     try:
@@ -1663,7 +1722,17 @@ def _persist_uploads(files):
                 except Exception:
                     pass
         items.append((name, f))                     # fall back to the in-memory upload
-    return items
+    saved = [src for _n, src in items if isinstance(src, str)]
+    if saved:
+        kept = set(_one_per_kind(_input_files(), prefer=saved))
+        items = [(n, src) for n, src in items if not isinstance(src, str) or src in kept]
+    # O que não foi gravado (pasta inacessível) também vale um por tipo: o último.
+    last = {}
+    for i, (n, _src) in enumerate(items):
+        kind = _classify_source(n)
+        last[kind if kind != 'unknown' else ('unknown', i)] = i
+    fica = set(last.values())
+    return [it for i, it in enumerate(items) if i in fica]
 
 
 def _gather_sources(files, mode):
@@ -1673,7 +1742,7 @@ def _gather_sources(files, mode):
     else:
         if not _store.isdir(_INPUT_BASE):
             raise FileNotFoundError('Pay/Rec input folder not found: %s' % _INPUT_BASE)
-        items = [(os.path.basename(p), p) for p in sorted(glob.glob(os.path.join(_INPUT_BASE, '*.*')))]
+        items = [(os.path.basename(p), p) for p in sorted(_one_per_kind(_input_files()))]
     for name, src in items:
         bucket = _classify_source(name)
         sheet = 'data' if bucket == 'jpm_cash' else ('FXO Detail' if bucket == 'jpm_fxo' else None)

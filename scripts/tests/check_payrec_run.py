@@ -72,6 +72,84 @@ finally:
         os.remove(os.path.join(tmp, name))
     os.rmdir(tmp)
 
+print('\n== 1b. UM arquivo por tipo na pasta de insumos (mesa, 21/10/2026) ==')
+# HistoricoMensagens JPM/MGT, cashflows... com qualquer nome — a copia que o
+# Windows numera "(1)" inclusive: fica o salvo por ULTIMO, os outros do mesmo
+# tipo sao APAGADOS. Com dois do mesmo tipo o Run lia os dois (o mesmo dinheiro
+# duas vezes). Arquivo de tipo desconhecido nao entra na disputa.
+import time as _time                                                    # noqa: E402
+
+
+class _Up(object):
+    """Um upload do dropzone (a FileStorage do Flask)."""
+    def __init__(self, filename, data=b'novo'):
+        self.filename = filename
+        self.stream = io.BytesIO(data)
+
+
+def _pasta(arquivos):
+    d = tempfile.mkdtemp(prefix='payrec-kind-')
+    for i, nome in enumerate(arquivos):
+        caminho = os.path.join(d, nome)
+        io.open(caminho, 'w', encoding='utf-8').write(nome)
+        t = _time.time() - 3600 + i * 60          # salvos em ordem, um minuto de cada vez
+        os.utime(caminho, (t, t))
+    return d
+
+
+_base, _read = RP._INPUT_BASE, RP._read_table
+lidos = []
+RP._read_table = lambda src, sheet=None: (lidos.append(os.path.basename(src)) or ([], []))
+try:
+    # ── a pasta (Run sem anexo) ──
+    d = _pasta(['HistoricoMensagensJPM_20261021.csv', 'cashflows_20261020.xlsx', 'notas.txt',
+                'HistoricoMensagensMGT_20261021.csv', 'HistoricoMensagensJPM_20261021 (1).csv',
+                'cashflows_20261021.xlsx'])
+    RP._INPUT_BASE = d
+    del lidos[:]
+    srcs = RP._gather_sources(None, 'auto')
+    check('o (1) e o mesmo tipo do original', RP._classify_source('HistoricoMensagensJPM_20261021 (1).csv'),
+          RP._classify_source('HistoricoMensagensJPM_20261021.csv'))
+    check('le um de cada tipo', sorted(lidos), sorted(['HistoricoMensagensJPM_20261021 (1).csv',
+          'HistoricoMensagensMGT_20261021.csv', 'cashflows_20261021.xlsx', 'notas.txt']))
+    check('JPM e MGT sao tipos diferentes (os dois ficam)', [b for b, _r, _c in srcs].count('spb') == 1
+          and [b for b, _r, _c in srcs].count('spb_mgt') == 1, True)
+    check('o mais antigo do mesmo tipo sai da PASTA', sorted(os.listdir(d)), sorted([
+          'HistoricoMensagensJPM_20261021 (1).csv', 'HistoricoMensagensMGT_20261021.csv',
+          'cashflows_20261021.xlsx', 'notas.txt']))
+    shutil.rmtree(d, ignore_errors=True)
+
+    # ── o dropzone: o que chega SUBSTITUI o do mesmo tipo, mesmo com nome diferente
+    #    e mesmo sendo o da pasta mais "novo" pelo relogio ──
+    d = _pasta(['HistoricoMensagensJPM_20261020.csv', 'RLDOCREC.csv', 'cashflows_hoje.xlsx'])
+    novo = os.path.join(d, 'cashflows_hoje.xlsx')
+    os.utime(novo, (_time.time() + 3600, _time.time() + 3600))
+    RP._INPUT_BASE = d
+    del lidos[:]
+    RP._gather_sources([_Up('HistoricoMensagensJPM_20261021 (1).csv'), _Up('cashflows (2).xlsx'),
+                        _Up('cashflows (3).xlsx')], 'manual')
+    check('manual le so o que chegou, um por tipo (o ultimo do lote)', sorted(lidos),
+          sorted(['HistoricoMensagensJPM_20261021 (1).csv', 'cashflows (3).xlsx']))
+    check('...e a pasta fica com um de cada tipo, o que chegou no lugar do antigo', sorted(os.listdir(d)),
+          sorted(['HistoricoMensagensJPM_20261021 (1).csv', 'RLDOCREC.csv', 'cashflows (3).xlsx']))
+    shutil.rmtree(d, ignore_errors=True)
+
+    # ── apagar pode falhar (arquivo aberto no Excel trava no Windows): o antigo
+    #    fica na pasta, mas o Run NAO o le ──
+    d = _pasta(['cashflows_velho.xlsx', 'cashflows_novo.xlsx'])
+    RP._INPUT_BASE = d
+    _rm = RP.os.remove
+    RP.os.remove = lambda p: (_ for _ in ()).throw(PermissionError('em uso'))
+    try:
+        del lidos[:]
+        RP._gather_sources(None, 'auto')
+    finally:
+        RP.os.remove = _rm
+    check('sem conseguir apagar, le so o mais novo', lidos, ['cashflows_novo.xlsx'])
+    shutil.rmtree(d, ignore_errors=True)
+finally:
+    RP._INPUT_BASE, RP._read_table = _base, _read
+
 print('\n== 2. a tela tem um botao de acao so ==')
 HTML = read('apps/templates/pages/reconciliation-payrec.html')
 check('o botao Import sumiu', 'prImportBtn' in HTML, False)
