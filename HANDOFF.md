@@ -18846,8 +18846,9 @@ vazamento. O par original (2,6 GB) ficou em
   `dce-swap` do Delete, o Mapping Intrag ID pelo Boletas CSV (linhas SWAP,
   chave = Deal Name, o Contract Number do arquivo) e o guarda
   `check_intrag_dce_swap.py`, cujo oráculo da linha é a saída do script da
-  mesa. O script `apps/pages/translate_athena_intrag_swap.py` continua fora
-  do repositório — a regra viva mora no `domain`.
+  mesa. O script `apps/pages/translate_athena_intrag_swap.py` ficou fora
+  do repositório até o §671 (hoje versionado, não importado) — a regra viva
+  mora no `domain`.
 
 **O segundo banco, e o que o log mentia (mesmo dia, 10:07).** A subida seguinte
 mostrou que o DPOSICAO-SWAP não estava sozinho:
@@ -25291,8 +25292,8 @@ de `apps/templates/confirmations/`:
   assinatura, que é hoje"). A regra da mesa inverte: vale a data da RECOMPRA
   (o `ref` do grupo, o mesmo do `data_neg`).
 
-O `mgt-fwd-vanilla.html` (não versionado, com o literal `DATA`) não é servido
-por rota nenhuma: é o Word de origem do `ndf-mgt-strike-me`.
+O `mgt-fwd-vanilla.html` (com o literal `DATA`; versionado desde o §671) não é
+servido por rota nenhuma: é o Word de origem do `ndf-mgt-strike-me`.
 
 ## §599 — Swap Calculator: o piso do índice e onde o multiplicador incide (2026-09-30)
 
@@ -28206,3 +28207,44 @@ produtos), `check_ops_summary` (a recompra de swap usa a mesma tolerância),
 `check_payrec_manual_match` (a linha única e a junção do dia antigo). Os dois
 FAILs de `check_swap_advice`/`check_ndf_advice` são os de antes (assunto/seed),
 conferidos linha a linha.
+
+## §671 — Três fontes versionadas, e o JSON de cadastro que barrou o `git pull` (2026-10-21)
+
+**O que entrou** (`b2464653`, na dev e na prod). Três arquivos que o código
+cita e que só existiam no checkout de quem os trouxe:
+`apps/pages/translate_athena_intrag_swap.py` (o script da mesa de onde o
+`intrag/domain.py` portou a linha da Intrag DCE Swap; não é importado),
+`apps/templates/confirmations/mgt-fwd-vanilla.html` (o Word de origem do
+`ndf-mgt-strike-me.html`; sem Jinja, não servido) e
+`apps/static/data/mappings/tools-swap-index.json` (a seed do cadastro, 33
+linhas).
+
+**Correção da mensagem do commit.** Ela diz que o `tools-swap-index` era "o
+único dos 45" cadastros sem `.json` versionado. São 48 cadastros, e outros três
+seguem sem `.json` DE PROPÓSITO: `opb3-msg-asset`, `swap-cetes-leg` e
+`swap-bullet-curve` nascem só do `seed` do `_MAPPING_DEFS`. O commit já estava
+no remoto e não foi reescrito (seria force push nas duas branches).
+
+**O `git pull` que recusou.** Na máquina de quem tinha o
+`tools-swap-index.json` solto, o pull parou em `untracked working tree file
+would be overwritten by merge`. O remédio é UMA vez por checkout: renomear o
+solto (`ren "apps\static\data\mappings\tools-swap-index.json"
+"tools-swap-index.json.bak"`), puxar e comparar os dois (`fc`). O `.bak` não se
+versiona.
+
+**Por que o JSON existia, se o armazém é só DuckDB.** O app NÃO o cria hoje. A
+prova: app com `DATA_DIR` e `DATABASE_DIR` vazios num tmp, `_mapping_rows
+('tools-swap-index')` (dispara a seed) e uma gravação por cima, como o Save da
+tela. Nenhum `.json` novo no disco (só os `translations/` de sempre); as linhas
+foram para `db/mappings/tools-swap-index.db`. O arquivo é SOBRA das ~32 h entre
+o nascimento do cadastro (`508447e5`, 08/09 13:48) e o corte para o banco
+(§434, `9e709455`, 09/09 22:00). Até ali a primeira leitura gravava a seed em
+disco, e na DEV o `DATA_DIR` é o próprio checkout, então ela caiu dentro da
+árvore do git (o da dev nasceu às 13:46 de 09/09). Na prod o `DATA_DIR` é o
+share desde 24/08 (`be859a69`): lá o app nunca gravou no checkout, e um
+checkout de prod com o arquivo o recebeu por cópia de uma pasta de dev.
+
+**O que não fecha.** A cópia da dev foi modificada em 15/09 às 09:08, depois do
+corte, e nenhuma sessão registra a gravação. Hoje só o rollback
+(`scripts/export_duckdb_to_json.py`) escreve JSON em `DATA_DIR`, de propósito;
+o candidato é ele, ou uma edição à mão, perto do `26e04a3d` (§466, 09:16).
