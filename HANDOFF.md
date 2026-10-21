@@ -27677,8 +27677,11 @@ Mesa: "o fator da leg precisa ser calculado no unwind swap: valor de liquidaçã
   do DPOSICAO-SWAP (coluna 15, `queries._swap` → `vbr`; coluna vazia = valor
   base − antecipado), achado pelo CETIP ID. Antes a base era o nocional
   recomprado (ações × strike). Na recompra TOTAL os dois coincidem e nada muda;
-  na PARCIAL a base passa a ser o VBR do contrato inteiro. Sem posição não há
-  VBR — e não há fator: o Check diz que falta, em vez de chutar a base.
+  na PARCIAL a base passa a ser o VBR do contrato inteiro — **confirmado pela
+  mesa (21/10/2026): o VBR é o Valor Base Remanescente da tela Live Position ›
+  Swap Characteristics** (a mesma coluna 15 do mesmo DPOSICAO-SWAP), também na
+  parcial; não troque pela base recomprada. Sem posição não há VBR — e não há
+  fator: o Check diz que falta, em vez de chutar a base.
 - **VBR é coluna** da recompra de swap (e fato do card), vinda da posição, e
   editável: o Edit do VBR refaz os fatores (`CAMPOS_ECONOMICOS`). Ações novas
   refazem só o nocional recomprado (o campo 11), não mais o fator.
