@@ -1639,7 +1639,8 @@ def confirmation_type(produto, lob=''):
 # um de-para de negócio: o tipo continua sendo o que o cadastro e a pasta usam,
 # e cada fase nova da recompra acrescenta uma linha aqui junto com o seu
 # Product Type.
-_UNWIND_PRODUCT_LABEL = {'UNWIND NDF': 'NDF FX', 'UNWIND NDF COMM': 'NDF COMMODITIES'}
+_UNWIND_PRODUCT_LABEL = {'UNWIND NDF': 'NDF FX', 'UNWIND NDF COMM': 'NDF COMMODITIES',
+                         'UNWIND OPTION COMM': 'OPTION COMMODITIES', 'UNWIND SWAP': 'SWAP'}
 
 
 def confirmation_label(produto, lob=''):

@@ -3762,6 +3762,7 @@ _ops_swap_ir_rate = _pf_settle._ops_swap_ir_rate
 _ops_cpty_receives = _pf_settle._ops_cpty_receives
 _OPS_RECON_TOL = _pf_settle._OPS_RECON_TOL
 _ops_swap_settling = _pf_settle._ops_swap_settling
+_ops_swap_unwind_rows = _pf_settle._ops_swap_unwind_rows
 _ops_swap_trade_rows = _pf_settle._ops_swap_trade_rows
 _ops_recon = _pf_settle._ops_recon
 _ops_ndfc_trade_rows = _pf_settle._ops_ndfc_trade_rows
@@ -5178,10 +5179,16 @@ def _swadv_collect(ref):
     números crus e os dados do destinatário ao lado das células — a tela usa as
     células, o aviso impresso usa o resto. Uma coleta só para os dois, para o que
     o cliente recebe não poder divergir do que a tela mostra."""
+    # As RECOMPRAS de swap da EDG (mesa, 21/10/2026): a MESMA leitura do Trade
+    # Level (`_ops_swap_unwind_rows`), e o contrato delas sai da leitura do
+    # Operations B3 — lido dos dois lados, o mesmo caixa sairia duas vezes.
+    unw = _ops_swap_unwind_rows(ref)
+    unw_contratos = {u['contract'].upper() for u in unw if u['contract']}
     _jp, opb3 = _opb3_load(ref)
     titulos, by_titulo = _ops_swap_settling(opb3)
+    titulos = [(t, r) for t, r in titulos if t.upper() not in unw_contratos]
     if not titulos:
-        return []
+        return [_swadv_unwind_row(u) for u in unw]
     tipo_maps = _opb3_tipo_maps(ref)
     terms = _ops_swap_pos_terms(ref)
 
@@ -5377,7 +5384,52 @@ def _swadv_collect(ref):
             'curva_cliente': curva_cliente_n,
         })
     _swadv_avisa_orfas(ref, by_cetip, titulos)
+    out.extend(_swadv_unwind_row(u) for u in unw)
     return out
+
+
+def _swadv_unwind_row(u):
+    """A recompra de swap como linha do Settlement Advice de swap — as MESMAS
+    colunas (`_SWADV_COLUMNS`): Curva Banco e Curva Cliente são as pernas na
+    visão do banco, Resultado Bruto o caixa do e-mail, e o IR o do swap. O
+    e-mail de RECOMPRA tem tabela própria (`_swadv_unwind_email_cells`)."""
+    def _dt(d):
+        return d.strftime('%d/%m/%Y') if d else ''
+    return {
+        'cells': [
+            u['counterparty'], u['lob'], u['contract'],
+            _dt(u['trade_date']), _dt(u['maturity']),
+            '' if u['prazo'] is None else '{:,}'.format(u['prazo']).replace(',', '.'),
+            _ops_fmt_amt(u['original']),
+            u['our_curve'], _ops_fmt_amt(u['curva_banco']),
+            u['cpty_curve'], _ops_fmt_amt(u['curva_cliente']),
+            _ops_fmt_amt(u['bruto']), _swadv_pct(u['rate']),
+            _ops_fmt_amt(u['ir']), _ops_fmt_amt(u['liquido']),
+        ],
+        'counterparty': u['counterparty'],
+        'no_advice': u['fundo'],
+        'lob': u['lob'],
+        'legal': u['legal'],
+        'spn': (_ndfsum_refdata_spn().get(_fcst_norm(u['counterparty']), {}) or {}).get('spn', ''),
+        'taxid': u['taxid'],
+        'premium': False,
+        'unwind': True,
+        'settle_type': 'UNWIND',
+        'bruto': u['bruto'], 'ir': u['ir'], 'liquido': u['liquido'], 'rate': u['rate'],
+        'valor_base': u['original'], 'valor_recomprado': u['unwound'],
+        'curva_banco': u['curva_banco'], 'curva_cliente': u['curva_cliente'],
+    }
+
+
+# O aviso da RECOMPRA de swap: as colunas do aviso de swap com o VALOR BASE
+# RECOMPRADO ao lado do original (mesa, 21/10/2026) — é o que distingue a
+# antecipação de um diferencial. As colunas de valor têm os MESMOS nomes: é por
+# eles que o bloqueador de linha incompleta as acha.
+_SWADV_UNWIND_EMAIL_HEADERS = [
+    'Número de Contrato', 'Data Operação', 'Vencimento', 'Prazo', 'Valor Base Original',
+    'Valor Base Recomprado', 'Indexador Banco', 'Curva Banco', 'Indexador Cliente',
+    'Curva Cliente', 'Resultado Bruto', 'Alíquota IR', 'Valor IR', 'Valor Líquido',
+]
 
 
 # Uma vez por (dia, conjunto de órfãs): o aviso é remontado a cada abertura da
@@ -5438,6 +5490,18 @@ def _swadv_email_rows(ref):
         if r.get('no_advice'):
             continue
         c = r['cells']
+        if r.get('unwind'):
+            # A RECOMPRA sai no aviso de recompra, com a tabela dela (o Valor
+            # Base Recomprado ao lado do original) — `_SWADV_UNWIND_EMAIL_HEADERS`.
+            out.append(dict(r, headers=list(_SWADV_UNWIND_EMAIL_HEADERS), cells=[
+                c[2], c[3], c[4], c[5],
+                money(r['valor_base']), money(r.get('valor_recomprado')),
+                c[7], money(r['curva_banco']), c[9], money(r['curva_cliente']),
+                money(r['bruto']),
+                '' if r['rate'] is None else otc_emails._br(r['rate'] * 100.0) + '%',
+                money(r['ir']), money(r['liquido']),
+            ]))
+            continue
         out.append(dict(r, cells=[
             c[2],                                   # Número de Contrato
             c[3],                                   # Data Operação
@@ -6635,19 +6699,31 @@ def _optadv_collect(ref, with_ir=True):
     # termo: a lista de Títulos e a soma do Settlement B3 lá embaixo têm de
     # enxergar as mesmas linhas.
     opb3 = _opb3_settle_rows(ref)
-    if not opb3:
+    # As RECOMPRAS de Opção de Commodities que liquidam hoje (mesa, 21/10/2026
+    # — o desenho do NDF de Commodities no aviso de termo): entram pela
+    # vertical, que é a autoridade, e o contrato delas sai da leitura do
+    # Operations B3 — a antecipação também pode aparecer lá, e lida dos dois
+    # lados o mesmo caixa sairia DUAS vezes na tabela e no aviso.
+    try:
+        unw = _unwind_engine().option_commodity_settlement_rows(ref) or []
+    except Exception:                                       # noqa: BLE001
+        log.warning('[optadv] recompras do dia ficaram de fora:\n%s', traceback.format_exc())
+        unw = []
+    unw_contratos = {str(u.get('Contract') or '').strip().upper() for u in unw}
+    unw_contratos.discard('')
+    if not opb3 and not unw:
         return []
 
     titulos, seen = [], set()
     for rec in opb3:
         titulo = str(rec.get('Título', '') or '').strip()
-        if not titulo or titulo.upper() in seen:
+        if not titulo or titulo.upper() in seen or titulo.upper() in unw_contratos:
             continue
         if 'opc' not in _fcst_norm(rec.get('Tipo Título', '')):
             continue
         seen.add(titulo.upper())
         titulos.append((titulo, rec))
-    if not titulos:
+    if not titulos and not unw:
         return []
 
     # Posição de opções pela TELA do Live Position: as datas já vêm dd/mm/yyyy e
@@ -6833,11 +6909,71 @@ def _optadv_collect(ref, with_ir=True):
                 (_lcell(lrow, 'Data de Liquidação do Prêmio'), 'Premium'),
                 (_lcell(lrow, 'Data Vencimento'), 'Exercise')), mine),
         })
+    out.extend(_optadv_unwind_rows(unw, opb3, spn_by_name, cpd))
     # O IR é do NET por contraparte, então só dá para calculá-lo com as linhas do
     # dia todas na mão — por isso ele é um passe depois do laço, e não parte
     # dele. `with_ir=False` devolve as linhas cruas: é como o ledger colhe o net
     # do dia sem chamar de volta a si mesmo (`_ndfsum_ir_commodity_groups`).
+    # A recompra entra SEM imposto (regra 1 do `_optadv_apply_ir`: só o prêmio
+    # paga) — ela não é `premium`.
     return _optadv_apply_ir(out, ref) if with_ir else out
+
+
+def _optadv_unwind_rows(unw, opb3, spn_by_name, cpd):
+    """As recompras de Opção de Commodities no formato das linhas do aviso de
+    opção (mesa, 21/10/2026): a Ptax é o FX da recompra, a Quantidade o
+    recomprado (unidades) e o Resultado o prêmio total em reais, com o sinal
+    do BANCO. O Settlement B3 é o do Título no Operations B3 quando a
+    antecipação está lá; sem ele fica vazio (não há o que conferir, não
+    "diverge"). A perna do FUNDO (o B2B com Lawton/Atacama) fica na tabela — é
+    liquidação de verdade — e sai do documento (`no_advice`): ela vai para a
+    Intrag, não para o cliente."""
+    fase1 = _unwind_engine()
+    out = []
+    for u in unw or []:
+        titulo = str(u.get('Contract') or '').strip()
+        cliente = str(u.get('Counterparty') or '').strip()
+        le = _b3_account_le(u.get('PartyAccount'))
+        legal = (str(_ndf_le_row(le).get('NAME', '') or '').strip() if le else '') or le
+        ref_rec = spn_by_name.get(_fcst_norm(cliente), {})
+        spn = ref_rec.get('spn', '')
+        net_type = _ndfsum_net_type(_cpd_find(cpd, spn) if spn else None)
+        apurado = u.get('_settlement')
+        b3_vals = [_conf_to_float(r.get('Valor')) for r in opb3 or []
+                   if titulo and str(r.get('Título', '') or '').strip().upper() == titulo.upper()]
+        b3_vals = [v for v in b3_vals if v is not None]
+        subj = str(u.get('Underlying') or '').strip().upper()
+        try:
+            fundo = bool(fase1.e_do_fundo(u))
+        except Exception:                                   # noqa: BLE001
+            fundo = False
+        out.append({
+            'cells': [
+                cliente, titulo, u.get('_chave', ''),
+                _conf_fmt_date(u.get('TradeDate')), subj,
+                str(u.get('FXRate') or ''), _OPTADV_FX_NA,
+                _ops_fmt_amt(abs(_conf_to_float(u.get('UnwoundNotional')) or 0.0)),
+                _ops_fmt_amt(apurado), _ops_fmt_amt(0.0), _ops_fmt_amt(apurado),
+            ],
+            'counterparty': cliente, 'legal': legal, 'spn': spn,
+            'taxid': str(u.get('TaxID') or '') or ref_rec.get('taxid', ''),
+            'net_type': net_type, 'lob': 'COMMODITIES', 'underlying': subj,
+            'product_label': _optadv_product_label('COMMODITIES'),
+            'premium': False,
+            'b3_id': titulo, 'internal_id': u.get('_chave', ''),
+            'apurado': apurado, 'ir': 0.0, 'liquido': apurado,
+            'b3': sum(b3_vals) if b3_vals else None,
+            'settle_type': 'UNWIND',
+            'unwind': True,
+            'no_advice': fundo,
+            # O que o aviso de RECOMPRA mostra (`_optadv_unwind_email_cells`).
+            'fx_rate': str(u.get('FXRate') or ''),
+            'original_qty': _conf_to_float(u.get('OriginalNotional')),
+            'unwound_qty': _conf_to_float(u.get('UnwoundNotional')),
+            'unit_premium': u.get('UnitPremium'),
+            'trade_date': _conf_fmt_date(u.get('TradeDate')),
+        })
+    return out
 
 
 # ── Edições manuais do aviso de Opção ────────────────────────────────────────
@@ -6921,6 +7057,32 @@ def _optadv_email_headers():
     return list(_OPTADV_COLUMNS[_OPTADV_EMAIL_FROM:])
 
 
+# O aviso da RECOMPRA de opção tem tabela PRÓPRIA (mesa, 21/10/2026), como o do
+# termo (`_NDFADV_UNWIND_EMAIL_HEADERS`): a quantidade original × recomprada e o
+# prêmio unitário da recompra no lugar da Cotação Ativo Subjacente, que na
+# recompra não existe. As colunas de valor têm os MESMOS nomes do aviso de
+# exercício: é por eles que o bloqueador de linha incompleta as acha.
+_OPTADV_UNWIND_EMAIL_HEADERS = [
+    'B3 ID', 'Nº da Confirmação', 'Data de Início da Operação', 'Ativo Subjacente', 'Ptax',
+    'Quantidade da Operação', 'Quantidade Recomprada', 'Prêmio Unitário (US$)',
+    'Resultado Apurado (R$)', 'IR 0,005% (R$)', 'Resultado Líquido (R$)',
+]
+
+
+def _optadv_unwind_email_cells(r):
+    from apps.pages import otc_emails
+    def _qtd(v):
+        return _ops_fmt_amt(abs(v)) if v is not None else ''
+    def _brl(v):
+        return otc_emails._brl(v) if v is not None else ''
+    premio = _conf_to_float(r.get('unit_premium'))
+    return [r.get('b3_id', ''), r.get('internal_id', ''), r.get('trade_date', ''),
+            r.get('underlying', ''), r.get('fx_rate', ''),
+            _qtd(r.get('original_qty')), _qtd(r.get('unwound_qty')),
+            '' if premio is None else '{:,.4f}'.format(premio),
+            _brl(r.get('apurado')), _brl(r.get('ir')), _brl(r.get('liquido'))]
+
+
 def _optadv_email_rows(ref):
     """Linhas do aviso impresso de opção: as mesmas da tela, sem Contraparte, e
     com os valores em BR (`R$ #.##0,00`, negativo entre parênteses). Formatadas a
@@ -6932,6 +7094,15 @@ def _optadv_email_rows(ref):
                  ('Resultado Líquido (R$)', 'liquido'))}
     out = []
     for r in _optadv_items(ref):
+        if r.get('unwind'):
+            # A recompra do FUNDO não vira documento (vai para a Intrag); a do
+            # cliente sai no aviso de RECOMPRA, com a tabela dela.
+            if r.get('no_advice'):
+                continue
+            out.append(dict(r, cells=_optadv_unwind_email_cells(r),
+                            headers=list(_OPTADV_UNWIND_EMAIL_HEADERS),
+                            commodity=r.get('underlying', ''), family='option'))
+            continue
         cells = []
         for i in range(_OPTADV_EMAIL_FROM, len(_OPTADV_COLUMNS)):
             if i in money_at:

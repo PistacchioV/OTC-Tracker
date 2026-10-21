@@ -1698,6 +1698,22 @@ def commodity_settlement_rows(ref):
     """As recompras de NDF de Commodities que liquidam em `ref` — o que o
     Settlement Advice de NDF de mercadoria (`_ndfadv_collect`) soma, e com ele
     o Trade Level, o Summary e a TED do Other Products. Mora no catálogo; a
-    porta é esta porque é ela que o `routes._unwind_engine()` devolve."""
+    porta é esta porque é ela que o `routes._unwind_engine()` devolve. SÓ o
+    NDF de Commodities: o Pay/Rec também lê daqui, como COMM TER."""
     from apps.pages.features.unwinds.product import commands as produto
-    return produto.settlement_rows(ref)
+    return produto.settlement_rows(ref, dirs=('NDF/Commodities',))
+
+
+def option_commodity_settlement_rows(ref):
+    """As recompras de OPÇÃO de Commodities que liquidam em `ref` — o que o
+    Settlement Advice de opção (`_optadv_collect`) soma, e com ele o Trade
+    Level, o Summary e a TED do Other Products (mesa, 21/10/2026)."""
+    from apps.pages.features.unwinds.product import commands as produto
+    return produto.settlement_rows(ref, dirs=('Options/Commodities',))
+
+
+def swap_edg_settlement_rows(ref):
+    """As recompras de SWAP da EDG que liquidam em `ref` — o que o Trade Level
+    de swap e o Settlement Advice de swap somam (mesa, 21/10/2026)."""
+    from apps.pages.features.unwinds.product import commands as produto
+    return produto.settlement_rows(ref, dirs=('Swap/EDG',))
