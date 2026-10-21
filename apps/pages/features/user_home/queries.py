@@ -113,6 +113,10 @@ def settings(sid):
     return domain.settings(store.load(sid))
 
 
+def favorites(sid):
+    return domain.favorites(store.load(sid))
+
+
 def wants(sid, key):
     """O aviso `key` vai para `sid`? Falha de leitura = sim (o padrão): um
     banco ocupado não pode calar o sino de ninguém."""

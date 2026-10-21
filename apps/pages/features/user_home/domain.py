@@ -82,6 +82,49 @@ def clean_settings(data, current):
     return out
 
 
+# ── Favoritos (o botão flutuante da casca, mesa, 21/10/2026 — §658) ─────────
+# A lista de páginas que a pessoa fixou para acesso rápido, na ORDEM dela. Só
+# caminho DESTE app: endereço de fora (`//host`, `http:`), API e o que não
+# começa por `/` caem fora — o link do botão é um `href` direto, e um favorito
+# gravado com `javascript:` ou outro domínio seria um link para fora com a cara
+# de atalho da casa. O rótulo é só o PLANO B: a casca mostra o nome do menu, no
+# idioma de quem vê.
+MAX_FAVORITES = 24
+_FAV_LABEL_MAX = 80
+
+
+def clean_favorites(data):
+    """[{url, label}] limpa: caminho interno, sem repetir (vale o primeiro),
+    até `MAX_FAVORITES`. Entrada que não é lista levanta HomeError."""
+    if not isinstance(data, list):
+        raise HomeError('favorites_invalid', 'Favorites must be a list.')
+    out, vistos = [], set()
+    for f in data:
+        if not isinstance(f, dict):
+            continue
+        url = str(f.get('url') or '').strip()
+        if not url.startswith('/') or url.startswith('//') or '\\' in url \
+                or url.lower().startswith('/api/') or any(c in url for c in '<>"\'\n\r\t '):
+            continue
+        url = url.split('#')[0]
+        if not url or url in vistos:
+            continue
+        vistos.add(url)
+        label = ' '.join(str(f.get('label') or '').split())[:_FAV_LABEL_MAX]
+        out.append({'url': url, 'label': label})
+        if len(out) >= MAX_FAVORITES:
+            break
+    return out
+
+
+def favorites(doc):
+    """Os favoritos gravados (já limpos — documento antigo não tem a chave)."""
+    try:
+        return clean_favorites((doc or {}).get('favorites') or [])
+    except HomeError:
+        return []
+
+
 def wants(doc, key):
     """A pessoa quer o aviso `key` no sino? (padrão: sim)."""
     return bool(settings(doc)['notify'].get(key, True))

@@ -99,6 +99,16 @@ def save_settings(me, data):
     return store.mutate(me['sid'], go)
 
 
+def save_favorites(me, data):
+    """Substitui a lista de favoritos (a ordem é a da tela). → a lista gravada."""
+    lista = domain.clean_favorites(data)
+
+    def go(doc):
+        doc['favorites'] = lista
+        return lista
+    return store.mutate(me['sid'], go)
+
+
 def reset_settings(me):
     def go(doc):
         doc['settings'] = {}

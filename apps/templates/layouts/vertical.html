@@ -23,7 +23,7 @@
    a troca de página chega quase pronta. Só links de navegação — nunca ações
    (logout, lock, downloads, API). #}
 <script type="speculationrules">
-{"prefetch": [{"where": {"and": [{"selector_matches": ".side-nav-link[href^='/'], .otc-pinned a[href^='/']"},
+{"prefetch": [{"where": {"and": [{"selector_matches": ".side-nav-link[href^='/'], .otc-pinned a[href^='/'], .otc-fab__item[href^='/']"},
   {"not": {"href_matches": "/logout"}}, {"not": {"href_matches": "/lock*"}}, {"not": {"href_matches": "/api/*"}}, {"not": {"href_matches": "/dev-login"}}]},
   "eagerness": "moderate"}]}
 </script>

@@ -149,6 +149,32 @@ def api_settings_save():
     return jsonify({'success': True, 'settings': st})
 
 
+# ── Favoritos: o botão flutuante da casca (§658) ─────────────────────────────
+# Um documento por SID (o da User Home): os favoritos acompanham a pessoa em
+# qualquer máquina e instância. A casca guarda uma CÓPIA no navegador para
+# desenhar na hora, e só pergunta aqui quando o painel abre.
+
+@blueprint.route('/api/user-home/favorites', methods=['GET'])
+def api_user_home_favorites():
+    g = _guard()
+    if g:
+        return g
+    return jsonify({'success': True, 'favorites': queries.favorites(_me()['sid'])})
+
+
+@blueprint.route('/api/user-home/favorites', methods=['POST'])
+def api_user_home_favorites_save():
+    g = _guard()
+    if g:
+        return g
+    body = request.get_json(silent=True) or {}
+    try:
+        lista = commands.save_favorites(_me(), body.get('favorites'))
+    except domain.HomeError as e:
+        return _err(e.code, e.text, 400, **e.params)
+    return jsonify({'success': True, 'favorites': lista})
+
+
 @blueprint.route('/api/settings/export-tasks', methods=['GET'])
 def api_settings_export_tasks():
     """As MINHAS tarefas (responsável = eu) num CSV da casa: `;` e BOM, uma
