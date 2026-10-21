@@ -50,6 +50,44 @@ def migrate(e):
     return e
 
 
+def read_day(fp):
+    """A lista do arquivo-dia (vazia se não existe), as linhas migradas. Banco
+    ocupado SOBE (§4)."""
+    if not _store.exists(fp):
+        return []
+    try:
+        entries = _store.read(fp)
+    except (json.JSONDecodeError, ValueError):
+        return []
+    return [migrate(e) for e in entries if isinstance(e, dict)] if isinstance(entries, list) else []
+
+
+def write_day(fp, entries):
+    """O funil de gravação (`_atomic_write_json`) + o memo do dia esquecido.
+    Quem chama segura o `_cache_lock` pelo ciclo inteiro."""
+    _R()._atomic_write_json(fp, entries)
+    _R()._daycache_forget(fp)
+
+
+def move_day(fp, lst, idx, ref):
+    """A linha `lst[idx]` do arquivo-dia `fp` passa para o dia de `ref` — o
+    Trade Date foi editado (mesa, 21/10/2026, §656), e é pelo dia do arquivo
+    que a busca, o Confirm/Send/Delete e o Monitor a acham. O DESTINO é gravado
+    primeiro (§4: o pior caso é a linha nos dois dias, nunca em nenhum); no
+    destino ela substitui a de mesma chave. Mesmo dia = só grava `fp`. Quem
+    chama segura o `_cache_lock`. → o caminho em que a linha ficou."""
+    novo = day_path(ref)
+    if os.path.normcase(os.path.normpath(novo)) == os.path.normcase(os.path.normpath(fp)):
+        write_day(fp, lst)
+        return fp
+    linha = lst.pop(idx)
+    os.makedirs(os.path.dirname(novo), exist_ok=True)
+    chave = key_of(linha)
+    write_day(novo, [e for e in read_day(novo) if key_of(e) != chave] + [linha])
+    write_day(fp, lst)
+    return novo
+
+
 def upsert(ref, novas):
     """Upsert por `_id` (a chave interna) no arquivo-dia de `ref`; o ciclo
     inteiro sob o `_cache_lock`. → quantidade gravada."""

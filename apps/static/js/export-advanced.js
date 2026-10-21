@@ -1485,7 +1485,12 @@
 
     function dateField(el, opts) {
         if (typeof el === 'string') el = document.querySelector(el);
-        if (!el || el._flatpickr || typeof flatpickr === 'undefined') return null;
+        // `_otcMask` = este campo JÁ é o altInput (o que se vê) de outro picker:
+        // ele herda a classe do original, e uma página que liga o helper por
+        // classe DEPOIS de montar parte do formulário (o cronograma do Swap
+        // Cashflow, §656) fazia dele um segundo picker, que relia "22/10/2026"
+        // como ISO e mostrava 01/01/2026.
+        if (!el || el._flatpickr || el._otcMask || typeof flatpickr === 'undefined') return null;
         var fp = flatpickr(el, jQuery.extend({
             dateFormat: 'Y-m-d',       // o que fica no value — é o que a API espera
             altInput: true, altFormat: 'd/m/Y',
