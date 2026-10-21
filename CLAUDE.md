@@ -1189,7 +1189,14 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   gaveta e viravam uma faixa no meio da página). **A miniatura de cada parede
   é `data-art="<parede>"` + `background: var(--w-art)`**: a MESMA paleta do
   §2b, no tema atual — gradiente escrito à mão tinha uma versão só e a gaveta
-  do claro parecia escura. Parede nova entra só no §2b (e na lista `WALLS`).
+  do claro parecia escura. **São DOIS desenhos no mesmo SVG** (21/10/2026,
+  §669): o do Pane (`otc-wall__pane`, as dez de antes) e o FLOW
+  (`otc-wall__flow` — Canyon, Fjord, Glacier: fita em serpentina e câmaras em
+  relevo, luz vindo de baixo), e a parede escolhe por `--w-pane`/`--w-flow`.
+  A miniatura do flow é um SVG embutido gerado pela `otc-flow-art` com as
+  mesmas cores. O desfoque do flow é só o halo e o reflexo (`.g`), que o modo
+  opaco tira. Parede nova entra no §2b, na lista `WALLS` e nos três mapas
+  `walls` do `settings.js`: o `check_wallpapers.py` cobra os quatro.
 - **A casca é presa na BORDA ESQUERDA, sem centralizar** (§634): menu a
   `--otc-inset` (10px) da borda, conteúdo a `--otc-side-gap` (18px) dele
   (`--otc-content-l`, que o desafixar zera para o `--otc-gutter`), barra do
@@ -3310,7 +3317,7 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (206 scripts)
+### `scripts/tests/` (207 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

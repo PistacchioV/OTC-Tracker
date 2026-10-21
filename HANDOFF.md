@@ -28072,3 +28072,60 @@ contraparte some; com R$15 de diferença o Match habilita (EQUITIES, R$20). **O
 caso do print continua bloqueado pelo VALOR**: a diferença é 9.496,16, acima
 dos R$20 — não é tolerância de arredondamento, é uma quebra a explicar (ou um
 lançamento a mais/a menos de um dos lados).
+
+## §669 — Três paredes novas: Canyon, Fjord e Glacier, o desenho "flow" (2026-10-21)
+
+**O pedido.** Novas opções de fundo a partir de uma referência visual (uma fita
+de luz em serpentina contornando câmaras arredondadas, sobre fundo escuro, em
+cobre, índigo e prata), com nomes que não remetessem à referência.
+
+**Os nomes.** Três paisagens esculpidas por correntes — o motivo do desenho são
+canais por onde algo flui: **Canyon** (cobre), **Fjord** (índigo) e
+**Glacier** (prata com brilho azul-gelo). Na Settings: Cânion, Fiorde, Geleira
+(PT) e Cañón, Fiordo, Glaciar (ES); na gaveta de Aparência, o nome em inglês
+como as outras.
+
+**O desenho é OUTRO, não outra paleta.** As dez paredes de antes são o mesmo
+SVG com cores diferentes (`--w-*`); o flow tem outra geometria. O partial
+passou a ter dois grupos sobre a mesma base: `otc-wall__pane` (o de sempre) e
+`otc-wall__flow`, e a parede diz qual aparece por `--w-pane`/`--w-flow` (o
+`display` dos grupos, §1 do `otc.scss`). O flow é:
+- uma fita em serpentina (entra pela esquerda e desce em S), uma aba saindo da
+  borda esquerda e três câmaras (a cápsula do alto e as duas de baixo);
+- **relevo por traços concêntricos**: cada caminho é desenhado várias vezes
+  com larguras decrescentes (contorno, corpo, contorno interno, corpo), o que
+  dá as linhas paralelas de curva de nível sem calcular offset de caminho;
+- **a luz vem de baixo**: a cópia clara do contorno (`--w-f-rim`) desce 3px por
+  baixo da escura (`--w-f-rim2`), então a borda de baixo de cada fita acende e
+  a de cima fica apagada; o halo também desce;
+- o brilho no fundo de cada câmara é um gradiente vertical (`--w-f-pool` →
+  `--w-f-pool2`) e um reflexo desfocado abaixo dela;
+- os caminhos estão uma vez no `<defs>` e são reusados por `<use>`.
+
+**Modo opaco.** Só o halo e o reflexo são desfocados (`.g`, os únicos com
+`filter`). Sem GPU o desfoque é software e pesaria em cada troca de página, e
+sem o desfoque eles seriam um traço grosso, por isso `:root.is-solid` os tira e
+fica o relevo. Conferido com `__OTC_TRACKER_FX__ = reduced`.
+
+**Os dois temas.** No escuro é a referência: fundo quase preto, contornos
+claros, brilho colorido. No claro é o mesmo relevo em baixo-relevo claro (corpo
+quase branco, contorno na cor da parede). O vidro das janelas segue a base
+(`--otc-glass-slab` mistura com o `--w-b2`), como nas outras.
+
+**A miniatura.** O `--w-art` das outras é feito de gradientes CSS, que não
+desenham fita. Para as flow ele é um SVG embutido (`url("data:image/svg+xml,…")`)
+gerado pela função Sass `otc-flow-art` com as MESMAS cores da parede, uma
+versão por tema (`[data-bs-theme=dark] [data-art=…]`). O `otc-hex` troca o `#`
+por `%23` (o `inspect` da cor literal devolve o hex como escrito).
+
+**Guardas.** `check_wallpapers.py` (novo, 42 asserções): a lista `WALLS`, a
+paleta compilada, os três mapas de nome da Settings, o desenho de cada parede
+(flow liga o seu e desliga o do Pane; as outras ficam no do Pane), a miniatura
+própria nos dois temas, as referências internas do partial e o modo opaco. Os
+guardas de tema e casca (`check_theme_toggle`, `check_dropdown_layers`,
+`check_page_switch`, `check_send_contrail`, `check_summary_glow`,
+`check_table_center`, `check_status_pill`, `check_row_action_buttons`,
+`check_fab_favorites`, `check_user_home`, `check_nav_alias`) passam.
+
+Conferido no app (5005), 1600×1000: Pay/Rec com as três paredes nos dois temas,
+a Settings com as treze miniaturas nos dois temas, e o Glacier no modo opaco.
