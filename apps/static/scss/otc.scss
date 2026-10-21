@@ -1733,6 +1733,31 @@ table td .btn.btn-act > i { font-size: 1rem !important; line-height: 1; }
   .badge-soft-#{$name} { color: #{$c} !important; }
   .badge-outline-#{$name} { color: #{$c} !important; border: 1px solid color-mix(in srgb, #{$c} 45%, transparent); background: transparent; }
 }
+// Pílula de STATUS (mesa, 21/10/2026, §649): em TODA tela, texto BRANCO e em
+// Proper — a primeira letra de cada palavra maiúscula, as demais minúsculas;
+// quem reescreve o texto é o `otc.js` (§9c), o dado não muda. A tela marca a
+// pílula com `otc-status` e segue escolhendo o TOM pela classe de sempre
+// (`text-bg-*`, `bg-*`, `bg-*-subtle`, `badge-soft-*`): aqui o tom vira fundo
+// CHEIO — branco sobre a tinta de 16% não se lê. `light` sai cinza (branco
+// sobre claro sumiria).
+$otc-status-tones: ("primary": var(--otc-accent), "secondary": rgb(110, 110, 128), "success": rgb(34, 165, 89),
+  "info": rgb(10, 143, 196), "danger": rgb(217, 45, 58), "warning": rgb(217, 138, 0), "dark": rgb(43, 43, 51),
+  "light": rgb(138, 143, 153), "purple": var(--otc-purple), "pink": var(--otc-pink), "teal": var(--otc-teal),
+  "orange": var(--otc-orange));
+// classe DOBRADA: o `.text-success`/`.text-danger` do tema vêm depois, com
+// `!important`, e a pílula `bg-*-subtle text-*` voltaria ao texto colorido
+.otc-status.otc-status {
+  background-color: rgb(110, 110, 128) !important;
+  background-image: linear-gradient(rgba(255, 255, 255, .24), rgba(255, 255, 255, 0)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25);
+  border-color: transparent !important;
+  color: #fff !important;
+  * { color: inherit !important; }
+}
+@each $name, $c in $otc-status-tones {
+  .otc-status:is(.text-bg-#{$name}, .bg-#{$name}, .bg-#{$name}-subtle, .badge-soft-#{$name}, .badge-outline-#{$name}) { background-color: #{$c} !important; }
+}
+.otc-status.badge-sent { background-color: #0e8fa8 !important; }
 .text-primary { color: var(--otc-accent-ink) !important; }
 // `bg-light` era cor FIXA do Bootstrap (#f3f5fa nos dois temas): o campo
 // automático do modal saía branco com texto apagado no escuro. Vira o

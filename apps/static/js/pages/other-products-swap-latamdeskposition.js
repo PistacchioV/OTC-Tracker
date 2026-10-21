@@ -167,9 +167,9 @@
   // Status badge padrão do projeto: OK=success, Pending=warning, New=info.
   function statusBadge(status) {
     var s = String(status || 'OK').toLowerCase();
-    if (s === 'pending') return '<span class="badge text-bg-warning bg-gradient">' + esc(t('pending')) + '</span>';
-    if (s === 'new')     return '<span class="badge bg-info text-white bg-gradient">' + esc(t('newst')) + '</span>';
-    return '<span class="badge text-bg-success bg-gradient">' + esc(t('ok')) + '</span>';
+    if (s === 'pending') return '<span class="badge otc-status text-bg-warning bg-gradient">' + esc(t('pending')) + '</span>';
+    if (s === 'new')     return '<span class="badge otc-status bg-info text-white bg-gradient">' + esc(t('newst')) + '</span>';
+    return '<span class="badge otc-status text-bg-success bg-gradient">' + esc(t('ok')) + '</span>';
   }
 
   function metaOf(r) {

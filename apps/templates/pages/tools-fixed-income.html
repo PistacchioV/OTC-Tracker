@@ -91,7 +91,7 @@
                         <div class="tl-big">R$ {{ r.valor_liquido | tl_money(2) }}</div>
                         <p class="tl-sub"><span data-lang="tl-rf-net-yield">net yield of</span> R$ {{ r.rendimento_liquido | tl_money(2) }} · {{ r.taxa_liquida_anual | tl_pct(4) }} <span data-lang="tl-rf-pa-equiv">p.a. equivalent</span></p>
                     </div>
-                    {% if r.isento %}<span class="badge rounded-pill text-bg-success bg-gradient" data-lang="tl-rf-exempt">tax exempt</span>{% endif %}
+                    {% if r.isento %}<span class="badge otc-status rounded-pill text-bg-success bg-gradient" data-lang="tl-rf-exempt">tax exempt</span>{% endif %}
                 </div>
                 <div class="tl-stats mt-3">
                     <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-rf-gross">Gross value</div><div class="tl-stat__value">R$ {{ r.valor_bruto | tl_money(2) }}</div><div class="tl-stat__note"><span data-lang="tl-rf-yield-of">yield of</span> R$ {{ r.rendimento_bruto | tl_money(2) }}</div></div>

@@ -302,7 +302,7 @@ function _todayYmd(){var d=new Date();return d.getFullYear()+('0'+(d.getMonth()+
 var STATUS_META = { 'Complete': 'bg-success text-white', 'Pending': 'bg-warning text-dark' };
 function statusBadge(s) {
     var txt = String(s || 'Pending');
-    return '<span class="badge rounded-pill ' + (STATUS_META[txt] || 'bg-secondary') + ' bg-gradient">' + esc(txt) + '</span>';
+    return '<span class="badge otc-status rounded-pill ' + (STATUS_META[txt] || 'bg-secondary') + ' bg-gradient">' + esc(txt) + '</span>';
 }
 
 $(document).ready(function () {

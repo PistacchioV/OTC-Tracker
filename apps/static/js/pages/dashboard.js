@@ -33,7 +33,7 @@ const STATUS_CLS = {
 function statusBadge(status) {
     const cls = STATUS_CLS[status] || 'bg-secondary-subtle text-secondary';
     const label = t(`dash-status-${(status || '').toLowerCase()}`, status || '—');
-    return `<span class="badge ${cls}">${label}</span>`;
+    return `<span class="badge otc-status ${cls}">${label}</span>`;
 }
 
 function productBadge(product, type) {

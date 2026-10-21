@@ -290,7 +290,7 @@ function statusBadge(status) {
     var s = 'New';
     for (var k in DCES_STATUS_META) { if (txt.toLowerCase() === k.toLowerCase()) { s = k; break; } }
     var m = DCES_STATUS_META[s];
-    return '<span class="badge ' + m.cls + ' bg-gradient" data-lang="' + m.lang + '">' + s + '</span>';
+    return '<span class="badge otc-status ' + m.cls + ' bg-gradient" data-lang="' + m.lang + '">' + s + '</span>';
 }
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function _t(key, fallback) {

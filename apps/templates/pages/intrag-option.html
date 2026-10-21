@@ -317,7 +317,7 @@ function statusBadge(status) {
     var s = 'New';
     for (var k in OPT_STATUS_META) { if (txt.toLowerCase() === k.toLowerCase()) { s = k; break; } }
     var m = OPT_STATUS_META[s];
-    return '<span class="badge ' + m.cls + ' bg-gradient" data-lang="' + m.lang + '">' + s + '</span>';
+    return '<span class="badge otc-status ' + m.cls + ' bg-gradient" data-lang="' + m.lang + '">' + s + '</span>';
 }
 
 $(document).ready(function() {

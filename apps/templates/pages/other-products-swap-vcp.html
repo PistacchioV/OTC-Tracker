@@ -392,7 +392,7 @@
     var txt = n2(v);
     if (!veredito) return esc(txt);   // sem os dois lados não há veredito
     var ok = veredito !== 'Check';
-    return '<span class="badge rounded-pill bg-gradient ' +
+    return '<span class="badge otc-status rounded-pill bg-gradient ' +
       (ok ? 'text-bg-success' : 'text-bg-warning') + '" title="' +
       esc(ok ? 'Ok — dentro da tolerância de R$ 10,00'
              : 'Check — diferença acima da tolerância de R$ 10,00') +
@@ -400,7 +400,7 @@
   }
   function pill(st) {
     var cls = { Sent: 'text-bg-primary', New: 'text-bg-info' }[st] || 'text-bg-secondary';
-    return '<span class="badge ' + cls + ' bg-gradient rounded-pill">' + esc(st || 'New') + '</span>';
+    return '<span class="badge otc-status ' + cls + ' bg-gradient rounded-pill">' + esc(st || 'New') + '</span>';
   }
   function postJSON(url, body) {
     return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })

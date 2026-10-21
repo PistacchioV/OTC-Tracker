@@ -505,7 +505,7 @@ $(document).ready(function () {
         var st  = (val || 'ACTIVE').toUpperCase();
         var cls = st === 'ACTIVE' ? 'text-bg-success' : 'text-bg-warning';
         var lbl = st === 'ACTIVE' ? 'Active' : 'Pending';
-        return '<span class="badge rounded-pill pill-badge ' + cls + '">' + lbl + '</span>';
+        return '<span class="badge otc-status rounded-pill pill-badge ' + cls + '">' + lbl + '</span>';
     }
 
     // Botões de ação no padrão do app (spec .ops-row-act, referência

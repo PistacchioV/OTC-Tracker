@@ -713,7 +713,7 @@
         document.getElementById('fiCurDesc').textContent = tpl.description || '';
         var live = tpl.status === 'active';
         document.getElementById('fiCurStatus').innerHTML =
-            '<span class="badge rounded-pill bg-gradient ' + (live ? 'bg-success' : 'bg-secondary') + '">' +
+            '<span class="badge otc-status rounded-pill bg-gradient ' + (live ? 'bg-success' : 'bg-secondary') + '">' +
             (live ? t('fi-status-active', 'Active') : t('fi-status-library', 'Library')) + '</span>';
 
         var meta = [];

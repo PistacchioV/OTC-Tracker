@@ -16658,6 +16658,69 @@ table td .btn.btn-act > i {
   background: transparent;
 }
 
+.otc-status.otc-status {
+  background-color: rgb(110, 110, 128) !important;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  border-color: transparent !important;
+  color: #fff !important;
+}
+.otc-status.otc-status * {
+  color: inherit !important;
+}
+
+.otc-status:is(.text-bg-primary, .bg-primary, .bg-primary-subtle, .badge-soft-primary, .badge-outline-primary) {
+  background-color: var(--otc-accent) !important;
+}
+
+.otc-status:is(.text-bg-secondary, .bg-secondary, .bg-secondary-subtle, .badge-soft-secondary, .badge-outline-secondary) {
+  background-color: rgb(110, 110, 128) !important;
+}
+
+.otc-status:is(.text-bg-success, .bg-success, .bg-success-subtle, .badge-soft-success, .badge-outline-success) {
+  background-color: rgb(34, 165, 89) !important;
+}
+
+.otc-status:is(.text-bg-info, .bg-info, .bg-info-subtle, .badge-soft-info, .badge-outline-info) {
+  background-color: rgb(10, 143, 196) !important;
+}
+
+.otc-status:is(.text-bg-danger, .bg-danger, .bg-danger-subtle, .badge-soft-danger, .badge-outline-danger) {
+  background-color: rgb(217, 45, 58) !important;
+}
+
+.otc-status:is(.text-bg-warning, .bg-warning, .bg-warning-subtle, .badge-soft-warning, .badge-outline-warning) {
+  background-color: rgb(217, 138, 0) !important;
+}
+
+.otc-status:is(.text-bg-dark, .bg-dark, .bg-dark-subtle, .badge-soft-dark, .badge-outline-dark) {
+  background-color: rgb(43, 43, 51) !important;
+}
+
+.otc-status:is(.text-bg-light, .bg-light, .bg-light-subtle, .badge-soft-light, .badge-outline-light) {
+  background-color: rgb(138, 143, 153) !important;
+}
+
+.otc-status:is(.text-bg-purple, .bg-purple, .bg-purple-subtle, .badge-soft-purple, .badge-outline-purple) {
+  background-color: var(--otc-purple) !important;
+}
+
+.otc-status:is(.text-bg-pink, .bg-pink, .bg-pink-subtle, .badge-soft-pink, .badge-outline-pink) {
+  background-color: var(--otc-pink) !important;
+}
+
+.otc-status:is(.text-bg-teal, .bg-teal, .bg-teal-subtle, .badge-soft-teal, .badge-outline-teal) {
+  background-color: var(--otc-teal) !important;
+}
+
+.otc-status:is(.text-bg-orange, .bg-orange, .bg-orange-subtle, .badge-soft-orange, .badge-outline-orange) {
+  background-color: var(--otc-orange) !important;
+}
+
+.otc-status.badge-sent {
+  background-color: #0e8fa8 !important;
+}
+
 .text-primary {
   color: var(--otc-accent-ink) !important;
 }

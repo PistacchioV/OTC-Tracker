@@ -264,7 +264,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var STATUS_RANK = { 'New': 1, 'In Progress': 2, 'Pending': 3, 'Resolved': 4, 'Closed': 5 };
 
     function badgeStatus(s) {
-        return '<span class="badge badge-label ' + (STATUS_CLASS[s] || 'bg-secondary-subtle text-secondary') +
+        return '<span class="badge otc-status badge-label ' + (STATUS_CLASS[s] || 'bg-secondary-subtle text-secondary') +
                '">' + esc(s) + '</span>';
     }
     function badgePriority(p) {

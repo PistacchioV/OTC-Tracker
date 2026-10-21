@@ -91,6 +91,26 @@
      * página que exporta (`check_export_excel_ids.py` cobra a ordem); o
      * Buttons copia o `action` na construção do botão, então o patch tem de
      * existir ANTES de qualquer `new Buttons(...)`. */
+    /* A pílula de STATUS sai no export como na tela, em Proper (§649): o
+     * `otc.js` reescreve o texto dela na página, mas o export lê o HTML que
+     * o render DEVOLVE, com o texto do dado ("SENT"). O Buttons tira o HTML
+     * de toda célula pelo `DataTable.Buttons.stripData` (o `format.body`
+     * padrão chama ele) — embrulhado UMA vez aqui, vale para Copy, CSV,
+     * Excel, Print e PDF de toda página. */
+    function properStatus(html) {
+        if (typeof html !== 'string' || html.indexOf('otc-status') === -1 || !window.otcProperize) return html;
+        var d = document.createElement('div');
+        d.innerHTML = html;
+        window.otcProperize(d);
+        return d.innerHTML;
+    }
+    (function patchStatusExport() {
+        var B = window.jQuery && jQuery.fn && jQuery.fn.dataTable && jQuery.fn.dataTable.Buttons;
+        if (!B || typeof B.stripData !== 'function' || B.stripData._otcProper) return;
+        var orig = B.stripData;
+        B.stripData = function (t, n) { return orig.call(this, properStatus(t), n); };
+        B.stripData._otcProper = true;
+    })();
     (function patchExcelIds() {
         var DT = window.jQuery && jQuery.fn && jQuery.fn.dataTable;
         var def = DT && DT.ext && DT.ext.buttons && DT.ext.buttons.excelHtml5;
@@ -1215,7 +1235,7 @@
                 // limpeza vale para toda página com Advanced Export.
                 format: { body: function (data) {
                     if (typeof data !== 'string') return data;
-                    var v = plain(data);
+                    var v = plain(properStatus(data));
                     return /^#?(NULL!?|N\/A|REF!|VALUE!|DIV\/0!|NAME\?|NUM!)$/i.test(v) ? '' : v;
                 } }
             }

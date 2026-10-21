@@ -902,8 +902,20 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   DataTables 2 o `tables({api:true})` não tem `.every()`, e era um `TypeError`
   que deixava Intrag, Swap Bullet/Cashflow e as recompras sem copiar nada.
 - **Números** `#,##0.00` com `tabular-nums`; taxa NÃO é valor (Strike fica com
-  as casas que tem); formatação só no `display`, sort pelo cru. **Status** é
-  badge pill `bg-gradient`.
+  as casas que tem); formatação só no `display`, sort pelo cru.
+- **A pílula de STATUS é uma só: texto BRANCO e em Proper** (mesa, 21/10/2026,
+  §649). A tela marca o badge com `otc-status` e segue escolhendo o TOM pela
+  classe de sempre (`text-bg-*`, `bg-*`, `bg-*-subtle`, `badge-soft-*`); o
+  tema (`otc.scss` §6d) o pinta CHEIO, com o texto branco, e o `otc.js` (§9c)
+  reescreve o texto pela regra do PROPER do Excel — maiúscula a letra depois
+  de não-letra, minúscula a depois de letra: "SENT" → "Sent", "Pending OTC" →
+  "Pending Otc", "Unmatched B3" fica —, inclusive no que chega depois (redraw,
+  tradução). O DADO não muda: o funil e o export (o `Buttons.stripData`
+  embrulhado no `export-advanced.js`) passam pela mesma `otcProperize`, para
+  a lista e o arquivo dizerem o que a célula diz. Badge que não é status
+  (contagem, produto, LOB, moeda, papel, prioridade, aviso) fica SEM a marca —
+  "NDF" não pode virar "Ndf". Função de status nova sem a marca: o
+  `check_status_pill.py` recusa.
 - **Excel exportado: ID que parece número sai como TEXTO** (§477). O
   `excelHtml5` do Buttons grava como número todo texto que casa
   `^-?\d+(\.\d+)?([eE]-?\d+)?$`, e o contrato B3 `26E04610365` casa — para o
@@ -3095,7 +3107,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (198 scripts)
+### `scripts/tests/` (199 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

@@ -162,7 +162,7 @@
   function statusCell(st) {
     var cls = STATUS_PILL[st];
     if (!cls) return null;
-    return '<span class="badge ' + cls + ' bg-gradient rounded-pill">' + esc(st) + '</span>';
+    return '<span class="badge otc-status ' + cls + ' bg-gradient rounded-pill">' + esc(st) + '</span>';
   }
 
   function buildTable(columns, rows, statuses) {
@@ -184,7 +184,7 @@
       }).join('') + '</tr>';
     document.querySelector('#swapchar-table thead').innerHTML = titleRow + filterRow;
 
-    var statusBadge = '<span class="badge bg-secondary-subtle text-secondary" data-lang="sc-status-custody">' + esc(t('status')) + '</span>';
+    var statusBadge = '<span class="badge otc-status bg-secondary-subtle text-secondary" data-lang="sc-status-custody">' + esc(t('status')) + '</span>';
     // Os botões carregam o índice da linha NO PAYLOAD (data-i), não a posição na
     // tela: a tabela ordena e pagina, e a posição visual não identifica nada.
     // `sc-row-act` e NAO `rounded-circle`: o circulo do Bootstrap so fica redondo

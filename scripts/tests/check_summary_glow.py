@@ -64,7 +64,8 @@ def alphas(body):
 print('\n== 1. o JS escreve o estado no card, do mesmo `ok` do badge ==')
 JS = SRC.split('{% block extra_javascript %}', 1)[1]
 check('badge e card saem da mesma variavel',
-      "badge.className = 'ops-recon-badge ' + (ok ? 'is-ok' : 'is-check');" in JS, True)
+      # a pílula é de status (§649): `otc-status` + o tom, do MESMO `ok`
+      "badge.className = 'ops-recon-badge otc-status ' + (ok ? 'is-ok text-bg-success' : 'is-check text-bg-danger');" in JS, True)
 check('o card recebe is-ok', "card.classList.toggle('is-ok', ok);" in JS, True)
 check('o card recebe is-check', "card.classList.toggle('is-check', !ok);" in JS, True)
 check('is-unmatched continua (anel ambar)', "card.classList.toggle('is-unmatched', !ok);" in JS, True)

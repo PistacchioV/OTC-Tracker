@@ -255,7 +255,7 @@
                                         </td>
                                         <td>{{ u.created_at }}</td>
                                         <td data-column="status">
-                                            <span class="status-badge badge rounded-pill {{ badge_class }}">{{ u.Status }}</span>
+                                            <span class="status-badge badge otc-status rounded-pill {{ badge_class }}">{{ u.Status }}</span>
                                             <select class="form-select form-select-sm status-select d-none" style="min-width:110px;">
                                                 <option value="Pending"  {% if u.Status == 'Pending'  %}selected{% endif %}>Pending</option>
                                                 <option value="Active"   {% if u.Status == 'Active'   %}selected{% endif %}>Active</option>
@@ -422,7 +422,7 @@ const ROLE_DISPLAY = {
 };
 
 function updateStatusBadge(badge, status) {
-    badge.className = 'status-badge badge rounded-pill';
+    badge.className = 'status-badge badge otc-status rounded-pill';
     if (status === 'Active')        badge.classList.add('bg-success-subtle', 'text-success');
     else if (status === 'Inactive') badge.classList.add('bg-danger-subtle',  'text-danger');
     else                            badge.classList.add('bg-warning-subtle', 'text-warning');

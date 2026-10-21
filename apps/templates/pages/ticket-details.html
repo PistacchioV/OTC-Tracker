@@ -298,7 +298,7 @@ document.addEventListener('DOMContentLoaded', function () {
         $('tkd-id').textContent = '#' + tk.id;
         $('tkd-subject').textContent = tk.subject || '';
         var badge = $('tkd-status-badge');
-        badge.className = 'badge badge-label ' + (STATUS_CLASS[tk.status] || 'bg-secondary-subtle text-secondary');
+        badge.className = 'badge otc-status badge-label ' + (STATUS_CLASS[tk.status] || 'bg-secondary-subtle text-secondary');
         badge.textContent = tk.status || '';
 
         var rname = tk.requester_name || tk.requester_sid || '';

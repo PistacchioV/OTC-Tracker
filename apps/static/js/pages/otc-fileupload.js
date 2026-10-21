@@ -573,11 +573,11 @@ var OTCFileUpload = (function () {
 
     function quotedBadge(subjEntry) {
         if (!subjEntry) {
-            return '<span class="badge text-bg-secondary rounded-pill">Missing B3</span>';
+            return '<span class="badge otc-status text-bg-secondary rounded-pill">Missing B3</span>';
         }
         return isCentsFactor(subjEntry.fatorConversao)
-            ? '<span class="badge text-bg-success rounded-pill">YES</span>'
-            : '<span class="badge text-bg-warning rounded-pill">NO</span>';
+            ? '<span class="badge otc-status text-bg-success rounded-pill">YES</span>'
+            : '<span class="badge otc-status text-bg-warning rounded-pill">NO</span>';
     }
 
     // -------------------------------------------------------------------------
@@ -819,7 +819,7 @@ var OTCFileUpload = (function () {
         var rowArray = _escRow([
             '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="option">',  // col 0
             ACTIONS,                                                                                                // col 1
-            '<span class="badge bg-info text-white bg-gradient">New</span>',                       // col 2  Status (match dealJsonToRow / filter render)
+            '<span class="badge otc-status bg-info text-white bg-gradient">New</span>',                       // col 2  Status (match dealJsonToRow / filter render)
             dealName,                                                                                               // col 3  Deal
             '',                                                                                                     // col 4  B3 ID (blank — filled manually later)
             tradeDate,                                                                                              // col 5  Trade Date
@@ -859,7 +859,7 @@ var OTCFileUpload = (function () {
         var rowArrayNDF = _escRow([
             '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="option">',  // col 0
             ACTIONS,                                                                                                // col 1
-            '<span class="badge bg-info text-white bg-gradient">New</span>',                       // col 2  Status (match dealJsonToRow / filter render)
+            '<span class="badge otc-status bg-info text-white bg-gradient">New</span>',                       // col 2  Status (match dealJsonToRow / filter render)
             dealName,                                                                                               // col 3  Deal
             '',                                                                                                     // col 4  B3 ID
             tradeDate,                                                                                              // col 5  Trade Date
@@ -1218,7 +1218,7 @@ var OTCFileUpload = (function () {
                 newData.B3_ID = existingB3Id;
 
                 // Set Amend status badge
-                newRow[2]      = '<span class="badge text-bg-warning bg-gradient">Amend</span>';
+                newRow[2]      = '<span class="badge otc-status text-bg-warning bg-gradient">Amend</span>';
                 newData.Status = 'Amend';
 
                 // Compute diff: which data columns changed?
@@ -1303,7 +1303,7 @@ var OTCFileUpload = (function () {
             var badge = res.status === 'Amend' ? 'text-bg-warning'
                       : res.status === 'Success' ? 'text-bg-success'
                       : res.status === 'Sent' ? 'badge-sent' : 'text-bg-secondary';
-            newRow[2] = '<span class="badge ' + badge + ' bg-gradient">' + (res.status || '') + '</span>';
+            newRow[2] = '<span class="badge otc-status ' + badge + ' bg-gradient">' + (res.status || '') + '</span>';
             newRow[4] = res.b3_id || '';
             rowApi.data(newRow);
             tableInstance.draw(false);

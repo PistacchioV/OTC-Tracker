@@ -572,8 +572,8 @@ var OTCFileUpload = (function () {
 
     function quotedBadge(fator) {
         return isCentsFactor(fator)
-            ? '<span class="badge text-bg-success rounded-pill">YES</span>'
-            : '<span class="badge text-bg-warning rounded-pill">NO</span>';
+            ? '<span class="badge otc-status text-bg-success rounded-pill">YES</span>'
+            : '<span class="badge otc-status text-bg-warning rounded-pill">NO</span>';
     }
 
     // -------------------------------------------------------------------------
@@ -736,7 +736,7 @@ var OTCFileUpload = (function () {
         return [
             '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="option">',  // col 0
             ACTIONS,                                                                                                // col 1
-            '<h4><span class="badge badge-label text-bg-info rounded-pill">New</span></h4>',                       // col 2  Status
+            '<h4><span class="badge otc-status badge-label text-bg-info rounded-pill">New</span></h4>',                       // col 2  Status
             dealName,                                                                                               // col 3  Deal
             '',                                                                                                     // col 4  B3 ID (blank — filled manually later)
             tradeDate,                                                                                              // col 5  Trade Date
