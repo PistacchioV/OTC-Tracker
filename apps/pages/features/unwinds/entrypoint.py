@@ -509,8 +509,21 @@ def _p_delete(pagina):
     return jsonify({'success': True})
 
 
+def _p_search(pagina):
+    """O filtro inteligente da tela (§661): `filters` = [{field, type, value,
+    mode}], o contrato das páginas de New Deals e da Fase 1. Cada linha volta
+    com `_day`, o dia do arquivo-dia em que ela mora."""
+    filters = _payload().get('filters', [])
+    if not isinstance(filters, list):
+        filters = []
+    return jsonify({'success': True, 'backend': True,
+                    'entries': product_queries.search(pagina, filters),
+                    'fields': catalog.fields(pagina), 'labels': catalog.labels(pagina)})
+
+
 _PRODUCT_ACTIONS = {
     ('GET', ''): _p_get,
+    ('POST', 'cache/search'): _p_search,
     ('POST', 'import-file'): _p_import,
     ('GET', 'preview'): _p_preview,
     ('POST', 'send-conecta'): _p_send,

@@ -23,7 +23,9 @@ TRANSPOSTA: rotulos na primeira coluna, uma TRANCHE por coluna, com o CETIP ID
      fatores de ponta SEM trocar o centavo do caixa do e-mail;
   4. a TELA em cards (Chromium, a pagina RENDERIZADA pelo app): um card por
      recompra, com os ids, Party/Counterparty e a pilula da LOB; o Edit do card
-     abre o modal; o duplo clique, o preview do arquivo da B3.
+     abre o modal; o duplo clique, o preview do arquivo da B3; e o FILTRO
+     INTELIGENTE (§661): o chip padrao da Reference Date, a busca pelo B3 ID que
+     atravessa os dias, e o Edit de um card de OUTRO dia gravando no dia dele.
 
     OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_unwind_swap_trs.py
 """
@@ -298,6 +300,14 @@ def main():
     check('a pagina carrega o deal-cards.js e desenha #unwCards',
           'deal-cards.js' in html and 'id="unwCards"' in html and 'unw-cards-mode' in html)
     check('a de Opcoes segue em tabela', 'id="unwCards"' not in cl.get('/unwinds/options/fxo').get_data(as_text=True))
+    # O MESMO e-mail importado tambem em 20/10: o contrato vive em dois dias
+    r = cl.post(pg['api'] + '/import-file', data={'file': (io.BytesIO(_eml()), 'recap.msg'), 'date': '2026-10-20'},
+                content_type='multipart/form-data')
+    check('o mesmo recap tambem no dia 20/10 (para a busca atravessar dias)', r.status_code == 200)
+    rs = cl.post(pg['api'] + '/cache/search', json={'filters': [
+        {'field': 'Contract', 'type': 'text', 'value': '25L03938191', 'mode': 'text'}]}).get_json()
+    check('a busca pelo B3 ID atravessa os dias e diz o dia de cada linha (`_day`)',
+          rs.get('success') and sorted(e.get('_day') for e in rs['entries']) == ['2026-10-20', '2026-10-21'], rs)
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:                                          # pragma: no cover
@@ -341,6 +351,36 @@ def main():
         p.dblclick('.otc-deal-card[data-key="%s"] .otc-deal-card__facts' % a['_id'])
         p.wait_for_timeout(1200)
         check('o duplo clique abre o preview do arquivo da B3', 'SWAP 0014' in p.inner_text('body'))
+        p.keyboard.press('Escape')
+        p.wait_for_timeout(400)
+
+        # o FILTRO INTELIGENTE (§661)
+        chips = p.evaluate("[...document.querySelectorAll('.smart-filter-chip')].map(c => c.innerText.replace(/\\s+/g, ' ').trim())")
+        check('a barra do filtro inteligente abre com o chip da Reference Date (hoje)',
+              p.is_visible('#smartFilter') and chips == ['REFERENCE DATE: 21/10/2026 ×'], chips)
+        p.click('.sf-chip-remove')
+        p.fill('#sfInput', '25L03938191')
+        p.wait_for_timeout(300)
+        p.locator('#sfDropdown li', has_text='B3 ID').first.dispatch_event('mousedown')
+        p.click('#sfSearchBtn')
+        p.wait_for_timeout(1200)
+        dias = p.evaluate("Object.keys(ROWS).map(k => ROWS[k]._day).sort()")
+        check('pelo B3 ID: os cards das DUAS datas', p.locator('.otc-deal-card').count() == 2
+              and dias == ['2026-10-20', '2026-10-21'], dias)
+        k20 = p.evaluate("Object.keys(ROWS).filter(k => ROWS[k]._day === '2026-10-20')[0]")
+        p.click('.otc-deal-card[data-key="%s"] .btn-row-edit' % k20)
+        p.wait_for_selector('#unwEditModal.show', timeout=5000)
+        p.fill('#unwEditFields input[data-f="KeepPremium"]', 'Sim')
+        p.click('#unwEditSave')
+        p.wait_for_timeout(1200)
+        from datetime import datetime as _dt
+        d20 = product_store.read_day(product_store.day_path(pg, _dt(2026, 10, 20)))
+        d21 = product_store.read_day(product_store.day_path(pg, _dt(2026, 10, 21)))
+        e20 = [x for x in d20 if x.get('_id') == k20]
+        e21 = [x for x in d21 if x.get('Contract') == '25L03938191']
+        check('o Edit de um card de OUTRO dia grava no dia DELE (20/10), nao no da Reference Date',
+              e20 and e20[0].get('KeepPremium') == 'Sim' and e20[0].get('Status') == 'Pending'
+              and e21 and e21[0].get('Status') != 'Pending', (e20 and e20[0].get('KeepPremium'), e21 and e21[0].get('Status')))
         check('sem erro de JS', not erros, erros)
         b.close()
 
