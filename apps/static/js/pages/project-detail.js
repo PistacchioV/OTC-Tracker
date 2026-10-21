@@ -1,6 +1,8 @@
 /* project-detail.js — a página de UM projeto: contadores, visão geral (Lead,
    status, linha do tempo, pessoas), marcos, atividade, burn-up e as tarefas por
-   status. Toda escrita devolve o projeto inteiro e a página se redesenha dele. */
+   status. Toda escrita devolve o projeto inteiro e a página se redesenha dele.
+   Os marcos são os EVENTOS da iniciativa: nascem do "New event" da barra, e o
+   card só os mostra (§648). */
 (function () {
   'use strict';
   var P = window.OtcPj;
@@ -110,20 +112,24 @@
     }).join('') || '<div class="text-muted">—</div>';
   }
 
+  // O card SÓ MOSTRA (mesa, 21/10/2026): quando, a hora e a duração, o tipo e
+  // o local. Criar é o New event da barra; o clique abre o evento no modal.
   function renderMilestones(p) {
     var ms = p.milestones || [];
     var done = ms.filter(function (m) { return m.done; }).length;
     $('pjd-ms-sub').textContent = ms.length ? t('ms_reached_n', { n: done, total: ms.length }) : t('no_ms');
     $('pjd-ms').innerHTML = ms.map(function (m) {
-      var when = m.done ? (P.fmtShort(m.date) || '') + (m.date ? ' · ' : '') + t('ms_done')
-                        : (m.date ? P.fmtShort(m.date) + ' · ' + P.inDays(m.date) : t('no_date'));
+      var when = [m.date ? P.fmtShort(m.date) : t('no_date')];
+      if (m.time) when.push(m.time + (m.length ? ' (' + P.lengthLabel(m.length) + ')' : ''));
+      when.push(m.done ? t('ms_done') : (m.date ? P.inDays(m.date) : ''));
+      var extra = [P.tEvent(m.type), m.where || ''].filter(Boolean).join(' · ');
       var next = !m.done && m.id === p.next_milestone_id;
-      return '<li class="' + (m.done ? 'is-done' : '') + '" data-ms="' + esc(m.id) + '">' +
-        '<button type="button" class="pjd-ms__check" data-ms-toggle aria-pressed="' + (m.done ? 'true' : 'false') + '" title="' +
-          esc(m.done ? t('reopen') : t('complete')) + '"><i data-lucide="check"></i></button>' +
-        '<div class="pjd-ms__body"><div class="pjd-ms__title">' + esc(m.title) + '</div><div class="pjd-ms__date">' + esc(when) + '</div></div>' +
+      return '<li class="' + (m.done ? 'is-done' : '') + '" data-ms="' + esc(m.id) + '" role="button" tabindex="0" title="' + esc(t('edit_event')) + '">' +
+        '<span class="pjd-ms__check" aria-hidden="true"><i data-lucide="check"></i></span>' +
+        '<div class="pjd-ms__body"><div class="pjd-ms__title">' + esc(m.title) + '</div>' +
+          '<div class="pjd-ms__date">' + esc(when.filter(Boolean).join(' · ')) + '</div>' +
+          '<div class="pjd-ms__date">' + esc(extra) + '</div></div>' +
         (next ? '<span class="otc-count">' + esc(t('next')) + '</span>' : '') +
-        '<button type="button" class="pjd-ms__del" data-ms-del aria-label="' + esc(t('del')) + '"><i data-lucide="x"></i></button>' +
       '</li>';
     }).join('');
   }
@@ -143,18 +149,18 @@
     var loc = { br: 'pt-BR', es: 'es-ES' }[lang] || 'en-US';
     var mes = function (d) { return new Intl.DateTimeFormat(loc, { month: 'short' }).format(d).replace('.', ''); };
     var itens = (p.milestones || []).filter(function (m) { return !m.done && m.date; })
-      .map(function (m) { return { date: m.date, title: m.title, kind: 'milestone' }; });
+      .map(function (m) { return { date: m.date, time: m.time || '', type: m.type, title: m.title, kind: 'milestone' }; });
     if (p.due_date && p.status !== 'Concluded') itens.push({ date: p.due_date, title: p.name, kind: 'target' });
     itens.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
     $('pjd-up').innerHTML = itens.slice(0, 6).map(function (x) {
       var d = P.parse(x.date), n = P.diffDays(x.date), late = n !== null && n < 0;
       var quando = n === 0 ? t('today') : (n === 1 ? t('tomorrow') : t('wd')[d.getDay()] + ', ' + P.fmtShort(x.date));
       var resto = late ? (n === -1 ? t('day_late') : t('days_late', { n: -n })) : P.inDays(x.date);
-      var tipo = x.kind === 'target' ? t('up_target') : t('up_milestone');
+      var tipo = x.kind === 'target' ? t('up_target') : P.tEvent(x.type);
       return '<li class="' + (late ? 'is-late' : '') + '">' +
         '<span class="pjd-up__date"><small>' + esc(mes(d)) + '</small><b>' + d.getDate() + '</b></span>' +
         '<span class="pjd-up__body"><b>' + esc((x.kind === 'target' ? '⚑ ' : '') + x.title) + '</b>' +
-          '<small>' + esc(quando) + (n > 1 ? ' · ' + esc(resto) : '') + (late ? ' · ' + esc(resto) : '') + ' · ' + esc(tipo) + '</small></span>' +
+          '<small>' + esc(quando) + (x.time ? ' · ' + esc(x.time) : '') + (n > 1 ? ' · ' + esc(resto) : '') + (late ? ' · ' + esc(resto) : '') + ' · ' + esc(tipo) + '</small></span>' +
         (x.kind === 'target' && p.lead_sid ? P.avatar(p.lead_sid, p.lead_name, 'sm') : '') +
       '</li>';
     }).join('') || '<li class="text-muted">' + esc(t('up_empty')) + '</li>';
@@ -229,8 +235,26 @@
     P.openTaskDrawer({ task: x, project: { id: state.p.id, name: state.p.name, color: state.p.color, people: state.p.people }, onChange: render });
   }
 
+  // Os botões leem a iniciativa CARREGADA (§648): no JP a página leva
+  // segundos, e o Edit clicado antes disso guardava `state.p` ainda vazio — o
+  // modal abria em branco, sem nada do que foi preenchido na criação. O clique
+  // espera a carga; se ela falhou, não abre (a caixa de erro já diz o motivo).
+  function carregada(fn) {
+    return function () {
+      if (state.p) { fn(); return; }
+      document.documentElement.style.cursor = 'progress';
+      state.loading.then(function () {
+        document.documentElement.style.removeProperty('cursor');
+        if (state.p) fn();
+      });
+    };
+  }
+  function openEvent(m) {
+    P.openEventModal({ project: state.p, milestone: m || null, onSaved: function (p) { render(p); P.toast(t('saved')); } });
+  }
+
   function wire() {
-    $('pjd-edit').addEventListener('click', function () {
+    $('pjd-edit').addEventListener('click', carregada(function () {
       P.openProjectModal({
         mode: 'edit', project: state.p, canDelete: state.canDelete,
         onSaved: function (d) { render(d.project); P.toast(t('saved')); },
@@ -239,55 +263,34 @@
           window.location.href = '/initiatives';
         }
       });
-    });
+    }));
+    $('pjd-new-event').addEventListener('click', carregada(function () { openEvent(null); }));
     $('pjd-pin').addEventListener('click', function () {
       if (window.otcPins && state.p) { window.otcPins.toggle(state.p); renderPin(); }
     });
-    $('pjd-add-task').addEventListener('click', function () {
+    $('pjd-add-task').addEventListener('click', carregada(function () {
       P.openTaskModal({ projects: [state.p], projectId: PID, fixedProject: true, onSaved: render });
-    });
+    }));
     $('pjd-tasks').addEventListener('click', function (e) {
       if (e.target.closest('[data-toggle-done]')) { e.preventDefault(); state.showDone = !state.showDone; renderTasks(state.p); P.icons(root); return; }
       var r = e.target.closest('[data-task]');
       if (r) openTask(r.getAttribute('data-task'));
     });
-    $('pjd-ms').addEventListener('click', function (e) {
+    // o clique num marco (ou Enter nele) abre o evento no modal
+    var abreMarco = function (e) {
       var li = e.target.closest('[data-ms]');
-      if (!li) return;
+      if (!li || !state.p) return;
       var id = li.getAttribute('data-ms');
       var m = (state.p.milestones || []).filter(function (k) { return k.id === id; })[0];
-      if (!m) return;
-      if (e.target.closest('[data-ms-toggle]')) {
-        var novo = !m.done;
-        send('PATCH', '/milestones/' + encodeURIComponent(id), { done: novo }).then(function (d) {
-          if (d && novo) P.toast(t('ms_reached', { m: m.title }), function () {
-            send('PATCH', '/milestones/' + encodeURIComponent(id), { done: false });
-          });
-        });
-      } else if (e.target.closest('[data-ms-del]')) {
-        send('DELETE', '/milestones/' + encodeURIComponent(id));
-      }
-    });
-    var msTitle = $('pjd-ms-title'), msDate = $('pjd-ms-date');
-    if (window.otcDateField) window.otcDateField(msDate);
-    var addMs = function () {
-      if (!msTitle.value.trim()) { msTitle.focus(); return; }
-      var v = String(msDate.value || '').trim();
-      var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v);
-      send('POST', '/milestones', { title: msTitle.value, date: m ? m[3] + '-' + m[2] + '-' + m[1] : v }).then(function (d) {
-        if (!d) return;
-        msTitle.value = '';
-        msDate.value = '';
-        if (msDate._flatpickr) msDate._flatpickr.clear(false);
-      });
+      if (m) { e.preventDefault(); openEvent(m); }
     };
-    $('pjd-ms-add').addEventListener('click', addMs);
-    msTitle.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addMs(); } });
+    $('pjd-ms').addEventListener('click', abreMarco);
+    $('pjd-ms').addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') abreMarco(e); });
     // o tema escuro/claro troca as cores do gráfico
     new MutationObserver(function () { if (state.p) renderChart(state.p); })
       .observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme', 'data-accent'] });
   }
 
   wire();
-  load();
+  state.loading = load();
 })();

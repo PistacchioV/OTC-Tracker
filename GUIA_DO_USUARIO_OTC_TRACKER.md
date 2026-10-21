@@ -401,7 +401,7 @@ São quadrados coloridos de canto arredondado, sempre na mesma ordem e sempre co
 
 > **O Send mostra o envio acontecendo.** Ao clicar no **Send** da linha — ou no **Send** da barra, que envia as linhas marcadas —, o rótulo some e o avião atravessa o botão na ponta de uma faixa mais clara, enquanto o sistema envia. **"Sent"** (ou um ✓, no botão da linha) só aparece quando o servidor confirma; depois a faixa recua e o botão volta ao normal. Se der erro, o botão treme e volta. O botão continua **azul** o tempo todo.
 >
-> **Os ícones que giram** (o de carregamento dos botões *Run*, o *Refresh* das telas que se atualizam) dão uma volta a cada pouco mais de um segundo. Girando, querem dizer só "trabalhando" — o resultado vem na mensagem de cada rotina.
+> **Os ícones que giram** (o de carregamento dos botões *Run*, *Import* e *Save*, o *Refresh* das telas que se atualizam) dão uma volta a cada pouco mais de um segundo, sempre no sentido horário — também nas máquinas com as animações do Windows desligadas. Enquanto trabalha, o *Refresh* troca as setas por um arco girando. Girando, querem dizer só "trabalhando" — o resultado vem na mensagem de cada rotina.
 >
 > **Os arquivos que o Send grava na pasta `Batch Conecta › New` começam pela conta da visão**, um ponto e o nome de sempre: `73760009.TCO_BANCO.txt` (Banco), `04880006.…` (MGT), `00041007.…` (Lawton), `85398005.…` (Atacama). A conta vem do cadastro **B3 Accounts** (a conta própria de cada entidade): sem ela cadastrada o Send recusa, dizendo qual entidade falta, e nenhum arquivo é gravado. Nas Opções (FXO e Commodities), as linhas da visão do Lawton saem num arquivo próprio (`00041007.FXO_Lawton.txt`), separadas das do Banco. O arquivo baixado pelo preview continua com o nome sem a conta.
 
@@ -2037,13 +2037,15 @@ Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de pa
 |---|---|
 | **Progress · Open tasks · Done · Days left** | O resumo da iniciativa |
 | **Overview** | Líder, status, categoria, a linha do tempo do início até a data-alvo e as pessoas, com quantas tarefas em aberto cada uma tem |
-| **Milestones** | Os marcos (os eventos da iniciativa). Clique no círculo para marcar como atingido; **Add** cria um novo, com data |
+| **Milestones** | Os marcos — os **eventos** da iniciativa, com data, hora, duração, tipo e local. O card só mostra: quem cria é o botão **New event** do alto, e clicar num marco abre o evento para editar, marcar como atingido (**Reached**) ou apagar |
 | **Coming up** | Os próximos marcos e a data-alvo, em ordem — as mesmas datas que aparecem no Calendar (13.5) |
 | **Recent activity** | Quem fez o quê, e quando |
 | **Burn-up** | Tarefas concluídas contra o total, ao longo da vida da iniciativa |
 | **Tasks** | As tarefas da iniciativa por status. **Add task** cria uma |
 
-**Pin** fixa a iniciativa no menu; **Edit** muda os dados, inclusive a categoria e o time. Apagar uma iniciativa é do líder, de quem a criou ou de um administrador.
+**Pin** fixa a iniciativa no menu; **Edit** muda os dados, inclusive a categoria e o time, e abre com tudo o que já foi preenchido. Apagar uma iniciativa é do líder, de quem a criou ou de um administrador.
+
+> **New event** cria um evento da iniciativa: título, data (já vem com hoje), hora de início (só os números — `1930` vira `19:30`), duração, tipo (*Milestone, Meeting, Deadline, Review, Go-live*) e onde. Sem hora, o evento é do dia inteiro e a duração fica desligada. O evento vira um **marco**: aparece no card *Milestones*, em *Coming up* e no Calendar (13.5), com a hora na frente quando tem.
 
 > **Quem está na iniciativa:** o líder, o **time** e quem já tem tarefa nela. É essa lista que aparece em *Overview*, e é dela que sai o **responsável** de cada tarefa (17.4). A iniciativa aparece na User Home (3.8) de todos eles.
 

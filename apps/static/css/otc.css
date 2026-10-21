@@ -16223,7 +16223,7 @@ body.otc-nav-unpinned .otc-menu-btn {
     rotate: 360deg;
   }
 }
-i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 {
+.otc-spin, i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 {
   display: inline-block;
   animation: otc-spin var(--otc-spin-dur) linear infinite;
 }
@@ -16264,9 +16264,13 @@ i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 {
     animation: otc-live-pulse 2.4s var(--otc-ease-out) infinite;
   }
 }
-.is-busy > i.ti {
+.is-busy > i.ti, .is-busy > svg {
   display: inline-block;
   animation: otc-spin var(--otc-spin-dur) linear infinite;
+}
+
+.is-busy > i.ti::before {
+  content: "\f226";
 }
 
 table td .btn.rounded-circle,
@@ -17998,7 +18002,19 @@ body.otc-has-island .otc-toast {
   --ins-spinner-width: 1.6rem;
   --ins-spinner-height: 25.6px;
   --ins-spinner-height: 1.6rem;
+  --ins-spinner-animation-speed: var(--otc-spin-dur);
   color: var(--otc-accent-ink);
+}
+
+.spinner-border-sm, .spinner-grow-sm {
+  --ins-spinner-width: 16px;
+  --ins-spinner-width: 1rem;
+  --ins-spinner-height: 16px;
+  --ins-spinner-height: 1rem;
+}
+
+.btn :is(.spinner-border, .spinner-grow) {
+  color: inherit;
 }
 
 .placeholder {
@@ -21795,9 +21811,10 @@ html .fc .fc-list-empty {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  :where(:not(.otc-spin, .ti-spin, .ti-loader, .ti-loader-2, .ti-loader-3, .is-busy > .ti, .is-busy > svg, .spinner-border, .spinner-grow, .dt-processing *, .is-flying)), :where(:not(.otc-spin, .ti-spin, .ti-loader, .ti-loader-2, .ti-loader-3, .is-busy > .ti, .is-busy > svg, .spinner-border, .spinner-grow, .dt-processing *, .is-flying))::before, :where(:not(.otc-spin, .ti-spin, .ti-loader, .ti-loader-2, .ti-loader-3, .is-busy > .ti, .is-busy > svg, .spinner-border, .spinner-grow, .dt-processing *, .is-flying))::after {
     animation-duration: 1ms !important;
     animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
   .otc-enter, .otc-title-char, .otc-enter-soft {

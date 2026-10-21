@@ -707,7 +707,8 @@ class CalendarSchedule {
                 const cor = /^(blue|purple|pink|orange|green|teal|indigo|yellow)$/.test(e.color) ? e.color : 'blue';
                 const pref = e.kind === 'project' ? '⚑ ' : (e.kind === 'milestone' ? '◆ ' : '');
                 return {
-                    title: pref + (e.kind === 'project' ? e.project_name : e.title),
+                    // o evento da iniciativa com hora diz a hora (§648)
+                    title: pref + (e.kind === 'milestone' && e.time ? e.time + ' ' : '') + (e.kind === 'project' ? e.project_name : e.title),
                     start: e.date, allDay: true, editable: false,
                     classNames: ['hc-cal-pj', 'hc-pj-c-' + cor].concat(e.done ? ['hc-pj-done'] : []),
                     extendedProps: {pj: true, kind: e.kind, project_id: e.project_id, id: e.id || ''}

@@ -48,8 +48,7 @@
 .acc-drop.is-busy { pointer-events: none; opacity: .85; }
 .acc-drop.is-busy .acc-drop__icon-glyph { display: none; }
 .acc-drop.is-busy .acc-drop__spin { display: block; }
-.acc-drop__spin svg { width: 19px; height: 19px; animation: accSpin .8s linear infinite; }
-@keyframes accSpin { to { transform: rotate(360deg); } }
+.acc-drop__spin svg { width: 19px; height: 19px; }
 
 .acc-asof { font-size: .78rem; color: var(--otc-text-2); text-align: center; margin-top: .6rem; min-height: 1.1rem; }
 .acc-asof b { color: var(--otc-text); font-weight: 600; }
@@ -128,10 +127,10 @@ table.dt-acc tbody tr.acc-row-sel td { background: var(--otc-accent-soft) !impor
 .acc-load-btn:disabled { opacity: .5; cursor: default; }
 .acc-btn:disabled { opacity: .7; cursor: default; }
 .acc-load-btn.is-busy, .acc-btn.is-busy { pointer-events: none; }
-/* Spinner de CSS puro que o JS põe no lugar do ícone enquanto o botão trabalha. */
+/* Spinner de CSS puro que o JS põe no lugar do ícone enquanto o botão trabalha;
+   o giro é o `.otc-spin` do tema (ritmo da casa, vale no movimento reduzido). */
 .acc-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor;
-    border-right-color: transparent; border-radius: 50%; opacity: .9; vertical-align: -2px;
-    animation: accSpin .65s linear infinite; }
+    border-right-color: transparent; border-radius: 50%; opacity: .9; vertical-align: -2px; }
 </style>
 {% endblock extra_css %}
 
@@ -207,7 +206,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: var(--otc-accent-soft) !impor
     <div class="acc-drop" id="accDrop" role="button" tabindex="0" aria-label="Upload MTM file">
         <div class="acc-drop__icon">
             <span class="acc-drop__icon-glyph" style="display:grid;place-items:center;"><i data-lucide="upload"></i></span>
-            <span class="acc-drop__spin"><i data-lucide="loader-2"></i></span>
+            <span class="acc-drop__spin"><i data-lucide="loader-2" class="otc-spin"></i></span>
         </div>
         <div>
             <p class="acc-drop__title" data-lang="mtm-drop-title">Drop the MTM file here, or click to browse</p>
@@ -337,7 +336,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: var(--otc-accent-soft) !impor
             if (btn.dataset.html === undefined) btn.dataset.html = btn.innerHTML;
             btn.disabled = true; btn.classList.add('is-busy');
             var lbl = btn.querySelector('span');
-            btn.innerHTML = '<span class="acc-spinner"></span><span>' + esc(lbl ? lbl.textContent : '') + '</span>';
+            btn.innerHTML = '<span class="acc-spinner otc-spin"></span><span>' + esc(lbl ? lbl.textContent : '') + '</span>';
         } else {
             btn.disabled = false; btn.classList.remove('is-busy');
             if (btn.dataset.html !== undefined) { btn.innerHTML = btn.dataset.html; delete btn.dataset.html; if (window.lucide) lucide.createIcons(); }

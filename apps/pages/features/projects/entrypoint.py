@@ -88,6 +88,7 @@ def _meta(me, people):
     return {'statuses': domain.STATUSES, 'task_statuses': domain.TASK_STATUSES,
             'priorities': domain.PRIORITIES, 'colors': domain.COLORS, 'icons': domain.ICONS,
             'categories': domain.CATEGORIES,
+            'event_types': domain.EVENT_TYPES, 'event_lengths': domain.EVENT_LENGTHS,
             'people': people, 'me': {'sid': me['sid'], 'name': me['name']},
             'today': _today().isoformat()}
 

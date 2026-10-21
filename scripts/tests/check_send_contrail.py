@@ -24,9 +24,16 @@ O que este script prende:
      do `btn-primary` em repouso, no voo e no "Sent" — a animação do modelo do
      Contrail (§644) corre por cima: o rótulo some, o avião vai na PONTA do
      preenchimento e o "Sent" aparece; nada vira verde;
-  5. todo ícone que gira (`ti-spin`, `ti-loader*`, o refresh `.is-busy`) gira
-     no MESMO ritmo, 1,2 s por volta — a .8 s/.6 s do rebranding ele parecia
-     "maluco" nas máquinas do JP (§644).
+  5. todo ícone que gira (`ti-spin`, `ti-loader*`, o refresh `.is-busy`, o
+     anel do Bootstrap e o `.otc-spin` das telas) gira no MESMO ritmo, 1,2 s
+     por volta — a .8 s/.6 s do rebranding ele parecia "maluco" nas máquinas
+     do JP (§644); o refresh ocupado vira o arco do loader e o anel pequeno do
+     botão tem o tamanho e a cor do texto (§647);
+  6. com o MOVIMENTO REDUZIDO (as animações do Windows desligadas, comum nas
+     máquinas do JP) o spinner segue girando no ritmo da casa — o `1ms` do
+     tema, num giro infinito, eram mil voltas por segundo: cada quadro num
+     ângulo qualquer (§647) — e o enfeite infinito roda uma vez e para;
+  7. nenhuma tela declara giro infinito próprio: é o `.otc-spin` do tema.
 """
 import io
 import os
@@ -158,22 +165,77 @@ if sync_playwright:
         b.close()
 
 print('=== 5. Os ícones que giram, num ritmo só ===')
+# Todo spinner da casa: o ícone da Tabler, o refresh ocupado, o anel do
+# Bootstrap (o do botão e o solto) e o `.otc-spin` das telas (§647).
+GIRAM = ['a', 'b', 'c', 'd', 'e', 'f']
+SPIN_HTML = (
+    '<!doctype html><html><head><link rel="stylesheet" href="file://%s/css/vendors.min.css">'
+    '<link rel="stylesheet" href="file://%s/css/otc.css"></head><body>'
+    '<button class="cp-run-btn"><i class="ti ti-loader-2 ti-spin" id="a"></i></button>'
+    '<button class="btn btn-sm btn-icon is-busy"><i class="ti ti-refresh" id="b"></i></button>'
+    '<i class="ti ti-loader" id="c"></i>'
+    '<button class="btn btn-primary" id="btn"><span class="spinner-border spinner-border-sm me-1" id="d"></span> Loading</button>'
+    '<div class="spinner-border" id="e"></div>'
+    '<span class="otc-spin" id="f" style="width:14px;height:14px;border:2px solid;border-radius:50%%"></span>'
+    '<div id="deco" style="animation: otc-spin 3s linear infinite">enfeite</div>'
+    '<div class="otc-enter" id="ent">entrada</div>'
+    '<button class="btn btn-primary btn-row-send is-flying" id="voo"><i class="ti ti-brand-telegram"></i></button>'
+    '</body></html>')
+DUR = "(ids) => ids.map(i => getComputedStyle(document.getElementById(i)).animationDuration)"
+REP = "(ids) => ids.map(i => getComputedStyle(document.getElementById(i)).animationIterationCount)"
 if sync_playwright:
+    arq = os.path.join(tmp, 'spin.html')
+    io.open(arq, 'w', encoding='utf-8').write(SPIN_HTML % (STATIC, STATIC))
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page()
-        arq = os.path.join(tmp, 'spin.html')
-        io.open(arq, 'w', encoding='utf-8').write(
-            '<!doctype html><html><head><link rel="stylesheet" href="file://%s/css/vendors.min.css">'
-            '<link rel="stylesheet" href="file://%s/css/otc.css"></head><body>'
-            '<button class="cp-run-btn"><i class="ti ti-loader-2 ti-spin" id="a"></i></button>'
-            '<button class="btn btn-sm btn-icon is-busy"><i class="ti ti-refresh" id="b"></i></button>'
-            '<i class="ti ti-loader" id="c"></i></body></html>' % (STATIC, STATIC))
         pg.goto('file://' + arq)
         pg.wait_for_timeout(200)
-        durs = pg.evaluate("['a','b','c'].map(i => getComputedStyle(document.getElementById(i)).animationDuration)")
-        check('  ti-spin, o refresh ocupado e o ti-loader: 1,2 s por volta', durs, ['1.2s'] * 3)
+        check('  todo spinner (Tabler, refresh ocupado, anel do Bootstrap, .otc-spin): 1,2 s por volta',
+              pg.evaluate(DUR, GIRAM), ['1.2s'] * len(GIRAM))
+        check('  o refresh ocupado vira o ARCO do loader (as setas dele são anti-horárias)',
+              pg.evaluate("getComputedStyle(document.getElementById('b'), '::before').content"), '""')
+        dim = pg.evaluate("""() => { const d = document.getElementById('d'), b = document.getElementById('btn');
+            return [getComputedStyle(d).width, getComputedStyle(d).color === getComputedStyle(b).color]; }""")
+        check('  o anel pequeno do botão: 1rem e da cor do texto do botão', dim, ['16px', True])
         b.close()
+
+print('=== 6. Movimento reduzido: o spinner segue girando, o enfeite para ===')
+# As máquinas do JP têm as animações do Windows desligadas. O `1ms` do bloco
+# do movimento reduzido, num giro infinito, eram mil voltas por segundo: cada
+# quadro num ângulo qualquer — o "loucão" que não andava no sentido horário.
+if sync_playwright:
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        pg = b.new_page(reduced_motion='reduce')
+        pg.goto('file://' + arq)
+        pg.wait_for_timeout(200)
+        check('  todo spinner fica no ritmo da casa', pg.evaluate(DUR, GIRAM), ['1.2s'] * len(GIRAM))
+        check('  e segue infinito', pg.evaluate(REP, GIRAM), ['infinite'] * len(GIRAM))
+        check('  a animação infinita que é enfeite roda UMA vez, na hora (não pisca)',
+              pg.evaluate(DUR, ['deco']) + pg.evaluate(REP, ['deco']), ['0.001s', '1'])
+        check('  a entrada do tema mantém o fade curto dela', pg.evaluate(DUR, ['ent']), ['0.15s'])
+        check('  e o voo do Send (a espera da resposta) segue no ritmo dele',
+              pg.evaluate(DUR, ['voo']), ['0.8s, 1.2s'])
+        b.close()
+
+print('=== 7. Tela não declara giro próprio ===')
+# Spinner de tela é o `.otc-spin` (ou o ícone da Tabler): keyframes de giro
+# próprio ficavam fora do ritmo da casa (.65 s, .7 s, .8 s, 1 s, 1,1 s) e fora
+# da exceção do movimento reduzido.
+proprios = []
+for nome in sorted(os.listdir(PAGES)):
+    if not nome.endswith('.html'):
+        continue
+    txt = io.open(os.path.join(PAGES, nome), encoding='utf-8').read()
+    giram = {m.group(1) for m in re.finditer(r'@keyframes\s+([\w-]+)\s*\{((?:[^{}]|\{[^{}]*\})*)\}', txt)
+             if 'rotate' in m.group(2)}
+    for m in re.finditer(r'animation\s*:\s*([^;}]*)', txt):
+        decl = m.group(1)
+        if 'infinite' in decl and (any(re.search(r'\b%s\b' % re.escape(k), decl) for k in giram)
+                                   or re.search(r'\botc-spin\b', decl)):
+            proprios.append('%s: %s' % (nome, decl.strip()))
+check('  nenhum giro infinito declarado na tela', proprios, [])
 
 print()
 if fails:

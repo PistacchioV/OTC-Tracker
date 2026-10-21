@@ -1037,10 +1037,18 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   tela nova com Send em lote a põe; `check_send_contrail.py` varre as telas.
   Não se reimplementa por página.
 - **Ícone que gira tem UM ritmo: `--otc-spin-dur` (1,2 s por volta)** — o
-  `ti-spin`/`ti-loader*` e o `.is-busy` (refresh ocupado), no `otc.scss` (§644).
-  A .8 s/.6 s do rebranding o giro parecia "maluco" nas máquinas do JP (sem
-  GPU, a tela perde quadros durante o request e o giro rápido anda aos trancos);
-  o tema antigo girava a 2 s. Tela nova não declara giro próprio.
+  `ti-spin`/`ti-loader*`, o `.is-busy` (refresh ocupado, que vira o ARCO do
+  loader: as setas do refresh são anti-horárias), o anel `spinner-border` do
+  Bootstrap e o `.otc-spin`, no `otc.scss` (§644, §647). Spinner próprio de
+  tela (anel de CSS, svg do Lucide) leva a classe `.otc-spin` — keyframes de
+  giro na página o `check_send_contrail` §7 recusa. **O movimento reduzido
+  NÃO toca nele** (§647): as máquinas do JP têm as animações do Windows
+  desligadas (`prefers-reduced-motion: reduce`), e o `1ms` da seção 11, num
+  giro infinito, eram MIL voltas por segundo — o ícone tremendo "para trás",
+  que o §644 não alcançou por ter medido só na dev. O que diz "estou
+  trabalhando" está na lista `$otc-progress`, fora da regra; o resto roda uma
+  vez e para (`animation-iteration-count: 1`). Indicador novo de progresso
+  entra na lista. Teste de animação também com `reduced_motion='reduce'`.
 - **A aparência vai para o `<html>` ANTES do primeiro paint** (script
   síncrono do `partials/head-css.html`): `data-bs-theme`, `data-accent`,
   `data-wall`, `data-glass` e a classe `is-solid`, lidos de
@@ -2530,6 +2538,18 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   responsável e ícone vêm na resposta da página, que no JP leva segundos, e o
   menu do tema não abre `<select>` vazio. Página nova que abre estes modais
   chama `P.setMeta` no sucesso e `P.metaFailed()` na falha.
+- **O MARCO é o EVENTO da iniciativa** (mesa, 21/10/2026, §648): nasce do
+  **New event** da barra da página (`OtcPj.openEventModal`), com hora,
+  duração, tipo e local (`domain.validate_milestone`; tipo e duração em lista
+  fechada, `EVENT_TYPES`/`EVENT_LENGTHS`, no `meta`; sem hora é o dia inteiro
+  e não tem duração). **O card Milestones SÓ MOSTRA**: o clique num marco abre
+  o mesmo modal, que é onde ele se edita, se dá por atingido e se apaga. O
+  PATCH só muda o que veio (`MILESTONE_FIELDS`).
+- **Botão da barra da página lê a iniciativa CARREGADA** (§648,
+  `carregada()` do `project-detail.js`): no JP a página leva segundos, e o
+  Edit clicado antes disso guardava o `state.p` vazio — o modal abria em
+  branco, sem o que foi preenchido na criação. O clique espera a carga; o
+  `openProjectModal` em modo edição sem iniciativa não abre.
 - Toda escrita devolve o PROJETO inteiro; a tela se redesenha dele. Atividade
   e erro saem ESTRUTURADOS (`kind`/`code` + params), traduzidos no
   `projects-common.js`. Chave de tradução das telas é `pj-*`/`tsk-*` — `tk-*`
