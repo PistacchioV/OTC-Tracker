@@ -2042,9 +2042,24 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   (`commands._espelho` → `domain.espelho_b2b`: contas trocadas, lado
   invertido), `UNWIND_NDF_COMMODITIES_LAWTON.txt` ao lado do do Banco. Só o
   layout do termo (`LAYOUTS_COM_ESPELHO`). O Participante do header vai por
-  `force_values` — o template da antecipação o tem `Fixed` em `JPMORGANBM`. Os outros produtos do
-  catálogo **ainda NÃO têm** Termo, esteira, Intrag, Cockpit nem Summary.
-  `check_unwind_products.py`.
+  `force_values` — o template da antecipação o tem `Fixed` em `JPMORGANBM`.
+  **A Opção de Commodities e o Swap EDG seguem o MESMO desenho** (mesa,
+  21/10/2026, §670 — "toda recompra contra CLIENTE tem o Termo; contra
+  Atacama/Lawton, o arquivo da Intrag"): `PAGINAS_COM_TERMO` liga a esteira
+  (`UNWIND OPTION COMM`, `UNWIND SWAP`) e o Termo, o MESMO modelo e as mesmas
+  colunas — o `para_o_termo` muda só os valores (opção: o eixo é o
+  `Underlying` e o recomprado é quantidade; swap: o Valor Base em BRL) e o XML
+  declara o produto recomprado (`XML_TIPO`: `OPTION`/`SWAP`, o swap só em
+  reais; Termo que junta produtos AVISA). A liquidação lê por PÁGINA
+  (`settlement_rows(ref, dirs=…)`): o aviso de termo e o Pay/Rec seguem só com
+  o NDF de Commodities (`commodity_settlement_rows`); a opção entra no
+  `_optadv_collect` (sem IR — só o prêmio paga) e o swap no Trade Level e no
+  `_swadv_collect` pela MESMA leitura (`_ops_swap_unwind_rows`: as pernas na
+  visão do banco por `curvas_do_banco`, o IR do swap), o contrato FORA da
+  leitura da B3 nos dois. A perna do fundo fica na tela e sai do documento.
+  Os outros produtos do catálogo (Options FXO/EDG, Swap CEM, COE, DCE)
+  **ainda NÃO têm** Termo, esteira, Cockpit nem Summary.
+  `check_unwind_products.py`, `check_unwind_settlement.py`.
 - **A recompra de NDF FX vem da API de liquidação** (mesa, 20/10/2026, §640):
   o bloco `termination` do MESMO `getTradesBySettle` do Cockpit, com o `Cetip
   ID` do contrato (`domain.recompras_da_api`, o de-para do e-mail campo a
@@ -2390,7 +2405,10 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   avisos vai ler. No NDF Summary as `cells` são posicionais: o TAX virou
   `_NDFSUM_TAX_CELL`.
 - **O aviso de liquidação da RECOMPRA é PRÓPRIO** (mesa, 28/09/2026, §569),
-  no NDF Summary e no Termo de Commodities do Other Products: nunca neta com o
+  no NDF Summary e no Termo de Commodities do Other Products — e, desde o §670,
+  no aviso de Opção (Opção de Commodities: quantidade original × recomprada e
+  prêmio unitário) e no de Swap (Swap EDG: o Valor Base Recomprado ao lado do
+  original; o `build_swap_settlement_emails` agrupa por `unwind`): nunca neta com o
   vencimento, o assunto é `(Recompra) Liquidação de Operação de Derivativo
   (<produto>) + Callback - …`, o `.eml` sai em alta prioridade (`importance`
   no draft → `Importance`/`X-Priority`) e a tabela troca o Fixing/Cotação
@@ -2882,6 +2900,12 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   `|difference| ≥ 0,005`, fora o match manual) são pílulas com o texto no
   `::before` (`data-tag`): no nó, "BANCO X Branch Reversal" viraria outra
   contraparte no funil. `check_payrec_run.py`.
+- **Pay/Rec: o match manual é UMA linha no Settled** (mesa, 21/10/2026, §670):
+  o `_apply_groups` grava o grupo pelo `_manual_settled_row` — o lado JPM e o
+  do cliente na mesma linha, os totais, a diferença Cliente − JPM e as pernas
+  originais em `manual_rows`. O dia gravado antes junta as pernas soltas na
+  LEITURA (`_junta_manuais`, no `load_last` e na resposta do Match), sem
+  regravar. `check_payrec_manual_match.py`.
 - **Pay/Rec: o botão Match casa À MÃO o que o motor deixou solto** (mesa,
   02/10/2026, §617/§623): duas ou mais linhas marcadas do Pending Payment e/ou
   do Pending Receivement, só as de UM lado (a que tem JPM e cliente já foi
@@ -3317,7 +3341,7 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (207 scripts)
+### `scripts/tests/` (208 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

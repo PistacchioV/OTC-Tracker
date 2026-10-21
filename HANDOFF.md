@@ -28129,3 +28129,80 @@ guardas de tema e casca (`check_theme_toggle`, `check_dropdown_layers`,
 
 Conferido no app (5005), 1600×1000: Pay/Rec com as três paredes nos dois temas,
 a Settings com as treze miniaturas nos dois temas, e o Glacier no modo opaco.
+
+## §670 — A recompra de Opção de Commodities e de Swap EDG segue a esteira inteira; o match manual do Pay/Rec numa linha só (2026-10-21)
+
+**O relato.** "Os unwinds de NDF Comm, Opt Comm e Swap EDG estão seguindo a
+esteira para o Other Products Summary, Daily Settlement nas páginas de cada
+produto, aviso de recompra etc.?" Só o NDF de Commodities. A liquidação lia as
+recompras do catálogo por UMA função (`product.settlement_rows`), que percorria
+só as páginas de `PAGINAS_COM_TERMO` — e lá havia uma entrada, o NDF Comm. O
+aviso de opção e o Trade Level/aviso de swap não consultavam a vertical. E nem
+pela B3 elas entravam: o `opb3-events` nasce lista branca (SWAP só diferencial
+e prêmio — o seed diz que RESGATE ANTECIPADO fica de fora de propósito —, OPC
+só exercício e prêmio). A regra da mesa: **toda recompra contra CLIENTE tem o
+Termo de Resilição; contra Atacama/Lawton, o arquivo da Intrag**, e o Termo é o
+MESMO — mesmo modelo, mesmas colunas, só os valores mudam com o produto.
+
+**O que mudou.**
+- **Esteira e Termo**: `PAGINAS_COM_TERMO` ganha `Options/Commodities` →
+  `UNWIND OPTION COMM` e `Swap/EDG` → `UNWIND SWAP` (as duas já existiam no
+  `PRODUCT_FOLDER` e na tela do Pending Confirmation; faltava ligar). Plataforma
+  (`_MC_CONFIRMATION_SOURCES`), rótulo do card (`OPTION COMMODITIES`, `SWAP`),
+  backfill (famílias `Unwind Options Commodities`/`Unwind Swap EDG` — e o
+  backfill passou a PULAR a recompra do fundo, que o import já pulava: ele
+  mandaria o Lawton/Atacama para a esteira). A validação do Termo segue só OTC
+  (a linha do seed tem LOB coringa).
+- **Os valores do Termo por produto** (`para_o_termo`): na opção o eixo é o
+  `Underlying` (a página não tem `Commodity`) e o recomprado é QUANTIDADE (sai
+  sem prefixo de moeda, como no termo); no swap o eixo e o Valor Base são BRL
+  (ações × strike). O XML declara o produto recomprado (`XML_TIPO`: `OPTION`,
+  `SWAP` — os códigos das confirmações deles; o termo segue `NDF`): na opção o
+  valor estrangeiro é reais ÷ FX da recompra (USD), no swap só reais. Termo que
+  junta produtos diferentes (mesma contraparte e ativo no dia) AVISA no XML em
+  vez de declarar um tipo calado.
+- **Liquidação por página**: `settlement_rows(ref, dirs=…)`. O aviso de termo e
+  o Pay/Rec (que as lê como COMM TER) seguem SÓ com o NDF Comm
+  (`commodity_settlement_rows`); entram `option_commodity_settlement_rows` e
+  `swap_edg_settlement_rows`. Sem o recorte, a recompra de opção cairia no aviso
+  de termo e no Pay/Rec como termo.
+- **Opção** (`_optadv_collect`): as recompras entram como linhas `UNWIND`, o
+  contrato delas sai da leitura da B3 (lido dos dois lados, o caixa sairia duas
+  vezes), sem IR (regra 1 do `_optadv_apply_ir`: só o prêmio paga), Ptax = FX da
+  recompra, a Quantidade o recomprado. Daí vêm sozinhos o Trade Level, o Summary
+  e a TED. O e-mail é o de recompra (`_OPTADV_UNWIND_EMAIL_HEADERS`: quantidade
+  original × recomprada e o prêmio unitário) — o gerador de termo/opção já sabia.
+- **Swap**: UMA leitura (`settlement._ops_swap_unwind_rows`) para o Trade Level e
+  o `_swadv_collect`: o caixa do e-mail é o Resultado Bruto; as curvas são as
+  pernas do recap na VISÃO DO BANCO (`product.domain.curvas_do_banco`: a perna
+  que o banco recebe é a Curva Banco; a que o cliente recebe, vista pelo banco,
+  a Curva Cliente — somadas, o `Result`); o IR é o do swap
+  (`_ops_swap_ir_rate`, prazo do trade até ESTA liquidação, só quando a
+  contraparte recebe). O e-mail de swap ganhou o que o de termo tinha: aviso
+  separado por `unwind`, cabeçalho da linha (`_SWADV_UNWIND_EMAIL_HEADERS`, o
+  Valor Base Recomprado ao lado do original), "(Recompra) … (Swap) + Callback" e
+  prioridade alta.
+- **O fundo**: a perna B2B (Lawton na opção, Atacama no swap) liquida, fica na
+  tela e no Trade Level, e sai do documento e da TED (`no_advice`/`_no_advice`)
+  — ela vai para a Intrag › Unwind, que o catálogo já fazia no import.
+
+**Suposição a confirmar com a mesa**: o `Result` do recap TRS é o caixa BRUTO e
+o IR regressivo do swap incide nele como em qualquer pagamento de swap (a
+coluna IR do aviso). Se o e-mail já vier líquido, o cadastro `swap-ir-client`
+isenta o cliente, ou a regra muda aqui.
+
+**Match manual numa linha** (mesa, mesmo dia, com o print da MARFRIG): o grupo
+entrava no Settled como as pernas soltas — a do JPM sem cliente e a do cliente
+sem JPM. O `_apply_groups` grava agora UMA linha (`_manual_settled_row`): o lado
+JPM (contraparte, produto, total), o do cliente (nome, total, sistema, conta), a
+diferença Cliente − JPM e as pernas originais em `manual_rows`. Dia gravado
+antes é juntado na LEITURA (`_junta_manuais`, no `load_last` — tela e e-mail do
+End process — e na resposta do Match), sem regravar.
+
+**Guardas.** `check_unwind_settlement.py` (novo): esteira, Termo (Anexo I por
+produto, XML, aviso de mistura), recorte por página, curvas, os dois avisos e
+os e-mails, Trade Level com o IR do swap. `check_manual_conf` (os onze
+produtos), `check_ops_summary` (a recompra de swap usa a mesma tolerância),
+`check_payrec_manual_match` (a linha única e a junção do dia antigo). Os dois
+FAILs de `check_swap_advice`/`check_ndf_advice` são os de antes (assunto/seed),
+conferidos linha a linha.

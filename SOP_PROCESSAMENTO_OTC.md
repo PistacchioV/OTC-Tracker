@@ -397,7 +397,7 @@ Confirmation e esteira no import, Termo de Resilição (só contra o cliente),
 Intrag › Unwind quando a outra ponta é fundo nosso, Other Products e Pay/Rec
 (como **COMM TER**). No B2B com o Lawton o Send grava as duas visões (Banco e
 Lawton). No Termo de Resilição de commodities, Valor Base Liquidado e Novo
-Valor Base saem só com a quantidade, sem o código da mercadoria. Swap, Options, COE e DCE ainda não têm Termo, esteira nem Intrag.
+Valor Base saem só com a quantidade, sem o código da mercadoria. A recompra de Opção de Commodities e a de Swap EDG seguem o mesmo ciclo: contra o cliente, Termo de Resilição e esteira; contra Atacama/Lawton, a Intrag › Unwind; a liquidação no Other Products e no Settlement Advice de opção e de swap, com o aviso de recompra. Swap CEM, Options FXO/EDG, COE e DCE ainda não têm Termo nem esteira.
 
 A de **Options Commodities** lê o e-mail da mesa (*INTERNAL JPMorgan Trade
 Recap … Unwind*), uma tabela por perna: **Client** (a operação com o cliente) e
