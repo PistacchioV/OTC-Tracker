@@ -2847,6 +2847,15 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   carry-forward e o match manual usam a mesma janela (`_manual_tol`: todo o
   lado JPM da seleção SWAP; a tela recebe `data-match-tol-swap`). O resto
   segue no R$1. `check_payrec_swap_tol.py`.
+- **Pay/Rec: as três listas são DataTable, com o funil** (mesa, 21/10/2026,
+  §666); o Summary segue tabela comum (ordenar levaria o TOTAL para o meio).
+  A instância é UMA por tabela: o `render` roda de novo a cada Justify, Cancel
+  e Match, e só troca as linhas (`clear` + `rows.add` + `draw(false)`) —
+  recriar apagaria os funis no meio do trabalho. **As marcas da linha** (Branch,
+  Manual e **Tolerance**, a do Settled que o motor casou sem bater no centavo:
+  `|difference| ≥ 0,005`, fora o match manual) são pílulas com o texto no
+  `::before` (`data-tag`): no nó, "BANCO X Branch Reversal" viraria outra
+  contraparte no funil. `check_payrec_run.py`.
 - **Pay/Rec: o botão Match casa À MÃO o que o motor deixou solto** (mesa,
   02/10/2026, §617/§623): duas ou mais linhas marcadas do Pending Payment e/ou
   do Pending Receivement, só as de UM lado (a que tem JPM e cliente já foi

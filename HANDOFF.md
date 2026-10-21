@@ -27919,3 +27919,53 @@ Pay/Rec (`check_payrec_run`, `_manual_match`, `_branch`, `_ndf_source`,
 `check_spb_status`) e o `check_soc_layers` passam antes e depois. Conferido no
 app (5005): a página entrega `data-match-tol="1.0"` e
 `data-match-tol-swap="20.0"`.
+
+## §666 — Pay/Rec: a marca "Tolerance" no casamento sem centavo exato, e o funil nas listas (2026-10-21)
+
+Pedido da mesa: uma pílula, no estilo da marca da Branch Settlement, dizendo que
+a linha foi casada por tolerância; e os filtros das outras tabelas nas tabelas
+do Pay/Rec.
+
+**A marca.** O motor casa por várias janelas — centavos (< R$1), SPB conta
+externa, interbancário e swap (±R$20), COMM OPT (0,005% + R$0,20) — e a tela
+mostrava `Settled` igual para o casamento exato e para o que fechou com
+R$ 12,50 de diferença. A linha já carrega a `difference` (Cliente − JPM, gravada
+pelo `_detail_row` e pelo casamento do carry-forward), então a marca sai na tela
+sem tocar no motor e vale também para os dias já gravados: `toleranceDiff` —
+Settled, os dois lados presentes, `|difference| ≥ 0,005` (ruído de float fica de
+fora), e não o match manual, que tem a marca dele. Pílula laranja ("Tolerance",
+traduzida) ao lado das outras na coluna JPM cpty, com a diferença no `title`.
+
+**O funil.** As listas eram `<tbody>` montado à mão — o `excel-filter.js` só se
+liga a DataTable (§662). Pending Payment, Pending Receivement e Settled viraram
+DataTable (DataTables local, carregado depois do jQuery); o Summary ficou tabela
+comum. Decisões:
+- **Uma instância por tabela pela vida da página.** O `render` roda de novo a
+  cada Justify, Cancel e Match; recriar a tabela apagaria os funis no meio do
+  trabalho. Ele troca as linhas (`clear` + `rows.add` dos mesmos `<tr>` + 
+  `draw(false)`), e o `<tbody>` é o mesmo nó — a delegação do Justify e da
+  seleção do Match segue valendo (o `data-pr-index` mora no `<tr>`, então a
+  ordenação não desalinha a linha do dado).
+- **As marcas da linha saem do `::before`** (`data-tag`): o funil e o Ctrl+C
+  leem o texto da célula, e "JPMORGAN MGT Branch Reversal" viraria outra
+  contraparte na lista do funil (o mesmo caso das iniciais do avatar no §662).
+- Checkbox e Actions fora do funil e da ordenação; lista vazia pela frase do
+  DataTables; paginação de 25.
+- **A rolagem horizontal é só da tabela** (`pr-dt-scroll`, no `dom`): no
+  invólucro de fora ela arrastava a paginação junto. O cabeçalho passou a poder
+  quebrar (a regra do tema) com 8px de padding — com o funil, o título centrado
+  e o ícone de ordenação, cada coluna mede ~110px no mínimo: a 1920px as três
+  cabem; a 1500px o Settled rola ~260px dentro da tabela.
+
+**De passagem**: o `LANG` da tela lia `localStorage['language']`, que o app
+nunca grava — os avisos do Pay/Rec saíam sempre em inglês. Hoje lê o
+`__OTC_TRACKER_LANG__` (a chave antiga fica de plano B). E o JS da página passou
+a ter `asset_v` no lugar do `?v=` escrito à mão.
+
+`check_payrec_run.py` (seção nova): DataTable reutilizada, sem destroy, colunas
+fora do funil, rolagem só da tabela, marcas pelo `::before`, as três línguas, o
+idioma do app e a regra da marca EXECUTADA no `node` (exato, centavos, swap,
+ruído de float, manual, pendente, um lado só, dia sem `difference`). Conferido no
+Chromium contra o servidor local com o `/data` interceptado: funil filtrando e
+sobrevivendo ao Edit → Cancel, seleção e Swal do Match, claro e escuro, 1500 e
+1920px.
