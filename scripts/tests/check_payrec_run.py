@@ -340,5 +340,84 @@ finally:
     RP._MAPPINGS_DIR = _dir_orig
     shutil.rmtree(tmpmap, ignore_errors=True)
 
+print('\n== As listas sao DataTable (o funil) e a marca de Tolerancia ==')
+# O funil "de Excel" (§591) so se liga a DataTable, e as tres listas eram
+# <tbody> montado a mao: a unica tela de recon sem filtro por coluna. O Summary
+# (Pay, Receive, TOTAL) fica tabela comum — ordenar levaria o TOTAL para o meio.
+JS = read('apps/static/js/pages/reconciliation-payrec.js')
+HTML = read('apps/templates/pages/reconciliation-payrec.html')
+i_jq = HTML.find('plugins/jquery/jquery.min.js')
+i_dt = HTML.find('plugins/datatables/dataTables.min.js')
+check('o template carrega o DataTables LOCAL, depois do jQuery', i_jq != -1 and i_dt > i_jq, True)
+check('nenhuma lista fora do funil', 'data-excel-filter="off"' in HTML or 'searching: false' in JS, False)
+check('a DataTable nasce na tabela do <tbody>', 'jQuery(table).DataTable({' in JS, True)
+# O `render` roda de novo a cada Justify, Cancel e Match: recriar a tabela
+# apagaria os funis no meio do trabalho. Uma instancia por tabela, linhas trocadas.
+check('uma instancia por tabela pela vida da pagina', 'var dt = DTS[bodyId];' in JS and 'dt = DTS[bodyId] = ' in JS, True)
+check('...e o render so troca as linhas, mantendo filtro/ordem/pagina',
+      'dt.clear();' in JS and 'dt.rows.add(' in JS and 'dt.draw(false);' in JS, True)
+check('nenhum destroy da tabela no render', 'destroy' in JS, False)
+check('checkbox e Actions fora do funil e da ordenacao',
+      "targets: [0, 10], orderable: false, searchable: false" in JS, True)
+check('lista vazia pela frase do DataTables (sem <tr colspan> no corpo da DataTable)',
+      "emptyTable: t('empty')" in JS, True)
+check('a rolagem horizontal e so da tabela, nao do rodape',
+      "dom: \"r<'pr-dt-scroll't>" in JS and '.pr-dt-scroll { overflow-x: auto;' in HTML, True)
+# O funil e o Ctrl+C leem o TEXTO da celula: com a marca no no, "BANCO X
+# Branch Reversal" viraria outra contraparte na lista do funil (§662, as
+# iniciais do avatar).
+check('as marcas da linha vem do ::before (data-tag), fora do texto da celula',
+      '.pr-tag::before { content: attr(data-tag); }' in HTML
+      and 'data-tag="\' + esc(label)' in JS, True)
+check('a marca de Tolerancia tem cor propria', '#payrec-page .pr-tol-tag {' in HTML, True)
+for lang in ('en', 'br', 'es'):
+    bloco = JS[JS.index('    %s: {' % lang):]
+    bloco = bloco[:bloco.index('},')]
+    check('%s: rotulo, titulo da marca e a frase do filtro vazio' % lang,
+          all(k in bloco for k in ('tolTag:', 'tolTitle:', 'noMatchRows:')), True)
+check('o idioma e o do app (__OTC_TRACKER_LANG__), nao a chave `language`',
+      "localStorage.getItem('__OTC_TRACKER_LANG__')" in JS, True)
+
+# A regra da marca EXECUTADA (a copia real do JS, no node): Settled que o motor
+# casou sem bater no centavo. `difference` e Cliente - JPM (`_detail_row`).
+import json as _json                                             # noqa: E402
+import shutil as _shutil                                         # noqa: E402
+import subprocess as _sp                                         # noqa: E402
+
+
+def _fn(nome):
+    ini = JS.index('function %s(' % nome)
+    j, prof = JS.index('{', ini), 0
+    while True:
+        prof += {'{': 1, '}': -1}.get(JS[j], 0)
+        if prof == 0:
+            return JS[ini:j + 1]
+        j += 1
+
+
+CASOS = [
+    ('exato', {'status': 'Settled', 'jpm_value': -1000.0, 'client_value': -1000.0, 'difference': 0.0}, None),
+    ('centavos', {'status': 'Settled', 'jpm_value': -500.0, 'client_value': -500.37, 'difference': -0.37}, -0.37),
+    ('swap R$12,50', {'status': 'Settled', 'jpm_value': 2000.0, 'client_value': 2012.5, 'difference': 12.5}, 12.5),
+    ('ruido de float', {'status': 'Settled', 'jpm_value': 0.1, 'client_value': 0.1, 'difference': 1e-12}, None),
+    ('match manual', {'status': 'Settled', 'jpm_value': -77.0, 'client_value': '', 'manual_match': 'M1',
+                      'difference': 77.0}, None),
+    ('pendente', {'status': 'Pending', 'jpm_value': -10.0, 'client_value': -10.5, 'difference': -0.5}, None),
+    ('um lado so', {'status': 'Settled', 'jpm_value': -10.0, 'client_value': ''}, None),
+    ('sem difference (dia antigo)', {'status': 'Settled', 'jpm_value': -120.0, 'client_value': -120.6}, -0.6),
+]
+node = _shutil.which('node')
+if not node:
+    print('  --  node nao encontrado: a regra da marca nao foi executada (so a leitura acima)')
+else:
+    prog = (_fn('asNum') + '\n' + _fn('toleranceDiff') + '\n' +
+            'var C = ' + _json.dumps([c[1] for c in CASOS]) + ';\n'
+            'console.log(JSON.stringify(C.map(function (r) { var d = toleranceDiff(r); '
+            'return d === null ? null : Math.round(d * 100) / 100; })));')
+    saida = _sp.run([node, '-e', prog], capture_output=True, text=True)
+    got = _json.loads(saida.stdout) if saida.returncode == 0 else saida.stderr
+    for (nome, _r, esperado), g in zip(CASOS, got if isinstance(got, list) else [got] * len(CASOS)):
+        check('marca de tolerancia: %s' % nome, g, esperado)
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

@@ -27869,3 +27869,103 @@ dias que falham (§562) mudou a contagem do `fetchDays` e o teste não acompanho
 
 Conferido no app (5005): Reference Data (Excel e CSV), /mapping › API/Bob
 Reports Links (CSV) e NDF Summary › Trade Level (Excel), com o título na A1.
+
+## §665 — Pay/Rec: o SWAP casa e liquida até R$20 (2026-10-21)
+
+**O pedido.** Aumentar para R$20 a tolerância do SWAP na Recon Pay/Rec.
+
+**Por que o R$1 não servia ao swap.** O lado interno do SWAP chega BRUTO do
+cashflows e é levado ao líquido pela alíquota regressiva do cadastro
+(`_swap_ir_rate`, sobre o net do trade, só no pagamento). O que o cliente de
+fato paga difere disso em alguns reais — arredondamento do imposto e a base em
+que ele incide. Com o R$1 dos centavos, o par nem casava: o JPM ficava no
+Pending Payment sem Client Value e a TED do cliente sobrava como outra
+pendência.
+
+**O que mudou (`recon_payrec.py`).**
+- `_TOL_SWAP = 20.0`. Perna JPM de SWAP (`_is_swap`: produto `SWAP`, fora da
+  Branch Settlement) com par até R$20 sai `Settled` (`_detail_row`, que é a
+  montagem da linha que estava dentro do laço, agora numa função só).
+- **A janela larga é uma passada PRÓPRIA no fim do `_reconcile`**
+  (`_swap_mate`). O casamento do motor é só por VALOR (o `_match_allowed` só
+  restringe o interbancário e a conta da casa); com a janela de R$20 dentro do
+  laço, um swap processado antes pegaria o par EXATO de uma linha que vem
+  depois. O swap sem par nos exatos e nos centavos guarda o lugar na lista
+  (`None`) e é resolvido depois de todo o resto — a ordem das linhas não muda.
+- A passada exige o **mesmo sentido** (com R$20, um Pay de −8 alcançaria um
+  Receive de +8) e, entre candidatos, prefere a **mesma contraparte**
+  (`_cpty_key`) ao valor mais próximo. Não EXIGE o nome: o lado cliente escreve
+  o nome como o extrato traz (truncado, `S A` × `SA`), e exigir esvaziaria a
+  regra.
+- **Quem diz que é swap é o lado JPM.** A perna do cliente que chega pelo SPB
+  nasce `NDF`; só o SDConta com histórico de swap a marca `SWAP`.
+- **Carry-forward** (`_apply_carry_forward`): o pendente de ontem com o lado JPM
+  em SWAP junta com o pagamento de hoje até R$20, pelo valor mais próximo (no
+  R$1 segue o primeiro que cabe).
+- **Match manual**: `_manual_tol` — R$20 quando TODA linha JPM da seleção é
+  SWAP; misturado ou só cliente, R$1. O par que o motor aceitaria sozinho não
+  pode ser recusado à mão. A tela recebe `data-match-tol-swap`
+  (`queries.match_tolerance_swap`) e o JS escolhe pela mesma regra, mostrando no
+  chip a tolerância que vale (`?v=20261021a`).
+- O resumo não precisou de nada: a folga dele já é a soma das diferenças das
+  linhas `Settled`.
+
+**O que ficou de fora.** `EQUITIES` (o swap de equity do cashflows e a
+Atacama) segue no R$1 — o pedido foi "swaps" e o produto da tela é `SWAP`; se
+a equipe quiser a mesma janela para equity, é a condição do `_is_swap`.
+
+**Guardas.** `check_payrec_swap_tol.py` (novo, 20 asserções). Os cinco do
+Pay/Rec (`check_payrec_run`, `_manual_match`, `_branch`, `_ndf_source`,
+`check_spb_status`) e o `check_soc_layers` passam antes e depois. Conferido no
+app (5005): a página entrega `data-match-tol="1.0"` e
+`data-match-tol-swap="20.0"`.
+
+## §666 — Pay/Rec: a marca "Tolerance" no casamento sem centavo exato, e o funil nas listas (2026-10-21)
+
+Pedido da mesa: uma pílula, no estilo da marca da Branch Settlement, dizendo que
+a linha foi casada por tolerância; e os filtros das outras tabelas nas tabelas
+do Pay/Rec.
+
+**A marca.** O motor casa por várias janelas — centavos (< R$1), SPB conta
+externa, interbancário e swap (±R$20), COMM OPT (0,005% + R$0,20) — e a tela
+mostrava `Settled` igual para o casamento exato e para o que fechou com
+R$ 12,50 de diferença. A linha já carrega a `difference` (Cliente − JPM, gravada
+pelo `_detail_row` e pelo casamento do carry-forward), então a marca sai na tela
+sem tocar no motor e vale também para os dias já gravados: `toleranceDiff` —
+Settled, os dois lados presentes, `|difference| ≥ 0,005` (ruído de float fica de
+fora), e não o match manual, que tem a marca dele. Pílula laranja ("Tolerance",
+traduzida) ao lado das outras na coluna JPM cpty, com a diferença no `title`.
+
+**O funil.** As listas eram `<tbody>` montado à mão — o `excel-filter.js` só se
+liga a DataTable (§662). Pending Payment, Pending Receivement e Settled viraram
+DataTable (DataTables local, carregado depois do jQuery); o Summary ficou tabela
+comum. Decisões:
+- **Uma instância por tabela pela vida da página.** O `render` roda de novo a
+  cada Justify, Cancel e Match; recriar a tabela apagaria os funis no meio do
+  trabalho. Ele troca as linhas (`clear` + `rows.add` dos mesmos `<tr>` + 
+  `draw(false)`), e o `<tbody>` é o mesmo nó — a delegação do Justify e da
+  seleção do Match segue valendo (o `data-pr-index` mora no `<tr>`, então a
+  ordenação não desalinha a linha do dado).
+- **As marcas da linha saem do `::before`** (`data-tag`): o funil e o Ctrl+C
+  leem o texto da célula, e "JPMORGAN MGT Branch Reversal" viraria outra
+  contraparte na lista do funil (o mesmo caso das iniciais do avatar no §662).
+- Checkbox e Actions fora do funil e da ordenação; lista vazia pela frase do
+  DataTables; paginação de 25.
+- **A rolagem horizontal é só da tabela** (`pr-dt-scroll`, no `dom`): no
+  invólucro de fora ela arrastava a paginação junto. O cabeçalho passou a poder
+  quebrar (a regra do tema) com 8px de padding — com o funil, o título centrado
+  e o ícone de ordenação, cada coluna mede ~110px no mínimo: a 1920px as três
+  cabem; a 1500px o Settled rola ~260px dentro da tabela.
+
+**De passagem**: o `LANG` da tela lia `localStorage['language']`, que o app
+nunca grava — os avisos do Pay/Rec saíam sempre em inglês. Hoje lê o
+`__OTC_TRACKER_LANG__` (a chave antiga fica de plano B). E o JS da página passou
+a ter `asset_v` no lugar do `?v=` escrito à mão.
+
+`check_payrec_run.py` (seção nova): DataTable reutilizada, sem destroy, colunas
+fora do funil, rolagem só da tabela, marcas pelo `::before`, as três línguas, o
+idioma do app e a regra da marca EXECUTADA no `node` (exato, centavos, swap,
+ruído de float, manual, pendente, um lado só, dia sem `difference`). Conferido no
+Chromium contra o servidor local com o `/data` interceptado: funil filtrando e
+sobrevivendo ao Edit → Cancel, seleção e Swal do Match, claro e escuro, 1500 e
+1920px.

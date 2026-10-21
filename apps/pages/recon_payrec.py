@@ -86,6 +86,14 @@ _TOL_COMM_OPT_ABS = 0.20      # + 20 cents
 # LTR0004/LTR0005 message code + 'Sucesso' status + the value, so they are matched
 # to the JPM/Cockpit side by VALUE within R$20.
 _TOL_BANK = 20.0
+# SWAP (21/10/2026): o lado interno chega BRUTO e sai líquido do IR pela
+# alíquota regressiva do cadastro (`_swap_ir_rate`), e o que o cliente de fato
+# paga difere disso em alguns reais — o arredondamento do imposto e a base em
+# que ele incide. Com o R$1 dos centavos, o par ficava solto dos dois lados.
+# O casamento na janela larga é uma passada PRÓPRIA, depois dos exatos e dos
+# centavos (`_reconcile`): como ele é só por VALOR, no meio do laço um swap
+# roubaria o par exato de uma linha que vem depois.
+_TOL_SWAP = 20.0
 _LTR_PAY = 'LTR0004'          # JP is PAYING  → Pay  (negative)
 _LTR_RECEIVE = 'LTR0005'      # JP is RECEIVING → Receive (positive)
 # Liquidação de CLIENTE pelo STR (a via do BACEN), 21/09/2026. Ela não é
@@ -1400,11 +1408,73 @@ def _reversal_leg(j, client, matched):
 
 
 # ── Reconciliation ────────────────────────────────────────────────────────────
+def _is_swap(j):
+    """Perna JPM de SWAP (a que tem a janela de `_TOL_SWAP`)."""
+    return j.get('product') == 'SWAP' and not j.get('branch')
+
+
+def _swap_mate(j, client, matched):
+    """O par de uma perna de SWAP que nenhuma passada anterior casou: a perna
+    de cliente livre, no MESMO sentido, até `_TOL_SWAP` de distância. Com R$20
+    um Pay pequeno ficaria ao alcance de um Receive, e o sentido entra aqui.
+    O casamento continua sendo por valor; entre candidatos, a mesma
+    contraparte (`_cpty_key`) vem antes do valor mais próximo."""
+    alvo = _cpty_key(_norm_cpty(j.get('cpty')))
+    best, best_rank = None, None
+    for c in client:
+        if id(c) in matched or c.get('pay_receive') != j.get('pay_receive') \
+                or not _match_allowed(j, c):
+            continue
+        d = abs(c['value'] - j['value'])
+        if d > _TOL_SWAP:
+            continue
+        rank = (_cpty_key(_norm_cpty(c.get('client'))) != alvo, d)
+        if best_rank is None or rank < best_rank:
+            best, best_rank = c, rank
+    return best
+
+
+def _detail_row(j, mate):
+    """A linha do resultado para a perna JPM `j` e o par dela (ou nenhum)."""
+    if not mate:
+        return {
+            'le': j.get('le', 'JPM'),
+            'product': j['product'], 'jpm_cpty': j['cpty'], 'client': '',
+            'pay_receive': j['pay_receive'], 'jpm_value': j['value'], 'client_value': '',
+            'sistema': _BRANCH_SISTEMA if j.get('branch') else '', 'snumconta': '',
+            'status': 'Pending', 'difference': -j['value'], 'branch': j.get('branch') or False}
+    diff = mate['value'] - j['value']
+    status = 'Settled' if abs(diff) < _TOL_SETTLED else 'Pending'   # agree within centavos (< R$1)
+    if mate['sistema'] == 'SPB - conta externa' and diff > _TOL_SPB_SETTLED:
+        status = 'Settled'
+    # Interbank SPB actual matched to the JPM side by value → settled
+    # within its own tolerance (±R$20).
+    if mate.get('tol') and abs(diff) <= mate['tol']:
+        status = 'Settled'
+    # COMM OPT: premium net of the ~0.005% IR → settle within 0.005% + 20 cents.
+    if j.get('product') == 'COMM OPT' and \
+            abs(diff) <= abs(j['value']) * _TOL_COMM_OPT_PCT + _TOL_COMM_OPT_ABS:
+        status = 'Settled'
+    # SWAP: o IR regressivo deixa alguns reais entre o bruto e o pago (±R$20).
+    if _is_swap(j) and abs(diff) <= _TOL_SWAP:
+        status = 'Settled'
+    return {
+        # LE is authoritative on the JPM/Cockpit side: settlement carries
+        # it from the Legal Entity column; cashflows/FXO are always JPM.
+        'le': j.get('le', 'JPM'),
+        'product': j['product'] or mate.get('product') or 'NDF',
+        'jpm_cpty': j['cpty'], 'client': mate['client'], 'pay_receive': j['pay_receive'],
+        'jpm_value': j['value'], 'client_value': mate['value'],
+        'sistema': mate['sistema'], 'snumconta': mate['snumconta'],
+        'status': status, 'difference': diff, 'branch': j.get('branch') or False}
+
+
 def _reconcile(jpm, client):
     buckets = {}
     for c in client:
         buckets.setdefault(_int_key(c['value']), []).append(c)
     details = []
+    deferred = []               # pernas de SWAP sem par: a janela de R$20 é no fim
     matched = set()
     mirrored = set()            # a ponta da MGT na reversão, como veio do extrato
     mirrored_as = {}            # … e dita na visão do Banco, que é a que conta
@@ -1464,35 +1534,18 @@ def _reconcile(jpm, client):
             if best is not None:
                 mate = best
                 matched.add(id(best))
-        if mate:
-            diff = mate['value'] - j['value']
-            status = 'Settled' if abs(diff) < _TOL_SETTLED else 'Pending'   # agree within centavos (< R$1)
-            if mate['sistema'] == 'SPB - conta externa' and diff > _TOL_SPB_SETTLED:
-                status = 'Settled'
-            # Interbank SPB actual matched to the JPM side by value → settled
-            # within its own tolerance (±R$20).
-            if mate.get('tol') and abs(diff) <= mate['tol']:
-                status = 'Settled'
-            # COMM OPT: premium net of the ~0.005% IR → settle within 0.005% + 20 cents.
-            if j.get('product') == 'COMM OPT' and \
-                    abs(diff) <= abs(j['value']) * _TOL_COMM_OPT_PCT + _TOL_COMM_OPT_ABS:
-                status = 'Settled'
-            details.append({
-                # LE is authoritative on the JPM/Cockpit side: settlement carries
-                # it from the Legal Entity column; cashflows/FXO are always JPM.
-                'le': j.get('le', 'JPM'),
-                'product': j['product'] or mate.get('product') or 'NDF',
-                'jpm_cpty': j['cpty'], 'client': mate['client'], 'pay_receive': j['pay_receive'],
-                'jpm_value': j['value'], 'client_value': mate['value'],
-                'sistema': mate['sistema'], 'snumconta': mate['snumconta'],
-                'status': status, 'difference': diff, 'branch': j.get('branch') or False})
-        else:
-            details.append({
-                'le': j.get('le', 'JPM'),
-                'product': j['product'], 'jpm_cpty': j['cpty'], 'client': '',
-                'pay_receive': j['pay_receive'], 'jpm_value': j['value'], 'client_value': '',
-                'sistema': _BRANCH_SISTEMA if j.get('branch') else '', 'snumconta': '',
-                'status': 'Pending', 'difference': -j['value'], 'branch': j.get('branch') or False})
+        if mate is None and _is_swap(j):
+            # A janela de R$20 do SWAP espera o fim do laço (ver `_TOL_SWAP`);
+            # a linha guarda o lugar para a ordem da tela não mudar.
+            deferred.append((len(details), j))
+            details.append(None)
+            continue
+        details.append(_detail_row(j, mate))
+    for idx, j in deferred:
+        mate = _swap_mate(j, client, matched)
+        if mate is not None:
+            matched.add(id(mate))
+        details[idx] = _detail_row(j, mate)
     for c in client:
         if id(c) in matched:
             continue
@@ -1705,7 +1758,7 @@ def _apply_carry_forward(recon_date, pend_pay, pend_rec, settled):
         # Settled row.
         carried_has_jpm = r.get('jpm_value', '') not in ('', None)
         cval = _num(v)
-        mate_i = None
+        mate_i, mate_d = None, None
         for i, p in enumerate(target):
             if str(p.get('status', '')).strip().lower() != 'pending':
                 continue                              # only fresh same-day pendings (never another carried row)
@@ -1720,7 +1773,14 @@ def _apply_carry_forward(recon_date, pend_pay, pend_rec, settled):
             if not carried_has_jpm and not (p_has_jpm and not p_has_client):
                 continue
             pv = _num(p.get('client_value', '') if carried_has_jpm else p.get('jpm_value', ''))
-            if abs(pv - cval) < _TOL_SETTLED:
+            d = abs(pv - cval)
+            # O produto é o do lado JPM; o SWAP tem a janela de R$20 do motor,
+            # e nela vale o valor mais próximo, não o primeiro que couber.
+            if (r if carried_has_jpm else p).get('product') == 'SWAP':
+                if d <= _TOL_SWAP and (mate_d is None or d < mate_d):
+                    mate_i, mate_d = i, d
+                continue
+            if d < _TOL_SETTLED:
                 mate_i = i
                 break
         if mate_i is not None:
@@ -2055,6 +2115,11 @@ def _justify_locked(recon_date, table, index, comment, status):
 # são reaplicados no fim de todo Run: o Run refaz o dia do zero, e gravados só
 # no resultado do dia eles sumiriam no Run seguinte, com o par voltando a Pending.
 _MANUAL_TOL = _TOL_SETTLED
+# Seleção em que TODA linha do lado JPM é SWAP casa na janela do motor para o
+# swap (`_TOL_SWAP`): o par que ele aceitaria sozinho não pode ser recusado à
+# mão. Quem diz o produto é o lado JPM, como no motor — a perna do cliente
+# chega pelo SPB como NDF.
+_MANUAL_TOL_SWAP = _TOL_SWAP
 _MANUAL_DIR = os.path.join(_CACHE_DIR, 'manual-matches')
 
 
@@ -2079,7 +2144,13 @@ def _row_side_value(r):
     return _num(r.get('client_value')), str(r.get('client') or ''), 'client'
 
 
-def _manual_balance(tot_jpm, tot_client, has_jpm, has_client):
+def _manual_tol(jpm_products):
+    """A tolerância do match manual pelos produtos das linhas JPM da seleção."""
+    prods = [str(p or '').strip().upper() for p in jpm_products]
+    return _MANUAL_TOL_SWAP if prods and all(p == 'SWAP' for p in prods) else _MANUAL_TOL
+
+
+def _manual_balance(tot_jpm, tot_client, has_jpm, has_client, tol=_MANUAL_TOL):
     """O critério do match manual -> (tipo, valor que tem de caber na tolerância).
 
     Dois casos casam (§623): `pair` — pernas JPM × pernas Client da mesma
@@ -2091,7 +2162,7 @@ def _manual_balance(tot_jpm, tot_client, has_jpm, has_client):
     soma = round(tot_jpm + tot_client, 2)
     if has_jpm and has_client:
         diff = round(tot_jpm - tot_client, 2)
-        if abs(diff) <= _MANUAL_TOL or abs(soma) > _MANUAL_TOL:
+        if abs(diff) <= tol or abs(soma) > tol:
             return 'pair', diff
     return 'offset', soma
 
@@ -2189,7 +2260,7 @@ def _manual_match_locked(recon_date, pay_idx, rec_idx, user, sid):
     totals = {'pay': 0.0, 'rec': 0.0}
     lados = {'jpm': 0.0, 'client': 0.0}
     tem = set()
-    names, rows = {}, []
+    names, rows, jpm_prods = {}, [], []
     for tbl in ('pay', 'rec'):
         lst = data.get(keys[tbl]) or []
         for i in sel[tbl]:
@@ -2203,6 +2274,8 @@ def _manual_match_locked(recon_date, pay_idx, rec_idx, user, sid):
             totals[tbl] += sv[0]
             lados[sv[2]] += sv[0]
             tem.add(sv[2])
+            if sv[2] == 'jpm':
+                jpm_prods.append(lst[i].get('product'))
             names.setdefault(_cpty_key(_norm_cpty(sv[1])), sv[1])
             rows.append({'table': tbl, 'sig': _row_sig(tbl, lst[i])})
     if len(names) != 1 or '' in names:
@@ -2210,9 +2283,10 @@ def _manual_match_locked(recon_date, pay_idx, rec_idx, user, sid):
         raise ManualMatchError('match_cpty_differs',
                                'The selected rows are not from the same counterparty: ' + lista,
                                {'names': lista})
-    kind, net = _manual_balance(lados['jpm'], lados['client'], 'jpm' in tem, 'client' in tem)
-    if abs(net) > _MANUAL_TOL:
-        params = {'net': '{:,.2f}'.format(net), 'tol': '{:,.2f}'.format(_MANUAL_TOL)}
+    tol = _manual_tol(jpm_prods)
+    kind, net = _manual_balance(lados['jpm'], lados['client'], 'jpm' in tem, 'client' in tem, tol)
+    if abs(net) > tol:
+        params = {'net': '{:,.2f}'.format(net), 'tol': '{:,.2f}'.format(tol)}
         raise ManualMatchError('match_over_tolerance',
                                'Difference {net} is above the tolerance of {tol}.'.format(**params),
                                params)

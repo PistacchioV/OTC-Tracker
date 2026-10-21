@@ -12,7 +12,9 @@
   var page = document.getElementById('payrec-page');
   if (!page) return;
 
-  var LANG = (localStorage.getItem('language') || 'en').toLowerCase();
+  // O idioma do app mora em `__OTC_TRACKER_LANG__` (§7); a chave `language`
+  // nunca é gravada, e a tela saía sempre em inglês.
+  var LANG = (localStorage.getItem('__OTC_TRACKER_LANG__') || localStorage.getItem('language') || 'en').toLowerCase();
   var _TRANS = {
     en: { running: 'Running…', sending: 'Sending…', run: 'Run reconciliation', end: 'End process',
           noFiles: 'No files', noFilesMsg: 'Attach files in the dropzone or make sure the Pay/Rec folder has the input files for this date.',
@@ -41,6 +43,8 @@
           matchCpty: 'Counterparty', matchValue: 'Value', matchTotal: 'Total', matchSum: 'Sum of the rows', matchDiff: 'Difference (JPM − Client)', matchJpm: 'JPM', matchClient: 'Client',
           matchTol: 'Tolerance', matchWithin: 'Within tolerance', matchOver: 'Above tolerance',
           matchDo: 'Match', matchDone: 'Rows matched and moved to Settled.', matchTag: 'Manual',
+          tolTag: 'Tolerance', tolTitle: 'Matched within tolerance — difference {diff} (Client − JPM)',
+          noMatchRows: 'No rows match the filters',
           e_match_need_two: 'Select at least two rows to match.',
           e_match_cpty_differs: 'The selected rows are not from the same counterparty: {names}',
           e_match_over_tolerance: 'The difference {net} is above the tolerance of {tol}.',
@@ -74,6 +78,8 @@
           matchCpty: 'Contraparte', matchValue: 'Valor', matchTotal: 'Total', matchSum: 'Soma das linhas', matchDiff: 'Diferença (JPM − Client)', matchJpm: 'JPM', matchClient: 'Client',
           matchTol: 'Tolerância', matchWithin: 'Dentro da tolerância', matchOver: 'Acima da tolerância',
           matchDo: 'Casar', matchDone: 'Linhas casadas e movidas para Settled.', matchTag: 'Manual',
+          tolTag: 'Tolerância', tolTitle: 'Casada dentro da tolerância — diferença {diff} (Cliente − JPM)',
+          noMatchRows: 'Nenhuma linha com estes filtros',
           e_match_need_two: 'Selecione ao menos duas linhas para casar.',
           e_match_cpty_differs: 'As linhas selecionadas não são da mesma contraparte: {names}',
           e_match_over_tolerance: 'A diferença {net} está acima da tolerância de {tol}.',
@@ -107,6 +113,8 @@
           matchCpty: 'Contraparte', matchValue: 'Valor', matchTotal: 'Total', matchSum: 'Suma de las filas', matchDiff: 'Diferencia (JPM − Client)', matchJpm: 'JPM', matchClient: 'Client',
           matchTol: 'Tolerancia', matchWithin: 'Dentro de la tolerancia', matchOver: 'Por encima de la tolerancia',
           matchDo: 'Conciliar', matchDone: 'Filas conciliadas y movidas a Settled.', matchTag: 'Manual',
+          tolTag: 'Tolerancia', tolTitle: 'Conciliada dentro de la tolerancia — diferencia {diff} (Cliente − JPM)',
+          noMatchRows: 'Ninguna fila con estos filtros',
           e_match_need_two: 'Seleccione al menos dos filas para conciliar.',
           e_match_cpty_differs: 'Las filas seleccionadas no son de la misma contraparte: {names}',
           e_match_over_tolerance: 'La diferencia {net} está por encima de la tolerancia de {tol}.',
@@ -180,21 +188,90 @@
     show('prCardSummary', true);
   }
 
-  function renderList(cardId, bodyId, countId, rows, kind, tableKey) {
+  // ── As marcas da linha (Branch, Match manual, Tolerância) ─────────────────
+  // Pílula cujo TEXTO vem do `::before` (`data-tag`), não do nó: o funil "de
+  // Excel" e o Ctrl+C leem o texto da célula, e "BANCO X Branch Reversal"
+  // viraria outra contraparte na lista do funil da coluna JPM cpty.
+  function tag(cls, label, title) {
+    return '<span class="pr-tag ' + cls + '" data-tag="' + esc(label) + '" aria-label="' + esc(label) + '"' +
+      (title ? ' title="' + esc(title) + '"' : '') + '></span>';
+  }
+  function asNum(v) {
+    if (typeof v === 'number') return v;
+    var n = parseFloat(String(v == null ? '' : v).replace(/,/g, ''));
+    return isNaN(n) ? null : n;
+  }
+  // A diferença de uma linha Settled que o MOTOR casou sem bater no centavo —
+  // dentro de uma das tolerâncias dele (centavos < R$1, SPB, interbancário e
+  // swap ±R$20, COMM OPT 0,005% + R$0,20). `difference` é Cliente − JPM, como o
+  // `_detail_row` grava; o dia salvo antes desta marca também a tem. O match
+  // manual já carrega a marca dele, e linha com um lado só não casou nada.
+  function toleranceDiff(r) {
+    if (r.manual_match || String(r.status || '').toLowerCase().indexOf('settl') === -1) return null;
+    var j = asNum(r.jpm_value), c = asNum(r.client_value);
+    if (j === null || c === null || r.jpm_value === '' || r.client_value === '') return null;
+    var d = asNum(r.difference);
+    if (d === null) d = c - j;
+    return Math.abs(d) >= 0.005 ? d : null;
+  }
+  function marks(r) {
+    var out = '';
+    if (r.branch) out += tag('pr-branch-tag', t(r.branch === 'b2b' ? 'branchTagB2b' : (r.branch === 'reversal' ? 'branchTagRev' : 'branchTag')));
+    if (r.manual_match) out += tag('pr-manual-tag', t('matchTag'), r.matched_by || '');
+    var d = toleranceDiff(r);
+    if (d !== null) out += tag('pr-tol-tag', t('tolTag'), fmtParams(t('tolTitle'), { diff: fmtNum(d) }));
+    return out;
+  }
+
+  // ── As três listas são DataTable (o funil "de Excel" só alcança DataTable) ─
+  // A instância é UMA por tabela pela vida da página: o `render` roda de novo a
+  // cada Justify, Cancel e Match, e recriar a tabela apagaria os funis no meio
+  // do trabalho. As linhas são trocadas (`clear` + `rows.add` dos <tr> montados
+  // como antes) e o `draw(false)` mantém filtros, ordem e página. O <tbody> é o
+  // mesmo nó, então a delegação do Justify e da seleção continua valendo.
+  var DTS = {};
+  function fillTable(bodyId, html, pending) {
     var body = document.getElementById(bodyId);
-    var span = countId ? String(rows ? rows.length : 0) : '';
-    if (countId) setText(countId, span);
-    if (!rows || !rows.length) {
-      body.innerHTML = '<tr><td colspan="11" class="pr-empty">' + esc(t('empty')) + '</td></tr>';
-      show(cardId, true);
+    var table = body && body.closest('table');
+    if (!table) return;
+    if (!(window.jQuery && jQuery.fn.dataTable)) {
+      body.innerHTML = html || '<tr><td colspan="11" class="pr-empty">' + esc(t('empty')) + '</td></tr>';
       return;
     }
-    body.innerHTML = rows.map(function (r, i) {
+    var dt = DTS[bodyId];
+    if (!dt) {
+      // Checkbox e Actions ficam fora do funil e da ordenação (§7).
+      var fixas = pending ? [{ targets: [0, 10], orderable: false, searchable: false }] : [];
+      dt = DTS[bodyId] = jQuery(table).DataTable({
+        // A rolagem horizontal é só da tabela (`pr-dt-scroll`), não do rodapé.
+        dom: "r<'pr-dt-scroll't><'d-md-flex justify-content-between align-items-center mt-2'ip>",
+        order: [], autoWidth: false, pageLength: 25, lengthChange: false,
+        columnDefs: fixas,
+        language: {
+          emptyTable: t('empty'), zeroRecords: t('noMatchRows'),
+          paginate: { first: '<i class="ti ti-chevrons-left"></i>', previous: '<i class="ti ti-chevron-left"></i>',
+                      next: '<i class="ti ti-chevron-right"></i>', last: '<i class="ti ti-chevrons-right"></i>' }
+        }
+      });
+      // Seleção de célula + Ctrl+C sem a caixinha e as ações (o automático do
+      // table-std pula a tabela já ligada).
+      if (window.otcCellCopy) otcCellCopy(table, { skip: pending ? [0, 10] : [] });
+    }
+    var tmp = document.createElement('tbody');
+    tmp.innerHTML = html;
+    dt.clear();
+    if (tmp.children.length) dt.rows.add(Array.prototype.slice.call(tmp.children));
+    dt.draw(false);
+  }
+
+  function renderList(cardId, bodyId, countId, rows, kind, tableKey) {
+    if (countId) setText(countId, String(rows ? rows.length : 0));
+    show(cardId, true);
+    var html = (rows || []).map(function (r, i) {
       var base =
         '<td>' + esc(r.le || '') + '</td>' +
         '<td>' + esc(r.product) + '</td>' +
-        '<td>' + esc(r.jpm_cpty) + (r.branch ? '<span class="pr-branch-tag">' + esc(t(r.branch === 'b2b' ? 'branchTagB2b' : (r.branch === 'reversal' ? 'branchTagRev' : 'branchTag'))) + '</span>' : '') +
-          (r.manual_match ? '<span class="pr-manual-tag" title="' + esc(r.matched_by || '') + '">' + esc(t('matchTag')) + '</span>' : '') + '</td>' +
+        '<td>' + esc(r.jpm_cpty) + marks(r) + '</td>' +
         '<td>' + esc(r.client) + '</td>' +
         '<td>' + esc(r.pay_receive) + '</td>' +
         numCell(r.jpm_value) + numCell(r.client_value);
@@ -225,7 +302,7 @@
         '<td class="pr-actions-cell">' + actions + '</td>' +
         '</tr>';
     }).join('');
-    show(cardId, true);
+    fillTable(bodyId, html, kind !== 'settled');
   }
 
   function render(d) {
@@ -521,6 +598,9 @@
   // da mesma contraparte. O servidor confere tudo de novo — o JS é conveniência.
   var matchSel = {};
   var MATCH_TOL = parseFloat(page.getAttribute('data-match-tol')) || 1;
+  // Todo o lado JPM da seleção em SWAP → a janela do motor para o swap
+  // (`_manual_tol` no servidor; quem diz o produto é o lado JPM).
+  var MATCH_TOL_SWAP = parseFloat(page.getAttribute('data-match-tol-swap')) || MATCH_TOL;
 
   function toNum(v) {
     if (typeof v === 'number') return v;
@@ -548,7 +628,8 @@
       var p = k.split(':');
       if (p[0] !== tableKey || !matchSel[k]) return;
       var i = parseInt(p[1], 10), r = (arr || [])[i], sv = r && sideValue(r);
-      if (sv) out.push({ index: i, cpty: sv.cpty, value: sv.value, side: sv.side, table: tableKey });
+      if (sv) out.push({ index: i, cpty: sv.cpty, value: sv.value, side: sv.side, table: tableKey,
+                         product: String(r.product || '').trim().toUpperCase() });
     });
     return out.sort(function (a, b) { return a.index - b.index; });
   }
@@ -588,7 +669,8 @@
     var cli = all.filter(function (r) { return r.side === 'client'; });
     var totJ = sum(jpm), totCl = sum(cli);
     var r2 = function (v) { return Math.round(v * 100) / 100; };
-    var fits = function (v) { return Math.abs(v) <= MATCH_TOL + 1e-9; };
+    var tol = jpm.length && jpm.every(function (r) { return r.product === 'SWAP'; }) ? MATCH_TOL_SWAP : MATCH_TOL;
+    var fits = function (v) { return Math.abs(v) <= tol + 1e-9; };
     // A MESMA regra do servidor (`_manual_balance`): JPM × Client fecha pela
     // diferença; linhas que se compensam (§617), pela soma.
     var diff = r2(totJ - totCl), soma = r2(totJ + totCl);
@@ -617,7 +699,7 @@
       '</table></div>' +
       '<div class="pr-match-sum">' + esc(t(usaDiff ? 'matchDiff' : 'matchSum')) + ': <b class="' + (net < 0 ? 'pr-neg' : '') + '">' + fmtNum(net) + '</b>' +
         '<span class="pr-match-chip ' + (within ? 'ok' : 'no') + '">' + esc(t(within ? 'matchWithin' : 'matchOver')) +
-        ' · ' + esc(t('matchTol')) + ' ' + fmtNum(MATCH_TOL) + '</span></div>' +
+        ' · ' + esc(t('matchTol')) + ' ' + fmtNum(tol) + '</span></div>' +
       (sameCpty ? '' : '<div class="pr-match-err">' + esc(fmtParams(t('e_match_cpty_differs'),
         { names: keys.map(function (k) { return names[k] || '—'; }).join(', ') })) + '</div>');
     var allowed = within && sameCpty;
