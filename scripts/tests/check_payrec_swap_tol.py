@@ -184,6 +184,16 @@ check(code == 'match_over_tolerance' and params.get('tol') == '1.00',
       'manual: o mesmo com NDF → match_over_tolerance, tolerância 1.00')
 check(RP._manual_tol(['SWAP', 'SWAP']) == 20.0 and RP._manual_tol(['SWAP', 'NDF']) == 1.0
       and RP._manual_tol([]) == 1.0, '_manual_tol: todo SWAP → 20; misturado ou sem JPM → 1')
+# EQUITIES também (mesa, 21/10/2026): o swap de equity e o da Atacama. Só no
+# match MANUAL — o motor segue no R$1 para ele.
+check(RP._manual_tol(['EQUITIES']) == 20.0 and RP._manual_tol(['SWAP', 'EQUITIES']) == 20.0
+      and RP._manual_tol(['EQUITIES', 'NDF']) == 1.0 and RP._manual_tol(['equities ']) == 20.0,
+      '_manual_tol: EQUITIES (sozinho ou com SWAP) → 20; com NDF → 1')
+_seed('EQUITIES')
+data, group = RP.manual_match(DATE, [0, 1], [], user='Tester')
+check(group['kind'] == 'pair' and abs(group['net'] - 15.0) < 1e-9,
+      'manual: JPM EQUITIES −1.000 × cliente −1.015 → casa (R$15 na janela do swap)')
+check(not RP._is_swap({'product': 'EQUITIES'}), 'o MOTOR segue com EQUITIES fora da janela de R$20')
 os.makedirs = _orig_makedirs
 
 # 7 · a tela recebe as duas tolerâncias, e o JS usa a do swap pela mesma regra
@@ -195,8 +205,14 @@ with open(os.path.join(ROOT, 'apps/pages/features/recon_payrec/entrypoint.py'), 
     ep = fh.read()
 check('data-match-tol-swap="{{ match_tol_swap }}"' in html and 'match_tol_swap=' in ep,
       'template e rota levam a tolerância do swap')
-check("data-match-tol-swap" in js and "r.product === 'SWAP'" in js and 'fmtNum(tol)' in js,
-      'o JS escolhe a tolerância pelo lado JPM e mostra a que vale')
+# A lista de produtos é UMA, a do servidor: o JS a recebe e não tem literal próprio.
+check('data-match-tol-swap-products="{{ match_tol_swap_products }}"' in html
+      and 'match_tol_swap_products=' in ep, 'template e rota levam os produtos da janela do swap')
+from apps.pages.features.recon_payrec import queries as _Q                     # noqa: E402
+check(_Q.match_tolerance_swap_products() == 'SWAP,EQUITIES', 'a rota entrega SWAP,EQUITIES')
+check("data-match-tol-swap" in js and 'MATCH_TOL_SWAP_PRODUCTS.indexOf(r.product)' in js
+      and "r.product === 'SWAP'" not in js and 'fmtNum(tol)' in js,
+      'o JS escolhe a tolerância pela lista do servidor e mostra a que vale')
 
 print()
 print('TUDO OK' if not fails else '%d FALHA(S)' % len(fails))

@@ -251,5 +251,19 @@ COM_ID = """<thead><style>
 th, td, fracos = analisa(COM_ID)
 check('clone alcancado por seletor com id nao e cobrado', th and td and not fracos)
 
+print('\n== 4. o select all do cabecalho nao fica embaixo da ordenacao ==')
+# 21/10/2026: num <th> de 50px o `span.dt-column-order` VAZIO da coluna que nao
+# ordena (12px) mais a reserva do funil encolhiam o titulo a 0px; o checkbox
+# transbordava por baixo do span e o clique caia nele (Intrag NDF/Option/Swap,
+# DCE NDF/Option). Medido no Chromium nas 39 telas com checkbox no cabecalho.
+_TEMA = io.open(SCSS, encoding='utf-8').read()
+_CSS = io.open(os.path.join(ROOT, 'apps', 'static', 'css', 'otc.css'), encoding='utf-8').read()
+check('coluna sem ordenacao nao desenha o span de ordenacao',
+      'th.dt-orderable-none .dt-column-order { display: none; }' in _TEMA)
+check('titulo com campo dentro nao encolhe abaixo dele',
+      '.dt-column-title:has(> input, > .form-check) { flex-shrink: 0; min-width: max-content; }' in _TEMA)
+check('...e o otc.css compilado tem as duas', 'th.dt-orderable-none .dt-column-order' in _CSS
+      and re.search(r'\.dt-column-title:has\(>\s*input,\s*>\s*\.form-check\)', _CSS) is not None)
+
 print('\n%s' % ('TUDO OK' if not falhas else 'FALHAS (%d)' % len(falhas)))
 sys.exit(1 if falhas else 0)

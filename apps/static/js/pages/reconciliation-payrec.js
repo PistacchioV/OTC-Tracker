@@ -598,9 +598,14 @@
   // da mesma contraparte. O servidor confere tudo de novo — o JS é conveniência.
   var matchSel = {};
   var MATCH_TOL = parseFloat(page.getAttribute('data-match-tol')) || 1;
-  // Todo o lado JPM da seleção em SWAP → a janela do motor para o swap
+  // Todo o lado JPM da seleção em SWAP ou EQUITIES → a janela do motor para o swap
   // (`_manual_tol` no servidor; quem diz o produto é o lado JPM).
   var MATCH_TOL_SWAP = parseFloat(page.getAttribute('data-match-tol-swap')) || MATCH_TOL;
+  // Os produtos que levam à janela do swap (SWAP, EQUITIES): a lista é do
+  // servidor (`_MANUAL_TOL_SWAP_PRODUCTS`), para as duas cópias da regra não
+  // divergirem.
+  var MATCH_TOL_SWAP_PRODUCTS = String(page.getAttribute('data-match-tol-swap-products') || 'SWAP')
+    .split(',').map(function (p) { return p.trim().toUpperCase(); }).filter(Boolean);
 
   function toNum(v) {
     if (typeof v === 'number') return v;
@@ -614,6 +619,18 @@
     if (hasJ === hasC) return null;
     return hasJ ? { value: toNum(r.jpm_value), cpty: r.jpm_cpty || '', side: 'jpm' }
                 : { value: toNum(r.client_value), cpty: r.client || '', side: 'client' };
+  }
+  // As variantes de nome das contrapartes da CASA viram uma só, como no
+  // servidor (`_norm_cpty`): "ATACAMA MULTIMERCADO" no lado JPM e "ATACAMA FUNDO
+  // DE INVESTIMENTO FINANCEIRO MULTIMERCADO CREDITO PRIVADO" no extrato são o
+  // mesmo fundo. Sem isto a janela do Match dizia "não é a mesma contraparte" e
+  // travava o botão antes de o servidor — que já aceitava — ser perguntado.
+  function normCpty(name) {
+    var u = String(name || '').toUpperCase();
+    if (u.indexOf('LAWTON') !== -1) return 'LAWTON MULTIMERCADO EXCLUSIVO';
+    if (u.indexOf('ATACAMA') !== -1) return 'ATACAMA MULTIMERCADO';
+    if (u.indexOf('BCO J.P') !== -1 || u.indexOf('BANCO J.P') !== -1) return 'Bco J.P. Morgan S.A.';
+    return String(name || '').trim();
   }
   // A mesma chave do servidor (`_cpty_key`): só letras e dígitos, sem sufixo societário.
   function cptyKey(name) {
@@ -669,7 +686,8 @@
     var cli = all.filter(function (r) { return r.side === 'client'; });
     var totJ = sum(jpm), totCl = sum(cli);
     var r2 = function (v) { return Math.round(v * 100) / 100; };
-    var tol = jpm.length && jpm.every(function (r) { return r.product === 'SWAP'; }) ? MATCH_TOL_SWAP : MATCH_TOL;
+    var tol = jpm.length && jpm.every(function (r) { return MATCH_TOL_SWAP_PRODUCTS.indexOf(r.product) !== -1; })
+      ? MATCH_TOL_SWAP : MATCH_TOL;
     var fits = function (v) { return Math.abs(v) <= tol + 1e-9; };
     // A MESMA regra do servidor (`_manual_balance`): JPM × Client fecha pela
     // diferença; linhas que se compensam (§617), pela soma.
@@ -677,7 +695,7 @@
     var usaDiff = jpm.length && cli.length && (fits(diff) || !fits(soma));
     var net = usaDiff ? diff : soma;
     var names = {};
-    all.forEach(function (r) { names[cptyKey(r.cpty)] = r.cpty; });
+    all.forEach(function (r) { names[cptyKey(normCpty(r.cpty))] = r.cpty; });
     var keys = Object.keys(names);
     var sameCpty = keys.length === 1 && keys[0] !== '';
     var within = fits(net);

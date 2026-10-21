@@ -22,9 +22,15 @@ def match_tolerance():
 
 
 def match_tolerance_swap():
-    """A do match manual quando todo o lado JPM da seleção é SWAP."""
+    """A do match manual quando todo o lado JPM da seleção é SWAP ou EQUITIES."""
     from apps.pages.recon_payrec import _MANUAL_TOL_SWAP
     return _MANUAL_TOL_SWAP
+
+
+def match_tolerance_swap_products():
+    """Os produtos do lado JPM que levam o match manual à janela do swap."""
+    from apps.pages.recon_payrec import _MANUAL_TOL_SWAP_PRODUCTS
+    return ','.join(_MANUAL_TOL_SWAP_PRODUCTS)
 
 
 def recipients():
