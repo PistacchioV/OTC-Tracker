@@ -3049,5 +3049,17 @@
   "pj-f-where": "Where",
   "pj-ph-where": "Video call",
   "pj-ph-event": "e.g. Go-live review",
-  "pj-f-reached": "Reached"
+  "pj-f-reached": "Reached",
+  "map-tab-swap-cetes-leg": "Swap Cetes — Legs (e-mail → B3)",
+  "nav-cetes": "Cetes",
+  "nd-cards-select-all": "Select all",
+  "nd-cards-count": "{total} operation(s)",
+  "nd-cards-selected": "{n} of {total} selected",
+  "nd-card-confirm": "Confirm",
+  "nd-card-edit": "Edit",
+  "nd-card-delete": "Delete",
+  "nd-card-send": "Send",
+  "nd-card-select": "Select",
+  "nd-card-dblclick": "Double-click to preview the B3 files",
+  "nd-card-empty": "No operations for these filters."
 }

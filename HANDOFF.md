@@ -27209,3 +27209,110 @@ badge e card). Conferido nas telas da dev com dados (Summaries, Users,
 Reference Data): pílulas brancas, em Proper, sem erro de JS. O
 `check_export_advanced` falha no `jsc` por `temDia` — igual no commit anterior,
 não é desta mudança.
+
+## §650 — New Deals › Swap › Cetes, e as telas de Swap em CARDS (2026-10-21)
+
+**O pedido.** "Em New Deals, criar a sub-página Swap › Cetes. A informação vem
+num e-mail jogado no dropzone: identificar a operação `cetip usd irs` e puxar
+as infos — o notional do swap na B3 tem de ser sempre em BRL, então converter o
+USD pelo `fx rate for reference`. Mapeado com o CETIP ID e Success, vai para a
+Intrag Swap, o fluxo padrão. E em vez de uma tabela com inúmeras colunas, um
+card por swap importado — ajustar as outras páginas a esse padrão — com os
+botões de ação padrão, checkbox nos cards, selecionar todos, duplo clique para
+o preview." (com o arquivo da mesa, Banco e Lawton, de exemplo). As "outras
+páginas" são as de Swap (Bullet e Cashflow), pela resposta da mesa; NDF e
+Opções seguem em tabela.
+
+**O arquivo é a versão 1 do layout, não o v3 do Bullet.** O exemplo tem header
+de 38 caracteres (sem o campo de versão) e registro de 1899: é o
+`swap-pagamento-final` do File Interpreter (117 campos), não o
+`swap-pagamento-final-v3` (43/1927). Decodificado campo a campo, a regra que ele
+segue — e que o gerador reproduz **byte a byte** nas duas visões
+(`check_swap_cetes` §2):
+- as duas curvas VCP (C00, 100%); a **Parte leva a curva que RECEBE** — na visão
+  do Banco o SOFR (Tipo/Classe 17182), na do Lawton o Dólar (21) com o juros
+  fixo; Sinal e Juros só na perna fixa; a Descrição só na curva da Parte;
+- PU inicial 1,00000000, Cupom Limpo = o fx rate for reference, Data de Cotação
+  = o D-n do `fx fixing` (t-2 → 02); o Tipo/Classe alinhado à direita com espaço
+  (`   21`), como a mesa grava;
+- o **Valor Base em reais** (USD notional × fx): no exemplo 111,05 mi × 5,1168 =
+  R$ 568.220.640,00 (a casa decimal implícita do campo me enganou na primeira
+  leitura — está registrado para não enganar o próximo);
+- o MESMO Meu Número nas duas visões; o campo 19 (Data operação termo) com a
+  data da operação; a LOB (CEM) alinhada à direita no Código Identificador.
+
+**O que cada perna é na B3 é cadastro**, nunca de-para no código:
+`swap-cetes-leg` (/mapping › Swap Cetes — Legs): o token da perna do e-mail
+(`we pay`/`we rec`; `Exact` vence `Contains`, o mais longo vence) → curva,
+Tipo/Classe da VCP, se leva a taxa FIXA e o texto da Descrição, com `{fx}`,
+`{rate}` e `{dn}`. A semente é o arquivo da mesa, letra a letra (espaços duplos
+inclusive). Adesão, Funcionalidade, Sim/Não e Sinal pelos MESMOS cadastros do
+Bullet. Quem paga a fixa sai do `direction` ("banco … pays fix vs lawton"),
+senão do `we pay`.
+
+**O backend** é a vertical `features/swap_cetes` (domain puro + commands +
+queries + entrypoint + infra: arquivo-dia em `cache/new deals/Swap/Cetes`, e o
+leitor do e-mail pelo CONTEÚDO — `.msg`, `.eml` ou o corpo solto, as linhas
+pelo `html_to_lines`, que lê igual o bloco em tabela e em parágrafos). O
+contrato de API é o do Swap Cashflow (prefixo estático
+`/api/new-deals/swap-cetes`), mais o **Mapping B3 ID** pelo retorno (o mesmo
+`parse_return_line`/`match_return` do Bullet — os 118 primeiros caracteres do
+0301 são iguais no v1 e no v3 — pelo Meu Número; plano B pela conta do Lawton).
+Os nomes da New levam a conta da visão (§646): `73760009.SWAP_CETES_BANCO.txt`
+e `00041007.SWAP_CETES_LAWTON.txt`. **No Success, a Intrag Swap na visão do
+LAWTON** (carteira INTRAGJP552, Parte Lawton × Banco, perna 1 = o Dólar fixo,
+perna 2 = o SOFR; Data de Cotação = o Effective recuado o D-n em dias úteis
+ANBIMA). O Intraday Monitor varre `Swap/Cetes` (card Swap CEM pela LOB) e conta
+a Intrag desde o import na entidade do Lawton. Rótulo `Swap Cetes` nos três mapas
+de notificação; menu New Deals › Swap › Cetes.
+
+**A página** é uma ENTRADA no catálogo (`new_deals/catalog.py`, colunas copiadas
+do domínio — feature não importa feature; o teste cobra a paridade), com flags
+novas: `cards`, `mapping` (o botão Mapping B3 ID) e `econ_aff` (a Cetes é
+intragrupo, sem Economic Affirmation).
+
+**Os CARDS** são um componente só: `static/js/deal-cards.js` + o visual no
+`otc.scss` (§6e, `.otc-deal-card`). O componente só DESENHA e AVISA: a página
+segue dona dos dados (ENTRIES, `selected`) e das ações (Confirm, Edit, Delete,
+Send, preview), e a **DataTable continua por baixo, escondida, como a fonte do
+Export da casa** (Copy · CSV · Excel · Print · PDF · Advanced) — export próprio
+não existe (§7). O catálogo diz o que vai em cada card (`title`, `subtitle`,
+`facts` com tipo, `meta`); o Bullet, com template próprio, declara o dele.
+Um card por OPERAÇÃO (a chave interna): os dados da dev tinham a mesma linha em
+dois dias, e dois cards com as ações agindo num só confundem. Os botões são os
+de linha da casa (squircle, cores) e o Send voa o Contrail sozinho. O Options
+EDG, que divide o template, segue em tabela.
+
+**Guarda.** `check_swap_cetes.py` (novo, 64 verificações): o e-mail, os dois
+registros byte a byte, as lacunas, import/re-import, o Send, o Mapping e a
+linha da Intrag, a página (catálogo, rota, busca, cadastro, menu, notificações,
+Monitor, toda ação com rota estática) e os cards no Chromium.
+`check_swap_cashflow` aprendeu que o `mapping-b3` só é chamado por quem declara
+`mapping`.
+
+## §651 — Python 3.13 na instância do JP: o que muda (2026-10-21, verificação)
+
+Pergunta da mesa: "preciso atualizar para o Python 3.13 no JPMorgan, tem alguma
+biblioteca que precisa ser atualizada?". Verificado, sem mudar código:
+- **Módulos removidos no 3.13** (`cgi`, `imghdr`, `pipes`, `telnetlib`…): o
+  código do app não usa nenhum; nas dependências só há `from cgi import escape`
+  dentro de `try/except` de Python 2 (htmlminf, oletools, lxml).
+- **Wheels Windows/cp313** (o `uv pip compile` para `x86_64-pc-windows-msvc` e o
+  PyPI pacote a pacote): as 59 dependências resolvem para as MESMAS versões no
+  3.12 e no 3.13; todas as compiladas têm wheel cp313/abi3. Só código-fonte:
+  `jsmin`, `red-black-tree-mod`, `win-unicode-console` (Python puro) e `rcssmin`
+  (C opcional, sem wheel Windows em versão nenhuma — já é assim no 3.12).
+  Versões mínimas com wheel Windows/3.13, se o Artifactory estiver atrás: numpy
+  2.1.0, pandas 2.2.3, duckdb 1.1.1, pywin32 307, rapidfuzz 3.9.6, xxhash 3.5.0,
+  MarkupSafe 3.0.0, cffi 1.17.0, Pillow 10.4.0, charset-normalizer 3.4.0.
+- **O app no 3.13**: sobe (561 rotas) e **192 dos 199 testes passam**; os 7 que
+  falham falham IGUAL no 3.12 (três antigos conhecidos e quatro que dependem do
+  Reference Data do banco da dev).
+- **O RISCO é o DuckDB**: a instalação nova puxa o **2.0**, e um banco CRIADO
+  pelo 2.0 não abre no 1.5 ("version number 999, but we can only read 64-68") —
+  os bancos existentes seguem legíveis pelos dois. Como cada pessoa roda a
+  própria instância sobre o MESMO `db/` do share, uma máquina no 2.0 criaria
+  bancos que as outras leem como ILEGÍVEIS. O 1.5.x tem wheel cp313: fixar o
+  DuckDB na versão da instância até todas as máquinas migrarem juntas.
+- **O lançador** é amarrado ao 3.12 (`PY_VERSION=3.12.10`, a pasta `python312`, o
+  registro `HKCU\…\PythonCore\3.12`, o instalador em `Application\installers`).

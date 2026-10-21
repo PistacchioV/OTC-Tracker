@@ -32,6 +32,10 @@
 #swb-table :is(th, td):nth-child(8), #swb-table_wrapper .dt-scroll-head th:nth-child(8) { width: 110px; min-width: 110px; }
 #apiRefDate { width: 8.5rem; }
 .swb-edit-grid label { font-size: .72rem; }
+/* Modo CARDS (§650): a DataTable fica por baixo como a fonte do Export — some
+   só a área da tabela e o rodapé dela; a toolbar continua. */
+.nd-cards-mode #swb-table_wrapper .nd-table-area,
+.nd-cards-mode #swb-table_wrapper .nd-table-foot { display: none !important; }
 </style>
 {% endblock extra_css %}
 
@@ -56,7 +60,7 @@
 
     <div class="row">
         <div class="col-12">
-            <div class="card nd-deal-card{% if page.group == 'Options' %} nd-deal-card--opt{% endif %}">
+            <div class="card nd-deal-card{% if page.group == 'Options' %} nd-deal-card--opt{% endif %}{% if page.cards %} nd-cards-mode{% endif %}">
 
                 <!-- ── Dropzone (o mesmo das páginas de New Deals) ──────────── -->
                 <div class="card-body" style="padding: 10px;">
@@ -124,6 +128,7 @@
                 <!-- ── Show/entries ─────────────────────────────────────────── -->
                 <div class="card-header">
                     <div class="d-flex align-items-center gap-2">
+                        {% if not page.cards %}
                         <label class="form-label mb-0" data-lang="b3-show">Show</label>
                         <select class="form-select form-select-sm" style="width: 80px;" data-table-set-rows-per-page>
                             <option value="50" selected>50</option>
@@ -132,6 +137,7 @@
                             <option value="200">200</option>
                         </select>
                         <label class="form-label mb-0" data-lang="b3-entries">entries</label>
+                        {% endif %}
                         <!-- Ações de documento/e-mail ficam aqui, ao lado do seletor de linhas,
                              como nas páginas de Options (a toolbar da tabela é do DataTables). -->
                         <div class="d-flex flex-wrap align-items-center gap-2 ms-3">
@@ -170,6 +176,15 @@
                             <tbody></tbody>
                         </table>
                     </div>
+                    {% if page.cards %}
+                    {# Os CARDS (§650): uma operação por card; a seleção é a mesma do Send/Delete em lote. #}
+                    <div class="otc-deal-cards-bar">
+                        <label><input class="form-check-input form-check-input-light mt-0" type="checkbox" id="cardsSelectAll">
+                            <span data-lang="nd-cards-select-all">Select all</span></label>
+                        <span id="cardsCount"></span>
+                    </div>
+                    <div id="swbCards"></div>
+                    {% endif %}
                 </div>
 
             </div>
@@ -218,6 +233,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/file-preview.js?v={{ asset_v('js/file-preview.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/deal-cards.js?v={{ asset_v('js/deal-cards.js') }}"></script>
 
 <script>
 // ── O contrato da página vem do CATÁLOGO (features/new_deals/catalog.py) ────
@@ -280,7 +296,14 @@ var _TRANS = {
           w_swc_no_amortization: 'Amortization type',
           w_swc_amortization_code: 'Amortization "{value}" has no B3 code in /mapping › Swap — Tipo de Amortização',
           w_swc_intl_curve: 'Curve {side} is JUROS INTERNACIONAIS — the SOFR / TERM SOFR fields of the B3 file are not generated yet',
-          w_swc_no_lob: 'LOB (CEM or EDG)', w_swc_no_category: 'Curve {side} category ({curve}) — register the curve in /mapping › Swap Bullet Curve (its B3 code gives the category in Swap Index)', w_swc_fx_coupon: 'Curve {side} (currency): initial FX quote — FX Start or Clean Coupon', w_swc_fx_quote: 'Curve {side} (currency): Quote date D-n (D0 to D-5)', w_swc_status: 'status {status} is not sendable', w_swc_not_found: 'not found' },
+          w_swc_no_lob: 'LOB (CEM or EDG)', w_swc_no_category: 'Curve {side} category ({curve}) — register the curve in /mapping › Swap Bullet Curve (its B3 code gives the category in Swap Index)', w_swc_fx_coupon: 'Curve {side} (currency): initial FX quote — FX Start or Clean Coupon', w_swc_fx_quote: 'Curve {side} (currency): Quote date D-n (D0 to D-5)', w_swc_status: 'status {status} is not sendable', w_swc_not_found: 'not found',
+          e_swt_no_cetip_irs: 'Nothing to import — the e-mail has no "cetip usd irs" block (#N cetip usd irs, then label: value lines).',
+          w_swt_missing: '{field}', w_swt_no_fx_fixing: 'FX Fixing (t-n)',
+          w_swt_leg_unmapped: 'Leg "{leg}" has no row in /mapping › Swap Cetes — Legs',
+          w_swt_fixed_leg: 'Exactly one leg must carry the fixed rate (Fixed Rate = Yes in /mapping › Swap Cetes — Legs)',
+          w_swt_no_direction: 'Who pays the fixed rate (Pays Fixed: BANCO or LAWTON)',
+          w_swt_no_account: 'Own B3 account of {le} in /mapping › B3 Accounts',
+          w_swt_no_code: '{field} has no B3 code in /mapping' },
     br: { e_nd_backend_pending: 'O servidor deste produto ainda não existe — a tela está pronta, o import e o arquivo da B3 vêm em seguida',
           e_nd_unknown_action: 'Esta tela não tem a ação {action}',
           e_swc_no_file: 'Nenhum arquivo recebido', e_swc_unreadable: 'Não foi possível ler o arquivo: {reason}',
@@ -302,7 +325,14 @@ var _TRANS = {
           w_swc_no_amortization: 'Tipo de amortização',
           w_swc_amortization_code: 'Amortização "{value}" sem código B3 em /mapping › Swap — Tipo de Amortização',
           w_swc_intl_curve: 'A Curva {side} é JUROS INTERNACIONAIS — os campos SOFR / TERM SOFR do arquivo da B3 ainda não são gerados',
-          w_swc_no_lob: 'LOB (CEM ou EDG)', w_swc_no_category: 'Categoria da Curva {side} ({curve}) — cadastre a curva em /mapping › Swap Bullet Curve (o código B3 dela dá a categoria no Swap Index)', w_swc_fx_coupon: 'Curva {side} (moeda): cotação inicial — FX Start ou Clean Coupon', w_swc_fx_quote: 'Curva {side} (moeda): Data de Cotação D-n (D0 a D-5)', w_swc_status: 'status {status} não é enviável', w_swc_not_found: 'não encontrada' },
+          w_swc_no_lob: 'LOB (CEM ou EDG)', w_swc_no_category: 'Categoria da Curva {side} ({curve}) — cadastre a curva em /mapping › Swap Bullet Curve (o código B3 dela dá a categoria no Swap Index)', w_swc_fx_coupon: 'Curva {side} (moeda): cotação inicial — FX Start ou Clean Coupon', w_swc_fx_quote: 'Curva {side} (moeda): Data de Cotação D-n (D0 a D-5)', w_swc_status: 'status {status} não é enviável', w_swc_not_found: 'não encontrada',
+          e_swt_no_cetip_irs: 'Nada a importar — o e-mail não tem o bloco "cetip usd irs" (#N cetip usd irs e as linhas rótulo: valor).',
+          w_swt_missing: 'Falta: {field}', w_swt_no_fx_fixing: 'FX Fixing (t-n)',
+          w_swt_leg_unmapped: 'A perna "{leg}" não tem linha em /mapping › Swap Cetes — Pernas',
+          w_swt_fixed_leg: 'Exatamente uma perna leva a taxa fixa (Fixed Rate = Yes em /mapping › Swap Cetes — Pernas)',
+          w_swt_no_direction: 'Quem paga a taxa fixa (Pays Fixed: BANCO ou LAWTON)',
+          w_swt_no_account: 'Conta B3 própria de {le} em /mapping › B3 Accounts',
+          w_swt_no_code: '{field} sem código B3 em /mapping' },
     es: { e_nd_backend_pending: 'El servidor de este producto aún no existe — la pantalla está lista, la importación y el archivo de la B3 vienen después',
           e_nd_unknown_action: 'Esta pantalla no tiene la acción {action}',
           e_swc_no_file: 'Ningún archivo recibido', e_swc_unreadable: 'No se pudo leer el archivo: {reason}',
@@ -324,7 +354,14 @@ var _TRANS = {
           w_swc_no_amortization: 'Tipo de amortización',
           w_swc_amortization_code: 'Amortización "{value}" sin código B3 en /mapping › Swap — Tipo de Amortização',
           w_swc_intl_curve: 'La Curva {side} es JUROS INTERNACIONAIS — los campos SOFR / TERM SOFR del archivo de la B3 aún no se generan',
-          w_swc_no_lob: 'LOB (CEM o EDG)', w_swc_no_category: 'Categoría de la Curva {side} ({curve}) — registre la curva en /mapping › Swap Bullet Curve (su código B3 da la categoría en Swap Index)', w_swc_fx_coupon: 'Curva {side} (moneda): cotización inicial — FX Start o Clean Coupon', w_swc_fx_quote: 'Curva {side} (moneda): Fecha de Cotización D-n (D0 a D-5)', w_swc_status: 'status {status} no es enviable', w_swc_not_found: 'no encontrada' }
+          w_swc_no_lob: 'LOB (CEM o EDG)', w_swc_no_category: 'Categoría de la Curva {side} ({curve}) — registre la curva en /mapping › Swap Bullet Curve (su código B3 da la categoría en Swap Index)', w_swc_fx_coupon: 'Curva {side} (moneda): cotización inicial — FX Start o Clean Coupon', w_swc_fx_quote: 'Curva {side} (moneda): Fecha de Cotización D-n (D0 a D-5)', w_swc_status: 'status {status} no es enviable', w_swc_not_found: 'no encontrada',
+          e_swt_no_cetip_irs: 'Nada que importar — el e-mail no tiene el bloque "cetip usd irs" (#N cetip usd irs y las líneas etiqueta: valor).',
+          w_swt_missing: 'Falta: {field}', w_swt_no_fx_fixing: 'FX Fixing (t-n)',
+          w_swt_leg_unmapped: 'La pata "{leg}" no tiene fila en /mapping › Swap Cetes — Patas',
+          w_swt_fixed_leg: 'Exactamente una pata lleva la tasa fija (Fixed Rate = Yes en /mapping › Swap Cetes — Patas)',
+          w_swt_no_direction: 'Quién paga la tasa fija (Pays Fixed: BANCO o LAWTON)',
+          w_swt_no_account: 'Cuenta B3 propia de {le} en /mapping › B3 Accounts',
+          w_swt_no_code: '{field} sin código B3 en /mapping' }
 };
 function _lang() { try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) { return 'en'; } }
 function _fmtParams(tpl, params) {
@@ -421,13 +458,14 @@ $(document).ready(function() {
             "B" +
             "<'refDateWrap ms-2 d-flex align-items-center'>" +
             "<'importBtn ms-2 me-2'>" +
+            "<'refreshBtn me-2'>" +
             "<'clearFiltersBtn me-2'>" +
             "<'conditionalActions ms-2 d-flex align-items-center gap-2'>" +
             ">" +
             "<'ms-auto'>" +
             ">" +
-            "<'row'<'col-sm-12'tr>>" +
-            "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+            "<'row nd-table-area'<'col-sm-12'tr>>" +
+            "<'d-md-flex justify-content-between align-items-center mt-2 nd-table-foot'ip>",
         buttons: [{
             extend:'collection', text:'<i class="ti ti-download me-1"></i> Export',
             className:'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all', autoClose:true, fade:0,
@@ -468,7 +506,7 @@ $(document).ready(function() {
 
             // ── Columns ────────────────────────────────────────────────────
             var columnToggleWrapper = document.querySelector('.columnToggleWrapper');
-            if (columnToggleWrapper) {
+            if (columnToggleWrapper && !PAGE.cards) {
                 var dd = document.createElement('div'); dd.className = 'dropdown';
                 var items = SWB_COLS.map(function(c, i){
                     return '<li class="dropdown-item"><div class="form-check">' +
@@ -527,6 +565,22 @@ $(document).ready(function() {
                 importBtn.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
                 importBtnContainer.appendChild(importBtn);
                 importBtn.addEventListener('click', runImport);
+            }
+
+            // ── Mapping B3 ID (o retorno da B3; só a página que o declara) ──
+            var refreshBtnContainer = document.querySelector('.refreshBtn');
+            if (PAGE.mapping && refreshBtnContainer && !document.getElementById('mappingB3Btn')) {
+                var mappingBtn = document.createElement('button');
+                mappingBtn.id = 'mappingB3Btn';
+                mappingBtn.className = 'btn btn-sm btn-success bg-gradient btn-toolbar-all btn-toolbar-refresh';
+                mappingBtn.setAttribute('type', 'button');
+                mappingBtn.setAttribute('data-bs-toggle', 'tooltip');
+                mappingBtn.setAttribute('data-bs-placement', 'bottom');
+                mappingBtn.setAttribute('data-bs-title', t('swal-mapping-b3-title', 'Mapping B3 ID'));
+                mappingBtn.setAttribute('data-bs-custom-class', 'tooltip-success');
+                mappingBtn.innerHTML = '<i class="ti ti-refresh"></i>';
+                refreshBtnContainer.appendChild(mappingBtn);
+                mappingBtn.addEventListener('click', runMappingB3);
             }
 
             // ── Clear Filters ──────────────────────────────────────────────
@@ -594,8 +648,62 @@ $(document).ready(function() {
         table.clear(); DEALS = {};
         ENTRIES.forEach(function(e){ if (!e) return; var k = e._id || e.Deal; if (!k) return; e._id = k; DEALS[k] = e; table.row.add(dealRow(e)); });
         table.draw(false);
+        // um card por OPERAÇÃO (a chave interna): a mesma linha gravada em dois
+        // dias seria dois cards com as ações agindo num só
+        if (cards) {
+            var vistos = {}, unicos = [];
+            ENTRIES.forEach(function(e){ if (e && DEALS[e._id] && !vistos[e._id]) { vistos[e._id] = 1; unicos.push(DEALS[e._id]); } });
+            cards.render(unicos); syncSelectAll();
+        }
         setTimeout(function(){ table.columns.adjust(); }, 100);
     }
+
+    // ── Os CARDS (§650): o que o catálogo declara em `cards` ────────────────
+    // O valor de cada fato sai do deal pelo TIPO (a mesma formatação da grade).
+    function cardValue(e, field, type) {
+        if (type === 'daterange') {
+            var p = field.split(',');
+            var a = _isoToDmy(e[p[0]] || ''), b = _isoToDmy(e[p[1]] || '');
+            return (a || b) ? (a || '—') + ' → ' + (b || '—') : '';
+        }
+        if (type === 'count') { var n = (e[field] || []).length; return n ? String(n) : ''; }
+        var v = e[field] == null ? '' : String(e[field]);
+        if (!v) return '';
+        if (type === 'money') return fmtMoney(v);
+        if (type === 'date') return _isoToDmy(v);
+        return v;
+    }
+    function cardText(e, spec) {
+        return (spec || []).map(function(x){
+            if (!x[0]) return x[1];
+            var v = e[x[0]] == null ? '' : String(e[x[0]]).trim();
+            return v ? x[1] + v : '';
+        }).join('').replace(/^\s*·\s*/, '');
+    }
+    var cards = (PAGE.cards && window.otcDealCards) ? otcDealCards({
+        el: '#swbCards', selected: selected, t: t,
+        key: function(e){ return e._id; },
+        title: function(e){ return cardText(e, PAGE.cards.title) || e._id; },
+        subtitle: function(e){ return cardText(e, PAGE.cards.subtitle); },
+        status: function(e){ return statusBadge(e.Status); },
+        facts: (PAGE.cards.facts || []).map(function(f){
+            return { label: t('nd-swb-col-' + f[0].toLowerCase(), f[1]), wide: f[2] === 'daterange',
+                     value: function(e){ return cardValue(e, f[0], f[2]); } };
+        }),
+        meta: function(e){
+            return (PAGE.cards.meta || []).map(function(m){ var v = e[m[0]]; return v ? m[1] + ' ' + v : ''; })
+                .filter(Boolean).join(' · ');
+        },
+        canConfirm: function(e){ var st = e.Status || 'New'; return st === 'New' || st === 'Pending' || st === 'Amend'; },
+        canSend: function(e){ var st = e.Status || 'New'; return st === 'New' || st === 'Approved'; },
+        onConfirm: function(k){ confirmDeal(k); },
+        onEdit: function(k){ if (DEALS[k]) openModal(DEALS[k]); },
+        onDelete: function(k){ deleteDeals([k]); },
+        onSend: function(k){ sendDeals([k]); },
+        onPreview: function(k){ previewDeal(k); },
+        onSelect: function(){ table.draw(false); }
+    }) : null;
+    $(document).on('change', '#cardsSelectAll', function(){ if (cards) cards.selectAll(this.checked); });
     function upsertEntry(e) {
         var i = ENTRIES.findIndex(function(x){ return x && (x._id || x.Deal) === (e._id || e.Deal); });
         if (i >= 0) ENTRIES[i] = e; else ENTRIES.push(e);
@@ -617,6 +725,60 @@ $(document).ready(function() {
     }
     function apiRefDateLabel() { var el = document.getElementById('apiRefDate'); return (el && el.value) || ''; }
     function apiRefIsToday() { return apiRefDateLabel() === _todayDmy(); }
+
+    // ── Mapping B3 ID (o retorno da B3; o mesmo fluxo do Swap Bullet) ────────
+    // A lista sai do ARQUIVO do dia da Trade Date no servidor; o casamento é
+    // pelo Meu Número que o 0301 levou. O veredito é o da GRAVAÇÃO (`saved`).
+    var _mappingRunning = false;
+    function runMappingB3() {
+        var btn = document.getElementById('mappingB3Btn');
+        if (_mappingRunning) return;
+        _mappingRunning = true;
+        if (btn) { btn.style.pointerEvents = 'none'; btn.innerHTML = '<i class="ti ti-loader-2 ti-spin"></i>'; }
+        function done() {
+            _mappingRunning = false;
+            if (btn) { btn.style.pointerEvents = ''; btn.innerHTML = '<i class="ti ti-refresh"></i>'; }
+        }
+        fetch(PAGE.api + '/mapping-b3', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin', body: JSON.stringify({ ref_date: apiRefDate() }) })
+        .then(function(r){ return r.json(); })
+        .then(function(res){
+            done();
+            if (!res.ok) {
+                var txt = res.code === 'return_folder_missing'
+                    ? t('swb-map-folder-missing', 'B3 return folder not found:') + ' ' + ((res.params && res.params.path) || '')
+                    : (res.error || t('swal-mapping-read-error', 'Failed to read return files.'));
+                Swal.fire({ title: t('swal-err-title', 'Error'), text: txt, icon: 'error',
+                            confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+                return;
+            }
+            var ok = 0, err = 0, failed = 0;
+            (res.results || []).forEach(function(r){
+                if (r.saved === false) { failed++; return; }
+                if (r.status === 'Success') ok++; else if (r.status === 'Error') err++;
+                if (r.entry) {
+                    var i = ENTRIES.findIndex(function(x){ return x && (x._id || x.Deal) === r.id; });
+                    if (i >= 0) ENTRIES[i] = r.entry;
+                }
+            });
+            renderAll();
+            var msg = '';
+            if (ok)     msg += ok + ' ' + t('swal-mapping-success-n', 'deal(s) mapped successfully.') + ' ';
+            if (err)    msg += err + ' ' + t('swal-mapping-error-n', 'deal(s) returned error from B3.') + ' ';
+            if (failed) msg += failed + ' ' + t('swal-mapping-failed-n', 'deal(s) could NOT be saved \u2014 see the log and try again.');
+            if (!msg) msg = t('swal-mapping-no-match', 'No matching deals found in return files.');
+            Swal.fire({ title: t('swal-mapping-b3-title', 'Mapping B3 ID'), text: msg.trim(),
+                        icon: failed ? 'error' : (ok ? 'success' : (err ? 'warning' : 'info')),
+                        confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#198754',
+                        timer: 3500, timerProgressBar: true, showConfirmButton: true });
+            if (window.fetchNotifications) window.fetchNotifications();
+        })
+        .catch(function(e){
+            done();
+            Swal.fire({ title: t('swal-err-title', 'Error'), text: t('swal-request-failed', 'Request failed:') + ' ' + e.message,
+                        icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+        });
+    }
 
     // ── Import: a fila do dropzone → dry-run → duplicatas → /cache/batch ──
     var ACCEPT_RE = new RegExp('\\.(' + (PAGE.accept || []).join('|') + ')$', 'i');
@@ -748,7 +910,7 @@ $(document).ready(function() {
     }
     (function () {
         var econAffContainer = document.querySelector('.econAffBtn');
-        if (!econAffContainer || document.getElementById('econAffBtn')) return;
+        if (PAGE.econ_aff === false || !econAffContainer || document.getElementById('econAffBtn')) return;
         var econAffBtn = document.createElement('button');
         econAffBtn.id = 'econAffBtn';
         econAffBtn.className = 'btn btn-sm btn-soft-info bg-gradient btn-toolbar-all';
@@ -799,7 +961,13 @@ $(document).ready(function() {
     }
     function syncSelectAll() {
         var total = Object.keys(DEALS).length, sel = selected.size;
-        $('#selectAll').each(function(){ if(sel===0){this.checked=false;this.indeterminate=false;} else if(sel>=total){this.checked=true;this.indeterminate=false;} else{this.checked=false;this.indeterminate=true;} });
+        $('#selectAll, #cardsSelectAll').each(function(){ if(sel===0){this.checked=false;this.indeterminate=false;} else if(sel>=total){this.checked=true;this.indeterminate=false;} else{this.checked=false;this.indeterminate=true;} });
+        if (cards) {
+            cards.sync();
+            var cnt = document.getElementById('cardsCount');
+            if (cnt) cnt.textContent = sel ? t('nd-cards-selected', '{n} of {total} selected').replace('{n}', sel).replace('{total}', total)
+                                           : t('nd-cards-count', '{total} operation(s)').replace('{total}', total);
+        }
         toggleActionButtons(sel >= 1);
     }
     $('[data-table-set-rows-per-page]').on('change',function(){ table.page.len(parseInt(this.value)).draw(); });
@@ -837,7 +1005,9 @@ $(document).ready(function() {
     $(document).on('click','#swb-table tbody .btn-row-confirm',function(e) {
         e.preventDefault();
         var d=table.row($(this).closest('tr')[0]).data(); if(!d) return;
-        var id = d[C_ID];
+        confirmDeal(d[C_ID]);
+    });
+    function confirmDeal(id) {
         fetch(PAGE.api + '/confirm', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
             body: JSON.stringify({ deal_id: id, trade_date: (DEALS[id] && DEALS[id].TradeDate) || '' }) })
         .then(function(resp){ return resp.json().then(function(j){ return {ok:resp.ok, data:j}; }); })
@@ -845,7 +1015,7 @@ $(document).ready(function() {
             if(o.ok && o.data.success){ upsertEntry(o.data.entry); if (window.fetchNotifications) window.fetchNotifications(); }
             else Swal.fire({ title:'Error', text:erroTexto(o.data)||'Confirmation failed.', icon:'error', confirmButtonText:'OK', confirmButtonColor:'#dc3545' });
         }).catch(function(err){ Swal.fire({ title:'Error', text:'Request failed: '+err.message, icon:'error', confirmButtonText:'OK', confirmButtonColor:'#dc3545' }); });
-    });
+    }
 
     // ── Send (os arquivos são montados no servidor) ─────────────────────────
     function sendDeals(ids) {

@@ -2778,6 +2778,7 @@ def api_generic_nd_mapping_b3(product):
 # sem a variável `page`. Página nova no catálogo = um decorador a mais aqui
 # (o `check_new_deals_catalog.py` cobra os dois lados).
 @blueprint.route('/new_deals-swap-cashflow')
+@blueprint.route('/new_deals-swap-cetes')
 @blueprint.route('/new_deals-opt-edg')
 def new_deals_product():
     from flask import redirect, render_template, url_for

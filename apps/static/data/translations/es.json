@@ -3049,5 +3049,17 @@
   "pj-f-where": "Dónde",
   "pj-ph-where": "Videollamada",
   "pj-ph-event": "ej.: Revisión del go-live",
-  "pj-f-reached": "Alcanzado"
+  "pj-f-reached": "Alcanzado",
+  "map-tab-swap-cetes-leg": "Swap Cetes — Patas (e-mail → B3)",
+  "nav-cetes": "Cetes",
+  "nd-cards-select-all": "Seleccionar todos",
+  "nd-cards-count": "{total} operación(es)",
+  "nd-cards-selected": "{n} de {total} seleccionada(s)",
+  "nd-card-confirm": "Confirmar",
+  "nd-card-edit": "Editar",
+  "nd-card-delete": "Eliminar",
+  "nd-card-send": "Enviar",
+  "nd-card-select": "Seleccionar",
+  "nd-card-dblclick": "Doble clic para ver los archivos de la B3",
+  "nd-card-empty": "Ninguna operación para estos filtros."
 }

@@ -27,6 +27,10 @@
 #swb-table :is(th, td):nth-child(8), #swb-table_wrapper .dt-scroll-head th:nth-child(8) { width: 110px; min-width: 110px; }
 #apiRefDate { width: 8.5rem; }
 .swb-edit-grid label { font-size: .72rem; }
+/* CARDS (§650): a DataTable fica por baixo como a fonte do Export — some só a
+   área da tabela e o rodapé dela; a toolbar continua. */
+.nd-cards-mode #swb-table_wrapper .nd-table-area,
+.nd-cards-mode #swb-table_wrapper .nd-table-foot { display: none !important; }
 </style>
 {% endblock extra_css %}
 
@@ -51,7 +55,7 @@
 
     <div class="row">
         <div class="col-12">
-            <div class="card nd-deal-card">
+            <div class="card nd-deal-card nd-cards-mode">
 
                 <!-- ── Dropzone (o mesmo das páginas de New Deals) ──────────── -->
                 <div class="card-body" style="padding: 10px;">
@@ -119,20 +123,12 @@
                 <!-- ── Show/entries ─────────────────────────────────────────── -->
                 <div class="card-header">
                     <div class="d-flex align-items-center gap-2">
-                        <label class="form-label mb-0" data-lang="b3-show">Show</label>
-                        <select class="form-select form-select-sm" style="width: 80px;" data-table-set-rows-per-page>
-                            <option value="50" selected>50</option>
-                            <option value="100">100</option>
-                            <option value="150">150</option>
-                            <option value="200">200</option>
-                        </select>
-                        <label class="form-label mb-0" data-lang="b3-entries">entries</label>
                         <!-- Ações de documento/e-mail ficam aqui, ao lado do seletor de linhas,
                              como nas páginas de Options (a toolbar da tabela é do DataTables). -->
                         <div class="d-flex flex-wrap align-items-center gap-2 ms-3">
                             <div class="econAffBtn"></div>
                         </div>
-                        <span class="text-muted fs-xs ms-auto d-none d-lg-inline" data-lang="nd-swb-preview-hint">Double-click a row to preview the B3 files (SWAP 0301 + premium 0897).</span>
+                        <span class="text-muted fs-xs ms-auto d-none d-lg-inline" data-lang="nd-swb-preview-hint-card">Double-click a card to preview the B3 files (SWAP 0301 + premium 0897).</span>
                     </div>
                 </div>
 
@@ -165,6 +161,13 @@
                             <tbody></tbody>
                         </table>
                     </div>
+                    {# Os CARDS (§650): uma operação por card; a seleção é a mesma do Send/Delete em lote. #}
+                    <div class="otc-deal-cards-bar">
+                        <label><input class="form-check-input form-check-input-light mt-0" type="checkbox" id="cardsSelectAll">
+                            <span data-lang="nd-cards-select-all">Select all</span></label>
+                        <span id="cardsCount"></span>
+                    </div>
+                    <div id="swbCards"></div>
                 </div>
 
             </div>
@@ -213,6 +216,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/file-preview.js?v={{ asset_v('js/file-preview.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/deal-cards.js?v={{ asset_v('js/deal-cards.js') }}"></script>
 
 <script>
 // ── Contrato com o servidor (domain.SWB_COLUMNS, na ordem) ──────────────────
@@ -341,8 +345,8 @@ $(document).ready(function() {
             ">" +
             "<'ms-auto'>" +
             ">" +
-            "<'row'<'col-sm-12'tr>>" +
-            "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+            "<'row nd-table-area'<'col-sm-12'tr>>" +
+            "<'d-md-flex justify-content-between align-items-center mt-2 nd-table-foot'ip>",
         buttons: [{
             extend:'collection', text:'<i class="ti ti-download me-1"></i> Export',
             className:'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all', autoClose:true, fade:0,
@@ -382,7 +386,8 @@ $(document).ready(function() {
             });
 
             // ── Columns ────────────────────────────────────────────────────
-            var columnToggleWrapper = document.querySelector('.columnToggleWrapper');
+            // Columns: não há colunas a mostrar em cards (§650).
+            var columnToggleWrapper = null;
             if (columnToggleWrapper) {
                 var dd = document.createElement('div'); dd.className = 'dropdown';
                 var items = SWB_COLS.map(function(c, i){
@@ -525,8 +530,47 @@ $(document).ready(function() {
         table.clear(); DEALS = {};
         ENTRIES.forEach(function(e){ if (!e) return; var k = e._id || e.Deal; if (!k) return; e._id = k; DEALS[k] = e; table.row.add(dealRow(e)); });
         table.draw(false);
+        // um card por OPERAÇÃO (a chave interna): a mesma linha gravada em dois
+        // dias seria dois cards com as ações agindo num só
+        if (cards) {
+            var vistos = {}, unicos = [];
+            ENTRIES.forEach(function(e){ if (e && DEALS[e._id] && !vistos[e._id]) { vistos[e._id] = 1; unicos.push(DEALS[e._id]); } });
+            cards.render(unicos); syncSelectAll();
+        }
         setTimeout(function(){ table.columns.adjust(); }, 100);
     }
+
+    // ── Os CARDS (§650): uma operação por card, no lugar das 60 colunas ─────
+    function _curva(e, x) {
+        var nome = e['Curve' + x] || '', cat = e['Curve' + x + 'Category'] || '';
+        var taxa = e['Curve' + x + 'Rate'] && parseFloat(e['Curve' + x + 'Rate']) ? ' + ' + e['Curve' + x + 'Rate'] + '%' : '';
+        return (nome || cat) ? (nome || cat) + taxa : '';
+    }
+    var cards = window.otcDealCards ? otcDealCards({
+        el: '#swbCards', selected: selected, t: t,
+        key: function(e){ return e._id; },
+        title: function(e){ return e.Client || e.ClientDT || e._id; },
+        subtitle: function(e){ return [e.LE === 'ATACAMA' ? 'B2B Banco × Atacama' : '', e.LOB || '', e.Type || ''].filter(Boolean).join(' · '); },
+        status: function(e){ return statusBadge(e.Status); },
+        facts: [
+            { label: t('nd-swb-col-startdate', 'Start') + ' → ' + t('nd-swb-col-maturitydate', 'Maturity'), wide: true,
+              value: function(e){ var a = _isoToDmy(e.StartDate || ''), b = _isoToDmy(e.MaturityDate || ''); return (a || b) ? (a || '—') + ' → ' + (b || '—') : ''; } },
+            { label: t('nd-swb-col-notional', 'Notional'), value: function(e){ return e.Notional ? fmtMoney(e.Notional) + (e.Currency ? ' ' + e.Currency : '') : ''; } },
+            { label: t('nd-swb-col-premiumamount', 'Premium'), value: function(e){ return e.PremiumAmount ? fmtMoney(e.PremiumAmount) : ''; } },
+            { label: t('nd-swb-col-curvea', 'Curve A'), value: function(e){ return _curva(e, 'A'); } },
+            { label: t('nd-swb-col-curveb', 'Curve B'), value: function(e){ return _curva(e, 'B'); } }
+        ],
+        meta: function(e){ return [e.B3ID ? 'B3 ID ' + e.B3ID : '', e.Deal ? 'Deal ' + e.Deal : '', e.SPN ? 'SPN ' + e.SPN : ''].filter(Boolean).join(' · '); },
+        canConfirm: function(e){ var st = e.Status || 'New'; return st === 'New' || st === 'Pending' || st === 'Amend'; },
+        canSend: function(e){ var st = e.Status || 'New'; return st === 'New' || st === 'Approved'; },
+        onConfirm: function(k){ confirmDeal(k); },
+        onEdit: function(k){ if (DEALS[k]) openModal(DEALS[k]); },
+        onDelete: function(k){ deleteDeals([k]); },
+        onSend: function(k){ sendDeals([k]); },
+        onPreview: function(k){ previewDeal(k); },
+        onSelect: function(){ table.draw(false); }
+    }) : null;
+    $(document).on('change', '#cardsSelectAll', function(){ if (cards) cards.selectAll(this.checked); });
     function upsertEntry(e) {
         var i = ENTRIES.findIndex(function(x){ return x && (x._id || x.Deal) === (e._id || e.Deal); });
         if (i >= 0) ENTRIES[i] = e; else ENTRIES.push(e);
@@ -781,7 +825,13 @@ $(document).ready(function() {
     }
     function syncSelectAll() {
         var total = Object.keys(DEALS).length, sel = selected.size;
-        $('#selectAll').each(function(){ if(sel===0){this.checked=false;this.indeterminate=false;} else if(sel>=total){this.checked=true;this.indeterminate=false;} else{this.checked=false;this.indeterminate=true;} });
+        $('#selectAll, #cardsSelectAll').each(function(){ if(sel===0){this.checked=false;this.indeterminate=false;} else if(sel>=total){this.checked=true;this.indeterminate=false;} else{this.checked=false;this.indeterminate=true;} });
+        if (cards) {
+            cards.sync();
+            var cnt = document.getElementById('cardsCount');
+            if (cnt) cnt.textContent = sel ? t('nd-cards-selected', '{n} of {total} selected').replace('{n}', sel).replace('{total}', total)
+                                           : t('nd-cards-count', '{total} operation(s)').replace('{total}', total);
+        }
         toggleActionButtons(sel >= 1);
     }
     $('[data-table-set-rows-per-page]').on('change',function(){ table.page.len(parseInt(this.value)).draw(); });
@@ -819,7 +869,9 @@ $(document).ready(function() {
     $(document).on('click','#swb-table tbody .btn-row-confirm',function(e) {
         e.preventDefault();
         var d=table.row($(this).closest('tr')[0]).data(); if(!d) return;
-        var id = d[C_ID];
+        confirmDeal(d[C_ID]);
+    });
+    function confirmDeal(id) {
         fetch('/api/new-deals/swap-bullet/confirm', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
             body: JSON.stringify({ deal_id: id, trade_date: (DEALS[id] && DEALS[id].TradeDate) || '' }) })
         .then(function(resp){ return resp.json().then(function(j){ return {ok:resp.ok, data:j}; }); })
@@ -827,7 +879,7 @@ $(document).ready(function() {
             if(o.ok && o.data.success){ upsertEntry(o.data.entry); if (window.fetchNotifications) window.fetchNotifications(); }
             else Swal.fire({ title:'Error', text:o.data.message||'Confirmation failed.', icon:'error', confirmButtonText:'OK', confirmButtonColor:'#dc3545' });
         }).catch(function(err){ Swal.fire({ title:'Error', text:'Request failed: '+err.message, icon:'error', confirmButtonText:'OK', confirmButtonColor:'#dc3545' }); });
-    });
+    }
 
     // ── Send (os arquivos são montados no servidor) ─────────────────────────
     function sendDeals(ids) {

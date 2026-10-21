@@ -204,7 +204,11 @@ def _main(R, app, catalog, bullet, bullet_q, commands, domain, entrypoint, queri
     check('o rótulo tem destino nos três mapas', R._notif_page_url(entrypoint.PAGE) == '/new_deals-swap-cashflow')
     regras = {str(r): r for r in app.url_map.iter_rules()}
     tpl = io.open(os.path.join(ROOT, 'apps', 'templates', 'pages', 'new_deals-product.html'), encoding='utf-8').read()
-    acoes = sorted(set(re.findall(r"PAGE\.api \+ '/([a-z\-/]+)", tpl)))
+    acoes = sorted(set(re.findall(r"PAGE\.api \+ '/([a-z0-9\-/]+)", tpl)))
+    # O Mapping B3 ID só é chamado pela página que o declara no catálogo
+    # (`mapping`, a Cetes — §650); o Cashflow não tem o botão.
+    if not pagina.get('mapping'):
+        acoes = [x for x in acoes if x != 'mapping-b3']
     check('toda ação que a tela chama tem rota ESTÁTICA', all(('/api/new-deals/swap-cashflow/' + a) in regras for a in acoes),
           [a for a in acoes if ('/api/new-deals/swap-cashflow/' + a) not in regras])
     check('as ações são as esperadas', set(acoes) >= {'import-file', 'cache/batch', 'cache/search', 'economic-affirmation',

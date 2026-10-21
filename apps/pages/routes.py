@@ -13390,6 +13390,34 @@ _MAPPING_DEFS = {
             {'CODE': '4', 'LABEL': 'Sem Troca de Amortiza\u00e7\u00e3o'},
         ],
     },
+    # ── New Deals › Swap › Cetes (§650): a perna do e-mail → o que ela é na B3 ──
+    # O `we pay`/`we rec` do bloco `cetip usd irs` ('USD Fixed rate, Bullet
+    # A/360…', 'USD-SOFR-COMPOUND(1d)…') casa por token (`Exact` vence
+    # `Contains`, o mais longo vence) e dá a curva (C00 = VCP), o Tipo/Classe da
+    # VCP, se a perna leva a TAXA FIXA (Sinal + Juros) e o texto da Descrição —
+    # `{fx}` = o fx rate for reference, `{rate}` = a taxa fixa, `{dn}` = o n do
+    # D-n do fx fixing. A semente é o arquivo da mesa de 21/10/2026, letra a
+    # letra (os espaços duplos inclusive).
+    'swap-cetes-leg': {
+        'label': 'Swap Cetes — Legs',
+        'columns': [
+            {'key': 'LEG', 'label': 'Leg (token)'},
+            {'key': 'MATCH', 'label': 'Match', 'type': 'select', 'options': ['Contains', 'Exact']},
+            {'key': 'CURVE', 'label': 'B3 Curve'},
+            {'key': 'VCP CODE', 'label': 'VCP Tipo/Classe'},
+            {'key': 'RATE', 'label': 'Fixed Rate', 'type': 'select', 'options': ['No', 'Yes']},
+            {'key': 'DESCRIPTION', 'label': 'Description ({fx} {rate} {dn})'},
+        ],
+        'seed': [
+            {'LEG': 'SOFR', 'MATCH': 'Contains', 'CURVE': 'C00', 'VCP CODE': '17182', 'RATE': 'No',
+             'DESCRIPTION': 'SOFR OVERNIGHT - CALENDARIO USD/BRL - COTACAO CAMBIO PTAX - TIPO VENDA - '
+                            'COTACAO CAMBIO D-{dn} - ACT360 - CUPOM LIMPO {fx}'},
+            {'LEG': 'FIXED', 'MATCH': 'Contains', 'CURVE': 'C00', 'VCP CODE': '21', 'RATE': 'Yes',
+             'DESCRIPTION': 'DOLAR DOS EUA - ACT/360 - Dolar inicio: {fx} - AMORTIZACAO: na data do '
+                            'vencimento - Juros: {rate}%  - Cotacao cambio: D-{dn} - Calendarios a serem '
+                            'considerados BRL e  NY'},
+        ],
+    },
     'swap-code-labels': {
         'label': 'Swap — Sinal e Sim/N\u00e3o',
         'columns': [
@@ -15214,6 +15242,7 @@ from apps.pages.features.tools import entrypoint as _f_tools                    
 from apps.pages.features.new_deals import entrypoint as _f_new_deals              # noqa: E402,F401
 from apps.pages.features.swap_bullet import entrypoint as _f_swap_bullet          # noqa: E402,F401
 from apps.pages.features.swap_cashflow import entrypoint as _f_swap_cashflow      # noqa: E402,F401
+from apps.pages.features.swap_cetes import entrypoint as _f_swap_cetes          # noqa: E402,F401
 from apps.pages.features.swap_strategy import entrypoint as _f_swap_strategy    # noqa: E402,F401
 from apps.pages.features.unwinds import entrypoint as _f_unwinds                # noqa: E402,F401
 _schedule_on_start('unwind-api', _f_unwinds.start_scheduler)
