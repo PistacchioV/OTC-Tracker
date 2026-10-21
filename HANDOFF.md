@@ -27149,3 +27149,63 @@ tirando a duração, as listas no `meta`, a hora no Calendar; e, no fonte, o New
 event na página, o card sem o Add, e os três botões com `carregada(`.
 Conferido no Chromium: o Edit clicado durante a carga atrasada abre
 preenchido; New event → card → clique → edição → Reached → Delete.
+
+## §649 — A pílula de status é uma só: texto branco e em Proper (2026-10-21)
+
+**"Nos badge pill de status, deixe padronizado Proper, primeira letra
+maiúscula e as demais minúsculas, e o texto em branco, em todas as páginas,
+tabelas e etc. que usem."** "Proper" é o PROPER (PRI.MAIÚSCULA) do Excel: a
+primeira letra de CADA palavra maiúscula e as demais minúsculas — "SENT" →
+"Sent", "Pending OTC" → "Pending Otc", "NOK" → "Nok", "Unmatched B3" fica
+(maiúscula depois de qualquer coisa que não é letra, como no Excel).
+
+**O que havia.** Mais de 50 funções de status, cada tela com o seu mapa: pílula
+cheia com texto escuro (`text-bg-warning` tinha `#3a2600`), pílula SUAVE com
+texto colorido (`bg-*-subtle text-*`, `badge-soft-*` — Support Center, Users,
+Dashboard, Live Position), classes próprias (`badge-settled` do Pay/Rec, o
+`ops-recon-badge` dos Summaries) e texto em caixa alta (`OK`, `NOK`,
+`MATURITY`, `YES`/`NO`, `RECEIVE`).
+
+**O desenho.** Não dá para fazer só no CSS: o `text-transform` não junta
+"minúscula" e "primeira de cada palavra maiúscula", e uma regra para todo
+`.badge` pegaria também o que não é status ("NDF" viraria "Ndf", "EDG",
+"USD", o papel do usuário, as contagens). Então:
+- a tela MARCA a pílula de status com `otc-status` (227 pontos em 56
+  arquivos) e continua escolhendo o tom pela classe de sempre;
+- o tema (`otc.scss` §6d) pinta a pílula marcada com o fundo CHEIO do tom —
+  inclusive o suave, onde branco sobre a tinta de 16% não se lê; `light` sai
+  cinza — e o texto branco (classe dobrada: o `.text-success` & cia. vêm
+  depois no arquivo, com `!important`);
+- o `otc.js` (§9c, `otcProper`/`otcProperize`) reescreve o TEXTO das pílulas
+  marcadas, as que existem e as que nascem depois — um `MutationObserver` no
+  `<body>` pega o redraw das tabelas e a tradução do I18nManager. O dado não
+  muda: quem compara status lê o dado, não a célula;
+- o funil do Excel (`cellText`) e o export (o `Buttons.stripData` embrulhado no
+  `export-advanced.js`, que vale para Copy/CSV/Excel/Print/PDF de toda página,
+  e o Advanced Export) passam pela mesma função — a lista do funil e o arquivo
+  dizem o que a célula diz.
+
+**O que entrou como status:** os status de linha de todas as telas (New Deals,
+Intrag, recompras, catálogo, Summaries, Settlement, recons, Pay/Rec, CGD,
+Comitente, Conf. Matching, Reference Data, Index B3, Live Position, Accrual/MtM,
+Swap VCP, Track Confirmations, Tracking Docs, Users, Support Center, Dashboard),
+os vereditos (OK/NOK/Check, a Diferença do Swap VCP, a recon do Accrual/MtM),
+as colunas de estado YES/NO/Missing B3 do New Deals, o badge de recon dos cards
+dos Summaries (com o `is-ok`/`is-check` de sempre, que o brilho usa) e os
+resultados das calculadoras (Receive/Pay, Exercised, Total/Partial). **Ficaram
+de fora**, de propósito: contagens, produto, LOB, moeda, papel do usuário,
+prioridade do ticket, tags, a marca "chave" e os avisos já brancos (Missing
+Counterparty). As fichas `otc-chip` das Initiatives (status com bolinha) são
+outro componente e ficaram como estão. O Pay/Rec perdeu as cores próprias
+(`badge-pending/settled/justified`) e passou aos tons da casa.
+
+**Guarda.** `check_status_pill.py` (novo): o tema; no Chromium com o `otc.css` e
+o `otc.js` de verdade, sete tons (cheio, suave, soft, light) brancos sobre a cor
+cheia e em Proper, o texto que chega depois, o badge sem marca intacto, a regra
+do PROPER e o `stripData` do export; o funil e o Advanced Export; e a varredura
+das funções de status (34 arquivos) — nenhuma sem a marca. O
+`check_summary_glow` passou a prender a linha nova do badge (o mesmo `ok` para
+badge e card). Conferido nas telas da dev com dados (Summaries, Users,
+Reference Data): pílulas brancas, em Proper, sem erro de JS. O
+`check_export_advanced` falha no `jsc` por `temDia` — igual no commit anterior,
+não é desta mudança.
