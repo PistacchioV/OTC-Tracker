@@ -348,6 +348,8 @@ Algumas telas trazem, acima da tabela, um campo largo com o texto *"Type a lette
 
 > **O Export leva o que está NA TELA** — com os filtros aplicados, na ordenação escolhida e só com as colunas visíveis. Se o arquivo saiu com menos linhas do que você esperava, o motivo quase sempre é um filtro esquecido: clique em **Clear Filters** e exporte de novo.
 
+> **O nome do arquivo segue um padrão só, em toda tela:** `<Tela> - OTC Tracker - OTC Processing System` — por exemplo, `Reference Data - OTC Tracker - OTC Processing System.xlsx`. Na tela com mais de uma tabela, vale o nome da tabela (`NDF Summary - Trade Level - OTC Tracker - OTC Processing System`); no **Mapping**, o cadastro aberto (`API-Bob Reports Links - …` — a barra vira hífen, porque o Windows não a aceita em nome de arquivo). O mesmo texto vai como título na primeira linha do Excel e no topo do PDF e da impressão. O nome **não leva data**: se você baixar duas vezes, o navegador numera a segunda cópia.
+
 ### 4.7. Advanced Export
 
 ![A janela do Advanced Export](docs/sop-screenshots/padrao-advanced-export.png)
@@ -356,7 +358,7 @@ Algumas telas trazem, acima da tabela, um campo largo com o texto *"Type a lette
 
 1. Clique em **Export** › **Advanced Export**.
 2. **Format** — escolha entre Excel, CSV, PDF ou Copy.
-3. **File name** — o nome sugerido é o título da tela; troque se quiser.
+3. **File name** — o nome sugerido é o padrão da casa (4.6), sem data; troque se quiser — o que você escrever é o nome do arquivo.
 4. **Rows** — *All rows* (a tabela toda) ou só a página que está à vista.
 5. **Start from the filters applied on screen** — deixe **marcado** para partir do que está filtrado na tela; desmarque para partir da tabela inteira e valer só os critérios que você montar abaixo.
 6. **RANGE — DAILY FILES** — preencha *From* e *To* para exportar vários dias de uma vez. **Se a tela não guardar arquivo por dia**, esta seção nasce apagada com o motivo escrito nela — não é defeito.
@@ -1072,8 +1074,20 @@ São cinco batimentos, cada um comparando duas fontes que deveriam dizer a mesma
 2. Clique em **Run** (botão azul).
 3. Confira as linhas: o que não bate aparece com a diferença calculada.
 4. Escreva a explicação na coluna **Comment** da linha que divergiu.
-5. **Casar à mão linhas que a recon deixou soltas** (uma perna dividida em várias, um estorno, uma TED devolvida): marque a caixinha de **duas ou mais** linhas no **Pending Payment** e/ou no **Pending Receivement** e clique em **Match** (botão azul). A janela mostra as linhas do **JPM** e as do **Client** lado a lado, com o total de cada lado. Havendo linhas dos dois lados, o que conta é a **diferença** entre os totais (duas pernas JPM contra uma do cliente, por exemplo); havendo só um lado, é a **soma** (um débito e o estorno dele). O Match só é aceito se todas as linhas forem da **mesma contraparte** e o valor ficar **dentro de R$ 1,00**; fora disso, o botão Confirmar fica desabilitado e a janela diz o porquê. As linhas casadas vão para o **Settled** com a marca *Manual*, e o casamento continua valendo se você rodar o **Run** de novo. Só aparece caixinha nas linhas que a recon não casou.
+5. **Casar à mão linhas que a recon deixou soltas** (uma perna dividida em várias, um estorno, uma TED devolvida): marque a caixinha de **duas ou mais** linhas no **Pending Payment** e/ou no **Pending Receivement** e clique em **Match** (botão azul). A janela mostra as linhas do **JPM** e as do **Client** lado a lado, com o total de cada lado. Havendo linhas dos dois lados, o que conta é a **diferença** entre os totais (duas pernas JPM contra uma do cliente, por exemplo); havendo só um lado, é a **soma** (um débito e o estorno dele). O Match só é aceito se todas as linhas forem da **mesma contraparte** e o valor ficar **dentro de R$ 1,00** (**R$ 20,00** quando todas as linhas do JPM são **SWAP**); fora disso, o botão Confirmar fica desabilitado e a janela diz o porquê. As linhas casadas vão para o **Settled** com a marca *Manual*, e o casamento continua valendo se você rodar o **Run** de novo. Só aparece caixinha nas linhas que a recon não casou.
 6. Quando tudo estiver resolvido ou justificado, clique em **End process** (botão verde) — ele só habilita depois de o Run rodar, e é ele que fecha e comunica o resultado.
+
+**Filtros:** as tabelas **Pending Payment**, **Pending Receivement** e **Settled** têm o funil no cabeçalho (4.3) e ordenam pelo clique no título. O filtro continua valendo enquanto você justifica e casa linhas. O **Summary** não tem funil.
+
+**As marcas na coluna JPM cpty:**
+
+| Marca | Significa |
+|---|---|
+| *Branch Settl.* · *B2B* · *Branch Reversal* (roxo) | Liquidação com a Branch (Banco × MGT) |
+| *Manual* (azul) | Linha casada à mão pelo **Match** (passo 5) |
+| **Tolerance** (laranja) | A recon casou os dois lados **dentro da tolerância**, sem bater no centavo. Passe o mouse para ver a diferença (Cliente − JPM). As tolerâncias estão em 18.2.4 |
+
+**O SWAP casa até R$ 20,00 de diferença:** o lado do JPM chega bruto e vai ao líquido pelo IR regressivo, e o que o cliente paga difere disso em alguns reais (arredondamento do imposto e a base em que ele incide). O swap de equity (**EQUITIES**) segue no R$ 1,00.
 
 **De onde vem o NDF do nosso lado:** do mesmo dia que o NDF Cockpit mostra — as operações que liquidam na data mais as **recompras de NDF**, com o IR já calculado. Se o Cockpit já foi importado para a data, o Run usa esse dia e responde na hora; se não, ele busca na API da Athena, o que pode levar alguns minutos. **Rode o Import do NDF Cockpit antes do Pay/Rec**: além de mais rápido, é o jeito de a recon ver uma liquidação que entrou na Athena depois do último import. A recompra de **NDF de Commodities** entra como **COMM TER** (termo), não como prêmio de opção. O arquivo `settlement.csv` **não é mais usado**: se ele estiver na pasta do Pay/Rec, é ignorado. Se a API não responder, o Run para e diz o motivo; tente de novo em alguns minutos, e se persistir, chame o suporte com a mensagem.
 
@@ -2222,10 +2236,11 @@ Várias pessoas usam a mesma base ao mesmo tempo, e o sistema impede que uma des
 | Pay/Rec — liquidação de cliente | menos de R$ 1,00 |
 | Pay/Rec — prêmio de opção de commodities (líquido do IR) | 0,005% do valor + R$ 0,20 |
 | Pay/Rec — liquidação interbancária (SPB) | até R$ 20,00 |
-| Pay/Rec — **Match** manual (diferença JPM × Client, ou soma do estorno) | até R$ 1,00 |
+| Pay/Rec — **SWAP** (lado do JPM líquido do IR regressivo) | até R$ 20,00 |
+| Pay/Rec — **Match** manual (diferença JPM × Client, ou soma do estorno) | até R$ 1,00 (R$ 20,00 se todo o lado JPM da seleção for SWAP) |
 | Recompra de NDF de Commodities × liquidação do dia | até R$ 1,00 |
 
-Fora da tolerância, a linha fica pendente e não é dada como liquidada.
+Fora da tolerância, a linha fica pendente e não é dada como liquidada. No Pay/Rec, a linha que casou dentro da tolerância sem bater no centavo ganha a marca **Tolerance** (8.2).
 
 ---
 

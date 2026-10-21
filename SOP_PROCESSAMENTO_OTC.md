@@ -103,7 +103,9 @@ Gere o arquivo de registro (Process / Send batch), importe o retorno da câmara 
 > nome do arquivo, escopo, filtros por coluna, escolha de colunas e o **intervalo de dias**, que lê
 > um arquivo por dia útil e junta tudo numa planilha só, com a **Reference Date** por linha. Dia sem
 > arquivo é pulado. A tela que não tem arquivo diário (cadastros como o Reference Data) mostra o
-> intervalo desabilitado, com o motivo escrito.
+> intervalo desabilitado, com o motivo escrito. O arquivo sai sempre com o nome
+> `<Tela ou tabela> - OTC Tracker - OTC Processing System` (no Mapping, o cadastro aberto), sem
+> data, e o mesmo texto é o título dentro do Excel, do PDF e da impressão.
 
 ### Navegação (Main)
 
@@ -243,7 +245,7 @@ Concilia as posições por comitente entre a base interna e o retorno da câmara
 
 #### Conciliação — Pay/Rec
 
-Concilia os valores a pagar e a receber (Pay/Rec), apontando as diferenças a tratar antes do encerramento. O lado de NDF do banco vem da API da Athena (liquidações da data) somada às recompras de NDF que a API ainda não traz, com o IR calculado — o mesmo dia do NDF Cockpit; a recompra de NDF de Commodities entra como COMM TER; o `settlement.csv` da pasta deixou de ser insumo.
+Concilia os valores a pagar e a receber (Pay/Rec), apontando as diferenças a tratar antes do encerramento. O lado de NDF do banco vem da API da Athena (liquidações da data) somada às recompras de NDF que a API ainda não traz, com o IR calculado — o mesmo dia do NDF Cockpit; a recompra de NDF de Commodities entra como COMM TER; o `settlement.csv` da pasta deixou de ser insumo. O SWAP casa até R$ 20,00 (o lado do banco é líquido do IR regressivo). As tabelas Pending Payment, Pending Receivement e Settled têm o funil no cabeçalho, e a linha que casou dentro da tolerância sem bater no centavo traz a marca **Tolerance**, com a diferença ao passar o mouse.
 
 ![Conciliação — Pay/Rec](docs/sop-screenshots/reconciliation-payrec.png)
 
