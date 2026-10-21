@@ -245,7 +245,7 @@ Concilia as posições por comitente entre a base interna e o retorno da câmara
 
 #### Conciliação — Pay/Rec
 
-Concilia os valores a pagar e a receber (Pay/Rec), apontando as diferenças a tratar antes do encerramento. O lado de NDF do banco vem da API da Athena (liquidações da data) somada às recompras de NDF que a API ainda não traz, com o IR calculado — o mesmo dia do NDF Cockpit; a recompra de NDF de Commodities entra como COMM TER; o `settlement.csv` da pasta deixou de ser insumo. O SWAP casa até R$ 20,00 (o lado do banco é líquido do IR regressivo). As tabelas Pending Payment, Pending Receivement e Settled têm o funil no cabeçalho, e a linha que casou dentro da tolerância sem bater no centavo traz a marca **Tolerance**, com a diferença ao passar o mouse.
+Concilia os valores a pagar e a receber (Pay/Rec), apontando as diferenças a tratar antes do encerramento. O lado de NDF do banco vem da API da Athena (liquidações da data) somada às recompras de NDF que a API ainda não traz, com o IR calculado — o mesmo dia do NDF Cockpit; a recompra de NDF de Commodities entra como COMM TER; o `settlement.csv` da pasta deixou de ser insumo. O SWAP casa até R$ 20,00 (o lado do banco é líquido do IR regressivo). As tabelas Pending Payment, Pending Receivement e Settled têm o funil no cabeçalho, e a linha que casou dentro da tolerância sem bater no centavo traz a marca **Tolerance**, com a diferença ao passar o mouse. A pasta de insumos guarda **um arquivo de cada tipo** (HistoricoMensagens JPM, HistoricoMensagens MGT, cashflows, RLDOCREC…): o que entra pelo dropzone substitui o do mesmo tipo, e com dois na pasta vale o salvo por último — o mais antigo é apagado.
 
 ![Conciliação — Pay/Rec](docs/sop-screenshots/reconciliation-payrec.png)
 

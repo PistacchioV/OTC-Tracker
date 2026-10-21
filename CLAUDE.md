@@ -920,6 +920,13 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   próprio é o do `clipboard.js`**, e ele percorre as tabelas pelo NÓ: no
   DataTables 2 o `tables({api:true})` não tem `.every()`, e era um `TypeError`
   que deixava Intrag, Swap Bullet/Cashflow e as recompras sem copiar nada.
+- **O checkbox de "select all" do cabeçalho é clicável em toda tabela** (§668):
+  coluna sem ordenação não desenha o `span.dt-column-order` (12px vazios, que o
+  funil ainda reservava à esquerda), e o título com um campo dentro não encolhe
+  abaixo dele (`otc.scss`). Num `<th>` de 50px o título ia a 0px e o span
+  ficava POR CIMA do checkbox — o clique caía nele, e a Intrag (NDF, Option,
+  Swap, DCE NDF/Option) não marcava nada. Página nova não escreve nada;
+  `check_table_center.py` §4.
 - **Números** `#,##0.00` com `tabular-nums`; taxa NÃO é valor (Strike fica com
   as casas que tem); formatação só no `display`, sort pelo cru.
 - **A pílula de STATUS é uma só: texto BRANCO e em Proper** (mesa, 21/10/2026,
@@ -2845,8 +2852,20 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   exige o MESMO sentido e prefere a mesma contraparte (`_cpty_key`). Quem diz
   que é swap é o lado JPM (a perna do cliente chega pelo SPB como NDF). O
   carry-forward e o match manual usam a mesma janela (`_manual_tol`: todo o
-  lado JPM da seleção SWAP; a tela recebe `data-match-tol-swap`). O resto
-  segue no R$1. `check_payrec_swap_tol.py`.
+  lado JPM da seleção SWAP **ou EQUITIES** — `_MANUAL_TOL_SWAP_PRODUCTS`, §668;
+  a tela recebe `data-match-tol-swap` e a lista em
+  `data-match-tol-swap-products`, sem literal no JS). No MOTOR o EQUITIES segue
+  no R$1, como o resto. `check_payrec_swap_tol.py`.
+- **Pay/Rec: UM arquivo por TIPO na pasta de insumos** (mesa, 21/10/2026,
+  §668). O tipo é o `_classify_source` (pelo nome, por dentro: a cópia
+  `HistoricoMensagensJPM_… (1).csv` é o mesmo tipo do original; JPM e MGT são
+  dois). Fica o salvo por ÚLTIMO e os outros do tipo são APAGADOS
+  (`_one_per_kind`), nos dois caminhos do Run: na pasta vale o mais recente
+  (`_saved_at` = o maior entre modificação e CRIAÇÃO — copiar pelo Explorer
+  preserva a modificação do original); pelo dropzone o que chega vence o da
+  pasta, e no lote vence o último. Apagar que falha (arquivo aberto no Excel)
+  fica avisado no log e o arquivo não é lido. Tipo desconhecido não entra na
+  disputa. `check_payrec_run.py` §1b.
 - **Pay/Rec: as três listas são DataTable, com o funil** (mesa, 21/10/2026,
   §666); o Summary segue tabela comum (ordenar levaria o TOTAL para o meio).
   A instância é UMA por tabela: o `render` roda de novo a cada Justify, Cancel
@@ -2859,7 +2878,11 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 - **Pay/Rec: o botão Match casa À MÃO o que o motor deixou solto** (mesa,
   02/10/2026, §617/§623): duas ou mais linhas marcadas do Pending Payment e/ou
   do Pending Receivement, só as de UM lado (a que tem JPM e cliente já foi
-  casada pelo motor), da MESMA contraparte pela `_cpty_key`. O LADO de cada
+  casada pelo motor), da MESMA contraparte pela `_cpty_key(_norm_cpty(…))` —
+  as variantes dos fundos e do Banco (Atacama, Lawton, `BCO J.P`) viram uma só;
+  a TELA tem a cópia (`normCpty` + `cptyKey`) e a paridade é EXECUTADA no `node`
+  (`check_payrec_manual_match.py`, §668: sem o `normCpty` a janela travava o
+  botão para o Atacama por extenso). O LADO de cada
   linha (JPM ou Client) decide a conta (`_manual_balance`): com os DOIS lados
   presentes é PAR — total JPM × total Client, a DIFERENÇA dentro de
   `_MANUAL_TOL` (= `_TOL_SETTLED`); só um lado é ESTORNO — a SOMA dentro dela.

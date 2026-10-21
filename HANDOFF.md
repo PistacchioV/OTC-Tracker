@@ -28011,3 +28011,64 @@ ASCII conferidos). A máquina do relato responde: dentro do DevShell, `where
 python` tem de mostrar o Python 3.12/3.13 — e é ele que o `.bat` vai usar. Se o
 DevShell não o tiver, `ds tool install python3.12`. O pip instala as
 dependências nele uma vez (o retrato fica na pasta desse Python).
+
+## §668 — Select all do cabeçalho sob o ícone de ordenação; um arquivo por tipo no Pay/Rec; Match manual de EQUITIES até R$20 (2026-10-21)
+
+Três pedidos da mesa no mesmo dia.
+
+**1. "O checkbox de select all da Intrag NDF não funciona — veja se há mais
+algum".** Não era o JS da página (o handler delegado pela classe está certo):
+o clique **não chegava** ao checkbox. Medido no Chromium, o elemento sob o
+centro dele era o `span.dt-column-order`. O cabeçalho do DataTables 2 é o flex
+"título · ordenação"; a coluna do checkbox não ordena, mas ganha o span VAZIO
+de 12px, e o `excel-filter.js` (`centerTitles`) reserva o mesmo tanto à
+esquerda para centrar o título. Num `<th>` fixo de 50px o título (onde mora o
+checkbox) encolhia a **0px** (`min-width: 0`), o checkbox transbordava e o
+span, pintado depois, ficava por cima. Varredura das 39 telas com checkbox no
+cabeçalho: cinco presas — Intrag NDF, Option, Swap, DCE NDF e DCE Option. A
+correção é do TEMA (`otc.scss`, depois do `.dt-column-title`): coluna
+`dt-orderable-none` não desenha o span (e o funil, que mede só o que se vê, para
+de reservar), e o título com campo dentro (`:has(> input, > .form-check)`) não
+encolhe abaixo dele. Depois: as 39 OK (Accrual e MtM conferidos numa janela
+alta — o "bloqueio" deles era só estar fora da vista), e na Intrag NDF o clique
+marca as três linhas. Track Confirmations e Tracking Docs deram 500 na DEV
+(dado local) e ficaram fora da medida. `check_table_center.py` §4.
+
+**2. "Só pode ter um arquivo de cada tipo na pasta do Pay/Rec".** O dropzone
+salvava cada anexo na pasta de insumos com o nome dele, e o Run (com anexo ou
+pela pasta) lia TODO arquivo de lá: o `HistoricoMensagensJPM_… (1).csv` que o
+Windows numera, ou o extrato de ontem esquecido, entrava junto e o mesmo
+dinheiro contava duas vezes. Agora `_one_per_kind`: o tipo é o
+`_classify_source` (cashflows, FXO Detail, settlement, RLDOCREC,
+HistoricoMensagens JPM, HistoricoMensagens MGT, rlctahis, PagamentosMGT — pelo
+nome, por dentro); fica o salvo por ÚLTIMO e os outros do tipo são apagados.
+"Salvo" é o `_saved_at`: o maior entre a modificação e a CRIAÇÃO
+(`st_birthtime`, com o `st_ctime` de plano B) — copiar pelo Explorer preserva a
+data de modificação do original, e quem diz a chegada é a criação. Pela pasta
+vale o mais recente; pelo dropzone o que chega vence o da pasta (mesmo com nome
+diferente) e no lote vence o último. Apagar que falha (o cashflows aberto no
+Excel trava no Windows) vai para o log em WARNING e o arquivo não é lido.
+Arquivo de tipo desconhecido não entra na disputa. `check_payrec_run.py` §1b.
+
+**3. "Tolerância do match manual para swap/equities também R$20".**
+`_MANUAL_TOL_SWAP_PRODUCTS = ('SWAP', 'EQUITIES')`: a janela de R$20 do match
+manual vale quando todo o lado JPM da seleção é um dos dois. O JS tinha o
+literal `'SWAP'`; agora recebe a lista do servidor
+(`data-match-tol-swap-products`, `queries.match_tolerance_swap_products`), e as
+duas cópias da regra não divergem. No MOTOR o EQUITIES segue no R$1 (o pedido
+foi o match manual). `check_payrec_swap_tol.py`.
+
+**4. "A contraparte é a mesma sim"** (o Match manual recusava "ATACAMA
+MULTIMERCADO" × "ATACAMA FUNDO DE INVESTIMENTO FINANCEIRO MULTIMERCADO CREDITO
+PRIVADO"). O SERVIDOR já juntava as duas — a chave dele é
+`_cpty_key(_norm_cpty(nome))`, e o `_norm_cpty` canoniza Atacama, Lawton e o
+Banco —, mas a cópia da regra no JS fazia só o `cptyKey`: a janela dizia "não é
+a mesma contraparte" e desabilitava o botão sem perguntar ao servidor. O JS
+ganhou o `normCpty` (o espelho do `_norm_cpty`), e o
+`check_payrec_manual_match.py` executa as DUAS cópias com os mesmos 13 nomes e
+cobra a mesma chave — o próximo ajuste numa delas sem a outra reprova. Conferido
+no Chromium com o código atual (instância de teste na 5007): o aviso de
+contraparte some; com R$15 de diferença o Match habilita (EQUITIES, R$20). **O
+caso do print continua bloqueado pelo VALOR**: a diferença é 9.496,16, acima
+dos R$20 — não é tolerância de arredondamento, é uma quebra a explicar (ou um
+lançamento a mais/a menos de um dos lados).

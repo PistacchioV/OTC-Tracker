@@ -1074,8 +1074,10 @@ São cinco batimentos, cada um comparando duas fontes que deveriam dizer a mesma
 2. Clique em **Run** (botão azul).
 3. Confira as linhas: o que não bate aparece com a diferença calculada.
 4. Escreva a explicação na coluna **Comment** da linha que divergiu.
-5. **Casar à mão linhas que a recon deixou soltas** (uma perna dividida em várias, um estorno, uma TED devolvida): marque a caixinha de **duas ou mais** linhas no **Pending Payment** e/ou no **Pending Receivement** e clique em **Match** (botão azul). A janela mostra as linhas do **JPM** e as do **Client** lado a lado, com o total de cada lado. Havendo linhas dos dois lados, o que conta é a **diferença** entre os totais (duas pernas JPM contra uma do cliente, por exemplo); havendo só um lado, é a **soma** (um débito e o estorno dele). O Match só é aceito se todas as linhas forem da **mesma contraparte** e o valor ficar **dentro de R$ 1,00** (**R$ 20,00** quando todas as linhas do JPM são **SWAP**); fora disso, o botão Confirmar fica desabilitado e a janela diz o porquê. As linhas casadas vão para o **Settled** com a marca *Manual*, e o casamento continua valendo se você rodar o **Run** de novo. Só aparece caixinha nas linhas que a recon não casou.
+5. **Casar à mão linhas que a recon deixou soltas** (uma perna dividida em várias, um estorno, uma TED devolvida): marque a caixinha de **duas ou mais** linhas no **Pending Payment** e/ou no **Pending Receivement** e clique em **Match** (botão azul). A janela mostra as linhas do **JPM** e as do **Client** lado a lado, com o total de cada lado. Havendo linhas dos dois lados, o que conta é a **diferença** entre os totais (duas pernas JPM contra uma do cliente, por exemplo); havendo só um lado, é a **soma** (um débito e o estorno dele). O Match só é aceito se todas as linhas forem da **mesma contraparte** (as variações de nome dos fundos da casa e do banco — *ATACAMA MULTIMERCADO* e o nome por extenso, por exemplo — contam como a mesma) e o valor ficar **dentro de R$ 1,00** (**R$ 20,00** quando todas as linhas do JPM são **SWAP** ou **EQUITIES**); fora disso, o botão Confirmar fica desabilitado e a janela diz o porquê. As linhas casadas vão para o **Settled** com a marca *Manual*, e o casamento continua valendo se você rodar o **Run** de novo. Só aparece caixinha nas linhas que a recon não casou.
 6. Quando tudo estiver resolvido ou justificado, clique em **End process** (botão verde) — ele só habilita depois de o Run rodar, e é ele que fecha e comunica o resultado.
+
+**Um arquivo de cada tipo na pasta:** o sistema guarda **um** arquivo de cada tipo de insumo (HistoricoMensagens JPM, HistoricoMensagens MGT, cashflows, RLDOCREC, FXO Detail…), reconhecido pelo nome — `HistoricoMensagensJPM_… (1).csv` conta como o mesmo tipo. O arquivo que você solta no dropzone **substitui** o do mesmo tipo que estava na pasta, e se a pasta tiver dois, o Run usa o salvo por último e apaga o mais antigo. Se um arquivo antigo estiver aberto no Excel, ele não é apagado, mas também não é lido.
 
 **Filtros:** as tabelas **Pending Payment**, **Pending Receivement** e **Settled** têm o funil no cabeçalho (4.3) e ordenam pelo clique no título. O filtro continua valendo enquanto você justifica e casa linhas. O **Summary** não tem funil.
 
@@ -2237,7 +2239,7 @@ Várias pessoas usam a mesma base ao mesmo tempo, e o sistema impede que uma des
 | Pay/Rec — prêmio de opção de commodities (líquido do IR) | 0,005% do valor + R$ 0,20 |
 | Pay/Rec — liquidação interbancária (SPB) | até R$ 20,00 |
 | Pay/Rec — **SWAP** (lado do JPM líquido do IR regressivo) | até R$ 20,00 |
-| Pay/Rec — **Match** manual (diferença JPM × Client, ou soma do estorno) | até R$ 1,00 (R$ 20,00 se todo o lado JPM da seleção for SWAP) |
+| Pay/Rec — **Match** manual (diferença JPM × Client, ou soma do estorno) | até R$ 1,00 (R$ 20,00 se todo o lado JPM da seleção for SWAP ou EQUITIES) |
 | Recompra de NDF de Commodities × liquidação do dia | até R$ 1,00 |
 
 Fora da tolerância, a linha fica pendente e não é dada como liquidada. No Pay/Rec, a linha que casou dentro da tolerância sem bater no centavo ganha a marca **Tolerance** (8.2).
