@@ -2284,8 +2284,15 @@ body.otc-has-island .otc-toast { top: calc(var(--otc-inset, 16px) + 128px); }
   &.is-on { background: color-mix(in srgb, var(--otc-yellow) 18%, transparent); color: var(--otc-text);
     svg { fill: var(--otc-yellow); stroke: var(--otc-yellow); } }
 }
-.otc-fab__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: min(56vh, 420px); overflow-y: auto;
+.otc-fab__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: min(60vh, 460px); overflow-y: auto;
   li { position: relative; } }
+// o título de BLOCO — o mesmo desenho do título de seção do menu lateral (§659)
+.otc-fab__list .otc-fab__group {
+  padding: 12px 8px 4px;
+  font: 650 11px/1 var(--otc-font); letter-spacing: .06em; text-transform: uppercase;
+  color: var(--otc-text-3);
+  &:first-child { padding-top: 2px; }
+}
 .otc-fab__item {
   display: flex; align-items: center; gap: 10px; min-width: 0; padding: 7px 38px 7px 7px;
   border-radius: var(--otc-r-sm); color: var(--otc-text); text-decoration: none;

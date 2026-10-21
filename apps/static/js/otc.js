@@ -41,15 +41,18 @@
     en: { sent: 'Sent', search: 'Search pages…', none: 'No page matches', goto: 'Go to page', pinned: 'Pinned', customize: 'Customize', menu: 'Menu',
           fab: 'Quick access', favs: 'Favorites', favAdd: 'Add this page', favIn: 'In favorites', favRemove: 'Remove',
           favEmpty: 'No favorites yet. Tap the star to add this page.', favAdded: 'Added to favorites',
-          favRemoved: 'Removed from favorites', favErr: 'Favorites could not be saved', favDrag: 'Quick access — drag to move' },
+          favRemoved: 'Removed from favorites', favErr: 'Favorites could not be saved', favDrag: 'Quick access — drag to move',
+          favOthers: 'Others' },
     br: { sent: 'Enviado', search: 'Buscar páginas…', none: 'Nenhuma página encontrada', goto: 'Ir para a página', pinned: 'Fixados', customize: 'Personalizar', menu: 'Menu',
           fab: 'Acesso rápido', favs: 'Favoritos', favAdd: 'Favoritar esta página', favIn: 'Nos favoritos', favRemove: 'Remover',
           favEmpty: 'Nenhum favorito ainda. Toque na estrela para adicionar esta página.', favAdded: 'Adicionado aos favoritos',
-          favRemoved: 'Removido dos favoritos', favErr: 'Não foi possível salvar os favoritos', favDrag: 'Acesso rápido — arraste para mover' },
+          favRemoved: 'Removido dos favoritos', favErr: 'Não foi possível salvar os favoritos', favDrag: 'Acesso rápido — arraste para mover',
+          favOthers: 'Outros' },
     es: { sent: 'Enviado', search: 'Buscar páginas…', none: 'Ninguna página encontrada', goto: 'Ir a la página', pinned: 'Fijados', customize: 'Personalizar', menu: 'Menú',
           fab: 'Acceso rápido', favs: 'Favoritos', favAdd: 'Agregar esta página', favIn: 'En favoritos', favRemove: 'Quitar',
           favEmpty: 'Aún no hay favoritos. Toque la estrella para agregar esta página.', favAdded: 'Agregado a favoritos',
-          favRemoved: 'Quitado de favoritos', favErr: 'No se pudieron guardar los favoritos', favDrag: 'Acceso rápido — arrastre para mover' }
+          favRemoved: 'Quitado de favoritos', favErr: 'No se pudieron guardar los favoritos', favDrag: 'Acceso rápido — arrastre para mover',
+          favOthers: 'Otros' }
   };
   function t(k) { var m = _TRANS[lang()] || _TRANS.en; return m[k] || _TRANS.en[k] || k; }
 
@@ -999,9 +1002,10 @@
   // ==========================================================================
   // 3f. O BOTÃO FLUTUANTE de favoritos (mesa, 21/10/2026, §658) — o
   // "AssistiveTouch" do iPad: um "+" por cima da página, que a pessoa ARRASTA
-  // para onde quiser (solto, encosta na borda mais perto e lembra o lugar,
+  // para QUALQUER lugar dela (fica onde for solto e lembra o lugar,
   // `__OTC_FAB_POS__`); parado, esmaece. O clique abre o painel: favoritar a
-  // página atual e a lista dos favoritos, na ordem em que entraram.
+  // página atual e os favoritos em BLOCOS, como o menu lateral (os títulos de
+  // seção dele — Main, Apps, … Data Base —, na ordem dele, §659).
   //
   // A lista é do SID, no documento da User Home (`/api/user-home/favorites`):
   // acompanha a pessoa em qualquer máquina e instância. O navegador guarda uma
@@ -1046,22 +1050,36 @@
     }
     return null;
   }
-  // A folha do menu com o endereço — a do DONO quando a página está em dois
-  // lugares (o atalho leva `data-nav-alias`, §654): "Option" é Intrag › DCE,
-  // não o atalho de New Deals › DCE.
-  function pageLeaf(href) {
-    var dono = null, atalho = null;
-    (function walk(nodes, trail) {
+  // O MAPA do menu para os favoritos: cada endereço → o BLOCO (o título de
+  // seção do primeiro nível do menu: Main, Apps, Reconciliations, … Data
+  // Base), a posição na ordem do menu, o nome e o caminho. Página em dois
+  // lugares vale a folha do DONO (o atalho leva `data-nav-alias`, §654):
+  // "Option" é Intrag › DCE, não o atalho de New Deals › DCE.
+  function menuIndex() {
+    var idx = {}, blocos = [], bloco = null, ordem = 0;
+    (function walk(nodes, trail, raiz) {
       (nodes || []).forEach(function (n) {
-        if (n.kind === 'leaf' && n.href === href) {
-          var o = { href: n.href, label: labelOf(n), trail: trail.slice() };
-          if (n.a && n.a.hasAttribute('data-nav-alias')) { if (!atalho) atalho = o; }
-          else if (!dono) dono = o;
-        } else if (n.kind === 'branch') walk(n.children, trail.concat([labelOf(n)]));
+        if (n.kind === 'title') {
+          if (raiz) {
+            bloco = { key: n.li.getAttribute('data-lang') || n.li.textContent.trim(),
+                      label: n.li.textContent.trim(), pos: blocos.length };
+            blocos.push(bloco);
+          }
+          return;
+        }
+        if (n.kind === 'leaf' && n.href) {
+          var alias = !!(n.a && n.a.hasAttribute('data-nav-alias')), atual = idx[n.href];
+          if (!atual || (atual.alias && !alias)) {
+            idx[n.href] = { href: n.href, label: labelOf(n), trail: trail.slice(), bloco: bloco,
+                            ordem: ordem, alias: alias };
+          }
+          ordem++;
+        } else if (n.kind === 'branch') walk(n.children, trail.concat([labelOf(n)]), false);
       });
-    })(Nav.tree, []);
-    return dono || atalho;
+    })(Nav.tree, [], true);
+    return { idx: idx, blocos: blocos };
   }
+  function pageLeaf(href) { return menuIndex().idx[href] || null; }
   function pageTitle() {
     var h = doc.querySelector('.content-page .page-title-head h4, .content-page .page-title-head h5');
     var txt = h ? h.textContent.replace(/\s+/g, ' ').trim() : '';
@@ -1131,14 +1149,30 @@
     star.querySelector('span').textContent = on ? t('favIn') : t('favAdd');
     Fab.panel.querySelector('.otc-fab__title').textContent = t('favs');
     var ul = Fab.panel.querySelector('.otc-fab__list');
-    ul.innerHTML = lista.map(function (o) {
+    // Os BLOCOS do menu, na ordem dele; dentro do bloco, a ordem do menu. O que
+    // não está no menu (a página de uma iniciativa) vai num bloco no fim.
+    var mi = menuIndex(), grupos = {}, chaves = [];
+    lista.forEach(function (o, i) {
+      var m = mi.idx[o.url];
+      var g = m ? (m.bloco || { key: '__menu', label: t('menu'), pos: -1 }) : { key: '__outros', label: t('favOthers'), pos: 1e6 };
+      if (!grupos[g.key]) { grupos[g.key] = { bloco: g, itens: [] }; chaves.push(g.key); }
+      grupos[g.key].itens.push({ o: o, ordem: m ? m.ordem : 1e6 + i });
+    });
+    chaves.sort(function (a, b) { return grupos[a].bloco.pos - grupos[b].bloco.pos; });
+    ul.innerHTML = chaves.map(function (k) {
+      var g = grupos[k];
+      g.itens.sort(function (a, b) { return a.ordem - b.ordem; });
+      return '<li class="otc-fab__group" role="presentation">' + esc(g.bloco.label) + '</li>' +
+        g.itens.map(function (x) { return favItem(x.o, url); }).join('');
+    }).join('');
+    function favItem(o, url) {
       var trail = favTrail(o);
       return '<li><a class="otc-fab__item' + (o.url === url ? ' is-current' : '') + '" href="' + esc(o.url) + '">' +
         '<span class="otc-fab__ico otc-icon-tile" data-ico="' + esc(o.url) + '"></span>' +
         '<span class="otc-fab__txt"><b>' + esc(favLabel(o)) + '</b>' + (trail ? '<small>' + esc(trail) + '</small>' : '') + '</span></a>' +
         '<button type="button" class="otc-fab__del" data-url="' + esc(o.url) + '" aria-label="' + esc(t('favRemove')) + '" title="' + esc(t('favRemove')) + '">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg></button></li>';
-    }).join('');
+    }
     $$('.otc-fab__ico[data-ico]', ul).forEach(function (s) {
       var ic = navIconOf(s.getAttribute('data-ico'));
       if (ic) s.appendChild(ic); else s.innerHTML = FAB_STAR;
@@ -1150,30 +1184,60 @@
     if (Fab.open) fabPlacePanel();
   }
 
-  // ── Posição: encostada numa borda, a altura como FRAÇÃO da janela ─────────
+  // ── Posição: LIVRE, onde a pessoa soltou (mesa, 21/10/2026, §659) ──────────
+  // Guardada como FRAÇÃO da área útil da janela (`x`, `y` de 0 a 1), para
+  // sobreviver a uma janela de outro tamanho sem sair dela. O formato de antes
+  // (encostado numa borda, `side` + `y`) vira a borda equivalente. SEM lugar
+  // gravado, ele nasce à ESQUERDA da barra do topo, no meio da altura dela
+  // (mesa, 21/10/2026) — e acompanha a barra quando ela muda de largura
+  // (idioma, janela) até a pessoa o arrastar.
+  function fabArea() {
+    return { w: Math.max(1, window.innerWidth - FAB_SIZE - 2 * FAB_MARGIN),
+             h: Math.max(1, window.innerHeight - FAB_SIZE - 2 * FAB_MARGIN) };
+  }
   function fabPos() {
     try {
       var p = JSON.parse(localStorage.getItem(FAB_POS_KEY) || 'null');
-      if (p && (p.side === 'left' || p.side === 'right') && p.y >= 0 && p.y <= 1) return p;
+      var ok = function (v) { return typeof v === 'number' && v >= 0 && v <= 1; };
+      if (p && ok(p.x) && ok(p.y)) return { x: p.x, y: p.y };
+      if (p && (p.side === 'left' || p.side === 'right') && ok(p.y)) return { x: p.side === 'left' ? 0 : 1, y: p.y };
     } catch (e) {}
-    return { side: 'right', y: 0.78 };
+    return null;
+  }
+  function fabDefault() {
+    var bar = doc.querySelector('.app-topbar'), r = bar && bar.getBoundingClientRect();
+    if (!r || !r.width) return { left: window.innerWidth - FAB_SIZE - FAB_MARGIN, top: FAB_MARGIN };
+    return { left: r.left - 12 - FAB_SIZE, top: r.top + (r.height - FAB_SIZE) / 2 };
   }
   function fabApply(p) {
-    var w = window.innerWidth, h = window.innerHeight;
-    var x = p.side === 'left' ? FAB_MARGIN : w - FAB_SIZE - FAB_MARGIN;
-    var y = FAB_MARGIN + p.y * Math.max(0, h - FAB_SIZE - 2 * FAB_MARGIN);
-    Fab.el.style.left = Math.round(x) + 'px';
-    Fab.el.style.top = Math.round(y) + 'px';
-    Fab.el.setAttribute('data-side', p.side);
+    var a = fabArea(), left, top;
+    if (p) { left = FAB_MARGIN + p.x * a.w; top = FAB_MARGIN + p.y * a.h; }
+    else {
+      var d = fabDefault();
+      left = Math.max(0, Math.min(d.left, window.innerWidth - FAB_SIZE));
+      top = Math.max(0, Math.min(d.top, window.innerHeight - FAB_SIZE));
+    }
+    Fab.el.style.left = Math.round(left) + 'px';
+    Fab.el.style.top = Math.round(top) + 'px';
   }
   function fabPlacePanel() {
     var r = Fab.el.getBoundingClientRect(), pn = Fab.panel;
     var w = Math.min(320, window.innerWidth - 2 * FAB_MARGIN);
     pn.style.width = w + 'px';
-    var left = Fab.el.getAttribute('data-side') === 'left' ? r.right + 10 : r.left - 10 - w;
+    // Abre para onde há espaço: no terço de CIMA da janela (o lugar inicial, ao
+    // lado da barra do topo), ABAIXO do botão; no de baixo, ACIMA; no meio, ao
+    // LADO. Na horizontal, alinhado à borda do botão do lado em que cabe.
+    var H = window.innerHeight, ph = pn.offsetHeight, top, left;
+    var aEsquerda = (r.left + r.width / 2) < window.innerWidth / 2;
+    if (r.top < H / 3 || r.bottom > H * 2 / 3) {
+      top = r.top < H / 3 ? r.bottom + 10 : r.top - 10 - ph;
+      left = aEsquerda ? r.left : r.right - w;
+    } else {
+      top = r.top + r.height / 2 - ph / 2;
+      left = aEsquerda ? r.right + 10 : r.left - 10 - w;
+    }
     left = Math.max(FAB_MARGIN, Math.min(left, window.innerWidth - w - FAB_MARGIN));
-    var ph = pn.offsetHeight;
-    var top = Math.max(FAB_MARGIN, Math.min(r.top + r.height / 2 - ph / 2, window.innerHeight - ph - FAB_MARGIN));
+    top = Math.max(FAB_MARGIN, Math.min(top, H - ph - FAB_MARGIN));
     pn.style.left = Math.round(left) + 'px';
     pn.style.top = Math.round(top) + 'px';
   }
@@ -1210,9 +1274,15 @@
     fabApply(fabPos());
     fabRender();
     fabIdle();
+    // a barra muda de largura (o idioma carrega, a janela muda): o lugar
+    // INICIAL a acompanha; o gravado é fração da janela e não depende dela
+    var bar = doc.querySelector('.app-topbar');
+    if (bar && window.ResizeObserver) {
+      new ResizeObserver(function () { if (!fabPos() && !wrap.classList.contains('is-dragging')) fabApply(null); }).observe(bar);
+    }
 
     // Arrastar: o ponteiro move o botão depois de 6px (antes disso é clique);
-    // ao soltar, encosta na borda mais perto e a posição fica gravada.
+    // ao soltar ele FICA ali (dentro da janela) e a posição fica gravada.
     var drag = null, moveu = false;
     Fab.btn.addEventListener('pointerdown', function (e) {
       if (e.button !== 0) return;
@@ -1243,10 +1313,9 @@
       drag = null;
       if (!moveu) return;
       wrap.classList.remove('is-dragging');
-      var r = wrap.getBoundingClientRect();
-      var livre = Math.max(1, window.innerHeight - FAB_SIZE - 2 * FAB_MARGIN);
-      var p = { side: (r.left + r.width / 2) < window.innerWidth / 2 ? 'left' : 'right',
-                y: Math.max(0, Math.min(1, (r.top - FAB_MARGIN) / livre)) };
+      var r = wrap.getBoundingClientRect(), a = fabArea();
+      var p = { x: Math.max(0, Math.min(1, (r.left - FAB_MARGIN) / a.w)),
+                y: Math.max(0, Math.min(1, (r.top - FAB_MARGIN) / a.h)) };
       try { localStorage.setItem(FAB_POS_KEY, JSON.stringify(p)); } catch (er) {}
       fabApply(p);
       fabIdle();

@@ -10,12 +10,15 @@ atual e lista os favoritos. Prende:
      rótulo enxuto; o que não é lista é recusado com código;
   2. a API (`/api/user-home/favorites`): o documento do SID, sem sessão é 401;
   3. no Chromium, com as páginas RENDERIZADAS pelo app (o `otc.js` e o
-     `otc.css` de verdade): o botão nasce na borda direita, abre o painel,
+     `otc.css` de verdade): o botão nasce à esquerda da barra do topo (o
+     painel abre abaixo dele), abre o painel,
      favorita a página (gravando no SERVIDOR), mostra o nome e o caminho do
      menu DONO (Option é Intrag › DCE, não o atalho de New Deals), remove com
-     Undo, fecha no Esc e no clique fora, ARRASTA e encosta na borda mais perto
-     (o clique do arrasto não abre o painel), lembra o lugar depois do reload,
-     esmaece parado, fala português e, no modo opaco, o painel é SÓLIDO.
+     Undo, fecha no Esc e no clique fora, ARRASTA para QUALQUER lugar e fica
+     onde foi solto (§659; o clique do arrasto não abre o painel), lembra o
+     lugar depois do reload (e converte o formato antigo, de borda), agrupa os
+     favoritos nos BLOCOS do menu lateral, na ordem dele (§659), esmaece
+     parado, fala português e, no modo opaco, o painel é SÓLIDO.
 
     OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_fab_favorites.py
 """
@@ -110,8 +113,14 @@ def main():
         pg.goto('http://otc.test/intrag-dce-option')
         pg.wait_for_selector('.otc-fab__btn', timeout=15000)
         x, y, w, h = fab_box(pg)
-        check('o botao nasce na borda DIREITA (14px dela)', x == w - 52 - 14, (x, w))
+        tb = pg.evaluate("() => { const r = document.querySelector('.app-topbar').getBoundingClientRect(); return [r.left, r.top, r.height]; }")
+        check('sem lugar gravado, nasce a ESQUERDA da barra do topo, no meio da altura dela',
+              abs(x - (tb[0] - 12 - 52)) <= 1 and abs(y - (tb[1] + (tb[2] - 52) / 2)) <= 1, (x, y, tb))
         pg.click('.otc-fab__btn')
+        pg.wait_for_timeout(400)            # a entrada do painel (escala .96 -> 1)
+        pr = pg.evaluate("() => { const p = document.querySelector('.otc-fab__panel').getBoundingClientRect(), "
+                         "b = document.querySelector('.otc-fab').getBoundingClientRect(); return [p.top, b.bottom, p.right, b.right]; }")
+        check('la em cima, o painel abre ABAIXO do botao, alinhado a ele', pr[0] >= pr[1] and abs(pr[2] - pr[3]) <= 1, pr)
         check('o clique abre o painel, vazio, com "Add this page"',
               pg.is_visible('.otc-fab__panel') and pg.is_visible('.otc-fab__empty')
               and pg.inner_text('.otc-fab__star').strip() == 'Add this page')
@@ -134,10 +143,10 @@ def main():
         check('em outra pagina a lista ja esta la (a copia do navegador)', pg.locator('.otc-fab__item').count() == 1)
         pg.click('.otc-fab__star')
         pg.wait_for_timeout(600)
-        check('dois favoritos, na ordem em que entraram',
-              [i.get_attribute('href') for i in pg.locator('.otc-fab__item').all()] == ['/intrag-dce-option', '/new_deals-swap-cetes'])
-        pg.hover('.otc-fab__list li:first-child')
-        pg.click('.otc-fab__list li:first-child .otc-fab__del')
+        check('dois favoritos, na ORDEM DO MENU (New Deals antes de Intrag), nao na de entrada',
+              [i.get_attribute('href') for i in pg.locator('.otc-fab__item').all()] == ['/new_deals-swap-cetes', '/intrag-dce-option'])
+        pg.hover('.otc-fab__item[href="/intrag-dce-option"]')
+        pg.click('.otc-fab__del[data-url="/intrag-dce-option"]')
         pg.wait_for_timeout(600)
         check('o x remove (e grava)', pg.locator('.otc-fab__item').count() == 1
               and [f['url'] for f in cl.get('/api/user-home/favorites').get_json()['favorites']] == ['/new_deals-swap-cetes'])
@@ -149,22 +158,51 @@ def main():
         pg.mouse.click(700, 450)
         check('o clique fora fecha', not pg.is_visible('.otc-fab__panel'))
 
-        # o ARRASTO: para o canto superior esquerdo, e ele encosta na esquerda
+        # o ARRASTO: para o MEIO da pagina, e ele fica ali (sem encostar)
         x, y, w, h = fab_box(pg)
         pg.mouse.move(x + 26, y + 26)
         pg.mouse.down()
         for k in range(1, 11):
-            pg.mouse.move(x + 26 - k * (x - 300) / 10, y + 26 - k * (y - 250) / 10)
+            pg.mouse.move(x + 26 - k * (x - 700) / 10, y + 26 - k * (y - 400) / 10)
         pg.mouse.up()
         pg.wait_for_timeout(500)
         x2, y2, _, _ = fab_box(pg)
-        check('solto no meio-esquerdo, encosta na borda ESQUERDA, na altura em que foi solto',
-              x2 == 14 and abs(y2 - 250) <= 3, (x2, y2))
+        check('solto no MEIO da pagina, fica onde foi solto (nao encosta na borda)',
+              abs(x2 - 700) <= 2 and abs(y2 - 400) <= 2, (x2, y2))
         check('o clique do arrasto NAO abre o painel', not pg.is_visible('.otc-fab__panel'))
+        pg.click('.otc-fab__btn')
+        pr = pg.evaluate("() => { const r = document.querySelector('.otc-fab__panel').getBoundingClientRect(); return [r.left, r.right, r.top, r.bottom, innerWidth, innerHeight]; }")
+        check('aberto no meio, o painel cabe na janela', pr[0] >= 0 and pr[1] <= pr[4] and pr[2] >= 0 and pr[3] <= pr[5], pr)
+        pg.keyboard.press('Escape')
         pg.reload()
         pg.wait_for_selector('.otc-fab__btn')
         x3, y3, _, _ = fab_box(pg)
-        check('o lugar e lembrado depois do reload', (x3, abs(y3 - y2) <= 2) == (14, True), (x3, y3))
+        check('o lugar e lembrado depois do reload', abs(x3 - x2) <= 2 and abs(y3 - y2) <= 2, (x3, y3))
+        pg.evaluate("localStorage.setItem('__OTC_FAB_POS__', JSON.stringify({side: 'left', y: 0.5}))")
+        pg.reload()
+        pg.wait_for_selector('.otc-fab__btn')
+        x4, _, _, _ = fab_box(pg)
+        check('a posicao no formato antigo (encostada na borda) e convertida', x4 == 14, x4)
+
+        # os BLOCOS do menu: Data Base depois de Products, e dentro de Products a
+        # ORDEM do menu (New Deals antes de Intrag), nao a ordem em que entraram;
+        # o que nao esta no menu vai em Others, no fim
+        cl.post('/api/user-home/favorites', json={'favorites': [
+            {'url': '/initiatives/PRJ-0001', 'label': 'PRJ-0001 Painel'}, {'url': '/mapping'},
+            {'url': '/intrag-dce-option'}, {'url': '/new_deals-swap-cetes'}]})
+        pg.goto('http://otc.test/intrag-swap')
+        pg.wait_for_selector('.otc-fab__btn')
+        pg.click('.otc-fab__btn')
+        pg.wait_for_timeout(700)
+        ordem = pg.evaluate("() => [...document.querySelectorAll('.otc-fab__list > li')].map(li => "
+                            "li.classList.contains('otc-fab__group') ? '#' + li.textContent.trim() : li.querySelector('a').getAttribute('href'))")
+        check('os favoritos em BLOCOS, como o menu lateral, na ordem dele',
+              ordem == ['#Products', '/new_deals-swap-cetes', '/intrag-dce-option', '#Data Base', '/mapping',
+                        '#Others', '/initiatives/PRJ-0001'], ordem)
+        tit = pg.evaluate("() => getComputedStyle(document.querySelector('.otc-fab__group')).textTransform")
+        check('o titulo do bloco no desenho do titulo do menu (caixa alta)', tit == 'uppercase', tit)
+        pg.keyboard.press('Escape')
+        pg.mouse.move(5, 5)
         pg.wait_for_timeout(3800)
         check('parado, ele esmaece', 'is-idle' in pg.get_attribute('.otc-fab', 'class'))
         check('sem erro de JS', not erros, erros)
