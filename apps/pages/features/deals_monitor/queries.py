@@ -77,7 +77,7 @@ def _ndm_monitor_snapshot(ref):
                     if destino:
                         found.setdefault(destino, _R().Counter())[domain.AWAITING_B3] += 1
                         found_les.setdefault(destino, _R().Counter())[
-                            domain.intrag_destino_le(destino)] += 1
+                            domain.intrag_destino_le(destino, pkey)] += 1
 
     _varre(_R().NEW_DEALS_CACHE_ROOT)
     # As RECOMPRAS: outra árvore, mesmo Monitor. O caminho vem do `data_paths`

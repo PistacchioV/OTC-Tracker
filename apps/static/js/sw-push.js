@@ -35,6 +35,7 @@ var PAGE_URL = {
     'Swap Bullet': '/new_deals-swap-bullet',
     'Onboarding': '/onboarding/tracking-docs',
     'Swap Cashflow': '/new_deals-swap-cashflow',
+    'Swap Cetes': '/new_deals-swap-cetes',
     'Unwind NDF FX': '/unwinds/ndf/fx',
     'Unwind Swap CEM': '/unwinds/swap/cem',
     'Unwind Swap EDG': '/unwinds/swap/edg',

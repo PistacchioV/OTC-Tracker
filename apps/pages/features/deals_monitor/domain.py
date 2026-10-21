@@ -15,7 +15,8 @@ PREFIXO_UNWIND = 'Unwind/'
 # abaixo e `_ndm_bucket`). `Swap/Equities` e `Swap/CEM` são as pastas que os
 # dois cards já declaravam antes de existir página: ficam, para o dia em que
 # alguém gravar nelas.
-_NDM_SWAP_DIRS = ('Swap/Bullet', 'Swap/Cashflow', 'Swap/Equities', 'Swap/CEM',
+# `Swap/Cetes` (§650) é o swap USD × SOFR das Cetes, Banco × Lawton, da CEM.
+_NDM_SWAP_DIRS = ('Swap/Bullet', 'Swap/Cashflow', 'Swap/Cetes', 'Swap/Equities', 'Swap/CEM',
                   PREFIXO_UNWIND + 'Swap/EDG', PREFIXO_UNWIND + 'Swap/CEM')
 
 # O que a varredura acrescenta ao pkey da linha cuja LOB não diz o card: ela
@@ -264,7 +265,8 @@ def _ndm_pending_times():
 #     MORGAN (`'banco' in cl and 'morgan' in cl`, a grafia do espelho);
 #   · NDF Vanilla e Other Publisher contra o LAWTON (FWD Start fica fora: o
 #     strike só existe na strike set date, e o espelho também não o grava);
-#   · Swap no B2B Banco × Atacama (`swap_deal_ticket.is_b2b`).
+#   · Swap no B2B Banco × Atacama (`swap_deal_ticket.is_b2b`);
+#   · o Swap Cetes, SEMPRE (Banco × Lawton, na carteira do LAWTON — §650).
 # ══════════════════════════════════════════════════════════════════════════
 AWAITING_B3 = 'Awaiting B3 ID'
 
@@ -273,6 +275,7 @@ _INTRAG_BANCO_DIRS = {'NDF/Commodities': 'Intrag/NDF',
                       'Option/FXO': 'Intrag/Option'}
 _INTRAG_LAWTON_DIRS = {'NDF/Vanilla': 'Intrag/NDF', 'NDF/OtherPublisher': 'Intrag/NDF'}
 _INTRAG_SWAP_DIRS = ('Swap/Bullet', 'Swap/Cashflow')
+_INTRAG_CETES_DIRS = ('Swap/Cetes',)
 
 
 def intrag_destino(pkey, d):
@@ -290,12 +293,17 @@ def intrag_destino(pkey, d):
     if pkey in _INTRAG_SWAP_DIRS:
         from apps.pages.platform import swap_deal_ticket     # puro: só o parser do DT
         return 'Intrag/Swap' if swap_deal_ticket.is_b2b(d) else None
+    if pkey in _INTRAG_CETES_DIRS:
+        return 'Intrag/Swap'
     return None
 
 
-def intrag_destino_le(balde):
-    """A entidade do espelho: o fundo que a Intrag carteira — Atacama no swap,
-    Lawton nos demais (INTRAGJP633 × INTRAGJP552, a leitura do `_ndm_deal_le`)."""
+def intrag_destino_le(balde, pkey=''):
+    """A entidade do espelho: o fundo que a Intrag carteira — Atacama no swap
+    (o Cetes é do Lawton), Lawton nos demais (INTRAGJP633 × INTRAGJP552, a
+    leitura do `_ndm_deal_le`)."""
+    if pkey in _INTRAG_CETES_DIRS:
+        return 'LAW'
     return 'ATA' if balde == 'Intrag/Swap' else 'LAW'
 
 

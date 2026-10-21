@@ -70,6 +70,7 @@ _NOTIF_PAGE_URL = {
     'Swap Bullet': '/new_deals-swap-bullet',
     'Onboarding': '/onboarding/tracking-docs',
     'Swap Cashflow': '/new_deals-swap-cashflow',
+    'Swap Cetes': '/new_deals-swap-cetes',
     'Unwind NDF FX': '/unwinds/ndf/fx',
     # As onze recompras do CATALOGO (`features/unwinds/catalog.py`): o rotulo e
     # o `label` da entrada, e o destino o `path` dela.

@@ -125,6 +125,61 @@ _OPT_EDG = (
     ('Adhesion', 'Adhesion', 'text'),
 )
 
+# As colunas do SWAP CETES sao as do `swap_cetes.domain.COLUMNS`, COPIADAS
+# (feature nao importa feature); o `check_swap_cetes.py` cobra a paridade.
+_CETES = (
+    ('Tranche', 'Tranche', 'text'),
+    ('Block', 'Block', 'text'),
+    ('Booking', 'Booking', 'text'),
+    ('Venue', 'Venue', 'text'),
+    ('StartDate', 'Effective', 'date'),
+    ('MaturityDate', 'Maturity', 'date'),
+    ('NotionalUSD', 'USD Notional', 'money'),
+    ('FxRate', 'FX Rate (reference)', 'number'),
+    ('Notional', 'Notional (BRL)', 'money'),
+    ('FixedRate', 'Fixed Rate %', 'number'),
+    ('FixedPayer', 'Pays Fixed', 'text'),
+    ('WePay', 'We Pay', 'text'),
+    ('WeRec', 'We Receive', 'text'),
+    ('Accruals', 'Accruals', 'text'),
+    ('Payments', 'Payments', 'text'),
+    ('FxFixing', 'FX Fixing', 'text'),
+    ('FxSettlement', 'FX Settlement', 'text'),
+    ('Direction', 'Direction', 'text'),
+    ('Adhesion', 'Adhesion', 'text'),
+    ('MyNumber', 'Meu Número', 'text'),
+    ('Subject', 'E-mail Subject', 'text'),
+)
+
+# Os CARDS (mesa, 21/10/2026, §650): as paginas de SWAP mostram uma operacao
+# por card, nao a tabela de dezenas de colunas — a DataTable segue escondida
+# por baixo, como a fonte do Export. O que vai no card e dado daqui:
+# `title`/`subtitle` = [[campo, prefixo]] (campo '' = so o texto), `facts` =
+# [campo, rotulo, tipo] (`daterange` = 'Inicio,Fim'; `count` = tamanho da
+# lista), `meta` = [[campo, rotulo]] no pe do card.
+_CARDS_SWAP = {
+    'title': [['Client', '']],
+    'subtitle': [['LOB', ''], ['Type', ' · ']],
+    'facts': [['StartDate,MaturityDate', 'Start → Maturity', 'daterange'],
+              ['Notional', 'Notional', 'money'],
+              ['CurveA', 'Curve A', 'text'],
+              ['CurveB', 'Curve B', 'text'],
+              ['Currency', 'Currency', 'text'],
+              ['CashFlows', 'Flows', 'count']],
+    'meta': [['B3ID', 'B3 ID'], ['Deal', 'Deal']],
+}
+_CARDS_CETES = {
+    'title': [['Tranche', 'Tranche '], ['Block', ' · ']],
+    'subtitle': [['', 'Banco × Lawton'], ['LOB', ' · ']],
+    'facts': [['StartDate,MaturityDate', 'Effective → Maturity', 'daterange'],
+              ['FixedRate', 'Fixed Rate %', 'number'],
+              ['NotionalUSD', 'USD Notional', 'money'],
+              ['FxRate', 'FX Rate', 'number'],
+              ['Notional', 'Notional (BRL)', 'money'],
+              ['FixedPayer', 'Pays Fixed', 'text']],
+    'meta': [['B3ID', 'B3 ID'], ['MyNumber', 'Meu Número']],
+}
+
 _SEL_COMUM = {'LE': ['JPM', 'ATACAMA'], 'LOB': ['EDG', 'CEM'],
               'Adhesion': ['CGD', 'CSA', 'CGD/CSA', 'SEM ADESAO']}
 _SEL_SWAP = dict(_SEL_COMUM, **{
@@ -153,6 +208,9 @@ def _page(slug, group, product, columns, **kw):
         'accept': ['xlsx', 'xlsm', 'pdf', 'msg', 'eml', 'htm', 'html'],
         'preview_hint': '', 'send_text': '',
         'schedule': [], 'schedule_field': 'CashFlows',
+        # cards: None = a tabela de sempre; mapping: o botao Mapping B3 ID
+        # (`<api>/mapping-b3`); econ_aff: o botao do Economic Affirmation.
+        'cards': None, 'mapping': False, 'econ_aff': True,
     }
     p.update(kw)
     return p
@@ -172,8 +230,26 @@ PAGES = dict((p['path'], p) for p in (
                     'Reset': 'Não', 'CurveACategory': 'JUROS', 'CurveAPct': '100.00',
                     'CurveASign': '+', 'CurveARate': '0.0000', 'CurveBCategory': 'JUROS',
                     'CurveBPct': '100.00', 'CurveBSign': '+', 'CurveBRate': '0.0000'},
-          preview_hint='Double-click a row to preview the B3 files.',
-          send_text='The swap contract and cash flow files are written to Batch Conecta › New.'),
+          preview_hint='Double-click a card to preview the B3 files.',
+          send_text='The swap contract and cash flow files are written to Batch Conecta › New.',
+          cards=_CARDS_SWAP),
+    # O "cetip usd irs" do e-mail das Cetes (§650): Banco × Lawton, o registro
+    # 0301 na versao 1 do layout, nas duas visoes; no Success, a Intrag Swap.
+    _page('swap-cetes', 'Swap', 'Cetes', _CETES + _MAKER,
+          group_lang='nav-swap', product_lang='nav-cetes',
+          hidden=['Booking', 'Venue', 'WePay', 'WeRec', 'Accruals', 'Payments', 'FxSettlement',
+                  'Direction', 'Subject', 'Maker', 'Checker'],
+          readonly=['Maker', 'Checker', 'Notional', 'MyNumber', 'Subject'],
+          selects={'LE': ['JPM'], 'LOB': ['CEM', 'EDG'], 'FixedPayer': ['BANCO', 'LAWTON'],
+                   'Adhesion': ['CGD', 'CSA', 'CGD/CSA', 'SEM ADESAO']},
+          defaults={'LE': 'JPM', 'LOB': 'CEM', 'Adhesion': 'CGD', 'FxFixing': 't-2',
+                    'FixedPayer': 'BANCO', 'WePay': 'USD Fixed rate, Bullet A/360 Mod Following Adj',
+                    'WeRec': 'USD-SOFR-COMPOUND(1d) Bullet A/360 Mod Following Adj'},
+          accept=['msg', 'eml', 'htm', 'html', 'txt'],
+          preview_hint='Double-click a card to preview the B3 files (Banco and Lawton).',
+          send_text='SWAP_CETES_BANCO.txt and SWAP_CETES_LAWTON.txt (contract 0301) are written to '
+                    'Batch Conecta › New.',
+          cards=_CARDS_CETES, mapping=True, econ_aff=False),
     _page('opt-edg', 'Options', 'EDG', _OPT_EDG + _MAKER,
           group_lang='nav-options', product_lang='nav-edg',
           hidden=['ClientTaxId', 'Maker', 'Checker'],
