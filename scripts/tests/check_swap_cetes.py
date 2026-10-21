@@ -298,6 +298,21 @@ def main():
           catalog.page('/new_deals-swap-cashflow')['cards'] is not None)
     tpl = io.open(os.path.join(RAIZ, 'apps', 'templates', 'pages', 'new_deals-swap-bullet.html'), encoding='utf-8').read()
     check('o Bullet carrega o deal-cards.js e desenha #swbCards', 'deal-cards.js' in tpl and 'id="swbCards"' in tpl)
+    # §655: Deal e B3 ID à vista mesmo em branco, as pontas da Cetes, a pílula da LOB
+    cc, cf = p['cards'], catalog.page('/new_deals-swap-cashflow')['cards']
+    check('o card da Cetes começa por Deal, B3 ID, Party (Banco) e Counterparty (o Client, Lawton)',
+          [f[0] for f in cc['facts'][:4]] == ['Deal', 'B3ID', 'Banco', 'Client']
+          and cc['facts'][2][2] == 'fixed' and d['Client'] == 'Lawton')
+    check('Deal e B3 ID primeiro também no Cashflow e no Bullet (fora do pé, onde sumiam vazios)',
+          [f[0] for f in cf['facts'][:2]] == ['Deal', 'B3ID']
+          and not [m for m in cc['meta'] + cf['meta'] if m[0] in ('Deal', 'B3ID')]
+          and tpl.index("t('nd-col-deal', 'Deal')") < tpl.index("t('nd-swb-col-startdate'"))
+    check('a pílula da LOB: a Cetes SEMPRE CEM; Bullet e Cashflow pela LOB da linha',
+          cc['lob'] == {'fixed': 'CEM'} and cf['lob'] == {'field': 'LOB'}
+          and 'lob: function(e){ return String(e.LOB' in tpl)
+    check('a LOB da Cetes não se edita, e o refresh devolve CEM à linha gravada com outra',
+          'LOB' not in commands.EDITABLE and p['selects']['LOB'] == ['CEM']
+          and domain.refresh(dict(d, LOB='EDG'))['LOB'] == 'CEM')
     with app.test_client() as c:
         with c.session_transaction() as s:
             s.update({'authenticated': True, 'user_sid': 'A111111', 'user_name': 'Teste', 'user_role': 'ADMIN',
@@ -345,11 +360,12 @@ def main():
             'window.cards = otcDealCards({ el: "#g", selected: sel, key: function(e){ return e.id; },'
             ' title: function(e){ return e.t; }, subtitle: function(){ return "Banco × Lawton"; },'
             ' status: function(e){ return \'<span class="badge otc-status">\' + e.s + "</span>"; },'
+            ' lob: function(e){ return e.l; },'
             ' facts: [{label: "USD Notional", value: function(e){ return e.n; }}],'
             ' canConfirm: function(e){ return e.s === "New"; }, canSend: function(e){ return e.s === "New" || e.s === "Approved"; },'
             ' onPreview: function(k){ ev.push("preview:" + k); }, onDelete: function(k){ ev.push("delete:" + k); },'
             ' onSelect: function(){ ev.push("sel:" + sel.size); } });'
-            'cards.render([{id: "a", t: "Tranche 111 · #9", s: "New", n: "78,860,000.00"}, {id: "b", t: "Tranche 112 · #9", s: "Sent", n: ""}]);'
+            'cards.render([{id: "a", t: "Tranche 111 · #9", s: "New", n: "78,860,000.00", l: "CEM"}, {id: "b", t: "Tranche 112 · #9", s: "Sent", n: "", l: ""}]);'
             '</script></body></html>' % (st, st, st))
         with sync_playwright() as pw:
             br = pw.chromium.launch()
@@ -374,6 +390,10 @@ def main():
             check('duplo clique = preview; o botão chama a ação da página',
                   'preview:b' in pg.evaluate('ev') and 'delete:b' in pg.evaluate('ev'))
             check('o vazio fica para o card que não tem o valor', '—' in pg.inner_text('.otc-deal-card[data-key="b"]'))
+            lob = pg.evaluate("""() => ['a','b'].map(k => { const x = document.querySelector('.otc-deal-card[data-key="' + k + '"] .otc-deal-card__lob');
+                return x ? [x.textContent, x.dataset.lob, x.classList.contains('otc-status'), getComputedStyle(x).borderRadius] : null; })""")
+            check('a pílula da LOB no cabeçalho (CEM, sem a marca de status); LOB vazia não desenha nada %s' % lob,
+                  lob[0] is not None and lob[0][:3] == ['CEM', 'cem', False] and lob[1] is None)
             br.close()
 
 

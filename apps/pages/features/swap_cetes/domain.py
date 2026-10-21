@@ -215,12 +215,18 @@ def make_deal_id(deal):
     return 'CTS-' + hashlib.sha1(base.encode('utf-8')).hexdigest()[:10].upper()
 
 
+# A Cetes é SEMPRE da CEM (mesa, 21/10/2026, §655): a LOB não se edita, e o
+# `refresh` a repõe na linha antiga que tenha sido gravada com outra — é ela
+# que vai no campo 116 do 0301 e que põe a operação no card CEM do Monitor.
+LOB = 'CEM'
+
+
 def deal_from_block(block, trade_iso, subject=''):
     """Um bloco `cetip usd irs` → o deal da página (Status New). Datas em ISO,
     números como texto de máquina; o Valor Base em BRL já calculado."""
     f = dict((LABELS[k], v) for k, v in (block.get('fields') or {}).items() if k in LABELS)
     d = {
-        'Status': 'New', 'LE': 'JPM', 'LOB': 'CEM', 'Deal': '', 'B3ID': '',
+        'Status': 'New', 'LE': 'JPM', 'LOB': LOB, 'Deal': '', 'B3ID': '',
         'TradeDate': trade_iso, 'Client': 'Lawton',
         'Tranche': tranche_of(subject), 'Block': '#' + str(block.get('num') or ''),
         'Booking': f.get('Booking', ''), 'Venue': f.get('Venue', ''),
@@ -249,6 +255,7 @@ def refresh(deal):
     em BRL, quem paga a fixa e o D-n — o que a mesa digitou nos derivados
     vale só até ela mexer num insumo."""
     deal['Notional'] = notional_brl(deal)
+    deal['LOB'] = LOB
     if not str(deal.get('FixedPayer') or '').strip():
         deal['FixedPayer'] = fixed_payer(deal.get('Direction'), deal.get('WePay'))
     deal['QuoteDateCode'] = quote_code(deal.get('FxFixing')) or str(deal.get('QuoteDateCode') or '')

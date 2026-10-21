@@ -1881,6 +1881,20 @@ $otc-status-tones: ("primary": var(--otc-accent), "secondary": rgb(110, 110, 128
   small { display: block; margin-top: 2px; font-size: 12.5px; color: var(--otc-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 .otc-deal-card__head > .badge { flex: none; }
+// A LOB do card (§655): pílula SUAVE (a do status é cheia e branca, §6d), a
+// cor pelo `data-lob`; o texto mistura a matiz com a cor do texto do tema, para
+// ler no claro e no escuro. LOB nova ganha o seu tom aqui.
+.otc-deal-card__lob {
+  --lob: var(--otc-text-3);
+  flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 8px; margin-top: 1px;
+  border-radius: var(--otc-r-pill);
+  font: 650 11px/1 var(--otc-font); letter-spacing: .04em;
+  color: color-mix(in srgb, var(--lob) 72%, var(--otc-text));
+  background: color-mix(in srgb, var(--lob) 15%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lob) 32%, transparent);
+  &[data-lob="cem"] { --lob: var(--otc-teal); }
+  &[data-lob="edg"] { --lob: var(--otc-purple); }
+}
 .otc-deal-card__facts {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 16px; margin: 0;
   dt { font: 650 10.5px/1.2 var(--otc-font); letter-spacing: .05em; text-transform: uppercase; color: var(--otc-text-3); }

@@ -667,6 +667,7 @@ $(document).ready(function() {
             return (a || b) ? (a || '—') + ' → ' + (b || '—') : '';
         }
         if (type === 'count') { var n = (e[field] || []).length; return n ? String(n) : ''; }
+        if (type === 'fixed') return field;
         var v = e[field] == null ? '' : String(e[field]);
         if (!v) return '';
         if (type === 'money') return fmtMoney(v);
@@ -686,8 +687,9 @@ $(document).ready(function() {
         title: function(e){ return cardText(e, PAGE.cards.title) || e._id; },
         subtitle: function(e){ return cardText(e, PAGE.cards.subtitle); },
         status: function(e){ return statusBadge(e.Status); },
+        lob: function(e){ var l = PAGE.cards.lob || {}; return l.fixed || (l.field ? String(e[l.field] || '').trim() : ''); },
         facts: (PAGE.cards.facts || []).map(function(f){
-            return { label: t('nd-swb-col-' + f[0].toLowerCase(), f[1]), wide: f[2] === 'daterange',
+            return { label: t(f[3] || ('nd-swb-col-' + f[0].toLowerCase()), f[1]), wide: f[2] === 'daterange',
                      value: function(e){ return cardValue(e, f[0], f[2]); } };
         }),
         meta: function(e){

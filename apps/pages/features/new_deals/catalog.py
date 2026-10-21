@@ -155,29 +155,43 @@ _CETES = (
 # por card, nao a tabela de dezenas de colunas — a DataTable segue escondida
 # por baixo, como a fonte do Export. O que vai no card e dado daqui:
 # `title`/`subtitle` = [[campo, prefixo]] (campo '' = so o texto), `facts` =
-# [campo, rotulo, tipo] (`daterange` = 'Inicio,Fim'; `count` = tamanho da
-# lista), `meta` = [[campo, rotulo]] no pe do card.
+# [campo, rotulo, tipo[, chave de traducao]] (`daterange` = 'Inicio,Fim';
+# `count` = tamanho da lista; `fixed` = o proprio `campo` e o texto; sem
+# chave, `nd-swb-col-<campo>`), `meta` =
+# [[campo, rotulo]] no pe do card, `lob` = a pilula CEM/EDG do cabecalho
+# ({'field': campo} ou {'fixed': valor}). Deal e B3 ID sao os DOIS PRIMEIROS fatos
+# (mesa, 21/10/2026, §655): fato vazio mostra '—', e no pe eles sumiam
+# enquanto estavam em branco — que e justamente quando a mesa os procura.
+_FACTS_ID = [['Deal', 'Deal', 'text', 'nd-col-deal'],
+             ['B3ID', 'B3 ID', 'text', 'nd-col-b3-id']]
 _CARDS_SWAP = {
     'title': [['Client', '']],
-    'subtitle': [['LOB', ''], ['Type', ' · ']],
-    'facts': [['StartDate,MaturityDate', 'Start → Maturity', 'daterange'],
+    'subtitle': [['Type', '']],
+    'lob': {'field': 'LOB'},
+    'facts': _FACTS_ID + [
+              ['StartDate,MaturityDate', 'Start → Maturity', 'daterange'],
               ['Notional', 'Notional', 'money'],
               ['CurveA', 'Curve A', 'text'],
               ['CurveB', 'Curve B', 'text'],
               ['Currency', 'Currency', 'text'],
               ['CashFlows', 'Flows', 'count']],
-    'meta': [['B3ID', 'B3 ID'], ['Deal', 'Deal']],
+    'meta': [['SPN', 'SPN']],
 }
 _CARDS_CETES = {
     'title': [['Tranche', 'Tranche '], ['Block', ' · ']],
-    'subtitle': [['', 'Banco × Lawton'], ['LOB', ' · ']],
-    'facts': [['StartDate,MaturityDate', 'Effective → Maturity', 'daterange'],
+    'subtitle': [['', 'Banco × Lawton']],
+    'lob': {'fixed': 'CEM'},                 # a Cetes e sempre da CEM (§655)
+    # as duas pontas: o Banco e o Lawton (o `Client` do deal, §655)
+    'facts': _FACTS_ID + [
+              ['Banco', 'Party', 'fixed', 'nd-card-party'],
+              ['Client', 'Counterparty', 'text', 'nd-card-counterparty'],
+              ['StartDate,MaturityDate', 'Effective → Maturity', 'daterange'],
               ['FixedRate', 'Fixed Rate %', 'number'],
               ['NotionalUSD', 'USD Notional', 'money'],
               ['FxRate', 'FX Rate', 'number'],
               ['Notional', 'Notional (BRL)', 'money'],
               ['FixedPayer', 'Pays Fixed', 'text']],
-    'meta': [['B3ID', 'B3 ID'], ['MyNumber', 'Meu Número']],
+    'meta': [['MyNumber', 'Meu Número']],
 }
 
 _SEL_COMUM = {'LE': ['JPM', 'ATACAMA'], 'LOB': ['EDG', 'CEM'],
@@ -240,7 +254,7 @@ PAGES = dict((p['path'], p) for p in (
           hidden=['Booking', 'Venue', 'WePay', 'WeRec', 'Accruals', 'Payments', 'FxSettlement',
                   'Direction', 'Subject', 'Maker', 'Checker'],
           readonly=['Maker', 'Checker', 'Notional', 'MyNumber', 'Subject'],
-          selects={'LE': ['JPM'], 'LOB': ['CEM', 'EDG'], 'FixedPayer': ['BANCO', 'LAWTON'],
+          selects={'LE': ['JPM'], 'LOB': ['CEM'], 'FixedPayer': ['BANCO', 'LAWTON'],
                    'Adhesion': ['CGD', 'CSA', 'CGD/CSA', 'SEM ADESAO']},
           defaults={'LE': 'JPM', 'LOB': 'CEM', 'Adhesion': 'CGD', 'FxFixing': 't-2',
                     'FixedPayer': 'BANCO', 'WePay': 'USD Fixed rate, Bullet A/360 Mod Following Adj',

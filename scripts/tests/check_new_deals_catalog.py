@@ -105,7 +105,9 @@ def main():
                   for f in list(p['selects']) + list(p['selects_from_mapping'])))
         check(path + ': default de campo que existe',
               all(f in campos or f in CABECA for f in p['defaults']))
-        check(path + ': a LOB oferece CEM e EDG', set(p['selects'].get('LOB') or []) == {'CEM', 'EDG'})
+        # a Cetes é SEMPRE da CEM (mesa, 21/10/2026, §655); as outras juntam as duas mesas
+        lobs = {'CEM'} if path == '/new_deals-swap-cetes' else {'CEM', 'EDG'}
+        check(path + ': a LOB oferece ' + ' e '.join(sorted(lobs)), set(p['selects'].get('LOB') or []) == lobs)
         check(path + ': cadastro que existe',
               all(k in R._MAPPING_DEFS for k in p['selects_from_mapping'].values()))
     tpl_bullet = io.open(os.path.join(ROOT, 'apps', 'templates', 'pages',
