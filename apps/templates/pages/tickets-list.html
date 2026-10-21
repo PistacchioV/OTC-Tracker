@@ -6,9 +6,10 @@
 <!-- SweetAlert2 CSS: sem ela o Swal.fire renderiza sem estilo. O formulário de
      novo ticket vive dentro de um Swal (a página /ticket-create foi removida). -->
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
-{# Só o que é DESTA tela: a lista de tickets não é DataTable (a regra do tema
-   não a alcança), o logo do agente por tema, a ordenação pelo cabeçalho, o
-   dropzone de imagens e os campos do Swal do New Ticket (pendurado no body). #}
+{# Só o que é DESTA tela: o logo do agente por tema, as iniciais do avatar, o
+   dropzone de imagens e os campos do Swal do New Ticket (pendurado no body).
+   A lista É DataTable (mesa, 21/10/2026): é o que liga o funil "de Excel" no
+   cabeçalho (excel-filter.js), como em toda tabela do app. #}
 <style>
 #tk-table thead th { font-size: .7rem; vertical-align: middle !important; text-align: center !important; }
 #tk-table tbody td { font-size: .8rem; vertical-align: middle; text-align: center; }
@@ -18,8 +19,9 @@
 [data-bs-theme="dark"] #tk-page .tk-agent-logo--light { display: none; }
 #tk-page .tk-empty { padding: 44px 16px; text-align: center; color: var(--otc-text-3); }
 #tk-page .tk-due-empty { color: var(--otc-text-3); }
-#tk-page th[data-tk-sort] { cursor: pointer; user-select: none; }
-#tk-page th[data-tk-sort]:hover { color: var(--otc-text); }
+/* As iniciais saem do atributo, não do texto: o funil lê a célula pelo
+   texto, e "GL Giulliano…" viraria o valor do filtro. */
+#tk-page .tk-initials::before { content: attr(data-initials); }
 
 .tk-dropzone { padding: 12px; text-align: center; cursor: pointer; font-size: .8rem; user-select: none; }
 .tk-drop-thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
@@ -135,38 +137,27 @@
                         <table id="tk-table" class="table table-custom table-centered table-hover w-100 mb-0">
                             <thead class="bg-light align-middle bg-opacity-25 thead-sm text-nowrap">
                                 <tr class="text-uppercase fs-xxs">
-                                    <th class="ps-3" data-tk-sort="seq" data-lang="tk-col-id">ID</th>
-                                    <th data-tk-sort="requester_name" data-lang="tk-col-requested">Requested By</th>
-                                    <th data-tk-sort="subject" data-lang="tk-col-subject">Ticket Subject</th>
+                                    <th class="ps-3" data-lang="tk-col-id">ID</th>
+                                    <th data-lang="tk-col-requested">Requested By</th>
+                                    <th data-lang="tk-col-subject">Ticket Subject</th>
                                     <th data-lang="tk-col-agent">Assigned Agent</th>
-                                    <th data-tk-sort="priority" data-lang="tk-col-priority">Priority</th>
-                                    <th data-tk-sort="status" data-lang="tk-col-status">Status</th>
-                                    <th data-tk-sort="created_at" data-lang="tk-col-created">Date Created</th>
-                                    <th data-tk-sort="due_date" data-lang="tk-col-due">Due Date</th>
+                                    <th data-lang="tk-col-priority">Priority</th>
+                                    <th data-lang="tk-col-status">Status</th>
+                                    <th data-lang="tk-col-created">Date Created</th>
+                                    <th data-lang="tk-col-due">Due Date</th>
                                     <th class="text-center" style="width: 1%;" data-lang="tk-col-actions">Actions</th>
                                 </tr>
                             </thead>
                             <tbody class="text-nowrap" id="tk-tbody"></tbody>
                         </table>
                     </div>
-                    <!-- Tabela ESPELHO, só para o export: a tabela da tela é
-                         montada à mão (paginação, ordenação e filtros próprios),
-                         então não há DataTable em que pendurar os Buttons. Ela é
-                         preenchida com o resultado de `filtered()` no clique, o
-                         que garante que o arquivo saia com o que está na tela.
-                         Fora do fluxo por posição, e não `display:none` — o
-                         DataTables precisa medir a tabela para o Print e o PDF. -->
+                    <!-- Tabela ESPELHO, só para o export: as células da tela são
+                         HTML (avatar, logos, badges), e o arquivo sai com o texto
+                         de `exportRow`. Ela é preenchida no clique com as linhas
+                         que a grade mostra — busca, Filter By, funis e ordenação
+                         aplicados. Fora do fluxo por posição, e não `display:none`
+                         — o DataTables precisa medir a tabela para o Print e o PDF. -->
                     <table id="tk-export-table" class="d-none"><thead><tr></tr></thead><tbody></tbody></table>
-                    <div class="tk-empty d-none" id="tk-empty">
-                        <i class="ti ti-ticket-off fs-24 d-block mb-2"></i>
-                        <span data-lang="tk-none">No tickets yet. Use “New Ticket” to open one.</span>
-                    </div>
-                </div>
-                <div class="card-footer border-0">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div id="tk-pag-info"></div>
-                        <div id="tk-pagination"></div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -217,11 +208,13 @@ document.addEventListener('DOMContentLoaded', function () {
     'use strict';
 
     // Minimal i18n (falls back to the data-lang English text already in the DOM).
+    // A grade nasce DEPOIS das traduções: os textos do DataTables (info, tabela
+    // vazia) são lidos uma vez, na init.
     var _T = {};
-    fetch('/static/data/translations/' +
+    var langReady = fetch('/static/data/translations/' +
           (localStorage.getItem('__OTC_TRACKER_LANG__') || 'en').slice(0, 2) + '.json')
         .then(function (r) { return r.json(); })
-        .then(function (d) { _T = d || {}; render(); })
+        .then(function (d) { _T = d || {}; })
         .catch(function () {});
     function t(k, fb) { return _T[k] || fb; }
 
@@ -235,17 +228,9 @@ document.addEventListener('DOMContentLoaded', function () {
     var USERS_ROOT = '{{ config.ASSETS_ROOT }}/images/users/';
     var STATE = { tickets: [], counts: {}, isMaster: false, me: {},
                   statuses: [], priorities: [], agent: 'OTC Tracker Team' };
-    // `dir: 'asc'` — a lista abre do PRIMEIRO ticket para o último, na ordem em
-    // que foram abertos. `perPage` casa com o valor marcado no select; mudar um
-    // sem o outro faz a primeira pintura discordar do que o campo mostra.
-    // A lista abre pela FILA: STATUS primeiro (New → In Progress → Pending →
-    // Resolved → Closed) e, dentro do status, o ID do mais ANTIGO para o mais
-    // novo. Quem abre a tela quer ver o que falta atender, e o que já terminou
-    // no fim; abrindo por ID, o resolvido de ontem ficava no meio do que está
-    // aberto hoje. O desempate por `seq` é aplicado em QUALQUER ordenação (ver
-    // `filtered`), então o chamado mais antigo encabeça sempre.
-    var UI = { q: '', status: '', priority: '', page: 1, perPage: 25,
-               sort: 'status', dir: 'asc' };
+    // A busca e o "Filter By" da barra. Paginação e ordenação são do DataTables
+    // (`initTable`), e os funis do cabeçalho são do excel-filter.js.
+    var UI = { q: '', status: '', priority: '' };
 
     var STATUS_CLASS = {
         'New':         'bg-primary-subtle text-primary',
@@ -309,10 +294,13 @@ document.addEventListener('DOMContentLoaded', function () {
                     'src="' + USERS_ROOT + encodeURIComponent(sid) + '.jpg" ' +
                     'onerror="this.onerror=null;this.style.display=\'none\';' +
                              'this.nextElementSibling.style.display=\'inline-flex\';" />' +
-                '<span class="avatar-title bg-primary-subtle text-primary rounded-circle fw-bold fs-xxs" ' +
-                    'style="display:none;width:1.5rem;height:1.5rem;">' + esc(initials(name, sid)) + '</span>' +
+                '<span class="avatar-title bg-primary-subtle text-primary rounded-circle fw-bold fs-xxs tk-initials" ' +
+                    'data-initials="' + esc(initials(name, sid)) + '" ' +
+                    'style="display:none;width:1.5rem;height:1.5rem;"></span>' +
             '</span>' +
-            '<span>' + esc(name) + '</span>' +
+            // O espaço entre nome e SID não aparece (o flex o ignora), mas é ele
+            // que separa os dois no texto que o funil lista.
+            '<span>' + esc(name) + '</span> ' +
             (tk.requester_sid ? '<small class="text-muted">' + esc(tk.requester_sid) + '</small>' : '') +
         '</div>';
     }
@@ -327,97 +315,112 @@ document.addEventListener('DOMContentLoaded', function () {
                '<span>' + esc(STATE.agent) + '</span></div>';
     }
 
-    function sortValue(tk, key) {
-        if (key === 'priority') { return PRIORITY_RANK[tk.priority] || 0; }
-        if (key === 'status') { return STATUS_RANK[tk.status] || 0; }
-        if (key === 'seq') { return tk.seq || 0; }
-        return String(tk[key] || '').toLowerCase();
-    }
-
-    function filtered() {
-        var q = UI.q.trim().toLowerCase();
-        var out = STATE.tickets.filter(function (tk) {
-            if (UI.status && tk.status !== UI.status) { return false; }
-            if (UI.priority && tk.priority !== UI.priority) { return false; }
-            if (!q) { return true; }
-            return [tk.id, tk.requester_name, tk.requester_sid, tk.subject,
-                    tk.status, tk.priority, (tk.tags || []).join(' ')]
-                .join(' ').toLowerCase().indexOf(q) !== -1;
-        });
-        out.sort(function (a, b) {
-            var va = sortValue(a, UI.sort), vb = sortValue(b, UI.sort);
-            if (va < vb) { return UI.dir === 'asc' ? -1 : 1; }
-            if (va > vb) { return UI.dir === 'asc' ? 1 : -1; }
-            // Empate → o ID mais ANTIGO primeiro, SEMPRE em ordem crescente e
-            // independente do `dir` da coluna: o desempate é a fila de
-            // atendimento, não uma segunda ordenação que se inverte junto. Sem
-            // ele, chamados do mesmo status saíam na ordem em que o servidor os
-            // devolveu, que muda a cada carga.
-            return (a.seq || 0) - (b.seq || 0);
-        });
-        return out;
-    }
-
-    function rowHtml(tk) {
+    function actionsCell(tk) {
         var href = '/ticket-details?id=' + encodeURIComponent(tk.id);
         var del = tk.can_delete
             ? '<a class="btn btn-danger btn-sm rounded-circle tk-del" href="#" data-id="' + esc(tk.id) +
               '" title="' + esc(t('tk-delete', 'Delete')) + '"><i class="ti ti-trash"></i></a>'
             : '';
-        return '<tr>' +
-            '<td class="ps-3"><a class="fw-semibold link-reset" href="' + href + '">#' + esc(tk.id) + '</a></td>' +
-            '<td>' + requesterCell(tk) + '</td>' +
-            '<td>' + esc(tk.subject) + '</td>' +
-            '<td>' + agentCell() + '</td>' +
-            '<td>' + badgePriority(tk.priority) + '</td>' +
-            '<td>' + badgeStatus(tk.status) + '</td>' +
-            '<td>' + fmtDateTime(tk.created_at) + '</td>' +
-            // Due Date nasce vazio de propósito: só o master preenche.
-            '<td>' + (tk.due_date ? esc(fmtDate(tk.due_date))
-                                  : '<span class="tk-due-empty">&mdash;</span>') + '</td>' +
-            '<td><div class="d-flex align-items-center justify-content-center gap-1">' +
+        return '<div class="d-flex align-items-center justify-content-center gap-1">' +
                 '<a class="btn btn-primary btn-sm rounded-circle" href="' + href + '" title="' +
                     esc(t('tk-view', 'View')) + '"><i class="ti ti-eye"></i></a>' + del +
-            '</div></td></tr>';
+            '</div>';
     }
 
-    function render() {
-        var rows = filtered();
-        var total = rows.length;
-        var pages = Math.ceil(total / UI.perPage) || 1;
-        if (UI.page > pages) { UI.page = pages; }
-        var start = (UI.page - 1) * UI.perPage;
-        var slice = rows.slice(start, start + UI.perPage);
+    // ── A grade (DataTable) ─────────────────────────────────────────────
+    // Cada coluna desenha o HTML na exibição e ordena por um valor PRÓPRIO
+    // (`sort`/`type`): Priority e Status pela severidade e pela fila, não pelo
+    // nome — por nome "Urgent" cairia depois de "Low" e "Closed" antes de
+    // "New"; o ID pelo `seq`; as datas pelo ISO cru. O funil lê o que a célula
+    // MOSTRA (render 'display', sem HTML).
+    var table = null;
+    var tableNode = document.getElementById('tk-table');
+    function coluna(desenho, ordena, extra) {
+        var c = { data: null, render: function (_, tipo, tk) {
+            return tipo === 'display' ? desenho(tk) : ordena(tk);
+        } };
+        Object.keys(extra || {}).forEach(function (k) { c[k] = extra[k]; });
+        return c;
+    }
 
-        document.getElementById('tk-tbody').innerHTML = slice.map(rowHtml).join('');
-        document.getElementById('tk-empty').classList.toggle('d-none', total > 0);
+    // Busca e "Filter By" filtram NESTA tabela pelo ext.search, como antes
+    // (mesmos campos, inclusive as tags, que não são coluna) — não pelo
+    // `column().search()`, que o excel-filter.js zera a cada draw.
+    $.fn.dataTable.ext.search.push(function (settings, _data, _idx, tk) {
+        if (settings.nTable !== tableNode || !tk) { return true; }
+        if (UI.status && tk.status !== UI.status) { return false; }
+        if (UI.priority && tk.priority !== UI.priority) { return false; }
+        var q = UI.q.trim().toLowerCase();
+        if (!q) { return true; }
+        return [tk.id, tk.requester_name, tk.requester_sid, tk.subject,
+                tk.status, tk.priority, (tk.tags || []).join(' ')]
+            .join(' ').toLowerCase().indexOf(q) !== -1;
+    });
 
+    function initTable() {
+        table = $(tableNode).DataTable({
+            data: [],
+            dom: "rt<'d-md-flex justify-content-between align-items-center px-3 py-2'ip>",
+            autoWidth: true,
+            pageLength: 25,
+            pagingType: 'simple_numbers',
+            // A lista abre pela FILA: STATUS primeiro (New → In Progress →
+            // Pending → Resolved → Closed) e, dentro do status, o ID do mais
+            // ANTIGO para o mais novo. Quem abre a tela quer ver o que falta
+            // atender, e o que já terminou no fim.
+            order: [[5, 'asc']],
+            // Empate → o ID mais ANTIGO primeiro, SEMPRE crescente e em
+            // QUALQUER ordenação: o desempate é a fila de atendimento, não uma
+            // segunda ordenação que se inverte junto. Sem ele, chamados do mesmo
+            // status saíam na ordem em que o servidor os devolveu.
+            orderFixed: { post: [[0, 'asc']] },
+            columns: [
+                coluna(function (tk) {
+                    return '<a class="fw-semibold link-reset" href="/ticket-details?id=' +
+                           encodeURIComponent(tk.id) + '">#' + esc(tk.id) + '</a>';
+                }, function (tk) { return tk.seq || 0; }, { className: 'ps-3', type: 'num' }),
+                coluna(requesterCell, function (tk) {
+                    return String(tk.requester_name || tk.requester_sid || '').toLowerCase();
+                }),
+                coluna(function (tk) { return esc(tk.subject); },
+                       function (tk) { return String(tk.subject || '').toLowerCase(); }),
+                coluna(agentCell, function () { return STATE.agent || ''; }, { orderable: false }),
+                coluna(function (tk) { return badgePriority(tk.priority); },
+                       function (tk) { return PRIORITY_RANK[tk.priority] || 0; }, { type: 'num' }),
+                coluna(function (tk) { return badgeStatus(tk.status); },
+                       function (tk) { return STATUS_RANK[tk.status] || 0; }, { type: 'num' }),
+                coluna(function (tk) { return fmtDateTime(tk.created_at); },
+                       function (tk) { return String(tk.created_at || ''); }),
+                // Due Date nasce vazio de propósito: só o master preenche.
+                coluna(function (tk) {
+                    return tk.due_date ? esc(fmtDate(tk.due_date)) : '<span class="tk-due-empty">&mdash;</span>';
+                }, function (tk) { return String(tk.due_date || ''); }),
+                coluna(actionsCell, function () { return ''; },
+                       { orderable: false, searchable: false, className: 'text-center' })
+            ],
+            language: {
+                info: t('tk-showing', 'Showing') + ' _START_–_END_ ' + t('tk-of', 'of') + ' _TOTAL_',
+                infoEmpty: '', infoFiltered: '',
+                emptyTable: '<div class="tk-empty"><i class="ti ti-ticket-off fs-24 d-block mb-2"></i>' +
+                            esc(t('tk-none', 'No tickets yet. Use “New Ticket” to open one.')) + '</div>',
+                zeroRecords: '<div class="tk-empty"><i class="ti ti-filter-off fs-24 d-block mb-2"></i>' +
+                             esc(t('tk-none-match', 'No tickets match the filters.')) + '</div>'
+            }
+        });
+    }
+
+    function renderCounts() {
         var c = STATE.counts || {};
         document.getElementById('tk-count-open').textContent = c.open || 0;
         document.getElementById('tk-count-pending').textContent = c.pending || 0;
         document.getElementById('tk-count-resolved').textContent = c.resolved || 0;
         document.getElementById('tk-count-closed').textContent = c.closed || 0;
+    }
 
-        document.getElementById('tk-pag-info').textContent = total
-            ? t('tk-showing', 'Showing') + ' ' + (start + 1) + '–' + Math.min(start + UI.perPage, total) +
-              ' ' + t('tk-of', 'of') + ' ' + total
-            : '';
-
-        var pag = '';
-        if (pages > 1) {
-            pag = '<ul class="pagination pagination-sm mb-0">';
-            pag += '<li class="page-item' + (UI.page === 1 ? ' disabled' : '') +
-                   '"><a class="page-link tk-page" href="#" data-p="' + (UI.page - 1) + '">&laquo;</a></li>';
-            for (var i = 1; i <= pages; i++) {
-                pag += '<li class="page-item' + (i === UI.page ? ' active' : '') +
-                       '"><a class="page-link tk-page" href="#" data-p="' + i + '">' + i + '</a></li>';
-            }
-            pag += '<li class="page-item' + (UI.page === pages ? ' disabled' : '') +
-                   '"><a class="page-link tk-page" href="#" data-p="' + (UI.page + 1) + '">&raquo;</a></li></ul>';
-        }
-        document.getElementById('tk-pagination').innerHTML = pag;
-
-        if (window.lucide && window.lucide.createIcons) { window.lucide.createIcons(); }
+    function render() {
+        renderCounts();
+        if (!table) { return; }
+        table.clear().rows.add(STATE.tickets).draw(false);
     }
 
     function fillSelect(el, values, allLabel) {
@@ -675,25 +678,27 @@ document.addEventListener('DOMContentLoaded', function () {
     // ── Wiring ──────────────────────────────────────────────────────────
     document.getElementById('tk-new-btn').addEventListener('click', openNewTicket);
 
+    // `draw()` sem argumento volta à primeira página, como a busca nova pede.
+    function redraw() { if (table) { table.draw(); } }
     document.getElementById('tk-search').addEventListener('input', function () {
-        UI.q = this.value; UI.page = 1; render();
+        UI.q = this.value; redraw();
     });
     document.getElementById('tk-filter-status').addEventListener('change', function () {
-        UI.status = this.value; UI.page = 1; render();
+        UI.status = this.value; redraw();
     });
     document.getElementById('tk-filter-priority').addEventListener('change', function () {
-        UI.priority = this.value; UI.page = 1; render();
+        UI.priority = this.value; redraw();
     });
 
     // ── Export ───────────────────────────────────────────────────────────────
-    // A tabela da tela é montada à mão, então não há DataTable em que pendurar
-    // os Buttons. Em vez de reescrever CSV/xlsx/PDF aqui (xlsx é um zip, o PDF
-    // precisa de layout), o export monta uma tabela ESPELHO invisível com o
-    // resultado de `filtered()` e deixa os Buttons do padrão fazerem o resto.
+    // As células da grade são HTML (avatar, logos, badges, a hora num <small>),
+    // e o arquivo sai com o texto de `exportRow`: o export monta uma tabela
+    // ESPELHO invisível e deixa os Buttons do padrão fazerem o resto (xlsx é um
+    // zip, o PDF precisa de layout).
     //
-    // O espelho é preenchido A CADA clique: o arquivo tem de sair com a busca, os
-    // filtros e a ordenação que estão na tela — e com TODAS as linhas, não só a
-    // página aberta, que é o que `modifier: {page:'all'}` faz nas demais telas.
+    // O espelho é preenchido A CADA clique com as linhas que a grade mostra: a
+    // busca, o Filter By, os funis e a ordenação — e TODAS as páginas, não só a
+    // aberta, que é o que `modifier: {page:'all'}` faz nas demais telas.
     // A coluna Actions fica de fora (são botões), como em toda exportação do app.
     // Chave de tradução + rótulo em inglês, na ORDEM das colunas da tela. As
     // chaves são as mesmas do <thead>, então o cabeçalho do arquivo sai no idioma
@@ -749,46 +754,27 @@ document.addEventListener('DOMContentLoaded', function () {
             var dt = exportTable();
             if (!dt) { return; }
             dt.clear();
-            dt.rows.add(filtered().map(exportRow));
+            var vistos = table ? table.rows({ search: 'applied', order: 'applied' }).data().toArray() : [];
+            dt.rows.add(vistos.map(exportRow));
             dt.draw(false);
             dt.button(a.getAttribute('data-tk-export') + ':name').trigger();
         });
     });
 
     document.getElementById('tk-per-page').addEventListener('change', function () {
-        // 'all' vira um número grande em vez de um caso especial: `Math.ceil` e
-        // `slice` continuam funcionando, a paginação some sozinha (1 página) e o
-        // "Showing 1–N of N" fecha, porque ele já usa `Math.min(..., total)`.
-        UI.perPage = this.value === 'all' ? Number.MAX_SAFE_INTEGER
-                                          : (parseInt(this.value, 10) || 25);
-        UI.page = 1;
-        render();
+        // 'all' é o -1 do DataTables: uma página só, com todas as linhas.
+        if (!table) { return; }
+        table.page.len(this.value === 'all' ? -1 : (parseInt(this.value, 10) || 25)).draw();
     });
 
-    document.querySelectorAll('#tk-page th[data-tk-sort]').forEach(function (th) {
-        th.addEventListener('click', function () {
-            var key = th.getAttribute('data-tk-sort');
-            if (UI.sort === key) { UI.dir = UI.dir === 'asc' ? 'desc' : 'asc'; }
-            else { UI.sort = key; UI.dir = 'asc'; }
-            render();
-        });
-    });
-
-    // Delegação: as linhas são reescritas a cada render, então listener por
-    // botão morreria no primeiro re-render.
-    document.getElementById('tk-tbody').addEventListener('click', function (ev) {
+    // Delegação no nó da tabela: as linhas são reescritas a cada draw, então
+    // listener por botão morreria no primeiro redesenho.
+    tableNode.addEventListener('click', function (ev) {
         var del = ev.target.closest('.tk-del');
         if (del) { ev.preventDefault(); deleteTicket(del.getAttribute('data-id')); }
     });
-    document.getElementById('tk-pagination').addEventListener('click', function (ev) {
-        var a = ev.target.closest('.tk-page');
-        if (!a) { return; }
-        ev.preventDefault();
-        var p = parseInt(a.getAttribute('data-p'), 10);
-        if (p >= 1) { UI.page = p; render(); }
-    });
 
-    load();
+    langReady.then(function () { initTable(); return load(); });
 });
 </script>
 {% endblock extra_javascript %}

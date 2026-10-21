@@ -1711,6 +1711,7 @@
   "tk-none": "Aún no hay tickets. Usa “Nuevo Ticket” para abrir uno.",
   "tk-showing": "Mostrando",
   "tk-of": "de",
+  "tk-none-match": "Ningún ticket con estos filtros.",
   "tk-view": "Ver",
   "tk-delete": "Eliminar",
   "tk-new-title": "Crear Nuevo Ticket de Soporte",
