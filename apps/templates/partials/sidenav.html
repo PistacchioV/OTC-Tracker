@@ -665,23 +665,30 @@
                                     </a>
                                     <div class="collapse" id="newDealsDCE">
                                         <ul class="sub-menu">
+                                            <!-- ATALHOS para as telas da Intrag › DCE (não existe página de
+                                                 DCE própria do New Deals): `data-nav-alias` diz ao menu que o
+                                                 dono da página é a Intrag. Clicado aqui, o menu acende AQUI;
+                                                 aberta por favorito ou link, acende Intrag › DCE (otc.js,
+                                                 findActive). Sem a marca, Intrag › DCE › Option abria New
+                                                 Deals › DCE › Option — e foi por isso que o NDF chegou a sair
+                                                 daqui em 15/09. -->
                                             <li class="side-nav-item">
-                                                <a href="/intrag-dce-dfw" class="side-nav-link">
+                                                <a href="/intrag-dce-dfw" class="side-nav-link" data-nav-alias>
                                                     <span class="menu-text" data-lang="nav-deliverable-forward">Deliverable Forward</span>
                                                 </a>
                                             </li>
-                                            <!-- A página de DCE NDF mora em Intrag › DCE › NDF, e é só de lá
-                                                 que ela se abre. Este submenu é de New Deals e não existe
-                                                 página de DCE própria dele: o item aqui levava a mesa à
-                                                 tela da Intrag por um caminho que não é o dela. Os três
-                                                 irmãos abaixo têm a mesma forma — ficam até a mesa dizer. -->
                                             <li class="side-nav-item">
-                                                <a href="/intrag-dce-option" class="side-nav-link">
+                                                <a href="/intrag-dce-ndf" class="side-nav-link" data-nav-alias>
+                                                    <span class="menu-text" data-lang="nav-ndf">NDF</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/intrag-dce-option" class="side-nav-link" data-nav-alias>
                                                     <span class="menu-text">Option</span>
                                                 </a>
                                             </li>
                                             <li class="side-nav-item">
-                                                <a href="/intrag-dce-swap" class="side-nav-link">
+                                                <a href="/intrag-dce-swap" class="side-nav-link" data-nav-alias>
                                                     <span class="menu-text">Swap</span>
                                                 </a>
                                             </li>

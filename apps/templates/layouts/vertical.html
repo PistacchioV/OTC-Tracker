@@ -41,7 +41,9 @@
             var head = document.querySelector('.content-page .page-title-head');
             if (!head || head.querySelector('[class*="-product-icon"], h4 > i.ti:first-child, h5 > i.ti:first-child')) return;
             var h = head.querySelector('h4, h5');
-            var link = document.querySelector('.side-nav a.side-nav-link[href="' + location.pathname + '"]');
+            // o ícone é o do menu DONO da página, não o de um atalho (data-nav-alias)
+            var sel = '.side-nav a.side-nav-link[href="' + location.pathname + '"]';
+            var link = document.querySelector(sel + ':not([data-nav-alias])') || document.querySelector(sel);
             if (!h) return;
             var glyph = null;
             // O desenho antigo (recons, Track Confirmations, Onboarding…): um ícone

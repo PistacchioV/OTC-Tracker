@@ -299,13 +299,36 @@
   function labelOf(n) { return n.textEl ? n.textEl.textContent.trim() : (n.a ? n.a.textContent.trim() : ''); }
   function langOf(n) { return n.textEl ? n.textEl.getAttribute('data-lang') : null; }
   function curPath() { return (window.location.pathname || '/').replace(/\/+$/, '') || '/'; }
+  // A MESMA página pode estar em dois lugares do menu: Option, Swap, DFW e NDF
+  // da Intrag › DCE têm atalho em New Deals › DCE.  Acender a PRIMEIRA folha com
+  // o endereço abria New Deals › DCE para quem clicou em Intrag › DCE.  Vale o
+  // item CLICADO (lembrado na aba, pela cadeia de submenus até ele); aberta por
+  // favorito ou link, vale o menu DONO da página — o atalho leva
+  // `data-nav-alias` no sidenav.
+  var NAV_PICK = '__OTC_NAV_PICK__';
+  function keyOf(n) {
+    var parts = [n.href];
+    for (var p = n.parent; p; p = p.parent) parts.unshift(p.a.getAttribute('aria-controls') || labelOf(p));
+    return parts.join('>');
+  }
+  function leavesAt(nodes, p, out) {
+    nodes.forEach(function (n) {
+      if (n.kind === 'leaf' && n.href && n.href === p) out.push(n);
+      else if (n.kind === 'branch') leavesAt(n.children, p, out);
+    });
+    return out;
+  }
   function findActive(nodes, p) {
     p = p || curPath();
-    for (var i = 0; i < nodes.length; i++) {
-      var n = nodes[i];
-      if (n.kind === 'leaf' && n.href && n.href === p) return n;
-      if (n.kind === 'branch') { var f = findActive(n.children, p); if (f) return f; }
+    var hits = leavesAt(nodes, p, []);
+    if (hits.length > 1) {
+      var pick = null;
+      try { pick = sessionStorage.getItem(NAV_PICK); } catch (e) {}
+      var clicked = hits.filter(function (n) { return pick && keyOf(n) === pick; })[0];
+      var owner = hits.filter(function (n) { return !n.a.hasAttribute('data-nav-alias'); })[0];
+      return clicked || owner || hits[0];
     }
+    if (hits.length) return hits[0];
     // Subpágina fora do menu (`/initiatives/PRJ-0001`): acende o item-pai do
     // caminho (`/initiatives`), subindo um segmento por vez.
     if (p === curPath()) {
@@ -383,8 +406,12 @@
       } else {
         a.classList.add('dd-leaf');
         if (node === Nav.active) a.classList.add('active');
-        // a lente desliza até o item clicado enquanto a página seguinte carrega
-        a.addEventListener('click', function () { moveLensTo(ul, a); });
+        // a lente desliza até o item clicado enquanto a página seguinte carrega;
+        // e a página seguinte acende ESTE item, não um gêmeo de outro menu
+        a.addEventListener('click', function () {
+          try { sessionStorage.setItem(NAV_PICK, keyOf(node)); } catch (e) {}
+          moveLensTo(ul, a);
+        });
       }
       ul.appendChild(li);
     });
