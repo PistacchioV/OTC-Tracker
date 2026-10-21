@@ -27762,3 +27762,41 @@ funil, sem erro nenhum.
 a chave `tk-none-match` nas três línguas. Conferido no Chromium: oito funis, a
 lista do Requested By sem as iniciais, o funil de Status combinado com o Filter
 By, a ordem da fila e a busca pela tag.
+
+## §663 — One pager executivo do OTC Tracker (2026-10-21)
+
+Pedido: uma página para a diretoria com o que o OTC Tracker cobre. Está em
+`Docs/OTC_Tracker_One_Pager.html` e é DOCUMENTO, não tela do app: o Flask não
+o serve, e ele não carrega o tema (`otc.css`) nem script de fora. É um HTML
+autocontido, que se abre no navegador ou se manda por e-mail.
+
+- **Dois idiomas no MESMO arquivo**: cada texto é um par `<span lang="pt">` /
+  `<span lang="en">`, e o `data-lang` do `<html>` esconde o outro. Abre SEMPRE
+  em inglês (`set('en')`); o PT é a troca do botão, sem memória. Texto novo
+  entra nos DOIS spans, senão some num dos idiomas.
+- **No computador cabe na janela, sem rolagem** (`fit()`, acima de 900×480):
+  a folha é medida sem zoom numa largura `W/z` e reduzida pelo `zoom` do CSS ao
+  MAIOR `z` que cabe, por busca binária (piso 0,5; abaixo dele, ou no celular,
+  a página rola). A conta direta não servia: a altura muda com a largura (o
+  texto quebra menos), e as passadas sucessivas paravam com ~70 px de sobra
+  embaixo depois que as margens laterais foram a 112 px. O PT é mais longo, e
+  por isso a troca de idioma reencaixa.
+- **Impressão: UMA folha A4 deitada**, nos dois idiomas (`@page A4
+  landscape`; folha de 1700 px × `zoom: .61 !important`). O `beforeprint` tira
+  o zoom do encaixe para a regra de impressão valer, e o `afterprint` o
+  devolve. É esse zoom que segura a página única: com a etapa 07 o PT passou a
+  duas folhas em .625. Conteúdo novo → conferir o PDF em EN e PT.
+- **O vocabulário é o da diretoria**: as equipes de Operações são "equipe" /
+  "Operations team", nunca "mesa" / "desk" (o termo lembra as mesas de
+  operação). Sem o ID do IA Hub e sem a linha de nomes da equipe.
+- **O ciclo de vida tem sete etapas**; a 07 é Regulatory: Accrual e MtM de fim
+  de mês (os arquivos B3/CETIP gerados e conciliados com o retorno da B3), e
+  **e-Financeira e WHT ditos "em desenvolvimento"** — no app eles ainda são só
+  links do menu (404). Quando existirem, a ressalva sai.
+- **A linha Coverage** (era Products): NDF FX · EDG · COMM, Options FX · COMM ·
+  EDG, Swaps CEM · EDG · COMM, Onshore & Offshore, New Deals & Unwinds, Intrag
+  (funds), Live Position. Saíram o COE · DCE e o chip Regulatory, que tem a
+  etapa própria.
+
+Conferido no Chromium: sem rolagem de 1280×680 a 1920×960 (a borda de baixo
+da folha a ~2 px da janela) e PDF de uma página em EN e PT.

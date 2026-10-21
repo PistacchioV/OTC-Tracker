@@ -3098,6 +3098,13 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 - `Docs/` e `docs/` coexistem; capturas em `docs/sop-screenshots/` com
   `git -c core.ignorecase=false add`. SOP e Guia são gerados do `.md` por
   `build_sop_docx.py`.
+- **O one pager executivo (`Docs/OTC_Tracker_One_Pager.html`, §663) é HTML
+  autocontido, não tela do app**: PT e EN no mesmo arquivo (par de `<span
+  lang>`; texto novo vai nos DOIS), abre em inglês, cabe na janela por zoom
+  (busca binária) e imprime em UMA A4 deitada pelo `zoom: .61` da impressão.
+  Mexeu no conteúdo: confira o PDF nos dois idiomas — o PT, mais longo, é o
+  que passa para a segunda folha. Texto para a diretoria: "equipe", nunca
+  "mesa".
 - `confirmation_pdfs.py`: documento novo nasce do HTML renderizado
   (`word_html_pdf`, `_CONF_OPT_PDF_FROM_HTML`), não de réplica em reportlab.
 - **Bloco "Definição das Partes" de export do Word desalinha NA TELA** (§550):
