@@ -1,0 +1,299 @@
+[
+  {
+    "MATCH": "DI",
+    "MODE": "Exact",
+    "INDEX": "cdi",
+    "CURRENCY": "",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "DI 360D",
+    "MODE": "Exact",
+    "INDEX": "cdi",
+    "CURRENCY": "",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "PREFIXADO 252D",
+    "MODE": "Exact",
+    "INDEX": "pre",
+    "CURRENCY": "",
+    "DAY COUNT": "du_252",
+    "REGIME": "composto",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "PREFIXADO 360D",
+    "MODE": "Exact",
+    "INDEX": "pre",
+    "CURRENCY": "",
+    "DAY COUNT": "act_360",
+    "REGIME": "composto",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "PRE LINEAR 360D",
+    "MODE": "Exact",
+    "INDEX": "pre",
+    "CURRENCY": "",
+    "DAY COUNT": "act_360",
+    "REGIME": "composto",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "PREFIXADO 365D",
+    "MODE": "Exact",
+    "INDEX": "pre",
+    "CURRENCY": "",
+    "DAY COUNT": "act_365",
+    "REGIME": "composto",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "PREFIXADO",
+    "MODE": "Contains",
+    "INDEX": "pre",
+    "CURRENCY": "",
+    "DAY COUNT": "",
+    "REGIME": "composto",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "IPCA",
+    "MODE": "Contains",
+    "INDEX": "ipca",
+    "CURRENCY": "",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "SOFR",
+    "MODE": "Contains",
+    "INDEX": "sofr",
+    "CURRENCY": "USD",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "TSFR1M",
+    "MODE": "Contains",
+    "INDEX": "term_sofr",
+    "CURRENCY": "USD",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": "1 month"
+  },
+  {
+    "MATCH": "TSFR3M",
+    "MODE": "Contains",
+    "INDEX": "term_sofr",
+    "CURRENCY": "USD",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": "3 month"
+  },
+  {
+    "MATCH": "TSFR6M",
+    "MODE": "Contains",
+    "INDEX": "term_sofr",
+    "CURRENCY": "USD",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": "6 month"
+  },
+  {
+    "MATCH": "TSFR12M",
+    "MODE": "Contains",
+    "INDEX": "term_sofr",
+    "CURRENCY": "USD",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": "12 month"
+  },
+  {
+    "MATCH": "TERM SOFR",
+    "MODE": "Contains",
+    "INDEX": "term_sofr",
+    "CURRENCY": "USD",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "EURIBOR",
+    "MODE": "Contains",
+    "INDEX": "euribor",
+    "CURRENCY": "EUR",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "DOLAR DOS EUA 30/360",
+    "MODE": "Exact",
+    "INDEX": "cambio",
+    "CURRENCY": "USD",
+    "DAY COUNT": "30_360",
+    "REGIME": "simples",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "DOLAR",
+    "MODE": "Contains",
+    "INDEX": "cambio",
+    "CURRENCY": "USD",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "DOLAR CANADENSE",
+    "MODE": "Contains",
+    "INDEX": "cambio",
+    "CURRENCY": "CAD",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "DOLAR AUSTRALIANO",
+    "MODE": "Contains",
+    "INDEX": "cambio",
+    "CURRENCY": "AUD",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "EURO",
+    "MODE": "Contains",
+    "INDEX": "cambio",
+    "CURRENCY": "EUR",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "IENE",
+    "MODE": "Contains",
+    "INDEX": "cambio",
+    "CURRENCY": "JPY",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "LIBRA ESTERLINA",
+    "MODE": "Contains",
+    "INDEX": "cambio",
+    "CURRENCY": "GBP",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "FRANCO SUICO",
+    "MODE": "Contains",
+    "INDEX": "cambio",
+    "CURRENCY": "CHF",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "COROA DINAM",
+    "MODE": "Contains",
+    "INDEX": "cambio",
+    "CURRENCY": "DKK",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "COROA NORUE",
+    "MODE": "Contains",
+    "INDEX": "cambio",
+    "CURRENCY": "NOK",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "COROA SUECA",
+    "MODE": "Contains",
+    "INDEX": "cambio",
+    "CURRENCY": "SEK",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "IUAN RENMIMBI",
+    "MODE": "Contains",
+    "INDEX": "cambio",
+    "CURRENCY": "CNY",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "RENMINBI HONG KON",
+    "MODE": "Contains",
+    "INDEX": "cambio",
+    "CURRENCY": "CNH",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "ACOES",
+    "MODE": "Contains",
+    "INDEX": "equity",
+    "CURRENCY": "BRL",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "IBOVESPA",
+    "MODE": "Contains",
+    "INDEX": "equity",
+    "CURRENCY": "BRL",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "S&P",
+    "MODE": "Contains",
+    "INDEX": "equity",
+    "CURRENCY": "USD",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "COMMODITIES",
+    "MODE": "Contains",
+    "INDEX": "equity",
+    "CURRENCY": "USD",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  },
+  {
+    "MATCH": "OURO",
+    "MODE": "Contains",
+    "INDEX": "equity",
+    "CURRENCY": "USD",
+    "DAY COUNT": "",
+    "REGIME": "",
+    "TENOR": ""
+  }
+]
