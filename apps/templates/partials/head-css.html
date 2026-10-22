@@ -14,11 +14,21 @@
             localStorage.setItem('__OTC_TRACKER_UI__', JSON.stringify(p));
         } catch (e) {}
     }
+    // paredes RETIRADAS (22/10/2026: não combinavam com a paleta do sistema;
+    // as lisas viraram as cores dela): quem as tinha escolhido volta à padrão
+    // (`frost`, a sem `data-wall`), GRAVADO — senão o `data-wall` ficaria
+    // apontando para uma paleta que não existe, sem miniatura marcada na
+    // gaveta e com o nome cru na Settings
+    var retiradas = { ash: 1, sand: 1, sage: 1, bloom: 1, ember: 1, grove: 1, canyon: 1 };
+    if (p.wall && retiradas[p.wall]) {
+        delete p.wall;
+        try { localStorage.setItem('__OTC_TRACKER_UI__', JSON.stringify(p)); } catch (e) {}
+    }
     var th = p.theme || 'light';
     if (th === 'auto') th = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     r.setAttribute('data-bs-theme', th === 'dark' ? 'dark' : 'light');
     if (p.accent && p.accent !== 'blue') r.setAttribute('data-accent', p.accent);
-    if (p.wall && p.wall !== 'ash') r.setAttribute('data-wall', p.wall);
+    if (p.wall && p.wall !== 'frost') r.setAttribute('data-wall', p.wall);
     if (p.glass === 'clear') r.setAttribute('data-glass', 'clear');
     var fx = '', auto = null;
     try { fx = localStorage.getItem('__OTC_TRACKER_FX__') || ''; auto = sessionStorage.getItem('__OTC_FX_AUTO__'); } catch (e) {}

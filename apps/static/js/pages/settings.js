@@ -25,7 +25,7 @@
       export_sub: '{n} tasks, one row each', export_none: 'No tasks of yours yet', saved: 'Saved',
       reset_q: 'Reset to defaults?', reset_txt: 'Theme, wallpaper, accent, glass, notifications and focus go back to the original.',
       reset_ok: 'Back to defaults', reset: 'Reset', cancel: 'Cancel',
-      walls: { ash: 'Ash', sand: 'Sand', sage: 'Sage', aurora: 'Aurora', smoke: 'Smoke', tide: 'Tide', bloom: 'Bloom', ember: 'Ember', grove: 'Grove', dusk: 'Dusk', canyon: 'Canyon', fjord: 'Fjord', glacier: 'Glacier' },
+      walls: { abyss: 'Abyss', midnight: 'Midnight', slate: 'Slate', steel: 'Steel', fog: 'Fog', frost: 'Frost', aurora: 'Aurora', smoke: 'Smoke', tide: 'Tide', dusk: 'Dusk', fjord: 'Fjord', glacier: 'Glacier' },
       accents: { blue: 'Blue', purple: 'Purple', pink: 'Pink', orange: 'Orange', green: 'Green', graphite: 'Graphite' },
     },
     br: {
@@ -41,7 +41,7 @@
       export_sub: '{n} tarefas, uma linha cada', export_none: 'Nenhuma tarefa sua ainda', saved: 'Salvo',
       reset_q: 'Voltar ao padrão?', reset_txt: 'Tema, papel de parede, destaque, vidro, avisos e foco voltam ao original.',
       reset_ok: 'De volta ao padrão', reset: 'Voltar', cancel: 'Cancelar',
-      walls: { ash: 'Cinza', sand: 'Areia', sage: 'Sálvia', aurora: 'Aurora', smoke: 'Fumaça', tide: 'Maré', bloom: 'Flor', ember: 'Brasa', grove: 'Bosque', dusk: 'Crepúsculo', canyon: 'Cânion', fjord: 'Fiorde', glacier: 'Geleira' },
+      walls: { abyss: 'Abismo', midnight: 'Meia-noite', slate: 'Ardósia', steel: 'Aço', fog: 'Névoa', frost: 'Geada', aurora: 'Aurora', smoke: 'Fumaça', tide: 'Maré', dusk: 'Crepúsculo', fjord: 'Fiorde', glacier: 'Geleira' },
       accents: { blue: 'Azul', purple: 'Roxo', pink: 'Rosa', orange: 'Laranja', green: 'Verde', graphite: 'Grafite' },
     },
     es: {
@@ -57,7 +57,7 @@
       export_sub: '{n} tareas, una fila cada una', export_none: 'Aún no tiene tareas', saved: 'Guardado',
       reset_q: '¿Volver a los valores originales?', reset_txt: 'Tema, fondo, acento, vidrio, avisos y foco vuelven al original.',
       reset_ok: 'Valores originales restaurados', reset: 'Restaurar', cancel: 'Cancelar',
-      walls: { ash: 'Ceniza', sand: 'Arena', sage: 'Salvia', aurora: 'Aurora', smoke: 'Humo', tide: 'Marea', bloom: 'Flor', ember: 'Brasa', grove: 'Bosque', dusk: 'Ocaso', canyon: 'Cañón', fjord: 'Fiordo', glacier: 'Glaciar' },
+      walls: { abyss: 'Abismo', midnight: 'Medianoche', slate: 'Pizarra', steel: 'Acero', fog: 'Niebla', frost: 'Escarcha', aurora: 'Aurora', smoke: 'Humo', tide: 'Marea', dusk: 'Ocaso', fjord: 'Fiordo', glacier: 'Glaciar' },
       accents: { blue: 'Azul', purple: 'Violeta', pink: 'Rosa', orange: 'Naranja', green: 'Verde', graphite: 'Grafito' },
     }
   };
@@ -118,8 +118,9 @@
     }).join('');
 
     var walls = (window.otcUI && otcUI.walls) || [];
+    var tones = (window.otcUI && otcUI.wallTones) || {};
     $('st-walls').innerHTML = walls.map(function (k) {
-      return '<button type="button" class="st-wall" data-wall-pick="' + k + '"><span class="st-wall__art" data-art="' + k + '"><i></i><i></i><i></i></span>' +
+      return '<button type="button" class="st-wall" data-wall-pick="' + k + '"' + (tones[k] ? ' data-tone="' + tones[k] + '"' : '') + '><span class="st-wall__art" data-art="' + k + '"><i></i><i></i><i></i></span>' +
         esc(t('walls')[k] || k) + '</button>';
     }).join('');
 
@@ -149,7 +150,8 @@
   }
   function syncNames() {
     var p = window.otcUI ? otcUI.get() : {};
-    $('st-wall-name').textContent = t('walls')[p.wall] || p.wall || '';
+    var wall = window.otcUI ? otcUI.shownWall() : p.wall;   // a do tema atual (§2b)
+    $('st-wall-name').textContent = t('walls')[wall] || wall || '';
     $('st-accent-name').textContent = t('accents')[p.accent] || p.accent || '';
   }
 
@@ -203,7 +205,7 @@
     $('st-reset').addEventListener('click', function () {
       var go = function () {
         save({ reset: true }).then(function () {
-          if (window.otcUI) { otcUI.set({ theme: 'light', accent: 'blue', wall: 'ash', glass: 'tinted' }, true); otcUI.fx('auto'); }
+          if (window.otcUI) { otcUI.set({ theme: 'light', accent: 'blue', wall: 'frost', glass: 'tinted' }, true); otcUI.fx('auto'); }
           render();
           if (window.otcToast) window.otcToast(t('reset_ok'));
         }).catch(P.fail);
