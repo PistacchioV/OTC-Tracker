@@ -28564,3 +28564,99 @@ gravado e a tela recarrega esse dia. A falha mostra o motivo do servidor e
 devolve o botão. No Mac o caminho testado foi o da falha (o Athena não resolve
 fora da rede do JP); o de sucesso usa o mesmo contrato de resposta do Cockpit
 (`rows`, `file`, `date`).
+
+## §677 — OTC Tracker no Stratos: a branch OTC-Tracker-Stratos (2026-10-22)
+
+O OTC ganhou uma terceira casa: o Stratos, a plataforma do JPM que roda
+soluções Python num contêiner na AWS. A solução é o `singing-moose-flask`
+(repositório no Bitbucket, contexto `/76521/otc-tracker-ops-ai-citizen`): o
+template traz `src/solution.py` e `src/run.py` com blocos DO NOT DELETE, o
+`requirements.txt` com o bloco dele e o pipeline (Dockerfile, terraform,
+Jenkinsfile, jules, spinnaker), que é do template e ninguém aqui toca.
+
+**A branch.** `OTC-Tracker-Stratos` é a dev mais três coisas: o bloco
+`ENV:STRATOS` no `apps/config.py` (dados sob `OTC_STRATOS_ROOT`, padrão no
+`/tmp`; maker/checker ligado), a pasta `stratos/` — o overlay que vai para o
+destino (`src/solution.py`, `src/run.py`, `src/otc_stratos.py`,
+`requirements.txt`), o gerador do requirements e o `tests/check_stratos.py` — e
+o `stratos-sync.bat`. O `apps/` fica na RAIZ da branch, e é o `.bat` que o põe
+em `src/apps/` no destino: mover a pasta na branch faria de todo merge da dev
+uma renomeação de ~880 arquivos. Assim o merge `StreamFlow → OTC-Tracker-Stratos`
+tem o tamanho do da prod, com o bloco de ENV como único conflito esperado. Ela
+mora numa worktree própria (`OTC Tracker Stratos`); `/commitstratos` faz o
+ciclo e `/commitall` publica nas três. O `requirements.txt` é GERADO do da raiz
+(`stratos/build_requirements.py`): o bloco do template verbatim e, abaixo da
+marca, o que o OTC precisa e não está lá — dependência nova na dev chega
+sozinha no merge. O `check_stratos.py` monta o layout do destino num tmp e sobe
+o `solution.py` com um Stratos de mentira (o `stratos-blocks` é interno).
+
+**A entrega é por cópia.** O `singing-moose-flask` empurra para o Bitbucket e
+não puxa do GitHub. O `stratos-sync.bat` (no estilo do hotfix: sem argumento
+lista, `apply` copia) leva só o que difere, remove de `src\apps` o que saiu da
+branch, recusa checkout com arquivo fora do git e põe o destino na ramificação
+`feature/stratos` — a do Stratos CLI. Fora dela o CLI não reconhece o projeto
+("Could not find a Stratos project"), e a primeira versão do `.bat`, que
+escolhia a ramificação padrão do origin, tirava a pasta justamente de lá.
+Depois, no destino, `stratos push`. O `git pull` do início fica num bloco no
+topo e o script se chama de novo: o cmd lê o `.bat` do disco aos poucos, e um
+pull que muda o próprio arquivo no meio da execução faria o resto ser lido no
+deslocamento antigo do arquivo novo.
+
+**Um app só.** O template cria o app Flask, o instrumenta (OpenTelemetry) e o
+autentica (`StratosAuth`). O `otc_stratos.mount` pendura o OTC nesse MESMO
+objeto, pelas funções do `apps.create_app` (`_require_config_names`,
+`configure_database_access`, `_seed_data_dir`, `register_blueprints`), em vez de
+servir um segundo app ao lado — assim a autenticação e o rastreamento do Stratos
+valem para toda rota. A rota de boas-vindas do template foi para
+`/stratos/whoami`, como diagnóstico de identidade.
+
+**O prefixo.** O OTC supõe morar em `/` (~550 `'/api/...'` no JS, ~230
+`href="/..."` nos templates) e no Stratos mora no contexto da solução. O
+`ASSETS_ROOT` leva a base; o HTML que sai é reescrito (href/src/action,
+`url(`, o `Location` dos redirects e as Speculation Rules — sem a base, o
+`href_matches: "/logout"` deixaria de excluir e o hover no menu pré-buscaria o
+logout); e um shim no `<head>` corrige o que o JS monta depois (fetch, XHR,
+EventSource, os setters de href/src, setAttribute, innerHTML pelo
+MutationObserver, `location.href` pela Navigation API), tirando a base do
+`?url=` em que a página manda o próprio caminho. O `/sw.js` ganha o mesmo para
+o `openWindow`. No Chromium, sete telas sem nenhuma requisição fora do prefixo.
+O cookie de sessão é próprio (`otc_tracker_session`) e mora no caminho da
+solução: o domínio do Stratos é de várias soluções.
+
+**O login.** Quem autentica é o StratosAuth, por OAuth: SSO → `/login/callback`
+com o código → a identidade na sessão. A ponte (`_ponte_sso`) abre a sessão do
+OTC a partir do SID dele; papel, páginas e status continuam saindo da tabela de
+usuários, SID sem cadastro vira pedido de acesso e o master é ativado sozinho (a
+tabela nasce vazia no servidor). O IP deixa de ser critério e a trava de tela
+não existe. A primeira versão rodava em todo request e pegava o próprio
+`/login/callback` antes de a identidade existir: "You are not authorized" na
+volta do SSO, e um `session.clear()` que levava junto o estado do login — a
+sessão Flask é uma só para o app. Hoje a ponte só age em
+`request.blueprint == pages_blueprint` e limpa só as chaves do OTC. O negado é
+403, nunca 401: no OTC o 401 é "sessão expirada" e o session-guard mandaria ao
+login.
+
+**A subida.** O `app.run` do template só abre a porta quando o módulo termina, e
+semear ~110 DuckDB num `/tmp` vazio leva 5 s num Mac e passou da janela do
+health check no contêiner: três deploys derrubados a ~2 min 20 s, com o
+contêiner de pé. O `mount` põe um portão WSGI na frente e sobe o OTC numa
+thread: o health check responde desde o primeiro segundo, as páginas dão 503
+"starting" e se recarregam, e uma subida que quebra mostra o traceback na tela —
+com o health check em 200 de propósito, porque derrubado o contêiner levaria o
+erro junto e o Stratos voltaria ao template sem dizer por quê. O Flask não é
+chamado antes de pronto: chamado, ele se daria por iniciado e recusaria o
+`register_blueprint` da subida. Com isso o deploy ficou estável.
+
+**A rede.** A saída para a internet é pelo proxy do Stratos
+(`stratosblocks.connectivity.configure_proxy_env_vars`, a opção C da
+documentação), e o `QUOTES_PROXY` vazio tira da fila o 9443 do desktop, que da
+AWS não responde. O pre-push scan do `stratos push` recusa qualquer citação do
+proxy on-premise nas portas antigas ou sem porta — até em comentário. Ele parou
+num docstring do `quotes.py` que explicava por que a porta antiga saiu; o texto
+foi reescrito na dev, e o `check_stratos.py` aplica a mesma regra a tudo o que
+vai para o destino.
+
+**O que não funciona lá.** O share `\\Nawest` (confirmações, Batch Conecta,
+CETIP, Electronic Inventory), o Outlook e a Athena (Kerberos). E o `/tmp` some a
+cada deploy: `OTC_STRATOS_ROOT` precisa de um volume persistente, `SECRET_KEY`
+vai no task definition, e a solução roda com UMA task (o processo único, §4).

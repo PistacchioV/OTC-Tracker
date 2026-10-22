@@ -50,6 +50,19 @@ OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_<nome>.py
   (`/commit` publica na dev, `/commitjp` faz o merge). Corrigir direto na
   prod cria divergência invisível até o merge seguinte conflitar. Nunca
   presuma `main`.
+- **Stratos: `OTC-Tracker-Stratos`** (§677) — a dev MAIS o bloco
+  `ENV:STRATOS` no `apps/config.py`, a pasta `stratos/` (o overlay do
+  repositório do Stratos, `singing-moose-flask`: o `solution.py`/`run.py` do
+  template com os blocos DO NOT DELETE intactos, o `otc_stratos.py` e o
+  `requirements.txt` GERADO) e o `stratos-sync.bat`, que leva `apps/` para
+  `src/apps/` lá. Mora numa worktree própria (`OTC Tracker Stratos`) — nunca
+  faça checkout dela neste working tree; `/commitstratos` faz o merge e
+  `/commitall` publica nas três. Duas mudanças da dev quebram o Stratos sem
+  quebrar a dev: renomear as funções do `apps.create_app` que a montagem chama
+  (`_require_config_names`, `_seed_data_dir`, `register_blueprints`…) e citar
+  o proxy on-premise nas portas antigas — mesmo em comentário, o scan do
+  `stratos push` recusa o arquivo. O `stratos/tests/check_stratos.py` pega as
+  duas.
 - **O bloco DEV BYPASS (`/dev-login`) do `routes.py` nunca vai para o
   repositório.** É removido antes de cada commit e restaurado depois.
 - **Nunca fixe um de-para novo no código.** Tudo que é mapeável se cadastra
@@ -3266,8 +3279,11 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   `REPORT_TIMEOUT` 180 s (EOD da Recon FXO, Intrag DCE, `getTradesBySettle`),
   `CONNECT_TIMEOUT` 10 s; cadastráveis, malformado cai no padrão com aviso.
   `check_athena_sso.py`.
-- **BCB/Yahoo (Quotes)**: mesma sessão, proxy volta como FILA (`QUOTES_PROXY`
-  → proxy do sistema COPIADO → `10443` → direto), primeira que responde fica.
+- **BCB/Yahoo (Quotes)**: mesma sessão, proxy volta como FILA (`QUOTES_PROXY`,
+  a 9443 → proxy do sistema COPIADO → direto), primeira que responde fica. A
+  porta antiga do desktop saiu da fila e não se escreve nem em comentário
+  (§677: o scan do Stratos recusa); no Stratos o `QUOTES_PROXY` é vazio e a
+  rota do sistema é o proxy dele.
   **O proxy do JPM responde 407 e o `requests` não sabe autenticar nele**
   (o SSPI negocia com o servidor, não com o proxy): as Tools
   (`precificador/rede.py`) caem para o WinHTTP com auto-logon e, por último,
