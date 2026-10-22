@@ -28402,3 +28402,24 @@ porque uma linha da tela já não é uma linha do banco, e o servidor a marca
 O `check_db_explorer.py` cobre as duas formas do ledger e a API (82 asserções).
 No navegador, o `ndf-ir-ledger_202609` mostra 6 linhas, de 26 registros, com
 `name`, `due`, `withheld`, `carry_in` e `carry_after` em colunas.
+
+**Um dia por vez, com o total (mesmo dia).** No uso, a visão expandida do ledger
+pareceu ter "todo o IR alocado numa empresa só": o 02/10 aparecia só com a
+ONESUBSEA, enquanto o cru do mesmo dia começava pela BAYER. A expansão não perdia
+linhas. Reproduzida numa segunda instância (porta 5007, `OTC_DATABASE_DIR` num
+tmp) com um ledger de 14 dias e 45 entradas, saíram as 45 linhas, todos os dias.
+
+O que faltava era LER por dia. A grade não vinha agrupada, e a única forma de
+isolar um dia era o funil do cabeçalho, que não está à vista. Agora:
+- a visão expandida com coluna de data abre ORDENADA pelo dia;
+- o seletor **Day** lista cada dia com quantas linhas ele tem e deixa só a quebra
+  dele. É um `ext.search` próprio, porque o `column().search()` o funil zera a
+  cada draw (§7);
+- o rodapé soma as colunas decimais do que a grade mostra (dia e funil
+  incluídos), e o Export leva a linha de Total.
+
+Na reprodução, o 06/10 mostrou as 6 contrapartes do banco, e o total de `due`
+(2.647,77) é a soma do banco. O ledger guarda, por dia, só as contrapartes que
+LIQUIDARAM naquele dia: `due` é o IR do dia, `withheld` o retido (com o
+acumulado que passou do piso de R$ 1,00) e `carry_in`/`carry_after` o acumulado
+abaixo do piso, antes e depois do dia.

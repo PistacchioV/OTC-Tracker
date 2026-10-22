@@ -610,7 +610,9 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   COLUNAS** (`domain.expand`): objeto de objetos vira uma linha por chave,
   lista de registros uma por item, objeto vazio não vira linha; a tabela
   "chave + JSON" do armazém (`__meta`, `__raw`, `_seq`/`_raw`) já abre assim, e
-  o seletor View volta ao cru. A visão expandida é só leitura. Toda gravação
+  o seletor View volta ao cru; com uma coluna de data ela abre ordenada pelo
+  dia, o seletor Day mostra UM dia com a quebra inteira dele, e o rodapé soma
+  as colunas decimais do que está filtrado. A visão expandida é só leitura. Toda gravação
   loga `[db-explorer]` em WARNING com SID, banco, tabela e colunas.
 - **Maker/checker (4-olhos) só vale na PROD** (§553): `Config.FOUR_EYES`,
   do bloco de ambiente (`_FOUR_EYES = False` na dev, onde uma pessoa só
