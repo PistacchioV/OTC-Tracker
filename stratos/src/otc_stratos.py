@@ -37,9 +37,12 @@ from flask import jsonify, redirect, render_template, request, session, url_for
 
 log = logging.getLogger('otc_tracker')
 
-# Fora da ponte de SSO: o estático, o health check (o balanceador o chama sem
-# identidade nenhuma) e o diagnóstico de identidade do solution.py.
-_SEM_SSO = {'static', 'health', 'stratos_whoami'}
+# As chaves que o OTC guarda na sessão. A sessão é UMA para o app inteiro, e o
+# StratosAuth guarda a dele ali também: limpar tudo (`session.clear()`) levava
+# junto o login do Stratos — e, no meio do /login/callback, o login inteiro.
+_CHAVES_OTC = ('authenticated', 'user_sid', 'user_name', 'user_email', 'user_role',
+               'user_position', 'session_ip', 'locked', 'pending_sid', 'pending_ip',
+               'masked_email', 'masked_phone')
 
 # Telas do login próprio. Com o SSO quem chega nelas já está autenticado.
 _TELAS_DE_LOGIN = {
@@ -273,13 +276,16 @@ def _ponte_sso(stratos_auth):
     from apps.pages import routes   # só existe depois do register_blueprints
 
     def otc_stratos_sso():
-        # Pelo ENDPOINT, não pelo caminho: `/static/data/...` é uma rota do
-        # OTC que serve RefData e cadastros, e tem de passar pelo SSO.
-        if request.endpoint in _SEM_SSO:
+        # Só nas rotas do OTC. As do app passam intactas: o estático, o health
+        # check (o balanceador o chama sem identidade), o whoami e as do
+        # StratosAuth — o /login/callback é onde a identidade NASCE, e barrado
+        # ali (era o "not authorized" na volta do SSO) o login não terminava.
+        # `/static/data/...` é rota do OTC e passa pela ponte.
+        if request.blueprint != 'pages_blueprint':
             return None
         sid, usuario = _identidade(stratos_auth, routes)
         if not sid:
-            session.clear()
+            _limpa_sessao_otc()
             return _negado(403, 'not_authorized',
                            'You are not authorized to view this page.')
         if session.get('authenticated') and \
@@ -325,7 +331,7 @@ def _abre_sessao(routes, sid, usuario):
     num servidor novo a tabela nasce vazia, e sem ele ninguém aprovaria o
     primeiro acesso.
     """
-    session.clear()
+    _limpa_sessao_otc()
     master = sid in routes._MASTER_SIDS
     cadastro = routes.get_user_by_sid(sid)
     if cadastro is None:
@@ -372,6 +378,11 @@ def _registra(routes, sid, usuario, ativo):
     log.warning('[stratos] pedido de acesso registrado: SID=%s (%s)', sid,
                 'ativo' if ativo else 'pendente')
     return nome
+
+
+def _limpa_sessao_otc():
+    for chave in _CHAVES_OTC:
+        session.pop(chave, None)
 
 
 def _negado(status, codigo, texto):

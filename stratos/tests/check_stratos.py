@@ -200,7 +200,7 @@ class _Usuario(object):
 
 
 def _stubs():
-    from flask import request
+    from flask import redirect, request, session
 
     def modulo(nome, **attrs):
         m = types.ModuleType(nome)
@@ -209,11 +209,18 @@ def _stubs():
         return m
 
     class StratosAuth(object):
+        # Como o de verdade: o login volta por /login/callback, que guarda a
+        # identidade na MESMA sessão Flask do app. Ou um cabeçalho do teste.
         def __init__(self, app, seal):
             self.app, self.seal = app, seal
 
-        def user(self):   # a identidade vem de um cabeçalho do teste
-            return _Usuario(request.headers.get('X-Test-SID'))
+            @app.route('/login/callback')
+            def stratos_login_callback():
+                session['stratos_user'] = request.args.get('sid', '')
+                return redirect(request.script_root + '/')
+
+        def user(self):
+            return _Usuario(request.headers.get('X-Test-SID') or session.get('stratos_user'))
 
     def dispatcher(app, inner):
         return inner
@@ -360,6 +367,30 @@ def confere_subida(tmp, sem_awmpy):
        'pendente na API: 403 account_pending')
     r = c.get(BASE + '/', headers=MASTER)
     ok(r.status_code == 302, 'mesmo navegador, SID de volta ao master: sessao reaberta')
+
+    # O login de verdade: o SSO devolve no /login/callback, que guarda a
+    # identidade na sessão. A ponte não pode barrar o callback nem apagar a
+    # chave do Stratos ao abrir (ou trocar) a sessão do OTC.
+    # HTTPS, como no Stratos: o cookie de sessão é Secure (ProductionConfig), e
+    # por HTTP o cliente não o devolveria.
+    sso = app.test_client()
+    https = {'base_url': 'https://localhost'}
+    r = sso.get(BASE + '/login/callback?sid=E930179&code=x', **https)
+    ok(r.status_code == 302, 'o /login/callback do Stratos passa pela ponte (%s)' % r.status_code)
+    r = sso.get(BASE + '/dashboard', **https)
+    with sso.session_transaction(BASE + '/', **https) as s:
+        dentro = dict(s)
+    ok(r.status_code == 200 and dentro.get('stratos_user') == 'E930179'
+       and dentro.get('user_sid') == 'E930179',
+       'pela sessao do Stratos: dashboard 200 e as duas sessoes convivem (%s %s)'
+       % (r.status_code, sorted(dentro)))
+    sso.get(BASE + '/login/callback?sid=A123456&code=y', **https)
+    r = sso.get(BASE + '/dashboard', **https)
+    with sso.session_transaction(BASE + '/', **https) as s:
+        dentro = dict(s)
+    ok(dentro.get('stratos_user') == 'A123456' and not dentro.get('authenticated')
+       and b'pending' in r.data,
+       'outro SID pelo SSO: a sessao do OTC troca, a do Stratos fica')
 
 
 # ── 4. O shim no node ───────────────────────────────────────────────────────
