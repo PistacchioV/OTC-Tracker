@@ -57,6 +57,10 @@ reconhece o projeto (`OTC_STRATOS_DEST` / `OTC_STRATOS_BRANCH` mudam).
   sozinho, porque num servidor novo a tabela nasce vazia. O IP deixa de ser
   critério e a trava de tela não existe aqui. `OTC_STRATOS_SSO=0` volta ao login
   próprio (SID + código por e-mail).
+  A ponte só age nas rotas do OTC: as do Stratos — o `/login/callback`, onde a
+  identidade nasce — passam intactas, e ela limpa só as chaves do OTC, nunca a
+  sessão inteira (o StratosAuth guarda o login dele na mesma sessão). O Logout do
+  menu do OTC limpa tudo, então leva de volta ao SSO.
 - **Prefixo.** O app foi escrito para morar em `/` e aqui mora em
   `/76521/otc-tracker-ops-ai-citizen`. O HTML que sai é reescrito
   (`href`/`src`/`action`, Speculation Rules, `Location`), o `ASSETS_ROOT` leva a
@@ -64,6 +68,12 @@ reconhece o projeto (`OTC_STRATOS_DEST` / `OTC_STRATOS_BRANCH` mudam).
   setters de `href`/`src`, `innerHTML`, `location.href` pela Navigation API).
 - **Cookie** próprio (`otc_tracker_session`) no caminho da solução: o domínio do
   Stratos é compartilhado com outras soluções.
+- **Rede.** A saída para a internet (BCB, Yahoo, IBGE, NY Fed) é pelo proxy do
+  Stratos: o `configure_proxy_env_vars` do `stratosblocks.connectivity` roda na
+  subida, e o `QUOTES_PROXY` vazio tira da fila o proxy corporativo do desktop.
+  O pre-push scan do `stratos push` recusa qualquer citação do proxy on-premise
+  nas portas antigas (ou sem porta), **até em comentário** — a correção vai na
+  dev, porque `apps/` é código da dev.
 
 ## Variáveis de ambiente (task definition)
 
@@ -82,7 +92,10 @@ python stratos/build_requirements.py --check
 ```
 
 O `check_stratos.py` monta o layout do destino e sobe o `solution.py` com um
-Stratos de mentira (o `stratos-blocks` é interno do JPM).
+Stratos de mentira (o `stratos-blocks` é interno do JPM): os blocos DO NOT
+DELETE, a subida em segundo plano e o portão, o login (inclusive o
+`/login/callback`), o prefixo, o shim no node e a regra do scan do proxy. A
+história de cada decisão está no HANDOFF, §677.
 
 ## O que não funciona fora da rede do desktop
 
