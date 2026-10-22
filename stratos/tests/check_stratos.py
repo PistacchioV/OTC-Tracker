@@ -5,8 +5,9 @@ singing-moose-flask — src/solution.py, src/run.py, src/otc_stratos.py e
 src/apps/ — e sobe o `solution.py` com um Stratos de MENTIRA (o stratos-blocks
 é interno do JPM). O que se confere:
 
-  1. os blocos DO NOT DELETE do solution.py e do run.py são os do template, e
-     o requirements.txt gerado está em dia;
+  1. os blocos DO NOT DELETE do solution.py e do run.py são os do template, o
+     requirements.txt gerado está em dia e nada cita o proxy on-premise que o
+     pre-push scan do `stratos push` recusa;
   2. o SSO: sem identidade é 403; o master entra num banco vazio; quem não tem
      cadastro vira pedido de acesso; trocar de SID troca a sessão;
   3. o prefixo: Location, HTML (href/src/action, Speculation Rules), estático,
@@ -151,6 +152,26 @@ def blocos(texto):
     return [partes[i] for i in range(1, len(partes), 2)]
 
 
+# A regra do pre-push scan do Stratos ("legacy-proxy"): o proxy on-premise nas
+# portas antigas, ou sem porta nenhuma. A 9443 passa. Vale até em comentário.
+PROXY_ANTIGO = re.compile(r'proxy\.jpmchase\.net(?::(?:8080|8443|10443)\b|(?![:\d]))', re.I)
+
+
+def confere_proxy():
+    r = subprocess.run(['git', '-C', RAIZ, 'ls-files', 'apps', 'stratos/src', 'stratos/requirements.txt'],
+                       capture_output=True, text=True)
+    achados = []
+    for rel in filter(None, r.stdout.split('\n')):
+        try:
+            texto = open(os.path.join(RAIZ, rel), encoding='utf-8').read()
+        except (UnicodeDecodeError, OSError):
+            continue
+        achados += ['%s:%d' % (rel, n) for n, linha in enumerate(texto.split('\n'), 1)
+                    if PROXY_ANTIGO.search(linha)]
+    ok(r.returncode == 0 and not achados,
+       'nada cita o proxy on-premise que o scan do stratos push barra %s' % achados[:5])
+
+
 def confere_template():
     sol = open(os.path.join(STRATOS, 'src', 'solution.py'), encoding='utf-8').read()
     ok(blocos(sol) == blocos(TEMPLATE_SOLUTION) and len(blocos(sol)) == 2,
@@ -166,6 +187,9 @@ def confere_template():
 
 
 # ── 2/3. Subida com o Stratos de mentira ────────────────────────────────────
+
+PROXY_TESTE = 'http://proxy-do-stratos.teste:3128'
+
 
 class _Usuario(object):
     def __init__(self, sid):
@@ -199,6 +223,10 @@ def _stubs():
     modulo('stratosblocks.web.otel', bootstrap_otel=lambda: None)
     modulo('stratosblocks.web.logging',
            enable_logging=lambda nivel: __import__('logging').getLogger('stratos'))
+    def proxy_do_stratos():
+        os.environ['HTTP_PROXY'] = os.environ['HTTPS_PROXY'] = PROXY_TESTE
+
+    modulo('stratosblocks.connectivity', configure_proxy_env_vars=proxy_do_stratos)
     modulo('stratosblocks.authentication')
     modulo('stratosblocks.authentication.web', StratosAuth=StratosAuth,
            StratosDispatcherMiddleware=dispatcher)
@@ -234,6 +262,8 @@ def confere_subida(tmp, sem_awmpy):
     os.environ.pop('OTC_DATABASE_DIR', None)
     os.environ['OTC_DISABLE_SCHEDULERS'] = '1'
     os.environ['SECRET_KEY'] = 'teste-stratos'
+    for nome in ('QUOTES_PROXY', 'HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy'):
+        os.environ.pop(nome, None)
     if sem_awmpy:
         sys.modules['awmpy'] = None   # `import awmpy` levanta ImportError
     _stubs()
@@ -253,6 +283,11 @@ def confere_subida(tmp, sem_awmpy):
        'DATA_DIR sob o OTC_STRATOS_ROOT (bloco ENV:STRATOS)')
     ok(app.config['FOUR_EYES'] is True, 'maker/checker ligado no Stratos')
     ok(app.root_path == os.path.join(src, 'apps'), 'root_path do app = src/apps')
+    from apps.pages import quotes
+    ok(quotes.QUOTES_PROXY == '', 'Cotacoes sem o proxy corporativo do desktop')
+    rotas = [nome for nome, _ in quotes._routes()]
+    ok(rotas[:1] == ['system proxy ' + PROXY_TESTE],
+       'a primeira saida das Cotacoes e o proxy do Stratos %s' % rotas)
     if sem_awmpy:
         ok(getattr(sys.modules.get('awmpy'), '_otc_stratos_stub', False),
            'sem awmpy instalado: o substituto entra e o app sobe')
@@ -384,6 +419,7 @@ def main():
             shutil.rmtree(tmp, ignore_errors=True)
         return 1 if FALHAS else 0
     confere_template()
+    confere_proxy()
     confere_shim()
     for sem_awmpy in ('0', '1'):
         r = subprocess.run([sys.executable, os.path.abspath(__file__), '--filho', sem_awmpy])

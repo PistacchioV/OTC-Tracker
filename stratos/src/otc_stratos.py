@@ -16,6 +16,9 @@ Três coisas o OTC supõe e o Stratos não dá, e cada uma tem a sua peça aqui:
     `_ponte_sso` abre a sessão do OTC a partir da identidade que ele valida.
   · `awmpy` (phonebook interno), que no servidor pode não existir.
 
+E a rede: a saída para a internet é pelo proxy do Stratos
+(`_proxy_do_stratos`), não pelo proxy corporativo do desktop.
+
 Este arquivo, o `solution.py` e o `run.py` existem SÓ na branch
 OTC-Tracker-Stratos; o código do app continua nascendo na dev.
 """
@@ -50,6 +53,7 @@ def mount(app, stratos_auth, context_root):
     primeira mudança da dev.
     """
     base = '/' + context_root.strip('/')
+    _proxy_do_stratos()
     _garante_awmpy()
 
     import apps as otc
@@ -106,7 +110,27 @@ def mount(app, stratos_auth, context_root):
     return app
 
 
-# ── Chave de sessão e awmpy ─────────────────────────────────────────────────
+# ── Proxy, chave de sessão e awmpy ──────────────────────────────────────────
+
+def _proxy_do_stratos():
+    """A saída para a internet (BCB, Yahoo, IBGE, NY Fed) é pelo proxy do Stratos.
+
+    `configure_proxy_env_vars` põe HTTP(S)_PROXY e NO_PROXY no processo — a
+    opção C da documentação de conectividade do Stratos —, e o `requests` os
+    respeita. As Cotações e as Tools copiam o proxy do sistema para a sessão
+    (a rota "system proxy" do `quotes._routes`), e o acham ali. O
+    `QUOTES_PROXY` vazio tira da fila o proxy corporativo do desktop, que da
+    AWS não responde e custaria o timeout de conexão a cada busca. Roda antes
+    do import do `apps`: o `quotes` lê o `QUOTES_PROXY` no import.
+    """
+    try:
+        from stratosblocks.connectivity import configure_proxy_env_vars
+    except ImportError:
+        log.warning('[stratos] stratosblocks.connectivity ausente: sem proxy de saida')
+    else:
+        configure_proxy_env_vars()
+    os.environ.setdefault('QUOTES_PROXY', '')
+
 
 def _chave_de_sessao(otc, app):
     """SECRET_KEY do ambiente; sem ela, a do arquivo da máquina do OTC.
