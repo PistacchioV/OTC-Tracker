@@ -304,18 +304,26 @@ $table-cell-padding-x-sm: .45rem;
 // As cores são as do Pane, valor a valor: o arremedo anterior em
 // radial-gradient deixava metade da tela na base quase branca, e no tema
 // claro o vidro inteiro saía LEITOSO (nada de cor atrás para ele refratar).
-// Lisos (Ash, o padrão, Sand, Sage): as fitas na cor da base, sem contorno.
+// Lisos: as fitas na cor da base, sem contorno. São a PALETA DO SISTEMA
+// (22/10/2026, no lugar de Ash/Sand/Sage), uma cor por tom: as escuras
+// (Abyss #06141b, Midnight #11212d, Slate #253745, Steel #4a5c6a) só no tema
+// escuro e as claras (Fog #9ba8ab, Frost #ccd0cf) só no claro. No outro tema
+// cada uma vale pela da OUTRA PONTA (Abyss ↔ Frost, Midnight ↔ Fog; Slate e
+// Steel → Fog — o `WALL_PAIR` do otc.js, que marca a miniatura), e a gaveta
+// esconde as que não são do tema (`data-tone`). A padrão é a Frost no claro e
+// a Abyss no escuro: o `:root` sem `data-wall`. O título e o breadcrumb ficam
+// DIRETO sobre o fundo — cor escura no tema claro os apagava.
 // A MESMA paleta vale para a MINIATURA de cada parede (`[data-art="<parede>"]`,
 // na gaveta de Aparência e na Settings), nas duas versões de tema: escritas à
 // mão, as miniaturas tinham uma versão só (escura em sete das dez) e a gaveta
 // do tema claro parecia estar no escuro (§634). O desenho é o `--w-art`.
 :root, [data-art] {
-  --w-b1: #e4e4e7; --w-b2: #e4e4e7;
+  --w-b1: #ccd0cf; --w-b2: #ccd0cf;
   --w-a: var(--w-b1); --w-a2: var(--w-b1); --w-b: var(--w-b1); --w-b2c: var(--w-b1);
   --w-c: var(--w-b1); --w-c2: var(--w-b1); --w-d: var(--w-b1); --w-d2: var(--w-b1);
   --w-line: 0;
 }
-[data-bs-theme="dark"], [data-bs-theme="dark"] [data-art] { --w-b1: #232428; --w-b2: #232428; }
+[data-bs-theme="dark"], [data-bs-theme="dark"] [data-art] { --w-b1: #06141b; --w-b2: #06141b; }
 // a miniatura: as formas do SVG em gradiente — fita `a` no alto à esquerda,
 // `d` no alto à direita, as ondas `b` e `c` embaixo, sobre a base diagonal
 [data-art] {
@@ -327,13 +335,20 @@ $table-cell-padding-x-sm: .45rem;
     linear-gradient(135deg, var(--w-b1), var(--w-b2));
 }
 
-@each $wall, $lb1, $lb2, $db1, $db2 in (
-  (sand, #f6e4d2, #f6e4d2, #3a2a1e, #3a2a1e),
-  (sage, #dde9dc, #dde9dc, #1f2c23, #1f2c23)
+// (parede, claro, escuro) — a Frost é o `:root` acima
+@each $wall, $lb, $db in (
+  (abyss, #ccd0cf, #06141b),
+  (midnight, #9ba8ab, #11212d),
+  (slate, #9ba8ab, #253745),
+  (steel, #9ba8ab, #4a5c6a),
+  (fog, #9ba8ab, #11212d)
 ) {
-  :root[data-wall="#{$wall}"], [data-art="#{$wall}"] { --w-b1: #{$lb1}; --w-b2: #{$lb2}; }
-  :root[data-wall="#{$wall}"][data-bs-theme="dark"], [data-bs-theme="dark"] [data-art="#{$wall}"] { --w-b1: #{$db1}; --w-b2: #{$db2}; }
+  :root[data-wall="#{$wall}"], [data-art="#{$wall}"] { --w-b1: #{$lb}; --w-b2: #{$lb}; }
+  :root[data-wall="#{$wall}"][data-bs-theme="dark"], [data-bs-theme="dark"] [data-art="#{$wall}"] { --w-b1: #{$db}; --w-b2: #{$db}; }
 }
+// a gaveta e a Settings mostram só as lisas do tema atual
+:root[data-bs-theme="dark"] [data-wall-pick][data-tone="light"],
+:root[data-bs-theme="light"] [data-wall-pick][data-tone="dark"] { display: none !important; }
 
 // (parede, claro: base 1/2 + fitas a/a2 b/b2 c/c2 d/d2, (contorno, -); escuro: idem)
 @each $wall, $l, $lo, $d, $do in (
@@ -346,15 +361,6 @@ $table-cell-padding-x-sm: .45rem;
   (tide,
     (#bfe4ff, #d4d0ff, #5aa9ff, #2f63ee, #3fd6e0, #3a76fd, #7a62ff, #b56dff, #86f2e2, #27bfd6), (1, 1),
     (#03112a, #0d0a2c, #1d55dc, #0a2a8c, #0ba9bd, #1b3cb0, #4c33d8, #7c2fc4, #16c3b0, #0b6c8c), (1, 1)),
-  (bloom,
-    (#ffdbe9, #d9dcff, #7ea4ff, #4d66ff, #ff7eb3, #ff9a62, #a97cff, #ff6aa6, #ffc76b, #ff8758), (1, 1),
-    (#130a2b, #2a0c22, #2c46c8, #17207a, #c2306c, #c4501f, #5a2fd0, #a3205e, #d08a2a, #a33f17), (1, 1)),
-  (ember,
-    (#ffe7d0, #ffd6d8, #ff9a5a, #ef5a26, #ffc23d, #ff7638, #ff6f8e, #e2436a, #ffd57c, #ffaa38), (1, 1),
-    (#200a04, #2a0a12, #c4501a, #7a220a, #c98a12, #b0421a, #b8304e, #7a1630, #c4861f, #8a4a0a), (1, 1)),
-  (grove,
-    (#ddf7e5, #d4f0f5, #4fd18a, #1c9f66, #a6e35a, #36c38a, #2fb8b0, #1b8ca6, #d9ef6a, #74d25a), (1, 1),
-    (#04170e, #041a1e, #1c8f55, #0b5232, #5e9e1f, #1c7a52, #138a86, #0b5a6e, #8a9a1f, #3f7a1c), (1, 1)),
   (dusk,
     (#e6e7ef, #eee3eb, #9aa0bf, #6c7396, #c9a3c2, #98799f, #a89cd8, #7a6eb7, #e5caae, #be9b80), (1, 1),
     (#0f1016, #17121c, #3d425e, #22253a, #5c3b58, #3a2440, #4a4180, #2c2650, #6a5440, #3e3024), (1, 1))
@@ -373,7 +379,7 @@ $table-cell-padding-x-sm: .45rem;
   }
 }
 
-// As paredes FLOW (Canyon, Fjord, Glacier — 21/10/2026): o OUTRO desenho do
+// As paredes FLOW (Fjord, Glacier — 21/10/2026): o OUTRO desenho do
 // partial (`otc-wall__flow`), uma fita em serpentina e câmaras em relevo sobre
 // a base. `--w-pane`/`--w-flow` dizem qual dos dois aparece (é o `display` dos
 // grupos, §1). As cores: halo (`glow`), contorno claro embaixo e escuro em
@@ -393,9 +399,6 @@ $table-cell-padding-x-sm: .45rem;
 
 // (parede, escuro: base 1/2, halo, contorno claro/escuro, corpo 1/2, brilho 1/2; claro: idem)
 @each $wall, $d, $l in (
-  (canyon,
-    (#0b0705, #060403, #c8642a, #ffc7a0, #5a2e18, #120b08, #070504, #d0682c, #ffd7b8),
-    (#f3e7dd, #ead8ca, #e7a174, #9a4b1e, #d8b29a, #fbf4ee, #f1e3d7, #e08a52, #a9501f)),
   (fjord,
     (#06070f, #030308, #3f4fe0, #c9cfff, #2c3160, #0c0d18, #05050a, #3346e0, #d4daff),
     (#e8e9f7, #dcdff2, #97a2f2, #3c47a8, #b4badf, #f7f8fe, #e7e9f8, #5b6be2, #2b3699)),

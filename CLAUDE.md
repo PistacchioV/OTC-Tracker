@@ -1197,13 +1197,21 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   é `data-art="<parede>"` + `background: var(--w-art)`**: a MESMA paleta do
   §2b, no tema atual — gradiente escrito à mão tinha uma versão só e a gaveta
   do claro parecia escura. **São DOIS desenhos no mesmo SVG** (21/10/2026,
-  §669): o do Pane (`otc-wall__pane`, as dez de antes) e o FLOW
-  (`otc-wall__flow` — Canyon, Fjord, Glacier: fita em serpentina e câmaras em
-  relevo, luz vindo de baixo), e a parede escolhe por `--w-pane`/`--w-flow`.
-  A miniatura do flow é um SVG embutido gerado pela `otc-flow-art` com as
-  mesmas cores. O desfoque do flow é só o halo e o reflexo (`.g`), que o modo
-  opaco tira. Parede nova entra no §2b, na lista `WALLS` e nos três mapas
-  `walls` do `settings.js`: o `check_wallpapers.py` cobra os quatro.
+  §669): o do Pane (`otc-wall__pane`) e o FLOW (`otc-wall__flow` — Fjord,
+  Glacier: fita em serpentina e câmaras em relevo, luz vindo de baixo), e a
+  parede escolhe por `--w-pane`/`--w-flow`. A miniatura do flow é um SVG
+  embutido gerado pela `otc-flow-art` com as mesmas cores. O desfoque do flow
+  é só o halo e o reflexo (`.g`), que o modo opaco tira. **As LISAS são a
+  paleta do sistema, uma cor por tom** (mesa, 22/10/2026, §672): Abyss,
+  Midnight, Slate e Steel só no tema escuro, Fog e Frost só no claro
+  (`WALL_TONE`; a gaveta esconde as do outro tema pelo `data-tone`), e no
+  outro tema cada uma vale pela da outra ponta (`WALL_PAIR`, e o CSS define as
+  duas versões). A padrão é a Frost, o `:root` sem `data-wall` (Abyss no
+  escuro). Cor escura no tema claro (e o contrário) apagava o título e o
+  breadcrumb, que ficam DIRETO sobre o fundo. Parede RETIRADA entra na lista
+  `retiradas` do `head-css.html`, que devolve à padrão quem a tinha gravada.
+  Parede nova entra no §2b, na lista `WALLS` e nos três mapas `walls` do
+  `settings.js`: o `check_wallpapers.py` cobra os quatro.
 - **A casca é presa na BORDA ESQUERDA, sem centralizar** (§634): menu a
   `--otc-inset` (10px) da borda, conteúdo a `--otc-side-gap` (18px) dele
   (`--otc-content-l`, que o desafixar zera para o `--otc-gutter`), barra do

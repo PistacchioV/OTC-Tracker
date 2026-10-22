@@ -28248,3 +28248,46 @@ checkout de prod com o arquivo o recebeu por cópia de uma pasta de dev.
 corte, e nenhuma sessão registra a gravação. Hoje só o rollback
 (`scripts/export_duckdb_to_json.py`) escreve JSON em `DATA_DIR`, de propósito;
 o candidato é ele, ou uma edição à mão, perto do `26e04a3d` (§466, 09:16).
+
+## §672 — Papéis de parede: as lisas viram a paleta do sistema; sete paredes retiradas (2026-10-22)
+
+**O pedido** (mesa, 22/10/2026). Ember e Canyon (laranja e cobre) não combinavam
+com a paleta de cor do sistema, e as lisas Ash, Sand e Sage também saíram, junto
+com Bloom e Grove. No lugar das lisas entram as seis cores da paleta, do mais
+escuro ao mais claro: Abyss `#06141B`, Midnight `#11212D`, Slate `#253745`,
+Steel `#4A5C6A`, Fog `#9BA8AB` e Frost `#CCD0CF`. Ficam as desenhadas Aurora,
+Smoke, Tide, Dusk, Fjord e Glacier.
+
+**Por que cada cor só no seu tema.** Toda parede tinha uma versão clara e uma
+escura (a Ash era `#e4e4e7`/`#232428`), e a paleta tem UMA cor por tom. O teste
+com a cor exata no tema oposto mostrou o problema: os painéis de vidro ficam
+legíveis em qualquer fundo, mas o título da página e o breadcrumb ficam DIRETO
+sobre o papel de parede, e somem (escuro sobre escuro no tema claro, claro sobre
+claro no escuro). A escolha da mesa foi: as quatro escuras só no tema escuro, as
+duas claras só no claro, e no outro tema cada uma vale pela da OUTRA PONTA —
+Abyss ↔ Frost, Midnight ↔ Fog, Slate e Steel → Fog.
+
+**Onde mora cada parte.** A COR é do CSS (`otc.scss` §2b): cada lisa define as
+duas versões, a exata no tema dela e a do par no outro, então a troca de tema
+pinta certo sem JS. O `otc.js` só decide qual miniatura fica MARCADA
+(`WALL_TONE`, `WALL_PAIR`, `shownWall`; `otcUI.shownWall()` para o nome da
+Settings), e a gaveta e a Settings escondem as do outro tema pelo `data-tone` de
+cada miniatura. A preferência gravada NÃO é reescrita na troca de tema: quem
+escolheu Slate no escuro vê a Fog no claro e reencontra a Slate ao voltar.
+
+**A padrão.** Era a Ash, a parede sem `data-wall` (o `:root`). Agora é a Frost:
+o `:root` é `#CCD0CF` no claro e `#06141B` no escuro. Quem tinha uma das sete
+retiradas gravada no `__OTC_TRACKER_UI__` volta à padrão no script do `<head>`
+(`retiradas`), e a migração GRAVA: sem isso o `data-wall` apontaria para uma
+paleta que não existe, sem miniatura marcada na gaveta e com o nome cru na
+Settings. Visualmente ele cairia no `:root` do mesmo jeito, e por isso o defeito
+seria só da gaveta.
+
+**Prova.** `check_wallpapers.py` reescrito: a cor exata de cada lisa no tema
+dela e a do par no outro (lida do `otc.css` compilado), o `:root` nos dois
+temas, o `WALL_TONE`/`WALL_PAIR`, a regra que esconde as do outro tema e as
+sete retiradas fora dos quatro lugares e migradas no `<head>`. No navegador
+(Playwright, porta 5005), com Sand gravada no escuro, o app abriu na Abyss com a
+preferência regravada como `frost`. A Slate escolhida no escuro pintou
+`#253745` e, no claro, `#9ba8ab` com a Fog marcada e o nome Fog na Settings. A
+gaveta mostrou só as do tema.

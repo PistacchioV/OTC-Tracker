@@ -88,6 +88,19 @@
   var UI_KEY = '__OTC_TRACKER_UI__';
   var FX_KEY = '__OTC_TRACKER_FX__';
   var mqDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  // As paredes LISAS são a paleta do sistema (22/10/2026), uma cor por tom:
+  // as escuras só existem no tema escuro e as claras só no claro. A gaveta
+  // mostra as do tema (`data-tone`, otc.scss §2b) e a escolhida no outro tema
+  // aparece pela da outra ponta (`WALL_PAIR`). A COR quem dá é o CSS, que
+  // define as duas versões de cada parede; aqui é só qual miniatura fica
+  // marcada. A padrão (`frost`) é a sem `data-wall`: o `:root` do §2b.
+  var WALL_DEFAULT = 'frost';
+  var WALL_TONE = { abyss: 'dark', midnight: 'dark', slate: 'dark', steel: 'dark', fog: 'light', frost: 'light' };
+  var WALL_PAIR = { abyss: 'frost', midnight: 'fog', slate: 'fog', steel: 'fog', fog: 'midnight', frost: 'abyss' };
+  function shownWall(wall, theme) {
+    var tone = WALL_TONE[wall];
+    return tone && tone !== theme ? WALL_PAIR[wall] : wall;
+  }
 
   function readPrefs() {
     var p = {};
@@ -95,7 +108,7 @@
     return {
       theme: p.theme || 'light',
       accent: p.accent || 'blue',
-      wall: p.wall || 'ash',
+      wall: p.wall || WALL_DEFAULT,
       glass: p.glass || 'tinted'
     };
   }
@@ -108,7 +121,7 @@
     var go = function () {
       root.setAttribute('data-bs-theme', effectiveTheme(p.theme));
       if (p.accent && p.accent !== 'blue') root.setAttribute('data-accent', p.accent); else root.removeAttribute('data-accent');
-      if (p.wall && p.wall !== 'ash') root.setAttribute('data-wall', p.wall); else root.removeAttribute('data-wall');
+      if (p.wall && p.wall !== WALL_DEFAULT) root.setAttribute('data-wall', p.wall); else root.removeAttribute('data-wall');
       if (p.glass === 'clear') root.setAttribute('data-glass', 'clear'); else root.removeAttribute('data-glass');
     };
     // A troca reavalia a cor de quase todo elemento; sem suprimir as
@@ -123,6 +136,9 @@
   }
   var otcUI = {
     get: readPrefs,
+    // a parede que aparece no tema ATUAL (a escolhida, ou a da outra ponta)
+    shownWall: function () { return shownWall(readPrefs().wall, root.getAttribute('data-bs-theme')); },
+    wallTones: WALL_TONE,
     set: function (patch, animate) {
       var p = readPrefs();
       for (var k in patch) if (Object.prototype.hasOwnProperty.call(patch, k)) p[k] = patch[k];
@@ -141,7 +157,7 @@
   };
   window.otcUI = otcUI;
   if (mqDark && mqDark.addEventListener) {
-    mqDark.addEventListener('change', function () { if (readPrefs().theme === 'auto') applyPrefs(readPrefs(), true); });
+    mqDark.addEventListener('change', function () { if (readPrefs().theme === 'auto') { applyPrefs(readPrefs(), true); syncAppearance(); } });
   }
 
   // Modo OPACO: a máquina SEM GPU não paga o vidro. Nas máquinas do JPM o
@@ -1602,10 +1618,12 @@
   // 5. Painel de Aparência (offcanvas do customizer.html)
   // ==========================================================================
   var ACCENTS = { blue: '#1f6fe6', purple: '#7b3ff0', pink: '#cf2068', orange: '#c4500f', green: '#167f3d', graphite: '#4a4a54' };
-  // as paredes, na ordem da tela. A MINIATURA de cada uma não mora aqui: é o
-  // `--w-art` do otc.scss §2b, pela mesma paleta da parede e no tema atual
-  // (`data-art`) — escrita aqui, ela tinha uma versão só e não seguia o tema
-  var WALLS = ['ash', 'sand', 'sage', 'aurora', 'smoke', 'tide', 'bloom', 'ember', 'grove', 'dusk', 'canyon', 'fjord', 'glacier'];
+  // as paredes, na ordem da tela: as lisas da paleta do sistema (do mais
+  // escuro ao mais claro; cada uma só no seu tema, `WALL_TONE`), depois as
+  // desenhadas. A MINIATURA de cada uma não mora aqui: é o `--w-art` do
+  // otc.scss §2b, pela mesma paleta da parede e no tema atual (`data-art`) —
+  // escrita aqui, ela tinha uma versão só e não seguia o tema
+  var WALLS = ['abyss', 'midnight', 'slate', 'steel', 'fog', 'frost', 'aurora', 'smoke', 'tide', 'dusk', 'fjord', 'glacier'];
   otcUI.accents = ACCENTS;
   otcUI.walls = WALLS;
   function initAppearance() {
@@ -1619,7 +1637,7 @@
     $$('[data-otc-walls]').forEach(function (wl) {
       if (wl.children.length) return;
       wl.innerHTML = WALLS.map(function (k) {
-        return '<button type="button" class="otc-wall-swatch" data-wall-pick="' + k + '"><span class="art" data-art="' + k + '"></span>' + k.charAt(0).toUpperCase() + k.slice(1) + '</button>';
+        return '<button type="button" class="otc-wall-swatch" data-wall-pick="' + k + '"' + (WALL_TONE[k] ? ' data-tone="' + WALL_TONE[k] + '"' : '') + '><span class="art" data-art="' + k + '"></span>' + k.charAt(0).toUpperCase() + k.slice(1) + '</button>';
       }).join('');
     });
     doc.addEventListener('click', function (e) {
@@ -1640,7 +1658,8 @@
   function syncAppearance() {
     var p = readPrefs();
     $$('[data-accent-pick]').forEach(function (b) { b.classList.toggle('is-on', b.getAttribute('data-accent-pick') === p.accent); });
-    $$('[data-wall-pick]').forEach(function (b) { b.classList.toggle('is-on', b.getAttribute('data-wall-pick') === p.wall); });
+    var wall = shownWall(p.wall, root.getAttribute('data-bs-theme'));
+    $$('[data-wall-pick]').forEach(function (b) { b.classList.toggle('is-on', b.getAttribute('data-wall-pick') === wall); });
     $$('[data-theme-pick]').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-theme-pick') === p.theme); });
     $$('[data-glass-pick]').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-glass-pick') === p.glass); });
     $$('[data-otc-solid]').forEach(function (solid) { solid.checked = root.classList.contains('is-solid'); });
