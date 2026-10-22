@@ -1,3 +1,7 @@
 <script src="{{ config.ASSETS_ROOT }}/js/vendors.min.js?v={{ asset_v('js/vendors.min.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/otc.js?v={{ asset_v('js/otc.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/clipboard.js?v={{ asset_v('js/clipboard.js') }}"></script>
+{# O padrão de TODO campo de data (máscara dd/mm/aaaa, seleção no clique,
+   calendário que acompanha a digitação, botão Today): ANTES dos scripts da
+   página, para embrulhar o flatpickr antes de qualquer tela criar um. #}
+<script src="{{ config.ASSETS_ROOT }}/js/date-std.js?v={{ asset_v('js/date-std.js') }}"></script>

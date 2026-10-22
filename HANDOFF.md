@@ -28475,3 +28475,92 @@ acumulado mais o do dia).
 `check_ndfc_api`, `check_optadv_ir`, `check_unwind_api`, `check_unwind_page` e
 `check_unwind_summary` seguem verdes. O `check_ndf_advice` tem uma falha que já
 existia antes desta mudança ("Mondelez esta no seed").
+
+## §675 — O datepicker da casa: digitável, que acompanha, com Today, em TODA tela (2026-10-22)
+
+**O pedido.** Todo datepicker, por padrão, tem de:
+- selecionar a data inteira ao clicar no campo;
+- aceitar a data digitada com máscara dd/mm/aaaa;
+- acompanhar a digitação no calendário;
+- ter um botão **Today** no pé do calendário.
+
+**Como estava.** O comportamento existia em DOIS lugares e só valia onde alguém
+o tinha ligado à mão:
+- a máscara do flatpickr no `export-advanced.js`, que só o `otcDateField`
+  aplicava (15 telas);
+- a do daterangepicker no `quotes.js` (§508), só na Quotes.
+
+O resto ficava como o plugin entrega: o flatpickr direto (cerca de 20 telas),
+o daterangepicker de data única (18, entre eles NDF Cockpit e NDF Summary) e o
+`<input type="date">` nativo, invisível atrás de um texto, nas recons de FXO,
+Conf. Matching, CGD e Comitente e no CGD da Reference Data. O nativo é o
+calendário do SISTEMA: não aceita botão, não acompanha a digitação e desenha
+mm/dd no Windows do JP.
+
+**O desenho.** Um helper só, `static/js/date-std.js`, carregado pelo
+`partials/footer-scripts.html` em toda página, depois do `otc.js` e ANTES dos
+scripts dela, como o funil e a cópia de célula, mas no começo. Ele:
+- embrulha o `flatpickr` global (e o do elemento) para padronizar cada
+  instância na CRIAÇÃO, e volta a embrulhar depois da carga, porque algumas
+  telas carregam o `vendors.min.js` de novo;
+- reconhece os dois plugins na primeira interação com o campo (`focusin`,
+  `mousedown`, `click`, em captura) e numa varredura depois da carga, que pega
+  o calendário aberto pelo botão do ícone, além do `show.daterangepicker`;
+- no flatpickr de uma data, sem hora e com d/m/Y visível, aplica a máscara de
+  sempre (`otcDateMask`, que saiu do `export-advanced.js`; o `otcDateField` usa
+  esta). O calendário em outro formato ganha só o Today e a seleção no clique;
+- no daterangepicker de data única em DD/MM/YYYY, tira o `readonly`, desliga o
+  `keyup` frouxo do plugin, põe a máscara, leva o calendário ao mês com dia e
+  mês e, com a data inteira, escolhe pelo `clickApply`, o mesmo caminho de um
+  clique no dia (o callback e o `apply.daterangepicker` da página rodam como
+  sempre). Ele ABRE o calendário antes de mudar a data, porque o `hide` só chama
+  o callback quando a data difere da que havia no `show`;
+- põe o **Today** no pé dos dois calendários (`.otc-dp-foot`/`.otc-dp-today` no
+  `otc.scss`): no flatpickr, `setDate(hoje, true)` e fecha; no daterangepicker,
+  hoje no início e no fim e `clickApply`.
+
+**O laço que o teste pegou.** No flatpickr SEM altInput, o campo visível é o
+próprio input do picker. O `setDate` que a máscara chama ao completar a data
+dispara um `input` nesse mesmo campo, que voltava à máscara: "Maximum call
+stack size exceeded". No `otcDateField` isso nunca apareceu, porque ali o
+evento cai no original escondido. A máscara agora tem uma trava de reentrância
+e não reescreve a data que já é a escolhida (a página recarregaria duas vezes).
+
+**As telas que mudaram de picker.**
+- As quatro recons e o CGD da Reference Data saíram do nativo. Nas recons, o
+  `otcDateField` no próprio `#xxx-date`, com o valor seguindo em ISO, que é o
+  que o código delas lê. O texto de exibição separado saiu, e onde a tela
+  escreve a data por código (a data que o servidor devolve; a data padrão da
+  Comitente), ela escreve pelo picker (`_flatpickr.setDate(iso, false)`, sem
+  disparar o `change`). Na Reference Data, o campo dd/mm/aaaa do popup virou
+  flatpickr d/m/Y, o botão do calendário o abre, e a máscara própria da tela
+  saiu.
+- A Quotes ficou só com o Enter, que dispara a busca.
+
+**Prova.**
+- No navegador: o NDF Cockpit (daterangepicker) selecionou tudo no clique; com
+  `1510` o calendário foi a outubro; `15102026` aplicou e recarregou o dia
+  `2026-10-15`; o Today aplicou e recarregou hoje.
+- O NDF Vanilla (flatpickr direto) fez o mesmo, sem erro depois da trava.
+- As quatro recons leram a data digitada e o Today.
+- O popup da Reference Data abriu o calendário pelo botão, o Today funcionou e
+  o popup não fechou.
+- Varredura das **99 telas do menu**: nenhum erro de JavaScript, e os **124
+  calendários** de **67 telas** ficaram no padrão.
+- `check_export_padrao.py` §5 reescrito sobre o `date-std.js`, incluindo
+  "nenhuma tela com `<input type="date">`", em que comentário não conta.
+
+## §676 — NDF Summary: o Import settlement do Cockpit, na própria tela (2026-10-22)
+
+O NDF Summary lê o dia que o import do NDF Cockpit grava (o
+`getTradesBySettle` do Athena, com o IR do mês). Para importar, a equipe tinha
+de abrir o Cockpit, importar e voltar. O botão **Import settlement** (o mesmo
+rótulo, `ndfc-import`, no teal de Import da casa) fica na barra da data de
+referência e chama o MESMO endpoint (`POST /api/ndf-cockpit/import`) com a data
+do campo. O sino é tocado pelo próprio endpoint. Enquanto isso, o estado da tela
+CONTA os segundos ("Importing the settlements from Athena… Ns"), porque no share
+o import leva dezenas de segundos. Depois, o campo de data vai para o dia
+gravado e a tela recarrega esse dia. A falha mostra o motivo do servidor e
+devolve o botão. No Mac o caminho testado foi o da falha (o Athena não resolve
+fora da rede do JP); o de sucesso usa o mesmo contrato de resposta do Cockpit
+(`rows`, `file`, `date`).

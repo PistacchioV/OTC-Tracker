@@ -3152,5 +3152,8 @@
   "dbx-truncated": "La expansión se detuvo en {n} filas.",
   "dbx-day-all": "Día: todos ({n} días)",
   "dbx-day": "Día: {day} — {n} filas",
-  "dbx-total": "Total"
+  "dbx-total": "Total",
+  "ops-importing": "Importando las liquidaciones de Athena… {s}s",
+  "ops-imported": "Listo: {n} fila(s) importada(s) ({file})",
+  "ops-import-failed": "La importación falló"
 }

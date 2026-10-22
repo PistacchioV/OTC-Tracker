@@ -151,7 +151,7 @@ O menu é em **níveis**: um item com **›** à direita tem submenu. Clicar nel
 | **PRODUCTS › Unwinds** | **Swap** (CEM · EDG) · **NDF** (FX · Commodities) · **Options** (FXO · Commodities · EDG) · COE · **DCE** (Deliverable Forward · NDF · Option · Swap) *(NDF › FX e NDF › Commodities com o ciclo completo; as demais importam, conferem e enviam à B3 — ver 5.11)* |
 | **PRODUCTS › Intrag** | NDF · Option · Swap · Unwind · **DCE** (Option · Swap · NDF · DFW) |
 | **REGULATORY** | e-Financeira (KAPITAL · ATHENA-NDF · ATHENA-FXO · PYRAMID) *(em construção)* · Accrual · MtM · WHT *(em construção)* |
-| **DATA BASE** | Reference Data · Index B3 · Mapping · **Users** (Roles · Page Access) · **Support Center** (Tickets List · Ticket Details) |
+| **DATA BASE** | Reference Data · Index B3 · Mapping · **Database Explorer** *(só o master)* · **Users** (Roles · Page Access) · **Support Center** (Tickets List · Ticket Details) |
 
 > Os itens marcados **(em construção)** aparecem no menu mas ainda não têm tela: clicar neles devolve uma página de "não encontrado". Os marcados **(tela pronta; importação em construção)** abrem normalmente, com a grade e as colunas do produto, mas ainda não importam nem enviam — a tela avisa isso em vez de falhar. A lista completa está no anexo 18.3.
 
@@ -231,7 +231,7 @@ O tempo focado soma no *Focused today* e no anel *Focus*. Enquanto você está e
 |---|---|
 | **Profile** | A sua foto (ou as suas iniciais, sem foto cadastrada), nome, e-mail, mesa e SID — vêm do cadastro (3.7) e não se editam aqui |
 | **Notifications** | Liga e desliga os avisos do sino que são **para você**: *Task assigned* (uma tarefa foi passada a você), *Comments* (comentaram numa tarefa sua), *Initiative lead* (você virou líder de uma iniciativa), *Initiative team* (você foi incluído no time de uma iniciativa), *Due dates* (às 08:00 do dia em que uma tarefa sua vence) e *Focus finished* (fim de uma sessão de foco) |
-| **Appearance** | **Theme** (*Light · Dark · Auto* — *Auto* segue o Windows), **Wallpaper** (dez papéis de parede; cada miniatura mostra a parede no tema escolhido), **Accent** (a cor de destaque dos botões e seleções), **Glass** (*Clear* mostra mais o papel de parede; *Tinted* é o padrão) e **Reduce transparency** (superfícies sólidas, sem vidro, e a troca de página sem as animações de entrada — o modo das máquinas sem placa de vídeo, onde elas pesam). O sistema liga *Reduce transparency* sozinho em máquina sem placa de vídeo ou com os **Efeitos de transparência** do Windows desligados; **desligar o botão vale sempre**, mesmo nesses casos |
+| **Appearance** | **Theme** (*Light · Dark · Auto* — *Auto* segue o Windows), **Wallpaper** (as cores lisas da paleta do sistema — **Abyss, Midnight, Slate e Steel** no tema escuro, **Fog e Frost** no claro; a lista mostra só as do tema atual, e trocar de tema leva à cor equivalente do outro, voltando à sua ao retornar — e os papéis desenhados **Aurora, Smoke, Tide, Dusk, Fjord e Glacier**, que valem nos dois temas; cada miniatura mostra a parede no tema escolhido. O padrão é **Frost** no claro e **Abyss** no escuro), **Accent** (a cor de destaque dos botões e seleções), **Glass** (*Clear* mostra mais o papel de parede; *Tinted* é o padrão) e **Reduce transparency** (superfícies sólidas, sem vidro, e a troca de página sem as animações de entrada — o modo das máquinas sem placa de vídeo, onde elas pesam). O sistema liga *Reduce transparency* sozinho em máquina sem placa de vídeo ou com os **Efeitos de transparência** do Windows desligados; **desligar o botão vale sempre**, mesmo nesses casos |
 | **Focus** | A duração da **sessão**, da **pausa** e a **meta diária** de foco, com **−** e **+**. **Start** começa uma sessão agora |
 | **Data** | **Export my tasks as CSV** baixa as suas tarefas, uma por linha. **Reset to defaults** volta aparência, avisos e foco ao original |
 
@@ -419,11 +419,14 @@ São quadrados coloridos de canto arredondado, sempre na mesma ordem e sempre co
 
 1. Clique no campo de data. Um calendário abre logo abaixo, e a data que já estava no campo fica **selecionada inteira**.
 2. Para escolher, navegue pelos meses com as setas do calendário e clique no dia. O calendário fecha e o campo fica preenchido.
-3. Para **digitar**, digite **só os números** — as barras se escrevem sozinhas (`14102026` vira `14/10/2026`). O calendário **acompanha**: com o dia e o mês ele vai para aquele mês, e com a data inteira ele a marca.
+3. Para **digitar**, digite **só os números** — as barras se escrevem sozinhas (`14102026` vira `14/10/2026`). O calendário **acompanha**: com o dia e o mês ele vai para aquele mês, e com a data inteira ele a escolhe na hora — a tela reage como se você tivesse clicado no dia.
+4. Para a data de **hoje**, clique em **Today**, no pé do calendário.
+
+Isso vale para **todo** campo de data do sistema, em todas as telas.
 
 > Data que não existe (`31/02/2026`) ou digitada pela metade **volta à última data válida** quando você sai do campo — nunca vira outro dia sem você ver.
 
-> Isso vale inclusive no Windows com o sistema em inglês: o sistema **não** usa o calendário nativo do navegador justamente para que `03/04` nunca seja lido como 3 de abril de um lado e 4 de março do outro.
+> Isso vale inclusive no Windows com o sistema em inglês: o sistema **não** usa o calendário nativo do navegador (nem do Windows) justamente para que `03/04` nunca seja lido como 3 de abril de um lado e 4 de março do outro.
 
 ### 4.12. O campo *Reference Date*
 
@@ -768,10 +771,11 @@ A tela tem, de cima para baixo: as **abas de produto** (Vanilla · Other Publish
 **Passo a passo:**
 
 1. Confira a **data** no alto. Por padrão vem hoje.
-2. Clique na **aba** do produto que quer olhar, ou em **Total** para ver tudo junto.
-3. Confira o **Settlement Summary**: cada linha é uma contraparte, com *Receive*, *Pay*, *Settlement Net* e a *Direction*.
-4. Se um valor estiver errado, clique em **Edit** na linha, corrija e salve; ou use **Add row** para incluir uma liquidação que não veio automaticamente.
-5. Role até o **Trade Level** para ver de que operações aquele total é feito.
+2. Se as liquidações do dia ainda não foram importadas (ou para trazê-las de novo), clique em **Import settlement**, ao lado da data. É o **mesmo import do NDF Cockpit** (6.2), feito daqui: a linha de estado conta os segundos enquanto o sistema busca na Athena e, ao terminar, a tela recarrega o dia importado. Se algo falhar, o motivo aparece na tela e o botão volta a ficar disponível.
+3. Clique na **aba** do produto que quer olhar, ou em **Total** para ver tudo junto.
+4. Confira o **Settlement Summary**: cada linha é uma contraparte, com *Receive*, *Pay*, *Settlement Net* e a *Direction*.
+5. Se um valor estiver errado, clique em **Edit** na linha, corrija e salve; ou use **Add row** para incluir uma liquidação que não veio automaticamente.
+6. Role até o **Trade Level** para ver de que operações aquele total é feito.
 
 Cada cartão (**Settlement Summary** e **Trade Level**) tem o seu **Clear Filters**, ao lado do **Columns**: ele limpa os funis só da tabela daquele cartão.
 
@@ -791,6 +795,8 @@ Cada cartão (**Settlement Summary** e **Trade Level**) tem o seu **Clear Filter
 3. Uma janela confirma quantas TEDs foram pedidas e quantos anexos foram. **Se faltar a SSI de alguma contraparte, o aviso diz de quem** — providencie e rode de novo.
 
 **A coluna *Settlement Type* do Trade Level** (logo à direita da contraparte) diz que liquidação é aquela: **MATURITY** (o termo venceu), **PREMIUM** ou **UNWIND** (a recompra, que entra na tela pela página de Unwinds). Ela aparece também nas linhas em *Check* — é justamente nelas que ajuda saber que caixa é aquele. Essa coluna é o que a geração dos avisos vai passar a usar.
+
+**O IR (0,005%) e o piso de R$ 1,00 do mês.** O imposto incide sobre a liquidação em que o banco **paga**, por contraparte, e soma termo de moeda, termo de mercadoria e opção de mercadoria. Enquanto o imposto do mês de uma contraparte não alcança **R$ 1,00**, ele **não é retido** — o cliente recebe o bruto — e fica **acumulado**. Quando o acumulado mais o do dia alcança R$ 1,00, **retém-se a soma**. **Alcançado o piso, ele vale para o resto do mês**: toda liquidação seguinte daquela contraparte no mês **retém**, mesmo que o imposto seja de centavos. No mês seguinte a contagem recomeça do zero. Contraparte isenta não paga.
 
 > **Operação intragrupo não gera aviso nem TED.** Não se manda documento nem se transfere dinheiro para a própria casa. A linha continua no Trade Level e no Settlement Summary — a liquidação existe e o total tem de fechar —, mas fica de fora do documento e do pedido de transferência.
 
@@ -2003,6 +2009,25 @@ Este merece um passo a passo próprio, porque tem uma opção que os outros não
 >
 > **Profile** e **Page Access** nunca são bloqueados — é o que impede alguém de ficar sem nenhuma tela.
 
+### 15.3. Database Explorer *(somente master)*
+
+**Menu › Data Base › Database Explorer**
+
+**Para que serve:** mostrar na tela o conteúdo dos bancos de dados do sistema e, nos que permitem, corrigir linhas. Só o **master** vê o item no menu e abre a tela — para qualquer outra pessoa ela não existe, e ela não aparece no Page Access.
+
+**Passo a passo:**
+
+1. Em **Database**, digite parte do nome e escolha o banco (a lista vem agrupada por pasta, com o tamanho de cada um).
+2. Em **Table**, digite para filtrar e escolha a tabela (com o número aproximado de linhas e de colunas). A tabela carrega sozinha; **Rows** define quantas linhas trazer (até 20 mil por vez — o aviso diz quando a tabela tem mais).
+3. A grade tem o funil de cada coluna, **Columns**, **Export** e **Clear Filters**, como as outras telas.
+4. Para corrigir uma linha, clique em **Edit** — só os campos que você mudar são gravados, e cada campo tem a opção **NULL**. Para várias linhas, marque as caixas e use **Batch Edit** (marque as colunas a mudar; o mesmo valor vai para todas as selecionadas) ou **Delete Selected**.
+
+> **Se a linha mudou desde que foi carregada** (outra pessoa gravou nela), a gravação é **recusada inteira** e a grade recarrega — nada é sobrescrito sem você ver. Toda gravação fica registrada no log do sistema, com quem gravou, onde e o quê.
+>
+> **Os bancos do armazém de dados (a pasta `db/`) abrem só para leitura.** As telas leem esses dados por um canal próprio; uma correção feita aqui não chegaria a elas. Corrija pela tela dona do dado.
+
+**Dado guardado em JSON.** Muitas tabelas do armazém guardam o dado como texto JSON. A tela abre esse texto **em colunas** sozinha (o seletor **View** volta ao texto como está gravado). Quando há uma coluna de data — o ledger de IR do NDF Summary, por exemplo —, a grade vem ordenada por dia, o seletor **Day** mostra **um dia por vez** com toda a quebra por contraparte, e o rodapé soma as colunas de valor do que está na tela.
+
 ---
 
 ## 16. Support Center — chamados
@@ -2399,6 +2424,7 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 | Mapping | Data Base | 13.3 |
 | Manage Roles | Data Base › Users › Roles | 15.1 |
 | Page Access | Data Base › Users | 15.2 |
+| Database Explorer *(só o master)* | Data Base | 15.3 |
 | Tickets · Ticket Details | Data Base › Support Center | 16 |
 
 ---

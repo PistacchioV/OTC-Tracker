@@ -29,13 +29,11 @@
 #cgd-page .cgd-kpi__n { font-size: 1.4rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: var(--otc-text); }
 #cgd-page .cgd-kpi__l { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--otc-text-2); }
 
-/* ── Data: `type="date"` INVISÍVEL por cima de um texto readonly em dd/mm/aaaa
-   (o nativo desenha no locale do SISTEMA — mm/dd no Windows do JP). */
+/* ── Data: o calendário da casa (`otcDateField` + `date-std.js`, 22/10/2026) —
+   dd/mm/aaaa que se digita, botão Today; o `value` do campo segue em ISO, que é
+   o que o código abaixo lê. Era o `type="date"` nativo invisível por cima de um
+   texto: o calendário do SISTEMA não aceita o Today nem acompanha a digitação. */
 #cgd-page .date-wrap { width: 132px; }
-#cgd-page .date-wrap input[type=date] { position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 2; }
-#cgd-page .date-wrap input[type=text] { pointer-events: none; padding-right: 28px; }
-#cgd-page .date-wrap-icon { position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
-                            z-index: 1; font-size: 15px; pointer-events: none; color: var(--otc-text-2); }
 
 /* ── Tabela ─────────────────────────────────────────────────────── */
 #cgd-table tbody td.cgd-ell { max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
@@ -63,9 +61,7 @@
             <div class="d-flex align-items-center gap-2">
                 <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="cgd-lbl-date">Position date:</label>
                 <div class="date-wrap">
-                    <input type="text" id="cgd-date-display" class="form-control form-control-sm" placeholder="DD/MM/YYYY" readonly>
-                    <i class="ti ti-calendar date-wrap-icon"></i>
-                    <input type="date" id="cgd-date">
+                    <input type="text" id="cgd-date" class="form-control form-control-sm otc-datefield" placeholder="dd/mm/aaaa" autocomplete="off">
                 </div>
             </div>
 
@@ -427,10 +423,7 @@
             ? '<div class="otc-banner mb-2">' + (j.warnings || []).map(function (w) {
                   return '<div>• ' + esc(msgText(w, 'w_')) + '</div>'; }).join('') + '</div>'
             : '');
-        if (j.ref) {
-            $('#cgd-date').val(j.ref);
-            $('#cgd-date-display').val(j.ref_fmt || '');
-        }
+        if (j.ref) poeData(j.ref);
         desenha();
     }
 
@@ -518,11 +511,18 @@
     });
 
     $('#cgd-date').on('change', function () {
-        // O texto é o que se lê; o nativo é só o calendário.
-        var v = this.value || '';
-        $('#cgd-date-display').val(v ? v.split('-').reverse().join('/') : '');
         carrega();
     });
+
+    // A data que o servidor respondeu volta ao campo pelo PICKER: o campo que
+    // se vê é o altInput, e escrever só no `value` deixaria a data anterior na
+    // tela. Sem disparar o `change`, que recarregaria a página.
+    function poeData(iso) {
+        var el = document.getElementById('cgd-date');
+        if (el && el._flatpickr) el._flatpickr.setDate(iso, false);
+        else if (el) el.value = iso;
+    }
+    if (window.otcDateField) otcDateField('#cgd-date');
 
     $(carrega);
 })(jQuery);

@@ -77,8 +77,10 @@ check('o CSS tem a regra',
 print('\n== 4. um arquivo de cada ==')
 check('o <head> carrega vendors.min.css + otc.css, e só',
       re.findall(r'}}/css/([\w.-]+\.css)', HEAD), ['vendors.min.css', 'otc.css'])
-check('o rodapé carrega vendors.min.js + otc.js + clipboard.js, e só',
-      re.findall(r'}}/js/([\w.-]+\.js)', FOOT), ['vendors.min.js', 'otc.js', 'clipboard.js'])
+# + o `date-std.js` (§675): o padrão de TODO datepicker, que tem de rodar antes
+# dos scripts da página para embrulhar o flatpickr antes de alguma tela criar um
+check('o rodapé carrega vendors.min.js + otc.js + clipboard.js + date-std.js, e só',
+      re.findall(r'}}/js/([\w.-]+\.js)', FOOT), ['vendors.min.js', 'otc.js', 'clipboard.js', 'date-std.js'])
 check('só existe UM scss', sorted(f for f in os.listdir('apps/static/scss')), ['otc.scss'])
 GONE = ('app.css', 'app.min.css', 'visual-refresh.css', 'streamflow.css', 'tools.css', 'js/app.js',
         'js/config.js', 'visual-refresh.js', 'streamflow.js', 'sidenav-drilldown.js', 'sticky-tables.js')

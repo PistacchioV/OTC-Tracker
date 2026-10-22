@@ -124,7 +124,9 @@
     .cp-edit-row.cp-bank-row { grid-template-columns: minmax(0,1.6fr) minmax(0,.7fr) minmax(0,1fr) 32px; }
     .cp-bank-editform { display: grid; grid-template-columns: minmax(0,1.5fr) minmax(0,.7fr) minmax(0,1fr) 30px 30px; gap: 6px; align-items: center; width: 100%; }
 
-    /* data do CGD: o texto mostra dd/mm/aaaa; o botão cobre um date nativo invisível */
+    /* data do CGD: o campo é um flatpickr dd/mm/aaaa (máscara, Today e o calendário
+       que acompanha a digitação vêm do `date-std.js`); o botão abre o calendário.
+       Era um `type="date"` nativo invisível sob o botão — o calendário do SISTEMA. */
     .cp-date-btn {
         position: relative; width: 32px; height: 32px; border-radius: var(--otc-r-sm); cursor: pointer; border: 0;
         display: inline-flex; align-items: center; justify-content: center;
@@ -132,8 +134,6 @@
         transition: background-color var(--otc-dur-fast) var(--otc-ease), scale var(--otc-dur-fast) var(--otc-ease);
     }
     .cp-date-btn:hover { background: var(--otc-fill-2); }
-    .cp-date-btn .cp-cgd-picker { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
-    .cp-date-btn .cp-cgd-picker::-webkit-calendar-picker-indicator { width: 100%; height: 100%; cursor: pointer; }
 
     .cp-contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
     .cp-contact-grid .cp-span2 { grid-column: 1 / -1; }
@@ -946,8 +946,6 @@ $(document).ready(function () {
     }
 
     /* ════════ Date helpers ════════ */
-    function _ymdToBr(s) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || '')); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; }
-    function _brToYmd(s) { var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(s || '').trim()); return m ? m[3] + '-' + m[2] + '-' + m[1] : ''; }
 
     /* approve button shared by CGD/contact pending items (data-own gates self-approval) */
     function _apprBtn(cls, id, own) {
@@ -956,13 +954,19 @@ $(document).ready(function () {
     }
 
     /* ════════ CGD zone (maker/checker) ════════ */
+    /* o calendário da casa nos campos de data do CGD que ainda não o têm (o
+       formulário é refeito a cada edição da zona) */
+    function _cgdPickers(root) {
+        if (typeof flatpickr === 'undefined') return;
+        $(root).find('.cp-cgd-val').each(function () {
+            if (!this._flatpickr) flatpickr(this, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
+        });
+    }
     function _cgdFormRow(item) {
         var val = item ? item.value : '';
-        var ymd = _brToYmd(val);
         return '<div class="cp-cgd-form">' +
             '<input type="text" class="form-control form-control-sm cp-cgd-val" placeholder="dd/mm/yyyy" maxlength="10" value="' + _attr(val) + '">' +
-            '<span class="cp-date-btn" title="' + t('rd-cp-pickdate', 'Pick date') + '"><i class="ti ti-calendar"></i>' +
-                '<input type="date" class="cp-cgd-picker"' + (ymd ? ' value="' + ymd + '"' : '') + '></span>' +
+            '<button type="button" class="cp-date-btn" title="' + t('rd-cp-pickdate', 'Pick date') + '"><i class="ti ti-calendar"></i></button>' +
             '<button type="button" class="cp-okbtn ' + (item ? 'cp-cgd-edit-save" data-id="' + item.id : 'cp-cgd-add-save') + '"><i class="ti ti-check"></i></button>' +
             '<button type="button" class="cp-cxbtn ' + (item ? 'cp-cgd-edit-cancel' : 'cp-cgd-add-cancel') + '"><i class="ti ti-x"></i></button></div>';
     }
@@ -1316,6 +1320,7 @@ $(document).ready(function () {
             didOpen: function(popup){
                 _applyLang(popup);
                 bindButtons(popup);
+                _cgdPickers(popup);
                 // Cinto de segurança do X (2026-09-02: houve relato de clique
                 // sem resposta que não reproduzimos): um listener NATIVO em
                 // fase de CAPTURA, direto no botão — fecha mesmo que a
@@ -1367,6 +1372,7 @@ $(document).ready(function () {
             var $z = $(popup).find('#cp-cgd-zone');
             $z.html(_renderCgdZone(model, cgdEditId));
             _applyLang($z);
+            _cgdPickers($z);
         }
         /* Re-render only the Settlement Net Type zone. */
         function refreshNetZone(popup) {
@@ -1448,18 +1454,11 @@ $(document).ready(function () {
             /* Close */
             $p.on('click', '[data-act="close"]', function(){ Swal.close(); });
 
-            /* ── CGD date picker → write dd/mm/yyyy into the text field ── */
-            $p.on('change', '.cp-cgd-picker', function(){
-                var br = _ymdToBr(this.value);
-                if (br) $(this).closest('.cp-cgd-form').find('.cp-cgd-val').val(br);
-            });
-            /* ── CGD manual typing → dd/mm/yyyy mask (auto-insert slashes) ── */
-            $p.on('input', '.cp-cgd-val', function(){
-                var d = this.value.replace(/\D/g, '').slice(0, 8);
-                var out = d;
-                if (d.length > 4)      out = d.slice(0,2) + '/' + d.slice(2,4) + '/' + d.slice(4);
-                else if (d.length > 2) out = d.slice(0,2) + '/' + d.slice(2);
-                this.value = out;
+            /* ── CGD: o botão do calendário abre o flatpickr do campo ao lado (a
+               máscara dd/mm/aaaa e o Today são do date-std.js) ── */
+            $p.on('click', '.cp-date-btn', function(){
+                var inp = $(this).closest('.cp-cgd-form').find('.cp-cgd-val')[0];
+                if (inp && inp._flatpickr) inp._flatpickr.open();
             });
 
             /* ── CGD: toggle add form ── */
