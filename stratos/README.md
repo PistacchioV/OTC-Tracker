@@ -33,9 +33,10 @@ stratos-sync           (lista o que vai mudar)
 stratos-sync apply     (copia; em src\apps também remove o que saiu da branch)
 ```
 
-e, no `singing-moose-flask`, commit e push para o Bitbucket. O destino padrão é
-`%USERPROFILE%\ds\python-solutions\stratos\76521\singing-moose-flask` na
-ramificação padrão do origin (`OTC_STRATOS_DEST` / `OTC_STRATOS_BRANCH` mudam).
+e, no `singing-moose-flask`, `stratos status` e `stratos push "mensagem"`. O
+destino padrão é `%USERPROFILE%\ds\python-solutions\stratos\76521\singing-moose-flask`
+na ramificação `feature/stratos`, a do Stratos CLI — fora dela o CLI não
+reconhece o projeto (`OTC_STRATOS_DEST` / `OTC_STRATOS_BRANCH` mudam).
 
 ## Como o OTC roda dentro do template
 

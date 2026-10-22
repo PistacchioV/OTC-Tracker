@@ -23,9 +23,9 @@ REM    1. atualiza este checkout - git pull - e confere a branch e que ele nao
 REM       tem nada fora do git em apps\ ou stratos\: o servidor tem de receber
 REM       a branch, nao o que alguem deixou na pasta;
 REM    2. confere que o destino e um repositorio git e o poe na ramificacao
-REM       certa: DEST_BRANCH abaixo, ou a variavel OTC_STRATOS_BRANCH; vazio e
-REM       a ramificacao padrao do origin, a que o pipeline constroi.
-REM  Depois do apply: no destino, commit e push para o Bitbucket.
+REM       do Stratos CLI, feature/stratos - DEST_BRANCH abaixo, ou a variavel
+REM       OTC_STRATOS_BRANCH. Fora dela o CLI nao reconhece o projeto.
+REM  Depois do apply, no destino: stratos status e stratos push "mensagem".
 REM
 REM  "Diferente" e data ou tamanho, como no hotfix.bat: um git pull troca a
 REM  data so dos arquivos que mudaram, e so eles sao copiados.
@@ -44,7 +44,7 @@ set "DEST=%USERPROFILE%\ds\python-solutions\stratos\76521\singing-moose-flask"
 if defined OTC_STRATOS_DEST set "DEST=%OTC_STRATOS_DEST%"
 REM Barra no fim viraria aspas escapadas no robocopy: "C:\x\" .
 if "%DEST:~-1%"=="\" set "DEST=%DEST:~0,-1%"
-set "DEST_BRANCH="
+set "DEST_BRANCH=feature/stratos"
 if defined OTC_STRATOS_BRANCH set "DEST_BRANCH=%OTC_STRATOS_BRANCH%"
 
 set "REPO=%~dp0"
@@ -56,6 +56,20 @@ set "OVL_DST=%DEST%\src"
 
 set "APPLY=0"
 if /i "%~1"=="apply" set "APPLY=1"
+
+REM O pull vem PRIMEIRO e dentro de um bloco. O cmd le o .bat do disco aos
+REM poucos, e um pull que mude ESTE arquivo no meio da execucao faria o resto
+REM ser lido no deslocamento antigo do arquivo novo - comandos pela metade. O
+REM bloco e lido inteiro antes de rodar; depois do pull o script chama a si
+REM mesmo, ja na versao nova, e esta copia termina sem ler mais nada do disco.
+if not defined OTC_STRATOS_PULLED (
+    set "OTC_STRATOS_PULLED=1"
+    echo Atualizando este checkout ...
+    git -C "%REPO%" pull --ff-only
+    if errorlevel 1 set "OTC_STRATOS_PULL_FALHOU=1"
+    call "%~f0" %*
+    goto :eof
+)
 
 where git >nul 2>&1
 if errorlevel 1 (
@@ -74,9 +88,7 @@ if /i not "%CUR_SRC%"=="%SRC_BRANCH%" (
     exit /b 1
 )
 
-echo Atualizando %SRC_BRANCH% ...
-git -C "%REPO%" pull --ff-only
-if errorlevel 1 (
+if defined OTC_STRATOS_PULL_FALHOU (
     echo AVISO: o git pull falhou - a lista abaixo e do que ja estava aqui.
     if "%APPLY%"=="1" (
         echo Corrija o checkout antes do apply.
@@ -107,16 +119,6 @@ if not exist "%DEST%\" (
 git -C "%DEST%" rev-parse --is-inside-work-tree >nul 2>&1
 if errorlevel 1 (
     echo Erro: "%DEST%" nao e um repositorio git.
-    pause
-    exit /b 1
-)
-if not defined DEST_BRANCH (
-    for /f "delims=" %%B in ('git -C "%DEST%" symbolic-ref --short refs/remotes/origin/HEAD 2^>nul') do set "DEST_BRANCH=%%B"
-)
-if defined DEST_BRANCH set "DEST_BRANCH=!DEST_BRANCH:origin/=!"
-if not defined DEST_BRANCH (
-    echo Erro: nao sei a ramificacao do destino. Defina DEST_BRANCH no topo
-    echo       deste .bat, ou rode no destino: git remote set-head origin -a
     pause
     exit /b 1
 )
@@ -203,7 +205,7 @@ if "%APPLY%"=="0" (
         echo ATENCAO: houve erro em pelo menos um arquivo - confira a lista acima.
     ) else (
         echo %COUNT% copiado[s], %XCOUNT% removido[s] em %DEST%.
-        echo Agora, no destino: git status, commit e push para o Bitbucket.
+        echo Agora, no destino: stratos status e stratos push "mensagem".
     )
 )
 echo.
