@@ -151,6 +151,11 @@
                 <span id="opsLoadState" class="ops-load-state fs-sm" aria-live="polite"></span>
             </div>
             <div class="ops-datefield d-flex align-items-center gap-2">
+                {# o MESMO import do NDF Cockpit (getTradesBySettle da data), daqui
+                   mesmo: o Summary lê o dia que ele grava (mesa, 22/10/2026) #}
+                <button type="button" class="btn btn-sm btn-toolbar-import bg-gradient me-2" id="opsImportSettlements">
+                    <i class="ti ti-file-import me-1"></i><span data-lang="ndfc-import">Import settlement</span>
+                </button>
                 <label class="fs-sm fw-semibold mb-0" data-lang="ops-ref-date">Reference date</label>
                 <div class="ops-datewrap" id="opsDateWrap">
                     <input type="text" id="ops-ref-date" readonly autocomplete="off" placeholder="dd/mm/yyyy">
@@ -992,6 +997,64 @@ document.addEventListener('DOMContentLoaded', function () {
     // Expose the batch loader so the reference-date picker (own <script> below)
     // can trigger a reload.
     window.opsLoadDate = loadDate;
+
+    // ── Import settlement: o MESMO import do NDF Cockpit ───────────────────
+    // `POST /api/ndf-cockpit/import` com a data do campo: puxa o
+    // getTradesBySettle do Athena, grava o dia do Cockpit (com o IR do mês) e
+    // toca o sino. O Summary lê esse dia, então em seguida recarrega a data que
+    // o import devolveu. No share o import leva dezenas de segundos: o estado
+    // CONTA os segundos e diz a etapa, senão um botão parado se lê "travou".
+    (function () {
+        var btn = document.getElementById('opsImportSettlements');
+        if (!btn) return;
+        var ico = btn.querySelector('i'), icoCls = ico ? ico.className : '';
+        var tick = null;
+        function busy(on) {
+            btn.disabled = on;
+            if (ico) ico.className = on ? 'spinner-border spinner-border-sm me-1' : icoCls;
+            if (tick) { clearInterval(tick); tick = null; }
+            if (!on) return;
+            var t0 = Date.now();
+            function mostra() {
+                showState('busy', '<span class="spinner-border" role="status"></span> ' +
+                    esc(t('ops-importing', 'Importing the settlements from Athena… {s}s')
+                        .replace('{s}', Math.round((Date.now() - t0) / 1000))));
+            }
+            mostra(); tick = setInterval(mostra, 1000);
+        }
+        btn.addEventListener('click', function () {
+            busy(true);
+            fetch('/api/ndf-cockpit/import', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date: currentYmd })
+            })
+                .then(function (r) { return r.json().catch(function () { return { success: false, error: 'HTTP ' + r.status }; }); })
+                .then(function (d) {
+                    busy(false);
+                    if (d && d.success) {
+                        var dia = d.date || currentYmd;
+                        // o campo de data acompanha o dia que o import gravou
+                        if (window.jQuery && jQuery('#ops-ref-date').data('daterangepicker') && window.moment) {
+                            jQuery('#ops-ref-date').data('daterangepicker').setStartDate(moment(dia, 'YYYY-MM-DD'));
+                            jQuery('#ops-ref-date').data('daterangepicker').setEndDate(moment(dia, 'YYYY-MM-DD'));
+                        }
+                        loadDate(dia);
+                        if (window.otcToast) window.otcToast(t('ops-imported', 'Done: {n} row(s) imported ({file})')
+                            .replace('{n}', d.rows).replace('{file}', d.file || ''));
+                    } else {
+                        showState('err', '<i class="ti ti-alert-triangle"></i> ' + esc((d && d.error) || t('ops-import-failed', 'Import failed')));
+                        if (window.Swal) Swal.fire({ icon: 'warning', title: t('ops-import-failed', 'Import failed'),
+                                                     text: (d && d.error) || '' });
+                    }
+                    if (window.fetchNotifications) window.fetchNotifications();
+                })
+                .catch(function () {
+                    busy(false);
+                    showState('err', '<i class="ti ti-alert-triangle"></i> ' + esc(t('ops-load-err-net', 'no response from the server')));
+                });
+        });
+    })();
     loadDate('{{ today }}');   // initial load for today
 });
 </script>

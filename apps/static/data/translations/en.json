@@ -3152,5 +3152,8 @@
   "dbx-truncated": "The expansion stopped at {n} rows.",
   "dbx-day-all": "Day: all ({n} days)",
   "dbx-day": "Day: {day} — {n} rows",
-  "dbx-total": "Total"
+  "dbx-total": "Total",
+  "ops-importing": "Importing the settlements from Athena… {s}s",
+  "ops-imported": "Done: {n} row(s) imported ({file})",
+  "ops-import-failed": "Import failed"
 }
