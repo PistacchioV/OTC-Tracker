@@ -597,6 +597,17 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   página fica pendente para o erro cru dela ("Not authenticated") não cobrir o
   aviso. Todo 401 de `/api/*` é "sem sessão"; não use 401 para outra coisa. A
   troca de IP loga em WARNING (`[enforce_session_ip]`).
+- **Database Explorer (`/database-explorer`, Data Base) é só do MASTER**
+  (§673): os bancos DuckDB do `DATABASE_DIR` na tela, com Edit, Delete e
+  alteração em lote. Quem segura é a ROTA (`_session_is_master`), não o
+  `Page_Access` — vazio é acesso total —, e a página fica fora da checklist do
+  /page-access (`authz._MASTER_ONLY_PATHS`). Banco e tabela só entram no SQL
+  conferidos no catálogo do próprio banco; valor, sempre `?`. Cada linha vai
+  com `rowid` + impressão digital, conferidos sob a trava: a linha que mudou
+  desde a leitura RECUSA o pedido inteiro. **Banco do armazém (com
+  `_manifest`) é só leitura**: o app o lê pelo `_raw` e memoriza pelo carimbo,
+  então a coluna tipada editada ali não chegaria às telas. Toda gravação loga
+  `[db-explorer]` em WARNING com SID, banco, tabela e colunas.
 - **Maker/checker (4-olhos) só vale na PROD** (§553): `Config.FOUR_EYES`,
   do bloco de ambiente (`_FOUR_EYES = False` na dev, onde uma pessoa só
   testa). Trava NOVA de "o próprio maker não aprova/envia" pergunta ao

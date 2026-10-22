@@ -28291,3 +28291,83 @@ sete retiradas fora dos quatro lugares e migradas no `<head>`. No navegador
 preferência regravada como `frost`. A Slate escolhida no escuro pintou
 `#253745` e, no claro, `#9ba8ab` com a Fog marcada e o nome Fog na Settings. A
 gaveta mostrou só as do tema.
+
+## §673 — Database Explorer: os bancos DuckDB na tela, só para o master (2026-10-22)
+
+**O pedido.** Uma página que só o master vê, para puxar o conteúdo dos bancos
+DuckDB: um campo para escolher o banco, um filtro para achar a tabela num banco
+com muitas, e a tabela com as colunas dela, os filtros da casa, botões de ação,
+checkbox e alteração em lote.
+
+**Onde mora.** Data Base › Database Explorer (`/database-explorer`), vertical
+`features/db_explorer/` (`domain` puro, `queries` de leitura, `commands` de
+gravação, `entrypoint` com as rotas), template e JS próprios
+(`pages/database-explorer.html`, `js/pages/database-explorer.js`).
+
+**A trava é da rota, não do menu.** O link só aparece para o master, mas um
+`Page_Access` vazio é acesso total (§5). Por isso a página volta ao dashboard e a
+API responde 403 `master_only` para quem não é master, conferindo o SID
+(`_session_is_master`). A página também saiu da checklist do /page-access
+(`authz._MASTER_ONLY_PATHS`): lida do menu como as outras, ela deixaria um admin
+"conceder" uma tela que a rota recusa.
+
+**O que entra no SQL.** O banco é um caminho RELATIVO ao `DATABASE_DIR`,
+recusado com `..`, absoluto, `_recuperado` ou extensão de não-banco
+(`domain.resolve_db`), e conferido pela marca `DUCK` do cabeçalho: o SQLite de
+comitentes com `.db` no nome para em `not_duckdb`. Tabela e coluna só entram
+entre aspas depois de achadas no catálogo do próprio banco (`duckdb_tables`,
+`duckdb_views`, `duckdb_columns`). O tipo do `CAST` vem do catálogo e só passa
+nome simples com precisão: lista, STRUCT, MAP, ENUM e BLOB ficam só leitura.
+Valor, sempre `?`.
+
+**A linha que mudou não é sobrescrita.** Cada linha chega à tela com o `rowid` e
+a impressão digital da linha inteira (`domain.row_hash`). O Edit, o lote e o
+Delete abrem UM `duckdb_write` (trava exclusiva entre instâncias + transação),
+recalculam a impressão de cada linha pedida e só gravam se todas baterem. Uma
+que divergiu, ou que outra instância apagou, recusa o pedido INTEIRO com 409
+`row_changed`, e a tela recarrega do banco.
+
+**Por que o `rowid` vai numa lista só.** No DuckDB 1.5.4 o UPDATE de algumas
+colunas (lista, chave) é delete + insert e troca o `rowid` da linha. Por isso o
+UPDATE e o DELETE são um comando cada, com `rowid IN (SELECT unnest(?))`, e não
+fatias `IN (?, ?…)` em sequência: uma segunda fatia poderia achar a linha errada.
+Toda gravação recarrega a grade pelo mesmo motivo.
+
+**O armazém é só leitura.** Os bancos com `_manifest` (§434) são lidos pelo app
+pelo canal `_raw`, com memória chaveada pelo carimbo do manifest. Editar a coluna
+tipada por aqui não mudaria o que as telas mostram, e a memória serviria o valor
+antigo até o restart. Esses bancos abrem com aviso, sem checkbox, sem Edit e sem
+lote, e o servidor também recusa a gravação (`readonly_store`). View e tabela com
+uma coluna chamada `rowid` (que esconde a pseudo-coluna) também ficam só leitura.
+
+**A tela.**
+- Os dois combos são de busca, nunca `<datalist>`: os bancos agrupados por pasta
+  com o tamanho, e as tabelas com o tamanho ESTIMADO e as colunas. A contagem
+  exata seria um `count(*)` por tabela, duzentas varreduras num banco do armazém.
+- A grade é uma DataTable que se refaz a cada tabela, como o /mapping, com o
+  funil, o Export da casa (Advanced incluído), Columns e Clear Filters.
+- Linhas: 500 a 20 mil por vez, teto de 50 mil no servidor, e o aviso diz quando
+  a tabela tem mais do que veio.
+- O Edit e o lote usam o MESMO modal: o Edit manda só o que mudou e o lote
+  aplica as colunas marcadas a todas as linhas selecionadas. Cada campo tem o
+  seletor NULL. A data usa o `otcDateField`, o timestamp é digitado
+  `dd/mm/aaaa hh:mm:ss`, e o campo vazio é NULL nas colunas que não são texto.
+- O painel dos seletores tem `z-index` próprio. Sem ele a lista dos combos abria
+  por BAIXO da placa da grade, porque cada placa é um contexto de empilhamento, e
+  a camada vai no wrapper, nunca no menu (§637).
+
+**Rastro.** Toda gravação loga `[db-explorer]` em WARNING (o nível que sai na
+instância), com SID, ação, quantas linhas, banco, tabela e colunas.
+
+**Prova.**
+- `check_db_explorer.py` (62 asserções): regras puras, trava e a API ponta a
+  ponta num `DATABASE_DIR` temporário.
+- Guardas verdes: `check_soc_layers`, `check_modal_standard`, `check_edit_modal`,
+  `check_row_action_buttons`, `check_export_padrao`, `check_export_excel_ids`,
+  `check_export_name`, `check_table_center`, `check_dropdown_layers`,
+  `check_nav_alias`, `check_config_names`, `check_theme_toggle`.
+- `check_export_advanced` tem duas falhas que já existem no HEAD limpo (a segunda
+  passada dos dias, §562) e não são desta mudança.
+- No navegador, com sessão de master: 175 bancos listados, a tabela `users`
+  carregada, o lote e o Edit no modal, o Subjacente do armazém só leitura com o
+  aviso, nos dois temas.
