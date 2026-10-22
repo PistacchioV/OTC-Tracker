@@ -3149,5 +3149,8 @@
   "dbx-view-raw": "Ver: como está grabado",
   "dbx-view-expand": "Ver: abrir el JSON de {col}",
   "dbx-expanded": "El JSON de <b>{col}</b> se muestra como tabla: {n} filas de {m} registros. Solo lectura — elija \"como está grabado\" en Ver para ver la columna como se guardó.",
-  "dbx-truncated": "La expansión se detuvo en {n} filas."
+  "dbx-truncated": "La expansión se detuvo en {n} filas.",
+  "dbx-day-all": "Día: todos ({n} días)",
+  "dbx-day": "Día: {day} — {n} filas",
+  "dbx-total": "Total"
 }
