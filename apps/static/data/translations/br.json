@@ -3145,5 +3145,9 @@
   "dbx-e-bad_value": "O banco recusou o valor: {msg}",
   "dbx-e-constraint": "Uma restrição do banco foi violada: {msg}",
   "dbx-e-db_busy": "O banco está em uso por outra instância. Tente de novo em instantes.",
-  "dbx-e-db_error": "Erro do banco: {msg}"
+  "dbx-e-db_error": "Erro do banco: {msg}",
+  "dbx-view-raw": "Ver: como está gravado",
+  "dbx-view-expand": "Ver: abrir o JSON de {col}",
+  "dbx-expanded": "O JSON de <b>{col}</b> aparece como tabela: {n} linhas de {m} registros. Só leitura — escolha \"como está gravado\" em Ver para ver a coluna como foi salva.",
+  "dbx-truncated": "A expansão parou em {n} linhas."
 }

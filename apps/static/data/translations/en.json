@@ -3145,5 +3145,9 @@
   "dbx-e-bad_value": "The database refused the value: {msg}",
   "dbx-e-constraint": "A database constraint was violated: {msg}",
   "dbx-e-db_busy": "The database is in use by another instance. Try again in a moment.",
-  "dbx-e-db_error": "Database error: {msg}"
+  "dbx-e-db_error": "Database error: {msg}",
+  "dbx-view-raw": "View: as stored",
+  "dbx-view-expand": "View: expand JSON in {col}",
+  "dbx-expanded": "The JSON in <b>{col}</b> is shown as a table: {n} rows from {m} records. Read-only — pick \"As stored\" in View to see the column as saved.",
+  "dbx-truncated": "The expansion stopped at {n} rows."
 }

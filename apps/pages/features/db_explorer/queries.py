@@ -167,10 +167,32 @@ def tables(rel):
     return out
 
 
-def rows(rel, schema, table, limit):
+def _expandida(cols, valores, escolha):
+    """A visão EXPANDIDA (`domain.expand`) com a família de cada coluna: as
+    da tabela mantêm a do catálogo (texto que é sempre data ISO vira data,
+    para a tela escrever dd/mm/aaaa), as que saíram do JSON pela dos valores."""
+    names = [n for n, _t in cols]
+    nomes, linhas, cortou = domain.expand(names, valores, names.index(escolha))
+    catalogo = {n: t for n, t in cols if n != escolha and n != '_seq'}
+    meta = []
+    for i, n in enumerate(nomes):
+        tipo = catalogo.get(n) if i < len(catalogo) else None
+        kind = domain.kind_of(tipo) if tipo else None
+        if tipo is None or kind in ('text', None):
+            achado = domain.infer_kind([l[i] for l in linhas])
+            kind = achado if tipo is None or achado == 'date' else kind
+        meta.append({'name': n, 'type': str(tipo) if tipo else 'JSON', 'kind': kind})
+    return meta, [[None, None] + [domain.cell(v) for v in l] for l in linhas], cortou
+
+
+def rows(rel, schema, table, limit, expand=None):
     """As linhas para a grade: `[rowid, impressão, valores…]` numa tabela que
     se edita, `[None, None, valores…]` numa que não. A impressão é da linha
-    INTEIRA, e é ela que a gravação confere."""
+    INTEIRA, e é ela que a gravação confere.
+
+    `expand`: a coluna JSON a abrir em linhas e colunas (`''` = como está
+    gravado; `None` = o padrão, que no armazém abre a tabela "chave + JSON" já
+    expandida). A visão expandida é só leitura."""
     path = db_path(rel)
     limit = domain.clamp_limit(limit)
 
@@ -191,11 +213,25 @@ def rows(rel, schema, table, limit):
             cur = con.execute('SELECT * FROM %s LIMIT ?' % q, [limit])
             dados = cur.fetchall()
             cols = [(d[0], str(d[1])) for d in cur.description]
+        names = [n for n, _t in cols]
+        valores = [list(r[1:]) if motivo is None else list(r) for r in dados]
+        candidatos = domain.json_columns(names, valores)
+        if expand is None:
+            escolha = domain.default_expand(names, candidatos, store)
+        else:
+            escolha = expand if expand in candidatos else None
+        out = {'total': total, 'limit': limit, 'kind': alvo['kind'], 'store': store,
+               'json_columns': candidatos, 'expanded': escolha, 'truncated': False,
+               'source_rows': len(dados)}
+        if escolha:
+            meta, linhas, out['truncated'] = _expandida(cols, valores, escolha)
+            out.update(columns=meta, rows=linhas, readonly=motivo or 'expanded')
+            return out
         meta = [{'name': n, 'type': str(t), 'kind': domain.kind_of(t)} for n, t in cols]
         if motivo is None:
             linhas = [[r[0], domain.row_hash(r[1:])] + [domain.cell(v) for v in r[1:]] for r in dados]
         else:
             linhas = [[None, None] + [domain.cell(v) for v in r] for r in dados]
-        return {'columns': meta, 'rows': linhas, 'total': total, 'limit': limit,
-                'readonly': motivo, 'kind': alvo['kind'], 'store': store}
+        out.update(columns=meta, rows=linhas, readonly=motivo)
+        return out
     return _ler(path, fn)
