@@ -1,0 +1,396 @@
+"""Confere o OTC Tracker montado no template do Stratos, no layout do destino.
+
+Monta num diretório temporário o que o stratos-sync.bat entrega ao
+singing-moose-flask — src/solution.py, src/run.py, src/otc_stratos.py e
+src/apps/ — e sobe o `solution.py` com um Stratos de MENTIRA (o stratos-blocks
+é interno do JPM). O que se confere:
+
+  1. os blocos DO NOT DELETE do solution.py e do run.py são os do template, e
+     o requirements.txt gerado está em dia;
+  2. o SSO: sem identidade é 403; o master entra num banco vazio; quem não tem
+     cadastro vira pedido de acesso; trocar de SID troca a sessão;
+  3. o prefixo: Location, HTML (href/src/action, Speculation Rules), estático,
+     cookie no caminho da solução, o shim na página e no /sw.js;
+  4. o shim de JavaScript, no node (se houver).
+
+    OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python stratos/tests/check_stratos.py
+"""
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import types
+
+AQUI = os.path.dirname(os.path.abspath(__file__))
+STRATOS = os.path.dirname(AQUI)
+RAIZ = os.path.dirname(STRATOS)
+BASE = '/76521/otc-tracker-ops-ai-citizen'
+MARCA = '########### DO NOT DELETE ###########'
+
+FALHAS = []
+
+
+def ok(cond, msg):
+    print(('ok    ' if cond else 'FAIL  ') + msg)
+    if not cond:
+        FALHAS.append(msg)
+
+
+# ── 1. Template ─────────────────────────────────────────────────────────────
+
+# O solution.py do template do Stratos, verbatim. Só os trechos entre as marcas
+# DO NOT DELETE e o cabeçalho (até "ADD YOUR OTHER IMPORTS") são conferidos.
+TEMPLATE_SOLUTION = '''# file solution.py
+# OTEL bootstrap MUST come first — installs the global TracerProvider before
+# Flask is imported so its instrumentor can wire into an untraced app.
+from stratosblocks.web.otel import bootstrap_otel
+
+bootstrap_otel()
+
+from flask import Flask, session, Response, request
+from stratosblocks.authentication.web import StratosAuth, StratosDispatcherMiddleware
+from stratosblocks.web.logging import enable_logging
+from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.middleware.dispatcher import DispatcherMiddleware
+from opentelemetry import trace
+from opentelemetry.instrumentation.flask import FlaskInstrumentor
+from opentelemetry.instrumentation.requests import RequestsInstrumentor
+import json
+########### ADD YOUR OTHER IMPORTS HERE ###########
+
+# Enable logging level. Default is ERROR but can be set to DEBUG, INFO or WARN
+# e.g. enable_logging("DEBUG")
+logger = enable_logging("INFO")
+
+########### DO NOT DELETE ###########
+CONTEXT_ROOT = '/76521/otc-tracker-ops-ai-citizen'
+
+def create_app():
+    flask_app = Flask(__name__)
+    flask_app.wsgi_app = ProxyFix(flask_app.wsgi_app, x_proto=1)
+    flask_app.config['SECRET_KEY'] = "76521-singing-moose-flask"
+    flask_app.config['routes_pathname_prefix'] = CONTEXT_ROOT + '/'
+    flask_app.wsgi_app = StratosDispatcherMiddleware(flask_app.wsgi_app, DispatcherMiddleware(
+        Response('Not Found', status=404),
+        {CONTEXT_ROOT: flask_app.wsgi_app}
+    ))
+    return flask_app
+
+app = create_app()
+
+# Framework instrumentation. Flask instrumentor wires ASGI-style middleware
+# into the WSGI app; RequestsInstrumentor auto-traces outbound calls.
+FlaskInstrumentor().instrument_app(app)
+RequestsInstrumentor().instrument()
+
+stratos_auth = StratosAuth(app, 76521)
+
+@app.before_request
+def add_post_body_to_trace():
+    try:
+        from flask import has_request_context
+
+        if has_request_context() and request.method == 'POST':
+            span = trace.get_current_span()
+            if span.is_recording():
+                try:
+                    post_body = request.get_json()
+                    if post_body:
+                        span.set_attribute('http.request.post_body', json.dumps(post_body))
+                except Exception:
+                    try:
+                        post_data = request.get_data(as_text=True)
+                        if post_data:
+                            span.set_attribute('http.request.post_body', post_data)
+                    except Exception:
+                        pass
+    except Exception as e:
+        logger.debug(f"Could not add POST body to trace: {e}")
+
+########### DO NOT DELETE ###########
+
+########### YOUR CODE MODIFICATIONS SHOULD GO BELOW HERE ###########
+
+########### DO NOT DELETE ###########
+@app.route("/actuator/keepalive")
+def health():
+    return {"status": "up"}
+
+if __name__ == "__main__":
+    app.run(host='0.0.0.0', port=8443, debug=False)
+########### DO NOT DELETE ###########
+'''
+
+TEMPLATE_RUN = '''########### DO NOT DELETE ###########
+import subprocess
+import sys
+
+
+def main():
+    exit_code = subprocess.run(["python", "solution.py"])
+    sys.exit(exit_code)
+
+
+# make testable for build to pass
+def startup():
+    if __name__ == '__main__':
+        main()
+
+
+startup()
+
+########### DO NOT DELETE ###########
+'''
+
+
+def blocos(texto):
+    partes = texto.split(MARCA)
+    return [partes[i] for i in range(1, len(partes), 2)]
+
+
+def confere_template():
+    sol = open(os.path.join(STRATOS, 'src', 'solution.py'), encoding='utf-8').read()
+    ok(blocos(sol) == blocos(TEMPLATE_SOLUTION) and len(blocos(sol)) == 2,
+       'solution.py: os dois blocos DO NOT DELETE identicos ao template')
+    corte = '########### ADD YOUR OTHER IMPORTS HERE ###########'
+    ok(sol.split(corte)[0] == TEMPLATE_SOLUTION.split(corte)[0],
+       'solution.py: cabecalho (bootstrap_otel primeiro) identico ao template')
+    run = open(os.path.join(STRATOS, 'src', 'run.py'), encoding='utf-8').read()
+    ok(run == TEMPLATE_RUN, 'run.py identico ao template')
+    r = subprocess.run([sys.executable, os.path.join(STRATOS, 'build_requirements.py'), '--check'],
+                       capture_output=True, text=True)
+    ok(r.returncode == 0, 'requirements.txt em dia com o da raiz (' + r.stdout.strip() + ')')
+
+
+# ── 2/3. Subida com o Stratos de mentira ────────────────────────────────────
+
+class _Usuario(object):
+    def __init__(self, sid):
+        self.sid = sid or ''
+        self.authorized = bool(sid)
+        self.first_name = 'Teste'
+        self.last_name = sid or ''
+
+
+def _stubs():
+    from flask import request
+
+    def modulo(nome, **attrs):
+        m = types.ModuleType(nome)
+        m.__dict__.update(attrs)
+        sys.modules[nome] = m
+        return m
+
+    class StratosAuth(object):
+        def __init__(self, app, seal):
+            self.app, self.seal = app, seal
+
+        def user(self):   # a identidade vem de um cabeçalho do teste
+            return _Usuario(request.headers.get('X-Test-SID'))
+
+    def dispatcher(app, inner):
+        return inner
+
+    modulo('stratosblocks')
+    modulo('stratosblocks.web')
+    modulo('stratosblocks.web.otel', bootstrap_otel=lambda: None)
+    modulo('stratosblocks.web.logging',
+           enable_logging=lambda nivel: __import__('logging').getLogger('stratos'))
+    modulo('stratosblocks.authentication')
+    modulo('stratosblocks.authentication.web', StratosAuth=StratosAuth,
+           StratosDispatcherMiddleware=dispatcher)
+    try:
+        import opentelemetry.instrumentation.flask  # noqa: F401
+        import opentelemetry.instrumentation.requests  # noqa: F401
+    except ImportError:
+        class _Span(object):
+            def is_recording(self):
+                return False
+
+        class _Noop(object):
+            def instrument_app(self, app):
+                pass
+
+            def instrument(self):
+                pass
+
+        modulo('opentelemetry', trace=types.SimpleNamespace(get_current_span=_Span))
+        modulo('opentelemetry.instrumentation')
+        modulo('opentelemetry.instrumentation.flask', FlaskInstrumentor=_Noop)
+        modulo('opentelemetry.instrumentation.requests', RequestsInstrumentor=_Noop)
+
+
+def confere_subida(tmp, sem_awmpy):
+    src = os.path.join(tmp, 'src')
+    os.makedirs(src)
+    for nome in ('solution.py', 'run.py', 'otc_stratos.py'):
+        shutil.copy(os.path.join(STRATOS, 'src', nome), src)
+    os.symlink(os.path.join(RAIZ, 'apps'), os.path.join(src, 'apps'))
+    os.environ['OTC_STRATOS_ROOT'] = os.path.join(tmp, 'otc-root')
+    os.environ.pop('OTC_DATA_DIR', None)
+    os.environ.pop('OTC_DATABASE_DIR', None)
+    os.environ['OTC_DISABLE_SCHEDULERS'] = '1'
+    os.environ['SECRET_KEY'] = 'teste-stratos'
+    if sem_awmpy:
+        sys.modules['awmpy'] = None   # `import awmpy` levanta ImportError
+    _stubs()
+    sys.path.insert(0, src)
+    os.chdir(src)
+    import solution
+
+    app = solution.app
+
+    from flask import redirect
+
+    @app.route('/__teste_redirect')
+    def teste_redirect():   # um redirect escrito à mão, como há no OTC
+        return redirect('/dashboard')
+
+    ok(app.config['DATA_DIR'].startswith(os.path.join(tmp, 'otc-root')),
+       'DATA_DIR sob o OTC_STRATOS_ROOT (bloco ENV:STRATOS)')
+    ok(app.config['FOUR_EYES'] is True, 'maker/checker ligado no Stratos')
+    ok(app.root_path == os.path.join(src, 'apps'), 'root_path do app = src/apps')
+    if sem_awmpy:
+        ok(getattr(sys.modules.get('awmpy'), '_otc_stratos_stub', False),
+           'sem awmpy instalado: o substituto entra e o app sobe')
+
+    c = app.test_client()
+    MASTER = {'X-Test-SID': 'E930179'}
+
+    r = c.get('/actuator/keepalive')
+    ok(r.status_code == 404, 'fora do CONTEXT_ROOT: 404 do dispatcher')
+    r = c.get(BASE + '/actuator/keepalive')
+    ok(r.status_code == 200 and r.get_json() == {'status': 'up'}, 'health sem identidade: 200')
+
+    r = c.get(BASE + '/stratos/whoami')
+    ok(r.status_code == 200 and b'not authorized' in r.data, 'whoami fora da ponte de SSO')
+
+    r = c.get(BASE + '/')
+    ok(r.status_code == 403, 'sem identidade do Stratos: 403')
+    r = c.get(BASE + '/api/user-home/favorites')
+    ok(r.status_code == 403 and (r.get_json() or {}).get('code') == 'not_authorized',
+       'API sem identidade: 403 JSON com code (nunca 401)')
+
+    from apps.pages import routes
+    ok(routes.get_user_by_sid('E930179') is None, 'banco de usuarios nasce vazio')
+    r = c.get(BASE + '/', headers=MASTER)
+    ok(r.status_code == 302 and r.headers['Location'] == BASE + '/dashboard',
+       'master num banco vazio: entra e vai ao dashboard (%s %s)'
+       % (r.status_code, r.headers.get('Location')))
+    u = routes.get_user_by_sid('E930179') or {}
+    ok(u.get('Status') == 'Active', 'master ativado sozinho')
+    cookie = c.get_cookie('otc_tracker_session', path=BASE)
+    ok(cookie is not None, 'cookie de sessao proprio, no caminho da solucao')
+
+    r = c.get(BASE + '/__teste_redirect', headers=MASTER)
+    ok(r.headers.get('Location') == BASE + '/dashboard', 'redirect("/x") ganha a base no Location')
+
+    r = c.get(BASE + '/dashboard', headers=MASTER)
+    html = r.get_data(as_text=True)
+    ok(r.status_code == 200, 'dashboard 200 para o master')
+    ok('window.__OTC_BASE__' in html and html.index('window.__OTC_BASE__') < html.index('</head>'),
+       'shim injetado no <head>')
+    soltos = re.findall(r'''\s(?:href|src|action)\s*=\s*["']/(?!/|%s)''' % re.escape(BASE[1:]), html)
+    ok(not soltos, 'nenhum href/src/action "/x" sem a base no HTML (%d)' % len(soltos))
+    ok(('href="%s/static/' % BASE) in html or ('src="%s/static/' % BASE) in html,
+       'ASSETS_ROOT com a base')
+    if 'speculationrules' in html:
+        ok('"href_matches": "%s/logout"' % BASE in html,
+           'Speculation Rules: logout continua fora da pre-busca')
+
+    r = c.get(BASE + '/static/js/otc.js')
+    ok(r.status_code == 200 and len(r.data) > 1000, 'estatico do OTC servido de src/apps/static')
+
+    r = c.get(BASE + '/sw.js', headers=MASTER)
+    corpo = r.get_data(as_text=True)
+    ok(r.status_code == 200 and corpo.lstrip().startswith('(function') and BASE in corpo[:400],
+       'service worker com o shim da base')
+
+    NOVO = {'X-Test-SID': 'A123456'}
+    r = c.get(BASE + '/', headers=NOVO)
+    ok(r.status_code == 200 and b'Request Received' in r.data,
+       'SID sem cadastro: pedido de acesso registrado')
+    ok((routes.get_user_by_sid('A123456') or {}).get('Status') == 'Pending', 'pedido fica Pending')
+    r = c.get(BASE + '/api/user-home/favorites', headers=NOVO)
+    ok(r.status_code == 403 and (r.get_json() or {}).get('code') == 'account_pending',
+       'pendente na API: 403 account_pending')
+    r = c.get(BASE + '/', headers=MASTER)
+    ok(r.status_code == 302, 'mesmo navegador, SID de volta ao master: sessao reaberta')
+
+
+# ── 4. O shim no node ───────────────────────────────────────────────────────
+
+NODE_TESTE = r"""
+const B = '/76521/otc-tracker-ops-ai-citizen';
+const chamadas = [];
+globalThis.window = globalThis;
+globalThis.location = { origin: 'https://h', assign() {} };
+globalThis.fetch = (r) => { chamadas.push(typeof r === 'string' ? r : r.url); return Promise.resolve(); };
+function XHR() {}
+XHR.prototype.open = function (m, u) { chamadas.push(u); };
+globalThis.XMLHttpRequest = XHR;
+function El() { this.a = {}; }
+El.prototype.setAttribute = function (n, v) { this.a[n] = v; };
+El.prototype.getAttribute = function (n) { return this.a[n] || null; };
+globalThis.Element = El;
+Object.defineProperty(globalThis, 'navigator', { value: {}, configurable: true });
+globalThis.history = { pushState(s, t, u) { chamadas.push(u); }, replaceState() {} };
+globalThis.document = { documentElement: {} };
+globalThis.MutationObserver = function () { this.observe = function () {}; };
+eval(require('fs').readFileSync(0, 'utf8'));
+const f = window.otcStratosUrl, falhas = [];
+function eq(a, b, m) { if (a !== b) falhas.push(m + ': ' + a + ' != ' + b); }
+eq(f('/api/x'), B + '/api/x', 'raiz relativa ganha a base');
+eq(f(B + '/api/x'), B + '/api/x', 'ja com a base nao duplica');
+eq(f('//cdn/x'), '//cdn/x', 'protocolo relativo intacto');
+eq(f('api/x'), 'api/x', 'relativo intacto');
+eq(f('https://h/api/x'), 'https://h' + B + '/api/x', 'absoluto da mesma origem');
+eq(f('https://outro/api/x'), 'https://outro/api/x', 'outra origem intacta');
+eq(f('/api/file-interpreter/page-spec?url=' + encodeURIComponent(B + '/new_deals-ndf-vanilla')),
+   B + '/api/file-interpreter/page-spec?url=' + encodeURIComponent('/new_deals-ndf-vanilla'),
+   'o caminho da pagina como parametro sai sem a base');
+fetch('/api/a'); new XMLHttpRequest().open('GET', '/api/b'); history.pushState({}, '', '/c');
+eq(chamadas.join(','), [B + '/api/a', B + '/api/b', B + '/c'].join(','), 'fetch/XHR/history');
+const el = new Element(); el.setAttribute('href', '/d'); el.setAttribute('data-x', '/e');
+eq(el.a.href, B + '/d', 'setAttribute href'); eq(el.a['data-x'], '/e', 'outro atributo intacto');
+if (falhas.length) { console.log(falhas.join('\n')); process.exit(1); }
+console.log('shim ok');
+"""
+
+
+def confere_shim():
+    node = shutil.which('node')
+    if not node:
+        print('skip  node ausente: shim de JavaScript nao executado')
+        return
+    sys.path.insert(0, os.path.join(STRATOS, 'src'))
+    import otc_stratos
+    js = otc_stratos._SHIM_PAGINA.replace('__BASE_JSON__', json.dumps(BASE))
+    r = subprocess.run([node, '-e', NODE_TESTE], input=js, capture_output=True, text=True)
+    ok(r.returncode == 0, 'shim de JavaScript (node): ' + (r.stdout + r.stderr).strip()[:400])
+
+
+def main():
+    if '--filho' in sys.argv:
+        # Cada subida importa o app inteiro: roda num processo filho limpo.
+        tmp = tempfile.mkdtemp(prefix='otc-stratos-')
+        try:
+            confere_subida(tmp, sem_awmpy=sys.argv[-1] == '1')
+        finally:
+            os.chdir(RAIZ)
+            shutil.rmtree(tmp, ignore_errors=True)
+        return 1 if FALHAS else 0
+    confere_template()
+    confere_shim()
+    for sem_awmpy in ('0', '1'):
+        r = subprocess.run([sys.executable, os.path.abspath(__file__), '--filho', sem_awmpy])
+        ok(r.returncode == 0, 'subida %s awmpy' % ('sem' if sem_awmpy == '1' else 'com'))
+    print('\n%d falha(s)' % len(FALHAS))
+    return 1 if FALHAS else 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
