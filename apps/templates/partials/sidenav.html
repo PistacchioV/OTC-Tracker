@@ -997,6 +997,16 @@
                         </a>
                     </li>
 
+                    {# Database Explorer: os bancos DuckDB na tela — só o MASTER (a rota confere de novo) #}
+                    {% if (session.get('user_role') or '')|upper == 'MASTER' %}
+                    <li class="side-nav-item">
+                        <a href="/database-explorer" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="database-zap"></i></span>
+                            <span class="menu-text" data-lang="nav-db-explorer">Database Explorer</span>
+                        </a>
+                    </li>
+                    {% endif %}
+
                     <!-- Users: o cadastro de papéis (Roles) e o Page Access, só de admin -->
                     <li class="side-nav-item">
                         <a data-bs-toggle="collapse" href="#sidebarUsers" aria-expanded="false" aria-controls="sidebarUsers"

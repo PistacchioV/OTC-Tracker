@@ -32,6 +32,9 @@ log = logging.getLogger('otc_tracker')
 # '/user-home' and '/settings' are PERSONAL (each user sees only their own document):
 # there is nothing to grant (§632).
 _ALWAYS_ALLOWED_PATHS = {'/users-profile', '/page-access', '/user-home', '/settings'}
+# Só do MASTER, pela rota (não pelo `Page_Access`): fora da checklist do
+# /page-access, senão um admin "concederia" uma tela que a rota recusa.
+_MASTER_ONLY_PATHS = {'/database-explorer'}
 
 
 def _load_nav_urls():
@@ -44,7 +47,7 @@ def _load_nav_urls():
             html = fh.read()
         urls = set(re.findall(r'<a[^>]*\bhref="(/[^"]+)"[^>]*\bclass="side-nav-link"', html))
         urls |= set(re.findall(r'<a[^>]*\bclass="side-nav-link"[^>]*\bhref="(/[^"]+)"', html))
-        return urls - _ALWAYS_ALLOWED_PATHS
+        return urls - _ALWAYS_ALLOWED_PATHS - _MASTER_ONLY_PATHS
     except Exception:
         log.warning('[page-access] could not parse sidenav urls:\n%s', traceback.format_exc())
         return set()

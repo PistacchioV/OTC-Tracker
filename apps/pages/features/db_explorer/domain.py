@@ -1,0 +1,246 @@
+# -*- coding: utf-8 -*-
+"""As regras puras do Database Explorer (só o master): que coluna se edita,
+como o valor vai e volta da tela, a impressão digital da linha e o caminho
+do banco.
+
+Puro de propósito: não abre banco, não importa `routes` nem Flask.
+"""
+import hashlib
+import json
+import math
+import os
+import re
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
+
+# Quantas linhas a tela pede por vez, e o teto. A grade é do navegador (o funil
+# e o Export trabalham sobre o que veio), e um dia do DPOSICAO-TER com o `_raw`
+# passa de cem mil linhas: sem teto, um clique trava a aba de quem pediu.
+LIMITS = (500, 1000, 5000, 20000)
+DEFAULT_LIMIT = 1000
+MAX_LIMIT = 50000
+
+# Extensões de banco DuckDB do app; o resto da pasta (`.lock`, `.wal`, as
+# cópias `.corrupt-*`) não é banco que se abra.
+DB_EXTS = ('.db', '.duckdb')
+# Onde o `recover_duckdb_wal.py` deixa o que substituiu: cópia de segurança,
+# não banco vivo.
+SKIP_DIRS = ('_recuperado',)
+DUCK_MAGIC = b'DUCK'          # bytes 8-11 de todo arquivo DuckDB
+
+# A tabela que marca um banco do ARMAZÉM (§434). O app lê esses bancos pelo
+# canal `_raw` e memoriza pelo carimbo do `_manifest`: editar a coluna tipada
+# por aqui não muda nada do que as telas mostram, e a memória serviria o valor
+# antigo até o restart. Por isso o banco do armazém abre SÓ LEITURA.
+STORE_MARK = '_manifest'
+
+TEXT_TYPES = {'VARCHAR', 'CHAR', 'BPCHAR', 'TEXT', 'STRING'}
+INT_TYPES = {'TINYINT', 'SMALLINT', 'INTEGER', 'INT', 'BIGINT', 'HUGEINT',
+             'UTINYINT', 'USMALLINT', 'UINTEGER', 'UBIGINT', 'UHUGEINT'}
+FLOAT_TYPES = {'FLOAT', 'REAL', 'DOUBLE'}
+TIMESTAMP_TYPES = {'TIMESTAMP', 'DATETIME', 'TIMESTAMP_S', 'TIMESTAMP_MS', 'TIMESTAMP_NS'}
+# Tipo que se escreve no CAST: só nome simples, com precisão opcional. Lista,
+# STRUCT, MAP, UNION e ENUM trazem parênteses, aspas ou colchetes e ficam como
+# só leitura — o tipo entra no SQL como texto, e só entra o que este padrão
+# deixa passar (ele vem do catálogo do próprio banco, nunca do request).
+_CASTABLE = re.compile(r'^[A-Z][A-Z0-9_ ]*(\(\d+(\s*,\s*\d+)?\))?$')
+
+_SAFE_INT = 2 ** 53           # acima disso o JavaScript arredonda o número
+
+
+class ExplorerError(Exception):
+    """Erro com CÓDIGO para a tela dizer no idioma de quem vê (§486):
+    `{code, params, error}`, com o texto só de fallback."""
+
+    def __init__(self, code, text, status=400, **params):
+        super().__init__(text)
+        self.code = code
+        self.text = text
+        self.status = status
+        self.params = params
+
+    def payload(self):
+        return {'success': False, 'code': self.code, 'params': self.params, 'error': self.text}
+
+
+def quote_ident(name):
+    """O identificador entre aspas duplas, com a aspa interna dobrada. Só se
+    aplica a nome que veio do CATÁLOGO do banco (a conferência é antes)."""
+    return '"' + str(name).replace('"', '""') + '"'
+
+
+def qualified(schema, table):
+    return quote_ident(schema) + '.' + quote_ident(table)
+
+
+def kind_of(data_type):
+    """A família do tipo, que decide o campo da tela e se a coluna se edita.
+    `None` = só leitura (BLOB, lista, STRUCT, MAP, tipo que não se escreve
+    num CAST)."""
+    t = str(data_type or '').strip().upper()
+    if not _CASTABLE.match(t):
+        return None
+    base = t.split('(')[0].strip()
+    if base in TEXT_TYPES:
+        return 'text'
+    if base == 'JSON':
+        return 'json'
+    if base in INT_TYPES:
+        return 'int'
+    if base in FLOAT_TYPES:
+        return 'float'
+    if base in ('DECIMAL', 'NUMERIC'):
+        return 'decimal'
+    if base in ('BOOLEAN', 'BOOL', 'LOGICAL'):
+        return 'bool'
+    if base == 'DATE':
+        return 'date'
+    if base in TIMESTAMP_TYPES:
+        return 'timestamp'
+    if base in ('BLOB', 'BYTEA', 'BINARY', 'VARBINARY', 'BIT', 'BITSTRING'):
+        return None
+    # TIME, INTERVAL, UUID, TIMESTAMP WITH TIME ZONE…: texto no CAST
+    return 'other'
+
+
+def cell(v):
+    """O valor do banco como a tela o recebe (e como entra na impressão
+    digital). Data em ISO (a tela desenha dd/mm/aaaa), DECIMAL como texto
+    (exato), inteiro acima de 2^53 como texto (o JavaScript arredondaria)."""
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, int):
+        return v if abs(v) <= _SAFE_INT else str(v)
+    if isinstance(v, float):
+        return v if math.isfinite(v) else str(v)
+    if isinstance(v, Decimal):
+        return str(v)
+    if isinstance(v, datetime):
+        return v.isoformat(sep=' ')
+    if isinstance(v, (date, time)):
+        return v.isoformat()
+    if isinstance(v, timedelta):
+        return str(v)
+    if isinstance(v, (bytes, bytearray, memoryview)):
+        return '\\x' + bytes(v).hex()
+    if isinstance(v, (list, tuple, dict)):
+        return json.dumps(v, ensure_ascii=False, default=str)
+    return str(v)
+
+
+def row_hash(values):
+    """A impressão digital da linha INTEIRA, na ordem das colunas. A gravação
+    a confere sob a trava: linha que mudou (ou que outra instância apagou)
+    entre a leitura e o Save é recusada, nunca sobrescrita."""
+    txt = json.dumps([cell(v) for v in values], ensure_ascii=False, separators=(',', ':'))
+    return hashlib.sha1(txt.encode('utf-8')).hexdigest()[:20]
+
+
+def readonly_reason(is_store, kind, columns):
+    """Por que a tabela não se edita (`None` = edita). Coluna que se chama
+    `rowid` esconde a pseudo-coluna do DuckDB, que é por onde a linha é
+    achada — editar por ela acharia a linha errada."""
+    if is_store:
+        return 'store'
+    if kind != 'table':
+        return 'view'
+    if any(str(c).lower() == 'rowid' for c in columns):
+        return 'rowid_column'
+    return None
+
+
+def clamp_limit(raw):
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_LIMIT
+    return max(1, min(n, MAX_LIMIT))
+
+
+_DMY = re.compile(r'^(\d{1,2})/(\d{1,2})/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2})(\.\d+)?)?)?$')
+
+
+def _dmy_to_iso(text, with_time):
+    m = _DMY.match(text)
+    if not m:
+        return text
+    d, mo, y, hh, mi, ss, frac = m.groups()
+    out = '%s-%02d-%02d' % (y, int(mo), int(d))
+    if with_time and hh is not None:
+        out += ' %02d:%s:%s%s' % (int(hh), mi, ss or '00', frac or '')
+    elif with_time:
+        out += ' 00:00:00'
+    return out
+
+
+def input_value(kind, raw, is_null):
+    """O valor digitado → o parâmetro do `?`. NULL só pelo seletor da tela; o
+    campo vazio é NULL nas colunas que não são texto (não existe número
+    vazio) e texto vazio nas de texto. Data aceita dd/mm/aaaa ou ISO. O
+    resto vai como texto para o CAST do próprio banco, que é quem diz se o
+    valor serve (e o erro dele volta para a tela)."""
+    if is_null:
+        return None
+    s = '' if raw is None else str(raw)
+    if kind == 'text':
+        return s
+    s = s.strip()
+    if s == '':
+        return None
+    if kind == 'date':
+        return _dmy_to_iso(s, False)
+    if kind == 'timestamp':
+        return _dmy_to_iso(s, True)
+    if kind == 'bool':
+        low = s.lower()
+        if low in ('true', 't', 'yes', 'y', 'sim', 's', '1'):
+            return 'true'
+        if low in ('false', 'f', 'no', 'n', 'nao', 'não', '0'):
+            return 'false'
+        return s
+    return s
+
+
+def set_clause(columns_meta, values):
+    """O `SET` do UPDATE e os parâmetros dele. `columns_meta`: nome → (tipo,
+    kind) do CATÁLOGO; `values`: nome → {value, null} da tela. Coluna fora do
+    catálogo, ou só leitura, recusa o pedido inteiro."""
+    if not values:
+        raise ExplorerError('nothing_to_change', 'No column to change')
+    partes, params = [], []
+    for nome, spec in values.items():
+        meta = columns_meta.get(nome)
+        if meta is None:
+            raise ExplorerError('bad_column', 'Unknown column: %s' % nome, column=nome)
+        tipo, kind = meta
+        if kind is None:
+            raise ExplorerError('readonly_column', 'Column %s cannot be edited here' % nome, column=nome)
+        spec = spec if isinstance(spec, dict) else {'value': spec}
+        val = input_value(kind, spec.get('value'), bool(spec.get('null')))
+        if kind == 'text':
+            partes.append('%s = ?' % quote_ident(nome))
+        else:
+            partes.append('%s = CAST(? AS %s)' % (quote_ident(nome), tipo))
+        params.append(val)
+    return ', '.join(partes), params
+
+
+def resolve_db(root, rel):
+    """O caminho absoluto de `rel` DENTRO de `root`, ou erro. `rel` vem do
+    navegador: `..`, caminho absoluto e extensão de não-banco são recusados
+    antes de qualquer abertura."""
+    rel = str(rel or '').strip().replace('\\', '/')
+    if not rel or rel.startswith('/') or re.match(r'^[A-Za-z]:', rel):
+        raise ExplorerError('bad_db', 'Invalid database path')
+    partes = [p for p in rel.split('/') if p not in ('', '.')]
+    if any(p == '..' for p in partes) or any(p in SKIP_DIRS for p in partes[:-1]):
+        raise ExplorerError('bad_db', 'Invalid database path')
+    if not partes or not partes[-1].lower().endswith(DB_EXTS):
+        raise ExplorerError('bad_db', 'Invalid database path')
+    raiz = os.path.normpath(os.path.abspath(root))
+    alvo = os.path.normpath(os.path.join(raiz, *partes))
+    if os.path.commonpath([raiz, alvo]) != raiz:
+        raise ExplorerError('bad_db', 'Invalid database path')
+    return alvo

@@ -1,0 +1,203 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Database Explorer{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+{# Só o que é DESTA tela: os dois combos de busca (banco e tabela), a célula
+   longa cortada com reticências, o NULL esmaecido, o tipo ao lado do nome da
+   coluna no modal e o menu de colunas que rola. Placa, ladrilhos de número,
+   toolbar, Export, botões de linha e tabela são do tema (otc.scss). #}
+<style>
+#dbx-page .dbx-panel { padding: var(--otc-pad); }
+/* a lista dos combos desce por cima da grade: cada placa é um contexto de
+   empilhamento, então a camada vai no PAINEL dos seletores (o wrapper),
+   nunca no menu nem num filho da placa (§637) */
+#dbxPick { position: relative; z-index: 4; }
+#dbx-page .dbx-combo { position: relative; }
+#dbx-page .dbx-combo .ar-ac-drop { max-height: 340px; }
+#dbx-page .dbx-combo .ar-ac-drop > .dbx-opt { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+#dbx-page .dbx-opt__name { overflow: hidden; text-overflow: ellipsis; }
+#dbx-page .dbx-opt__meta { flex: none; font-size: 11.5px; color: var(--otc-text-3); font-variant-numeric: tabular-nums; }
+#dbx-page .dbx-combo .ar-ac-drop > .active .dbx-opt__meta,
+#dbx-page .dbx-combo .ar-ac-drop > :hover .dbx-opt__meta { color: inherit; opacity: .8; }
+#dbx-page .dbx-combo .ar-ac-drop > .dbx-group,
+#dbx-page .dbx-combo .ar-ac-drop > .dbx-group:hover,
+#dbx-page .dbx-combo .ar-ac-drop > .dbx-none,
+#dbx-page .dbx-combo .ar-ac-drop > .dbx-none:hover {
+    cursor: default; background: none; color: var(--otc-text-3);
+    font-size: 11px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase;
+}
+#dbx-page .dbx-meta { min-height: 18px; margin-top: 6px; font-size: 12px; color: var(--otc-text-2); }
+#dbx-page .dbx-cell { display: inline-block; max-width: 320px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+#dbx-page .dbx-null { color: var(--otc-text-3); font-style: italic; font-size: .72rem; }
+#dbx-page #dbxTable td { font-variant-numeric: tabular-nums; }
+#dbx-page .dbx-cols-menu { max-height: 60vh; overflow: auto; }
+#dbx-page .dbx-empty { padding: 48px 16px; text-align: center; color: var(--otc-text-2); }
+#dbx-page .dbx-empty i { display: block; font-size: 2rem; margin-bottom: 8px; color: var(--otc-text-3); }
+#dbxEditModal .dbx-type { margin-left: 6px; font-size: 10.5px; color: var(--otc-text-3); text-transform: none; }
+#dbxEditModal .dbx-field.is-off .dbx-in { opacity: .45; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="dbx-page" class="container-fluid" data-content="">
+
+    {# o ladrilho de ícone vem sozinho do item do menu lateral #}
+    <div class="page-title-head">
+        <div class="flex-grow-1">
+            <h4 data-lang="dbx-title">Database Explorer</h4>
+            <p class="otc-page-sub" data-lang="dbx-sub">Read and edit the app's DuckDB databases directly. Master only — every change is written to the log.</p>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="javascript: void(0);">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="javascript: void(0);" data-lang="data-base-title">Data Base</a></li>
+                <li class="breadcrumb-item active" data-lang="nav-db-explorer">Database Explorer</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="otc-page-bar">
+        <div class="otc-stats">
+            <div class="otc-stat otc-stat--total" style="--hue: var(--otc-indigo)">
+                <span class="otc-stat__label" data-lang="dbx-kpi-dbs">Databases</span>
+                <span class="otc-stat__value" id="dbx-kpi-dbs">—</span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-blue)">
+                <span class="otc-stat__label" data-lang="dbx-kpi-tables">Tables</span>
+                <span class="otc-stat__value" id="dbx-kpi-tables">—</span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-teal)">
+                <span class="otc-stat__label" data-lang="dbx-kpi-rows">Rows in table</span>
+                <span class="otc-stat__value" id="dbx-kpi-rows">—</span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-purple)">
+                <span class="otc-stat__label" data-lang="dbx-kpi-loaded">Rows loaded</span>
+                <span class="otc-stat__value" id="dbx-kpi-loaded">—</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="dbx-panel mb-3" id="dbxPick">
+        <div class="row g-3 align-items-start">
+            <div class="col-lg-4">
+                <label class="form-label fs-xs text-muted mb-1" for="dbxDbInput" data-lang="dbx-database">Database</label>
+                <div class="dbx-combo" id="dbxDbCombo">
+                    <div class="app-search d-block">
+                        <input type="text" class="form-control" id="dbxDbInput" autocomplete="off"
+                               placeholder="Search database…" data-lang-placeholder="dbx-db-ph">
+                        <i class="app-search-icon text-muted" data-lucide="database"></i>
+                    </div>
+                    <div class="ar-ac-drop" id="dbxDbMenu" role="listbox"></div>
+                </div>
+                <div class="dbx-meta" id="dbxDbMeta"></div>
+            </div>
+            <div class="col-lg-4">
+                <label class="form-label fs-xs text-muted mb-1" for="dbxTblInput" data-lang="dbx-table">Table</label>
+                <div class="dbx-combo" id="dbxTblCombo">
+                    <div class="app-search d-block">
+                        <input type="text" class="form-control" id="dbxTblInput" autocomplete="off" disabled
+                               placeholder="Filter tables…" data-lang-placeholder="dbx-tbl-ph">
+                        <i class="app-search-icon text-muted" data-lucide="table"></i>
+                    </div>
+                    <div class="ar-ac-drop" id="dbxTblMenu" role="listbox"></div>
+                </div>
+                <div class="dbx-meta" id="dbxTblMeta"></div>
+            </div>
+            <div class="col-6 col-lg-2">
+                <label class="form-label fs-xs text-muted mb-1" for="dbxLimit" data-lang="dbx-limit">Rows</label>
+                <select class="form-select" id="dbxLimit">
+                    {% for n in dbx_limits %}<option value="{{ n }}"{% if n == dbx_default_limit %} selected{% endif %}>{{ '{:,}'.format(n) }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-lg-2">
+                <label class="form-label fs-xs mb-1 d-block">&nbsp;</label>
+                <button type="button" class="btn btn-primary bg-gradient w-100" id="dbxLoad" disabled>
+                    <i class="ti ti-database-search me-1"></i><span data-lang="dbx-load">Load</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="otc-banner mb-3 d-none" id="dbxBanner"></div>
+
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3 d-none" id="dbxToolbar">
+        <span id="dbxColsSlot"></span>
+        <span id="dbxExportSlot"></span>
+        <button type="button" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all dbx-edit-only" id="dbxBatchEdit" disabled>
+            <i class="ti ti-edit me-1"></i><span data-lang="dbx-batch-edit">Batch Edit</span>
+            <span class="otc-count ms-1" id="dbxSelCount">0</span>
+        </button>
+        <button type="button" class="btn btn-sm btn-danger bg-gradient btn-toolbar-all dbx-edit-only" id="dbxBatchDelete" disabled>
+            <i class="ti ti-trash me-1"></i><span data-lang="dbx-batch-delete">Delete Selected</span>
+        </button>
+        <button type="button" class="btn btn-sm btn-success bg-gradient btn-toolbar-all" id="dbxRefresh">
+            <i class="ti ti-refresh me-1"></i><span data-lang="dbx-refresh">Refresh</span>
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="dbxClearFilters">
+            <i class="ti ti-filter-off me-1"></i><span data-lang="btn-clear-filters">Clear Filters</span>
+        </button>
+    </div>
+
+    <div class="dbx-panel">
+        <div class="dbx-empty" id="dbxEmpty">
+            <i class="ti ti-database-search"></i>
+            <span data-lang="dbx-empty">Pick a database and a table, then Load.</span>
+        </div>
+        <div class="table-responsive d-none" id="dbxTableWrap">
+            <table id="dbxTable" class="table table-sm table-hover w-100 mb-0" data-export-name="Database Explorer"></table>
+        </div>
+    </div>
+
+</div>
+
+<!-- Edit de UMA linha e alteração em LOTE: o mesmo modal (padrão glass, §7) -->
+<div class="modal fade" id="dbxEditModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content liquid-glass">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fs-6"><i class="ti ti-edit me-1"></i><span id="dbxEditTitle">Edit row</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="otc-banner mb-3" id="dbxEditNote"></div>
+                <div class="row g-3" id="dbxEditGrid"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-danger btn-act" data-bs-dismiss="modal" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Cancel" data-bs-custom-class="tooltip-danger"><i class="ti ti-x"></i></button>
+                <button type="button" class="btn btn-sm btn-success btn-act" id="dbxEditSave" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Save" data-bs-custom-class="tooltip-success"><i class="ti ti-device-floppy"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script>
+// Registro SÍNCRONO do JSZip (§7): sem ele o Excel do Buttons não sai.
+(function () {
+    var jz = (typeof JSZip !== 'undefined') ? JSZip : undefined;
+    if (!jz) return;
+    window.JSZip = jz;
+    if ($.fn.dataTable && $.fn.dataTable.Buttons && typeof $.fn.dataTable.Buttons.jszip === 'function') {
+        $.fn.dataTable.Buttons.jszip(jz);
+    }
+})();
+</script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/table-std.js?v={{ asset_v('js/table-std.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/database-explorer.js?v={{ asset_v('js/pages/database-explorer.js') }}"></script>
+{% endblock extra_javascript %}
