@@ -2591,7 +2591,10 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   Strategy (`PONTA_PARTE` = banco).
 - **IR do termo de moeda é CALCULADO** (`_ndfsum_ir_apply`, §423): 0,005%,
   isento pelo `ndfc-ir-exempt`, piso de R$ 1,00 acumulado no mês no ledger
-  `ndf-ir-ledger_AAAAMM.json`; o import do Cockpit reusa as mesmas funções
+  `ndf-ir-ledger_AAAAMM.json`. **O piso é do MÊS** (mesa, 22/10/2026, §674):
+  alcançado, toda liquidação seguinte da contraparte no mês retém, mesmo
+  centavos — a entrada do ledger grava `reached`, e a antiga sem ele vale pelo
+  `withheld` > 0 (`_ndfsum_ir_reached`). O import do Cockpit reusa as mesmas funções
   (`_ndfc_apply_ir`), o calculado vence o `VL_TAX_INCOME`. **A cura do ledger é
   INCREMENTAL e roda FORA do `_cache_lock`** (§432 — era o Summary
   "infinito"): grava dia a dia, só o dia pedido fica de fora com `ir_partial`;
