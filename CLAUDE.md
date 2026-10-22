@@ -606,8 +606,12 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   com `rowid` + impressão digital, conferidos sob a trava: a linha que mudou
   desde a leitura RECUSA o pedido inteiro. **Banco do armazém (com
   `_manifest`) é só leitura**: o app o lê pelo `_raw` e memoriza pelo carimbo,
-  então a coluna tipada editada ali não chegaria às telas. Toda gravação loga
-  `[db-explorer]` em WARNING com SID, banco, tabela e colunas.
+  então a coluna tipada editada ali não chegaria às telas. **O JSON abre em
+  COLUNAS** (`domain.expand`): objeto de objetos vira uma linha por chave,
+  lista de registros uma por item, objeto vazio não vira linha; a tabela
+  "chave + JSON" do armazém (`__meta`, `__raw`, `_seq`/`_raw`) já abre assim, e
+  o seletor View volta ao cru. A visão expandida é só leitura. Toda gravação
+  loga `[db-explorer]` em WARNING com SID, banco, tabela e colunas.
 - **Maker/checker (4-olhos) só vale na PROD** (§553): `Config.FOUR_EYES`,
   do bloco de ambiente (`_FOUR_EYES = False` na dev, onde uma pessoa só
   testa). Trava NOVA de "o próprio maker não aprova/envia" pergunta ao

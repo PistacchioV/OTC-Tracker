@@ -28371,3 +28371,34 @@ instância), com SID, ação, quantas linhas, banco, tabela e colunas.
 - No navegador, com sessão de master: 175 bancos listados, a tabela `users`
   carregada, o lote e o Edit no modal, o Subjacente do armazém só leitura com o
   aviso, nos dois temas.
+
+**O JSON em colunas (mesmo dia).** O primeiro uso real foi o ledger de IR, e a
+`__meta` aparecia como `key` + um `value` de texto cru
+(`{"ebazar.com.br ltda": {"name": …, "due": …}}`), que não se lê nem se filtra.
+No armazém o dado mora assim em todo lugar: o `_raw` de cada registro, o `value`
+da `__meta` e o objeto inteiro no `__raw`.
+
+A visão EXPANDIDA (`domain.expand`) abre o JSON:
+- objeto de objetos vira uma linha por chave, com a chave numa coluna
+  (`value › key`; no `__raw` do mês, `key 1` = dia e `key 2` = contraparte), até
+  três níveis;
+- lista de registros vira uma linha por item;
+- objeto aninhado no registro vira colunas `a.b`;
+- campo homônimo de outra coluna leva o prefixo da coluna expandida.
+
+O tipo de cada coluna nova sai dos valores (`infer_kind`): o dia ISO aparece
+dd/mm/aaaa e o decimal com separador de milhar na tela, mas cru no Export.
+
+**Objeto vazio não vira linha.** Era uma fileira de NULL por dia parado: 20 das
+28 linhas do ledger de setembro.
+
+**Quando abre sozinha.** A tabela do ARMAZÉM cujo resto é só `_seq`/`key` já abre
+expandida (`default_expand`). Dataset tipado e banco de plataforma abrem como
+estão. O seletor View (na barra) troca entre "como está gravado" e cada coluna
+JSON que a amostra de 50 valores reconhece. A visão expandida é só leitura,
+porque uma linha da tela já não é uma linha do banco, e o servidor a marca
+`readonly = 'expanded'`.
+
+O `check_db_explorer.py` cobre as duas formas do ledger e a API (82 asserções).
+No navegador, o `ndf-ir-ledger_202609` mostra 6 linhas, de 26 registros, com
+`name`, `due`, `withheld`, `carry_in` e `carry_after` em colunas.
