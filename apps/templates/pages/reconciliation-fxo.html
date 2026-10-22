@@ -72,14 +72,11 @@
 /* A busca própria do DataTables sai: o funil de cada coluna faz o mesmo. */
 #fxo-table_filter { display: none !important; }
 
-/* ── Data: o input nativo fica invisível POR CIMA do texto dd/mm/aaaa ── */
+/* ── Data: o calendário da casa (`otcDateField` + `date-std.js`, 22/10/2026) —
+   dd/mm/aaaa que se digita, botão Today; o `value` do campo segue em ISO, que é
+   o que o código abaixo lê. Era o `type="date"` nativo invisível por cima de um
+   texto: o calendário do SISTEMA não aceita o Today nem acompanha a digitação. */
 #fxo-page .date-wrap { width: 130px; }
-#fxo-page .date-wrap input[type=date] { position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 2; }
-#fxo-page .date-wrap input[type=text] { pointer-events: none; padding-right: 28px; }
-#fxo-page .date-wrap-icon {
-    position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
-    z-index: 1; pointer-events: none; font-size: 15px; color: var(--otc-text-2);
-}
 
 /* ── Upload manual ──────────────────────────────────────────────── */
 .upload-zone { text-align: center; cursor: pointer; }
@@ -178,9 +175,7 @@
             <div class="d-flex align-items-center gap-2">
                 <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="recon-lbl-date">Date:</label>
                 <div class="date-wrap">
-                    <input type="text" id="fxo-date-display" class="form-control form-control-sm" placeholder="DD/MM/YYYY" readonly>
-                    <i class="ti ti-calendar date-wrap-icon"></i>
-                    <input type="date" id="fxo-date" value="{{ ref_date }}">
+                    <input type="text" id="fxo-date" class="form-control form-control-sm otc-datefield" value="{{ ref_date }}" placeholder="dd/mm/aaaa" autocomplete="off">
                 </div>
             </div>
             <div class="d-flex align-items-center gap-2">
@@ -756,13 +751,6 @@
 
     function isoDate() { return $('#fxo-date').val() || ''; }
 
-    function syncDateDisplay() {
-        var v = isoDate();
-        if (!v) { $('#fxo-date-display').val(''); return; }
-        var p = v.split('-');
-        $('#fxo-date-display').val(p[2] + '/' + p[1] + '/' + p[0]);
-    }
-
     function loadData() {
         fetch('/reconciliation-fxo/data?recon_date=' + encodeURIComponent(isoDate()))
             .then(function (r) { return r.json(); })
@@ -819,10 +807,10 @@
 
     $(document).ready(function () {
         buildTable(['Status']);          // cabeçalho mínimo até o /data responder
-        syncDateDisplay();
+        if (window.otcDateField) otcDateField('#fxo-date');
         loadData();
 
-        $('#fxo-date').on('change', function () { syncDateDisplay(); loadData(); });
+        $('#fxo-date').on('change', function () { loadData(); });
         $('#fxoPageLength').on('change', function () {
             if (table) table.page.len(parseInt(this.value, 10)).draw();
         });

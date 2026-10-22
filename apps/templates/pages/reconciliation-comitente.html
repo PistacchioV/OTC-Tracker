@@ -33,14 +33,11 @@
 .upload-zone input[type=file] { display: none; }
 .upload-zone .fn { font-size: .72rem; color: var(--otc-accent-ink); font-weight: 600; margin-top: .3rem; }
 
-/* ── Data: o input nativo fica invisível POR CIMA do texto dd/mm/aaaa ── */
+/* ── Data: o calendário da casa (`otcDateField` + `date-std.js`, 22/10/2026) —
+   dd/mm/aaaa que se digita, botão Today; o `value` do campo segue em ISO, que é
+   o que o código abaixo lê. Era o `type="date"` nativo invisível por cima de um
+   texto: o calendário do SISTEMA não aceita o Today nem acompanha a digitação. */
 .date-wrap { width: 130px; }
-.date-wrap input[type=date] { position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 2; }
-.date-wrap input[type=text] { pointer-events: none; padding-right: 28px; }
-.date-wrap-icon {
-    position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
-    z-index: 1; pointer-events: none; font-size: 15px; color: var(--otc-text-2);
-}
 </style>
 {% endblock %}
 
@@ -123,9 +120,7 @@
             <div class="d-flex align-items-center gap-2">
                 <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="recon-lbl-date">Date:</label>
                 <div class="date-wrap">
-                    <input type="text" id="recon-date-display" class="form-control form-control-sm" placeholder="DD/MM/YYYY" readonly>
-                    <i class="ti ti-calendar date-wrap-icon"></i>
-                    <input type="date" id="recon-date">
+                    <input type="text" id="recon-date" class="form-control form-control-sm otc-datefield" placeholder="dd/mm/aaaa" autocomplete="off">
                 </div>
             </div>
         </div>
@@ -381,10 +376,11 @@ function formatExportData(data) {
 function getIsoDate() {
     return document.getElementById('recon-date').value || '';
 }
+// pelo PICKER: o campo que se vê é o altInput do `otcDateField`
 function setReconDate(isoStr) {
-    document.getElementById('recon-date').value = isoStr;
-    const [y, m, d] = isoStr.split('-');
-    document.getElementById('recon-date-display').value = d + '/' + m + '/' + y;
+    var el = document.getElementById('recon-date');
+    if (el._flatpickr) el._flatpickr.setDate(isoStr, false);
+    else el.value = isoStr;
 }
 
 $(document).ready(function() {
@@ -443,16 +439,8 @@ $(document).ready(function() {
         $(input).trigger('change');
     });
 
-    $('#recon-date').on('change', function() {
-        if (this.value) {
-            var p = this.value.split('-');
-            $('#recon-date-display').val(p[2] + '/' + p[1] + '/' + p[0]);
-        }
-    });
-    // Clicking the field (or the calendar icon) opens the native picker.
-    $('#recon-date').on('click', function() {
-        if (this.showPicker) { try { this.showPicker(); } catch (e) {} }
-    });
+    // o calendário da casa (dd/mm/aaaa digitável, Today), antes da data padrão abaixo
+    if (window.otcDateField) otcDateField('#recon-date');
 
     /* ── 2. Data padrão: último dia útil ─────────────────────────── */
     var ld = new Date();

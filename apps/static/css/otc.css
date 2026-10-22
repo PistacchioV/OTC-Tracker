@@ -20259,6 +20259,35 @@ table.dataTable.dtr-inline.collapsed > tbody > tr > td.dtr-control::before {
   border-color: var(--otc-text-2);
 }
 
+.otc-dp-foot {
+  clear: both;
+  display: flex;
+  margin-top: 4px;
+  padding: 8px 4px 2px;
+  border-top: 1px solid var(--otc-sep);
+}
+
+.daterangepicker .otc-dp-foot {
+  margin-top: 0;
+  padding: 8px;
+}
+
+.otc-dp-today {
+  flex: 1;
+  min-height: 32px;
+  border: 0;
+  border-radius: var(--otc-r-pill);
+  background: color-mix(in srgb, var(--otc-accent) 14%, transparent);
+  color: var(--otc-accent-ink);
+  font: 650 13px/1 var(--otc-font);
+  cursor: pointer;
+  transition: background-color var(--otc-dur-fast) var(--otc-ease), color var(--otc-dur-fast) var(--otc-ease);
+}
+.otc-dp-today:hover, .otc-dp-today:focus-visible {
+  background: var(--otc-accent);
+  color: #fff;
+}
+
 .select2-container--default .select2-selection--single, .select2-container--default .select2-selection--multiple {
   min-height: 42px;
   border: 0 !important;

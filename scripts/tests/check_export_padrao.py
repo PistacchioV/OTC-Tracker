@@ -262,28 +262,62 @@ check('  so as telas conhecidas tem o menu pela metade', incompleto, MENU_INCOMP
 # nenhum. A mascara mora no HELPER — copiada por pagina, ela chega a umas e
 # falta noutras, que e a historia do Import laranja da setima tela (§490).
 print('=== 5. A mascara de data (dd/mm/aaaa, so os numeros) ===')
+# Desde 22/10/2026 a regra e de TODO datepicker do app e mora no `date-std.js`
+# (carregado pelo `footer-scripts.html` em toda pagina, antes dos scripts dela):
+# o flatpickr (direto ou pelo `otcDateField`) e o daterangepicker de data unica.
+DS = io.open(os.path.join(ROOT, 'apps', 'static', 'js', 'date-std.js'), encoding='utf-8').read()
+FS = io.open(os.path.join(ROOT, 'apps', 'templates', 'partials', 'footer-scripts.html'), encoding='utf-8').read()
 XA = io.open(os.path.join(ROOT, 'apps', 'static', 'js', 'export-advanced.js'),
              encoding='utf-8').read()
-check('  o helper expoe a mascara', 'window.otcDateMask = dateMask;' in XA, True)
-# O campo que se VE e o altInput; mascarar o original nao alcanca quem digita.
-check('  e a aplica ao campo VISIVEL', 'if (fp && fp.altInput) dateMask(fp.altInput, fp);' in XA, True)
+check('  o date-std.js e carregado em TODA pagina, depois do otc.js',
+      FS.index('js/date-std.js') > FS.index('js/otc.js'), True)
+check('  ele expoe a mascara', 'window.otcDateMask = dateMask;' in DS, True)
+check('  e o export-advanced nao tem copia: o otcDateField usa a dele',
+      'function dateMask' not in XA
+      and 'if (fp && fp.altInput && window.otcDateMask) window.otcDateMask(fp.altInput, fp);' in XA, True)
 # So a data inteira e escolha: escrever no picker no meio da digitacao faria o
-# campo pular para um dia que ninguem pediu.
+# campo pular para um dia que ninguem pediu. E completada ela vale na hora: o
+# codigo em volta le o ISO do input original, que so nasceria no blur.
 check('  so a data INTEIRA e REAL e escrita no picker',
-      "if (d.length === 8 && dataReal(dia, mes, ano)) { fp.setDate(txt, true, 'd/m/Y'); return; }" in XA, True)
-# Completada, ela vale na hora: o codigo em volta le o ISO do input original, e
-# ele so nasceria no blur — clicar direto no Run exportaria o intervalo anterior.
-check('  o ISO nao espera o blur', 'fp.setDate(txt' in XA, True)
-# O calendario ACOMPANHA a digitacao (mesa, 20/10/2026): dia e mes levam ao mes,
-# sem escolher nada; e o clique seleciona a data inteira, como na Quotes (§508).
-check('  dia e mes levam o calendario ao mes', 'fp.jumpToDate(new Date(' in XA, True)
+      "if (d.length === 8 && dataReal(dia, mes, ano)) { escolhe(txt); return; }" in DS
+      and "fp.setDate(txt, true, 'd/m/Y')" in DS, True)
+# O setDate dispara um `input` no campo do picker; no flatpickr direto ele e o
+# visivel, e sem a trava a mascara chamava setDate de novo, sem fim.
+check('  a trava contra o laco do setDate (flatpickr sem altInput)',
+      'if (escrevendo) return;' in DS and 'if (atual === txt) return;' in DS, True)
+# O calendario ACOMPANHA a digitacao: dia e mes levam ao mes, sem escolher nada;
+# e o clique seleciona a data inteira, como na Quotes (§508).
+check('  dia e mes levam o calendario ao mes', 'fp.jumpToDate(new Date(' in DS, True)
 check('  o clique seleciona a data inteira',
-      "inp.addEventListener('focus', selAll);" in XA and "inp.addEventListener('click', selAll);" in XA, True)
+      "inp.addEventListener('focus', selAll);" in DS and "inp.addEventListener('click', selAll);" in DS, True)
 # 31/02 nao e data: o parse frouxo do flatpickr a leria como 03/03 ao sair do
 # campo (no blur E no clique fora, que ele rele antes do blur).
 check('  data impossivel/pela metade volta a ultima valida',
-      "inp.addEventListener('blur', restaura, true);" in XA
-      and "window.addEventListener('mousedown', foraDoCampo, true);" in XA, True)
+      "inp.addEventListener('blur', restaura, true);" in DS
+      and "window.addEventListener('mousedown', foraDoCampo, true);" in DS, True)
+# O daterangepicker de data unica: a mesma regra, e o keyup FROUXO do plugin sai.
+check('  o daterangepicker se digita (o keyup frouxo do plugin sai)',
+      "window.jQuery(inp).off('keyup.daterangepicker');" in DS and 'drp.clickApply();' in DS, True)
+check('  ...aberto ANTES de a data mudar (senao o callback da pagina nao roda)',
+      'if (!drp.isShowing) drp.show();' in DS, True)
+# O botao TODAY no pe dos dois calendarios, com o estilo no tema.
+CSS = io.open(os.path.join(ROOT, 'apps', 'static', 'css', 'otc.css'), encoding='utf-8').read()
+check('  o Today nos dois calendarios',
+      'fp.calendarContainer.appendChild(rodape(' in DS and 'drp.container.append(rodape(' in DS, True)
+check('  ...com o estilo no tema', '.otc-dp-today' in CSS and '.otc-dp-foot' in CSS, True)
+# Ninguem liga o padrao a mao: o flatpickr e embrulhado na criacao, e os dois
+# sao reconhecidos na primeira interacao e numa varredura depois da carga.
+check('  o padrao se liga sozinho (criacao, interacao, varredura)',
+      'window.flatpickr = embrulhado;' in DS and "['focusin', 'mousedown', 'click']" in DS
+      and "on('show.daterangepicker'" in DS, True)
+# O `type="date"` nativo nao volta: o calendario do SISTEMA nao aceita o Today,
+# nao acompanha a digitacao e desenha mm/dd no Windows do JP.
+def _sem_comentarios(t):
+    # o comentario que EXPLICA por que nao usar o nativo nao e uso
+    t = re.sub(r'\{#.*?#\}|<!--.*?-->|/\*.*?\*/', '', t, flags=re.S)
+    return re.sub(r'(?m)^\s*//.*$|\s//\s.*$', '', t)
+nativos = sorted(n for n, t in fontes() if re.search(r'<input[^>]*type=["\']date["\']', _sem_comentarios(t)))
+check('  nenhuma tela com <input type="date">', nativos, [])
 
 print()
 if fails:
