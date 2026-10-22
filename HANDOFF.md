@@ -28423,3 +28423,55 @@ Na reprodução, o 06/10 mostrou as 6 contrapartes do banco, e o total de `due`
 LIQUIDARAM naquele dia: `due` é o IR do dia, `withheld` o retido (com o
 acumulado que passou do piso de R$ 1,00) e `carry_in`/`carry_after` o acumulado
 abaixo do piso, antes e depois do dia.
+
+## §674 — IR do NDF: alcançado o piso de R$ 1,00, o resto do mês retém tudo (2026-10-22)
+
+**O caso.** A ADVANTA COMERCIO DE SEMENTES reteve R$ 1,43 em 06/10, o bastante
+para alcançar o piso de R$ 1,00 do mês. Em 22/10 teve mais R$ 0,34 de IR, que
+saiu BRUTO e foi para o acumulado (`carry_after` = 0,34). A equipe viu isso pelo
+Database Explorer, com a visão expandida do `ndf-ir-ledger_202610` filtrada no
+nome. A regra da mesa: o piso é do MÊS. Uma vez alcançado, toda liquidação
+seguinte da contraparte no mês retém, mesmo que o imposto seja de um centavo.
+
+**A causa.** O `_ndfsum_ir_apply` só conhecia o acumulado NÃO retido (`carry`).
+Quando a contraparte retém, o `carry` volta a zero, e o dia seguinte era lido
+como se o mês tivesse recomeçado: R$ 0,34 < R$ 1,00, então nada era retido. O
+fato "já alcançou o piso neste mês" não existia em lugar nenhum.
+
+**A correção.**
+- `_ndfsum_ir_apply(..., reached=False)`: com `reached`, a regra do piso não se
+  aplica. Todo imposto do dia retém, somado ao acumulado que houver, e esse
+  acumulado entra na primeira operação com imposto, como antes.
+- A entrada do ledger grava `reached`, o estado AO FIM do dia (já tinha
+  alcançado, ou reteve hoje). A entrada gravada antes desta regra não tem o
+  campo e vale pelo `withheld` > 0 (`_ndfsum_ir_reached`): reter é ter
+  alcançado. Por isso o ledger de outubro já gravado não precisa de migração.
+- A cura do mês (`_ndfsum_ir_cure_month`) leva o conjunto de quem alcançou de
+  um dia para o outro, como já levava o `carry`. O dia pedido o recebe do ledger
+  (`_ndfsum_ir_reached_before`). Nenhuma assinatura de chamador mudou: NDF
+  Summary, Cockpit e os avisos de termo e opção de mercadoria passam todos por
+  `_ndfsum_ir_for_day`.
+- O isento continua isento, e o mês novo volta a contar do zero (o ledger é
+  mensal).
+
+**O 22/10 da Advanta.** A entrada do dia é SUBSTITUÍDA quando o Summary daquele
+dia é aberto, então, depois do pull + restart, abrir o NDF Summary de 22/10
+refaz a conta e os R$ 0,34 passam a ser retidos. O que já saiu antes da
+correção (aviso, TED) não é refeito por isto. Se algum dia anterior do mês,
+gravado pela regra antiga, deixou centavos no acumulado depois de a contraparte
+já ter alcançado o piso, esse valor entra na PRÓXIMA liquidação dela (retém o
+acumulado mais o do dia).
+
+**Prova.** `check_ndfsum_ir.py`:
+- a regra pura com `reached` (centavos retêm, levando o acumulado; sem imposto
+  não há o que reter; isento segue isento);
+- o cenário que já existia (a ACME, depois de reter 1,05, retém os 0,05 do dia
+  seguinte);
+- o caso da Advanta pelo ledger (06/11 retém 1,43 com `reached`; 23/11 retém
+  0,34 sem acumular);
+- a entrada antiga sem `reached`;
+- o mês novo voltando ao piso.
+
+`check_ndfc_api`, `check_optadv_ir`, `check_unwind_api`, `check_unwind_page` e
+`check_unwind_summary` seguem verdes. O `check_ndf_advice` tem uma falha que já
+existia antes desta mudança ("Mondelez esta no seed").
