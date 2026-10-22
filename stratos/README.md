@@ -43,6 +43,14 @@ reconhece o projeto (`OTC_STRATOS_DEST` / `OTC_STRATOS_BRANCH` mudam).
 - **Um app só.** `otc_stratos.mount` pendura o OTC no `app` que o template cria,
   instrumenta e autentica — a autenticação e o rastreamento do Stratos valem para
   toda rota do OTC.
+- **Subida em segundo plano.** O `app.run` do template só abre a porta quando o
+  módulo termina, e semear os bancos num contêiner com fração de CPU passava da
+  janela do health check (os três primeiros deploys foram derrubados a ~2 min 20 s).
+  O `mount` põe um portão na frente do app e sobe o OTC numa thread: o health
+  check responde na hora, as páginas dizem "starting" e se recarregam, e uma
+  subida que quebra mostra o erro na tela (o health check segue 200 de propósito,
+  senão o contêiner morreria levando o erro junto). O log diz quanto a subida
+  levou: `[stratos] OTC Tracker pronto em ..., em Ns`.
 - **SSO.** Quem autentica é o Stratos. A identidade dele (o SID) abre a sessão do
   OTC; papel, páginas e status continuam saindo da tabela de usuários. SID sem
   cadastro vira pedido de acesso (aviso ao ADMIN); o master (`E930179`) é ativado

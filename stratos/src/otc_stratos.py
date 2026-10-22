@@ -22,11 +22,15 @@ E a rede: a saída para a internet é pelo proxy do Stratos
 Este arquivo, o `solution.py` e o `run.py` existem SÓ na branch
 OTC-Tracker-Stratos; o código do app continua nascendo na dev.
 """
+import html
 import json
 import logging
 import os
 import re
 import sys
+import threading
+import time
+import traceback
 import types
 
 from flask import jsonify, redirect, render_template, request, session, url_for
@@ -45,14 +49,60 @@ _TELAS_DE_LOGIN = {
 }
 
 
-def mount(app, stratos_auth, context_root):
-    """Pendura o OTC Tracker no `app` do template. Chamado uma vez, no import.
+# A subida do OTC em segundo plano (ver `mount`): pronto, e o erro que a parou.
+_SUBIDA = {'pronto': threading.Event(), 'erro': None, 'inicio': time.time()}
 
-    Reproduz o `apps.create_app` sobre um app que já existe, pelas mesmas
-    funções dele — duplicar a lógica faria as duas subidas divergirem na
-    primeira mudança da dev.
+
+def mount(app, stratos_auth, context_root):
+    """Pendura o OTC Tracker no `app` do template — em SEGUNDO PLANO.
+
+    O `app.run` do template (bloco DO NOT DELETE) só abre a porta quando o
+    módulo inteiro termina, e a subida do OTC — importar o app e semear ~110
+    bancos DuckDB num disco vazio — leva segundos numa máquina rápida e minutos
+    num contêiner com fração de CPU: o health check do Stratos desistia antes,
+    e três deploys foram derrubados a ~2 min 20 s cada. Aqui o `mount` só põe
+    um portão na frente do app e volta: a porta abre na hora, o health check
+    responde desde o primeiro segundo, as páginas dizem "starting" até o OTC
+    ficar pronto, e uma subida que quebra aparece na tela com o erro.
     """
     base = '/' + context_root.strip('/')
+    _SUBIDA['inicio'] = time.time()
+    app.wsgi_app = _portao(app.wsgi_app, base)
+    threading.Thread(target=_sobe, args=(app, stratos_auth, base),
+                     name='otc-stratos-boot', daemon=True).start()
+    return app
+
+
+def espera_subida(timeout=None):
+    """Bloqueia até o OTC subir (ou quebrar). Devolve o erro, ou None."""
+    if not _SUBIDA['pronto'].wait(timeout):
+        return 'a subida nao terminou em %ss' % timeout
+    return _SUBIDA['erro']
+
+
+def _sobe(app, stratos_auth, base):
+    # O solution.py ainda registra rotas depois do `mount` (o whoami e, por
+    # último, o health check do bloco DO NOT DELETE): mexer no url_map ao
+    # mesmo tempo seria uma corrida. O health check registrado é a deixa.
+    limite = time.time() + 60
+    while 'health' not in app.view_functions and time.time() < limite:
+        time.sleep(0.05)
+    try:
+        _monta(app, stratos_auth, base)
+    except Exception:                                       # noqa: BLE001
+        _SUBIDA['erro'] = traceback.format_exc()
+        log.error('[stratos] a subida do OTC Tracker falhou:\n%s', _SUBIDA['erro'])
+    else:
+        log.warning('[stratos] OTC Tracker pronto em %s, em %.0fs (dados em %s)',
+                    base, time.time() - _SUBIDA['inicio'], app.config.get('DATA_DIR'))
+    finally:
+        _SUBIDA['pronto'].set()
+
+
+def _monta(app, stratos_auth, base):
+    """Reproduz o `apps.create_app` sobre o app do template, pelas mesmas
+    funções dele — duplicar a lógica faria as duas subidas divergirem na
+    primeira mudança da dev."""
     _proxy_do_stratos()
     _garante_awmpy()
 
@@ -105,9 +155,54 @@ def mount(app, stratos_auth, context_root):
     # O primeiro da lista é o ÚLTIMO a rodar (o Flask percorre os after_request
     # de trás para a frente): a reescrita vê o corpo final.
     app.after_request_funcs.setdefault(None, []).insert(0, _prefixa_resposta(base))
-    log.warning('[stratos] OTC Tracker montado em %s (dados em %s)',
-                base, app.config.get('DATA_DIR'))
-    return app
+
+
+# ── O portão: o que responde enquanto o OTC sobe ────────────────────────────
+
+_PAGINA_SUBINDO = (
+    '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="5">'
+    '<title>OTC Tracker</title><body style="font-family:system-ui,sans-serif;margin:3rem">'
+    '<h3>OTC Tracker is starting&hellip;</h3><p>%d s. This page reloads by itself.</p>')
+_PAGINA_ERRO = (
+    '<!doctype html><meta charset="utf-8"><title>OTC Tracker</title>'
+    '<body style="font-family:system-ui,sans-serif;margin:3rem">'
+    '<h3>OTC Tracker failed to start</h3><pre style="white-space:pre-wrap">%s</pre>')
+
+
+def _portao(wsgi, base):
+    """WSGI na frente do app: enquanto o OTC sobe, o Flask não é chamado.
+
+    Chamado, ele se daria por iniciado, e o `register_blueprint` da subida
+    passaria a ser recusado. Só o health check responde desde já — o mesmo
+    `{"status": "up"}` da rota do template, nos dois endereços em que ele pode
+    vir. Com a subida QUEBRADA ele segue 200 de propósito: derrubado, o
+    contêiner levaria o erro junto e o Stratos voltaria à versão anterior sem
+    dizer por quê; de pé, o erro fica na tela de quem abrir a solução.
+    """
+    saude = (base + '/actuator/keepalive', '/actuator/keepalive')
+
+    def otc_stratos_portao(environ, start_response):
+        if _SUBIDA['pronto'].is_set() and _SUBIDA['erro'] is None:
+            return wsgi(environ, start_response)
+        caminho = environ.get('PATH_INFO') or ''
+        status = '503 Service Unavailable'
+        if caminho in saude:
+            corpo, tipo, status = b'{"status": "up"}', 'application/json', '200 OK'
+        elif _SUBIDA['erro'] is not None:
+            corpo = (_PAGINA_ERRO % html.escape(_SUBIDA['erro'])).encode('utf-8')
+            tipo = 'text/html; charset=utf-8'
+        elif caminho.startswith(base + '/api/'):
+            corpo = json.dumps({'success': False, 'code': 'starting', 'params': {},
+                                'text': 'OTC Tracker is starting.'}).encode('utf-8')
+            tipo = 'application/json'
+        else:
+            corpo = (_PAGINA_SUBINDO % (time.time() - _SUBIDA['inicio'])).encode('utf-8')
+            tipo = 'text/html; charset=utf-8'
+        start_response(status, [('Content-Type', tipo), ('Content-Length', str(len(corpo))),
+                                ('Retry-After', '5'), ('Cache-Control', 'no-store')])
+        return [corpo]
+
+    return otc_stratos_portao
 
 
 # ── Proxy, chave de sessão e awmpy ──────────────────────────────────────────

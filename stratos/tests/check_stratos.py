@@ -269,8 +269,14 @@ def confere_subida(tmp, sem_awmpy):
     _stubs()
     sys.path.insert(0, src)
     os.chdir(src)
+    import time
+    t0 = time.time()
     import solution
+    import otc_stratos
 
+    ok(time.time() - t0 < 5, 'o import do solution.py volta na hora (a subida e em segundo plano)')
+    erro = otc_stratos.espera_subida(300)
+    ok(erro is None, 'o OTC subiu em segundo plano em %.1fs %s' % (time.time() - t0, (erro or '')[-600:]))
     app = solution.app
 
     from flask import redirect
@@ -408,6 +414,48 @@ def confere_shim():
     ok(r.returncode == 0, 'shim de JavaScript (node): ' + (r.stdout + r.stderr).strip()[:400])
 
 
+def confere_portao():
+    """O portão WSGI nos três estados da subida, sem subir o app."""
+    import threading
+    import time
+    from werkzeug.test import Client
+    sys.path.insert(0, os.path.join(STRATOS, 'src'))
+    import otc_stratos
+
+    chamado = []
+
+    def interno(environ, start_response):
+        chamado.append(environ['PATH_INFO'])
+        start_response('200 OK', [('Content-Type', 'text/plain')])
+        return [b'flask']
+
+    original = otc_stratos._SUBIDA
+    otc_stratos._SUBIDA = {'pronto': threading.Event(), 'erro': None, 'inicio': time.time()}
+    try:
+        c = Client(otc_stratos._portao(interno, BASE))
+        r = c.get(BASE + '/actuator/keepalive')
+        ok(r.status_code == 200 and r.get_json() == {'status': 'up'} and not chamado,
+           'subindo: health 200 sem chamar o Flask')
+        r = c.get(BASE + '/dashboard')
+        ok(r.status_code == 503 and b'starting' in r.data and b'refresh' in r.data and not chamado,
+           'subindo: pagina 503 que se recarrega sozinha')
+        r = c.get(BASE + '/api/x')
+        ok(r.status_code == 503 and (r.get_json() or {}).get('code') == 'starting',
+           'subindo: API 503 JSON com code')
+        otc_stratos._SUBIDA['erro'] = 'Traceback ... ValueError: <boom>'
+        otc_stratos._SUBIDA['pronto'].set()
+        r = c.get(BASE + '/dashboard')
+        ok(r.status_code == 503 and b'failed to start' in r.data and b'&lt;boom&gt;' in r.data,
+           'quebrou: o erro na tela, escapado')
+        r = c.get(BASE + '/actuator/keepalive')
+        ok(r.status_code == 200, 'quebrou: health segue 200, para o erro continuar na tela')
+        otc_stratos._SUBIDA['erro'] = None
+        r = c.get(BASE + '/dashboard')
+        ok(r.status_code == 200 and chamado == [BASE + '/dashboard'], 'pronto: tudo vai ao Flask')
+    finally:
+        otc_stratos._SUBIDA = original
+
+
 def main():
     if '--filho' in sys.argv:
         # Cada subida importa o app inteiro: roda num processo filho limpo.
@@ -421,6 +469,7 @@ def main():
     confere_template()
     confere_proxy()
     confere_shim()
+    confere_portao()
     for sem_awmpy in ('0', '1'):
         r = subprocess.run([sys.executable, os.path.abspath(__file__), '--filho', sem_awmpy])
         ok(r.returncode == 0, 'subida %s awmpy' % ('sem' if sem_awmpy == '1' else 'com'))
