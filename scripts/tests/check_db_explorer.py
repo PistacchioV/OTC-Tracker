@@ -325,6 +325,17 @@ def main():
                                                     'expand': 'sid'}).get_json()
     check('coluna que não é JSON não expande', d['expanded'] is None)
 
+    print('== 6. a tela: um dia por vez, com o total ==')
+    tpl = open(os.path.join(ROOT, 'apps', 'templates', 'pages', 'database-explorer.html'), encoding='utf-8').read()
+    js = open(os.path.join(ROOT, 'apps', 'static', 'js', 'pages', 'database-explorer.js'), encoding='utf-8').read()
+    check('o seletor do dia na barra', 'id="dbxDay"' in tpl)
+    check('o filtro do dia é um ext.search próprio (o column().search() o funil zera)',
+          'jQuery.fn.dataTable.ext.search.push' in js and 'row[S.dayCol + 2] === S.day' in js)
+    check('a visão expandida por data abre ordenada pelo dia', "order: S.dayCol >= 0 ? [[off + S.dayCol, 'asc']] : []" in js)
+    check('o rodapé soma o que a grade mostra, e vai no Export',
+          "api.rows({ search: 'applied' })" in js and 'footer: true' in js and '<tfoot>' in js)
+    check('o Clear Filters volta a todos os dias', "S.day = ''; el('dbxDay').value = '';" in js)
+
     print()
     print('TUDO OK' if not FALHAS else '%d FALHA(S): %s' % (len(FALHAS), ', '.join(FALHAS)))
     return 1 if FALHAS else 0

@@ -33,6 +33,7 @@
 #dbx-page .dbx-cell { display: inline-block; max-width: 320px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
 #dbx-page .dbx-null { color: var(--otc-text-3); font-style: italic; font-size: .72rem; }
 #dbx-page #dbxTable td { font-variant-numeric: tabular-nums; }
+#dbx-page #dbxTable tfoot th { font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; }
 #dbx-page .dbx-cols-menu { max-height: 60vh; overflow: auto; }
 #dbx-page .dbx-empty { padding: 48px 16px; text-align: center; color: var(--otc-text-2); }
 #dbx-page .dbx-empty i { display: block; font-size: 2rem; margin-bottom: 8px; color: var(--otc-text-3); }
@@ -126,6 +127,8 @@
     <div class="d-flex flex-wrap align-items-center gap-2 mb-3 d-none" id="dbxToolbar">
         {# a coluna JSON aberta em linhas e colunas, ou a tabela como está gravada #}
         <select class="form-select form-select-sm w-auto d-none" id="dbxView" aria-label="View"></select>
+        {# na visão expandida: um dia por vez, com a quebra inteira dele #}
+        <select class="form-select form-select-sm w-auto d-none" id="dbxDay" aria-label="Day"></select>
         <span id="dbxColsSlot"></span>
         <span id="dbxExportSlot"></span>
         <button type="button" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all dbx-edit-only" id="dbxBatchEdit" disabled>

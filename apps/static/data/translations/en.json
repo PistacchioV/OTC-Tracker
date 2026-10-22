@@ -3149,5 +3149,8 @@
   "dbx-view-raw": "View: as stored",
   "dbx-view-expand": "View: expand JSON in {col}",
   "dbx-expanded": "The JSON in <b>{col}</b> is shown as a table: {n} rows from {m} records. Read-only — pick \"As stored\" in View to see the column as saved.",
-  "dbx-truncated": "The expansion stopped at {n} rows."
+  "dbx-truncated": "The expansion stopped at {n} rows.",
+  "dbx-day-all": "Day: all ({n} days)",
+  "dbx-day": "Day: {day} — {n} rows",
+  "dbx-total": "Total"
 }

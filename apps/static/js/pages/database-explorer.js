@@ -25,7 +25,7 @@
     var S = {
         dbs: [], db: null, dbInfo: null, tables: [], table: null,
         data: null, dt: null, sig: null, byRid: new Map(), sel: new Map(),
-        edit: null, pedido: 0,
+        edit: null, pedido: 0, dayCol: -1, day: '',
         expand: undefined    // undefined = o padrão do servidor; '' = como está gravado
     };
 
@@ -339,7 +339,7 @@
         var ec = { columns: ':visible:not(.dbx-noexp)', orthogonal: 'export', modifier: { page: 'all' } };
         function item(ext, icon, label) {
             return { extend: ext, text: '<i class="ti ' + icon + ' me-1 fs-lg align-middle"></i> ' + label,
-                     className: 'dropdown-item', exportOptions: ec };
+                     className: 'dropdown-item', footer: true, exportOptions: ec };
         }
         return [{
             extend: 'collection',
@@ -379,10 +379,61 @@
         sel.value = d.expanded || '';
     }
 
+    // ── visão expandida: o DIA e o total ─────────────────────────────────────
+    // O ledger (e todo JSON por data) se lê UM DIA POR VEZ: o seletor mostra
+    // cada dia com quantas linhas ele tem, e a grade fica só com a quebra dele.
+    // O filtro é um `ext.search` próprio (o `column().search()` o funil zera).
+    function dayColumn(d) {
+        if (!d.expanded) return -1;
+        for (var i = 0; i < d.columns.length; i++) if (d.columns[i].kind === 'date') return i;
+        return -1;
+    }
+    function daySelect(d, keepDay) {
+        var sel = el('dbxDay'), i = dayColumn(d), antes = keepDay ? S.day : '';
+        S.dayCol = i; S.day = '';
+        sel.classList.toggle('d-none', i < 0);
+        if (i < 0) { sel.innerHTML = ''; return; }
+        var cont = {}, dias = [];
+        d.rows.forEach(function (r) {
+            var v = r[i + 2];
+            if (v == null) return;
+            if (!cont[v]) { cont[v] = 0; dias.push(v); }
+            cont[v]++;
+        });
+        dias.sort();
+        sel.innerHTML = '<option value="">' + esc(t('dbx-day-all', 'Day: all ({n} days)', { n: fmtInt(dias.length) })) + '</option>' +
+            dias.map(function (v) {
+                return '<option value="' + esc(v) + '">' + esc(t('dbx-day', 'Day: {day} — {n} rows', { day: dmy(v), n: fmtInt(cont[v]) })) + '</option>';
+            }).join('');
+        if (antes && cont[antes]) S.day = antes;
+        sel.value = S.day;
+    }
+    jQuery.fn.dataTable.ext.search.push(function (settings, _data, _idx, row) {
+        if (!S.day || S.dayCol < 0 || settings.nTable !== el('dbxTable')) return true;
+        return !row || row[S.dayCol + 2] === S.day;
+    });
+
+    // o total das colunas decimais, do que a grade MOSTRA (dia e funil incluídos)
+    function sumColumns(d) {
+        var out = [];
+        d.columns.forEach(function (c, i) { if (c.kind === 'float' || c.kind === 'decimal') out.push(i); });
+        return out;
+    }
+    function footerSums(api, d, off) {
+        var linhas = api.rows({ search: 'applied' }).data().toArray();
+        var ths = jQuery(api.table().footer()).find('th');
+        sumColumns(d).forEach(function (i) {
+            var s = 0;
+            linhas.forEach(function (r) { var v = parseFloat(r[i + 2]); if (!isNaN(v)) s += v; });
+            ths.eq(i + off).text(s.toLocaleString('en-US', { maximumFractionDigits: 2 }));
+        });
+    }
+
     function render(keep) {
         var d = S.data;
         var editable = !d.readonly;
         viewSelect(d);
+        daySelect(d, keep);
         S.byRid = new Map();
         if (editable) d.rows.forEach(function (r) { S.byRid.set(r[0], r); });
         S.sel.clear();
@@ -407,11 +458,18 @@
         var tb = el('dbxTable');
         tb.removeAttribute('data-otc-expadv');
         var off = editable ? 2 : 0;
+        var somas = sumColumns(d);
+        // o rótulo do total vai na primeira coluna que não é somada
+        var rotulo = -1;
+        for (var k = 0; k < d.columns.length; k++) { if (somas.indexOf(k) < 0) { rotulo = k; break; } }
         tb.innerHTML = '<thead><tr>' +
             (editable ? '<th class="dbx-noexp" style="width:34px"><input type="checkbox" class="form-check-input" id="dbxAll" aria-label="Select all"></th>' +
                         '<th class="dbx-noexp" style="width:84px">' + esc(t('dbx-actions', 'Actions')) + '</th>' : '') +
             d.columns.map(function (c) { return '<th title="' + esc(c.type) + '">' + esc(c.name) + '</th>'; }).join('') +
-            '</tr></thead>';
+            '</tr></thead>' +
+            (somas.length ? '<tfoot><tr>' + (editable ? '<th class="dbx-noexp"></th><th class="dbx-noexp"></th>' : '') +
+                d.columns.map(function (c, i) { return '<th>' + (i === rotulo ? esc(t('dbx-total', 'Total')) : '') + '</th>'; }).join('') +
+                '</tr></tfoot>' : '');
         var cols = [];
         if (editable) {
             cols.push({ data: null, orderable: false, searchable: false, className: 'dbx-noexp',
@@ -428,7 +486,8 @@
             data: d.rows,
             columns: cols,
             deferRender: true,
-            order: [],
+            // a visão expandida por data abre agrupada por DIA
+            order: S.dayCol >= 0 ? [[off + S.dayCol, 'asc']] : [],
             pageLength: 50,
             lengthChange: false,
             autoWidth: true,
@@ -443,7 +502,8 @@
                     last: '<i class="ti ti-chevrons-right"></i>'
                 }
             },
-            drawCallback: function () { syncSel(); }
+            drawCallback: function () { syncSel(); },
+            footerCallback: function () { if (somas.length) footerSums(this.api(), d, off); }
         });
         jQuery('#dbxExportSlot').empty().append(S.dt.buttons().container());
         colsMenu(off);
@@ -662,9 +722,11 @@
     el('dbxLoad').addEventListener('click', function () { loadRows(false); });
     el('dbxLimit').addEventListener('change', function () { if (S.table) loadRows(true); });
     el('dbxView').addEventListener('change', function () { S.expand = this.value; loadRows(false); });
+    el('dbxDay').addEventListener('change', function () { S.day = this.value; if (S.dt) S.dt.draw(); });
     el('dbxRefresh').addEventListener('click', function () { loadRows(true); });
     // o funil limpa sozinho (excel-filter.js reconhece o botão); aqui a busca
     el('dbxClearFilters').addEventListener('click', function () {
+        S.day = ''; el('dbxDay').value = '';
         if (S.dt) S.dt.search('').columns().search('').draw();
     });
 
