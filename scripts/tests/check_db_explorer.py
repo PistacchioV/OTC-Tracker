@@ -12,7 +12,13 @@ Prende:
      impressão, o Edit de uma linha (data dd/mm/aaaa, NULL), a linha que mudou
      desde a leitura RECUSADA sem gravar nada, o lote tudo-ou-nada, o valor que
      o CAST recusa, a coluna só leitura, o Delete, o banco do ARMAZÉM (com
-     `_manifest`) só leitura, `..` e o SQLite recusados.
+     `_manifest`) só leitura, `..` e o SQLite recusados;
+  4. o JSON EM COLUNAS: a forma do ledger de IR (`{dia: {contraparte: {name,
+     due, withheld…}}}`) vira uma linha por dia × contraparte, na `__meta` e no
+     `__raw`; o dia sem lançamento não vira linha; campo com o nome
+     de outra coluna leva prefixo; a tabela "chave + JSON" do armazém abre já
+     expandida, "como está gravado" volta ao cru, e a tabela editável só expande
+     quando pedida — e aí é só leitura.
 
 Não toca em dado real: tudo num tmp.
 """
@@ -36,6 +42,13 @@ if os.name != 'nt' and not os.environ.get('OTC_SHARED_DRIVE_ROOT'):
 import duckdb  # noqa: E402
 
 FALHAS = []
+# a forma do ledger de IR do NDF Summary (`ndf-ir-ledger_AAAAMM.json`)
+LEDGER = {
+    '2026-10-01': {'ebazar ltda': {'name': 'EBAZAR', 'due': 10.5, 'withheld': 0.0, 'carry_in': 0.0, 'carry_after': 10.5}},
+    '2026-10-02': {},
+    '2026-10-05': {'bayer sa': {'name': 'BAYER S.A.', 'due': 1139.4, 'withheld': 1139.4, 'carry_in': 0.0, 'carry_after': 0.0},
+                   'suzano sa': {'name': 'SUZANO SA', 'due': 0.4, 'withheld': 0.0, 'carry_in': 0.6, 'carry_after': 1.0}},
+}
 
 
 def check(nome, cond, extra=''):
@@ -56,6 +69,8 @@ def semear():
     con.execute('CREATE SCHEMA extra')
     con.execute('CREATE TABLE extra."odd ""name""" (v VARCHAR)')
     con.execute("INSERT INTO extra.\"odd \"\"name\"\"\" VALUES ('z')")
+    con.execute('CREATE TABLE prefs (sid VARCHAR, doc VARCHAR)')
+    con.execute('INSERT INTO prefs VALUES (?, ?)', ['A1', json.dumps({'theme': 'dark', 'ui': {'wall': 'slate'}})])
     con.close()
     # pasta e nome que a semeadura da subida não usa (ela grava o armazém real
     # neste mesmo tmp, e um `mappings/bank-name.db` seria sobrescrito)
@@ -64,6 +79,10 @@ def semear():
     con.execute('CREATE TABLE _manifest (path VARCHAR, mtime DOUBLE, fsize BIGINT, targets VARCHAR)')
     con.execute('CREATE TABLE bank_name (NAME VARCHAR, _seq BIGINT, _raw VARCHAR)')
     con.execute("INSERT INTO bank_name VALUES ('BANCO X', 0, '{\"NAME\": \"BANCO X\"}')")
+    con.execute('CREATE TABLE ledger__meta (key VARCHAR, value VARCHAR)')
+    con.executemany('INSERT INTO ledger__meta VALUES (?, ?)', [[k, json.dumps(v)] for k, v in LEDGER.items()])
+    con.execute('CREATE TABLE ledger__raw (_seq BIGINT, _raw VARCHAR)')
+    con.execute('INSERT INTO ledger__raw VALUES (0, ?)', [json.dumps(LEDGER)])
     con.close()
     lite = sqlite3.connect(os.path.join(DBDIR, 'comitentes.db'))
     lite.execute('CREATE TABLE t (a INTEGER)')
@@ -122,6 +141,32 @@ def main():
         check('coluna só leitura recusada no SET', False)
     except domain.ExplorerError as e:
         check('coluna só leitura recusada no SET', e.code == 'readonly_column')
+
+    print('== 1b. JSON em colunas ==')
+    meta = [[k, json.dumps(v)] for k, v in LEDGER.items()]
+    check('acha a coluna JSON', domain.json_columns(['key', 'value'], meta) == ['value'])
+    check('texto comum não é JSON', domain.json_columns(['a'], [['abc'], ['{x']]) == [])
+    nomes, linhas, cortou = domain.expand(['key', 'value'], meta, 1)
+    check('__meta: dia, contraparte e os campos em colunas',
+          nomes == ['key', 'value › key', 'name', 'due', 'withheld', 'carry_in', 'carry_after'], nomes)
+    check('...uma linha por dia × contraparte, o dia sem lançamento fora',
+          [l[:3] for l in linhas] == [['2026-10-01', 'ebazar ltda', 'EBAZAR'],
+                                     ['2026-10-05', 'bayer sa', 'BAYER S.A.'], ['2026-10-05', 'suzano sa', 'SUZANO SA']])
+    check('...com os números', linhas[1][3:5] == [1139.4, 1139.4] and not cortou)
+    nomes, linhas, _ = domain.expand(['_seq', '_raw'], [[0, json.dumps(LEDGER)]], 1)
+    check('__raw: o mês inteiro, dia e contraparte em duas colunas (o _seq sai)',
+          nomes[:3] == ['_raw › key 1', '_raw › key 2', 'name'] and len(linhas) == 3, nomes)
+    check('família pelos valores', [domain.infer_kind([l[i] for l in linhas]) for i in (0, 2, 3)] == ['date', 'text', 'float'])
+    nomes, linhas, _ = domain.expand(['key', 'value'], [['k', json.dumps({'key': 1, 'a': {'b': 2}})]], 1)
+    check('campo homônimo leva prefixo; objeto aninhado vira a.b', nomes == ['key', 'value.key', 'a.b'], nomes)
+    check('lista de registros: uma linha por item',
+          domain.expand(['x'], [[json.dumps([{'a': 1}, {'a': 2}])]], 0)[1] == [[1], [2]])
+    check('o teto corta e diz que cortou', domain.expand(['key', 'value'], meta, 1, cap=2)[2] is True)
+    check('armazém "chave + JSON" abre expandido', domain.default_expand(['key', 'value'], ['value'], True) == 'value'
+          and domain.default_expand(['_seq', '_raw'], ['_raw'], True) == '_raw')
+    check('...dataset tipado e banco de plataforma, não',
+          domain.default_expand(['NAME', '_seq', '_raw'], ['_raw'], True) is None
+          and domain.default_expand(['key', 'value'], ['value'], False) is None)
 
     semear()
     from apps import create_app
@@ -255,6 +300,30 @@ def main():
           d['readonly'] == 'store' and d['rows'][0][:2] == [None, None] and d['rows'][0][2] == 'BANCO X')
     r = upd([{'rowid': 0, 'h': 'x'}], {'NAME': {'value': 'Y'}}, table='bank_name', db='zz-armazem/teste.db')
     check('gravar no armazém: 409 readonly_store', r.status_code == 409 and r.get_json()['code'] == 'readonly_store')
+
+    print('== 5. JSON em colunas pela API ==')
+    d = rows('ledger__meta', db='zz-armazem/teste.db').get_json()
+    check('a __meta do armazém abre expandida', d['expanded'] == 'value' and d['readonly'] == 'store'
+          and [c['name'] for c in d['columns']][:4] == ['key', 'value › key', 'name', 'due'], d.get('expanded'))
+    check('...a data da chave vira data, o número vira número',
+          [c['kind'] for c in d['columns']][:4] == ['date', 'text', 'text', 'float'])
+    check('...3 linhas (dia × contraparte) de 3 registros', len(d['rows']) == 3 and d['source_rows'] == 3)
+    d = m.post('/api/database-explorer/rows', json={'db': 'zz-armazem/teste.db', 'schema': 'main',
+                                                    'table': 'ledger__meta', 'expand': ''}).get_json()
+    check('"como está gravado" volta ao cru', d['expanded'] is None and len(d['rows']) == 3
+          and d['json_columns'] == ['value'])
+    d = rows('ledger__raw', db='zz-armazem/teste.db').get_json()
+    check('o __raw do mês inteiro também', d['expanded'] == '_raw' and len(d['rows']) == 3)
+    d = rows('prefs').get_json()
+    check('tabela editável com JSON não expande sozinha', d['expanded'] is None and d['readonly'] is None
+          and d['json_columns'] == ['doc'])
+    d = m.post('/api/database-explorer/rows', json={'db': 'Plataforma.db', 'schema': 'main', 'table': 'prefs',
+                                                    'expand': 'doc'}).get_json()
+    check('...pedida, expande e fica só leitura', d['expanded'] == 'doc' and d['readonly'] == 'expanded'
+          and [c['name'] for c in d['columns']] == ['sid', 'theme', 'ui.wall'] and d['rows'][0][:2] == [None, None])
+    d = m.post('/api/database-explorer/rows', json={'db': 'Plataforma.db', 'schema': 'main', 'table': 'prefs',
+                                                    'expand': 'sid'}).get_json()
+    check('coluna que não é JSON não expande', d['expanded'] is None)
 
     print()
     print('TUDO OK' if not FALHAS else '%d FALHA(S): %s' % (len(FALHAS), ', '.join(FALHAS)))

@@ -25,7 +25,8 @@
     var S = {
         dbs: [], db: null, dbInfo: null, tables: [], table: null,
         data: null, dt: null, sig: null, byRid: new Map(), sel: new Map(),
-        edit: null, pedido: 0
+        edit: null, pedido: 0,
+        expand: undefined    // undefined = o padrão do servidor; '' = como está gravado
     };
 
     function el(id) { return document.getElementById(id); }
@@ -230,6 +231,7 @@
 
     function pickTable(x) {
         S.table = x;
+        S.expand = undefined;
         el('dbxLoad').disabled = false;
         tblMeta();
         loadRows(false);
@@ -264,7 +266,8 @@
         var meu = ++S.pedido;
         setBusy(true);
         return api('POST', '/rows', {
-            db: S.db, schema: S.table.schema, table: S.table.name, limit: +el('dbxLimit').value
+            db: S.db, schema: S.table.schema, table: S.table.name, limit: +el('dbxLimit').value,
+            expand: S.expand
         }).then(function (j) {
             if (meu !== S.pedido) return;
             S.data = j;
@@ -277,29 +280,44 @@
 
     function banner() {
         var d = S.data, b = el('dbxBanner'), partes = [];
-        if (d.readonly) {
+        if (d.readonly && d.readonly !== 'expanded') {
             partes.push('<i class="ti ti-lock me-1"></i>' + t('dbx-ro-' + d.readonly, 'Read-only.'));
         }
-        if (d.total > d.rows.length) {
+        if (d.expanded) {
+            partes.push('<i class="ti ti-table me-1"></i>' + t('dbx-expanded',
+                'The JSON in <b>{col}</b> is shown as a table: {n} rows from {m} records. Read-only — pick "As stored" in View to see the column as saved.',
+                { col: esc(d.expanded), n: fmtInt(d.rows.length), m: fmtInt(d.source_rows) }));
+        }
+        if (d.truncated) {
+            partes.push('<i class="ti ti-info-circle me-1"></i>' + esc(t('dbx-truncated',
+                'The expansion stopped at {n} rows.', { n: fmtInt(d.rows.length) })));
+        }
+        var lidas = d.source_rows != null ? d.source_rows : d.rows.length;
+        if (d.total > lidas) {
             partes.push('<i class="ti ti-info-circle me-1"></i>' + esc(t('dbx-partial',
                 'Showing the first {n} of {total} rows — raise "Rows" to load more.',
-                { n: fmtInt(d.rows.length), total: fmtInt(d.total) })));
+                { n: fmtInt(lidas), total: fmtInt(d.total) })));
         }
         b.innerHTML = partes.join('<br>');
         b.classList.toggle('d-none', !partes.length);
     }
 
     function shown(c, v) {
-        if (c.kind === 'date') return dmy(v);
+        if (c.kind === 'date' && typeof v === 'string') return dmy(v);
         if (c.kind === 'timestamp') return dmyTime(v);
         if (typeof v === 'boolean') return v ? 'true' : 'false';
         return String(v);
+    }
+    // número decimal com separador de milhar NA TELA; o Export leva o cru
+    function disp(c, v) {
+        if (typeof v === 'number' && c.kind === 'float') return v.toLocaleString('en-US', { maximumFractionDigits: 10 });
+        return shown(c, v);
     }
     function cellRender(c) {
         return function (v, type) {
             if (type === 'display') {
                 if (v === null || v === undefined) return '<span class="dbx-null">NULL</span>';
-                var s = shown(c, v);
+                var s = disp(c, v);
                 return s.length > 48 ? '<span class="dbx-cell" title="' + esc(s.slice(0, 1500)) + '">' + esc(s) + '</span>' : esc(s);
             }
             if (v === null || v === undefined) return '';
@@ -351,9 +369,20 @@
             '<ul class="dropdown-menu dbx-cols-menu">' + items + '</ul></div>';
     }
 
+    function viewSelect(d) {
+        var sel = el('dbxView'), cols = d.json_columns || [];
+        sel.classList.toggle('d-none', !cols.length);
+        sel.innerHTML = '<option value="">' + esc(t('dbx-view-raw', 'View: as stored')) + '</option>' +
+            cols.map(function (c) {
+                return '<option value="' + esc(c) + '">' + esc(t('dbx-view-expand', 'View: expand JSON in {col}', { col: c })) + '</option>';
+            }).join('');
+        sel.value = d.expanded || '';
+    }
+
     function render(keep) {
         var d = S.data;
         var editable = !d.readonly;
+        viewSelect(d);
         S.byRid = new Map();
         if (editable) d.rows.forEach(function (r) { S.byRid.set(r[0], r); });
         S.sel.clear();
@@ -632,6 +661,7 @@
     // ── barra ────────────────────────────────────────────────────────────────
     el('dbxLoad').addEventListener('click', function () { loadRows(false); });
     el('dbxLimit').addEventListener('change', function () { if (S.table) loadRows(true); });
+    el('dbxView').addEventListener('change', function () { S.expand = this.value; loadRows(false); });
     el('dbxRefresh').addEventListener('click', function () { loadRows(true); });
     // o funil limpa sozinho (excel-filter.js reconhece o botão); aqui a busca
     el('dbxClearFilters').addEventListener('click', function () {

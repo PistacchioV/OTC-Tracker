@@ -3145,5 +3145,9 @@
   "dbx-e-bad_value": "La base rechazó el valor: {msg}",
   "dbx-e-constraint": "Se violó una restricción de la base: {msg}",
   "dbx-e-db_busy": "La base está en uso por otra instancia. Intente de nuevo en un momento.",
-  "dbx-e-db_error": "Error de la base: {msg}"
+  "dbx-e-db_error": "Error de la base: {msg}",
+  "dbx-view-raw": "Ver: como está grabado",
+  "dbx-view-expand": "Ver: abrir el JSON de {col}",
+  "dbx-expanded": "El JSON de <b>{col}</b> se muestra como tabla: {n} filas de {m} registros. Solo lectura — elija \"como está grabado\" en Ver para ver la columna como se guardó.",
+  "dbx-truncated": "La expansión se detuvo en {n} filas."
 }

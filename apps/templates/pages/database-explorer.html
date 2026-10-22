@@ -124,6 +124,8 @@
     <div class="otc-banner mb-3 d-none" id="dbxBanner"></div>
 
     <div class="d-flex flex-wrap align-items-center gap-2 mb-3 d-none" id="dbxToolbar">
+        {# a coluna JSON aberta em linhas e colunas, ou a tabela como está gravada #}
+        <select class="form-select form-select-sm w-auto d-none" id="dbxView" aria-label="View"></select>
         <span id="dbxColsSlot"></span>
         <span id="dbxExportSlot"></span>
         <button type="button" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all dbx-edit-only" id="dbxBatchEdit" disabled>

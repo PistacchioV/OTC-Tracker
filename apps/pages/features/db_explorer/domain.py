@@ -227,6 +227,164 @@ def set_clause(columns_meta, values):
     return ', '.join(partes), params
 
 
+# ── JSON em colunas ─────────────────────────────────────────────────────────
+# No armazém o dado mora como JSON (o `_raw` de cada registro, o `value` da
+# `__meta`, o objeto inteiro no `__raw`), e o texto cru numa célula não se lê
+# nem se filtra. A visão EXPANDIDA abre o JSON em linhas e colunas: objeto de
+# objetos vira uma linha por chave (com a chave numa coluna), lista de
+# registros uma linha por item, e o objeto aninhado dentro do registro vira
+# colunas `a.b`. É só leitura: uma linha da tela já não é uma linha do banco.
+
+EXPAND_DEPTH = 3              # níveis de "objeto de objetos" abertos em linhas
+JSON_SAMPLE = 50              # valores olhados para dizer que a coluna é JSON
+# Colunas que não dizem nada fora do JSON: com só elas ao lado, a tabela do
+# armazém abre já expandida (`_seq` é a ordem, `key` a chave da `__meta`).
+_BOOKKEEPING = {'_seq', 'key'}
+_ISO_DATE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+
+def parse_json(v):
+    """O valor como objeto/lista, ou None se não é JSON."""
+    if isinstance(v, (dict, list)):
+        return v
+    if isinstance(v, str):
+        s = v.strip()
+        if s[:1] in ('{', '['):
+            try:
+                return json.loads(s)
+            except ValueError:
+                return None
+    return None
+
+
+def json_columns(names, rows):
+    """As colunas cujos valores (os primeiros `JSON_SAMPLE` não nulos) são
+    todos objeto ou lista JSON — as que a tela oferece expandir."""
+    out = []
+    for i, nome in enumerate(names):
+        vistos, ok = 0, True
+        for r in rows:
+            v = r[i]
+            if v is None:
+                continue
+            if parse_json(v) is None:
+                ok = False
+                break
+            vistos += 1
+            if vistos >= JSON_SAMPLE:
+                break
+        if ok and vistos:
+            out.append(nome)
+    return out
+
+
+def default_expand(names, candidates, is_store):
+    """A coluna que o banco do ARMAZÉM abre expandida: só quando, fora do
+    JSON, a tabela não tem nada além de ordem e chave (`_seq`/`_raw`, a
+    `__meta`, o `__raw`). Dataset com colunas tipadas já se lê como está."""
+    if not is_store or not candidates:
+        return None
+    if set(names) - set(candidates) - _BOOKKEEPING:
+        return None
+    for pref in ('_raw', 'value'):
+        if pref in candidates:
+            return pref
+    return candidates[0]
+
+
+def _flat(d, prefix=''):
+    out = {}
+    for k, x in d.items():
+        nome = prefix + str(k)
+        if isinstance(x, dict) and x:
+            out.update(_flat(x, nome + '.'))
+        elif isinstance(x, (dict, list)):
+            out[nome] = json.dumps(x, ensure_ascii=False) if x else None
+        else:
+            out[nome] = x
+    return out
+
+
+def _records(v, depth=0):
+    """(chaves do caminho, registro achatado) de cada linha que `v` vira."""
+    if depth < EXPAND_DEPTH and isinstance(v, dict) and v and all(isinstance(x, dict) for x in v.values()):
+        for k, sub in v.items():
+            for keys, rec in _records(sub, depth + 1):
+                yield [k] + keys, rec
+        return
+    if isinstance(v, list):
+        if v and all(isinstance(x, dict) for x in v):
+            for x in v:
+                yield [], _flat(x)
+        else:
+            yield [], ({'value': json.dumps(v, ensure_ascii=False)} if v else {})
+        return
+    if isinstance(v, dict):
+        yield [], _flat(v)
+        return
+    yield [], ({} if v is None else {'value': v})
+
+
+def infer_kind(values):
+    """A família de uma coluna que saiu do JSON, pelos valores dela."""
+    vs = [v for v in values if v is not None and v != '']
+    if not vs:
+        return 'text'
+    if all(isinstance(v, bool) for v in vs):
+        return 'bool'
+    if all(isinstance(v, int) and not isinstance(v, bool) for v in vs):
+        return 'int'
+    if all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in vs):
+        return 'float'
+    if all(isinstance(v, str) and _ISO_DATE.match(v) for v in vs):
+        return 'date'
+    return 'text'
+
+
+def expand(names, rows, idx, cap=MAX_LIMIT):
+    """A visão expandida da coluna `idx`: (nomes, linhas, cortou?). As outras
+    colunas da linha vão na frente (menos o `_seq`, que é só a ordem), depois
+    as chaves do caminho (`<coluna> › key`) e os campos do registro, na ordem
+    em que aparecem. Campo com o nome de outra coluna leva o prefixo da
+    coluna expandida. Objeto vazio (o dia sem lançamento do ledger) não vira
+    linha: era uma fileira de NULL para cada dia parado, e o que se procura
+    na visão expandida são os registros."""
+    alvo = names[idx]
+    outros = [i for i, n in enumerate(names) if i != idx and n != '_seq']
+    linhas, campos, vistos, nivel, cortou = [], [], set(), 0, False
+    for r in rows:
+        v = parse_json(r[idx])
+        for keys, rec in _records(v if v is not None else r[idx]):
+            if not rec:
+                continue
+            if len(linhas) >= cap:
+                cortou = True
+                break
+            linhas.append(([r[i] for i in outros], keys, rec))
+            nivel = max(nivel, len(keys))
+            for f in rec:
+                if f not in vistos:
+                    vistos.add(f)
+                    campos.append(f)
+        if cortou:
+            break
+    nomes = [names[i] for i in outros]
+    usados = set(nomes)
+    for j in range(nivel):
+        nome = '%s › key' % alvo if nivel == 1 else '%s › key %d' % (alvo, j + 1)
+        nomes.append(nome)
+        usados.add(nome)
+    rotulos = []
+    for f in campos:
+        rot = f if f not in usados else '%s.%s' % (alvo, f)
+        usados.add(rot)
+        rotulos.append(rot)
+    nomes += rotulos
+    saida = [base + keys + [None] * (nivel - len(keys)) + [rec.get(f) for f in campos]
+             for base, keys, rec in linhas]
+    return nomes, saida, cortou
+
+
 def resolve_db(root, rel):
     """O caminho absoluto de `rel` DENTRO de `root`, ou erro. `rel` vem do
     navegador: `..`, caminho absoluto e extensão de não-banco são recusados
