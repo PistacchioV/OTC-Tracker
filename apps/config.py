@@ -46,13 +46,17 @@ class Config(object):
     # Os dois continuam podendo ser trocados por variável de ambiente
     # (`OTC_DATABASE_DIR`, `OTC_SHARED_DRIVE_ROOT`) sem tocar no arquivo.
     #
-    # ── ENV:DEV ──────────────────────────────────────────────────────────────
-    _DATA_DIR_DEFAULT = os.path.join(basedir, 'static', 'data')
-    _DATABASE_DIR_DEFAULT = os.path.join(basedir, 'static', 'data', 'db')
-    _SHARED_DRIVE_DEFAULT = 'I:\\'
-    _SQLITE_DIR_DEFAULT = basedir
-    _CONECTA_SUFFIX = ' - UAT'   # Batch Conecta: a dev grava em New - UAT / lê Return - UAT
-    _FOUR_EYES = False           # maker/checker DESLIGADO na dev (uma pessoa só testa)
+    # ── ENV:STRATOS (servidor Stratos, contêiner Linux na AWS) ───────────────
+    # Sem o share da rede: tudo mora sob UMA raiz, `OTC_STRATOS_ROOT`. Aponte-a
+    # para o volume persistente (EFS) — o disco do contêiner some a cada deploy
+    # e leva os bancos junto. Sem a variável cai no /tmp: sobe, mas não guarda.
+    _STRATOS_ROOT = os.getenv('OTC_STRATOS_ROOT') or os.path.join(os.getenv('TMPDIR') or '/tmp', 'otc-tracker')
+    _DATA_DIR_DEFAULT = os.path.join(_STRATOS_ROOT, 'data')
+    _DATABASE_DIR_DEFAULT = os.path.join(_STRATOS_ROOT, 'data', 'db')
+    _SHARED_DRIVE_DEFAULT = os.path.join(_STRATOS_ROOT, 'share')
+    _SQLITE_DIR_DEFAULT = _STRATOS_ROOT
+    _CONECTA_SUFFIX = ''         # Batch Conecta: como a prod (New / Return)
+    _FOUR_EYES = os.getenv('OTC_FOUR_EYES', '1') != '0'   # maker/checker LIGADO, como na prod
     # ── /ENV ─────────────────────────────────────────────────────────────────
 
     # A PASTA dos bancos, e é dela que sai todo caminho de banco do app — o
