@@ -10413,6 +10413,12 @@ def _ndfsum_b3_val(legs, titulo, casa, cpty_acc):
 #      do dia: se a soma continua abaixo de R$ 1,00, segue sem retenção (e
 #      acumula); se alcança R$ 1,00, retém-se a SOMA — o de hoje mais o que não
 #      foi retido antes;
+#    · ALCANÇADO o piso, ele vale para o RESTO do mês (mesa, 22/10/2026): toda
+#      liquidação seguinte da contraparte retém, mesmo um imposto de centavos.
+#      O piso é do mês, não de cada liquidação — a Advanta reteve R$ 1,43 em
+#      06/10 e, em 22/10, R$ 0,34 saíam brutos e acumulavam, como se o mês
+#      tivesse recomeçado. O estado mora no ledger (`reached` da entrada; a
+#      entrada antiga sem ele vale pelo `withheld` > 0);
 #    · a contagem é do MÊS: em mês novo o acumulado começa em zero.
 #  O acumulado vive num LEDGER mensal (`ndf-ir-ledger/ndf-ir-ledger_AAAAMM.json`,
 #  uma entrada por dia × contraparte), reescrito pelo `_ndfsum_collect` do dia
@@ -10477,10 +10483,12 @@ def _ndfsum_ir_ledger_load(ref):
         return {}
 
 
-def _ndfsum_ir_apply(settlements, carry, exempt=False):
+def _ndfsum_ir_apply(settlements, carry, exempt=False, reached=False):
     """A regra, PURA. `settlements` são os resultados das operações da
     contraparte no dia (negativo = o banco paga); `carry` é o imposto não
-    retido nas liquidações anteriores do mês.
+    retido nas liquidações anteriores do mês; `reached` diz que a contraparte
+    JÁ alcançou o piso neste mês — daí em diante todo imposto retém, por menor
+    que seja.
 
     Devolve (taxes, due, withheld, carry_after): o IR por operação na MESMA
     ordem, o imposto devido no dia, o retido e o acumulado que segue. Quando a
@@ -10493,7 +10501,7 @@ def _ndfsum_ir_apply(settlements, carry, exempt=False):
                 for x in settlements]
     due = round(sum(due_each), 2)
     total = round(carry + due, 2)
-    if due <= 0 or total < _NDFSUM_IR_MIN:
+    if due <= 0 or (total < _NDFSUM_IR_MIN and not reached):
         return [0.0] * len(settlements), due, 0.0, total
     taxes = list(due_each)
     for i, t in enumerate(taxes):
@@ -10553,9 +10561,24 @@ def _ndfsum_ir_merge(*grupos):
     return out
 
 
-def _ndfsum_ir_day_entries(groups, carry_by_key):
+def _ndfsum_ir_reached(entry):
+    """A contraparte já tinha alcançado o piso do mês ao fim deste dia? A
+    entrada nova diz (`reached`); a gravada antes da regra vale pelo que
+    reteve — reter é ter alcançado."""
+    entry = entry or {}
+    return bool(entry.get('reached')) or float(entry.get('withheld', 0.0) or 0.0) > 0
+
+
+def _ndfsum_ir_reached_before(ledger, iso):
+    """As contrapartes que alcançaram o piso em algum dia do ledger ANTES de `iso`."""
+    return {key for dia, ents in (ledger or {}).items() if dia < iso
+            for key, e in (ents or {}).items() if _ndfsum_ir_reached(e)}
+
+
+def _ndfsum_ir_day_entries(groups, carry_by_key, reached=frozenset()):
     """As entradas do ledger de UM dia: aplica a regra por contraparte a partir
-    do acumulado dado. Devolve ({chave: entrada}, {chave: {fonte: taxes}}).
+    do acumulado dado e de quem já alcançou o piso no mês (`reached`).
+    Devolve ({chave: entrada}, {chave: {fonte: taxes}}).
 
     As três fontes entram numa lista SÓ — é isso que faz o piso ser do balde e
     não do produto —, e os impostos voltam fatiados na mesma ordem."""
@@ -10564,10 +10587,12 @@ def _ndfsum_ir_day_entries(groups, carry_by_key):
         por_fonte = _ndfsum_ir_src(g)
         flat = [v for k in _NDFSUM_IR_SOURCES for v in por_fonte[k]]
         carry_in = float(carry_by_key.get(key, 0.0) or 0.0)
+        ja = key in reached
         taxes, due, withheld, carry_after = _ndfsum_ir_apply(
-            flat, carry_in, exempt=_ndfc_ir_exempt(g['name']))
+            flat, carry_in, exempt=_ndfc_ir_exempt(g['name']), reached=ja)
         entries[key] = {'name': g['name'], 'due': due, 'withheld': withheld,
-                        'carry_in': round(carry_in, 2), 'carry_after': carry_after}
+                        'carry_in': round(carry_in, 2), 'carry_after': carry_after,
+                        'reached': bool(ja or withheld > 0)}
         fatias, i = {}, 0
         for k in _NDFSUM_IR_SOURCES:
             n = len(por_fonte[k])
@@ -10702,6 +10727,7 @@ def _ndfsum_ir_cure_month(ref, teto=None):
     with _cache_lock:
         ledger = _ndfsum_ir_ledger_load(ref)
     carry, completo = {}, True
+    alcancou = set()           # quem já alcançou o piso do mês (`_ndfsum_ir_apply`)
     t0 = time.monotonic()
     d = ref_day.replace(day=1)
     while d < ref_day:
@@ -10716,11 +10742,13 @@ def _ndfsum_ir_cure_month(ref, teto=None):
                                 'OTC_NDFSUM_IR_HEAL_SECONDS; o aquecimento em background '
                                 'termina o mês)', teto, k)
                     break
-                ent, _ = _ndfsum_ir_day_entries(_ndfsum_ir_day_groups(d), carry)
+                ent, _ = _ndfsum_ir_day_entries(_ndfsum_ir_day_groups(d), carry, alcancou)
                 ledger[k] = ent
                 _ndfsum_ir_ledger_merge(ref, {k: ent})       # curado é curado: grava JÁ
             for key, e in (ledger.get(k) or {}).items():
                 carry[key] = float(e.get('carry_after', 0.0) or 0.0)
+                if _ndfsum_ir_reached(e):
+                    alcancou.add(key)
         d += timedelta(days=1)
     return ledger, carry, completo
 
@@ -10739,9 +10767,10 @@ def _ndfsum_ir_for_day(ref, groups, src='moeda'):
     (`g._ndfsum_ir_partial`), e nada errado fica em disco."""
     ref_day = ref.date() if hasattr(ref, 'date') else ref
     iso = ref_day.strftime('%Y-%m-%d')
-    _ledger, carry, completo = _ndfsum_ir_cure_month(ref, _NDFSUM_IR_CURA_TETO)
+    ledger, carry, completo = _ndfsum_ir_cure_month(ref, _NDFSUM_IR_CURA_TETO)
     entries, taxes_by_key = _ndfsum_ir_day_entries(
-        _ndfsum_ir_day_groups(ref_day, groups, src), carry)
+        _ndfsum_ir_day_groups(ref_day, groups, src), carry,
+        _ndfsum_ir_reached_before(ledger, iso))
     if completo:
         _ndfsum_ir_ledger_merge(ref, {iso: entries}, replace=True)
     elif has_app_context():

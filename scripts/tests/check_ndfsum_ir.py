@@ -8,7 +8,10 @@ acumulado mais o do dia alcanca R$ 1,00, retem a soma; mes novo zera.
 
   1. a regra pura (`_ndfsum_ir_apply`): abaixo do piso → bruto e acumula; a soma
      alcanca o piso → retem a soma na PRIMEIRA operacao com imposto; positivo e
-     isento nao pagam; arredondamento a 2 casas;
+     isento nao pagam; arredondamento a 2 casas; e o piso e do MES — alcancado,
+     toda liquidacao seguinte da contraparte no mes retem, mesmo centavos
+     (Advanta, 22/10/2026; `reached` no ledger, a entrada antiga vale pelo
+     `withheld`), e mes novo volta a contar do zero;
   2. o ledger mensal: dias anteriores sem entrada sao CURADOS do arquivo do
      Cockpit, na ordem; a entrada do dia e SUBSTITUIDA (recarregar nao dobra);
      mes novo comeca em zero; o ledger vai para o tmp, nunca para o dado real;
@@ -52,6 +55,11 @@ check('duas operacoes: o acumulado entra na PRIMEIRA com imposto',
 check('cliente pagando (positivo) nao tem IR', R._ndfsum_ir_apply([240000.0], 0.7), ([0.0], 0.0, 0.0, 0.7))
 check('isento: nada, e o acumulado nao muda', R._ndfsum_ir_apply([-240000.0], 0.3, exempt=True), ([0.0], 0.0, 0.0, 0.3))
 check('o exemplo do aviso: 240.000 → 12,00', R._ndfsum_ir_apply([-240000.0], 0.0), ([12.0], 12.0, 12.0, 0.0))
+# o piso é do MÊS (mesa, 22/10/2026): alcançado, todo imposto seguinte retém
+check('ja alcancou o piso no mes: centavos RETEM', R._ndfsum_ir_apply([-6800.0], 0.0, reached=True), ([0.34], 0.34, 0.34, 0.0))
+check('...levando junto o acumulado que sobrou', R._ndfsum_ir_apply([-6800.0], 0.2, reached=True), ([0.54], 0.34, 0.54, 0.0))
+check('...sem imposto no dia, nada a reter', R._ndfsum_ir_apply([6800.0], 0.0, reached=True), ([0.0], 0.0, 0.0, 0.0))
+check('...e o isento continua isento', R._ndfsum_ir_apply([-6800.0], 0.0, exempt=True, reached=True), ([0.0], 0.0, 0.0, 0.0))
 
 print('\n== 2. o ledger mensal ==')
 TMP = tempfile.mkdtemp(prefix='otc-ndfsum-ir-')
@@ -94,6 +102,8 @@ try:
     res4 = R._ndfsum_ir_for_day(d4, R._ndfsum_ir_cockpit_groups(
         [{'LEGAL': 'BANCO J.P MORGAN S.A', 'NM_COUNTERPARTY': 'ACME LTDA', '[PROD] Cockpit.SETTLEMENT': '-1000.00'}]))
     check('2. depois de reter, o acumulado da ACME voltou a zero', res4[R._fcst_norm('ACME LTDA')]['carry_in'], 0.0)
+    check('2. ...e os 0,05 do dia 04 RETEM: a ACME ja alcancou o piso em setembro',
+          (res4[R._fcst_norm('ACME LTDA')]['taxes'], res4[R._fcst_norm('ACME LTDA')]['withheld']), ([0.05], 0.05))
     check('2. e o da BETA segue (0,01) para o proximo dia dela',
           R._ndfsum_ir_ledger_load(d4)['2026-09-03'][R._fcst_norm('BETA SA')]['carry_after'], 0.01)
     oct1 = datetime(2026, 10, 1)
@@ -103,6 +113,30 @@ try:
     check('2. o ledger de outubro e outro arquivo',
           os.path.basename(R._ndfsum_ir_ledger_path(oct1)), 'ndf-ir-ledger_202610.json')
     check('2. o ledger ficou no tmp', R._ndfsum_ir_ledger_path(d3).startswith(TMP))
+
+    print('\n== 2b. o piso alcancado vale para o resto do mes (Advanta, 22/10/2026) ==')
+    adv = R._fcst_norm('ADVANTA COMERCIO DE SEMENTES LTDA')
+
+    def liq(day, valor, nome='ADVANTA COMERCIO DE SEMENTES LTDA'):
+        return R._ndfsum_ir_for_day(day, R._ndfsum_ir_cockpit_groups(
+            [{'LEGAL': 'BANCO J.P MORGAN S.A', 'NM_COUNTERPARTY': nome,
+              '[PROD] Cockpit.SETTLEMENT': '%.2f' % valor}]))
+    n6 = liq(datetime(2026, 11, 6), -28600.0)[adv]
+    check('2b. 06/11: R$ 1,43 alcancam o piso e retem', (n6['taxes'], n6['withheld']), ([1.43], 1.43))
+    check('2b. ...e a entrada do ledger diz que alcancou',
+          R._ndfsum_ir_ledger_load(datetime(2026, 11, 6))['2026-11-06'][adv]['reached'], True)
+    n23 = liq(datetime(2026, 11, 23), -6800.0)[adv]
+    check('2b. 23/11: R$ 0,34 RETEM (o piso ja foi alcancado no mes)', (n23['taxes'], n23['withheld']), ([0.34], 0.34))
+    led = R._ndfsum_ir_ledger_load(datetime(2026, 11, 23))
+    check('2b. ...sem acumular nada', (led['2026-11-23'][adv]['carry_after'], led['2026-11-23'][adv]['reached']), (0.0, True))
+    # o ledger gravado ANTES da regra nao tem o `reached`: vale pelo que reteve
+    # (fevereiro/2027: os outros meses deste teste são de outros cenários)
+    R._ndfsum_ir_ledger_merge(datetime(2027, 2, 1), {'2027-02-01': {R._fcst_norm('OLDCO SA'): {
+        'name': 'OLDCO SA', 'due': 1.43, 'withheld': 1.43, 'carry_in': 0.0, 'carry_after': 0.0}}})
+    old = liq(datetime(2027, 2, 2), -6800.0, nome='OLDCO SA')[R._fcst_norm('OLDCO SA')]
+    check('2b. entrada antiga sem `reached`: reter no dia 01 basta', old['withheld'], 0.34)
+    jan = liq(datetime(2027, 1, 4), -6800.0)[adv]
+    check('2b. mes novo: o piso volta a valer (0,34 sai bruto e acumula)', (jan['withheld'], jan['taxes']), (0.0, [0.0]))
 
     print('\n== 3. o aviso ==')
     E._build_cpdetails_index = lambda: {}
