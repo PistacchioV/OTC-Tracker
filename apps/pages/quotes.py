@@ -18,7 +18,7 @@ uma forma de autenticar para todas as APIs do app.
 `build_session` desliga o `trust_env` de propósito, porque a Athena é host
 INTERNO e herdar o proxy corporativo dava `WinError 10061` (CLAUDE.md §8). BCB e
 Yahoo são o oposto: são internet, e em boa parte da rede JPM a conexão só sai
-pelo proxy. Só que o `proxy.jpmchase.net:10443` que o app de desktop usava **não
+pelo proxy. Só que a porta antiga do proxy, a que o app de desktop usava, **não
 atende em toda máquina** — na instância do time ele responde *connection refused*,
 que é o mesmo `WinError 10061` por outro motivo (ali não há nada escutando).
 
@@ -52,12 +52,12 @@ log = logging.getLogger('otc_tracker')
 # para a Athena: ela é interna e o proxy a recusa. `QUOTES_PROXY=` (vazio) tira
 # esta rota da fila; ele é a PRIMEIRA tentativa, não a única.
 QUOTES_PROXY = os.getenv('QUOTES_PROXY', 'http://proxy.jpmchase.net:9443')
-# A porta que o app de desktop usava. Ela é tentada DEPOIS, e existe porque as
-# O proxy é a 9443, SEMPRE — confirmado pela mesa. A 10443 é a porta do app de
-# desktop e não atende em máquina nenhuma; ela estava aqui como segunda tentativa
+# O proxy é a 9443, SEMPRE — confirmado pela mesa. A porta antiga, a do app de
+# desktop, não atende em máquina nenhuma; ela estava aqui como segunda tentativa
 # e o único efeito era pôr uma linha a mais em toda mensagem de erro, dizendo que
 # um endereço que nunca funcionou também falhou. Quem precisar de outro endereço
-# põe no `QUOTES_PROXY`.
+# põe no `QUOTES_PROXY`. O número dela não se escreve no código, nem em
+# comentário: o scan do `stratos push` recusa o arquivo que o cita.
 _FALLBACK_PROXIES = ()
 QUOTES_TIMEOUT = int(os.getenv('QUOTES_TIMEOUT', '30') or 30)
 # O timeout de CONEXÃO é curto de propósito: ele é pago uma vez por rota morta,
