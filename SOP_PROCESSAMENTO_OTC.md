@@ -177,7 +177,7 @@ de período aceitam digitação direta da data. **Fixed Income**, **SOFR Index**
 
 #### NDF — Summary
 
-Batch de liquidação de NDF do dia. Os cards Vanilla / Other Publisher / T+0 / Total classificam a posição. As grades editáveis "Settlement Summary" e "Trade Level" permitem adicionar, editar, remover e confirmar linhas antes de gerar o batch. No **Trade Level**, a coluna **Settlement Type** (à direita da contraparte) diz que liquidação é aquela — `MATURITY`, `PREMIUM` ou `UNWIND` (a recompra) —, inclusive nas linhas em *Check*. Cada grade tem o seu **Clear Filters**, que limpa os funis só dela.
+Batch de liquidação de NDF do dia. Os cards Vanilla / Other Publisher / T+0 / Total classificam a posição. As grades editáveis "Settlement Summary" e "Trade Level" permitem adicionar, editar, remover e confirmar linhas antes de gerar o batch. No **Trade Level**, a coluna **Settlement Type** (à direita da contraparte) diz que liquidação é aquela — `MATURITY`, `PREMIUM` ou `UNWIND` (a recompra) —, inclusive nas linhas em *Check*. Cada grade tem o seu **Clear Filters**, que limpa os funis só dela. O botão **Import settlement**, ao lado da data, traz as liquidações do dia da Athena sem sair da tela (o mesmo import do NDF Cockpit). O IR (0,005%) segue o **piso de R$ 1,00 do mês** por contraparte: abaixo dele não se retém e acumula; ao alcançá-lo, retém-se a soma — e, **alcançado o piso, toda liquidação seguinte da contraparte no mês retém**, mesmo centavos.
 
 ![NDF — Summary](docs/sop-screenshots/ndf-summary.png)
 

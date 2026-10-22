@@ -1024,16 +1024,24 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 - **Autocomplete nunca é `<datalist>`**: dropdown próprio abaixo do campo, mesma
   largura, `max-height` ~220px, item por `mousedown` (antes do `blur`),
   reemitindo `input`/`change` (`mapAttachDrop`, `.ar-ac-drop`).
-- **Data é SEMPRE `dd/mm/aaaa` e `<input type="date">` visível é proibido** (o
-  nativo desenha no locale do sistema — `mm/dd` no Windows do JP). flatpickr
+- **Data é SEMPRE `dd/mm/aaaa` e `<input type="date">` é proibido** (o nativo
+  desenha no locale do sistema — `mm/dd` no Windows do JP — e o calendário do
+  SISTEMA não aceita o Today nem acompanha a digitação; as recons e a Reference
+  Data que o usavam invisível viraram flatpickr em 22/10/2026, §675). flatpickr
   com `altInput` (`otcDateField`/`otcDateSync` do `export-advanced.js`; quem
   escreve por código chama `el._flatpickr.setDate`; largura em CLASSE porque o
   `style=` fica no campo escondido; ícone como background SVG embutido) ou
-  daterangepicker `singlePicker` `DD/MM/YYYY`. `type="date"` só invisível atrás
-  de texto readonly (`.date-wrap` das recons). **E o campo se DIGITA: só os
-  NÚMEROS, as barras se escrevem sozinhas** (mesa, 22/09/2026;
-  `otcDateMask`, aplicada pelo `otcDateField` ao **altInput**, que é o campo que
-  se vê). Sem ela o parse frouxo do flatpickr lê `2208/2026` como uma data
+  daterangepicker `singlePicker` `DD/MM/YYYY`. **O comportamento é de TODO
+  datepicker e mora no `static/js/date-std.js`** (mesa, 22/10/2026, §675),
+  carregado pelo `footer-scripts.html` em toda página ANTES dos scripts dela:
+  ele embrulha o `flatpickr` na criação e reconhece os dois plugins na
+  primeira interação e numa varredura depois da carga — página nova não escreve
+  nada. O **botão TODAY** no pé dos dois calendários é dele (estilo
+  `.otc-dp-foot`/`.otc-dp-today` no tema). **E o campo se DIGITA: só os
+  NÚMEROS, as barras se escrevem sozinhas** (mesa, 22/09/2026; `otcDateMask`,
+  no campo que se VÊ — o altInput, ou o próprio input no flatpickr direto). No
+  flatpickr SEM altInput o `setDate` dispara um `input` no mesmo campo, e a
+  máscara tem uma trava contra o laço. Sem ela o parse frouxo do flatpickr lê `2208/2026` como uma data
   QUALQUER, sem erro nenhum. A data INTEIRA vai ao picker na hora
   (`setDate`) — o código em volta lê o ISO do input original, e ele só nasceria
   no blur: clicar direto no botão exportaria o intervalo anterior. O clique
@@ -3083,14 +3091,16 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 
 ### Quotes
 
-- **Os campos From/To se DIGITAM** (§508, `typeableDate` no `quotes.js`): o
-  clique seleciona o texto, a máscara põe as barras (`22082026` → 22/08/2026),
-  e o calendário acompanha — com dia e mês ele vai para o mês, com a data
-  inteira ele a marca. Só a data INTEIRA vale para a busca. **O `keyup` do
-  daterangepicker é desligado nesses campos**: ele relê o texto com parse
-  frouxo do moment e desfazia a navegação no meio da digitação. Data futura é
-  puxada para hoje (o `maxDate`), e texto pela metade volta à última data
-  válida no blur — quem reescreve é o próprio plugin, no `hide`.
+- **Os campos From/To se DIGITAM** (§508): o clique seleciona o texto, a
+  máscara põe as barras (`22082026` → 22/08/2026), e o calendário acompanha —
+  com dia e mês ele vai para o mês, com a data inteira ele a escolhe (o
+  `clickApply`, e o callback grava o `state`). Desde 22/10/2026 isso é do
+  `date-std.js` para todo daterangepicker do app (§675); o `typeableDate` do
+  `quotes.js` ficou só com o Enter, que dispara a busca. **O `keyup` do
+  daterangepicker é desligado**: ele relê o texto com parse frouxo do moment e
+  desfazia a navegação no meio da digitação. Data futura é puxada para hoje (o
+  `maxDate`), e texto pela metade volta à última data válida ao fechar — quem
+  reescreve é o próprio plugin, no `hide`.
 
 ### Save CETIP Files
 
