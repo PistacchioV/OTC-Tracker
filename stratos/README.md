@@ -13,6 +13,7 @@ que está listado abaixo existe apenas nesta branch.
 | `stratos/requirements.txt` | `requirements.txt` | o bloco do template + o que o OTC precisa (gerado) |
 | `apps/config.py` (bloco `ENV:STRATOS`) | — | caminhos de dados no contêiner |
 | `stratos-sync.bat` | — | copia o que mudou para o repositório do Stratos |
+| `stratos/exporta_dados.py` | — | tira do share a cópia dos bancos que vai para o Stratos |
 | `stratos/build_requirements.py`, `stratos/tests/` | — | gerador e verificação |
 
 Dockerfile, terraform, Jenkinsfile, jules, `tests/` e o `favicon.ico` são do
@@ -74,6 +75,37 @@ reconhece o projeto (`OTC_STRATOS_DEST` / `OTC_STRATOS_BRANCH` mudam).
   O pre-push scan do `stratos push` recusa qualquer citação do proxy on-premise
   nas portas antigas (ou sem porta), **até em comentário** — a correção vai na
   dev, porque `apps/` é código da dev.
+
+## Levar os dados (os bancos do share)
+
+O contêiner não enxerga o share, então os dados chegam lá como ARQUIVO. Quem
+monta o arquivo é o `exporta_dados.py`, na máquina do JPM, com o MESMO python
+do `start-otc-tracker.bat`: é a versão de duckdb que escreveu os WALs.
+
+```
+python stratos\exporta_dados.py --medir        (quantos bancos, quantos MB)
+python stratos\exporta_dados.py --zip          (monta o pacote)
+```
+
+Banco a banco, ele toma a trava de leitura da camada, copia o `.db` com os WALs
+para o disco local, faz o `CHECKPOINT` lá (o limbo do §442 sai pela rotina do
+`recover_duckdb_wal.py`) e confere que não sobrou WAL. O pacote não leva WAL:
+WAL de uma versão de duckdb replayado por outra é o banco ILEGÍVEL do §442. O
+pacote vai para `%LOCALAPPDATA%\OTC-Tracker\exporta-stratos`, fora do Desktop
+porque o Desktop pode estar no OneDrive. A pasta `data/` dentro dele tem a forma
+do `OTC_STRATOS_ROOT`, e o `manifest.json` lista bytes e sha256 de cada arquivo.
+
+Rode com as instâncias do time FECHADAS (fim do dia). Um banco preso por uma
+instância de pé fica de fora como EM USO e o pacote sai INCOMPLETO;
+`--insistir 60` fica tentando. O share não é alterado.
+
+Ficam de fora: sobras (`.lock`, `_recuperado/`, `.corrupt-*`), `translations/`,
+que vem com o código, e o JSON legado em disco, isto é, o histórico de mais de 12
+meses que só existe como arquivo (§434). `--com-json-legado` leva o legado junto.
+
+**O lado do Stratos ainda não existe:** depende de onde o contêiner guarda dado
+de forma persistente (ver as variáveis abaixo). Sem isso, o que entrar no `/tmp`
+some no próximo deploy.
 
 ## Variáveis de ambiente (task definition)
 

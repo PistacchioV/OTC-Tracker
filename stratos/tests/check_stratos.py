@@ -12,7 +12,10 @@ src/apps/ — e sobe o `solution.py` com um Stratos de MENTIRA (o stratos-blocks
      cadastro vira pedido de acesso; trocar de SID troca a sessão;
   3. o prefixo: Location, HTML (href/src/action, Speculation Rules), estático,
      cookie no caminho da solução, o shim na página e no /sw.js;
-  4. o shim de JavaScript, no node (se houver).
+  4. o shim de JavaScript, no node (se houver);
+  5. o `exporta_dados.py` (o pacote dos bancos para o Stratos), pelo
+     `check_exporta_dados.py` — ele usa por dentro o `recover_duckdb_wal.py` da
+     dev, e um helper renomeado lá quebra a exportação sem quebrar a dev.
 
     OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python stratos/tests/check_stratos.py
 """
@@ -504,6 +507,12 @@ def main():
     for sem_awmpy in ('0', '1'):
         r = subprocess.run([sys.executable, os.path.abspath(__file__), '--filho', sem_awmpy])
         ok(r.returncode == 0, 'subida %s awmpy' % ('sem' if sem_awmpy == '1' else 'com'))
+    r = subprocess.run([sys.executable, os.path.join(AQUI, 'check_exporta_dados.py')],
+                       capture_output=True, text=True)
+    for linha in r.stdout.splitlines():
+        if linha.startswith('FAIL'):
+            print('      exporta: ' + linha)
+    ok(r.returncode == 0, 'exporta_dados: o pacote dos bancos para o Stratos')
     print('\n%d falha(s)' % len(FALHAS))
     return 1 if FALHAS else 0
 
