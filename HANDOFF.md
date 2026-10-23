@@ -28660,3 +28660,134 @@ vai para o destino.
 CETIP, Electronic Inventory), o Outlook e a Athena (Kerberos). E o `/tmp` some a
 cada deploy: `OTC_STRATOS_ROOT` precisa de um volume persistente, `SECRET_KEY`
 vai no task definition, e a solução roda com UMA task (o processo único, §4).
+
+## §678 — Stratos no MongoDB: as decisões e o plano em passos (2026-10-23)
+
+**Onde estamos.** O Stratos sobe, entra pelo SSO e mostra o painel, mas vazio: os
+bancos estão no `/tmp` do contêiner, que some a cada deploy. Desde o §677
+entraram:
+- o `stratos/exporta_dados.py` (`bd5403d5`, só na branch do Stratos): a cópia
+  consistente dos bancos do share, com o WAL fundido e um manifest com sha256,
+  testada pelo `check_exporta_dados.py`, que o `check_stratos.py` roda;
+- a foto das telas de login (`527c3325`, na dev): o rebranding a deixou no
+  `app.css` apagado;
+- o Lock Screen e o Log Out no Stratos (`8addddde`): a ponte desfazia os dois.
+
+**As decisões (com o usuário, 23/10/2026).**
+1. **A instância da equipe continua sendo a PROD** (desktop, `StreamFlow-prod`,
+   DuckDB no share) até o Stratos estar 100%.
+2. **O banco do Stratos é o Stratos NoSQL (MongoDB)**, pelo `NoSqlDatabase(env)`
+   do stratosblocks: `get_dataset`/`create_dataset` → `create_collection`, depois
+   `add_document`/`query_documents`. Não pede proxy nem token manual, e tem
+   backup automático: restaura qualquer minuto dos últimos 30 dias. O ambiente
+   pode guardar dado de cliente (nome, CNPJ, operação), conforme o usuário.
+3. **É o porte de verdade.** O Stratos lê e grava no NoSQL; a dev e a prod seguem
+   no DuckDB, e o mesmo código escolhe pelo config. Ficaram de fora:
+   - Databricks + Snowflake: warehouse analítico, com latência por consulta e
+     custo por segundo ligado. Só o poll do sino o manteria acordado o dia
+     inteiro. Serve como destino de relatório, não como banco do app.
+   - O MongoDB só como disco dos arquivos DuckDB: sairia em dias, mas com janela
+     de perda se o contêiner morre e disputa entre os contêineres no deploy.
+4. **A migração é pela Database Explorer:** um Export na instância da equipe e um
+   dropzone na do Stratos. O arquivo é a **cópia consistente do banco DuckDB, não
+   CSV**:
+   - o CSV confunde vazio com nulo, e no app isso tem significado (papel vazio
+     revoga, nulo não mexe);
+   - perde os tipos (`DATE`, `TIMESTAMP`, `DOUBLE`, `BIGINT`, `BOOLEAN`);
+   - seriam milhares de arquivos: 645 tabelas só na dev, e na prod uma por dia
+     por produto;
+   - e o Excel estraga ID e data (§477).
+
+   O duckdb existe dos dois lados, então o importador abre o próprio `.db`.
+5. **O código da dev nunca importa o `stratosblocks`.** O backend NoSQL recebe um
+   ADAPTADOR com a interface mínima: o `otc_stratos.py` o monta sobre o
+   `NoSqlDatabase`, e os testes, sobre um falso (em memória ou um `mongod` local,
+   via `brew install mongodb-community` + `pymongo` na venv). O `pymongo`, se for
+   preciso, entra só no requirements do Stratos, pelo `build_requirements.py`.
+
+**Os passos.** Cada um termina com teste, commit e, quando mexe no Stratos,
+`stratos-sync apply` + `stratos push` na máquina do JPM.
+
+**Passo 0 — Conhecer a API do `NoSqlDatabase`.** O nosso `stratos/src/solution.py`
+não tem o exemplo que a documentação cita (`solution.py:115-123` é de outro
+projeto ou de um template mais novo). O que levantar:
+- o import (`from stratosblocks.… import NoSqlDatabase`) e o que é o `env`;
+- os métodos e as assinaturas: há update, replace, delete, upsert, operação em
+  lote? Qual a linguagem do filtro do `query_documents`? Há paginação, ordenação
+  e projeção?
+- os limites: tamanho de documento (o do MongoDB é 16 MB), documentos por
+  chamada, cotas;
+- se há índice e atomicidade (update condicional, transação).
+
+Como levantar: pela página da documentação ou, no Stratos, por uma rota só do
+master no `otc_stratos.py` que imprima o `help()` da classe. Junto, a saída de
+`stratos\exporta_dados.py --medir` na máquina do JPM, que diz o tamanho dos
+dados. Sem esse passo, o esquema do passo 2 é chute. Saída: a API anotada aqui.
+
+**Passo 1 — Export na Database Explorer (dev → prod; não depende do NoSQL).**
+- Um botão só do master exporta um banco, uma seleção ou todos num `.zip` com a
+  cópia consistente de cada `.db` e o `manifest.json` (bytes, sha256, versão do
+  duckdb).
+- A rotina sai do `stratos/exporta_dados.py` e do `scripts/recover_duckdb_wal.py`
+  para um módulo do app (por exemplo `apps/pages/duck_snapshot.py`, porque
+  feature não importa `scripts/`), e o `exporta_dados.py` vira casca dela.
+- As regras são as de hoje: trava de LEITURA da camada por banco, CHECKPOINT na
+  cópia local e banco preso como EM USO, com o pacote marcado INCOMPLETO.
+- O zip é montado em arquivo temporário e servido em stream, porque pode ter GB.
+- O `check_exporta_dados.py` passa a cobrir a rotina e a rota.
+
+**Passo 2 — O backend e o ARMAZÉM no NoSQL.**
+- `Config.STORAGE`: `duckdb` por padrão e `nosql` no bloco ENV:STRATOS.
+- O `data_store` fala com o DuckDB em 4 pontos (a leitura do alvo e as três
+  gravações), atrás de cerca de 590 chamadas do app. O backend entra ali.
+- O esquema se decide com a API do passo 0. A ideia: um documento por caminho
+  (rel, mtime, tamanho, targets e o payload do `__raw`) e, no arquivo-dia, UMA
+  linha por documento (o `_seq`/`_raw` de hoje), que respeita o limite de 16 MB
+  nas posições grandes.
+- O "mudou?", que hoje é o `stat` do `.db`, vira um carimbo de versão por
+  coleção, consultado uma vez por request.
+- Os testes do armazém (`check_duck_read`, `check_daycache`, `check_duck_gate`…)
+  rodam também com o falso.
+
+**Passo 3 — Usuários e notificações.** É o mínimo para o login do Stratos sem
+DuckDB, porque a ponte de SSO chama essas funções:
+- o `routes.py`: cadastro, `Page_Access`, `get_user_by_sid`, `insert_new_user`;
+- o `platform/db.py`;
+- o `platform/notifications.py`: o sino, o poll sem trava e o expurgo;
+- o `platform/authz.py`.
+
+**Passo 4 — O resto do SQL.** Cerca de 180 `execute`, um módulo por commit:
+- `platform/pending_confirmation.py`: os três bancos e o histórico de métricas;
+- `manual_conf.py`: a esteira, com `mutate_row`/`save_changes`, que releem dentro
+  da escrita (§548);
+- `cgd_docs.py`: o Onboarding, com a geração do §548;
+- `recon_comitente.py`: o SQLite;
+- `platform/confirmations.py`, `platform/manual_confirmation.py`,
+  `features/deals_monitor`, `features/projects/infra/people.py`,
+  `features/support` e `features/appver`;
+- a própria Database Explorer, que no Stratos mostra as coleções.
+
+**Passo 5 — O dropzone no Stratos (Database Explorer, só do master).**
+- O zip do passo 1 entra em pedaços, para não bater no limite de corpo do Stratos.
+- Confere o sha256 do manifest, abre cada `.db` com o duckdb do contêiner e
+  grava no NoSQL pelo backend dos passos 2 a 4.
+- Por banco, SUBSTITUI o que havia, para poder repetir até a virada; recusa
+  pacote INCOMPLETO e mostra quantas linhas entraram por tabela.
+- Cresce com os passos: importa só o que já foi portado.
+
+**Passo 6 — Validar e virar.**
+- Testes de ponta a ponta com o falso e o `check_stratos.py` com o backend NoSQL.
+- No Stratos, com dado real importado, conferir as telas contra a instância da
+  equipe.
+- A virada: a instância da equipe fica PARADA durante a última exportação e
+  importação (o que for gravado no meio se perde), e só então a equipe passa
+  para o Stratos.
+
+**Fora do banco, o que ainda falta para o Stratos ser 100%** (§677): o contêiner
+não enxerga o share (Batch Conecta, confirmações, CETIP, Electronic Inventory),
+não tem Outlook (box scan, leitura de e-mail) nem Kerberos (Athena), e o SMTP da
+rede provavelmente não responde de lá (e-mails e o 2FA do login próprio). Cada
+um pede uma solução própria antes da virada.
+
+**Lembrete da documentação do Stratos:** `SSLError` depois do deploy se resolve
+com `stratos upgrade` (atualiza os certificados do proxy) e um deploy de novo.

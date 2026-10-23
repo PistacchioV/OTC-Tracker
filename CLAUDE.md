@@ -62,7 +62,9 @@ OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_<nome>.py
   (`_require_config_names`, `_seed_data_dir`, `register_blueprints`…) e citar
   o proxy on-premise nas portas antigas — mesmo em comentário, o scan do
   `stratos push` recusa o arquivo. O `stratos/tests/check_stratos.py` pega as
-  duas.
+  duas. **O banco do Stratos vai ser o Stratos NoSQL (MongoDB), por porte de
+  verdade** — a prod segue na instância da equipe até o Stratos estar 100%, e o
+  código escolhe o banco pelo config; as decisões e os passos 0–6 estão no §678.
 - **O bloco DEV BYPASS (`/dev-login`) do `routes.py` nunca vai para o
   repositório.** É removido antes de cada commit e restaurado depois.
 - **Nunca fixe um de-para novo no código.** Tudo que é mapeável se cadastra
