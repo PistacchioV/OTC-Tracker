@@ -9,7 +9,9 @@ src/apps/ — e sobe o `solution.py` com um Stratos de MENTIRA (o stratos-blocks
      requirements.txt gerado está em dia e nada cita o proxy on-premise que o
      pre-push scan do `stratos push` recusa;
   2. o SSO: sem identidade é 403; o master entra num banco vazio; quem não tem
-     cadastro vira pedido de acesso; trocar de SID troca a sessão;
+     cadastro vira pedido de acesso; trocar de SID troca a sessão; o Lock
+     Screen trava e o SID do SSO destrava; o Logout para na tela de saída sem
+     derrubar o login do Stratos;
   3. o prefixo: Location, HTML (href/src/action, Speculation Rules), estático,
      cookie no caminho da solução, o shim na página e no /sw.js;
   4. o shim de JavaScript, no node (se houver);
@@ -394,6 +396,56 @@ def confere_subida(tmp, sem_awmpy):
     ok(dentro.get('stratos_user') == 'A123456' and not dentro.get('authenticated')
        and b'pending' in r.data,
        'outro SID pelo SSO: a sessao do OTC troca, a do Stratos fica')
+
+    # O menu da foto: Lock Screen e Logout. A ponte devolvia o dashboard nos
+    # dois — tirava o `locked` a cada request, e o Logout do OTC
+    # (`session.clear()`) levava o login do Stratos junto, e o SSO entrava de novo.
+    from urllib.parse import urlsplit
+
+    def onde(resp):
+        return urlsplit(resp.headers.get('Location', '')).path
+
+    t = app.test_client()
+    t.get(BASE + '/login/callback?sid=E930179&code=z', **https)
+    ok(t.get(BASE + '/dashboard', **https).status_code == 200, 'menu: o master entrou pelo SSO')
+    r = t.get(BASE + '/lock', **https)
+    ok(r.status_code == 302 and onde(r) == BASE + '/auth-2-lock-screen',
+       'Lock Screen leva a tela travada (%s %s)' % (r.status_code, onde(r)))
+    r = t.get(BASE + '/auth-2-lock-screen', **https)
+    ok(r.status_code == 200 and (BASE + '/unlock').encode() in r.data, 'a tela travada abre, com o Unlock')
+    r = t.get(BASE + '/dashboard', **https)
+    ok(r.status_code == 302 and onde(r) == BASE + '/auth-2-lock-screen',
+       'travada, o dashboard volta para a trava')
+    r = t.post(BASE + '/unlock', data={'sid': 'A123456'}, **https)
+    ok(onde(r) == BASE + '/auth-2-lock-screen' and t.get(BASE + '/dashboard', **https).status_code == 302,
+       'o SID de outra pessoa nao destrava')
+    r = t.post(BASE + '/unlock', data={'sid': 'e930179'}, **https)
+    ok(r.status_code == 302 and onde(r) == BASE + '/dashboard', 'o SID do SSO destrava (%s)' % onde(r))
+    ok(t.get(BASE + '/dashboard', **https).status_code == 200, 'destravada, o dashboard abre')
+
+    r = t.get(BASE + '/logout', **https)
+    with t.session_transaction(BASE + '/', **https) as s:
+        dentro = dict(s)
+    ok(r.status_code == 302 and onde(r) == BASE + '/auth-2-sign-in'
+       and dentro.get('stratos_user') == 'E930179' and not dentro.get('authenticated')
+       and dentro.get('otc_stratos_saiu'),
+       'Logout encerra so a sessao do OTC; a do Stratos fica (%s)' % sorted(dentro))
+    r = t.get(BASE + '/auth-2-sign-in', **https)
+    ok(r.status_code == 200 and b'otc-stratos-saiu' in r.data and b'card-side-img' in r.data
+       and (BASE + '/auth-2-sign-in?entrar=1').encode() in r.data,
+       'saiu: a tela de saida, com o Sign in again na base')
+    r = t.get(BASE + '/dashboard', **https)
+    ok(r.status_code == 302 and onde(r) == BASE + '/auth-2-sign-in', 'saiu: o SSO nao reabre a sessao sozinho')
+    r = t.get(BASE + '/api/user-home/favorites', **https)
+    ok(r.status_code == 401 and (r.get_json() or {}).get('code') == 'signed_out',
+       'saiu: a API responde 401 (o session-guard da aba aberta leva a tela de saida)')
+    r = t.get(BASE + '/auth-2-sign-in?entrar=1', **https)
+    ok(r.status_code == 302 and onde(r) == BASE + '/dashboard', 'Sign in again reabre pelo SSO')
+    r = t.get(BASE + '/dashboard', **https)
+    with t.session_transaction(BASE + '/', **https) as s:
+        dentro = dict(s)
+    ok(r.status_code == 200 and dentro.get('user_sid') == 'E930179' and not dentro.get('otc_stratos_saiu'),
+       'e o dashboard volta, sem a marca de saida')
 
 
 # ── 4. O shim no node ───────────────────────────────────────────────────────

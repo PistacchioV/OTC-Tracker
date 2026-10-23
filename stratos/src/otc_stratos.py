@@ -33,7 +33,8 @@ import time
 import traceback
 import types
 
-from flask import jsonify, redirect, render_template, request, session, url_for
+from flask import (flash, jsonify, redirect, render_template, render_template_string, request,
+                   session, url_for)
 
 log = logging.getLogger('otc_tracker')
 
@@ -44,12 +45,21 @@ _CHAVES_OTC = ('authenticated', 'user_sid', 'user_name', 'user_email', 'user_rol
                'user_position', 'session_ip', 'locked', 'pending_sid', 'pending_ip',
                'masked_email', 'masked_phone')
 
-# Telas do login próprio. Com o SSO quem chega nelas já está autenticado.
+# Telas do login próprio. Com o SSO quem chega nelas já está autenticado. A
+# tela TRAVADA não está aqui: o Lock Screen do menu vale no Stratos também.
 _TELAS_DE_LOGIN = {
     'pages_blueprint.index', 'pages_blueprint.sign_in_page',
     'pages_blueprint.sign_up_page', 'pages_blueprint.two_factor_page',
-    'pages_blueprint.lock_screen_page',
 }
+
+# Quem clicou em Logout. O Logout do OTC faz `session.clear()` — e com isso
+# apagava também o login do StratosAuth; o request seguinte voltava pelo SSO,
+# que entra sozinho, e o clique devolvia o dashboard. Aqui sair encerra só a
+# sessão do OTC e PARA nela: com esta marca a ponte não reabre a sessão até o
+# "Sign in again" (`/auth-2-sign-in?entrar=1`).
+_SAIU = 'otc_stratos_saiu'
+# O que a tela de saída ainda pede ao blueprint do OTC.
+_LIVRE_SEM_SESSAO = {'pages_blueprint.service_worker'}
 
 
 # A subida do OTC em segundo plano (ver `mount`): pronto, e o erro que a parou.
@@ -283,6 +293,27 @@ def _ponte_sso(stratos_auth):
         # `/static/data/...` é rota do OTC e passa pela ponte.
         if request.blueprint != 'pages_blueprint':
             return None
+        endpoint = request.endpoint
+        if endpoint == 'pages_blueprint.logout':
+            # Antes da rota do OTC, que faria o `session.clear()`.
+            log.warning('[stratos] logout: SID=%s', session.get('user_sid'))
+            _limpa_sessao_otc()
+            session[_SAIU] = True
+            return redirect(url_for('pages_blueprint.sign_in_page'))
+        if session.get(_SAIU):
+            if endpoint == 'pages_blueprint.sign_in_page' and request.args.get('entrar') == '1':
+                session.pop(_SAIU, None)        # segue: a sessão reabre e a tela leva ao dashboard
+            elif endpoint in _LIVRE_SEM_SESSAO or _traducao(endpoint):
+                return None
+            elif request.path.startswith('/api/'):
+                # 401 é "sem sessão" para o session-guard.js de uma aba que
+                # ficou aberta: ele avisa e leva ao login, que é a tela de saída.
+                return jsonify({'success': False, 'code': 'signed_out', 'params': {},
+                                'text': 'You have signed out of OTC Tracker.'}), 401
+            elif endpoint == 'pages_blueprint.sign_in_page':
+                return render_template_string(_PAGINA_SAIU, segment='stratos-signed-out')
+            else:
+                return redirect(url_for('pages_blueprint.sign_in_page'))
         sid, usuario = _identidade(stratos_auth, routes)
         if not sid:
             _limpa_sessao_otc()
@@ -292,10 +323,10 @@ def _ponte_sso(stratos_auth):
                 (session.get('user_sid') or '').strip().upper() == sid:
             # O IP deixa de ser critério: atrás do proxy do Stratos ele nem é o
             # do usuário, e quem identifica é o SSO. Carimbado a cada request, o
-            # `enforce_session_ip` não derruba ninguém. A trava de tela também é
-            # do login próprio — destravar pediria o código por e-mail.
+            # `enforce_session_ip` não derruba ninguém.
             session['session_ip'] = routes.get_client_ip()
-            session.pop('locked', None)
+            if endpoint == 'pages_blueprint.unlock':
+                return _destrava(routes, sid)
         else:
             resposta = _abre_sessao(routes, sid, usuario)
             if resposta is not None:
@@ -305,6 +336,34 @@ def _ponte_sso(stratos_auth):
         return None
 
     return otc_stratos_sso
+
+
+def _traducao(endpoint):
+    """As traduções que a tela de saída pede (`/static/data/translations/...`)."""
+    nome = str((request.view_args or {}).get('filename') or '')
+    return (endpoint == 'pages_blueprint.static_data_file'
+            and nome.startswith('translations/') and '..' not in nome)
+
+
+def _destrava(routes, sid):
+    """O Unlock da tela travada. O do OTC confere o IP gravado no cadastro e, se
+    não bate, manda o código por e-mail — atrás do proxy do Stratos o IP não é o
+    do usuário e o SMTP da rede não responde, e a tela ficava travada para
+    sempre. Aqui basta digitar o SID: o MESMO que o SSO identificou. A trava é
+    de privacidade (a tela coberta), não um segundo login."""
+    if not session.get('locked'):
+        return redirect(url_for('pages_blueprint.dashboard'))
+    digitado = request.form.get('sid', '').strip().upper()
+    if not routes._validate_sid(digitado):
+        flash('Invalid SID format. Must be 1 letter + 6 numbers.', 'error')
+        return redirect(url_for('pages_blueprint.lock_screen_page'))
+    if digitado != sid:
+        log.warning('[stratos] unlock recusado: digitado=%s sessao=%s', digitado, sid)
+        flash('This SID does not match the locked account.', 'error')
+        return redirect(url_for('pages_blueprint.lock_screen_page'))
+    session.pop('locked', None)
+    log.warning('[stratos] tela destravada: SID=%s', sid)
+    return redirect(url_for('pages_blueprint.dashboard'))
 
 
 def _identidade(stratos_auth, routes):
@@ -383,6 +442,59 @@ def _registra(routes, sid, usuario, ativo):
 def _limpa_sessao_otc():
     for chave in _CHAVES_OTC:
         session.pop(chave, None)
+
+
+# A tela de quem saiu: a do pedido de acesso, com um botão só. "Sign in again"
+# reabre pelo SSO, sem pedir SID. O texto nasce em inglês e a própria tela o
+# traduz por um mapa local, pela língua que o usuário escolheu no app.
+_PAGINA_SAIU = """{% extends 'layouts/base.html' %}
+{% block title %}Signed Out{% endblock title %}
+{% block content %}
+<div class="auth-box p-0 w-100">
+  <div class="row w-100 g-0">
+    <div class="col-md-auto">
+      <div class="card auth-box-form border-0 mb-0">
+        <div class="card-body min-vh-100 d-flex flex-column justify-content-center">
+          <div class="auth-brand mb-0 text-center">
+            <a class="logo-dark" href="/"><img alt="dark logo" height="80" src="{{ config.ASSETS_ROOT }}/images/logo-black.png" /></a>
+            <a class="logo-light" href="/"><img alt="logo" height="80" src="{{ config.ASSETS_ROOT }}/images/logo.png" /></a>
+          </div>
+          <div class="mt-auto mx-auto" id="otc-stratos-saiu" style="max-width: 380px;">
+            <h4 class="fw-bold text-center mb-2" data-otc-saiu="t">You have signed out</h4>
+            <p class="text-muted text-center mb-4" data-otc-saiu="m">Your OTC Tracker session was closed. You are still signed in to Stratos, so signing in again will not ask for your SID.</p>
+            <div class="d-grid">
+              <a class="btn btn-primary fw-semibold py-2" href="/auth-2-sign-in?entrar=1" data-otc-saiu="b">Sign in again</a>
+            </div>
+          </div>
+          <p class="text-center text-muted mt-auto mb-0">&copy; <script>document.write(new Date().getFullYear())</script> OTC Tracker by <span class="fw-semibold">JPMorganChase &amp; Co.</span></p>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="h-100 position-relative card-side-img rounded-0 overflow-hidden">
+        <div class="p-4 card-img-overlay auth-overlay"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}
+{% block extra_javascript %}
+<script>
+(function () {
+  var T = {
+    br: {t: 'Você saiu', m: 'Sua sessão do OTC Tracker foi encerrada. Você continua conectado ao Stratos, então entrar de novo não pede o SID.', b: 'Entrar novamente'},
+    es: {t: 'Ha cerrado sesión', m: 'Su sesión de OTC Tracker fue cerrada. Sigue conectado a Stratos, así que volver a entrar no pide el SID.', b: 'Entrar de nuevo'}
+  };
+  var l = 'en';
+  try { l = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) {}
+  var x = T[l];
+  if (!x) return;
+  document.querySelectorAll('[data-otc-saiu]').forEach(function (el) {
+    el.textContent = x[el.getAttribute('data-otc-saiu')];
+  });
+})();
+</script>
+{% endblock extra_javascript %}"""
 
 
 def _negado(status, codigo, texto):

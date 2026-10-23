@@ -56,12 +56,19 @@ reconhece o projeto (`OTC_STRATOS_DEST` / `OTC_STRATOS_BRANCH` mudam).
   OTC; papel, páginas e status continuam saindo da tabela de usuários. SID sem
   cadastro vira pedido de acesso (aviso ao ADMIN); o master (`E930179`) é ativado
   sozinho, porque num servidor novo a tabela nasce vazia. O IP deixa de ser
-  critério e a trava de tela não existe aqui. `OTC_STRATOS_SSO=0` volta ao login
+  critério. `OTC_STRATOS_SSO=0` volta ao login
   próprio (SID + código por e-mail).
   A ponte só age nas rotas do OTC: as do Stratos — o `/login/callback`, onde a
   identidade nasce — passam intactas, e ela limpa só as chaves do OTC, nunca a
-  sessão inteira (o StratosAuth guarda o login dele na mesma sessão). O Logout do
-  menu do OTC limpa tudo, então leva de volta ao SSO.
+  sessão inteira (o StratosAuth guarda o login dele na mesma sessão).
+- **O menu da foto.** O **Lock Screen** trava de verdade, e o Unlock é digitar o
+  SID que o SSO identificou. O do OTC conferia o IP do cadastro e, sem ele,
+  mandava código por e-mail, o que atrás do proxy do Stratos travaria a tela para
+  sempre. O **Log Out** encerra só a sessão do OTC e para numa tela "You have
+  signed out", que segura a sessão fechada até o "Sign in again". O do OTC
+  (`session.clear()`) levava junto o login do Stratos, o SSO entrava sozinho no
+  request seguinte e o clique devolvia o dashboard. Uma aba que ficou aberta
+  recebe 401 na API e o `session-guard.js` a leva à mesma tela.
 - **Prefixo.** O app foi escrito para morar em `/` e aqui mora em
   `/76521/otc-tracker-ops-ai-citizen`. O HTML que sai é reescrito
   (`href`/`src`/`action`, Speculation Rules, `Location`), o `ASSETS_ROOT` leva a
