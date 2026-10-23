@@ -3,7 +3,7 @@
 from apps.pages.features.intrag import domain
 
 
-def _intrag_build_b3_map(csv_path, match_col, match_val, b3_col):
+def _intrag_build_b3_map(csv_path, match_col, match_val, b3_col, sem_recompra=False):
     """Parse the Boletas CSV (no header) → {b3_key → Intrag ID (col A)} for rows
     whose `match_col` STARTS WITH `match_val`.
 
@@ -13,7 +13,16 @@ def _intrag_build_b3_map(csv_path, match_col, match_val, b3_col):
     CSV e era descartada aqui ANTES do casamento: o Mapping dizia "N mapped"
     (as de mercadoria) e o termo de moedas ficava sem Intrag ID, sem erro
     nenhum. O filtro é só a FAMÍLIA da linha; quem pareia de verdade é o B3
-    ID, que é exato e único — alargar o filtro não tem como casar cruzado."""
+    ID, que é exato e único — alargar o filtro não tem como casar cruzado.
+
+    `match_val=None` não filtra família (o SWAP, mesa 23/10/2026): na boleta de
+    swap a coluna B é a CARTEIRA (`INTRAGJP633`), não o instrumento, e o filtro
+    `SWAP` — uma suposição de antes de o arquivo existir — descartava TODA
+    linha de swap antes do casamento; o Mapping respondia "No matching
+    operations" com o B3 ID ali na coluna C. `sem_recompra` pula a linha que se
+    diz recompra (`UNWIND_MARKS`): a boleta da antecipação leva o MESMO B3 ID do
+    contrato, e sem filtro de família ela poderia dar ao swap o Intrag ID da
+    recompra."""
     import csv as _csv
     out = {}
     with open(csv_path, 'r', encoding='latin-1', newline='') as fh:
@@ -22,7 +31,11 @@ def _intrag_build_b3_map(csv_path, match_col, match_val, b3_col):
         for row in _csv.reader(fh, delimiter=delim):
             if len(row) <= max(match_col, b3_col):
                 continue
-            if not str(row[match_col]).strip().upper().startswith(match_val):
+            if match_val is not None and \
+                    not str(row[match_col]).strip().upper().startswith(match_val):
+                continue
+            if sem_recompra and any(m in _sem_acento_upper(' '.join(row))
+                                    for m in UNWIND_MARKS):
                 continue
             b3, intrag_id = domain._intrag_b3_key(row[b3_col]), str(row[0]).strip()
             if b3 and intrag_id:

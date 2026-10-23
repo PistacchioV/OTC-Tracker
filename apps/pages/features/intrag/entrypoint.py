@@ -653,13 +653,16 @@ def api_intrag_swap_approve():
 
 @blueprint.route('/api/intrag/swap/mapping-intrag-id', methods=['POST'])
 def api_intrag_swap_mapping_intrag_id():
-    # Boletas CSV: linhas de swap identificadas pela col B == 'SWAP' com o B3 ID
-    # na col C (mesmo formato das linhas de NDF). Ajustar match_col/match_val/b3_col
-    # aqui se o layout real do CSV de retorno para swap for diferente.
+    # Boletas CSV de swap (o arquivo real, mesa 23/10/2026): Intrag ID na col A
+    # (`N. Operação`), a CARTEIRA na col B (`INTRAGJP633`) e o B3 ID na col C
+    # (`ID do Sistema`). A col B não diz a família — o filtro `SWAP` de antes
+    # descartava toda linha —, então quem casa é só o B3 ID, exato, e a linha
+    # de recompra (mesmo B3 ID do contrato) fica de fora.
     if not session.get('authenticated'):
         return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
     deals = (request.get_json(silent=True) or {}).get('deals', [])
-    results, err = commands._intrag_run_mapping(deals, 1, 'SWAP', 2, queries._find_intrag_swap_entry)
+    results, err = commands._intrag_run_mapping(deals, 1, None, 2, queries._find_intrag_swap_entry,
+                                                sem_recompra=True)
     if results is None:
         return jsonify({'ok': False, 'error': err}), 400
     return jsonify({'ok': True, 'results': results})
@@ -1417,13 +1420,16 @@ def api_intrag_dce_swap_approve():
 
 @blueprint.route('/api/intrag/dce-swap/mapping-intrag-id', methods=['POST'])
 def api_intrag_dce_swap_mapping_intrag_id():
-    # O mesmo processo da Intrag Swap: linhas de swap do Boletas CSV (col B ==
-    # 'SWAP', id na col C, Intrag ID na col A); a chave que a tela manda como
-    # `b3_id` é o Deal Name — o Contract Number que vai no arquivo.
+    # O mesmo processo da Intrag Swap: id na col C, Intrag ID na col A, e a col B
+    # é a carteira, não a família (sem filtro; a recompra fica de fora). A chave
+    # que a tela manda como `b3_id` é o Deal Name — o Contract Number que vai
+    # no arquivo.
     if not session.get('authenticated'):
         return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
     deals = (request.get_json(silent=True) or {}).get('deals', [])
-    results, err = commands._intrag_run_mapping(deals, 1, 'SWAP', 2, queries._find_intrag_dce_swap_entry)
+    results, err = commands._intrag_run_mapping(deals, 1, None, 2,
+                                                queries._find_intrag_dce_swap_entry,
+                                                sem_recompra=True)
     if results is None:
         return jsonify({'ok': False, 'error': err}), 400
     return jsonify({'ok': True, 'results': results})
