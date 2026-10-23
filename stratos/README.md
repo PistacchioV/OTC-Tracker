@@ -153,12 +153,23 @@ morar numa máquina da rede.
 ```
 set PY=C:\Users\e930179\ds\tools\python3.13\latest\python.exe
 %PY% stratos\ponte_share.py --medir                         (arquivos e MB por pasta)
-%PY% stratos\ponte_share.py --solution-id <ID> --dry-run    (o que faria)
-%PY% stratos\ponte_share.py --solution-id <ID> --loop 20    (espelho, em laço)
+%PY% stratos\ponte_share.py --solution-id <ID> --env dev --dry-run    (o que faria)
+%PY% stratos\ponte_share.py --solution-id <ID> --env dev --loop 20    (espelho, em laço)
 ```
 
 O `<ID>` é o solution id da solução no Stratos, o mesmo do `stratos file`.
 Também pode vir da variável `OTC_PONTE_SOLUTION_ID`.
+
+O `--env` é obrigatório e é o ambiente em que a solução está publicada, com os
+mesmos nomes do `stratos file` (`dev`, e `prod` quando ela for para a
+produção). Cada ambiente tem o seu Shared Drive: errado, a ponte grava num
+drive que o app não lê.
+
+Para conferir sem log que o contêiner escreve os manifestos:
+
+```
+stratos file --listfiles --local-path "" --server-path "otc-tracker/ponte/manifesto" --env dev
+```
 
 - **Espelho** (o padrão, enquanto a equipe segue na instância de hoje): só do
   share para o Stratos. **A ponte não escreve nada no share**: um arquivo do

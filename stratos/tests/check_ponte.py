@@ -120,6 +120,13 @@ def confere_regras():
        and not P.ignora('Termo.docx'), 'ignora: lock do Office, Thumbs.db e temporario')
     ok(P.limite_de_remocao(5) == 10 and P.limite_de_remocao(1000) == 200,
        'limite de remocao: 10, ou 20% da pasta')
+    ok((PS.AMBIENTES['dev'], PS.AMBIENTES['prod']) == ('TEST', 'PRODUCTION'),
+       'ambiente: dev/prod do stratos file viram TEST/PRODUCTION do stratosblocks')
+    try:
+        PS.main(['--solution-id', '1'])
+        ok(False, 'ambiente: sem --env a ponte recusa')
+    except SystemExit as e:
+        ok(e.code == 2, 'ambiente: sem --env a ponte recusa (cada ambiente tem o seu drive)')
 
 
 def confere_espelho(tmp):

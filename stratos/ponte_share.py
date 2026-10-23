@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """ponte_share.py — mantém as pastas do share iguais no Shared Drive do Stratos.
 
-    python stratos\\ponte_share.py --solution-id <ID> [--env PRODUCTION|TEST]
+    python stratos\\ponte_share.py --solution-id <ID> --env dev|prod
                                   [--modo espelho|virada] [--alinhar]
                                   [--loop 20] [--so slug,slug] [--dry-run]
                                   [--permitir-apagar] [--medir]
@@ -35,6 +35,11 @@ lixeira\\<dia>\\` nesta máquina. Uma passada que tiraria muitos arquivos de
 uma pasta é recusada (`--permitir-apagar` insiste), e se o drive do Stratos
 for trocado ou zerado (o id do manifesto muda) a pasta para até alguém olhar.
 
+`--env` é OBRIGATÓRIO e é o ambiente em que a solução está publicada (`dev`
+ou `prod`, os mesmos nomes do `stratos file`; `TEST`/`PRODUCTION` também
+valem). Cada ambiente tem o SEU Shared Drive: com a solução no dev, uma ponte
+em `prod` gravaria num drive que o app não lê, sem erro nenhum.
+
 Uma ponte por vez: ela grava um aviso no drive (`<raiz>/ponte/ponte.json`) a
 cada passada, e uma segunda que encontre o de outra máquina com menos de 3
 minutos espera.
@@ -56,6 +61,8 @@ import ponte_comum as P  # noqa: E402
 log = logging.getLogger('ponte')
 
 SHARE_PADRAO = r'\\Nawest.ad.jpmorganchase.com\lac\BRA\intra'
+# O nome do `stratos file` (dev/prod) → a constante do `stratosblocks.env`.
+AMBIENTES = {'dev': 'TEST', 'test': 'TEST', 'prod': 'PRODUCTION', 'production': 'PRODUCTION'}
 DRIVE_RAIZ = 'otc-tracker'          # a pasta do OTC no Shared Drive (otc_stratos._PASTA_NO_DRIVE)
 AVISO_VALIDO = 180                  # s: o aviso de outra ponte vale por isto
 
@@ -369,8 +376,9 @@ def medir(share, pastas, agora):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--solution-id', default=os.getenv('OTC_PONTE_SOLUTION_ID', ''))
-    ap.add_argument('--env', default=os.getenv('OTC_PONTE_ENV', 'PRODUCTION'),
-                    choices=('PRODUCTION', 'TEST'))
+    ap.add_argument('--env', default=os.getenv('OTC_PONTE_ENV', ''),
+                    type=lambda v: v.strip().lower(),
+                    help='dev ou prod: o ambiente em que a solução está publicada')
     ap.add_argument('--share', default=os.getenv('OTC_PONTE_SHARE', SHARE_PADRAO))
     ap.add_argument('--drive-raiz', default=DRIVE_RAIZ)
     ap.add_argument('--drive-local', default='', help='ensaio: uma pasta local no lugar do drive')
@@ -401,11 +409,14 @@ def main(argv=None):
     else:
         if not a.solution_id:
             ap.error('--solution-id (ou OTC_PONTE_SOLUTION_ID) é obrigatório')
-        drive = DriveHttp(a.solution_id, a.env)
+        if a.env not in AMBIENTES:
+            ap.error('--env dev ou --env prod (ou OTC_PONTE_ENV) é obrigatório: o ambiente '
+                     'em que a solução está publicada. Cada um tem o seu Shared Drive.')
+        drive = DriveHttp(a.solution_id, AMBIENTES[a.env])
     ponte = Ponte(a.share, drive, a.drive_raiz, modo=a.modo,
                   permitir_apagar=a.permitir_apagar, dry_run=a.dry_run)
-    log.info('[ponte] %s, %s -> %s/share, %d pasta(s)%s', a.modo, a.share, a.drive_raiz,
-             len(pastas), ' (alinhar)' if a.alinhar else '')
+    log.info('[ponte] %s, %s -> %s/share (%s), %d pasta(s)%s', a.modo, a.share, a.drive_raiz,
+             a.env or 'drive local', len(pastas), ' (alinhar)' if a.alinhar else '')
 
     proximo = {}
     while True:
