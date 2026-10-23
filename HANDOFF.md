@@ -28671,7 +28671,11 @@ entraram:
   testada pelo `check_exporta_dados.py`, que o `check_stratos.py` roda;
 - a foto das telas de login (`527c3325`, na dev): o rebranding a deixou no
   `app.css` apagado;
-- o Lock Screen e o Log Out no Stratos (`8addddde`): a ponte desfazia os dois.
+- o Lock Screen e o Log Out no Stratos (`8addddde`): a ponte desfazia os dois;
+- o phonebook pelo `stratosblocks.utilities.get_phonebook_data([sid])`
+  (`9fd623b0`): o `awmpy` não existe no contêiner, e a ponte o troca por uma
+  casca desse, que devolve as mesmas chaves (`nameFull`, `email`,
+  `positionName`); o `routes.py` não muda.
 
 **As decisões (com o usuário, 23/10/2026).**
 1. **A instância da equipe continua sendo a PROD** (desktop, `StreamFlow-prod`,
@@ -28719,8 +28723,10 @@ projeto ou de um template mais novo). O que levantar:
   chamada, cotas;
 - se há índice e atomicidade (update condicional, transação).
 
-Como levantar: pela página da documentação ou, no Stratos, por uma rota só do
-master no `otc_stratos.py` que imprima o `help()` da classe. Junto, a saída de
+Como levantar: o `stratosblocks` roda no Python do DevShell da máquina do JPM
+(`C:\Users\e930179\ds\tools\python3.13\latest\python.exe` executou o
+`get_phonebook_data` em 23/10), então basta um `help()` da classe lá. Sem isso,
+use a página da documentação ou uma rota só do master no `otc_stratos.py`. Junto, a saída de
 `stratos\exporta_dados.py --medir` na máquina do JPM, que diz o tamanho dos
 dados. Sem esse passo, o esquema do passo 2 é chute. Saída: a API anotada aqui.
 
