@@ -29170,8 +29170,11 @@ cada ambiente do Stratos tem o SEU Shared Drive, e a solução ainda está no de
 A primeira versão supunha `PRODUCTION` — a ponte gravaria num drive que o app
 não lê, sem erro nenhum.
 
+**O `solution_id` é o 76521** (o usuário, 23/10/2026): o mesmo do
+CONTEXT_ROOT (`/76521/...`) e do `StratosAuth(app, 76521)`, e é o padrão da
+ponte (`SOLUCAO`).
+
 **O que falta descobrir na máquina do JPM:**
-- o `solution_id` do cliente `SharedDrive`;
 - como o `load` diz "não existe": a ponte lê 404/not found na mensagem;
 - se o `save` cria as pastas: a ponte chama o `create_folder` antes;
 - o tamanho do Electronic Inventory: o `ponte_share.py --medir` responde.
@@ -29181,3 +29184,25 @@ não lê, sem erro nenhum.
 a cópia não cai na pasta da ponte. O certo é a coluna pendurar do
 `SHARED_DRIVE_ROOT`, não a letra do drive.
 
+
+## §684 — New Deals: o Delete da linha só tira da tela depois do servidor (2026-10-23)
+
+A equipe relatou na prod que excluir e editar nas Opt Comm "ou dá erro, ou não
+faz nada". O Delete da linha, nas SEIS telas de New Deals (NDF Vanilla, FWD
+Start, NDF Commodities, Other Publisher, Opt FXO, Opt Comm), tirava a linha da
+tela ANTES da resposta e nunca a lia (`fetch(...).catch(console.warn)` e
+`row.remove()` logo em seguida): um 404 (par Deal + Client que não casa) ou um
+503 (banco ocupado no share) fazia a linha sumir e voltar no recarregamento,
+sem aviso nenhum — a regra do §430 desrespeitada. Agora a linha só sai com a
+resposta de sucesso, e a recusa aparece com o motivo e o status HTTP. Linha sem
+Deal (sem URL própria) vai pelo `bulk-delete`, que casa o par vazio.
+
+E o repositório versionava `cache/new deals/Option/Commodities/2026/06/
+20260612_optcomm.json` com UMA operação toda em branco (Status `Pending`): a
+semeadura da prod e do Stratos a importa (lá o `cache/` não fica de fora), e
+ela não saía pela tela. O arquivo saiu do repositório; a que já está no banco
+sai pelo botão.
+
+O Edit, o Confirm e o Send têm a trava do *Missing Counterparty* (§8, "Counterparty
+Not Registered"), de propósito; a causa do erro do Edit na prod ainda depende da
+mensagem que a equipe viu.
