@@ -604,11 +604,15 @@ def api_conf_optfxo_save():
         if picked:
             numero_contrato, xml_str, xml_warns = _R()._conf_ndf_xml(
                 # MAIÚSCULO, pela mesma razão do Opt Comm.
-                picked, merc, ref, tipo='OPTION', prefixo='Opt_FXO',
+                picked, merc, ref, tipo='OPTION', prefixo='FXO',
                 ccy_field='UnderlyingAsset', warn_no_spot=False,
                 # valor = Total Notional × Strike, valorEstrangeiro = Total
                 # Notional (mesa, 29/09/2026; _conf_fxo_legs).
-                legs_fn=_R()._conf_fxo_legs)
+                legs_fn=_R()._conf_fxo_legs,
+                # Com várias operações: FXO_<data>_<moeda>_<acronym>, e o
+                # valor é o da MAIOR em BRL, não a soma (mesa, 23/10/2026).
+                # O acronym do payload, não o `acr` (que vira 'CONFIRMATION' vazio).
+                acronym=str(payload.get('acronym') or '').strip(), valor_do_maior=True)
             # Mesmo nome-base do .doc/.pdf: os três arquivos da confirmação
             # ficam juntos na listagem da pasta.
             xbase = candidate
@@ -1182,15 +1186,21 @@ def api_conf_mgt_save():
             # do outro lado. As outras três confirmações que geram XML já usam o
             # nome do produto: NDF Commodities manda `NDF` e as duas de opção,
             # `Option`.
+            vanilla = family != 'fwd-start'
             numero_contrato, xml_str, xml_warns = _R()._conf_ndf_xml(
                 picked, merc, ref, tipo='NDF',
-                prefixo='NDF_FwdStart' if family == 'fwd-start' else 'NDF_Vanilla',
+                prefixo='NDF' if vanilla else 'NDF_FwdStart',
                 ccy_field='QuantityCurrency', warn_no_spot=False,
                 # MGT × cliente: valor = Notional × Rate, valorEstrangeiro =
                 # Notional (mesa, 29/09/2026). O FWD Start do Banco não muda.
                 legs_fn=_R()._conf_mgt_fx_legs, ccy=merc,
                 # FWD Start = B3 ID em qualquer LE; Vanilla segue o Athena ID.
-                num_field=_R()._conf_mgt_num_field(picked))
+                num_field=_R()._conf_mgt_num_field(picked),
+                # Vanilla com várias operações: NDF_<data>_<moeda>_<acronym>, e
+                # o valor é o da MAIOR em BRL, não a soma (mesa, 23/10/2026).
+                # O acronym do payload, não o `acr` (que vira 'CONFIRMATION' vazio).
+                acronym=str(payload.get('acronym') or '').strip() if vanilla else '',
+                valor_do_maior=vanilla)
             xcand, xn = candidate, 0
             while _store.exists(_R()._ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
                 xn += 1
