@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """ponte_share.py — mantém as pastas do share iguais no Shared Drive do Stratos.
 
-    python stratos\\ponte_share.py --solution-id <ID> --env dev|prod
+    python stratos\\ponte_share.py --env dev|prod [--solution-id 76521]
                                   [--modo espelho|virada] [--alinhar]
                                   [--loop 20] [--so slug,slug] [--dry-run]
                                   [--permitir-apagar] [--medir]
@@ -64,6 +64,9 @@ SHARE_PADRAO = r'\\Nawest.ad.jpmorganchase.com\lac\BRA\intra'
 # O nome do `stratos file` (dev/prod) → a constante do `stratosblocks.env`.
 AMBIENTES = {'dev': 'TEST', 'test': 'TEST', 'prod': 'PRODUCTION', 'production': 'PRODUCTION'}
 DRIVE_RAIZ = 'otc-tracker'          # a pasta do OTC no Shared Drive (otc_stratos._PASTA_NO_DRIVE)
+# O solution id do OTC no Stratos: o mesmo do CONTEXT_ROOT (`/76521/...`) e do
+# `StratosAuth(app, 76521)` do solution.py.
+SOLUCAO = '76521'
 AVISO_VALIDO = 180                  # s: o aviso de outra ponte vale por isto
 
 
@@ -375,7 +378,7 @@ def medir(share, pastas, agora):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('--solution-id', default=os.getenv('OTC_PONTE_SOLUTION_ID', ''))
+    ap.add_argument('--solution-id', default=os.getenv('OTC_PONTE_SOLUTION_ID', SOLUCAO))
     ap.add_argument('--env', default=os.getenv('OTC_PONTE_ENV', ''),
                     type=lambda v: v.strip().lower(),
                     help='dev ou prod: o ambiente em que a solução está publicada')
