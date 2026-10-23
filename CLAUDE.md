@@ -57,14 +57,23 @@ OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_<nome>.py
   `requirements.txt` GERADO) e o `stratos-sync.bat`, que leva `apps/` para
   `src/apps/` lá. Mora numa worktree própria (`OTC Tracker Stratos`) — nunca
   faça checkout dela neste working tree; `/commitstratos` faz o merge e
-  `/commitall` publica nas três. Duas mudanças da dev quebram o Stratos sem
-  quebrar a dev: renomear as funções do `apps.create_app` que a montagem chama
-  (`_require_config_names`, `_seed_data_dir`, `register_blueprints`…) e citar
-  o proxy on-premise nas portas antigas — mesmo em comentário, o scan do
-  `stratos push` recusa o arquivo. O `stratos/tests/check_stratos.py` pega as
-  duas. **O banco do Stratos vai ser o Stratos NoSQL (MongoDB), por porte de
-  verdade** — a prod segue na instância da equipe até o Stratos estar 100%, e o
-  código escolhe o banco pelo config; as decisões e os passos 0–6 estão no §678.
+  `/commitall` publica nas três. Três mudanças da dev quebram o Stratos sem
+  quebrar a dev: renomear o que a ponte (`otc_stratos.py`) usa pelo nome — as
+  funções do `apps.create_app` que a montagem chama (`_require_config_names`,
+  `_seed_data_dir`, `register_blueprints`…), as do `routes` que ela chama
+  (`_set_session`, `get_user_by_sid`…) e os endpoints que ela intercepta
+  (`logout`, `unlock`…) —, citar o proxy on-premise nas portas antigas — mesmo
+  em comentário, o scan do `stratos push` recusa o arquivo — e mexer (nome,
+  assinatura, retorno) nos helpers PRIVADOS do `scripts/recover_duckdb_wal.py`
+  (`_recupera_local`, `_a_copiar`, `_manifest_linhas`…) ou no
+  `slim_duckdb.emagrecer`, que o `stratos/exporta_dados.py` (a cópia dos bancos
+  do share para o Stratos, §678) chama por dentro. O
+  `stratos/tests/check_stratos.py` pega as três — a última rodando o
+  `check_exporta_dados.py` —, menos o `unlock` renomeado: no teste o IP bate e
+  o Unlock do próprio OTC destrava sem a ponte. **O banco do Stratos vai ser o
+  Stratos NoSQL (MongoDB), por porte de verdade** — a prod segue na instância
+  da equipe até o Stratos estar 100%, e o código escolhe o banco pelo config;
+  as decisões e os passos 0–6 estão no §678.
 - **O bloco DEV BYPASS (`/dev-login`) do `routes.py` nunca vai para o
   repositório.** É removido antes de cada commit e restaurado depois.
 - **Nunca fixe um de-para novo no código.** Tudo que é mapeável se cadastra
@@ -629,9 +638,11 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   dia, o seletor Day mostra UM dia com a quebra inteira dele, e o rodapé soma
   as colunas decimais do que está filtrado. A visão expandida é só leitura. Toda gravação
   loga `[db-explorer]` em WARNING com SID, banco, tabela e colunas.
-- **Maker/checker (4-olhos) só vale na PROD** (§553): `Config.FOUR_EYES`,
-  do bloco de ambiente (`_FOUR_EYES = False` na dev, onde uma pessoa só
-  testa). Trava NOVA de "o próprio maker não aprova/envia" pergunta ao
+- **Maker/checker (4-olhos) só vale na PROD e no Stratos** (§553, §677):
+  `Config.FOUR_EYES`, do bloco de ambiente (`_FOUR_EYES = False` na dev, onde
+  uma pessoa só testa; no `ENV:STRATOS` ele nasce ligado, e a variável de
+  ambiente `OTC_FOUR_EYES=0` o desliga). Trava NOVA de "o próprio maker não
+  aprova/envia" pergunta ao
   `platform.authz.is_own_change(maker, sid)` no servidor e é condicionada ao
   `OTC_FOUR_EYES` no navegador (a página o define ao lado do
   `CURRENT_USER`/`CURRENT_USER_SID`) — comparar maker e SID à mão continua
@@ -1268,6 +1279,15 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   o HTML da tela no hover (Speculation Rules) — link de AÇÃO (logout, lock,
   download, API) fica fora da lista.
 - Cor só de tema claro precisa do par `[data-bs-theme=dark]`.
+- **Caminho em `url()` no `otc.scss` é RELATIVO ao CSS** (`../images/auth.jpg`,
+  `../fonts/…`): no Stratos o `otc_stratos.py` põe o prefixo da solução no
+  HTML que sai — até no `url(` do `<style>` da página —, não no `.css`. O
+  `otc.css` vai como está e a relativa resolve contra o `<link>` dele, que já
+  leva o prefixo; um `/static/…` absoluto, que na dev funciona, lá pede o
+  arquivo FORA da solução: a tela fica sem a imagem ou a fonte, sem erro
+  nenhum, e o `check_stratos.py` não o vê. E regra que morava no `app.css`
+  apagado (§630) e não foi trazida para o tema some calada — foi o caso da foto
+  das telas de login (`.card-side-img`, §678), cuja imagem nem era pedida.
 
 ---
 
@@ -3267,7 +3287,16 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   dado). Sem Excel na dev, o que se testa é o ARQUIVO (o `sheet1.xml` dentro
   do zip), como faz o `check_export_excel_ids.py`.
 - **`awmpy` é interna do JPM** (não está no PyPI): fora da rede, stub mínimo
-  no venv + `/dev-login` do DEV BYPASS.
+  no venv + `/dev-login` do DEV BYPASS. No Stratos ela também não existe, e o
+  `otc_stratos.py` (`_garante_awmpy`) põe no lugar uma casca do
+  `stratosblocks.utilities.get_phonebook_data([sid])`, com as mesmas chaves
+  (`nameFull`, `email`, `positionName`): o `routes` não muda, e a chamada
+  `awmpy.get_phonebook_data(sid)` do `get_user_data_from_phonebook` e as três
+  chaves que ele lê são o contrato da casca. Fora dele, o pedido de acesso do
+  Stratos nasce com o nome do SSO, sem o e-mail do phonebook nem o cargo, e a
+  tela não acusa nada (no máximo um `[phonebook] FAILED` no log) — o
+  `stratos/tests/check_stratos.py` pega. A dev nunca importa o
+  `stratosblocks` (§678).
 - **macOS: porta 5005.** `duckdb` e `flask-minify` obrigatórios.
 - **`OTC_SHARED_DRIVE_ROOT` obrigatória fora do Windows** (o app recusa valor
   relativo; `I:\` é relativo em qualquer sistema que não seja Windows — as
@@ -3290,6 +3319,15 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   (o SSPI negocia com o servidor, não com o proxy): as Tools
   (`precificador/rede.py`) caem para o WinHTTP com auto-logon e, por último,
   o WinInet da macro da mesa (§450); a Quotes ainda não tem essa queda.
+  **No Stratos o Codex (a API de dados de mercado do JPM) pode tomar o lugar
+  do Yahoo** — em investigação no §679, com a sonda `stratos/sonda_codex.py`
+  (só na branch do Stratos): a ponte (`otc_stratos.py`) embrulharia o
+  `quotes.fetch_ohlc` sem mexer na dev — todo chamador o lê pelo atributo do
+  módulo —, com o identificador do Codex numa coluna NOVA do cadastro
+  `quotes-equity` (nunca regra no código) e o Yahoo como queda para o símbolo
+  sem esse identificador, para o que falha e fora de request (o token do
+  Codex é do usuário logado; rotina de fundo não tem usuário). No desktop ele
+  também livraria do 407 o que a Quotes busca no Yahoo; fica para decidir.
 - **A instância roda sem reloader**: pull que tocou `.py` ou template exige
   restart. Mapping pela tela é a exceção.
 - **A instância roda com o DebugConfig** (o ProductionConfig exige cookie
@@ -3404,7 +3442,7 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (208 scripts)
+### `scripts/tests/` (209 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

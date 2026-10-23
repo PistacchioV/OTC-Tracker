@@ -28636,6 +28636,12 @@ sessão Flask é uma só para o app. Hoje a ponte só age em
 403, nunca 401: no OTC o 401 é "sessão expirada" e o session-guard mandaria ao
 login.
 
+> **Superado pelo §678** (`8addddde`, 23/10/2026): a trava de tela VALE no
+> Stratos — o `enforce_screen_lock` do OTC segura as telas, e o Unlock é da
+> ponte (`_destrava`): basta digitar o SID que o SSO identificou. E a ponte
+> ganhou UM 401, de propósito: a API de quem saiu pelo Log Out responde
+> `signed_out`, para o `session-guard.js` levar a aba aberta à tela de saída.
+
 **A subida.** O `app.run` do template só abre a porta quando o módulo termina, e
 semear ~110 DuckDB num `/tmp` vazio leva 5 s num Mac e passou da janela do
 health check no contêiner: três deploys derrubados a ~2 min 20 s, com o
@@ -28668,10 +28674,34 @@ bancos estão no `/tmp` do contêiner, que some a cada deploy. Desde o §677
 entraram:
 - o `stratos/exporta_dados.py` (`bd5403d5`, só na branch do Stratos): a cópia
   consistente dos bancos do share, com o WAL fundido e um manifest com sha256,
-  testada pelo `check_exporta_dados.py`, que o `check_stratos.py` roda;
-- a foto das telas de login (`527c3325`, na dev): o rebranding a deixou no
-  `app.css` apagado;
-- o Lock Screen e o Log Out no Stratos (`8addddde`): a ponte desfazia os dois;
+  testada pelo `check_exporta_dados.py`, que o `check_stratos.py` roda — e roda
+  porque o exportador usa helpers PRIVADOS do `scripts/recover_duckdb_wal.py`
+  da dev (`_recupera_local`, `_resolve_sobra_recovery`, `_manifest_linhas`,
+  `_a_copiar`, `_liberar`, `_prova_de_renome`, `_em_uso`), além do
+  `slim_duckdb.emagrecer`, do `data_store` (`wal_irmaos`, `WAL_SUFIXOS`,
+  `RECUPERADO_DIR`) e do `database_access.hold_file_lock`: renomear ou mudar a
+  assinatura de um deles na dev quebra a exportação sem quebrar a dev;
+- a foto das telas de login (`527c3325`, na dev): é o fundo da `.card-side-img`
+  (sign-in, 2FA, lock screen e pedido de acesso), e quem punha o
+  `images/auth.jpg` nela era o `app.css`, que o rebranding (§630) apagou. O
+  `otc.scss` reescreveu a regra só com o raio e o `object-fit`, e a coluna
+  ficava vazia, sem erro nenhum (a imagem nem era pedida). A URL é relativa ao
+  CSS para valer também sob o prefixo do Stratos;
+- o Lock Screen e o Log Out no Stratos (`8addddde`): a ponte desfazia os dois.
+  Ela tirava o `locked` da sessão a cada request (a decisão do §677, de quando
+  a trava era só do login próprio) e mandava a tela travada ao dashboard; e o
+  `/logout` do OTC faz `session.clear()`, que apagava também o login do
+  StratosAuth (a sessão Flask é uma só), e o SSO reentrava sozinho no request
+  seguinte. Hoje a trava vale (o `enforce_screen_lock` do OTC segura as telas)
+  e o Unlock é da ponte (`_destrava`): é digitar o SID que o SSO identificou. O
+  do OTC confere o IP do cadastro e, se não bate, manda código por e-mail; atrás
+  do proxy do Stratos o IP não é o do usuário e o SMTP da rede provavelmente não
+  responde, e a tela ficaria travada para sempre. O Log Out é interceptado ANTES
+  da rota do OTC: limpa só as chaves do OTC, marca `otc_stratos_saiu` e para na
+  tela "You have signed out" até o "Sign in again" (`?entrar=1`). A sessão do
+  Stratos fica, e a API de quem saiu responde 401 `signed_out` — de propósito,
+  ao contrário do negado do §677 (403): o `session-guard.js` de uma aba aberta
+  leva ao login, que é a tela de saída;
 - o phonebook pelo `stratosblocks.utilities.get_phonebook_data([sid])`
   (`9fd623b0`): o `awmpy` não existe no contêiner, e a ponte o troca por uma
   casca desse, que devolve as mesmas chaves (`nameFull`, `email`,
@@ -28864,7 +28894,8 @@ login.
 do JPM e com o python em que o Codex funciona:
 - sem argumentos, tenta 3 ativos de cada grupo da SEED do `quotes-equity`, pelo
   palpite FactSet `TICKER-PAÍS`;
-- `--todos` tenta o cadastro inteiro;
+- `--todos` tenta a seed inteira, que pode estar atrás do que a equipe
+  cadastrou na tela (a sonda não lê o banco);
 - `--ids` testa identificadores à mão (índices, commodities);
 - `--csv` grava o resultado.
 
