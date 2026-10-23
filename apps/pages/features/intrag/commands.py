@@ -738,14 +738,15 @@ def _dce_ndf_import(ref_date=None, sid='', actor_name=''):
             'date_max': (chaves[-1][:4] + '-' + chaves[-1][4:6] + '-' + chaves[-1][6:]) if chaves else ''}
 
 
-def _intrag_run_mapping(deals, match_col, match_val, b3_col, finder):
+def _intrag_run_mapping(deals, match_col, match_val, b3_col, finder, sem_recompra=False):
     """Map each requested deal's B3 ID → Intrag ID via the export CSV, persist the
     intrag_id onto the matching JSON entry (loaded rows only). Returns (results, err)."""
     csv_path = queries._intrag_find_export_csv()
     if not csv_path:
         return None, 'No Boletas CSV found in the Return folder.'
     try:
-        b3map = mappers._intrag_build_b3_map(csv_path, match_col, match_val, b3_col)
+        b3map = mappers._intrag_build_b3_map(csv_path, match_col, match_val, b3_col,
+                                             sem_recompra=sem_recompra)
     except Exception:
         _R().log.error('[intrag-map] CSV parse failed:\n%s', traceback.format_exc())
         return None, 'Failed to read the Boletas CSV.'

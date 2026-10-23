@@ -328,7 +328,7 @@ check('o XML do FWD Start sai com tipoOperacao NDF', _tipos.get('NDF_FwdStart'),
 # As duas familias de OPCAO saem em MAIUSCULO, como o NDF: e o que o FepWeb le,
 # e o `Option` com inicial maiuscula era a unica saida do app fora desse padrao.
 check('   e as outras tres seguem o produto delas',
-      (_tipos.get('NDF_Comm'), _tipos.get('Opt_Comm'), _tipos.get('Opt_FXO')),
+      (_tipos.get('NDF_Comm'), _tipos.get('Opt_Comm'), _tipos.get('FXO')),
       ('NDF', 'OPTION', 'OPTION'))
 check('   e o tipo vai sempre em CAIXA ALTA',
       [t for t in _tipos.values() if t != t.upper()], [])

@@ -29047,3 +29047,47 @@ até a equipe, mas isso é decisão de cada fluxo.
 **O botão de Export na Database Explorer** (o passo 1 do §678) deixa de ser
 bloqueante: o `exporta_dados.py` faz a carga. Ele continua útil para repetir a
 carga sem linha de comando.
+
+## §682 — XML do FXO e do NDF Vanilla de MGT; o Mapping Intrag ID do swap (2026-10-23)
+
+**O XML das confirmações com várias operações** (mesa, 23/10/2026). Dois
+defeitos no `_conf_ndf_xml`, nos documentos de Opção de Câmbio (FXO) e de NDF
+Vanilla de MGT × cliente:
+- **O `numeroContrato` não distinguia a contraparte.** Com mais de uma operação
+  ele era `<prefixo>_<AAAAMMDD>_<moeda>` (`Opt_FXO_20261023_USD`), e dois
+  clientes que fecham na mesma moeda no mesmo dia geravam o MESMO contrato no
+  FepWeb. Agora, com o `acronym`, é `FXO_<AAAAMMDD>_<moeda>_<acronym>` e
+  `NDF_<AAAAMMDD>_<moeda>_<acronym>` (espaço vira `_`). Com uma operação só
+  nada muda: segue o Deal (Athena ID) do Vanilla e o da opção. O acronym vem do
+  payload do Save; o `'CONFIRMATION'` que a tela usa quando ele falta não entra
+  no número.
+- **O `valor` era a SOMA dos notionals.** A regra é o da MAIOR operação em BRL
+  (`valor_do_maior`), e o `valorEstrangeiro` sai da MESMA operação — o par
+  descreve um contrato que existe. A `dataVencimento` já era a mais distante
+  entre as operações (o máximo das `SettlementDate`, lido antes de qualquer
+  perna recusada, §563) e continua assim, agora preso no teste.
+
+Só esses dois documentos mudam: NDF Commodities, as opções de commodities, o
+FWD Start (Banco e MGT), o Swap EDG e o Termo de Resilição seguem somando e sem
+acronym. O mesmo choque de número entre clientes vale para eles; se a equipe
+quiser a regra lá, é ligar as duas flags na chamada. `check_conf_fxo_xml.py`
+§2; o `check_fwdstart_conf.py` passou a ler o prefixo `FXO`.
+
+**O Mapping Intrag ID da Intrag Swap não mapeava nada.** O
+`_intrag_build_b3_map` filtra a FAMÍLIA da linha pela coluna B, e para o swap o
+filtro era `SWAP` — uma suposição escrita antes de existir um arquivo de
+retorno de swap (o comentário da rota pedia para ajustar "se o layout real for
+diferente"). Na boleta real a coluna B é a CARTEIRA (`INTRAGJP633`), o Intrag ID
+está na A (`N. Operação`) e o B3 ID na C (`ID do Sistema`), com cabeçalho e em
+UTF-8: toda linha de swap era descartada ANTES do casamento, e a tela dizia "No
+matching operations found" com o B3 ID ali na coluna C.
+
+Agora o swap não filtra família (`match_val=None`): quem casa é o B3 ID da
+coluna C, que é exato. E como a boleta de RECOMPRA leva o MESMO B3 ID do
+contrato, a linha que se diz recompra (`UNWIND_MARKS`, a regra da Intrag
+Unwind, §585) fica de fora (`sem_recompra`) — sem isso, a que viesse primeiro
+no arquivo daria ao swap o Intrag ID da antecipação. A Intrag DCE Swap tinha o
+MESMO filtro `SWAP` e recebeu a mesma correção, sem amostra do arquivo dela.
+`check_intrag_api.py` §7b monta a boleta com a linha real e uma recompra do
+mesmo B3 ID antes dela; no código antigo dá as três falhas que a tela mostrava.
+

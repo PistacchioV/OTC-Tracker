@@ -189,6 +189,40 @@ check('e PERSISTIDA no arquivo-dia com status Success',
       sorted((e['_deal'], e.get('intrag_id'), e['status']) for e in d),
       [('MAP-MERC', 'INT-111', 'Success'), ('MAP-MOEDA', 'INT-222', 'Success')])
 
+print('\n== 7b. Mapping Intrag ID do SWAP: a boleta real (col B = carteira) ==')
+# O arquivo de retorno de swap (mesa, 23/10/2026): Intrag ID na col A, a
+# CARTEIRA na col B e o B3 ID na col C — com cabecalho e em UTF-8. O filtro
+# antigo exigia 'SWAP' na col B e descartava toda linha. A linha de RECOMPRA do
+# mesmo contrato (mesmo B3 ID) vem ANTES e nao pode ganhar o casamento.
+fp_sw = os.path.join(B.INTRAG_SWAP_CACHE_DIR, '2026', '10', '20261023_intrag_swap.json')
+R._atomic_write_json(fp_sw, [{'_deal': 'SW-1', 'carteira': 'INTRAGJP633',
+                              'b3_id': '26J07515763', 'status': 'Approved'},
+                             {'_deal': 'SW-2', 'carteira': 'INTRAGJP633',
+                              'b3_id': '26J09999999', 'status': 'Approved'}])
+csv_sw = os.path.join(TMP, 'boletas_swap.csv')
+with open(csv_sw, 'w', encoding='utf-8') as fh:
+    fh.write('N. Operação,CÓDIGO DA CARTEIRA,ID do Sistema,ID Tipo de Linha,Data de Registro,'
+             'Conta Titular,Nome do Titular,Contrato,Contrato2,Meu Numero\n'
+             '5590001,INTRAGJP633,26J07515763,23/10/2026,31/10/2028,1286000,'
+             'Recomprado Parcialmente,Atacama,Vanilla,Banco JP Morgan\n'
+             '5585593,INTRAGJP633,26J07515763,22/10/2026,31/10/2028,1286000,'
+             'Opção de Arrependimento,Atacama,Vanilla,Banco JP Morgan\n')
+Q._intrag_find_export_csv = lambda: csv_sw
+try:
+    r = maker.post('/api/intrag/swap/mapping-intrag-id',
+                   json={'deals': [{'id': 'SW-1', 'b3_id': '26J07515763'},
+                                   {'id': 'SW-2', 'b3_id': '26J09999999'}]})
+finally:
+    Q._intrag_find_export_csv = _finder_orig
+res = {x['id']: x for x in (r.get_json() or {}).get('results', [])}
+check('swap mapeado pela col C, com a carteira na col B',
+      (res.get('SW-1') or {}).get('intrag_id'), '5585593')
+check('   a recompra do mesmo B3 ID nao ganha', (res.get('SW-1') or {}).get('status'), 'Success')
+check('   B3 ID fora do arquivo fica de fora', 'SW-2' in res, False)
+grav = {e['_deal']: e for e in S.read(fp_sw)}
+check('   e PERSISTIDO com Success', (grav['SW-1'].get('intrag_id'), grav['SW-1']['status'],
+                                     grav['SW-2']['status']), ('5585593', 'Success', 'Approved'))
+
 print('\n== 8. Information Source legivel (separador -> espaco) ==')
 check('a regra pura', D._intrag_info_source('PTAX|BRR[PTAX'), 'PTAX BRR PTAX')
 check('   chave/parentese tambem', D._intrag_info_source('{PTAX}(BRR);<X>'), 'PTAX BRR X')
