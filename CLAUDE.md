@@ -70,10 +70,13 @@ OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_<nome>.py
   do share para o Stratos, §678) chama por dentro. O
   `stratos/tests/check_stratos.py` pega as três — a última rodando o
   `check_exporta_dados.py` —, menos o `unlock` renomeado: no teste o IP bate e
-  o Unlock do próprio OTC destrava sem a ponte. **O banco do Stratos vai ser o
-  Stratos NoSQL (MongoDB), por porte de verdade** — a prod segue na instância
-  da equipe até o Stratos estar 100%, e o código escolhe o banco pelo config;
-  as decisões e os passos 0–6 estão no §678.
+  o Unlock do próprio OTC destrava sem a ponte. **No Stratos os bancos são os
+  mesmos DuckDB, no Shared Drive (EFS) da solução** (§681, que revê o §678):
+  a ponte (`_raiz_no_shared_drive`) aponta o `OTC_STRATOS_ROOT` para ele antes
+  do `import apps`, e a chave da sessão vai junto. O porte para o Stratos NoSQL
+  (MongoDB) ficou para depois da virada; a prod segue na instância da equipe
+  até o Stratos estar 100%, e os passos que faltam (travas no EFS, a chegada do
+  pacote sem pisar nos bancos em uso, o backup de hora em hora) estão no §681.
 - **O bloco DEV BYPASS (`/dev-login`) do `routes.py` nunca vai para o
   repositório.** É removido antes de cada commit e restaurado depois.
 - **Nunca fixe um de-para novo no código.** Tudo que é mapeável se cadastra

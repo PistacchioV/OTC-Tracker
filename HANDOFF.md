@@ -28669,6 +28669,11 @@ vai no task definition, e a solução roda com UMA task (o processo único, §4)
 
 ## §678 — Stratos no MongoDB: as decisões e o plano em passos (2026-10-23)
 
+> **Revisto pelo §681** (23/10/2026, no mesmo dia): o banco do Stratos é o
+> próprio DuckDB, no Shared Drive (EFS) da solução, e não o NoSQL. As decisões
+> 1, 4 e 5 abaixo continuam valendo; a 2 e a 3 (o porte para o MongoDB) e os
+> passos 2 a 5 ficaram para depois da virada. Os passos que valem estão no §681.
+
 **Onde estamos.** O Stratos sobe, entra pelo SSO e mostra o painel, mas vazio: os
 bancos estão no `/tmp` do contêiner, que some a cada deploy. Desde o §677
 entraram:
@@ -28930,3 +28935,115 @@ duas linhas nem é cortado, e cabeçalho e corpo seguem alinhados. Foram
 conferidas seis telas: Unwinds NDF FX, New Deals NDF Vanilla, Intrag NDF,
 Reference Data, Pending Confirmation e NDF Cockpit. Vale para toda DataTable com
 funil, sem nada na página.
+
+## §681 — Stratos: os bancos DuckDB no Shared Drive (EFS); o MongoDB fica para depois (2026-10-23)
+
+**O que mudou.** O plano do §678 portava o armazém, os usuários, o sino e cerca
+de 180 `execute` para o Stratos NoSQL, porque o Stratos parecia não ter onde
+guardar um arquivo de banco: o disco do contêiner some a cada deploy. Na mesma
+tarde o usuário trouxe a documentação dos Building Blocks de armazenamento, e
+ela muda a conta:
+
+- **Shared Drive**: o Amazon EFS da solução, montado como diretório comum
+  (`stratosblocks.utilities.get_shared_drive(path)` devolve o caminho; só no web
+  app). Persiste entre os deploys e é *"shared by all of its web workers"*, com
+  *"low-latency access"*. A própria página o indica para *"SQLite databases… read,
+  write, and update in place"*, que é o caso do DuckDB. Backup: uma foto por noite,
+  guardada 35 dias, sem versão por arquivo. De fora do contêiner se chega pelo
+  cliente `stratosblocks.file_storage.SharedDrive` (HTTP, `solution_id`
+  explícito, auditado) e pelo `stratos file --save/--load/--listfiles`.
+- **File Library**: S3, arquivo inteiro (`save`/`load`/`download_stream`), todas
+  as versões por 70 dias, acessível do desktop e do web. Não serve de banco (não
+  altera parte de um arquivo, não trava), serve de transporte e de backup.
+- **Snowflake**: liberação dos hosts por chamado, conector pelo proxy do
+  `get_proxies()`, token OAuth do usuário ou do FID da solução, e conta, banco,
+  papel e USER do FID provisionados pelo time de data platform. Com a latência
+  por consulta de um warehouse, fica como destino de relatório, não como banco
+  das telas.
+
+Com o Shared Drive o DuckDB roda **sem porte**. É o desenho que a prod já tem:
+várias instâncias sobre o mesmo `db/` num disco de rede, com as travas `.lock`,
+o OCUPADO, a intenção do escritor (§4 do CLAUDE.md) e o rastro de banco — só que
+com o EFS no lugar do SMB pela rede do JPM. O `solution.py` roda o app num
+processo só (`app.run`); mais de um contêiner é o caso das "instâncias
+vizinhas", que o app já trata.
+
+**A decisão (com o usuário).** O banco do Stratos é o DuckDB no Shared Drive. Do
+§678 continuam: a instância da equipe é a PROD até o Stratos estar 100% (1), o
+pacote é a CÓPIA CONSISTENTE dos `.db`, não CSV (4), e a dev nunca importa o
+`stratosblocks` (5). O porte para o NoSQL (2 e 3, passos 2 a 5 de lá) fica para
+depois da virada, como melhoria. O que se aceita com isso: a restauração vai da
+noite anterior, não de qualquer minuto (o passo C reduz a uma hora), e a
+fragilidade do DuckDB em disco de rede continua — o limbo e o WAL que não
+replaya do §442, com o `recover_duckdb_wal.py` como saída. O ganho é o Stratos
+100% sem reescrever a camada de dados que a equipe usa em produção.
+
+**Passo A — A raiz no Shared Drive (feito).** `otc_stratos._raiz_no_shared_drive`,
+chamado no `_monta` ANTES do `import apps` (o bloco ENV:STRATOS lê o
+`OTC_STRATOS_ROOT` no import do `config.py`):
+- sem a variável, a raiz é `get_shared_drive(path='otc-tracker')`, tornada
+  absoluta (fora do contêiner ele devolve a pasta RELATIVA do `local_data_dir`,
+  e o app recusa caminho de banco relativo) e criada;
+- a variável definida vence, e o `get_shared_drive` nem é chamado;
+- sem os dois, ou com o `get_shared_drive` levantando, fica o `/tmp` do bloco
+  ENV:STRATOS, com o aviso no log. A linha `[stratos] dados em <raiz> (<origem>)`
+  diz sempre qual valeu;
+- o `OTC_SECRET_KEY_FILE` passa a ser o `secret_key.txt` da raiz (se não vier
+  definido): o drive é privado da solução, e a chave que sobrevive ao deploy e é
+  a mesma em todo worker mantém a sessão. A `SECRET_KEY` do ambiente vence.
+  Na dev a regra do `_secret_key_file` (nunca no share) continua: o share da
+  equipe é lido por todas as instâncias de todas as pessoas.
+
+O `check_stratos.py` sobe uma vez pelo Shared Drive de mentira (o
+`get_shared_drive` no mesmo `stratosblocks.utilities` do phonebook) e outra pelo
+`OTC_STRATOS_ROOT`, e o `confere_shared_drive` cobre os seis casos sem subir o
+app. Nome que o `_SHARED_DRIVE_DEFAULT` do `config.py` já tinha: ele é o
+`SHARED_DRIVE_ROOT` do OTC, os destinos do share da rede (confirmações, Batch
+Conecta), e no Stratos fica em `<raiz>/share` — dentro do Shared Drive, mas não
+é a mesma coisa.
+
+**Passo B — Provar as travas no EFS.** O EFS é NFS v4.1, que tem trava de
+arquivo, mas a documentação não fala dela, e o app depende de duas: a do
+`portalocker` (o `.lock` da camada `database_access`) e a do próprio DuckDB. Uma
+rota só do master na ponte, rodando no contêiner, com dois processos sobre a
+mesma pasta do drive:
+- trava exclusiva num processo, e a do outro não vem (nem a compartilhada);
+- DuckDB aberto em escrita num, e o outro recebe o erro de arquivo em uso;
+- o tempo de abrir um banco de dia e um de cadastro, para comparar com o share.
+Se a trava não valer, dois workers gravando o mesmo banco o corrompem, e aí o
+Stratos precisa de UM worker só, ou o NoSQL volta para a frente da fila.
+
+**Passo C — A chegada do pacote.** Nunca por cima dos bancos em uso: um `.db`
+aberto por outro worker, ou pelo contêiner velho durante o deploy, e
+substituído por baixo dele é um banco corrompido.
+1. Na máquina do JPM, `stratos\exporta_dados.py --zip` (já existe) monta o
+   pacote.
+2. O pacote vai para uma pasta PRÓPRIA do drive,
+   `otc-tracker-pacotes/<carimbo>/`, pelo cliente `SharedDrive` ou pelo
+   `stratos file --save` (um arquivo por chamada). Falta descobrir o
+   `solution_id` que o cliente pede e o limite de tamanho por arquivo.
+3. A conferência pelo sha256 do `manifest.json`, já no contêiner; pacote
+   INCOMPLETO é recusado.
+4. Um ponteiro (`otc-tracker-raiz.txt`, na raiz do drive) com a pasta do pacote
+   escolhido; a ponte o lê na subida, e o restart seguinte passa a usar a pasta
+   nova. A pasta anterior fica como volta atrás. Sem ponteiro, vale a
+   `otc-tracker` do passo A.
+
+**Passo C2 — Backup de hora em hora.** A foto do drive é só noturna. Uma rotina no
+contêiner faz a mesma cópia consistente do `exporta_dados.py` (trava de leitura,
+CHECKPOINT na cópia) e a guarda no File Library, que versiona sozinho por 70
+dias. A perda máxima cai de um dia para uma hora.
+
+**Passo D — Validar e virar** (o passo 6 do §678): as telas do Stratos com dado
+real, conferidas contra a instância da equipe; a virada com a instância da
+equipe PARADA durante a última exportação.
+
+**Fora do banco, continua faltando** (§677, §678): o contêiner não enxerga o
+share da rede, não tem Outlook nem Kerberos (Athena), e o SMTP da rede
+provavelmente não responde de lá. O Shared Drive pode ser o destino dos arquivos
+gerados (o `<raiz>/share` já mora nele), com o cliente `SharedDrive` levando-os
+até a equipe, mas isso é decisão de cada fluxo.
+
+**O botão de Export na Database Explorer** (o passo 1 do §678) deixa de ser
+bloqueante: o `exporta_dados.py` faz a carga. Ele continua útil para repetir a
+carga sem linha de comando.
