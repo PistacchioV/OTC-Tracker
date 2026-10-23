@@ -28636,6 +28636,12 @@ sessão Flask é uma só para o app. Hoje a ponte só age em
 403, nunca 401: no OTC o 401 é "sessão expirada" e o session-guard mandaria ao
 login.
 
+> **Superado pelo §678** (`8addddde`, 23/10/2026): a trava de tela VALE no
+> Stratos — o `enforce_screen_lock` do OTC segura as telas, e o Unlock é da
+> ponte (`_destrava`): basta digitar o SID que o SSO identificou. E a ponte
+> ganhou UM 401, de propósito: a API de quem saiu pelo Log Out responde
+> `signed_out`, para o `session-guard.js` levar a aba aberta à tela de saída.
+
 **A subida.** O `app.run` do template só abre a porta quando o módulo termina, e
 semear ~110 DuckDB num `/tmp` vazio leva 5 s num Mac e passou da janela do
 health check no contêiner: três deploys derrubados a ~2 min 20 s, com o
@@ -28660,3 +28666,267 @@ vai para o destino.
 CETIP, Electronic Inventory), o Outlook e a Athena (Kerberos). E o `/tmp` some a
 cada deploy: `OTC_STRATOS_ROOT` precisa de um volume persistente, `SECRET_KEY`
 vai no task definition, e a solução roda com UMA task (o processo único, §4).
+
+## §678 — Stratos no MongoDB: as decisões e o plano em passos (2026-10-23)
+
+**Onde estamos.** O Stratos sobe, entra pelo SSO e mostra o painel, mas vazio: os
+bancos estão no `/tmp` do contêiner, que some a cada deploy. Desde o §677
+entraram:
+- o `stratos/exporta_dados.py` (`bd5403d5`, só na branch do Stratos): a cópia
+  consistente dos bancos do share, com o WAL fundido e um manifest com sha256,
+  testada pelo `check_exporta_dados.py`, que o `check_stratos.py` roda — e roda
+  porque o exportador usa helpers PRIVADOS do `scripts/recover_duckdb_wal.py`
+  da dev (`_recupera_local`, `_resolve_sobra_recovery`, `_manifest_linhas`,
+  `_a_copiar`, `_liberar`, `_prova_de_renome`, `_em_uso`), além do
+  `slim_duckdb.emagrecer`, do `data_store` (`wal_irmaos`, `WAL_SUFIXOS`,
+  `RECUPERADO_DIR`) e do `database_access.hold_file_lock`: renomear ou mudar a
+  assinatura de um deles na dev quebra a exportação sem quebrar a dev;
+- a foto das telas de login (`527c3325`, na dev): é o fundo da `.card-side-img`
+  (sign-in, 2FA, lock screen e pedido de acesso), e quem punha o
+  `images/auth.jpg` nela era o `app.css`, que o rebranding (§630) apagou. O
+  `otc.scss` reescreveu a regra só com o raio e o `object-fit`, e a coluna
+  ficava vazia, sem erro nenhum (a imagem nem era pedida). A URL é relativa ao
+  CSS para valer também sob o prefixo do Stratos;
+- o Lock Screen e o Log Out no Stratos (`8addddde`): a ponte desfazia os dois.
+  Ela tirava o `locked` da sessão a cada request (a decisão do §677, de quando
+  a trava era só do login próprio) e mandava a tela travada ao dashboard; e o
+  `/logout` do OTC faz `session.clear()`, que apagava também o login do
+  StratosAuth (a sessão Flask é uma só), e o SSO reentrava sozinho no request
+  seguinte. Hoje a trava vale (o `enforce_screen_lock` do OTC segura as telas)
+  e o Unlock é da ponte (`_destrava`): é digitar o SID que o SSO identificou. O
+  do OTC confere o IP do cadastro e, se não bate, manda código por e-mail; atrás
+  do proxy do Stratos o IP não é o do usuário e o SMTP da rede provavelmente não
+  responde, e a tela ficaria travada para sempre. O Log Out é interceptado ANTES
+  da rota do OTC: limpa só as chaves do OTC, marca `otc_stratos_saiu` e para na
+  tela "You have signed out" até o "Sign in again" (`?entrar=1`). A sessão do
+  Stratos fica, e a API de quem saiu responde 401 `signed_out` — de propósito,
+  ao contrário do negado do §677 (403): o `session-guard.js` de uma aba aberta
+  leva ao login, que é a tela de saída;
+- o phonebook pelo `stratosblocks.utilities.get_phonebook_data([sid])`
+  (`9fd623b0`): o `awmpy` não existe no contêiner, e a ponte o troca por uma
+  casca desse, que devolve as mesmas chaves (`nameFull`, `email`,
+  `positionName`); o `routes.py` não muda.
+
+**As decisões (com o usuário, 23/10/2026).**
+1. **A instância da equipe continua sendo a PROD** (desktop, `StreamFlow-prod`,
+   DuckDB no share) até o Stratos estar 100%.
+2. **O banco do Stratos é o Stratos NoSQL (MongoDB)**, pelo `NoSqlDatabase(env)`
+   do stratosblocks: `get_dataset`/`create_dataset` → `create_collection`, depois
+   `add_document`/`query_documents`. Não pede proxy nem token manual, e tem
+   backup automático: restaura qualquer minuto dos últimos 30 dias. O ambiente
+   pode guardar dado de cliente (nome, CNPJ, operação), conforme o usuário.
+3. **É o porte de verdade.** O Stratos lê e grava no NoSQL; a dev e a prod seguem
+   no DuckDB, e o mesmo código escolhe pelo config. Ficaram de fora:
+   - Databricks + Snowflake: warehouse analítico, com latência por consulta e
+     custo por segundo ligado. Só o poll do sino o manteria acordado o dia
+     inteiro. Serve como destino de relatório, não como banco do app.
+   - O MongoDB só como disco dos arquivos DuckDB: sairia em dias, mas com janela
+     de perda se o contêiner morre e disputa entre os contêineres no deploy.
+4. **A migração é pela Database Explorer:** um Export na instância da equipe e um
+   dropzone na do Stratos. O arquivo é a **cópia consistente do banco DuckDB, não
+   CSV**:
+   - o CSV confunde vazio com nulo, e no app isso tem significado (papel vazio
+     revoga, nulo não mexe);
+   - perde os tipos (`DATE`, `TIMESTAMP`, `DOUBLE`, `BIGINT`, `BOOLEAN`);
+   - seriam milhares de arquivos: 645 tabelas só na dev, e na prod uma por dia
+     por produto;
+   - e o Excel estraga ID e data (§477).
+
+   O duckdb existe dos dois lados, então o importador abre o próprio `.db`.
+5. **O código da dev nunca importa o `stratosblocks`.** O backend NoSQL recebe um
+   ADAPTADOR com a interface mínima: o `otc_stratos.py` o monta sobre o
+   `NoSqlDatabase`, e os testes, sobre um falso (em memória ou um `mongod` local,
+   via `brew install mongodb-community` + `pymongo` na venv). O `pymongo`, se for
+   preciso, entra só no requirements do Stratos, pelo `build_requirements.py`.
+
+**Os passos.** Cada um termina com teste, commit e, quando mexe no Stratos,
+`stratos-sync apply` + `stratos push` na máquina do JPM.
+
+**Passo 0 — Conhecer a API do `NoSqlDatabase`.** O nosso `stratos/src/solution.py`
+não tem o exemplo que a documentação cita (`solution.py:115-123` é de outro
+projeto ou de um template mais novo). O que levantar:
+- o import (`from stratosblocks.… import NoSqlDatabase`) e o que é o `env`;
+- os métodos e as assinaturas: há update, replace, delete, upsert, operação em
+  lote? Qual a linguagem do filtro do `query_documents`? Há paginação, ordenação
+  e projeção?
+- os limites: tamanho de documento (o do MongoDB é 16 MB), documentos por
+  chamada, cotas;
+- se há índice e atomicidade (update condicional, transação).
+
+Como levantar: o `stratosblocks` roda no Python do DevShell da máquina do JPM
+(`C:\Users\e930179\ds\tools\python3.13\latest\python.exe` executou o
+`get_phonebook_data` em 23/10), então basta um `help()` da classe lá. Sem isso,
+use a página da documentação ou uma rota só do master no `otc_stratos.py`. Junto, a saída de
+`stratos\exporta_dados.py --medir` na máquina do JPM, que diz o tamanho dos
+dados. Sem esse passo, o esquema do passo 2 é chute. Saída: a API anotada aqui.
+
+**Passo 1 — Export na Database Explorer (dev → prod; não depende do NoSQL).**
+- Um botão só do master exporta um banco, uma seleção ou todos num `.zip` com a
+  cópia consistente de cada `.db` e o `manifest.json` (bytes, sha256, versão do
+  duckdb).
+- A rotina sai do `stratos/exporta_dados.py` e do `scripts/recover_duckdb_wal.py`
+  para um módulo do app (por exemplo `apps/pages/duck_snapshot.py`, porque
+  feature não importa `scripts/`), e o `exporta_dados.py` vira casca dela.
+- As regras são as de hoje: trava de LEITURA da camada por banco, CHECKPOINT na
+  cópia local e banco preso como EM USO, com o pacote marcado INCOMPLETO.
+- O zip é montado em arquivo temporário e servido em stream, porque pode ter GB.
+- O `check_exporta_dados.py` passa a cobrir a rotina e a rota.
+
+**Passo 2 — O backend e o ARMAZÉM no NoSQL.**
+- `Config.STORAGE`: `duckdb` por padrão e `nosql` no bloco ENV:STRATOS.
+- O `data_store` fala com o DuckDB em 4 pontos (a leitura do alvo e as três
+  gravações), atrás de cerca de 590 chamadas do app. O backend entra ali.
+- O esquema se decide com a API do passo 0. A ideia: um documento por caminho
+  (rel, mtime, tamanho, targets e o payload do `__raw`) e, no arquivo-dia, UMA
+  linha por documento (o `_seq`/`_raw` de hoje), que respeita o limite de 16 MB
+  nas posições grandes.
+- O "mudou?", que hoje é o `stat` do `.db`, vira um carimbo de versão por
+  coleção, consultado uma vez por request.
+- Os testes do armazém (`check_duck_read`, `check_daycache`, `check_duck_gate`…)
+  rodam também com o falso.
+
+**Passo 3 — Usuários e notificações.** É o mínimo para o login do Stratos sem
+DuckDB, porque a ponte de SSO chama essas funções:
+- o `routes.py`: cadastro, `Page_Access`, `get_user_by_sid`, `insert_new_user`;
+- o `platform/db.py`;
+- o `platform/notifications.py`: o sino, o poll sem trava e o expurgo;
+- o `platform/authz.py`.
+
+**Passo 4 — O resto do SQL.** Cerca de 180 `execute`, um módulo por commit:
+- `platform/pending_confirmation.py`: os três bancos e o histórico de métricas;
+- `manual_conf.py`: a esteira, com `mutate_row`/`save_changes`, que releem dentro
+  da escrita (§548);
+- `cgd_docs.py`: o Onboarding, com a geração do §548;
+- `recon_comitente.py`: o SQLite;
+- `platform/confirmations.py`, `platform/manual_confirmation.py`,
+  `features/deals_monitor`, `features/projects/infra/people.py`,
+  `features/support` e `features/appver`;
+- a própria Database Explorer, que no Stratos mostra as coleções.
+
+**Passo 5 — O dropzone no Stratos (Database Explorer, só do master).**
+- O zip do passo 1 entra em pedaços, para não bater no limite de corpo do Stratos.
+- Confere o sha256 do manifest, abre cada `.db` com o duckdb do contêiner e
+  grava no NoSQL pelo backend dos passos 2 a 4.
+- Por banco, SUBSTITUI o que havia, para poder repetir até a virada; recusa
+  pacote INCOMPLETO e mostra quantas linhas entraram por tabela.
+- Cresce com os passos: importa só o que já foi portado.
+
+**Passo 6 — Validar e virar.**
+- Testes de ponta a ponta com o falso e o `check_stratos.py` com o backend NoSQL.
+- No Stratos, com dado real importado, conferir as telas contra a instância da
+  equipe.
+- A virada: a instância da equipe fica PARADA durante a última exportação e
+  importação (o que for gravado no meio se perde), e só então a equipe passa
+  para o Stratos.
+
+**Fora do banco, o que ainda falta para o Stratos ser 100%** (§677): o contêiner
+não enxerga o share (Batch Conecta, confirmações, CETIP, Electronic Inventory),
+não tem Outlook (box scan, leitura de e-mail) nem Kerberos (Athena), e o SMTP da
+rede provavelmente não responde de lá (e-mails e o 2FA do login próprio). Cada
+um pede uma solução própria antes da virada.
+
+**Lembrete da documentação do Stratos:** `SSLError` depois do deploy se resolve
+com `stratos upgrade` (atualiza os certificados do proxy) e um deploy de novo.
+
+## §679 — Stratos: o Codex no lugar do Yahoo (em investigação, 2026-10-23)
+
+O Codex é a API de dados de mercado do JPM (FactSet, Bloomberg, posições). No
+Stratos ele pode substituir o Yahoo da Quotes. Para as ações, o usuário tem
+quase certeza; para o resto, ainda falta procurar.
+
+**O que a documentação do Codex diz (prints de 23/10/2026).**
+- **Preço:**
+  `from codex.api import Codex; Codex().fetch(campos, ids, d1, d2)` devolve um
+  DataFrame por data. Os campos de preço são `fp_open_price`, `fp_low_price`,
+  `fp_high_price`, `fp_close_price` e `fp_volume`, e o identificador segue o
+  padrão FactSet `TICKER-PAÍS` (`AAPL-US`).
+- **Busca de identificadores:** `search_identifiers(IdentifierSource.IBEX,
+  "bovespa")` acha os códigos IBEX dos índices (`IBOVESPAGRBRL0`, Gross Return em
+  BRL; `IBRXGRBRL0`…), e `IdentifierSource.FACTSET_ECON` acha as séries
+  econômicas (`US_FED_FUNDS_RATE`, `US_FED_TARGET_RATE`, `GOV_YIELD_3M` a
+  `GOV_YIELD_15Y`).
+- **No desktop** funciona como está, com o login de quem roda.
+- **Num app web do Stratos** o Codex roda em nome do usuário logado. É preciso
+  registrar OS DOIS recursos:
+
+  ```
+  stratos update --register-resource "JPMC:URI:RS-110187-116901-CODEXPRODCLIENT-PROD,JPMC:URI:RS-86370-34117-EQInvestorPlatform-PROD"
+  ```
+
+  Só o FactorStore registrado faz a chamada comum falhar com `FID is required
+  when using on_behalf_of`. O `StratosAuth(app)` obtém os tokens no LOGIN, e
+  depois basta um `Codex()` na rota.
+
+**Onde ele encaixa.** Todo uso do Yahoo passa por `quotes.fetch_ohlc(symbol,
+start, end)`, chamada pelo ATRIBUTO do módulo: a tela Quotes, as Tools (perna de
+equity do Swap Calculator, fixings das calculadoras de opção e NDF) e o Cupom
+Limpo da confirmação (`platform/confirmations.py`). O contrato da função é
+`(OHLC_COLUMNS, linhas)`: data `dd/mm/aaaa`, números já formatados (`{:,.6f}`,
+§476) e o mais recente primeiro. A ponte do Stratos pode embrulhá-la sem mexer
+na dev:
+- tenta o Codex primeiro para o símbolo que tem identificador Codex;
+- cai no Yahoo, com log, para o que não tem, para o que falha e fora de request
+  (o token é do usuário logado; rotina de fundo não tem usuário).
+
+O `Adj Close` ainda não tem campo Codex conhecido: ou se acha o ajustado, ou vai
+o Close.
+
+**O identificador é CADASTRO, não regra no código** (§2): uma coluna nova no
+`quotes-equity` (e depois no `quotes-commodity`), preenchida na PROD. Ela é a
+origem dos dados até a virada, e a migração do §678 leva a coluna junto.
+
+**O que falta descobrir:**
+- o formato que pega nas ações brasileiras (`ABEV3-BR`?);
+- o campo do fechamento ajustado;
+- os índices: o código IBEX, e se é o Gross Return ou o índice de preço que se
+  quer;
+- os futuros de commodities: o contínuo e o mês `"MY"`;
+- se há PTAX (até lá fica o BCB) e SOFR, Term SOFR, EURIBOR e IPCA para as Tools
+  (a lista FactSet econ mostra Fed Funds e Gov Yields, sem SOFR);
+- o nome do pacote pip do `codex`, para o requirements do Stratos (pelo
+  `build_requirements.py`).
+
+E, depois de registrar os recursos, é preciso um LOGIN NOVO no Stratos (janela
+anônima): o Log Out do OTC mantém a sessão do Stratos (§678), e o token só vem no
+login.
+
+**A sonda:** `stratos/sonda_codex.py` (`d81f15a4`, branch do Stratos), na máquina
+do JPM e com o python em que o Codex funciona:
+- sem argumentos, tenta 3 ativos de cada grupo da SEED do `quotes-equity`, pelo
+  palpite FactSet `TICKER-PAÍS`;
+- `--todos` tenta a seed inteira, que pode estar atrás do que a equipe
+  cadastrou na tela (a sonda não lê o banco);
+- `--ids` testa identificadores à mão (índices, commodities);
+- `--csv` grava o resultado.
+
+O palpite é da sonda, não do app.
+
+**De bônus:** como o Codex funciona no desktop com o login do usuário, ele
+também resolveria a Quotes da instância da equipe atrás do proxy 407 (§9, §450).
+Isso fica para decidir depois.
+
+## §680 — Cabeçalho de tabela: o título empilhado em três linhas (2026-10-23)
+
+**O sintoma** (Unwinds › NDF FX, no Stratos): "praticamente não dá para ler
+nenhum" título da tabela.
+
+**A causa.** No th centralizado, o cabeçalho do DataTables 2 é o flex `título ·
+funil · ordenação`, e o `centerTitles` do `excel-filter.js` reserva à ESQUERDA do
+título a mesma largura do que está à direita dele (§603). São uns 80px de
+cromo num th. Numa tabela de muitas colunas numéricas, a coluna tem a largura do
+DADO (~130px), e o título ficava com 31px: "PRE FWD RATE", "OTC TRACKER
+RESULT", "FIRST FIXING DATE" saíam com UMA palavra por linha, em três linhas de
+11px em caixa alta. O `widenTruncated` (§591) só alargava o título CORTADO (com
+"…"), e o empilhado não corta nada. Medido na dev a 1280px, antes da correção:
+2 títulos de três linhas no Unwinds NDF FX, 3 no New Deals NDF Vanilla e 7 na
+Intrag NDF.
+
+**A correção.** O título pode quebrar (§7), mas em no máximo DUAS linhas. O
+`widenTruncated` passou a contar como falta também a diferença entre a largura
+do título e a menor largura em que o texto dele cabe em duas linhas sem partir
+palavra (`twoLineWidth`: mede cada palavra no canvas com a fonte, a caixa e o
+espaçamento computados do próprio título). Depois disso, nenhum título passa de
+duas linhas nem é cortado, e cabeçalho e corpo seguem alinhados. Foram
+conferidas seis telas: Unwinds NDF FX, New Deals NDF Vanilla, Intrag NDF,
+Reference Data, Pending Confirmation e NDF Cockpit. Vale para toda DataTable com
+funil, sem nada na página.

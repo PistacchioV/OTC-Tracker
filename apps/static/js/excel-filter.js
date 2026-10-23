@@ -418,6 +418,36 @@
     // aplica no cabeçalho e no corpo. Ele mede de novo numa tabela oculta, e
     // uma passada só não fecha (27 → 17 → 0 na Intrag NDF): até três.
     // Idempotente: sem título cortado, não mexe em nada.
+    //
+    // E o título EMPILHADO conta como cortado (23/10/2026): num th de 130px o
+    // funil, a ordenação e o respiro do centro (`centerTitles`) levam ~80px, e
+    // "Pre FWD Rate" ficava em 31px — TRÊS linhas de uma palavra, ilegível, sem
+    // "…" nenhum para disparar a regra acima (Unwinds NDF FX, e toda tabela de
+    // muitas colunas numéricas). O título pode quebrar (§7), mas em no máximo
+    // DUAS linhas: a falta é o que separa a largura dele da menor largura em
+    // que o texto cabe em duas, medida na fonte real (`twoLineWidth`).
+    var _medidor = null;
+    function twoLineWidth(el) {
+        if (el.querySelector('input, .form-check')) return 0;
+        var txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!txt) return 0;
+        var cs = getComputedStyle(el);
+        if (cs.textTransform === 'uppercase') txt = txt.toUpperCase();
+        _medidor = _medidor || document.createElement('canvas').getContext('2d');
+        _medidor.font = cs.font || (cs.fontStyle + ' ' + cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily);
+        var ls = parseFloat(cs.letterSpacing) || 0;
+        var mede = function (s) { return _medidor.measureText(s).width + ls * s.length; };
+        var ws = txt.split(' ').map(mede), sp = mede(' ');
+        if (ws.length === 1) return Math.ceil(ws[0]);
+        var total = ws.reduce(function (a, b) { return a + b; }, 0) + sp * (ws.length - 1);
+        var melhor = Infinity, esq = 0;
+        for (var k = 1; k < ws.length; k++) {
+            esq += ws[k - 1] + (k > 1 ? sp : 0);
+            melhor = Math.min(melhor, Math.max(esq, total - esq - sp));
+        }
+        return Math.ceil(melhor);
+    }
+
     function widenTruncated(dt) {
         var s0 = dt.settings()[0];
         for (var pass = 0; pass < 3; pass++) {
@@ -432,7 +462,8 @@
                 var hdr = th.querySelector('.dt-column-header') || title;
                 var falta = Math.max(title.scrollWidth - title.clientWidth,
                                      hdr.scrollWidth - hdr.clientWidth,
-                                     th.scrollWidth - th.clientWidth);
+                                     th.scrollWidth - th.clientWidth,
+                                     twoLineWidth(title) - title.clientWidth);
                 if (falta <= 1) return;
                 var w = (th.offsetWidth + falta + 2) + 'px';
                 s0.aoColumns[i].sWidthOrig = w;
