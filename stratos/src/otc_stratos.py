@@ -19,7 +19,9 @@ Três coisas o OTC supõe e o Stratos não dá, e cada uma tem a sua peça aqui:
     vira uma casca dele (`_garante_awmpy`).
 
 E a rede: a saída para a internet é pelo proxy do Stratos
-(`_proxy_do_stratos`), não pelo proxy corporativo do desktop.
+(`_proxy_do_stratos`), não pelo proxy corporativo do desktop. E o disco: os
+bancos DuckDB moram no Shared Drive (EFS) da solução, que sobrevive ao deploy
+(`_raiz_no_shared_drive`), e não no disco do contêiner.
 
 Este arquivo, o `solution.py` e o `run.py` existem SÓ na branch
 OTC-Tracker-Stratos; o código do app continua nascendo na dev.
@@ -120,6 +122,7 @@ def _monta(app, stratos_auth, base):
     primeira mudança da dev."""
     _proxy_do_stratos()
     _garante_awmpy()
+    _raiz_no_shared_drive()   # antes do import: o bloco ENV:STRATOS lê a raiz nele
 
     import apps as otc
     from apps.config import config_dict
@@ -242,6 +245,58 @@ def _proxy_do_stratos():
     os.environ.setdefault('QUOTES_PROXY', '')
 
 
+# A pasta do OTC dentro do Shared Drive da solução.
+_PASTA_NO_DRIVE = 'otc-tracker'
+
+
+def _raiz_no_shared_drive():
+    """Os dados e os bancos moram no Stratos Shared Drive (HANDOFF §681).
+
+    O disco do contêiner some a cada deploy e leva os bancos junto. O Shared
+    Drive é o EFS da solução: montado como diretório comum, persiste entre os
+    deploys e é o MESMO para todos os web workers — o desenho de hoje, com
+    várias instâncias sobre o mesmo `db/`, só que com o EFS no lugar do SMB. É a
+    raiz que o bloco ENV:STRATOS do `config.py` lê no `OTC_STRATOS_ROOT`, e por
+    isso este passo roda ANTES do `import apps`; o `config.py` não importa o
+    `stratosblocks` (a dev nunca o importa).
+
+    A variável definida no ambiente vence, e o `get_shared_drive` só responde
+    quando ela falta. Sem os dois, a raiz fica no /tmp do bloco ENV:STRATOS: o
+    app sobe, mas o que gravar some no deploy — e o log diz isso.
+
+    A chave da sessão vai para lá também (`OTC_SECRET_KEY_FILE`): o drive é
+    privado da solução, e uma chave que sobrevive ao deploy e é a mesma em todo
+    worker mantém a sessão de quem está logado. A `SECRET_KEY` do ambiente
+    continua vencendo.
+
+    Devolve a raiz, ou None quando ficou no /tmp.
+    """
+    raiz = (os.getenv('OTC_STRATOS_ROOT') or '').strip()
+    origem = 'OTC_STRATOS_ROOT'
+    if not raiz:
+        try:
+            from stratosblocks.utilities import get_shared_drive
+        except ImportError:
+            log.warning('[stratos] sem OTC_STRATOS_ROOT e sem o get_shared_drive: dados '
+                        'no /tmp do conteiner, que somem a cada deploy')
+            return None
+        try:
+            raiz = get_shared_drive(path=_PASTA_NO_DRIVE)
+        except Exception:                                   # noqa: BLE001
+            log.exception('[stratos] get_shared_drive falhou: dados no /tmp do '
+                          'conteiner, que somem a cada deploy')
+            return None
+        origem = 'Shared Drive'
+    # Fora do contêiner o `get_shared_drive` devolve uma pasta RELATIVA (o
+    # `local_data_dir`), e o app recusa caminho de banco relativo.
+    raiz = os.path.abspath(str(raiz))
+    os.makedirs(raiz, exist_ok=True)
+    os.environ['OTC_STRATOS_ROOT'] = raiz
+    os.environ.setdefault('OTC_SECRET_KEY_FILE', os.path.join(raiz, 'secret_key.txt'))
+    log.warning('[stratos] dados em %s (%s)', raiz, origem)
+    return raiz
+
+
 def _chave_de_sessao(otc, app):
     """SECRET_KEY do ambiente; sem ela, a do arquivo da máquina do OTC.
 
@@ -253,12 +308,16 @@ def _chave_de_sessao(otc, app):
     if chave:
         return chave
     chave = otc._persisted_secret_key()
-    log.warning('[stratos] SECRET_KEY ausente no ambiente — usando %s. Com mais de '
-                'uma task, ou a cada deploy, a sessao se perde (o SSO a reabre, '
-                'mas defina SECRET_KEY no task definition).',
-                'a do arquivo ' + otc._secret_key_file() if chave
-                else 'uma chave aleatoria deste processo')
-    return chave or app.config['SECRET_KEY']
+    if chave:
+        # No Shared Drive (`_raiz_no_shared_drive`) ela sobrevive ao deploy e é
+        # a mesma em todo worker; no /tmp, cada deploy desloga todo mundo.
+        log.warning('[stratos] SECRET_KEY ausente no ambiente — usando a do arquivo %s',
+                    otc._secret_key_file())
+        return chave
+    log.warning('[stratos] SECRET_KEY ausente e sem arquivo gravavel: chave aleatoria '
+                'deste processo. A cada deploy, e entre workers, a sessao se perde (o '
+                'SSO a reabre, mas defina SECRET_KEY no task definition).')
+    return app.config['SECRET_KEY']
 
 
 def _garante_awmpy():

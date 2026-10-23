@@ -23,11 +23,11 @@ cliente, CNPJ e operação):
         data/db/...         os bancos, um por um, já sem WAL
         data/...            o que não é banco (anexos, imagens dos tickets)
 
-`data/` tem a MESMA forma do `data/` sob o `OTC_STRATOS_ROOT` no contêiner,
-mas o banco do Stratos vai ser o Stratos NoSQL: quem vai importar o pacote é
-o dropzone da Database Explorer do Stratos (§678, passo 5 — ainda não existe),
-que confere o sha256 do manifest, abre cada `.db` com o duckdb do contêiner e
-grava no NoSQL.
+`data/` tem a MESMA forma do `data/` sob o `OTC_STRATOS_ROOT` no contêiner, que
+é a pasta `otc-tracker` do Shared Drive (§681): o Stratos roda com os mesmos
+bancos DuckDB, e o pacote chega lá como está, pelo `stratos file --save`, numa
+pasta própria — nunca por cima dos bancos em uso. Só depois de conferido pelo
+sha256 do manifest ele passa a valer como raiz.
 
 Banco a banco:
   1. toma a trava COMPARTILHADA da camada (a mesma das leituras do app): um

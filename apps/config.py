@@ -47,9 +47,10 @@ class Config(object):
     # (`OTC_DATABASE_DIR`, `OTC_SHARED_DRIVE_ROOT`) sem tocar no arquivo.
     #
     # ── ENV:STRATOS (servidor Stratos, contêiner Linux na AWS) ───────────────
-    # Sem o share da rede: tudo mora sob UMA raiz, `OTC_STRATOS_ROOT`. Aponte-a
-    # para o volume persistente (EFS) — o disco do contêiner some a cada deploy
-    # e leva os bancos junto. Sem a variável cai no /tmp: sobe, mas não guarda.
+    # Sem o share da rede: tudo mora sob UMA raiz, `OTC_STRATOS_ROOT`, que o
+    # otc_stratos.py aponta para o Shared Drive (EFS) da solução quando ela não
+    # vem definida — o disco do contêiner some a cada deploy e leva os bancos
+    # junto (HANDOFF §681). Sem as duas cai no /tmp: sobe, mas não guarda.
     _STRATOS_ROOT = os.getenv('OTC_STRATOS_ROOT') or os.path.join(os.getenv('TMPDIR') or '/tmp', 'otc-tracker')
     _DATA_DIR_DEFAULT = os.path.join(_STRATOS_ROOT, 'data')
     _DATABASE_DIR_DEFAULT = os.path.join(_STRATOS_ROOT, 'data', 'db')

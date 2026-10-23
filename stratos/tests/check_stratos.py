@@ -17,7 +17,9 @@ src/apps/ — e sobe o `solution.py` com um Stratos de MENTIRA (o stratos-blocks
      `get_phonebook_data([sid])` (registro de OUTRO SID levanta); com ele, o
      `awmpy` é a casca dele, o pedido de acesso nasce com nome, e-mail e cargo
      e o master com nome e e-mail; sem phonebook nenhum, o app sobe e o pedido
-     leva o nome que o Stratos informa;
+     leva o nome que o Stratos informa; a raiz dos dados: sem o
+     OTC_STRATOS_ROOT ela sai do `get_shared_drive` (o EFS da solução), a
+     variável vence, e sem os dois fica no /tmp avisando;
   3. o prefixo: Location, HTML (href/src/action, Speculation Rules), estático,
      cookie no caminho da solução, o shim na página e no /sw.js;
   4. o shim de JavaScript, no node (se houver);
@@ -214,6 +216,16 @@ FONE = {
 }
 
 
+# O Shared Drive do Stratos (`stratosblocks.utilities.get_shared_drive`): no
+# contêiner devolve o caminho no EFS montado; aqui, uma pasta do tmp do teste.
+DRIVE = {'raiz': None, 'pedidos': []}
+
+
+def _get_shared_drive(path, local_data_dir='data'):
+    DRIVE['pedidos'].append(path)
+    return os.path.join(DRIVE['raiz'], path)
+
+
 def _phonebook(sids):
     if not isinstance(sids, list):
         raise TypeError('get_phonebook_data espera uma lista de SIDs')
@@ -264,7 +276,8 @@ def _stubs(com_phonebook=True):
 
     modulo('stratosblocks.connectivity', configure_proxy_env_vars=proxy_do_stratos)
     if com_phonebook:
-        modulo('stratosblocks.utilities', get_phonebook_data=_phonebook)
+        modulo('stratosblocks.utilities', get_phonebook_data=_phonebook,
+               get_shared_drive=_get_shared_drive)
     modulo('stratosblocks.authentication')
     modulo('stratosblocks.authentication.web', StratosAuth=StratosAuth,
            StratosDispatcherMiddleware=dispatcher)
@@ -295,7 +308,16 @@ def confere_subida(tmp, sem_awmpy):
     for nome in ('solution.py', 'run.py', 'otc_stratos.py'):
         shutil.copy(os.path.join(STRATOS, 'src', nome), src)
     os.symlink(os.path.join(RAIZ, 'apps'), os.path.join(src, 'apps'))
-    os.environ['OTC_STRATOS_ROOT'] = os.path.join(tmp, 'otc-root')
+    # Com phonebook a raiz sai do Shared Drive (o `get_shared_drive` está no
+    # mesmo `stratosblocks.utilities`); sem, do OTC_STRATOS_ROOT.
+    if sem_awmpy:
+        raiz = os.path.join(tmp, 'otc-root')
+        os.environ['OTC_STRATOS_ROOT'] = raiz
+    else:
+        DRIVE['raiz'] = os.path.join(tmp, 'efs')
+        raiz = os.path.join(DRIVE['raiz'], 'otc-tracker')
+        os.environ.pop('OTC_STRATOS_ROOT', None)
+    os.environ.pop('OTC_SECRET_KEY_FILE', None)
     os.environ.pop('OTC_DATA_DIR', None)
     os.environ.pop('OTC_DATABASE_DIR', None)
     os.environ['OTC_DISABLE_SCHEDULERS'] = '1'
@@ -324,8 +346,11 @@ def confere_subida(tmp, sem_awmpy):
     def teste_redirect():   # um redirect escrito à mão, como há no OTC
         return redirect('/dashboard')
 
-    ok(app.config['DATA_DIR'].startswith(os.path.join(tmp, 'otc-root')),
-       'DATA_DIR sob o OTC_STRATOS_ROOT (bloco ENV:STRATOS)')
+    ok(app.config['DATA_DIR'].startswith(raiz) and app.config['DATABASE_DIR'].startswith(raiz),
+       'DATA_DIR e DATABASE_DIR sob a raiz %s (%s)' % (
+           'do OTC_STRATOS_ROOT' if sem_awmpy else 'do Shared Drive', app.config['DATABASE_DIR']))
+    if not sem_awmpy:
+        ok(DRIVE['pedidos'] == ['otc-tracker'], 'a raiz pedida ao get_shared_drive uma vez')
     ok(app.config['FOUR_EYES'] is True, 'maker/checker ligado no Stratos')
     ok(app.root_path == os.path.join(src, 'apps'), 'root_path do app = src/apps')
     from apps.pages import quotes
@@ -559,6 +584,83 @@ def confere_phonebook():
             ok(True, 'phonebook: %s levanta' % desc)
 
 
+def confere_shared_drive():
+    """A raiz dos dados: Shared Drive, variável, ou /tmp avisando — sem subir o app."""
+    sys.path.insert(0, os.path.join(STRATOS, 'src'))
+    import otc_stratos
+    guardado = {k: os.environ.get(k) for k in ('OTC_STRATOS_ROOT', 'OTC_SECRET_KEY_FILE')}
+    util = sys.modules.get('stratosblocks.utilities')
+    pai = sys.modules.get('stratosblocks')
+    sys.modules.setdefault('stratosblocks', types.ModuleType('stratosblocks'))
+    tmp = tempfile.mkdtemp(prefix='otc-drive-')
+    cwd = os.getcwd()
+
+    def limpa():
+        for k in guardado:
+            os.environ.pop(k, None)
+
+    def com_utilities(**attrs):
+        m = types.ModuleType('stratosblocks.utilities')
+        m.__dict__.update(attrs)
+        sys.modules['stratosblocks.utilities'] = m
+
+    try:
+        limpa()
+        DRIVE.update(raiz=os.path.join(tmp, 'efs'), pedidos=[])
+        com_utilities(get_shared_drive=_get_shared_drive)
+        raiz = otc_stratos._raiz_no_shared_drive()
+        esperado = os.path.join(tmp, 'efs', 'otc-tracker')
+        ok(raiz == esperado and os.environ.get('OTC_STRATOS_ROOT') == esperado,
+           'drive: sem a variavel, a raiz e a pasta do OTC no Shared Drive')
+        ok(os.path.isdir(esperado), 'drive: a pasta e criada')
+        ok(os.environ.get('OTC_SECRET_KEY_FILE') == os.path.join(esperado, 'secret_key.txt'),
+           'drive: a chave da sessao no drive (sobrevive ao deploy, a mesma em todo worker)')
+
+        limpa()
+        os.environ['OTC_STRATOS_ROOT'] = os.path.join(tmp, 'escolhida')
+        DRIVE['pedidos'] = []
+        raiz = otc_stratos._raiz_no_shared_drive()
+        ok(raiz == os.path.join(tmp, 'escolhida') and DRIVE['pedidos'] == [],
+           'drive: a variavel vence, e o get_shared_drive nem e chamado')
+
+        limpa()
+        os.environ['OTC_SECRET_KEY_FILE'] = '/outro/lugar.txt'
+        otc_stratos._raiz_no_shared_drive()
+        ok(os.environ.get('OTC_SECRET_KEY_FILE') == '/outro/lugar.txt',
+           'drive: OTC_SECRET_KEY_FILE definida vence')
+
+        limpa()
+        os.chdir(tmp)
+        com_utilities(get_shared_drive=lambda path, local_data_dir='data': os.path.join('data', path))
+        raiz = otc_stratos._raiz_no_shared_drive()
+        ok(raiz == os.path.join(os.path.realpath(tmp), 'data', 'otc-tracker')
+           or raiz == os.path.join(tmp, 'data', 'otc-tracker'),
+           'drive: fora do conteiner o caminho relativo vira absoluto (%s)' % raiz)
+        os.chdir(cwd)
+
+        for desc, attrs in (('sem o get_shared_drive', {}),
+                            ('get_shared_drive que levanta',
+                             {'get_shared_drive': lambda **kw: 1 / 0})):
+            limpa()
+            com_utilities(**attrs)
+            raiz = otc_stratos._raiz_no_shared_drive()
+            ok(raiz is None and 'OTC_STRATOS_ROOT' not in os.environ,
+               'drive: %s, a raiz fica no /tmp do bloco ENV:STRATOS' % desc)
+    finally:
+        os.chdir(cwd)
+        limpa()
+        for k, v in guardado.items():
+            if v is not None:
+                os.environ[k] = v
+        if util is None:
+            sys.modules.pop('stratosblocks.utilities', None)
+        else:
+            sys.modules['stratosblocks.utilities'] = util
+        if pai is None:
+            sys.modules.pop('stratosblocks', None)
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def confere_portao():
     """O portão WSGI nos três estados da subida, sem subir o app."""
     import threading
@@ -615,6 +717,7 @@ def main():
     confere_proxy()
     confere_shim()
     confere_phonebook()
+    confere_shared_drive()
     confere_portao()
     for sem_awmpy in ('0', '1'):
         r = subprocess.run([sys.executable, os.path.abspath(__file__), '--filho', sem_awmpy])
