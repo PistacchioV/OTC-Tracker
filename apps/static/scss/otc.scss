@@ -3512,7 +3512,11 @@ html .fc {
 .mark-as-read { color: var(--otc-accent-ink); }
 .error-text-alt { color: var(--otc-text-3); font-weight: 800; letter-spacing: -.04em; }
 .card-radio { position: relative; .form-check-input { position: absolute; opacity: 0; } .form-check-label { width: 100%; padding: 14px; border-radius: var(--otc-r-inner); background: var(--otc-fill-hover); cursor: pointer; transition: box-shadow var(--otc-dur-fast) var(--otc-ease); } .form-check-input:checked + .form-check-label { box-shadow: 0 0 0 2px var(--otc-accent-ink); } }
-.card-side-img { border-radius: var(--otc-r-xl) 0 0 var(--otc-r-xl); object-fit: cover; }
+// A foto ao lado do formulário das telas de login (sign-in, 2FA, lock, pedido de
+// acesso). Era do app.css, que o rebranding apagou sem trazer a imagem; URL
+// RELATIVA ao CSS, para valer também sob o prefixo do Stratos.
+.card-side-img { border-radius: var(--otc-r-xl) 0 0 var(--otc-r-xl); object-fit: cover;
+  background: url("../images/auth.jpg") center / cover no-repeat; }
 .icon-b3, .icon-intrag { display: inline-grid; place-items: center; font: 800 9px/1 var(--otc-font); letter-spacing: .02em; }
 .outlook-box, .email-app { display: flex; gap: var(--otc-gap); }
 .outlook-left-menu, .outlook-left-menu-sm { flex: none; }
