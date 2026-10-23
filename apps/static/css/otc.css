@@ -21343,6 +21343,7 @@ html .fc .fc-list-empty {
   border-radius: var(--otc-r-xl) 0 0 var(--otc-r-xl);
   -o-object-fit: cover;
      object-fit: cover;
+  background: url("../images/auth.jpg") center/cover no-repeat;
 }
 
 .icon-b3, .icon-intrag {
