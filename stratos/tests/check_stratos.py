@@ -25,7 +25,9 @@ src/apps/ — e sobe o `solution.py` com um Stratos de MENTIRA (o stratos-blocks
   4. o shim de JavaScript, no node (se houver);
   5. o `exporta_dados.py` (o pacote dos bancos para o Stratos), pelo
      `check_exporta_dados.py` — ele usa por dentro o `recover_duckdb_wal.py` da
-     dev, e um helper renomeado lá quebra a exportação sem quebrar a dev.
+     dev, e um helper renomeado lá quebra a exportação sem quebrar a dev;
+  6. a ponte do share (`ponte_share.py` + `src/ponte_comum.py`), pelo
+     `check_ponte.py`.
 
     OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python stratos/tests/check_stratos.py
 """
@@ -728,6 +730,12 @@ def main():
         if linha.startswith('FAIL'):
             print('      exporta: ' + linha)
     ok(r.returncode == 0, 'exporta_dados: o pacote dos bancos para o Stratos')
+    r = subprocess.run([sys.executable, os.path.join(AQUI, 'check_ponte.py')],
+                       capture_output=True, text=True)
+    for linha in r.stdout.splitlines():
+        if linha.startswith('FAIL'):
+            print('      ponte: ' + linha)
+    ok(r.returncode == 0, 'ponte do share: espelho, travas, alinhar e virada')
     print('\n%d falha(s)' % len(FALHAS))
     return 1 if FALHAS else 0
 

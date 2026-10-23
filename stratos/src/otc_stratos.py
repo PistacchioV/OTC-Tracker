@@ -21,7 +21,9 @@ Três coisas o OTC supõe e o Stratos não dá, e cada uma tem a sua peça aqui:
 E a rede: a saída para a internet é pelo proxy do Stratos
 (`_proxy_do_stratos`), não pelo proxy corporativo do desktop. E o disco: os
 bancos DuckDB moram no Shared Drive (EFS) da solução, que sobrevive ao deploy
-(`_raiz_no_shared_drive`), e não no disco do contêiner.
+(`_raiz_no_shared_drive`), e não no disco do contêiner; e as pastas do share
+que o app usa chegam e saem por uma PONTE com a máquina do JPM
+(`_ponte_manifestos` aqui, `stratos/ponte_share.py` lá).
 
 Este arquivo, o `solution.py` e o `run.py` existem SÓ na branch
 OTC-Tracker-Stratos; o código do app continua nascendo na dev.
@@ -173,6 +175,7 @@ def _monta(app, stratos_auth, base):
     # O primeiro da lista é o ÚLTIMO a rodar (o Flask percorre os after_request
     # de trás para a frente): a reescrita vê o corpo final.
     app.after_request_funcs.setdefault(None, []).insert(0, _prefixa_resposta(base))
+    _ponte_manifestos(app)
 
 
 # ── O portão: o que responde enquanto o OTC sobe ────────────────────────────
@@ -295,6 +298,50 @@ def _raiz_no_shared_drive():
     os.environ.setdefault('OTC_SECRET_KEY_FILE', os.path.join(raiz, 'secret_key.txt'))
     log.warning('[stratos] dados em %s (%s)', raiz, origem)
     return raiz
+
+
+def _ponte_manifestos(app):
+    """A metade da PONTE do share que roda aqui (HANDOFF §683; a regra está no
+    `ponte_comum`): uma thread escreve, por pasta, o manifesto do lado do
+    Stratos em `<raiz>/ponte/manifesto/` — caminho, mtime e tamanho de cada
+    arquivo sob o `SHARED_DRIVE_ROOT` —, que a ponte da máquina do JPM lê numa
+    chamada só. Na metade do intervalo da pasta, para a ponte achar o
+    manifesto fresco. `OTC_PONTE=0` e o `OTC_DISABLE_SCHEDULERS=1` dos testes a
+    desligam. Sem raiz no Shared Drive (o /tmp) não há ponte para quem
+    escrever, e ela não sobe."""
+    if os.getenv('OTC_PONTE', '1').strip() == '0' or \
+            os.getenv('OTC_DISABLE_SCHEDULERS', '').strip() == '1':
+        return None
+    raiz = (os.getenv('OTC_STRATOS_ROOT') or '').strip()
+    share = app.config.get('SHARED_DRIVE_ROOT')
+    if not raiz or not share:
+        log.warning('[ponte] sem OTC_STRATOS_ROOT: os manifestos da ponte nao sobem')
+        return None
+    import ponte_comum as P
+    pasta_ponte = os.path.join(raiz, 'ponte')
+    instancia = P.instancia_do_drive(pasta_ponte)
+
+    def laco():
+        proximo, avisado = {}, {}
+        while True:
+            agora = time.time()
+            for p in P.PASTAS:
+                if proximo.get(p.slug, 0) > agora:
+                    continue
+                proximo[p.slug] = agora + max(10, p.intervalo // 2)
+                try:
+                    P.escreve_manifesto(share, pasta_ponte, p, agora, instancia)
+                except Exception as e:                      # noqa: BLE001
+                    if agora - avisado.get(p.slug, 0) > 600:
+                        avisado[p.slug] = agora
+                        log.warning('[ponte] manifesto de %s falhou: %s: %s', p.slug,
+                                    type(e).__name__, e)
+            time.sleep(5)
+
+    t = threading.Thread(target=laco, name='ponte-manifesto', daemon=True)
+    t.start()
+    log.warning('[ponte] manifestos em %s (instancia %s)', pasta_ponte, instancia)
+    return t
 
 
 def _chave_de_sessao(otc, app):

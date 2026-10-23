@@ -131,6 +131,69 @@ Stratos começa com os bancos vazios, só com o que a semeadura traz.
 arquivo. Na pior hora se perde até um dia; uma cópia de hora em hora para o File
 Library (o S3, que guarda todas as versões por 70 dias) é um dos passos do §681.
 
+## A ponte do share
+
+O contêiner não enxerga o share, e as pastas dele são usadas fora do app: o
+Batch Conecta da B3 lê a `New` e devolve na `Return`, a equipe abre o
+Electronic Inventory pelo Explorer, a equipe global lê a planilha do Pending
+Confirmation. A ponte mantém essas pastas iguais no share e no
+`<raiz>/share` do Shared Drive (§683). São 16 pastas, com a lista e a regra
+em `src/ponte_comum.py`.
+
+A ponte tem duas metades:
+- **No contêiner**, uma thread (`otc_stratos._ponte_manifestos`) escreve por
+  pasta o manifesto do lado do Stratos, em `<raiz>/ponte/manifesto/`.
+- **Numa máquina da rede do JPM**, roda o `ponte_share.py`, com o Python do
+  DevShell, porque é ele que tem o `stratosblocks`. Ele lê o share e o
+  manifesto e copia pelo cliente `SharedDrive`.
+
+A tarefa agendada do Stratos também roda na nuvem, então essa metade só pode
+morar numa máquina da rede.
+
+```
+set PY=C:\Users\e930179\ds\tools\python3.13\latest\python.exe
+%PY% stratos\ponte_share.py --medir                         (arquivos e MB por pasta)
+%PY% stratos\ponte_share.py --solution-id <ID> --dry-run    (o que faria)
+%PY% stratos\ponte_share.py --solution-id <ID> --loop 20    (espelho, em laço)
+```
+
+O `<ID>` é o solution id da solução no Stratos, o mesmo do `stratos file`.
+Também pode vir da variável `OTC_PONTE_SOLUTION_ID`.
+
+- **Espelho** (o padrão, enquanto a equipe segue na instância de hoje): só do
+  share para o Stratos. **A ponte não escreve nada no share**: um arquivo do
+  Stratos em validação na `Batch Conecta\New` seria registro de verdade na B3.
+- **Virada**, quando o Stratos virar a produção, em duas etapas:
+  1. Uma vez, `--modo virada --alinhar`: o Stratos fica igual ao share, e o que
+     ele gerou na validação vai para a lixeira dele.
+  2. Depois, `--modo virada --loop 20`: os dois sentidos, com as remoções. O
+     app esvazia a `Return` depois de ler e o Conecta esvazia a `New` depois de
+     enviar, e as duas remoções chegam ao outro lado. Num conflito vence o
+     sentido da pasta: o Stratos nas de saída, o share nas outras.
+
+**Nada é apagado de verdade.** O que sai do Stratos vai para
+`<raiz>/ponte/lixeira/<dia>/`. O que sai do share vai para
+`%LOCALAPPDATA%\OTC-Tracker\ponte\lixeira\<dia>\` na máquina da ponte.
+
+Três travas param a passada da pasta:
+- muitas remoções de uma vez, mais de 10 ou de 20% da pasta (`--permitir-apagar`
+  insiste);
+- o drive do Stratos trocado ou zerado (o id do manifesto muda);
+- a virada sem o `--alinhar` antes.
+
+Uma subpasta do share que não abre (sem permissão) é pulada, e nada se decide
+dentro dela. Só roda uma ponte por vez: ela renova um aviso no drive, e uma
+segunda máquina espera.
+
+As pastas por dia (CETIP, MtM, Accrual, Intrag, Comitente) levam só os
+últimos 31 dias: o histórico de anos não serve ao app e custaria horas de
+cópia. O Electronic Inventory vai inteiro, e a primeira passada dele é a
+longa. Antes, o `--medir` diz quanto é.
+
+**Pendente:** o cadastro `cetip-files` (/mapping) guarda as cópias extras como
+`I:\CETIP_OPTIONS` e `I:\CETIP_NDF`. No Linux do Stratos isso é um caminho
+relativo, e a cópia não cai na pasta da ponte.
+
 ## Variáveis de ambiente (task definition)
 
 | Variável | Para quê |
@@ -138,6 +201,7 @@ Library (o S3, que guarda todas as versões por 70 dias) é um dos passos do §6
 | `OTC_STRATOS_ROOT` | raiz de dados e bancos. Sem ela, a ponte usa a pasta `otc-tracker` do Shared Drive (`get_shared_drive`); sem nenhum dos dois, o `/tmp`, que some a cada deploy (o log diz qual valeu: `[stratos] dados em …`) |
 | `OTC_SECRET_KEY_FILE` | onde fica a chave da sessão quando não há `SECRET_KEY`; padrão: `secret_key.txt` na raiz de dados |
 | `SECRET_KEY` | chave de sessão; vence o arquivo do drive |
+| `OTC_PONTE=0` | desliga a thread dos manifestos da ponte |
 | `OTC_TRACKER_URL` | endereço completo da solução, para os botões de e-mail |
 | `OTC_FOUR_EYES=0` | desliga o maker/checker (padrão: ligado, como na prod) |
 
@@ -152,16 +216,17 @@ O `check_stratos.py` monta o layout do destino e sobe o `solution.py` com um
 Stratos de mentira (o `stratos-blocks` é interno do JPM): os blocos DO NOT
 DELETE, a subida em segundo plano e o portão, o login (inclusive o
 `/login/callback`), o phonebook (com o do Stratos e sem nenhum), a raiz dos
-dados (Shared Drive, variável, ou `/tmp` avisando), o menu da
+dados (Shared Drive, variável, ou `/tmp` avisando), a ponte do share
+(`check_ponte.py`: espelho, travas, alinhar e virada), o menu da
 foto (Lock Screen e Log Out), o prefixo, o shim no node e a regra do scan do
 proxy. E roda o `check_exporta_dados.py`: o pacote dos bancos sem WAL, lido de
 volta pelo armazém, o banco EM USO e o `--zip`. A história de cada decisão está
-no HANDOFF, §677 a §681.
+no HANDOFF, §677 a §683.
 
 ## O que não funciona fora da rede do desktop
 
 O contêiner não enxerga o share (`\\Nawest...`): confirmações, Batch Conecta,
-CETIP e Electronic Inventory ficam sem destino. Também não há Outlook (box scan,
+CETIP e Electronic Inventory chegam e saem pela ponte (acima). Não há Outlook (box scan,
 leitura de e-mail) e a Athena pede Kerberos, que no Linux não está configurado.
 E o SMTP da rede (`mailhost.jpmchase.net`) provavelmente não responde do
 contêiner: sem ele não saem os e-mails do app nem o código do login próprio
