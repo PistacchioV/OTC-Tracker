@@ -28797,3 +28797,79 @@ um pede uma solução própria antes da virada.
 
 **Lembrete da documentação do Stratos:** `SSLError` depois do deploy se resolve
 com `stratos upgrade` (atualiza os certificados do proxy) e um deploy de novo.
+
+## §679 — Stratos: o Codex no lugar do Yahoo (em investigação, 2026-10-23)
+
+O Codex é a API de dados de mercado do JPM (FactSet, Bloomberg, posições). No
+Stratos ele pode substituir o Yahoo da Quotes. Para as ações, o usuário tem
+quase certeza; para o resto, ainda falta procurar.
+
+**O que a documentação do Codex diz (prints de 23/10/2026).**
+- **Preço:**
+  `from codex.api import Codex; Codex().fetch(campos, ids, d1, d2)` devolve um
+  DataFrame por data. Os campos de preço são `fp_open_price`, `fp_low_price`,
+  `fp_high_price`, `fp_close_price` e `fp_volume`, e o identificador segue o
+  padrão FactSet `TICKER-PAÍS` (`AAPL-US`).
+- **Busca de identificadores:** `search_identifiers(IdentifierSource.IBEX,
+  "bovespa")` acha os códigos IBEX dos índices (`IBOVESPAGRBRL0`, Gross Return em
+  BRL; `IBRXGRBRL0`…), e `IdentifierSource.FACTSET_ECON` acha as séries
+  econômicas (`US_FED_FUNDS_RATE`, `US_FED_TARGET_RATE`, `GOV_YIELD_3M` a
+  `GOV_YIELD_15Y`).
+- **No desktop** funciona como está, com o login de quem roda.
+- **Num app web do Stratos** o Codex roda em nome do usuário logado. É preciso
+  registrar OS DOIS recursos:
+
+  ```
+  stratos update --register-resource "JPMC:URI:RS-110187-116901-CODEXPRODCLIENT-PROD,JPMC:URI:RS-86370-34117-EQInvestorPlatform-PROD"
+  ```
+
+  Só o FactorStore registrado faz a chamada comum falhar com `FID is required
+  when using on_behalf_of`. O `StratosAuth(app)` obtém os tokens no LOGIN, e
+  depois basta um `Codex()` na rota.
+
+**Onde ele encaixa.** Todo uso do Yahoo passa por `quotes.fetch_ohlc(symbol,
+start, end)`, chamada pelo ATRIBUTO do módulo: a tela Quotes, as Tools (perna de
+equity do Swap Calculator, fixings das calculadoras de opção e NDF) e o Cupom
+Limpo da confirmação (`platform/confirmations.py`). O contrato da função é
+`(OHLC_COLUMNS, linhas)`: data `dd/mm/aaaa`, números já formatados (`{:,.6f}`,
+§476) e o mais recente primeiro. A ponte do Stratos pode embrulhá-la sem mexer
+na dev:
+- tenta o Codex primeiro para o símbolo que tem identificador Codex;
+- cai no Yahoo, com log, para o que não tem, para o que falha e fora de request
+  (o token é do usuário logado; rotina de fundo não tem usuário).
+
+O `Adj Close` ainda não tem campo Codex conhecido: ou se acha o ajustado, ou vai
+o Close.
+
+**O identificador é CADASTRO, não regra no código** (§2): uma coluna nova no
+`quotes-equity` (e depois no `quotes-commodity`), preenchida na PROD. Ela é a
+origem dos dados até a virada, e a migração do §678 leva a coluna junto.
+
+**O que falta descobrir:**
+- o formato que pega nas ações brasileiras (`ABEV3-BR`?);
+- o campo do fechamento ajustado;
+- os índices: o código IBEX, e se é o Gross Return ou o índice de preço que se
+  quer;
+- os futuros de commodities: o contínuo e o mês `"MY"`;
+- se há PTAX (até lá fica o BCB) e SOFR, Term SOFR, EURIBOR e IPCA para as Tools
+  (a lista FactSet econ mostra Fed Funds e Gov Yields, sem SOFR);
+- o nome do pacote pip do `codex`, para o requirements do Stratos (pelo
+  `build_requirements.py`).
+
+E, depois de registrar os recursos, é preciso um LOGIN NOVO no Stratos (janela
+anônima): o Log Out do OTC mantém a sessão do Stratos (§678), e o token só vem no
+login.
+
+**A sonda:** `stratos/sonda_codex.py` (`d81f15a4`, branch do Stratos), na máquina
+do JPM e com o python em que o Codex funciona:
+- sem argumentos, tenta 3 ativos de cada grupo da SEED do `quotes-equity`, pelo
+  palpite FactSet `TICKER-PAÍS`;
+- `--todos` tenta o cadastro inteiro;
+- `--ids` testa identificadores à mão (índices, commodities);
+- `--csv` grava o resultado.
+
+O palpite é da sonda, não do app.
+
+**De bônus:** como o Codex funciona no desktop com o login do usuário, ele
+também resolveria a Quotes da instância da equipe atrás do proxy 407 (§9, §450).
+Isso fica para decidir depois.
