@@ -3342,14 +3342,27 @@ $(document).ready(function() {
             cancelButtonColor: '#6c757d'
         }).then(function(result) {
             if (result.isConfirmed) {
+                // A linha só sai da tela DEPOIS do servidor (CLAUDE.md §8, §430): removida antes,
+                // um 404/503 a fazia sumir e voltar no recarregamento, sem aviso. Linha sem
+                // Deal não tem URL própria e vai pelo bulk-delete, que casa o par vazio.
                 var rowId = _sh(table.cell(tr[0], 3).data()) || '';
-                if (rowId) {
-                    var clientVal = _sh(table.cell(tr[0], 10).data());
-                    fetch('/api/new-deals/opt-commodities/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(clientVal), {
-                        method: 'DELETE'
-                    }).catch(function(err) { console.warn('Cache DELETE failed:', err); });
-                }
-                table.row(tr[0]).remove().draw(false);
+                var clientVal = _sh(table.cell(tr[0], 10).data());
+                var req = rowId
+                    ? fetch('/api/new-deals/opt-commodities/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(clientVal), { method: 'DELETE' })
+                    : fetch('/api/new-deals/opt-commodities/cache/bulk-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ pairs: [{ deal: '', client: clientVal }] }) });
+                req.then(function(r) {
+                    return r.json().catch(function() { return {}; }).then(function(j) {
+                        var feito = r.ok && j.success !== false && (rowId || j.deleted);
+                        if (feito) { table.row(tr[0]).remove().draw(false); return; }
+                        Swal.fire({ title: t('swal-delete-failed', 'Could not delete'),
+                                    text: (j.message || j.error || '') + ' (HTTP ' + r.status + ')',
+                                    icon: 'error', confirmButtonColor: '#dc3545' });
+                    });
+                }).catch(function(err) {
+                    Swal.fire({ title: t('swal-delete-failed', 'Could not delete'), text: String(err),
+                                icon: 'error', confirmButtonColor: '#dc3545' });
+                });
             }
         });
     });
