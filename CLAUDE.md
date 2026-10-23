@@ -77,6 +77,12 @@ OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_<nome>.py
   (MongoDB) ficou para depois da virada; a prod segue na instância da equipe
   até o Stratos estar 100%, e os passos que faltam (travas no EFS, a chegada do
   pacote sem pisar nos bancos em uso, o backup de hora em hora) estão no §681.
+  As pastas do share que o app usa chegam e saem por uma PONTE (§683):
+  `stratos/ponte_share.py` numa máquina da rede do JPM e os manifestos da
+  thread do contêiner, com a regra no `stratos/src/ponte_comum.py`. Pasta NOVA
+  do share na dev entra na lista `PASTAS` de lá, senão no Stratos ela fica
+  vazia sem erro nenhum. Até a virada a ponte é ESPELHO (só do share para o
+  Stratos) e nunca escreve no share.
 - **O bloco DEV BYPASS (`/dev-login`) do `routes.py` nunca vai para o
   repositório.** É removido antes de cada commit e restaurado depois.
 - **Nunca fixe um de-para novo no código.** Tudo que é mapeável se cadastra
