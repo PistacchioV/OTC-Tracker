@@ -28904,3 +28904,29 @@ O palpite é da sonda, não do app.
 **De bônus:** como o Codex funciona no desktop com o login do usuário, ele
 também resolveria a Quotes da instância da equipe atrás do proxy 407 (§9, §450).
 Isso fica para decidir depois.
+
+## §680 — Cabeçalho de tabela: o título empilhado em três linhas (2026-10-23)
+
+**O sintoma** (Unwinds › NDF FX, no Stratos): "praticamente não dá para ler
+nenhum" título da tabela.
+
+**A causa.** No th centralizado, o cabeçalho do DataTables 2 é o flex `título ·
+funil · ordenação`, e o `centerTitles` do `excel-filter.js` reserva à ESQUERDA do
+título a mesma largura do que está à direita dele (§603). São uns 80px de
+cromo num th. Numa tabela de muitas colunas numéricas, a coluna tem a largura do
+DADO (~130px), e o título ficava com 31px: "PRE FWD RATE", "OTC TRACKER
+RESULT", "FIRST FIXING DATE" saíam com UMA palavra por linha, em três linhas de
+11px em caixa alta. O `widenTruncated` (§591) só alargava o título CORTADO (com
+"…"), e o empilhado não corta nada. Medido na dev a 1280px, antes da correção:
+2 títulos de três linhas no Unwinds NDF FX, 3 no New Deals NDF Vanilla e 7 na
+Intrag NDF.
+
+**A correção.** O título pode quebrar (§7), mas em no máximo DUAS linhas. O
+`widenTruncated` passou a contar como falta também a diferença entre a largura
+do título e a menor largura em que o texto dele cabe em duas linhas sem partir
+palavra (`twoLineWidth`: mede cada palavra no canvas com a fonte, a caixa e o
+espaçamento computados do próprio título). Depois disso, nenhum título passa de
+duas linhas nem é cortado, e cabeçalho e corpo seguem alinhados. Foram
+conferidas seis telas: Unwinds NDF FX, New Deals NDF Vanilla, Intrag NDF,
+Reference Data, Pending Confirmation e NDF Cockpit. Vale para toda DataTable com
+funil, sem nada na página.

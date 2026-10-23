@@ -856,7 +856,10 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   título é que cede (quebra, ou "…"), palavra não se parte, e o helper
   ALARGA a coluna cujo título ficou cortado (`widenTruncated`: `sWidthOrig`
   + `adjust`, até três passadas — tabela `table-layout: fixed` ignora
-  `min-width` no th).
+  `min-width` no th) **ou EMPILHADO em mais de duas linhas** (§680): o funil,
+  a ordenação e o respiro do centro levam ~80px do th, e numa coluna numérica
+  de 130px o título ficava em 31px, uma palavra por linha. A largura de duas
+  linhas sai da fonte real (`twoLineWidth`, canvas).
   **A antiga linha de filtro por coluna (2ª linha do `<thead>`) é REMOVIDA
   pelo helper** (mesa, 29/09/2026, §597 — escondida não bastava). O DataTables
   redesenha o cabeçalho a partir do layout que leu na init (`aoHeader`, uma
