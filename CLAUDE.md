@@ -1442,7 +1442,14 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   Start de MGT) → `Notional` e `Notional × Rate`, sempre (`_conf_mgt_fx_legs`);
   **FWD Start do BANCO** → o `_conf_fx_legs`, que DIVIDE pela taxa quando o
   notional vem em BRL (mesa: "fwd start é diferente"). Não unifique: mexer no
-  `_conf_fx_legs` leva o Banco junto.
+  `_conf_fx_legs` leva o Banco junto. **No FXO e no NDF Vanilla de MGT, com
+  várias operações no documento** (mesa, 23/10/2026, §682): o par
+  `valor`/`valorEstrangeiro` é o da operação de MAIOR valor em BRL, não a soma
+  (`valor_do_maior`); a `dataVencimento` é a mais distante; e o
+  `numeroContrato` leva o acronym — `FXO_<AAAAMMDD>_<moeda>_<acronym>`,
+  `NDF_<AAAAMMDD>_<moeda>_<acronym>` —, senão dois clientes no mesmo dia e
+  moeda davam o mesmo contrato no FepWeb. Os outros documentos seguem somando
+  e com o número sem acronym.
 - **O prêmio D0 das páginas de opção é uma FAIXA, não um Swal** (§565,
   `premium-d0.js`): contada da grade a cada draw, por qualquer caminho de
   entrada; o box scan também toca o sino.

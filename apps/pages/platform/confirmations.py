@@ -724,7 +724,7 @@ def _conf_fxo_legs(deal, subj):
 
 def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
                   ccy_field='StrikeCurrency', warn_no_spot=True, legs_fn=None, ccy=None,
-                  evento='N', num_field='Deal'):
+                  evento='N', num_field='Deal', acronym='', valor_do_maior=False):
     """(numero_contrato, xml_string, warnings) do grupo de deals da confirmação.
 
     `num_field` é o campo do deal que nomeia o contrato de UMA operação: o
@@ -736,7 +736,20 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
     valorEstrangeiro = Σ notional × strike ajustado
     numeroContrato   = DealName quando a confirmação tem 1 operação
                        (Mondelez: DealName_Mercadoria); com várias,
-                       <prefixo>_YYYYMMDD_Mercadoria.
+                       <prefixo>_YYYYMMDD_Mercadoria — e, com `acronym`,
+                       <prefixo>_YYYYMMDD_Moeda_Acronym.
+
+    `acronym` (mesa, 23/10/2026; FXO e NDF Vanilla de MGT): sem ele, dois
+    clientes que fecham mais de uma operação na mesma moeda e no mesmo dia
+    davam o MESMO numeroContrato (`Opt_FXO_20261023_USD`), e o FepWeb não
+    distingue um contrato do outro. Com ele o número leva a contraparte:
+    `FXO_20261023_USD_CLIENTE1`, `NDF_20261023_USD_CLIENTE1`.
+
+    `valor_do_maior` (mesa, 23/10/2026; os mesmos dois): `valor` e
+    `valorEstrangeiro` são os da operação de MAIOR valor em BRL do grupo, não a
+    soma de todas. Os dois saem da MESMA operação, para o par ser o de um
+    contrato que existe. A `dataVencimento` é sempre a mais distante entre as
+    operações, com ou sem a flag.
     Opções de Commodities usam o mesmo contrato com tipo='OPTION' e
     prefixo='Opt_Comm' — o resto do padrão é idêntico ao NDF. O tipo vai em
     MAIÚSCULO como o `NDF`: é o que o FepWeb lê, e o `Option` com inicial
@@ -750,8 +763,11 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
     trade_dt = routes._parse_date_any(first.get('TradeDate')) or ref
     merc_tag = re.sub(r'\s+', '_', str(merc or '').strip().upper())
 
+    acr_tag = re.sub(r'\s+', '_', str(acronym or '').strip().upper())
     if len(picked) > 1:
         numero = '{}_{}_{}'.format(prefixo, trade_dt.strftime('%Y%m%d'), merc_tag)
+        if acr_tag:
+            numero = '{}_{}'.format(numero, acr_tag)
     else:
         numero = str(first.get(num_field) or '').strip()
         if not numero and num_field != 'Deal':
@@ -776,6 +792,7 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
 
     valor = 0.0
     valor_estr = 0.0
+    maior = None       # (valor em BRL, valor estrangeiro) da maior operação
     venc = None
     for deal, subj in picked:
         # O vencimento vem ANTES de qualquer `continue`: ele não depende do
@@ -795,6 +812,8 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
                 continue
             valor_estr += legs[0]
             valor += legs[1]
+            if maior is None or legs[1] > maior[0]:
+                maior = (legs[1], legs[0])
         else:
             qty = _conf_to_float(str(deal.get('TotalNotional') or '').replace('-', ''))
             strike_adj = _conf_strike_adj(deal, subj)
@@ -811,6 +830,11 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
                     warnings.append('Operação {}: sem Spot FXRate — valor em BRL ficou igual ao '
                                     'estrangeiro.'.format(deal.get('Deal')))
             valor += leg * spot
+            if maior is None or leg * spot > maior[0]:
+                maior = (leg * spot, leg)
+
+    if valor_do_maior and maior is not None:
+        valor, valor_estr = maior
 
     cnpj_cli = re.sub(r'\D', '', str(first.get('TaxID') or ''))
     if len(cnpj_cli) != 14:
