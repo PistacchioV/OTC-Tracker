@@ -29165,6 +29165,11 @@ Uma ponte por vez (o aviso `<raiz>/ponte/ponte.json`, 3 min).
 pastas temporárias, o `DriveLocal` no lugar do `DriveHttp`, o manifesto pela
 mesma função da thread e o relógio do teste.
 
+**O ambiente é obrigatório** (`--env dev|prod`, os nomes do `stratos file`):
+cada ambiente do Stratos tem o SEU Shared Drive, e a solução ainda está no dev.
+A primeira versão supunha `PRODUCTION` — a ponte gravaria num drive que o app
+não lê, sem erro nenhum.
+
 **O que falta descobrir na máquina do JPM:**
 - o `solution_id` do cliente `SharedDrive`;
 - como o `load` diz "não existe": a ponte lê 404/not found na mensagem;
