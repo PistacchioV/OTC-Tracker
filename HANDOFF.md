@@ -29091,3 +29091,88 @@ MESMO filtro `SWAP` e recebeu a mesma correção, sem amostra do arquivo dela.
 `check_intrag_api.py` §7b monta a boleta com a linha real e uma recompra do
 mesmo B3 ID antes dela; no código antigo dá as três falhas que a tela mostrava.
 
+## §683 — Stratos: a ponte do share (2026-10-23)
+
+**Por que existe.** O contêiner do Stratos não enxerga o share
+(`\\Nawest...\lac\BRA\intra`), e as pastas dele são usadas fora do app — o
+usuário confirmou ("o otc tracker e demais ramificações são utilizadas"): o
+Batch Conecta da B3 lê a `New` e devolve na `Return`, a equipe abre o
+Electronic Inventory pelo Explorer, a equipe global lê a planilha do Pending
+Confirmation. No Stratos o `SHARED_DRIVE_ROOT` do OTC é `<raiz>/share`, dentro
+do Shared Drive (§681), e sem ponte tudo o que o app gera ficaria invisível, e
+tudo o que chega ao share não chegaria ao app — sem erro nenhum (a tela do
+Electronic Inventory abriria sem contraparte, o TED sem SSI, a B3 sem arquivo).
+
+**O inventário** (16 pastas, todas pendurando do `SHARED_DRIVE_ROOT`; a lista
+mora em `stratos/src/ponte_comum.PASTAS`, com o sentido e o intervalo de
+cada uma):
+- de ENTRADA (alguém põe, o app lê e às vezes apaga): `Batch Conecta/Return`
+  (lida e esvaziada por SEIS rotinas, cada uma com a sua regra — New Deals, os
+  swaps, Unwinds, Intrag, Save CETIP), `Settlements`, `Settlement/OTM`,
+  `Alteryx/Batimento CGD/Input`;
+- de SAÍDA (o app grava para alguém pegar): `Batch Conecta/New` (o Conecta da
+  produção), `Intrag`, `CETIP Files/Position Files`, `Reconciliations/Comitente`,
+  `Movimento/Pending Confirmation`, `CETIP_OPTIONS`, `CETIP_NDF`;
+- dos DOIS: `Electronic Inventory`, `Reconciliations/payrec`,
+  `Regulatory/MTM`, `Regulatory/Accrual`, `Alteryx/Posição B3/ARQUIVOS CETIP`.
+Ficam de fora o `link.txt` (o Stratos tem o próprio deploy) e os bancos (o
+pacote do §681). As pastas por dia levam só os últimos 31 dias.
+
+**O desenho.** Duas metades, e a regra numa só (`ponte_comum.py`, puro, em
+`stratos/src/`, que o `stratos-sync` leva ao contêiner):
+- no contêiner, a thread `ponte-manifesto` (`otc_stratos._ponte_manifestos`)
+  escreve por pasta o MANIFESTO do lado do Stratos (caminho, mtime, tamanho),
+  na metade do intervalo da pasta. Listar o drive pela API HTTP seria uma
+  chamada por subpasta, e o Electronic Inventory tem milhares;
+- numa máquina da rede do JPM, o `stratos/ponte_share.py` (Python do DevShell,
+  que tem o `stratosblocks`) lista o share, lê o manifesto numa chamada, decide
+  pelo `plano` e copia pelo cliente `SharedDrive` (HTTP). A tarefa agendada do
+  Stratos roda na nuvem, então esta metade não tem outro lugar.
+
+**A regra.** Cada lado é comparado com a BASE — o que os dois tinham na última
+passada, guardada na máquina da ponte —, nunca um lado com o outro: os
+relógios do share e do contêiner não são o mesmo. O que a ponte sobe fica
+PENDENTE até o manifesto mostrar o arquivo com o mesmo tamanho (até 15 min).
+Arquivo mexido há menos de 10 s está sendo escrito e espera. O mesmo arquivo é
+comparado pela chave casefold + NFC: o share é Windows (caixa não importa) e o
+EFS é Linux, e o `ç` de `Posição` chega nas duas grafias do Unicode.
+
+**Os modos.**
+- **Espelho** (o padrão, enquanto a equipe segue na instância de hoje): só do
+  share para o Stratos, e a ponte não escreve NADA no share (ela recusa até a
+  ação, além de não planejá-la). É a trava que importa: um arquivo do Stratos
+  em validação na `Batch Conecta\New` seria registro de verdade na B3. O que o
+  app apaga no drive (o retorno consumido) não é subido de novo.
+- **Alinhar** (uma vez, ao virar): o drive fica igual ao share, e o que só
+  existe no drive vai para a lixeira dele. Sem isso a primeira passada da
+  virada levaria ao share tudo o que o Stratos gerou na validação.
+- **Virada**: os dois sentidos com as remoções — o app esvazia a `Return` e o
+  Conecta esvazia a `New`, e as duas remoções chegam ao outro lado. Conflito
+  (mudou dos dois lados) pelo sentido: na de saída vence o Stratos, nas outras
+  o share. Recusa rodar sem o alinhar.
+
+**As travas.** Nada se apaga de verdade: do drive para `<raiz>/ponte/lixeira/
+<dia>/`, do share para `%LOCALAPPDATA%\OTC-Tracker\ponte\lixeira\<dia>\`.
+Passada com mais remoções que `max(10, 20% da pasta)` é recusada
+(`--permitir-apagar`) — é mais provável um lado vazio por engano do que a
+rotina do dia. Drive trocado ou zerado (o id `<raiz>/ponte/instancia` do
+manifesto muda) para a pasta até um alinhar. Subpasta do share que não abre é
+pulada, e nada se decide dentro dela (uma contraparte bloqueada não para o
+Electronic Inventory inteiro); a raiz da pasta que não abre para a passada.
+Uma ponte por vez (o aviso `<raiz>/ponte/ponte.json`, 3 min).
+
+`stratos/tests/check_ponte.py` (no `check_stratos.py`): share e drive como
+pastas temporárias, o `DriveLocal` no lugar do `DriveHttp`, o manifesto pela
+mesma função da thread e o relógio do teste.
+
+**O que falta descobrir na máquina do JPM:**
+- o `solution_id` do cliente `SharedDrive`;
+- como o `load` diz "não existe": a ponte lê 404/not found na mensagem;
+- se o `save` cria as pastas: a ponte chama o `create_folder` antes;
+- o tamanho do Electronic Inventory: o `ponte_share.py --medir` responde.
+
+**Pendente no cadastro:** o `cetip-files` guarda as cópias extras como
+`I:\CETIP_OPTIONS`/`I:\CETIP_NDF`. No Linux do Stratos é caminho RELATIVO, e
+a cópia não cai na pasta da ponte. O certo é a coluna pendurar do
+`SHARED_DRIVE_ROOT`, não a letra do drive.
+
