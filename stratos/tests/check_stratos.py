@@ -8,10 +8,16 @@ src/apps/ — e sobe o `solution.py` com um Stratos de MENTIRA (o stratos-blocks
   1. os blocos DO NOT DELETE do solution.py e do run.py são os do template, o
      requirements.txt gerado está em dia e nada cita o proxy on-premise que o
      pre-push scan do `stratos push` recusa;
-  2. o SSO: sem identidade é 403; o master entra num banco vazio; quem não tem
-     cadastro vira pedido de acesso; trocar de SID troca a sessão; o Lock
+  2. a subida e o SSO: o import do solution.py volta na hora, e o portão
+     responde o health check, a página "starting" e o erro de uma subida que
+     quebrou; sem identidade é 403; o master entra num banco vazio; quem não
+     tem cadastro vira pedido de acesso; trocar de SID troca a sessão; o Lock
      Screen trava e o SID do SSO destrava; o Logout para na tela de saída sem
-     derrubar o login do Stratos;
+     derrubar o login do Stratos; o phonebook: as formas da resposta do
+     `get_phonebook_data([sid])` (registro de OUTRO SID levanta); com ele, o
+     `awmpy` é a casca dele, o pedido de acesso nasce com nome, e-mail e cargo
+     e o master com nome e e-mail; sem phonebook nenhum, o app sobe e o pedido
+     leva o nome que o Stratos informa;
   3. o prefixo: Location, HTML (href/src/action, Speculation Rules), estático,
      cookie no caminho da solução, o shim na página e no /sw.js;
   4. o shim de JavaScript, no node (se houver);

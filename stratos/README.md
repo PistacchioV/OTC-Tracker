@@ -14,6 +14,7 @@ que está listado abaixo existe apenas nesta branch.
 | `apps/config.py` (bloco `ENV:STRATOS`) | — | caminhos de dados no contêiner |
 | `stratos-sync.bat` | — | copia o que mudou para o repositório do Stratos |
 | `stratos/exporta_dados.py` | — | tira do share a cópia dos bancos que vai para o Stratos |
+| `stratos/sonda_codex.py` | — | confere, na máquina do JPM, se o Codex responde pelos ativos da seed do `quotes-equity`, para saber se ele pode tomar o lugar do Yahoo na Quotes do Stratos (§679) |
 | `stratos/build_requirements.py`, `stratos/tests/` | — | gerador e verificação |
 
 Dockerfile, terraform, Jenkinsfile, jules, `tests/` e o `favicon.ico` são do
@@ -112,15 +113,22 @@ Ficam de fora: sobras (`.lock`, `_recuperado/`, `.corrupt-*`), `translations/`,
 que vem com o código, e o JSON legado em disco, isto é, o histórico de mais de 12
 meses que só existe como arquivo (§434). `--com-json-legado` leva o legado junto.
 
-**O lado do Stratos ainda não existe:** depende de onde o contêiner guarda dado
-de forma persistente (ver as variáveis abaixo). Sem isso, o que entrar no `/tmp`
+**O lado do Stratos ainda não existe**, mas o destino está decidido (§678): os
+dados vão morar no Stratos NoSQL (MongoDB, o `NoSqlDatabase` do
+`stratosblocks`), por porte de verdade — a dev e a prod seguem no DuckDB, e o
+mesmo código vai escolher o banco pelo config. O pacote vai entrar por um
+dropzone da Database Explorer do Stratos (só do master), que confere o sha256 do
+`manifest.json`, abre cada `.db` com o duckdb do contêiner, grava no NoSQL e
+recusa pacote INCOMPLETO (passo 5). A rotina de exportação vai para um módulo do
+app, com um botão na Database Explorer da instância da equipe, e o
+`exporta_dados.py` vira casca dela (passo 1). Até lá, o que entrar no `/tmp`
 some no próximo deploy.
 
 ## Variáveis de ambiente (task definition)
 
 | Variável | Para quê |
 |---|---|
-| `OTC_STRATOS_ROOT` | raiz de dados e bancos. **Aponte para um volume persistente** — sem ela vai para o `/tmp`, que some a cada deploy |
+| `OTC_STRATOS_ROOT` | raiz de dados e bancos; sem ela vai para o `/tmp`, que some a cada deploy. Quem vai guardar os bancos é o Stratos NoSQL (o porte do §678, ainda não feito), não esta pasta |
 | `SECRET_KEY` | chave de sessão estável entre tasks e deploys |
 | `OTC_TRACKER_URL` | endereço completo da solução, para os botões de e-mail |
 | `OTC_FOUR_EYES=0` | desliga o maker/checker (padrão: ligado, como na prod) |
@@ -135,11 +143,18 @@ python stratos/build_requirements.py --check
 O `check_stratos.py` monta o layout do destino e sobe o `solution.py` com um
 Stratos de mentira (o `stratos-blocks` é interno do JPM): os blocos DO NOT
 DELETE, a subida em segundo plano e o portão, o login (inclusive o
-`/login/callback`), o prefixo, o shim no node e a regra do scan do proxy. A
-história de cada decisão está no HANDOFF, §677.
+`/login/callback`), o phonebook (com o do Stratos e sem nenhum), o menu da
+foto (Lock Screen e Log Out), o prefixo, o shim no node e a regra do scan do
+proxy. E roda o `check_exporta_dados.py`: o pacote dos bancos sem WAL, lido de
+volta pelo armazém, o banco EM USO e o `--zip`. A história de cada decisão está
+no HANDOFF, §677 a §679.
 
 ## O que não funciona fora da rede do desktop
 
 O contêiner não enxerga o share (`\\Nawest...`): confirmações, Batch Conecta,
 CETIP e Electronic Inventory ficam sem destino. Também não há Outlook (box scan,
 leitura de e-mail) e a Athena pede Kerberos, que no Linux não está configurado.
+E o SMTP da rede (`mailhost.jpmchase.net`) provavelmente não responde do
+contêiner: sem ele não saem os e-mails do app nem o código do login próprio
+(`OTC_STRATOS_SSO=0`). Cada uma dessas faltas pede uma solução própria antes de
+a equipe passar para o Stratos (§678).

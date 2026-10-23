@@ -23,8 +23,11 @@ cliente, CNPJ e operação):
         data/db/...         os bancos, um por um, já sem WAL
         data/...            o que não é banco (anexos, imagens dos tickets)
 
-`data/` é a MESMA forma do `OTC_STRATOS_ROOT` no contêiner: importar é
-extrair o pacote lá.
+`data/` tem a MESMA forma do `data/` sob o `OTC_STRATOS_ROOT` no contêiner,
+mas o banco do Stratos vai ser o Stratos NoSQL: quem vai importar o pacote é
+o dropzone da Database Explorer do Stratos (§678, passo 5 — ainda não existe),
+que confere o sha256 do manifest, abre cada `.db` com o duckdb do contêiner e
+grava no NoSQL.
 
 Banco a banco:
   1. toma a trava COMPARTILHADA da camada (a mesma das leituras do app): um
