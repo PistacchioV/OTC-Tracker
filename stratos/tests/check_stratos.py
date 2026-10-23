@@ -196,6 +196,24 @@ def confere_template():
 PROXY_TESTE = 'http://proxy-do-stratos.teste:3128'
 
 
+# O phonebook do Stratos (`stratosblocks.utilities.get_phonebook_data`): recebe
+# uma LISTA de SIDs e, com um SID, devolve o registro dele (a forma do print
+# da documentação).
+FONE = {
+    'E930179': {'standardID': 'E930179', 'nameFull': 'Giulliano Teste De Luccia',
+                'email': 'giulliano.teste@jpmorgan.com',
+                'positionName': '1542868: Trading Services Associate I (CWT515) BRAZIL BO'},
+    'A123456': {'standardID': 'A123456', 'nameFull': 'Fulana Teste',
+                'email': 'fulana.teste@jpmorgan.com', 'positionName': '1: Analyst BRAZIL BO'},
+}
+
+
+def _phonebook(sids):
+    if not isinstance(sids, list):
+        raise TypeError('get_phonebook_data espera uma lista de SIDs')
+    return dict(FONE.get(sids[0], {}))
+
+
 class _Usuario(object):
     def __init__(self, sid):
         self.sid = sid or ''
@@ -204,7 +222,7 @@ class _Usuario(object):
         self.last_name = sid or ''
 
 
-def _stubs():
+def _stubs(com_phonebook=True):
     from flask import redirect, request, session
 
     def modulo(nome, **attrs):
@@ -239,6 +257,8 @@ def _stubs():
         os.environ['HTTP_PROXY'] = os.environ['HTTPS_PROXY'] = PROXY_TESTE
 
     modulo('stratosblocks.connectivity', configure_proxy_env_vars=proxy_do_stratos)
+    if com_phonebook:
+        modulo('stratosblocks.utilities', get_phonebook_data=_phonebook)
     modulo('stratosblocks.authentication')
     modulo('stratosblocks.authentication.web', StratosAuth=StratosAuth,
            StratosDispatcherMiddleware=dispatcher)
@@ -276,9 +296,10 @@ def confere_subida(tmp, sem_awmpy):
     os.environ['SECRET_KEY'] = 'teste-stratos'
     for nome in ('QUOTES_PROXY', 'HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy'):
         os.environ.pop(nome, None)
+    # Sem phonebook: nem o do Stratos nem o `awmpy` — o app tem de subir assim.
     if sem_awmpy:
         sys.modules['awmpy'] = None   # `import awmpy` levanta ImportError
-    _stubs()
+    _stubs(com_phonebook=not sem_awmpy)
     sys.path.insert(0, src)
     os.chdir(src)
     import time
@@ -308,7 +329,10 @@ def confere_subida(tmp, sem_awmpy):
        'a primeira saida das Cotacoes e o proxy do Stratos %s' % rotas)
     if sem_awmpy:
         ok(getattr(sys.modules.get('awmpy'), '_otc_stratos_stub', False),
-           'sem awmpy instalado: o substituto entra e o app sobe')
+           'sem phonebook nenhum: o substituto entra e o app sobe')
+    else:
+        ok(getattr(sys.modules.get('awmpy'), '_otc_stratos_phonebook', False),
+           'o awmpy e a casca do phonebook do Stratos (mesmo com o awmpy instalado)')
 
     c = app.test_client()
     MASTER = {'X-Test-SID': 'E930179'}
@@ -367,6 +391,17 @@ def confere_subida(tmp, sem_awmpy):
     ok(r.status_code == 200 and b'Request Received' in r.data,
        'SID sem cadastro: pedido de acesso registrado')
     ok((routes.get_user_by_sid('A123456') or {}).get('Status') == 'Pending', 'pedido fica Pending')
+    novo, master = routes.get_user_by_sid('A123456') or {}, routes.get_user_by_sid('E930179') or {}
+    if sem_awmpy:
+        ok(novo.get('Name') == 'Teste A123456', 'sem phonebook: o nome que o Stratos informa (%r)'
+           % novo.get('Name'))
+    else:
+        ok(novo.get('Name') == 'Fulana Teste' and novo.get('Email') == 'fulana.teste@jpmorgan.com'
+           and novo.get('Role_Description') == FONE['A123456']['positionName'],
+           'pedido de acesso com nome, e-mail e cargo do phonebook do Stratos (%r)' % novo)
+        ok(master.get('Name') == FONE['E930179']['nameFull']
+           and master.get('Email') == FONE['E930179']['email'],
+           'o master tambem nasce com o phonebook (%r)' % master.get('Name'))
     r = c.get(BASE + '/api/user-home/favorites', headers=NOVO)
     ok(r.status_code == 403 and (r.get_json() or {}).get('code') == 'account_pending',
        'pendente na API: 403 account_pending')
@@ -500,6 +535,24 @@ def confere_shim():
     ok(r.returncode == 0, 'shim de JavaScript (node): ' + (r.stdout + r.stderr).strip()[:400])
 
 
+def confere_phonebook():
+    """A resposta do `get_phonebook_data([sid])` nas formas que ela pode ter."""
+    sys.path.insert(0, os.path.join(STRATOS, 'src'))
+    import otc_stratos
+    reg = otc_stratos._registro_do_phonebook
+    um = dict(FONE['A123456'])
+    ok(reg(um, 'a123456') is um, 'phonebook: o registro de um SID (a forma do print)')
+    ok(reg([FONE['E930179'], um], 'A123456') is um, 'phonebook: lista, achado pelo standardID')
+    ok(reg({'A123456': um}, 'A123456') is um, 'phonebook: dict por SID')
+    for ruim, desc in (({}, 'vazio'), ([], 'lista vazia'), (None, 'None'),
+                       (dict(FONE['E930179']), 'registro de OUTRO SID')):
+        try:
+            reg(ruim, 'A123456')
+            ok(False, 'phonebook: %s levanta' % desc)
+        except LookupError:
+            ok(True, 'phonebook: %s levanta' % desc)
+
+
 def confere_portao():
     """O portão WSGI nos três estados da subida, sem subir o app."""
     import threading
@@ -555,10 +608,11 @@ def main():
     confere_template()
     confere_proxy()
     confere_shim()
+    confere_phonebook()
     confere_portao()
     for sem_awmpy in ('0', '1'):
         r = subprocess.run([sys.executable, os.path.abspath(__file__), '--filho', sem_awmpy])
-        ok(r.returncode == 0, 'subida %s awmpy' % ('sem' if sem_awmpy == '1' else 'com'))
+        ok(r.returncode == 0, 'subida %s phonebook' % ('sem' if sem_awmpy == '1' else 'com'))
     r = subprocess.run([sys.executable, os.path.join(AQUI, 'check_exporta_dados.py')],
                        capture_output=True, text=True)
     for linha in r.stdout.splitlines():

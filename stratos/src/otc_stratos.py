@@ -14,7 +14,9 @@ Três coisas o OTC supõe e o Stratos não dá, e cada uma tem a sua peça aqui:
     um shim que corrige as URLs que o JavaScript monta depois.
   · Login próprio (SID + código por e-mail). Aqui quem autentica é o Stratos:
     `_ponte_sso` abre a sessão do OTC a partir da identidade que ele valida.
-  · `awmpy` (phonebook interno), que no servidor pode não existir.
+  · `awmpy` (phonebook interno), que no servidor não existe. O phonebook do
+    Stratos é o `stratosblocks.utilities.get_phonebook_data`, e o `awmpy`
+    vira uma casca dele (`_garante_awmpy`).
 
 E a rede: a saída para a internet é pelo proxy do Stratos
 (`_proxy_do_stratos`), não pelo proxy corporativo do desktop.
@@ -260,12 +262,31 @@ def _chave_de_sessao(otc, app):
 
 
 def _garante_awmpy():
-    """O `routes` importa o `awmpy` no topo; sem ele o app não sobe.
+    """O `routes` importa o `awmpy` no topo (sem ele o app não sobe), e é pelo
+    `awmpy.get_phonebook_data(sid)` que saem o nome, o e-mail e o cargo de quem
+    pede acesso pela primeira vez.
 
-    O phonebook só serve, com o SSO, para completar nome e e-mail de quem pede
-    acesso pela primeira vez — e o Stratos já diz o nome. O substituto responde
-    "indisponível" e o pedido de acesso segue com o que o Stratos informou.
+    No Stratos o phonebook é o `stratosblocks.utilities.get_phonebook_data`, que
+    recebe uma LISTA de SIDs e devolve as mesmas chaves (`nameFull`, `email`,
+    `positionName`, `standardID`...). O `awmpy` vira uma casca dele e o `routes`
+    não muda. Sem nenhum dos dois, o substituto responde "indisponível" e o
+    pedido de acesso segue com o nome que o Stratos informou.
     """
+    try:
+        from stratosblocks.utilities import get_phonebook_data as do_stratos
+    except ImportError:
+        do_stratos = None
+    if do_stratos is not None:
+        casca = types.ModuleType('awmpy')
+        casca._otc_stratos_phonebook = True
+
+        def get_phonebook_data(sid):
+            return _registro_do_phonebook(do_stratos([sid]), sid)
+
+        casca.get_phonebook_data = get_phonebook_data
+        sys.modules['awmpy'] = casca
+        log.warning('[stratos] phonebook pelo stratosblocks.utilities')
+        return
     try:
         import awmpy  # noqa: F401
     except ImportError:
@@ -278,6 +299,34 @@ def _garante_awmpy():
         stub.get_phonebook_data = get_phonebook_data
         sys.modules['awmpy'] = stub
         log.warning('[stratos] awmpy ausente: phonebook indisponivel')
+
+
+def _registro_do_phonebook(resposta, sid):
+    """O registro do SID na resposta do `get_phonebook_data([sid])`. Com um SID
+    só, ela vem como o próprio registro (um dict com `standardID`). Lista de
+    registros e dict por SID também são aceitos, para o dia em que a forma
+    mudar. Registro de OUTRO SID não serve: levanta, e o
+    `get_user_data_from_phonebook` do OTC loga e devolve None."""
+    alvo = str(sid or '').strip().upper()
+
+    def dele(reg):
+        return isinstance(reg, dict) and str(reg.get('standardID') or '').strip().upper() == alvo
+
+    if isinstance(resposta, dict):
+        if 'standardID' in resposta or 'nameFull' in resposta:
+            if dele(resposta) or not resposta.get('standardID'):
+                return resposta
+        else:
+            for chave, reg in resposta.items():
+                if str(chave).strip().upper() == alvo and isinstance(reg, dict):
+                    return reg
+    elif isinstance(resposta, (list, tuple)):
+        for reg in resposta:
+            if dele(reg):
+                return reg
+        if len(resposta) == 1 and isinstance(resposta[0], dict) and not resposta[0].get('standardID'):
+            return resposta[0]
+    raise LookupError('phonebook do Stratos sem registro para %s' % alvo)
 
 
 # ── Ponte de SSO: a identidade do Stratos abre a sessão do OTC ──────────────

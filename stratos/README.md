@@ -55,8 +55,10 @@ reconhece o projeto (`OTC_STRATOS_DEST` / `OTC_STRATOS_BRANCH` mudam).
 - **SSO.** Quem autentica é o Stratos. A identidade dele (o SID) abre a sessão do
   OTC; papel, páginas e status continuam saindo da tabela de usuários. SID sem
   cadastro vira pedido de acesso (aviso ao ADMIN); o master (`E930179`) é ativado
-  sozinho, porque num servidor novo a tabela nasce vazia. O IP deixa de ser
-  critério. `OTC_STRATOS_SSO=0` volta ao login
+  sozinho, porque num servidor novo a tabela nasce vazia. Nome, e-mail e cargo do
+  pedido de acesso saem do phonebook do Stratos
+  (`stratosblocks.utilities.get_phonebook_data`, as mesmas chaves do `awmpy`, que
+  não existe no contêiner e vira uma casca dele). O IP deixa de ser critério. `OTC_STRATOS_SSO=0` volta ao login
   próprio (SID + código por e-mail).
   A ponte só age nas rotas do OTC: as do Stratos — o `/login/callback`, onde a
   identidade nasce — passam intactas, e ela limpa só as chaves do OTC, nunca a
