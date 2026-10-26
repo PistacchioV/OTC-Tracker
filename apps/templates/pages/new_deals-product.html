@@ -234,6 +234,7 @@
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/file-preview.js?v={{ asset_v('js/file-preview.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/deal-cards.js?v={{ asset_v('js/deal-cards.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/swap-deal.js?v={{ asset_v('js/swap-deal.js') }}"></script>
 
 <script>
 // ── O contrato da página vem do CATÁLOGO (features/new_deals/catalog.py) ────
@@ -532,10 +533,13 @@ $(document).ready(function() {
                 var btn = document.createElement('button');
                 btn.id = 'addRow';
                 btn.className = 'btn btn-sm btn-primary bg-gradient btn-toolbar-all btn-toolbar-addrow';
-                btn.textContent = 'Add Row +';
+                // Nas telas de swap o botão diz Add Deal (equipe, 26/10/2026, §698).
+                var addDeal = PAGE.add_label === 'Add Deal';
+                btn.textContent = (addDeal ? t('nd-add-deal', 'Add Deal') : 'Add Row') + ' +';
                 btn.setAttribute('type', 'button');
                 btn.setAttribute('data-bs-toggle', 'tooltip'); btn.setAttribute('data-bs-placement', 'bottom');
-                btn.setAttribute('data-bs-title', 'Add a new row'); btn.setAttribute('data-bs-custom-class', 'tooltip-primary');
+                btn.setAttribute('data-bs-title', addDeal ? t('nd-add-deal-tip', 'Add a new deal') : 'Add a new row');
+                btn.setAttribute('data-bs-custom-class', 'tooltip-primary');
                 btnContainer.appendChild(btn);
                 btn.addEventListener('click', function(){ openModal(null); });
             }
@@ -669,6 +673,8 @@ $(document).ready(function() {
             return (a || b) ? (a || '—') + ' → ' + (b || '—') : '';
         }
         if (type === 'count') { var n = (e[field] || []).length; return n ? String(n) : ''; }
+        // a curva com o percentual e o spread: "CDI + 3.00%" (swap-deal.js, §698)
+        if (type === 'curve') return window.otcSwapCurveText ? otcSwapCurveText(e, field.slice(-1)) : String(e[field] || '');
         if (type === 'fixed') return field;
         var v = e[field] == null ? '' : String(e[field]);
         if (!v) return '';
@@ -680,6 +686,8 @@ $(document).ready(function() {
         return (spec || []).map(function(x){
             if (!x[0]) return x[1];
             var v = e[x[0]] == null ? '' : String(e[x[0]]).trim();
+            // o Type do swap é o termo da B3: na tela, no idioma dela (§698)
+            if (v && x[2] === 'swap-type' && window.otcSwapTypeLabel) v = otcSwapTypeLabel(v, t);
             return v ? x[1] + v : '';
         }).join('').replace(/^\s*·\s*/, '');
     }
@@ -687,7 +695,10 @@ $(document).ready(function() {
         el: '#swbCards', selected: selected, t: t,
         key: function(e){ return e._id; },
         title: function(e){ return cardText(e, PAGE.cards.title) || e._id; },
-        subtitle: function(e){ return cardText(e, PAGE.cards.subtitle); },
+        subtitle: function(e){
+            var b2b = PAGE.b2b && otcSwapIsB2B(e) ? 'B2B Banco × ' + (String(e.LE).toUpperCase() === 'LAWTON' ? 'Lawton' : 'Atacama') : '';
+            return [b2b, cardText(e, PAGE.cards.subtitle)].filter(Boolean).join(' · ');
+        },
         status: function(e){ return statusBadge(e.Status); },
         lob: function(e){ var l = PAGE.cards.lob || {}; return l.fixed || (l.field ? String(e[l.field] || '').trim() : ''); },
         facts: (PAGE.cards.facts || []).map(function(f){
@@ -704,6 +715,9 @@ $(document).ready(function() {
         onEdit: function(k){ if (DEALS[k]) openModal(DEALS[k]); },
         onDelete: function(k){ deleteDeals([k]); },
         onSend: function(k){ sendDeals([k]); },
+        // Create B2B (§698): só no deal contra cliente, na página que o declara
+        canB2B: function(e){ return !otcSwapIsB2B(e); },
+        onB2B: PAGE.b2b ? function(k){ createB2B(k); } : null,
         onPreview: function(k){ previewDeal(k); },
         onSelect: function(){ table.draw(false); }
     }) : null;
@@ -1063,13 +1077,29 @@ $(document).ready(function() {
         // Data: VALUE em ISO (é o que o otcDateField guarda; o altInput mostra dd/mm/aaaa).
         return lab + '<input type="text" class="form-control form-control-sm' + (SWB_DATE[f] ? ' swb-date' : '') + '" id="' + id + '" data-f="' + f + '" value="' + esc(value) + '"' + extra + (SWB_READONLY[f] ? ' readonly' : '') + '>';
     }
-    function openModal(entry) {
+    // ── Create B2B (§698): a operação do cliente com as pernas trocadas, × o
+    // fundo da LOB (CEM → Lawton, EDG → Atacama), no modal de Add para editar
+    function createB2B(k) {
+        var e = DEALS[k]; if (!e) return;
+        var d = otcSwapB2B(e);
+        if (!d) {
+            Swal.fire({ icon: 'warning', title: t('nd-card-b2b', 'Create B2B'),
+                        text: t('w_nd_b2b_no_lob', 'Set the LOB of the client deal first: CEM goes × Lawton, EDG × Atacama.'),
+                        confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+            return;
+        }
+        openModal(null, d);
+    }
+    function openModal(entry, prefill) {
         var isEdit = !!entry;
         modalEl.querySelector('.modal-title').innerHTML = isEdit
             ? '<i class="ti ti-edit me-1"></i>' + t('nd-prod-modal-edit', 'Edit Deal') + ' — ' + esc(PAGE.name) + ' · ' + esc(entry.Deal || entry.Client || '')
+            : prefill
+            ? '<i class="ti ti-arrows-exchange me-1"></i>' + t('nd-card-b2b', 'Create B2B') + ' — ' + esc(PAGE.name) + ' · ' + esc(prefill.Client || '')
             : '<i class="ti ti-plus me-1"></i>' + t('nd-prod-modal-add', 'Add Deal') + ' — ' + esc(PAGE.name);
-        var e = entry || $.extend({}, PAGE.defaults || {});
-        var html = '<div class="col-md-2">' + '<label class="form-label fs-xs text-muted mb-1" data-lang="nd-col-trade-date">Trade Date</label><input type="text" class="form-control form-control-sm swb-date" id="swb-f-TradeDate" data-f="TradeDate" value="' + esc(isEdit ? (e.TradeDate || '') : (apiRefDate() || _todayIso())) + '" placeholder="dd/mm/aaaa" autocomplete="off"></div>';
+        var e = entry || prefill || $.extend({}, PAGE.defaults || {});
+        var tdIni = isEdit || prefill ? (e.TradeDate || '') : (apiRefDate() || _todayIso());
+        var html = '<div class="col-md-2">' + '<label class="form-label fs-xs text-muted mb-1" data-lang="nd-col-trade-date">Trade Date</label><input type="text" class="form-control form-control-sm swb-date" id="swb-f-TradeDate" data-f="TradeDate" value="' + esc(tdIni) + '" placeholder="dd/mm/aaaa" autocomplete="off"></div>';
         html += '<div class="col-md-2">' + fieldInput('LE', 'LE', e.LE || 'JPM') + '</div>' +
                 '<div class="col-md-2">' + fieldInput('LOB', 'LOB', e.LOB || '') + '</div>' +
                 '<div class="col-md-2">' + fieldInput('Deal', 'Deal', e.Deal || '') + '</div>' +
@@ -1097,7 +1127,7 @@ $(document).ready(function() {
                 var cli = document.getElementById('swb-f-Client'), acc = document.getElementById('swb-f-ClientAccount'), tax = document.getElementById('swb-f-ClientTaxId');
                 if (res && res.found) {
                     var leEl = document.getElementById('swb-f-LE');
-                    if (leEl && res.le) leEl.value = res.le === 'ATACAMA' ? 'ATACAMA' : 'JPM';
+                    if (leEl && res.le) leEl.value = (res.le === 'ATACAMA' || res.le === 'LAWTON') ? res.le : 'JPM';
                     if (cli) cli.value = res.client || cli.value;
                     if (acc) acc.value = res.account || '';
                     if (tax) tax.value = res.account ? '' : (res.taxid || '');

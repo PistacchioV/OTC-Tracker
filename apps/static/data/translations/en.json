@@ -3183,5 +3183,11 @@
   "wht-s-diff-ir": "Tax Diff.",
   "map-tab-wht-codes": "WHT — Tax Codes",
   "map-tab-wht-company": "WHT — Company",
-  "map-tab-wht-nonres": "WHT — Non-Resident Counterparties"
+  "map-tab-wht-nonres": "WHT — Non-Resident Counterparties",
+  "nd-add-deal": "Add Deal",
+  "nd-add-deal-tip": "Add a new deal",
+  "nd-card-b2b": "Create B2B",
+  "w_nd_b2b_no_lob": "Set the LOB of the client deal first: CEM goes × Lawton, EDG × Atacama.",
+  "nd-swap-type-cashflow": "Cash Flow",
+  "nd-swap-type-bullet": "Bullet"
 }
