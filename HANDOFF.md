@@ -29453,3 +29453,55 @@ chamada anota o host em `prova-travas/hosts/`, e a resposta lista os vistos na
 O `check_stratos.py` cobre ainda a rota pelo app montado: 403 sem identidade e
 para quem não é master, 200 com os onze casos para o master, 400 para modo
 desconhecido.
+
+
+## §690 — Ponte do share: o caminho longo e as pastas que só descem (2026-10-26)
+
+O primeiro `--medir` na máquina do JPM respondeu duas coisas.
+
+**O Electronic Inventory parava na listagem.** `[WinError 3] The system cannot
+find the path specified` numa pasta
+`…\CITROSUCO SA AGROINDUSTRIA\Confirmations\2026\09. September\28\TERMO DE
+RESILICAO\CITROSUCO SA AGROINDUSTRIA - NACX0005 - TERMO DE RESILIÇÃO -
+20260928_files`, de ~259 caracteres. O Windows limita o caminho de uma PASTA a
+248 (o de arquivo a 260), e é com esse erro que ele responde. A cópia
+(`ponte_share._longo`) já usava a forma estendida (`\\?\UNC\…`), mas a
+listagem (`ponte_comum.lista`) abria pelo caminho comum, e a `--medir` levanta
+na primeira pasta que não abre. A regra agora é uma só, `ponte_comum.longo`,
+aplicada à BASE da listagem (os `e.path` dos filhos a herdam) e à cópia. Fora
+do Windows e em caminho relativo não muda nada. Na passada normal o mesmo erro
+não parava tudo: a pasta entrava em `pulados` e não era copiada nunca, sem
+outro sinal além do WARNING.
+
+**26 GB sem contar o EI, e 18 deles não servem ao Stratos.** Por pasta:
+- `cetip-ndf`: 10,4 GB;
+- `pending-confirmation`: 5,7 GB (11.298 arquivos);
+- `cetip-options`: 2,3 GB;
+- `mtm`, `cetip-origem`, `accrual`: 2,0 a 2,7 GB cada;
+- o resto: abaixo de 1 GB.
+
+As três primeiras são de saída que o app só GRAVA e não lê:
+- `CETIP_NDF` e `CETIP_OPTIONS` são o `EXTRA DEST` do Save CETIP Files;
+- na pasta `Movimento\Pending Confirmation` o app escreve UM arquivo (a planilha
+  do time global, `pcx`), e o resto é de outras pessoas.
+
+Pelo cliente HTTP, um arquivo por chamada, isso seria a maior parte da carga
+inicial, para um histórico que nenhuma tela abre.
+
+O sentido novo `DESCE` (`ponte_comum`) vale para as três:
+- **espelho:** nada; a pasta nem é listada (`passada` volta antes do
+  manifesto);
+- **`--alinhar`:** o que o share tem é só REGISTRADO na base (`registra`, que
+  grava como o `adota`, sem cópia). O que só o Stratos tem vai para a lixeira
+  do drive, como nas outras;
+- **virada:** a regra da SAIDA, com toda subida trocada por `registra`
+  (`_so_desce`). O que o app grava desce, conflito vence o Stratos, e o que
+  outras pessoas gravam no share fica lá sem subir.
+
+A carga inicial cai para ~8 GB mais o EI.
+
+`check_ponte.py`: os quatro casos da forma estendida (UNC, letra de drive, não
+prefixa duas vezes, fora do Windows) e o `confere_so_desce` (espelho sem ação e
+sem nada no drive, alinhar com o share intocado e a sobra da validação na
+lixeira, a planilha do app descendo, o arquivo de outra pessoa não subindo, a
+cópia extra da posição descendo).
