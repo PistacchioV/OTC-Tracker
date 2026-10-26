@@ -437,7 +437,9 @@ def _save_intrag_opt_entry(deal, is_fxo=False):
         idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
         if idx is not None:
             # Preserve lifecycle + the once-generated random numbers on re-save.
-            for k in ('status', 'maker', 'checker', 'my_number', 'cetip_number'):
+            # O `intrag_id` do Mapping Intrag ID também: o Edit da Opt Comm/FXO
+            # manda Success em qualquer edição e regrava esta linha (§696).
+            for k in ('status', 'maker', 'checker', 'my_number', 'cetip_number', 'intrag_id'):
                 if entries[idx].get(k):
                     entry[k] = entries[idx][k]
             entries[idx] = entry
@@ -453,8 +455,12 @@ def _maybe_save_intrag_opt(deal):
     if 'banco' in cl and 'morgan' in cl:
         try:
             _save_intrag_opt_entry(deal)
+            return True
         except Exception as exc:
             _R().log.error('[INTRAG OPT] save failed for deal=%r: %s', deal.get('Deal', ''), exc)
+            from apps.pages.platform import mirrors
+            return mirrors.falhou('intrag', deal.get('Deal', ''), exc)
+    return None
 
 
 def _maybe_save_intrag_fxo(deal):
@@ -464,8 +470,12 @@ def _maybe_save_intrag_fxo(deal):
     if 'banco' in cl and 'morgan' in cl:
         try:
             _save_intrag_opt_entry(deal, is_fxo=True)
+            return True
         except Exception as exc:
             _R().log.error('[INTRAG FXO] save failed for deal=%r: %s', deal.get('Deal', ''), exc)
+            from apps.pages.platform import mirrors
+            return mirrors.falhou('intrag', deal.get('Deal', ''), exc)
+    return None
 
 
 # O endereço do extrato quando o cadastro ainda não tem a linha `Intrag DCE`:

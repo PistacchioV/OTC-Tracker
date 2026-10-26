@@ -214,9 +214,12 @@ def main():
         d1_linha = [x for x in out['rows'] if x['AthenaID'] == 'STP-XE-D1-0-0'][0]
         check('a de D+1 liquida no dia que a API disse', d1_linha['SettlementDate'] == '2026-10-15',
               d1_linha['SettlementDate'])
-        pc = R._pc_find_rows(['STP-XE-10PSG8U-0-0'])
-        check('a recompra esta no Pending Confirmation', 'STP-XE-10PSG8U-0-0' in pc, sorted(pc))
-        check('e na esteira', _mc.find_row('STP-XE-10PSG8U-0-0') is not None)
+        k = domain.chave_esteira([x for x in queries.entries('2026-10-14')
+                                  if x['AthenaID'] == 'STP-XE-10PSG8U-0-0'][0])
+        pc = R._pc_find_rows([k])
+        check('a recompra esta no Pending Confirmation (UNW-…, §696)',
+              k == 'UNW-STP-XE-10PSG8U-0-0-20261014' and k in pc, (k, sorted(pc)))
+        check('e na esteira', _mc.find_row(k) is not None)
         ck = _ds.read(R._ndfc_json_path(date(2026, 10, 14))) or []
         ids = sorted(x.get('_nc_id') for x in ck if x.get('_nc_unwind'))
         check('no NDF Cockpit do dia da liquidacao', ids == ['UNW-STP-XE-10PSG8U-0-0'], ids)

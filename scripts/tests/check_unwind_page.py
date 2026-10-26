@@ -699,9 +699,12 @@ def main():
           [f['name'] for f in lote.get('failed') or []] == ['lixo.htm'], lote.get('failed'))
     check('as tres estao no arquivo-dia',
           sorted(e['AthenaID'] for e in queries.entries('2026-09-17')) == sorted(ids))
-    pc = R._pc_find_rows(ids)
-    check('as tres estao no Pending Confirmation', sorted(pc) == sorted(ids), sorted(pc))
-    check('e as tres na esteira', all(_mc.find_row(a) is not None for a in ids))
+    from apps.pages.features.unwinds import domain as _udom
+    chaves = [_udom.chave_esteira(e) for e in queries.entries('2026-09-17')]
+    pc = R._pc_find_rows(chaves)
+    check('as tres estao no Pending Confirmation (chave UNW-…, §696)',
+          sorted(pc) == sorted(chaves) and all(k.startswith('UNW-') for k in chaves), sorted(pc))
+    check('e as tres na esteira', all(_mc.find_row(a) is not None for a in chaves))
     so_lixo = cl.post('/api/unwinds/ndf/fx/import-file',
                       data={'file': [(io.BytesIO(b'<p>x</p>'), 'lixo.htm')], 'date': '2026-09-17'},
                       content_type='multipart/form-data')

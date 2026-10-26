@@ -295,6 +295,40 @@ def _api_txt(v):
     return str(v).strip()
 
 
+# A chave da recompra no Pending Confirmation e na esteira (§696). NÃO é o
+# Athena ID cru: ele é o `DEAL NAME` do trade ORIGINAL, o mesmo `Deal` com que
+# a Vanilla e a Other Publisher gravam a confirmação do contrato — com a mesma
+# chave, a recompra reescrevia a linha da original no Pending, nunca entrava na
+# esteira (a linha "já existia") e o Delete dela apagava a confirmação
+# original. O prefixo é o do Cockpit (`UNW-`); a data de LIQUIDAÇÃO separa as
+# recompras parciais do mesmo contrato e é preservada no reimport
+# (`KEEP_ON_REIMPORT`). A do catálogo chega pronta em `_mc_key` (o `_id`).
+ESTEIRA_PREFIX = 'UNW-'
+
+
+def _aaaammdd(v):
+    t = str(v or '').strip()
+    m = re.match(r'^(\d{4})-(\d{2})-(\d{2})', t)
+    if m:
+        return ''.join(m.groups())
+    m = re.match(r'^(\d{2})/(\d{2})/(\d{4})', t)
+    return (m.group(3) + m.group(2) + m.group(1)) if m else ''
+
+
+def chave_esteira(linha):
+    """A chave da recompra no Pending Confirmation e na esteira:
+    `UNW-<Athena ID>-<AAAAMMDD da liquidação>` (sem data, `UNW-<Athena ID>`)."""
+    l = linha or {}
+    pronta = str(l.get('_mc_key') or '').strip()
+    if pronta:
+        return pronta
+    aid = str(l.get('AthenaID') or '').strip()
+    if not aid:
+        return ''
+    dia = _aaaammdd(l.get('SettlementDate'))
+    return ESTEIRA_PREFIX + aid + ('-' + dia if dia else '')
+
+
 def _api_data(v):
     """`AAAA-MM-DD` (com ou sem hora) -> o ISO; outra coisa volta como veio."""
     t = str(v or '').strip()

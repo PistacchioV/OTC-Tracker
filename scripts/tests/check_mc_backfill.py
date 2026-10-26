@@ -61,8 +61,12 @@ check('nenhum source da esteira sem familia no backfill',
       sorted(R._MC_CONFIRMATION_SOURCES - sources_bf), [])
 check('nenhuma familia apontando para source que a plataforma nao conhece',
       sorted(sources_bf - R._MC_CONFIRMATION_SOURCES), [])
-check('toda familia declara a chave (deal ou b3id)',
-      sorted({cfg['key'] for cfg in BF.FAMILIES.values()}), ['b3id', 'deal'])
+check('toda familia declara a chave (deal, b3id ou a da esteira da recompra)',
+      sorted({cfg['key'] for cfg in BF.FAMILIES.values()}), ['b3id', 'deal', 'mc'])
+# A recompra é chaveada pela chave PRÓPRIA (`_mc_key`, §696): o Athena ID dela
+# é o `Deal` da operação original.
+check('as familias de recompra usam a chave da esteira',
+      sorted(f for f, cfg in BF.FAMILIES.items() if f.startswith('Unwind') and cfg['key'] != 'mc'), [])
 # O FWD Start e chaveado pelo B3 ID (`_generic_nd_pc_trigger`); com a chave
 # errada o backfill criaria a linha com o nome do deal e o mapeamento seguinte
 # criaria uma SEGUNDA linha com o B3 ID.

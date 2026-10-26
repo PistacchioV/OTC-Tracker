@@ -469,6 +469,23 @@ def add_security_headers(response):
     return response
 
 
+@blueprint.after_request
+def add_mirror_failed_header(response):
+    """A cópia para o Pending Confirmation, a esteira ou a Intrag que falhou
+    neste request vai no cabeçalho `X-OTC-Mirror-Failed` (§696), e o
+    `session-guard.js` diz na tela. Sem isto a falha só ia para o log, e a
+    tela confirmava o que não aconteceu."""
+    try:
+        if request.path.startswith('/api/'):
+            from apps.pages.platform import mirrors as _pf_mirrors
+            v = _pf_mirrors.cabecalho()
+            if v:
+                response.headers['X-OTC-Mirror-Failed'] = v
+    except Exception:
+        pass
+    return response
+
+
 @blueprint.route('/csp-report', methods=['POST'])
 def csp_report():
     """Collector for Content-Security-Policy-Report-Only violations. Report-only
