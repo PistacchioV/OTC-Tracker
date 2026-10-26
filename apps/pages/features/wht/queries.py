@@ -6,9 +6,9 @@ As FONTES são as mesmas linhas das duas telas de liquidação, nunca uma
 segunda leitura dos arquivos: o NDF Summary entrega as operações do aviso
 (`_ndfsum_collect(...)['email_trades']`, com as recompras do dia) e o Other
 Products o Trade Level (`_ops_trade_rows`: swap, termo de mercadoria e opção).
-Só entra a liquidação em que o BANCO PAGA (valor negativo, a ótica das duas
-telas): é a contraparte recebendo rendimento que gera o imposto e a linha no
-relatório do HUB.
+Só entra a liquidação em que o BANCO (ou a MGT) PAGA — valor negativo, a ótica
+das duas telas —, com ou sem imposto: a isenta também é informada ao HUB. O
+prêmio de opção entra como UMA linha com o net da contraparte no dia.
 
 O imposto de cada operação (`devido`) é o dela, ANTES do piso de R$ 1,00:
 0,005% do bruto no termo de moeda, no de mercadoria e no prêmio de opção
@@ -151,40 +151,74 @@ def ndf_rows(day, trades):
     return _ids(out)
 
 
+def _produto_ops(r):
+    prod, lob = domain.norm(r.get('product')), domain.norm(r.get('lob'))
+    if prod == 'SWAP':
+        return 'SWAP'
+    if prod in ('TERMO', 'NDF COMMODITIES'):
+        return 'NDF COMM'
+    return 'OPTION COMM' if lob == 'COMMODITIES' else 'OPTION'
+
+
 def ops_rows(day, trades):
-    """As linhas do Trade Level do Other Products que o banco paga."""
+    """As linhas do Trade Level do Other Products que o banco (ou a MGT) PAGA —
+    tenha ou não imposto: a isenta também é informada ao HUB.
+
+    O PRÊMIO de opção sai numa linha SÓ, com o NET da contraparte no dia
+    (entidade × contraparte × produto): é o caixa que liquida e é sobre ele que
+    o imposto incide (`_optadv_apply_ir`) — dois prêmios que se anulam não
+    pagam nada. Só o net em que o banco paga entra; a linha leva o id da
+    operação que mais paga, e `net_of` diz quais entraram no net."""
     R = _R()
     rate = R._NDFADV_IR_RATE
     refdata = _refdata_index()
-    out = []
+    out, premios, ordem = [], {}, []
     for r in trades or ():
         s = r.get('_settle_n')
-        if s is None or s >= 0:
+        if s is None:
+            continue
+        product = _produto_ops(r)
+        event = str(r.get('settle_type', '') or '')
+        if product in ('OPTION', 'OPTION COMM') and 'PREMIUM' in domain.norm(event):
+            k = (domain.alnum(r.get('_legal')), domain.alnum(r.get('counterparty')), product)
+            if k not in premios:
+                premios[k] = []
+                ordem.append(k)
+            premios[k].append(r)
+            continue
+        if s >= 0:
             continue
         cpty = str(r.get('counterparty', '') or '').strip()
-        prod = domain.norm(r.get('product'))
-        lob = domain.norm(r.get('lob'))
-        event = str(r.get('settle_type', '') or '')
         gross = abs(float(s))
         unknown = False
-        if prod == 'SWAP':
-            product = 'SWAP'
+        if product == 'SWAP':
             tax = r.get('_tax_n')
             unknown = tax is None
             devido = abs(float(tax)) if tax is not None else 0.0
             taxable = unknown or devido > 0
         else:
-            product = ('NDF COMM' if prod in ('TERMO', 'NDF COMMODITIES')
-                       else 'OPTION COMM' if lob == 'COMMODITIES' else 'OPTION')
-            exempt = R._ndfc_ir_exempt(cpty)
-            # Na opção só o PRÊMIO paga imposto (`_optadv_apply_ir`): exercício e
-            # recompra são liquidação isenta.
-            premio = product == 'NDF COMM' or 'PREMIUM' in domain.norm(event)
-            taxable = premio and not exempt
+            # Termo de mercadoria paga por contrato; na opção, exercício e
+            # recompra são liquidação isenta (só o prêmio paga, acima).
+            taxable = product == 'NDF COMM' and not R._ndfc_ir_exempt(cpty)
             devido = gross * rate if taxable else 0.0
         out.append(_linha(day, 'ops', len(out), r.get('internal_id'), r.get('id_b3'), product,
                           r.get('lob'), event, gross, devido, taxable, cpty,
                           refdata.get(domain.alnum(cpty), ''), r.get('_legal'), unknown))
+    for k in ordem:
+        linhas = premios[k]
+        net = sum(float(r['_settle_n']) for r in linhas)
+        if net >= 0:
+            continue
+        rep = min(linhas, key=lambda r: float(r['_settle_n']))      # a que mais paga
+        cpty = str(rep.get('counterparty', '') or '').strip()
+        gross = abs(net)
+        taxable = not R._ndfc_ir_exempt(cpty)
+        x = _linha(day, 'ops', len(out), rep.get('internal_id'), rep.get('id_b3'), k[2],
+                   rep.get('lob'), 'PREMIUM', gross, gross * rate if taxable else 0.0, taxable,
+                   cpty, refdata.get(domain.alnum(cpty), ''), rep.get('_legal'))
+        if len(linhas) > 1:
+            x['net_of'] = [str(r.get('internal_id') or r.get('id_b3') or '') for r in linhas]
+        out.append(x)
     return _ids(out)
 
 

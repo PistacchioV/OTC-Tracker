@@ -8,7 +8,7 @@
    linha que o servidor devolve; `kind` diz como a célula se desenha. #}
 {% set WHT_COLS = [
     {'name': 'Status', 'kind': 'status'},
-    {'name': 'Internal ID', 'kind': 'text'},
+    {'name': 'Internal ID', 'kind': 'id'},
     {'name': 'B3 Id', 'kind': 'text'},
     {'name': 'Product', 'kind': 'text'},
     {'name': 'LOB', 'kind': 'text'},
@@ -106,7 +106,7 @@
             <div class="d-flex align-items-center gap-2">
                 <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="wht-lbl-date">Reference date:</label>
                 <div class="date-wrap">
-                    <input type="text" id="wht-date" class="form-control form-control-sm otc-datefield" placeholder="dd/mm/aaaa" autocomplete="off">
+                    <input type="text" id="wht-date" class="form-control form-control-sm otc-datefield" placeholder="dd/mm/aaaa" autocomplete="off" value="{{ ref_date }}">
                 </div>
             </div>
             <span class="wht-dec" id="wht-dec"></span>
@@ -232,6 +232,7 @@
     </div>
 
     <div class="wht-panel">
+        <div id="wht-job"></div>
         <div id="wht-warnings"></div>
         <div class="table-responsive">
             <table id="wht-table" class="table table-hover table-sm w-100 mb-0" data-export-name="WHT">
@@ -281,7 +282,7 @@
     'use strict';
 
     var _TRANS = {
-        en: { total: 'Total', only_hub: 'Unmatched HUB', only_otc: 'Unmatched OTC', partial: 'Partial', matched: 'Matched',
+        en: { importProgress: '{done} of {total} day(s)', importBackground: 'You can close this window: the import goes on and the page refreshes when it ends.', close: 'Close', netOf: 'Net of:', total: 'Total', only_hub: 'Unmatched HUB', only_otc: 'Unmatched OTC', partial: 'Partial', matched: 'Matched',
               decendio: 'decendio', d1: '1st', d2: '2nd', d3: '3rd', payment: 'payment',
               empty: 'Nothing for this decendio yet — click Import Settlements and drop the HUB report.',
               importing: 'Importing the settlements…',
@@ -304,7 +305,7 @@
               e_hub_file_empty: 'No operation for the HUB file in this decendio (only Unmatched OTC rows, or the rows you select, go into it).',
               e_no_company: 'Legal entity without a company in the WHT — Company mapping: {les}.',
               e_no_file: 'No file was sent.' },
-        br: { total: 'Total', only_hub: 'Só no HUB', only_otc: 'Só no OTC', partial: 'Parcial', matched: 'Batido',
+        br: { importProgress: '{done} de {total} dia(s)', importBackground: 'Pode fechar esta janela: o import continua e a tela se atualiza no fim.', close: 'Fechar', netOf: 'Net de:', total: 'Total', only_hub: 'Só no HUB', only_otc: 'Só no OTC', partial: 'Parcial', matched: 'Batido',
               decendio: 'decêndio', d1: '1º', d2: '2º', d3: '3º', payment: 'recolhimento',
               empty: 'Nada neste decêndio ainda — clique em Import Settlements e solte o relatório do HUB.',
               importing: 'Importando as liquidações…',
@@ -327,7 +328,7 @@
               e_hub_file_empty: 'Nenhuma operação para o arquivo do HUB neste decêndio (entram só as linhas Só no OTC, ou as que você marcar).',
               e_no_company: 'Entidade sem empresa no cadastro WHT — Company: {les}.',
               e_no_file: 'Nenhum arquivo foi enviado.' },
-        es: { total: 'Total', only_hub: 'Solo en HUB', only_otc: 'Solo en OTC', partial: 'Parcial', matched: 'Conciliado',
+        es: { importProgress: '{done} de {total} día(s)', importBackground: 'Puede cerrar esta ventana: la importación sigue y la pantalla se actualiza al terminar.', close: 'Cerrar', netOf: 'Neto de:', total: 'Total', only_hub: 'Solo en HUB', only_otc: 'Solo en OTC', partial: 'Parcial', matched: 'Conciliado',
               decendio: 'decenio', d1: '1º', d2: '2º', d3: '3º', payment: 'pago',
               empty: 'Nada en este decenio todavía — haga clic en Import Settlements y suelte el informe del HUB.',
               importing: 'Importando las liquidaciones…',
@@ -428,6 +429,12 @@
                 if (type !== 'display') { return v; }
                 if (c.kind === 'status') { return badge(r); }
                 if (c.kind === 'ell') { return '<span title="' + esc(v) + '">' + esc(v) + '</span>'; }
+                // O prêmio de opção é UMA linha com o net do dia: o selo diz de quantas.
+                if (c.kind === 'id' && r.OTC_net_of) {
+                    var n = r.OTC_net_of.split(', ').length;
+                    return esc(v) + ' <span class="badge badge-soft-info" title="' + esc(t('netOf') + ' ' + r.OTC_net_of) +
+                           '">net ×' + n + '</span>';
+                }
                 return esc(v);
             }
         };
@@ -570,6 +577,7 @@
                   return '<div>• ' + esc(msgText(w, 'w_')) + '</div>'; }).join('') + '</div>'
             : '');
         if (j.ref) { refIso = j.ref; poeData(j.ref); }
+        if (j.import_job && j.import_job.state === 'running') { acompanha(j.import_job); } else { faixa(null); }
         kpis(j.counts);
         resumo(j.summary);
         desenha();
@@ -599,25 +607,72 @@
         if (window.Swal) { Swal.fire({ icon: 'error', title: titulo, html: html, confirmButtonColor: '#0066cc' }); }
     }
 
-    // ── Import Settlements: os dias do decêndio, das duas telas de liquidação ──
+    // ── Import Settlements: um TRABALHO em segundo plano ─────────────────────
+    // Os dias do decêndio (e os do mês que faltam, pelo piso) são coletados no
+    // servidor, vários ao mesmo tempo. A janela mostra "x de y dias" e pode ser
+    // fechada: o import segue, a faixa no topo da tabela acompanha, e a tela se
+    // redesenha sozinha no fim.
+    var acompanhando = null, janelaAberta = false;
+    function progressoTxt(job) {
+        return fill(t('importProgress'), { done: job.done || 0, total: job.total || 0 });
+    }
+    function faixa(job) {
+        $('#wht-job').html(job && job.state === 'running'
+            ? '<div class="otc-banner mb-2"><i class="ti ti-loader-2 ti-spin me-1"></i>' +
+              esc(t('importing')) + ' ' + esc(progressoTxt(job)) + '</div>' : '');
+    }
+    function fimDoImport(job) {
+        faixa(null);
+        carrega();
+        var falhas = job.failed || [];
+        var html = esc(fill(t('importSummary'), { days: job.done || 0, rows: job.rows || 0 }));
+        if (job.error) { html += '<div class="text-start mt-2 fs-xs text-danger">' + esc(job.error) + '</div>'; }
+        if (falhas.length) {
+            html += '<div class="text-start mt-2 fs-xs text-danger"><b>' + esc(t('failedDays')) + '</b><br>' +
+                falhas.map(function (f) { return esc(f.day + ' · ' + f.source + ' — ' + f.error); }).join('<br>') + '</div>';
+        }
+        if (janelaAberta && window.Swal) {
+            Swal.fire({ icon: (falhas.length || job.error) ? 'warning' : 'success', title: t('imported'), html: html,
+                        showConfirmButton: !!(falhas.length || job.error),
+                        timer: (falhas.length || job.error) ? undefined : 2200 });
+        } else if (window.otcToast) {
+            otcToast(t('imported') + ': ' + fill(t('importSummary'), { days: job.done || 0, rows: job.rows || 0 }));
+        }
+        janelaAberta = false;
+    }
+    function acompanha(job) {
+        if (!job) { return; }
+        if (job.state !== 'running') { fimDoImport(job); return; }
+        faixa(job);
+        if (janelaAberta && window.Swal && Swal.isVisible()) {
+            var el = document.getElementById('wht-job-prog');
+            if (el) { el.textContent = progressoTxt(job); }
+        }
+        clearTimeout(acompanhando);
+        acompanhando = setTimeout(function () {
+            fetch('/api/wht/import-status?date=' + encodeURIComponent(dataAtual()), { credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (j) { acompanha(j && j.job); })
+                .catch(function () { acompanha(job); });
+        }, 2500);
+    }
     $('#wht-import-st').on('click', function () {
-        carregando(t('importing'), t('importingTxt'));
         fetch('/api/wht/import-settlements', {
             method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ date: dataAtual() })
         }).then(function (r) { return r.json(); }).then(function (j) {
             if (!j || !j.success) { throw new Error(errText(j)); }
-            pinta(j);
-            var im = j.imported || {};
-            var html = esc(fill(t('importSummary'), { days: (im.days || []).length, rows: im.rows || 0 }));
-            if ((im.failed || []).length) {
-                html += '<div class="text-start mt-2 fs-xs text-danger"><b>' + esc(t('failedDays')) + '</b><br>' +
-                    im.failed.map(function (f) { return esc(f.day + ' · ' + f.source + ' — ' + f.error); }).join('<br>') + '</div>';
-            }
+            janelaAberta = true;
             if (window.Swal) {
-                Swal.fire({ icon: (im.failed || []).length ? 'warning' : 'success', title: t('imported'), html: html,
-                            showConfirmButton: !!(im.failed || []).length, timer: (im.failed || []).length ? undefined : 2200 });
+                Swal.fire({ title: t('importing'),
+                            html: '<div class="spinner-border text-primary mb-2" role="status"></div><div>' +
+                                  esc(t('importingTxt')) + '</div><div class="mt-2 fw-semibold" id="wht-job-prog">' +
+                                  esc(progressoTxt(j.job)) + '</div><div class="mt-1 fs-xs text-muted">' +
+                                  esc(t('importBackground')) + '</div>',
+                            showConfirmButton: true, confirmButtonText: t('close'), confirmButtonColor: '#0066cc' })
+                    .then(function () { janelaAberta = false; });
             }
+            acompanha(j.job);
         }).catch(function (e) { falha(t('importFail'), esc(String(e && e.message || e))); });
     });
 
@@ -697,6 +752,9 @@
         else if (el) { el.value = iso; }
     }
     if (window.otcDateField) { otcDateField('#wht-date'); }
+    // A data do link (Intraday Monitor, favorito) vence o D-1 do servidor.
+    var doLink = window.otcLinkIso && window.otcLinkIso();
+    if (doLink) { poeData(doLink); }
 
     $(carrega);
 })(jQuery);
