@@ -1264,12 +1264,25 @@ var OTCFileUpload = (function () {
                     newData.id   = existingId;
                     patchUrl     = cacheEndpoint + '/' + existingId;
                 }
+                // A grade já mostra o Amend: se o servidor não gravar, ela volta
+                // ao que era e o lote avisa (§685) — antes ficava só no console,
+                // e o recarregamento desmentia a tela.
+                var _antes = existingRowData.slice();
                 fetch(patchUrl, {
                     method: 'PATCH', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(patchData)
                 }).then(function(r) {
-                    if (!r.ok) console.error('OTCFileUpload: cache PATCH failed', r.status, r.statusText, patchUrl);
-                }).catch(function (err) { console.error('OTCFileUpload: cache PATCH error', err); });
+                    return r.json().catch(function () { return {}; }).then(function (j) {
+                        if (r.ok && j.success !== false) return;
+                        existingRowApi.data(_antes);
+                        tableInstance.draw(false);
+                        importFalhou(dealName, (j.message || j.error || r.statusText) + ' (HTTP ' + r.status + ')');
+                    });
+                }).catch(function (err) {
+                    existingRowApi.data(_antes);
+                    tableInstance.draw(false);
+                    importFalhou(dealName, String(err && err.message || err));
+                });
 
             } else {
                 // ── NEW ROW: deal not in the GRID ────────────────────────────
@@ -1292,11 +1305,15 @@ var OTCFileUpload = (function () {
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify(payload)
         }).then(function (r) {
-            if (!r.ok) {
-                console.error('OTCFileUpload: cache POST failed', r.status, r.statusText, newData.Deal);
+            return r.json().catch(function () { return {}; }).then(function (j) {
+                if (r.ok && j.success !== false) return j;
+                // não gravou: a linha sai da grade, em vez de ficar como se
+                // tivesse entrado (§685)
+                rowApi.remove();
+                tableInstance.draw(false);
+                importFalhou(newData.Deal, (j.message || j.error || r.statusText) + ' (HTTP ' + r.status + ')');
                 return null;
-            }
-            return r.json();
+            });
         }).then(function (res) {
             if (!res || !res.result || res.result === 'new') return;
             // Já estava gravada: a linha da grade mostra o que ficou no banco.
@@ -1308,8 +1325,28 @@ var OTCFileUpload = (function () {
             rowApi.data(newRow);
             tableInstance.draw(false);
         }).catch(function (err) {
-            console.error('OTCFileUpload: cache POST error', err);
+            rowApi.remove();
+            tableInstance.draw(false);
+            importFalhou(newData.Deal, String(err && err.message || err));
         });
+    }
+
+    // As falhas de UM lote do import num aviso só (cada e-mail é um pedido).
+    var _importFalhas = [], _importFalhasT = null;
+    function importFalhou(deal, motivo) {
+        console.error('OTCFileUpload: import NOT saved', deal, motivo);
+        _importFalhas.push({ deal: deal || '—', motivo: motivo });
+        clearTimeout(_importFalhasT);
+        _importFalhasT = setTimeout(function () {
+            var l = _importFalhas.splice(0);
+            if (!l.length || typeof Swal === 'undefined') return;
+            var tt = window.otcNdT || function (k) { return k; };
+            Swal.fire({ icon: 'error', title: tt('t_save'), confirmButtonColor: '#dc3545',
+                        html: '<ul class="text-start mb-0">' + l.slice(0, 15).map(function (x) {
+                            return '<li><b>' + String(x.deal).replace(/</g, '&lt;') + '</b><br><small>' +
+                                   String(x.motivo).replace(/</g, '&lt;') + '</small></li>';
+                        }).join('') + (l.length > 15 ? '<li>…</li>' : '') + '</ul>' });
+        }, 400);
     }
 
     function processEmailFile(file, tableInstance, assetsRoot, makerSid, cacheEndpoint, rowLayout) {

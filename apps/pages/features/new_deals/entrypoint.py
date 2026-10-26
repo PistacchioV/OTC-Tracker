@@ -81,6 +81,16 @@ def _grava_mapeamento(finder, deal_text, client_name, updates):
     with _R()._cache_lock:
         try:
             deals_list = _store.read(file_path)
+            # O índice do finder é da leitura MEMOIZADA: com o dia mudado no meio
+            # (a instância vizinha inseriu ou apagou uma linha), o B3 ID caía na
+            # operação do lado. A linha se acha de novo na leitura fresca.
+            deal_k, client_k = _nd_par(deal_text, client_name)
+            idx = next((i for i, d in enumerate(deals_list)
+                        if _nd_casa(d, deal_k, client_k)), None)
+            if idx is None:
+                _R().log.warning('[MAPPING-B3] linha SUMIU do arquivo-dia entre a busca e a '
+                                 'gravação: deal=%r client=%r em %s', deal_text, client_name, file_path)
+                return False, None, 'row_not_found'
             deals_list[idx].update(updates)
             _R()._atomic_write_json(file_path, deals_list)      # funil (§335)
             return True, deals_list[idx].copy(), ''
@@ -108,9 +118,38 @@ def _import_resposta(deals, data, base_dir, suffix, file_path):
 # passava por cima. Swap Bullet/Cashflow, Unwinds e Intrag já conferem aqui.
 _ND_FINAL_STATUSES = ('Sent', 'Success')
 _ND_BACK_STATUSES = ('New', 'Pending', 'Approved')
+# O que não é DADO da operação num PATCH: estado e carimbos.
+_ND_GUARD_META = ('Status', 'Maker', 'Checker', '_client')
 
 
-def _nd_guard_updates(deal, updates, sid):
+def _nd_edit_de_registrada(deal, upd, product):
+    """O Save do modal de Edit numa linha JÁ ENVIADA (Sent/Success).
+
+    O modal manda `Status: 'Pending'` junto com os campos, e a trava abaixo o
+    recusava como `status_regression` — o 409 da aba velha. A tela não lia a
+    resposta e dizia "Saved": a edição sumia no recarregamento (o "dá erro ou
+    não faz nada" das Opt Comm na prod, 26/10/2026). Uma edição não é aba
+    velha: é a régua do Amend da API (`_nd_api_amend`), a MESMA função —
+    mudança ECONÔMICA devolve a operação à fila como `Amend` (de onde ela
+    volta ao 4-olhos e à B3), mudança só cosmética mantém o status."""
+    from apps.pages.platform import new_deals as _pf_nd
+    dados = {k: v for k, v in upd.items() if k not in _ND_GUARD_META}
+    antes = dict(deal or {})
+    depois = dict(antes, **dados)
+    mudou = [k for k, v in dados.items()
+             if str(antes.get(k, '') or '').strip() != str(v or '').strip()]
+    economico = any(_pf_nd._nd_amend_is_economic(
+        k, str(antes.get(k, '') or '').strip(), str(dados[k] or '').strip(),
+        antes, depois, product) for k in mudou)
+    if economico:
+        upd['Status'] = 'Amend'
+        upd['AmendChanged'] = sorted(set(antes.get('AmendChanged') or []) | set(mudou))
+    else:
+        upd.pop('Status', None)
+    return upd
+
+
+def _nd_guard_updates(deal, updates, sid, product=''):
     """(updates saneados, código de recusa ou '').
 
     - `Maker`/`Checker` não-vazios são da SESSÃO (vazio segue vazio: limpar é
@@ -119,7 +158,10 @@ def _nd_guard_updates(deal, updates, sid):
       botão Confirm (New/Amend → Approved segue livre, §540);
     - Sent/Success não voltam a New/Pending/Approved (`status_regression`): é
       a aba aberta antes do envio gravando o status que ela ainda mostra. O
-      `Amend` passa — é o caminho do dado econômico."""
+      `Amend` passa — é o caminho do dado econômico. A exceção é o Save do
+      modal de Edit (`Pending` COM campos de dado): ele segue a régua do Amend
+      (`_nd_edit_de_registrada`). `product` é a chave do `_GENERIC_ND_PRODUCTS`
+      (o Strike do FWD Start é cosmético)."""
     sid = str(sid or '').strip()
     upd = dict(updates or {})
     for k in ('Maker', 'Checker'):
@@ -129,6 +171,8 @@ def _nd_guard_updates(deal, updates, sid):
     atual = str((deal or {}).get('Status', '') or '').strip()
     if novo and novo != atual:
         if atual in _ND_FINAL_STATUSES and novo in _ND_BACK_STATUSES:
+            if novo == 'Pending' and any(k not in _ND_GUARD_META for k in upd):
+                return _nd_edit_de_registrada(deal, upd, product), ''
             return None, 'status_regression'
         if novo == 'Approved' and atual == 'Pending':
             maker = str((deal or {}).get('Maker', '') or '').strip().upper()
@@ -146,6 +190,231 @@ _ND_GUARD_HTTP = {
 def _nd_guard_response(code):
     status, msg = _ND_GUARD_HTTP[code]
     return jsonify({'success': False, 'error': code, 'message': msg}), status
+
+
+# ── O veredito sai da GRAVAÇÃO (26/10/2026, HANDOFF §685) ────────────────────
+# As quatro famílias (Opt Comm, Opt FXO, NDF Comm e o NDF genérico) tinham cada
+# uma a sua cópia de bulk-delete, bulk-patch, envio e mapping, e as quatro
+# respondiam `success` dizendo só QUANTOS — a tela tirava da grade, pintava e
+# anunciava tudo o que tinha pedido. Aqui a resposta diz O QUE: par a par o
+# que foi feito, o que não foi achado e o que foi recusado, e a tela só mexe na
+# linha que o servidor confirmou.
+
+def _nd_par(deal, client):
+    return (str(deal or '').strip(), str(client or '').strip())
+
+
+def _nd_casa(d, deal, client):
+    """A linha `d` é o (Deal, Client) pedido? Trim dos dois lados; `client`
+    vazio casa qualquer cliente (o contrato do bulk-patch)."""
+    if not isinstance(d, dict):
+        return False
+    if str(d.get('Deal') or '').strip() != deal:
+        return False
+    return not client or str(d.get('Client') or '').strip() == client
+
+
+def _nd_le_dia(fp):
+    """O arquivo-dia de quem vai GRAVAR, sob a trava: ocupado, ilegível ou
+    corrompido SOBE. Lido como `[]`, a gravação seguinte escrevia o dia sem as
+    outras linhas (CLAUDE.md §548)."""
+    deals = _store.read(fp)
+    return deals if isinstance(deals, list) else [deals]
+
+
+def _nd_bulk_delete(finder, pairs, label):
+    pares = []
+    for p in pairs or []:
+        t = _nd_par(p.get('deal'), p.get('client'))
+        if t not in pares:
+            pares.append(t)
+    por_arquivo, nao_achados = {}, []
+    for deal, client in pares:
+        fp, _ = finder(deal, client)
+        if fp:
+            por_arquivo.setdefault(fp, []).append((deal, client))
+        else:
+            nao_achados.append((deal, client))
+    apagados, feitos = 0, []
+    for fp, alvo in por_arquivo.items():
+        with _R()._cache_lock:
+            deals = _nd_le_dia(fp)
+            ficam, achou = [], set()
+            for d in deals:
+                t = _nd_par(d.get('Deal'), d.get('Client')) if isinstance(d, dict) else None
+                if t in alvo:
+                    achou.add(t)
+                    continue
+                ficam.append(d)
+            if len(ficam) != len(deals):
+                _R()._atomic_write_json(fp, ficam)
+            apagados += len(deals) - len(ficam)
+        feitos.extend(t for t in alvo if t in achou)
+        nao_achados.extend(t for t in alvo if t not in achou)
+    if apagados > 0:
+        _R()._create_notification(
+            session.get('user_sid', ''), session.get('user_name', ''), 'Bulk Delete', label,
+            str(apagados) + ' deal' + ('s' if apagados != 1 else '') + ' deleted')
+    return jsonify({'success': True, 'deleted': apagados,
+                    'done': [{'deal': d, 'client': c} for d, c in feitos],
+                    'not_found': [{'deal': d, 'client': c} for d, c in nao_achados]})
+
+
+def _nd_bulk_patch(finder, patches, label, product='', ajusta=None, depois=None):
+    """`ajusta(linha)` reordena a linha gravada (FXO); `depois(linha)` roda FORA
+    da trava para cada linha que virou Success (Pending Confirmation)."""
+    sid = session.get('user_sid', '')
+    por_arquivo, nao_achados = {}, []
+    for p in patches or []:
+        deal, client = _nd_par(p.get('deal_id'), p.get('client'))
+        upd = p.get('updates') or {}
+        if not deal or not upd:
+            nao_achados.append((deal, client))
+            continue
+        fp, _ = finder(deal, client)
+        if fp:
+            por_arquivo.setdefault(fp, []).append((deal, client, upd))
+        else:
+            nao_achados.append((deal, client))
+    feitos, recusados, sucessos = [], [], []
+    for fp, ops in por_arquivo.items():
+        with _R()._cache_lock:
+            deals = _nd_le_dia(fp)
+            mudou = False
+            for deal, client, upd in ops:
+                idxs = [i for i, d in enumerate(deals) if _nd_casa(d, deal, client)]
+                if not idxs:
+                    nao_achados.append((deal, client))
+                    continue
+                for idx in idxs:
+                    u, recusa = _nd_guard_updates(deals[idx], upd, sid, product)
+                    if recusa:
+                        recusados.append({'deal_id': deal, 'client': client, 'error': recusa})
+                        continue
+                    deals[idx].update(u)
+                    if ajusta:
+                        deals[idx] = ajusta(deals[idx])
+                    mudou = True
+                    feitos.append({'deal_id': deal, 'client': client,
+                                   'status': deals[idx].get('Status', '')})
+                    if str(u.get('Status', '')) == 'Success':
+                        sucessos.append(deals[idx].copy())
+            if mudou:
+                _R()._atomic_write_json(fp, deals)
+    if depois:
+        for d in sucessos:
+            depois(d)
+    if feitos:
+        _R()._create_notification(
+            session.get('user_sid', ''), session.get('user_name', ''), 'Bulk Update', label,
+            str(len(feitos)) + ' deal' + ('s' if len(feitos) != 1 else '') + ' updated')
+    return jsonify({'success': True, 'updated': len(feitos), 'done': feitos,
+                    'refused': recusados,
+                    'not_found': [{'deal_id': d, 'client': c} for d, c in nao_achados]})
+
+
+# O ENVIO à B3 confere no SERVIDOR e marca `Sent` no MESMO pedido. A tela
+# mandava o arquivo e depois um PATCH solto (`.catch(console.warn)`): com o
+# PATCH recusado ou o banco ocupado, o arquivo ia para a B3, a linha ficava
+# `Approved` e o próximo Send registrava a operação DE NOVO. E o status que a
+# tela conferia era o dela — uma linha que outro usuário editou (Pending no
+# banco) ia ao arquivo sem a segunda aprovação.
+_ND_ENVIAVEL = ('Approved', 'Error')
+
+
+def _nd_conferir_envio(finder, deals, sid):
+    """Recusas antes de qualquer arquivo: `[{deal, client, error, status}]`."""
+    recusas = []
+    for d in deals or []:
+        if str(d.get('Status', '') or '').strip() == 'Canceled':
+            continue                    # o gerador já pula; não é operação a marcar
+        deal, client = _nd_par(d.get('Deal'), d.get('Client'))
+        fp = finder(deal, client)[0] if deal else None
+        linha = None
+        if fp:
+            linha = next((x for x in _nd_le_dia(fp) if _nd_casa(x, deal, client)), None)
+        if linha is None:
+            recusas.append({'deal': deal, 'client': client, 'error': 'not_found', 'status': ''})
+            continue
+        status = str(linha.get('Status', '') or '').strip()
+        if status not in _ND_ENVIAVEL:
+            recusas.append({'deal': deal, 'client': client, 'error': 'not_sendable',
+                            'status': status})
+        elif _authz.is_own_change(str(linha.get('Maker', '') or '').strip().upper(), sid):
+            recusas.append({'deal': deal, 'client': client, 'error': 'same_user',
+                            'status': status})
+    return recusas
+
+
+def _nd_recusa_envio(recusas):
+    return jsonify({'ok': False, 'error': 'not_sendable', 'refused': recusas,
+                    'message': 'Some deals cannot be sent — reload the page.'}), 409
+
+
+def _nd_marcar_enviados(finder, deals, sid):
+    """Depois do arquivo gravado: `Sent` + Checker em cada linha. Devolve
+    (marcados, falhas) — a falha aqui é com o arquivo JÁ na pasta, e a tela tem
+    de dizer que NÃO se reenvia."""
+    por_arquivo, falhas = {}, []
+    for d in deals or []:
+        if str(d.get('Status', '') or '').strip() == 'Canceled':
+            continue
+        deal, client = _nd_par(d.get('Deal'), d.get('Client'))
+        try:
+            fp = finder(deal, client)[0] if deal else None
+        except Exception as exc:                                # noqa: BLE001
+            falhas.append({'deal': deal, 'client': client, 'reason': '%s: %s' % (type(exc).__name__, exc)})
+            continue
+        if fp:
+            por_arquivo.setdefault(fp, []).append((deal, client))
+        else:
+            falhas.append({'deal': deal, 'client': client, 'reason': 'row_not_found'})
+    marcados = []
+    for fp, alvo in por_arquivo.items():
+        try:
+            with _R()._cache_lock:
+                linhas = _nd_le_dia(fp)
+                feitos = []
+                for deal, client in alvo:
+                    idxs = [i for i, x in enumerate(linhas) if _nd_casa(x, deal, client)]
+                    for i in idxs:
+                        linhas[i]['Status'] = 'Sent'
+                        linhas[i]['Checker'] = sid
+                    if idxs:
+                        feitos.append((deal, client))
+                    else:
+                        falhas.append({'deal': deal, 'client': client, 'reason': 'row_not_found'})
+                if feitos:
+                    _R()._atomic_write_json(fp, linhas)
+            marcados.extend({'deal': d, 'client': c} for d, c in feitos)
+        except Exception as exc:                                # noqa: BLE001
+            _R().log.exception('[SEND] arquivo gravado mas o status NAO: %s', fp)
+            falhas.extend({'deal': d, 'client': c, 'reason': '%s: %s' % (type(exc).__name__, exc)}
+                          for d, c in alvo)
+    if falhas:
+        _R().log.warning('[SEND] %d linha(s) foram para a B3 sem o status Sent gravado: %s',
+                         len(falhas), falhas)
+    return marcados, falhas
+
+
+def _nd_apaga_retornos(linhas_por_arquivo, gravou, tag):
+    """Apaga o arquivo de retorno só quando TODA linha do produto nele casou
+    com uma operação desta passada E gravou — a regra que o Swap Bullet e a
+    recompra já seguem. Apagado por "ter linha do produto", ele levava os B3 ID
+    que esta passada não absorveu: retorno de ontem lido com a Reference Date
+    de hoje (as candidatas são as do DIA), a gravação que falhou (`saved:
+    false` dizia "tente de novo" com o arquivo já apagado) e, no OPC, as linhas
+    da outra página de opção. O que fica é relido na próxima passada."""
+    for fp, deals in linhas_por_arquivo.items():
+        pendentes = [d for d in deals if not (d and gravou.get(d))]
+        if pendentes:
+            _R().log.warning('[MAPPING-B3 %s] retorno MANTIDO %s: %d linha(s) sem operação '
+                             'gravada nesta passada', tag, os.path.basename(fp), len(pendentes))
+            continue
+        try:
+            _store.remove(fp)
+        except Exception:                                       # noqa: BLE001
+            _R().log.warning('[MAPPING-B3 %s] não consegui apagar %s', tag, fp, exc_info=True)
 
 
 @blueprint.route('/api/new-deals/opt-commodities/cache', methods=['POST'])
@@ -177,12 +446,7 @@ def api_save_deal_cache():
 
     with _R()._cache_lock:
         if _store.exists(file_path):
-            try:
-                deals = _store.read(file_path)
-                if not isinstance(deals, list):
-                    deals = [deals]
-            except (json.JSONDecodeError, ValueError):
-                deals = []
+            deals = _nd_le_dia(file_path)
         else:
             deals = []
 
@@ -196,9 +460,13 @@ def api_save_deal_cache():
                              and d.get('Deal', '').strip() == deal_name
                              and d.get('Client', '').strip() == client_name), None)
         if existing_idx is not None:
-            deals[existing_idx] = data
-        else:
-            deals.append(data)
+            # O Add Row não SUBSTITUI a operação já gravada (26/10/2026): o POST
+            # trocava a linha inteira, e um Sent/Success voltava a Pending sem o
+            # B3 ID. Quem atualiza uma linha existente é o PATCH (Edit) ou o
+            # import (`_import`, acima).
+            return jsonify({"success": False, "error": "deal_exists",
+                            "message": "This deal is already saved — edit it instead."}), 409
+        deals.append(data)
         target_idx = existing_idx if existing_idx is not None else len(deals) - 1
         for _k in ('Maker', 'Checker'):
             if _k in deals[target_idx]:
@@ -249,10 +517,7 @@ def api_update_deal_cache(deal_id):
         return jsonify({"success": False, "message": "Deal not found"}), 404
 
     with _R()._cache_lock:
-        try:
-            deals = _store.read(file_path)
-        except (json.JSONDecodeError, ValueError):
-            deals = []
+        deals = _nd_le_dia(file_path)
         idx = next((i for i, d in enumerate(deals)
                     if (d.get('Deal') or '').strip() == (deal_id or '').strip()
                     and (client is None or (d.get('Client', '') or '').strip() == (client or '').strip())), None)
@@ -295,7 +560,8 @@ def api_update_deal_cache(deal_id):
                 'Deal Updated', 'Opt Comm',
                 deal_id + ' (' + ', '.join(_fields.keys()) + ')' + _R()._nd_token(updated_deal.get('TradeDate'))
             )
-    return jsonify({"success": True})
+    return jsonify({"success": True, "status": updated_deal.get('Status', ''),
+                    "b3_id": updated_deal.get('B3_ID', '')})
 
 @blueprint.route('/api/new-deals/opt-commodities/cache/<deal_id>', methods=['DELETE'])
 def api_delete_deal_cache(deal_id):
@@ -308,10 +574,7 @@ def api_delete_deal_cache(deal_id):
         return jsonify({"success": False, "message": "Deal not found"}), 404
 
     with _R()._cache_lock:
-        try:
-            deals = _store.read(file_path)
-        except (json.JSONDecodeError, ValueError):
-            deals = []
+        deals = _nd_le_dia(file_path)
         idx = next((i for i, d in enumerate(deals)
                     if (d.get('Deal') or '').strip() == (deal_id or '').strip()
                     and (client is None or (d.get('Client', '') or '').strip() == (client or '').strip())), None)
@@ -330,99 +593,19 @@ def api_delete_deal_cache(deal_id):
 def api_bulk_delete_deal_cache():
     if not session.get('authenticated'):
         return jsonify({"success": False, "message": "Not authenticated"}), 401
-
-    data  = request.get_json(silent=True)
-    pairs = data.get('pairs', []) if data else []
+    pairs = (request.get_json(silent=True) or {}).get('pairs', [])
     if not pairs:
         return jsonify({"success": False, "message": "No pairs provided"}), 400
-
-    pair_set = {(p.get('deal', ''), p.get('client', '')) for p in pairs}
-
-    # Group pairs by their source file (search outside the lock — read-only scan)
-    file_pairs = {}
-    for deal_name, client_name in pair_set:
-        fp, _ = _R()._find_deal_in_cache(deal_name, client_name)
-        if fp:
-            file_pairs.setdefault(fp, set()).add((deal_name, client_name))
-
-    deleted = 0
-    for fp, pairs_in_file in file_pairs.items():
-        with _R()._cache_lock:
-            try:
-                deals = _store.read(fp)
-            except (json.JSONDecodeError, ValueError):
-                deals = []
-            if not isinstance(deals, list):
-                deals = [deals]
-            before = len(deals)
-            deals  = [d for d in deals if (d.get('Deal', ''), d.get('Client', '')) not in pairs_in_file]
-            deleted += before - len(deals)
-            _R()._atomic_write_json(fp, deals)
-
-    not_found = len(pair_set) - deleted
-    if deleted > 0:
-        _R()._create_notification(
-            session.get('user_sid', ''), session.get('user_name', ''),
-            'Bulk Delete', 'Opt Comm',
-            str(deleted) + ' deal' + ('s' if deleted != 1 else '') + ' deleted'
-        )
-    return jsonify({"success": True, "deleted": deleted, "not_found": not_found})
+    return _nd_bulk_delete(_R()._find_deal_in_cache, pairs, 'Opt Comm')
 
 @blueprint.route('/api/new-deals/opt-commodities/cache/bulk-patch', methods=['POST'])
 def api_opt_bulk_patch_deal_cache():
     if not session.get('authenticated'):
         return jsonify({"success": False, "message": "Not authenticated"}), 401
-
-    data    = request.get_json(silent=True)
-    patches = data.get('patches', []) if data else []
+    patches = (request.get_json(silent=True) or {}).get('patches', [])
     if not patches:
         return jsonify({"success": False, "message": "No patches provided"}), 400
-
-    # Group by source file (outside lock — read-only scan)
-    file_patches = {}
-    for p in patches:
-        deal_id = p.get('deal_id', '')
-        client  = p.get('client', '')
-        updates = p.get('updates', {})
-        if not deal_id or not updates:
-            continue
-        fp, _ = _R()._find_deal_in_cache(deal_id, client)
-        if fp:
-            file_patches.setdefault(fp, []).append((deal_id, client, updates))
-
-    updated = 0
-    refused = []                 # recusados pelo 4-olhos (`_nd_guard_updates`)
-    for fp, file_ops in file_patches.items():
-        with _R()._cache_lock:
-            try:
-                deals = _store.read(fp)
-            except (json.JSONDecodeError, ValueError):
-                deals = []
-            for deal_id, client, updates in file_ops:
-                want_client = (client or '').strip()
-                matching = [i for i, d in enumerate(deals)
-                            if (d.get('Deal') or '').strip() == deal_id.strip()
-                            and (not want_client or (d.get('Client') or '').strip() == want_client)]
-                if matching:
-                    for idx in matching:
-                        upd, _recusa = _nd_guard_updates(deals[idx], updates, session.get('user_sid', ''))
-                        if _recusa:
-                            refused.append({'deal_id': deal_id, 'client': client, 'error': _recusa})
-                            continue
-                        deals[idx].update(upd)
-                        updated += 1
-                else:
-                    _R().log.warning("[OPT BULK-PATCH] idx not found: deal=%r client=%r in %s",
-                                deal_id, client, fp)
-            _R()._atomic_write_json(fp, deals)
-
-    if updated > 0:
-        _R()._create_notification(
-            session.get('user_sid', ''), session.get('user_name', ''),
-            'Bulk Update', 'Opt Comm',
-            str(updated) + ' deal' + ('s' if updated != 1 else '') + ' updated'
-        )
-    return jsonify({"success": True, "updated": updated, "refused": refused})
+    return _nd_bulk_patch(_R()._find_deal_in_cache, patches, 'Opt Comm')
 
 @blueprint.route('/api/new-deals/opt-fxo/cache', methods=['POST'])
 def api_save_fxo_cache():
@@ -444,12 +627,7 @@ def api_save_fxo_cache():
 
     with _R()._cache_lock:
         if _store.exists(file_path):
-            try:
-                deals = _store.read(file_path)
-                if not isinstance(deals, list):
-                    deals = [deals]
-            except (json.JSONDecodeError, ValueError):
-                deals = []
+            deals = _nd_le_dia(file_path)
         else:
             deals = []
 
@@ -462,9 +640,13 @@ def api_save_fxo_cache():
                              and d.get('Client', '').strip() == client_name), None)
         # Persist in table-column order (Maker/Checker last) — not alphabetical.
         if existing_idx is not None:
-            deals[existing_idx] = _R()._fxo_order_deal(data)
-        else:
-            deals.append(_R()._fxo_order_deal(data))
+            # O Add Row não SUBSTITUI a operação já gravada (26/10/2026): o POST
+            # trocava a linha inteira, e um Sent/Success voltava a Pending sem o
+            # B3 ID. Quem atualiza uma linha existente é o PATCH (Edit) ou o
+            # import (`_import`, acima).
+            return jsonify({"success": False, "error": "deal_exists",
+                            "message": "This deal is already saved — edit it instead."}), 409
+        deals.append(_R()._fxo_order_deal(data))
         _R()._atomic_write_json(file_path, deals)
 
     return jsonify({"success": True, "deal": data.get('Deal', '')})
@@ -503,10 +685,7 @@ def api_update_fxo_cache(deal_id):
         return jsonify({"success": False, "message": "Deal not found"}), 404
 
     with _R()._cache_lock:
-        try:
-            deals = _store.read(file_path)
-        except (json.JSONDecodeError, ValueError):
-            deals = []
+        deals = _nd_le_dia(file_path)
         idx = next((i for i, d in enumerate(deals)
                     if (d.get('Deal') or '').strip() == (deal_id or '').strip()
                     and (client is None or (d.get('Client', '') or '').strip() == (client or '').strip())), None)
@@ -545,7 +724,8 @@ def api_update_fxo_cache(deal_id):
                 'Deal Updated', 'Opt FXO',
                 deal_id + ' (' + ', '.join(_fields.keys()) + ')' + _R()._nd_token(updated_deal.get('TradeDate'))
             )
-    return jsonify({"success": True})
+    return jsonify({"success": True, "status": updated_deal.get('Status', ''),
+                    "b3_id": updated_deal.get('B3_ID', '')})
 
 @blueprint.route('/api/new-deals/opt-fxo/cache/<deal_id>', methods=['DELETE'])
 def api_delete_fxo_cache(deal_id):
@@ -557,10 +737,7 @@ def api_delete_fxo_cache(deal_id):
         return jsonify({"success": False, "message": "Deal not found"}), 404
 
     with _R()._cache_lock:
-        try:
-            deals = _store.read(file_path)
-        except (json.JSONDecodeError, ValueError):
-            deals = []
+        deals = _nd_le_dia(file_path)
         idx = next((i for i, d in enumerate(deals)
                     if (d.get('Deal') or '').strip() == (deal_id or '').strip()
                     and (client is None or (d.get('Client', '') or '').strip() == (client or '').strip())), None)
@@ -579,91 +756,20 @@ def api_delete_fxo_cache(deal_id):
 def api_bulk_delete_fxo_cache():
     if not session.get('authenticated'):
         return jsonify({"success": False, "message": "Not authenticated"}), 401
-    data  = request.get_json(silent=True)
-    pairs = data.get('pairs', []) if data else []
+    pairs = (request.get_json(silent=True) or {}).get('pairs', [])
     if not pairs:
         return jsonify({"success": False, "message": "No pairs provided"}), 400
-
-    pair_set = {(p.get('deal', ''), p.get('client', '')) for p in pairs}
-    file_pairs = {}
-    for deal_name, client_name in pair_set:
-        fp, _ = _R()._find_fxo(deal_name, client_name)
-        if fp:
-            file_pairs.setdefault(fp, set()).add((deal_name, client_name))
-
-    deleted = 0
-    for fp, pairs_in_file in file_pairs.items():
-        with _R()._cache_lock:
-            try:
-                deals = _store.read(fp)
-            except (json.JSONDecodeError, ValueError):
-                deals = []
-            if not isinstance(deals, list):
-                deals = [deals]
-            before = len(deals)
-            deals  = [d for d in deals if (d.get('Deal', ''), d.get('Client', '')) not in pairs_in_file]
-            deleted += before - len(deals)
-            _R()._atomic_write_json(fp, deals)
-
-    not_found = len(pair_set) - deleted
-    if deleted > 0:
-        _R()._create_notification(
-            session.get('user_sid', ''), session.get('user_name', ''),
-            'Bulk Delete', 'Opt FXO',
-            str(deleted) + ' deal' + ('s' if deleted != 1 else '') + ' deleted'
-        )
-    return jsonify({"success": True, "deleted": deleted, "not_found": not_found})
+    return _nd_bulk_delete(_R()._find_fxo, pairs, 'Opt FXO')
 
 @blueprint.route('/api/new-deals/opt-fxo/cache/bulk-patch', methods=['POST'])
 def api_fxo_bulk_patch_deal_cache():
     if not session.get('authenticated'):
         return jsonify({"success": False, "message": "Not authenticated"}), 401
-    data    = request.get_json(silent=True)
-    patches = data.get('patches', []) if data else []
+    patches = (request.get_json(silent=True) or {}).get('patches', [])
     if not patches:
         return jsonify({"success": False, "message": "No patches provided"}), 400
-
-    file_patches = {}
-    for p in patches:
-        deal_id = p.get('deal_id', '')
-        client  = p.get('client', '')
-        updates = p.get('updates', {})
-        if not deal_id or not updates:
-            continue
-        fp, _ = _R()._find_fxo(deal_id, client)
-        if fp:
-            file_patches.setdefault(fp, []).append((deal_id, client, updates))
-
-    updated = 0
-    refused = []                 # recusados pelo 4-olhos (`_nd_guard_updates`)
-    for fp, file_ops in file_patches.items():
-        with _R()._cache_lock:
-            try:
-                deals = _store.read(fp)
-            except (json.JSONDecodeError, ValueError):
-                deals = []
-            for deal_id, client, updates in file_ops:
-                want_client = (client or '').strip()
-                matching = [i for i, d in enumerate(deals)
-                            if (d.get('Deal') or '').strip() == deal_id.strip()
-                            and (not want_client or (d.get('Client') or '').strip() == want_client)]
-                for idx in matching:
-                    upd, _recusa = _nd_guard_updates(deals[idx], updates, session.get('user_sid', ''))
-                    if _recusa:
-                        refused.append({'deal_id': deal_id, 'client': client, 'error': _recusa})
-                        continue
-                    deals[idx].update(upd)
-                    deals[idx] = _R()._fxo_order_deal(deals[idx])
-                    updated += 1
-            _R()._atomic_write_json(fp, deals)
-
-    if updated > 0:
-        _R()._create_notification(
-            session.get('user_sid', ''), session.get('user_name', ''),
-            'Bulk Update', 'Opt FXO',
-            str(updated) + ' deal' + ('s' if updated != 1 else '') + ' updated'
-        )
-    return jsonify({"success": True, "updated": updated, "refused": refused})
+    return _nd_bulk_patch(_R()._find_fxo, patches, 'Opt FXO',
+                          ajusta=lambda d: _R()._fxo_order_deal(d))
 
 @blueprint.route('/api/new-deals/opt-fxo/import-api', methods=['POST'])
 def api_fxo_import_api():
@@ -804,6 +910,11 @@ def api_fxo_send_conecta():
     download = bool(data.get('download'))   # preview: devolve o conteúdo, não grava
     if not deals:
         return jsonify({'ok': False, 'error': 'No deals provided'}), 400
+    if not download:
+        # status e 4-olhos conferidos no SERVIDOR antes do arquivo (§685)
+        _recusas = _nd_conferir_envio(_R()._find_fxo, deals, session.get('user_sid', ''))
+        if _recusas:
+            return _nd_recusa_envio(_recusas)
 
     # O cadastro é a autoridade da linha: sem template (ou sem os blocos), o
     # arquivo NÃO sai meio montado — erro claro pedindo o /file-interpreter.
@@ -1016,8 +1127,11 @@ def api_fxo_send_conecta():
             _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                                  'Sent to B3', 'Opt FXO',
                                  str(deal_count) + ' deal' + ('' if deal_count == 1 else 's') + ' sent')
+        # o arquivo JÁ está na pasta: o `Sent` vai no mesmo pedido (§685)
+        _marcados, _falhas = _nd_marcar_enviados(_R()._find_fxo, deals, session.get('user_sid', ''))
         return jsonify({'ok': True, 'filename': generated[0] if generated else '',
-                        'count': deal_count, 'files': generated})
+                        'count': deal_count, 'files': generated,
+                        'marked': _marcados, 'status_failed': _falhas})
     except Exception as exc:                          # noqa: BLE001
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
@@ -1045,7 +1159,7 @@ def api_fxo_mapping_b3():
         return jsonify({'ok': True, 'results': []})
 
     mapping = {}
-    files_to_delete = []
+    linhas_por_arquivo = {}   # arquivo → Deal de cada linha OPC tipo 1
     try:
         if not _store.isdir(_R().RETURN_PATH):
             return jsonify({'ok': False, 'error': 'Return folder not found: {}'.format(_R().RETURN_PATH)}), 400
@@ -1056,12 +1170,11 @@ def api_fxo_mapping_b3():
             try:
                 with open(fpath, encoding='utf-8', errors='replace') as fh:
                     lines = fh.readlines()
-                file_has_opc = False
+                donos = []
                 for line in lines[1:]:
                     line = line.strip()
                     if not line or line[56:59] != 'OPC':
                         continue
-                    file_has_opc = True
                     parts = line.split(';')
                     if len(parts) < 5:
                         continue
@@ -1073,17 +1186,19 @@ def api_fxo_mapping_b3():
                     deal_text = pipe_parts[24].strip()
                     if not deal_text:
                         continue
+                    donos.append(deal_text)
                     is_ok = (status_text == 'EXECUCAO OK')
                     if deal_text not in mapping or (is_ok and not mapping[deal_text]['ok']):
                         mapping[deal_text] = {'b3_id': b3_id, 'ok': is_ok}
-                if file_has_opc:
-                    files_to_delete.append(fpath)
+                if donos:
+                    linhas_por_arquivo[fpath] = donos
             except Exception:
                 continue
     except Exception as exc:
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
     results = []
+    gravou = {}
     for sent in sent_deals:
         deal_text   = sent.get('Deal', '')
         client_name = sent.get('Client', '')
@@ -1097,6 +1212,7 @@ def api_fxo_mapping_b3():
 
         gravado, linha, motivo = _grava_mapeamento(
             _R()._find_fxo, deal_text, client_name, updates)
+        gravou[deal_text] = gravou.get(deal_text, True) and gravado
 
         intrag_candidate = linha if (gravado and new_status == 'Success') else None
         if intrag_candidate is not None:
@@ -1112,11 +1228,9 @@ def api_fxo_mapping_b3():
             'reason': motivo,
         })
 
-    for fpath in files_to_delete:
-        try:
-            _store.remove(fpath)
-        except Exception:
-            pass
+    # Deal da outra página de opção (o OPC é dos dois) ou de outro dia fica
+    # sem dono aqui, e o retorno fica para quem o absorve (_nd_apaga_retornos)
+    _nd_apaga_retornos(linhas_por_arquivo, gravou, 'Opt FXO')
 
     # O sino conta o que FICOU GRAVADO, não o que se tentou: escrito
     # `len(results)`, ele anunciava para a mesa inteira um número que
@@ -1152,12 +1266,7 @@ def api_ndf_save_deal_cache():
 
     with _R()._cache_lock:
         if _store.exists(file_path):
-            try:
-                deals = _store.read(file_path)
-                if not isinstance(deals, list):
-                    deals = [deals]
-            except (json.JSONDecodeError, ValueError):
-                deals = []
+            deals = _nd_le_dia(file_path)
         else:
             deals = []
 
@@ -1170,9 +1279,13 @@ def api_ndf_save_deal_cache():
                              and d.get('Deal', '').strip() == deal_name
                              and d.get('Client', '').strip() == client_name), None)
         if existing_idx is not None:
-            deals[existing_idx] = data
-        else:
-            deals.append(data)
+            # O Add Row não SUBSTITUI a operação já gravada (26/10/2026): o POST
+            # trocava a linha inteira, e um Sent/Success voltava a Pending sem o
+            # B3 ID. Quem atualiza uma linha existente é o PATCH (Edit) ou o
+            # import (`_import`, acima).
+            return jsonify({"success": False, "error": "deal_exists",
+                            "message": "This deal is already saved — edit it instead."}), 409
+        deals.append(data)
 
         _R()._atomic_write_json(file_path, deals)
 
@@ -1240,11 +1353,7 @@ def api_ndf_update_deal_cache(deal_id):
         return jsonify({"success": False, "message": "Deal not found"}), 404
 
     with _R()._cache_lock:
-        try:
-            deals = _store.read(file_path)
-        except (json.JSONDecodeError, ValueError):
-            _R().log.error("[NDF PATCH] JSON parse error in file=%s", file_path)
-            deals = []
+        deals = _nd_le_dia(file_path)
         idx = next((i for i, d in enumerate(deals)
                     if (d.get('Deal') or '').strip() == (deal_id or '').strip()
                     and (client is None or (d.get('Client', '') or '').strip() == (client or '').strip())), None)
@@ -1294,7 +1403,8 @@ def api_ndf_update_deal_cache(deal_id):
                 'Deal Updated', 'NDF Comm',
                 deal_id + ' (' + ', '.join(_fields.keys()) + ')' + _R()._nd_token(updated_deal.get('TradeDate'))
             )
-    return jsonify({"success": True})
+    return jsonify({"success": True, "status": updated_deal.get('Status', ''),
+                    "b3_id": updated_deal.get('B3_ID', '')})
 
 @blueprint.route('/api/new-deals/ndf-commodities/cache/<deal_id>', methods=['DELETE'])
 def api_ndf_delete_deal_cache(deal_id):
@@ -1307,10 +1417,7 @@ def api_ndf_delete_deal_cache(deal_id):
         return jsonify({"success": False, "message": "Deal not found"}), 404
 
     with _R()._cache_lock:
-        try:
-            deals = _store.read(file_path)
-        except (json.JSONDecodeError, ValueError):
-            deals = []
+        deals = _nd_le_dia(file_path)
         idx = next((i for i, d in enumerate(deals)
                     if (d.get('Deal') or '').strip() == (deal_id or '').strip()
                     and (client is None or (d.get('Client', '') or '').strip() == (client or '').strip())), None)
@@ -1329,121 +1436,19 @@ def api_ndf_delete_deal_cache(deal_id):
 def api_ndf_bulk_delete_deal_cache():
     if not session.get('authenticated'):
         return jsonify({"success": False, "message": "Not authenticated"}), 401
-
-    data  = request.get_json(silent=True)
-    pairs = data.get('pairs', []) if data else []
-    _R().log.info("[NDF BULK-DELETE] Received %d pair(s): %s", len(pairs), pairs)
-
+    pairs = (request.get_json(silent=True) or {}).get('pairs', [])
     if not pairs:
         return jsonify({"success": False, "message": "No pairs provided"}), 400
-
-    pair_set = {(p.get('deal', ''), p.get('client', '')) for p in pairs}
-    _R().log.info("[NDF BULK-DELETE] Unique pairs after dedup: %s", list(pair_set))
-
-    # Check for suspicious empty keys
-    empty_keys = [(d, c) for d, c in pair_set if not d or not c]
-    if empty_keys:
-        _R().log.warning("[NDF BULK-DELETE] WARNING — pairs with empty deal or client: %s", empty_keys)
-
-    # Group pairs by their source file (search outside the lock — read-only scan)
-    file_pairs = {}
-    for deal_name, client_name in pair_set:
-        fp, idx_found = _R()._find_ndf_deal_in_cache(deal_name, client_name)
-        _R().log.debug("[NDF BULK-DELETE] _find deal=%r client=%r → file=%s idx=%s",
-                  deal_name, client_name, fp, idx_found)
-        if fp:
-            file_pairs.setdefault(fp, set()).add((deal_name, client_name))
-        else:
-            _R().log.warning("[NDF BULK-DELETE] NOT FOUND: deal=%r (repr=%r) client=%r (repr=%r)",
-                        deal_name, repr(deal_name), client_name, repr(client_name))
-
-    _R().log.info("[NDF BULK-DELETE] Files to mutate: %s", list(file_pairs.keys()))
-
-    deleted = 0
-    for fp, pairs_in_file in file_pairs.items():
-        with _R()._cache_lock:
-            try:
-                deals = _store.read(fp)
-            except (json.JSONDecodeError, ValueError):
-                _R().log.error("[NDF BULK-DELETE] JSON parse error in %s", fp)
-                deals = []
-            if not isinstance(deals, list):
-                deals = [deals]
-            before = len(deals)
-            _R().log.info("[NDF BULK-DELETE] File %s has %d deals BEFORE delete. Removing pairs: %s",
-                     os.path.basename(fp), before, list(pairs_in_file))
-            deals  = [d for d in deals if (d.get('Deal', ''), d.get('Client', '')) not in pairs_in_file]
-            after  = len(deals)
-            deleted += before - after
-            _R().log.info("[NDF BULK-DELETE] File %s: %d → %d deals (removed %d)",
-                     os.path.basename(fp), before, after, before - after)
-            _R()._atomic_write_json(fp, deals)
-
-    not_found = len(pair_set) - deleted
-    _R().log.info("[NDF BULK-DELETE] Done. deleted=%d not_found=%d", deleted, not_found)
-    if deleted > 0:
-        _R()._create_notification(
-            session.get('user_sid', ''), session.get('user_name', ''),
-            'Bulk Delete', 'NDF Comm',
-            str(deleted) + ' deal' + ('s' if deleted != 1 else '') + ' deleted'
-        )
-    return jsonify({"success": True, "deleted": deleted, "not_found": not_found})
+    return _nd_bulk_delete(_R()._find_ndf_deal_in_cache, pairs, 'NDF Comm')
 
 @blueprint.route('/api/new-deals/ndf-commodities/cache/bulk-patch', methods=['POST'])
 def api_ndf_bulk_patch_deal_cache():
     if not session.get('authenticated'):
         return jsonify({"success": False, "message": "Not authenticated"}), 401
-
-    data    = request.get_json(silent=True)
-    patches = data.get('patches', []) if data else []
-    _R().log.info("[NDF BULK-PATCH] Received %d patch(es)", len(patches))
-
+    patches = (request.get_json(silent=True) or {}).get('patches', [])
     if not patches:
         return jsonify({"success": False, "message": "No patches provided"}), 400
-
-    # Group by source file (outside lock — read-only scan)
-    file_patches = {}
-    for p in patches:
-        deal_id = p.get('deal_id', '')
-        client  = p.get('client', '')
-        updates = p.get('updates', {})
-        if not deal_id or not updates:
-            continue
-        fp, _ = _R()._find_ndf_deal_in_cache(deal_id, client)
-        if fp:
-            file_patches.setdefault(fp, []).append((deal_id, client, updates))
-        else:
-            _R().log.warning("[NDF BULK-PATCH] NOT FOUND: deal=%r client=%r", deal_id, client)
-
-    updated = 0
-    refused = []                 # recusados pelo 4-olhos (`_nd_guard_updates`)
-    for fp, file_ops in file_patches.items():
-        with _R()._cache_lock:
-            try:
-                deals = _store.read(fp)
-            except (json.JSONDecodeError, ValueError):
-                deals = []
-            for deal_id, client, updates in file_ops:
-                idx = next((i for i, d in enumerate(deals)
-                            if d.get('Deal') == deal_id and (not client or d.get('Client', '') == client)), None)
-                if idx is not None:
-                    upd, _recusa = _nd_guard_updates(deals[idx], updates, session.get('user_sid', ''))
-                    if _recusa:
-                        refused.append({'deal_id': deal_id, 'client': client, 'error': _recusa})
-                        continue
-                    deals[idx].update(upd)
-                    updated += 1
-                    _R().log.debug("[NDF BULK-PATCH] Updated deal=%r client=%r", deal_id, client)
-            _R()._atomic_write_json(fp, deals)
-
-    _R().log.info("[NDF BULK-PATCH] Done. updated=%d", updated)
-    if updated > 0:
-        _R()._create_notification(
-            session.get('user_sid', ''), session.get('user_name', ''),
-            'Bulk Update', 'NDF Comm',
-            str(updated) + ' deal' + ('s' if updated != 1 else '') + ' updated'
-        )
-    return jsonify({"success": True, "updated": updated, "refused": refused})
+    return _nd_bulk_patch(_R()._find_ndf_deal_in_cache, patches, 'NDF Comm')
 
 @blueprint.route('/api/new-deals/ndf-commodities/send-conecta', methods=['POST'])
 def api_ndf_send_conecta():
@@ -1456,6 +1461,11 @@ def api_ndf_send_conecta():
     download = bool(data.get('download'))   # preview: devolve o conteúdo, não grava
     if not deals:
         return jsonify({'ok': False, 'error': 'No deals provided'}), 400
+    if not download:
+        # status e 4-olhos conferidos no SERVIDOR antes do arquivo (§685)
+        _recusas = _nd_conferir_envio(_R()._find_ndf_deal_in_cache, deals, session.get('user_sid', ''))
+        if _recusas:
+            return _nd_recusa_envio(_recusas)
 
     today = _dt.datetime.today().strftime('%Y%m%d')
 
@@ -1511,7 +1521,10 @@ def api_ndf_send_conecta():
         primary = generated[0]['filename'] if generated else ''
         if total > 0:
             _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''), 'Sent to B3', 'NDF Comm', str(total) + ' deal' + ('' if total == 1 else 's') + ' sent')
-        return jsonify({'ok': True, 'filename': primary, 'count': total, 'files': generated})
+        # o arquivo JÁ está na pasta: o `Sent` vai no mesmo pedido (§685)
+        _marcados, _falhas = _nd_marcar_enviados(_R()._find_ndf_deal_in_cache, deals, session.get('user_sid', ''))
+        return jsonify({'ok': True, 'filename': primary, 'count': total, 'files': generated,
+                        'marked': _marcados, 'status_failed': _falhas})
     except Exception as exc:
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
@@ -1526,7 +1539,7 @@ def api_ndf_mapping_b3():
         return jsonify({'ok': True, 'results': []})
 
     mapping         = {}
-    files_to_delete = []
+    linhas_por_arquivo = {}   # arquivo → dono (Deal) de cada linha TER
     try:
         if not _store.isdir(_R().RETURN_PATH):
             return jsonify({'ok': False, 'error': f'Return folder not found: {_R().RETURN_PATH}'}), 400
@@ -1538,7 +1551,7 @@ def api_ndf_mapping_b3():
             try:
                 with open(fpath, 'r', encoding='latin-1') as fh:
                     lines = fh.readlines()
-                file_has_ter = False
+                donos = []
                 for line in lines[1:]:  # skip header row
                     line = line.strip()
                     if not line:
@@ -1549,7 +1562,8 @@ def api_ndf_mapping_b3():
                     # arquivo era APAGADO antes do Mapping da recompra le-lo.
                     if line[56:59] != 'TER' or _e_antecipacao(line):
                         continue
-                    file_has_ter = True
+                    donos.append(next((sd.get('Deal', '') for sd in sent_deals
+                                       if sd.get('Deal', '') and sd.get('Deal', '') in line), None))
                     if 'EXECUCAO OK' not in line:
                         continue
                     parts = line.split(';')
@@ -1560,31 +1574,40 @@ def api_ndf_mapping_b3():
                         deal_text = sd.get('Deal', '')
                         if deal_text and deal_text not in mapping and deal_text in line:
                             mapping[deal_text] = b3_id
-                # Only delete return files that actually carried TER (NDF) lines
-                if file_has_ter:
-                    files_to_delete.append(fpath)
+                if donos:
+                    linhas_por_arquivo[fpath] = donos
             except Exception:
                 continue
     except Exception as exc:
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
     results = []
+    gravou = {}     # Deal → a linha ficou como o retorno manda (ver _nd_apaga_retornos)
     for sd in sent_deals:
         deal_text   = sd.get('Deal', '')
         client_name = sd.get('Client', '')
         if str(sd.get('Status', '') or '').strip() == 'Canceled':
-            continue                    # cancelado via API: fora do mapping
+            gravou[deal_text] = True    # cancelado via API: fora do mapping, nada a gravar
+            continue
         if deal_text and deal_text in mapping:
             b3_id      = mapping[deal_text]
             new_status = 'Success'
             updates    = {'Status': new_status, 'B3_ID': b3_id}
         else:
-            b3_id      = ''
+            b3_id = ''
+            # Só vira `Error` quem esperava retorno (`_ND_MAPPING_ERRORABLE`, a
+            # regra do genérico): a tela manda todo status (§626), e sem isto
+            # um Approved/Pending que nem foi registrado virava Error.
+            prev = str(sd.get('Status', '') or '').strip()
+            if prev and prev not in _R()._ND_MAPPING_ERRORABLE:
+                gravou[deal_text] = True
+                continue
             new_status = 'Error'
             updates    = {'Status': new_status}
 
         gravado, linha, motivo = _grava_mapeamento(
             _R()._find_ndf_deal_in_cache, deal_text, client_name, updates)
+        gravou[deal_text] = gravou.get(deal_text, True) and gravado
 
         intrag_candidate = linha if (gravado and new_status == 'Success') else None
         if intrag_candidate is not None:
@@ -1607,11 +1630,7 @@ def api_ndf_mapping_b3():
             'reason': motivo,
         })
 
-    for fpath in files_to_delete:
-        try:
-            _store.remove(fpath)
-        except Exception:
-            pass
+    _nd_apaga_retornos(linhas_por_arquivo, gravou, 'NDF Comm')
 
     # O sino conta o que FICOU GRAVADO, não o que se tentou: escrito
     # `len(results)`, ele anunciava para a mesa inteira um número que
@@ -1633,6 +1652,11 @@ def api_send_conecta():
     download = bool(data.get('download'))   # preview: devolve o conteúdo, não grava
     if not deals:
         return jsonify({'ok': False, 'error': 'No deals provided'}), 400
+    if not download:
+        # status e 4-olhos conferidos no SERVIDOR antes do arquivo (§685)
+        _recusas = _nd_conferir_envio(_R()._find_deal_in_cache, deals, session.get('user_sid', ''))
+        if _recusas:
+            return _nd_recusa_envio(_recusas)
 
     # O cadastro do File Interface (opcoes-flexiveis-vcp) comanda a montagem
     # das linhas — ordem, larguras e literais Fixed saem do template; aqui
@@ -1854,8 +1878,11 @@ def api_send_conecta():
             generated.append(os.path.basename(filepath))
         if deal_count > 0:
             _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''), 'Sent to B3', 'Opt Comm', str(deal_count) + ' deal' + ('' if deal_count == 1 else 's') + ' sent')
+        # o arquivo JÁ está na pasta: o `Sent` vai no mesmo pedido (§685)
+        _marcados, _falhas = _nd_marcar_enviados(_R()._find_deal_in_cache, deals, session.get('user_sid', ''))
         return jsonify({'ok': True, 'filename': generated[0] if generated else '',
-                        'count': deal_count, 'files': generated})
+                        'count': deal_count, 'files': generated,
+                        'marked': _marcados, 'status_failed': _falhas})
     except Exception as exc:
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
@@ -1871,7 +1898,7 @@ def api_mapping_b3():
 
     # ── scan return folder ────────────────────────────────────────────
     mapping       = {}   # deal_text -> {'b3_id': str, 'ok': bool}
-    files_to_delete = []
+    linhas_por_arquivo = {}   # arquivo → Deal de cada linha OPC tipo 1
     try:
         if not _store.isdir(_R().RETURN_PATH):
             return jsonify({'ok': False, 'error': f'Return folder not found: {_R().RETURN_PATH}'}), 400
@@ -1883,7 +1910,7 @@ def api_mapping_b3():
             try:
                 with open(fpath, encoding='utf-8', errors='replace') as fh:
                     lines = fh.readlines()
-                file_has_opc = False
+                donos = []
                 for line in lines[1:]:   # skip header
                     line = line.strip()
                     if not line:
@@ -1891,7 +1918,6 @@ def api_mapping_b3():
                     # Sigla at chars 57-59 (1-based): Options map only 'OPC' (opção) lines
                     if line[56:59] != 'OPC':
                         continue
-                    file_has_opc = True
                     parts = line.split(';')
                     if len(parts) < 5:
                         continue
@@ -1906,12 +1932,12 @@ def api_mapping_b3():
                     deal_text = pipe_parts[24].strip()
                     if not deal_text:
                         continue
+                    donos.append(deal_text)
                     is_ok = (status_text == 'EXECUCAO OK')
                     if deal_text not in mapping or (is_ok and not mapping[deal_text]['ok']):
                         mapping[deal_text] = {'b3_id': b3_id, 'ok': is_ok}
-                # Only delete return files that actually carried OPC (Option) lines
-                if file_has_opc:
-                    files_to_delete.append(fpath)
+                if donos:
+                    linhas_por_arquivo[fpath] = donos
             except Exception:
                 continue
     except Exception as exc:
@@ -1919,6 +1945,7 @@ def api_mapping_b3():
 
     # ── match sent deals and update cache ────────────────────────────
     results = []
+    gravou = {}
     for sent in sent_deals:
         deal_text   = sent.get('Deal', '')
         client_name = sent.get('Client', '')
@@ -1933,6 +1960,7 @@ def api_mapping_b3():
 
         gravado, linha, motivo = _grava_mapeamento(
             _R()._find_deal_in_cache, deal_text, client_name, updates)
+        gravou[deal_text] = gravou.get(deal_text, True) and gravado
 
         intrag_candidate = linha if (gravado and new_status == 'Success') else None
         if intrag_candidate is not None:
@@ -1948,12 +1976,9 @@ def api_mapping_b3():
             'reason': motivo
         })
 
-    # ── delete processed return files ────────────────────────────────
-    for fpath in files_to_delete:
-        try:
-            _store.remove(fpath)
-        except Exception:
-            pass
+    # Deal da outra página de opção (o OPC é dos dois) ou de outro dia fica
+    # sem dono aqui, e o retorno fica para quem o absorve (_nd_apaga_retornos)
+    _nd_apaga_retornos(linhas_por_arquivo, gravou, 'Opt Comm')
 
     # O sino conta o que FICOU GRAVADO, não o que se tentou: escrito
     # `len(results)`, ele anunciava para a mesa inteira um número que
@@ -2198,12 +2223,7 @@ def api_generic_nd_save_cache(product):
 
     with _R()._cache_lock:
         if _store.exists(file_path):
-            try:
-                deals = _store.read(file_path)
-                if not isinstance(deals, list):
-                    deals = [deals]
-            except (json.JSONDecodeError, ValueError):
-                deals = []
+            deals = _nd_le_dia(file_path)
         else:
             deals = []
 
@@ -2216,9 +2236,13 @@ def api_generic_nd_save_cache(product):
                              and d.get('Deal', '').strip() == deal_name
                              and d.get('Client', '').strip() == client_name), None)
         if existing_idx is not None:
-            deals[existing_idx] = data
-        else:
-            deals.append(data)
+            # O Add Row não SUBSTITUI a operação já gravada (26/10/2026): o POST
+            # trocava a linha inteira, e um Sent/Success voltava a Pending sem o
+            # B3 ID. Quem atualiza uma linha existente é o PATCH (Edit) ou o
+            # import (`_import`, acima).
+            return jsonify({"success": False, "error": "deal_exists",
+                            "message": "This deal is already saved — edit it instead."}), 409
+        deals.append(data)
         _R()._atomic_write_json(file_path, deals)
 
     return jsonify({"success": True, "deal": data.get('Deal', '')})
@@ -2290,15 +2314,12 @@ def api_generic_nd_update_cache(product, deal_id):
         return jsonify({"success": False, "message": "Deal not found"}), 404
 
     with _R()._cache_lock:
-        try:
-            deals = _store.read(file_path)
-        except (json.JSONDecodeError, ValueError):
-            deals = []
+        deals = _nd_le_dia(file_path)
         idx = next((i for i, d in enumerate(deals)
                     if d.get('Deal') == deal_id and (client is None or d.get('Client', '') == client)), None)
         if idx is None:
             return jsonify({"success": False, "message": "Deal not found"}), 404
-        updates, _recusa = _nd_guard_updates(deals[idx], updates, session.get('user_sid', ''))
+        updates, _recusa = _nd_guard_updates(deals[idx], updates, session.get('user_sid', ''), product)
         if _recusa:
             return _nd_guard_response(_recusa)
         deals[idx].update(updates)
@@ -2330,7 +2351,8 @@ def api_generic_nd_update_cache(product, deal_id):
         else:
             _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                                  'Deal Updated', cfg['label'], deal_id + ' (' + ', '.join(_fields.keys()) + ')' + _R()._nd_token(updated_deal.get('TradeDate')))
-    return jsonify({"success": True})
+    return jsonify({"success": True, "status": updated_deal.get('Status', ''),
+                    "b3_id": updated_deal.get('B3_ID', '')})
 
 @blueprint.route('/api/new-deals/<product>/cache/<deal_id>', methods=['DELETE'])
 def api_generic_nd_delete_cache(product, deal_id):
@@ -2346,10 +2368,7 @@ def api_generic_nd_delete_cache(product, deal_id):
         return jsonify({"success": False, "message": "Deal not found"}), 404
 
     with _R()._cache_lock:
-        try:
-            deals = _store.read(file_path)
-        except (json.JSONDecodeError, ValueError):
-            deals = []
+        deals = _nd_le_dia(file_path)
         idx = next((i for i, d in enumerate(deals)
                     if d.get('Deal') == deal_id and (client is None or d.get('Client', '') == client)), None)
         if idx is None:
@@ -2368,39 +2387,10 @@ def api_generic_nd_bulk_delete_cache(product):
     cfg = _R()._generic_nd_cfg(product)
     if not cfg:
         return jsonify({"success": False, "message": "Unknown product"}), 404
-
-    data  = request.get_json(silent=True)
-    pairs = data.get('pairs', []) if data else []
+    pairs = (request.get_json(silent=True) or {}).get('pairs', [])
     if not pairs:
         return jsonify({"success": False, "message": "No pairs provided"}), 400
-
-    pair_set = {(p.get('deal', ''), p.get('client', '')) for p in pairs}
-    file_pairs = {}
-    for deal_name, client_name in pair_set:
-        fp, _ = _R()._find_generic_nd_deal(cfg, deal_name, client_name)
-        if fp:
-            file_pairs.setdefault(fp, set()).add((deal_name, client_name))
-
-    deleted = 0
-    for fp, pairs_in_file in file_pairs.items():
-        with _R()._cache_lock:
-            try:
-                deals = _store.read(fp)
-            except (json.JSONDecodeError, ValueError):
-                deals = []
-            if not isinstance(deals, list):
-                deals = [deals]
-            before = len(deals)
-            deals  = [d for d in deals if (d.get('Deal', ''), d.get('Client', '')) not in pairs_in_file]
-            deleted += before - len(deals)
-            _R()._atomic_write_json(fp, deals)
-
-    not_found = len(pair_set) - deleted
-    if deleted > 0:
-        _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                             'Bulk Delete', cfg['label'],
-                             str(deleted) + ' deal' + ('s' if deleted != 1 else '') + ' deleted')
-    return jsonify({"success": True, "deleted": deleted, "not_found": not_found})
+    return _nd_bulk_delete(lambda d, c: _R()._find_generic_nd_deal(cfg, d, c), pairs, cfg['label'])
 
 @blueprint.route('/api/new-deals/<product>/cache/bulk-patch', methods=['POST'])
 def api_generic_nd_bulk_patch_cache(product):
@@ -2409,53 +2399,11 @@ def api_generic_nd_bulk_patch_cache(product):
     cfg = _R()._generic_nd_cfg(product)
     if not cfg:
         return jsonify({"success": False, "message": "Unknown product"}), 404
-
-    data    = request.get_json(silent=True)
-    patches = data.get('patches', []) if data else []
+    patches = (request.get_json(silent=True) or {}).get('patches', [])
     if not patches:
         return jsonify({"success": False, "message": "No patches provided"}), 400
-
-    file_patches = {}
-    for p in patches:
-        deal_id = p.get('deal_id', '')
-        client  = p.get('client', '')
-        updates = p.get('updates', {})
-        if not deal_id or not updates:
-            continue
-        fp, _ = _R()._find_generic_nd_deal(cfg, deal_id, client)
-        if fp:
-            file_patches.setdefault(fp, []).append((deal_id, client, updates))
-
-    updated = 0
-    refused = []                 # recusados pelo 4-olhos (`_nd_guard_updates`)
-    for fp, file_ops in file_patches.items():
-        with _R()._cache_lock:
-            try:
-                deals = _store.read(fp)
-            except (json.JSONDecodeError, ValueError):
-                deals = []
-            success_deals = []
-            for deal_id, client, updates in file_ops:
-                idx = next((i for i, d in enumerate(deals)
-                            if d.get('Deal') == deal_id and (not client or d.get('Client', '') == client)), None)
-                if idx is not None:
-                    upd, _recusa = _nd_guard_updates(deals[idx], updates, session.get('user_sid', ''))
-                    if _recusa:
-                        refused.append({'deal_id': deal_id, 'client': client, 'error': _recusa})
-                        continue
-                    deals[idx].update(upd)
-                    updated += 1
-                    if str(updates.get('Status', '')) == 'Success':
-                        success_deals.append(deals[idx].copy())
-            _R()._atomic_write_json(fp, deals)
-        for d in success_deals:
-            _R()._generic_nd_pc_trigger(product, d)              # → pending confirmation
-
-    if updated > 0:
-        _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                             'Bulk Update', cfg['label'],
-                             str(updated) + ' deal' + ('s' if updated != 1 else '') + ' updated')
-    return jsonify({"success": True, "updated": updated, "refused": refused})
+    return _nd_bulk_patch(lambda d, c: _R()._find_generic_nd_deal(cfg, d, c), patches, cfg['label'], product=product,
+                          depois=lambda d: _R()._generic_nd_pc_trigger(product, d))
 
 @blueprint.route('/api/new-deals/<product>/send-conecta', methods=['POST'])
 def api_generic_nd_send_conecta(product):
@@ -2485,6 +2433,11 @@ def api_generic_nd_send_conecta(product):
     deals = data.get('deals', [])
     if not deals:
         return jsonify({'ok': False, 'error': 'No deals provided'}), 400
+    if not download:
+        # status e 4-olhos conferidos no SERVIDOR antes do arquivo (§685)
+        _recusas = _nd_conferir_envio((lambda d, c: _R()._find_generic_nd_deal(_R()._generic_nd_cfg(product), d, c)), deals, session.get('user_sid', ''))
+        if _recusas:
+            return _nd_recusa_envio(_recusas)
 
     today = datetime.today().strftime('%Y%m%d')
 
@@ -2626,7 +2579,10 @@ def api_generic_nd_send_conecta(product):
                                  'Sent to B3', cfg['label'] if cfg else product,
                                  str(total) + ' deal' + ('' if total == 1 else 's') + ' sent')
         primary = generated[0]['filename'] if generated else ''
-        return jsonify({'ok': True, 'filename': primary, 'count': total, 'files': generated})
+        # o arquivo JÁ está na pasta: o `Sent` vai no mesmo pedido (§685)
+        _marcados, _falhas = _nd_marcar_enviados((lambda d, c: _R()._find_generic_nd_deal(_R()._generic_nd_cfg(product), d, c)), deals, session.get('user_sid', ''))
+        return jsonify({'ok': True, 'filename': primary, 'count': total, 'files': generated,
+                        'marked': _marcados, 'status_failed': _falhas})
     except Exception as exc:                            # noqa: BLE001
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
@@ -2653,7 +2609,7 @@ def api_generic_nd_mapping_b3(product):
         return jsonify({'ok': True, 'results': []})
 
     mapping         = {}
-    files_to_delete = []
+    linhas_por_arquivo = {}   # arquivo → dono (Deal) de cada linha TER
     try:
         if not _store.isdir(_R().RETURN_PATH):
             return jsonify({'ok': False, 'error': f'Return folder not found: {_R().RETURN_PATH}'}), 400
@@ -2665,7 +2621,7 @@ def api_generic_nd_mapping_b3(product):
             try:
                 with open(fpath, 'r', encoding='latin-1') as fh:
                     lines = fh.readlines()
-                file_has_ter = False
+                donos = []
                 for line in lines[1:]:  # skip header row
                     line = line.strip()
                     if not line:
@@ -2676,7 +2632,8 @@ def api_generic_nd_mapping_b3(product):
                     # arquivo era APAGADO antes do Mapping da recompra le-lo.
                     if line[56:59] != 'TER' or _e_antecipacao(line):
                         continue
-                    file_has_ter = True
+                    donos.append(next((sd.get('Deal', '') for sd in sent_deals
+                                       if sd.get('Deal', '') and sd.get('Deal', '')[-14:] in line), None))
                     if 'EXECUCAO OK' not in line:
                         continue
                     parts = line.split(';')
@@ -2687,20 +2644,21 @@ def api_generic_nd_mapping_b3(product):
                         deal_text = sd.get('Deal', '')
                         if deal_text and deal_text not in mapping and deal_text[-14:] in line:
                             mapping[deal_text] = b3_id
-                # Only delete return files that actually carried TER (NDF) lines
-                if file_has_ter:
-                    files_to_delete.append(fpath)
+                if donos:
+                    linhas_por_arquivo[fpath] = donos
             except Exception:
                 continue
     except Exception as exc:
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
     results = []
+    gravou = {}     # Deal → a linha ficou como o retorno manda (ver _nd_apaga_retornos)
     for sd in sent_deals:
         deal_text   = sd.get('Deal', '')
         client_name = sd.get('Client', '')
         if str(sd.get('Status', '') or '').strip() == 'Canceled':
-            continue                    # cancelado via API: fora do mapping
+            gravou[deal_text] = True    # cancelado via API: fora do mapping, nada a gravar
+            continue
         if deal_text and deal_text in mapping:
             b3_id      = mapping[deal_text]
             new_status = 'Success'
@@ -2729,6 +2687,7 @@ def api_generic_nd_mapping_b3(product):
             gravado, linha, motivo = _grava_mapeamento(
                 lambda d, c: _R()._find_generic_nd_deal(cfg, d, c),
                 deal_text, client_name, updates)
+        gravou[deal_text] = gravou.get(deal_text, True) and gravado
 
         success_deal = linha if (gravado and new_status == 'Success') else None
         if success_deal is not None:
@@ -2756,11 +2715,7 @@ def api_generic_nd_mapping_b3(product):
                 'reason': motivo,
             })
 
-    for fpath in files_to_delete:
-        try:
-            _store.remove(fpath)
-        except Exception:
-            pass
+    _nd_apaga_retornos(linhas_por_arquivo, gravou, cfg['label'])
 
     # O sino conta o que FICOU GRAVADO, não o que se tentou: escrito
     # `len(results)`, ele anunciava para a mesa inteira um número que

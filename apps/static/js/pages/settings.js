@@ -205,7 +205,7 @@
     $('st-reset').addEventListener('click', function () {
       var go = function () {
         save({ reset: true }).then(function () {
-          if (window.otcUI) { otcUI.set({ theme: 'light', accent: 'blue', wall: 'frost', glass: 'tinted' }, true); otcUI.fx('auto'); }
+          if (window.otcUI) { otcUI.set({ theme: 'light', accent: 'blue', wall: 'aurora', glass: 'clear' }, true); otcUI.fx('auto'); }
           render();
           if (window.otcToast) window.otcToast(t('reset_ok'));
         }).catch(P.fail);

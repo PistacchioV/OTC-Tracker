@@ -16,7 +16,7 @@
     }
     // paredes RETIRADAS (22/10/2026: não combinavam com a paleta do sistema;
     // as lisas viraram as cores dela): quem as tinha escolhido volta à padrão
-    // (`frost`, a sem `data-wall`), GRAVADO — senão o `data-wall` ficaria
+    // (`aurora`), GRAVADO — senão o `data-wall` ficaria
     // apontando para uma paleta que não existe, sem miniatura marcada na
     // gaveta e com o nome cru na Settings
     var retiradas = { ash: 1, sand: 1, sage: 1, bloom: 1, ember: 1, grove: 1, canyon: 1 };
@@ -28,8 +28,12 @@
     if (th === 'auto') th = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     r.setAttribute('data-bs-theme', th === 'dark' ? 'dark' : 'light');
     if (p.accent && p.accent !== 'blue') r.setAttribute('data-accent', p.accent);
-    if (p.wall && p.wall !== 'frost') r.setAttribute('data-wall', p.wall);
-    if (p.glass === 'clear') r.setAttribute('data-glass', 'clear');
+    // padrão de quem nunca escolheu: Aurora com o vidro Clear (26/10/2026). A
+    // `frost` é a parede SEM `data-wall` (o `:root` do otc.scss §2b) — o
+    // WALL_BASE/WALL_DEFAULT do otc.js, que tem de dizer o mesmo.
+    var wall = p.wall || 'aurora';
+    if (wall !== 'frost') r.setAttribute('data-wall', wall);
+    if ((p.glass || 'clear') === 'clear') r.setAttribute('data-glass', 'clear');
     var fx = '', auto = null;
     try { fx = localStorage.getItem('__OTC_TRACKER_FX__') || ''; auto = sessionStorage.getItem('__OTC_FX_AUTO__'); } catch (e) {}
     // automático = sem GPU (sonda do otc.js, memoizada na sessão) OU o sistema

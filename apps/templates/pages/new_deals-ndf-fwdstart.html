@@ -453,6 +453,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.select.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/nd-write.js?v={{ asset_v('js/nd-write.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/inputmask/inputmask.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/missing-counterparty.js?v={{ asset_v('js/missing-counterparty.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/b3-quote-config.js?v={{ asset_v('js/b3-quote-config.js') }}"></script>
@@ -2223,51 +2224,31 @@ $(document).ready(function() {
             if (!result.isConfirmed) return;
 
             var dealPayloads = sendableRows.map(function(item) { return extractRowDeal(item.data); });
-            fetch('/api/new-deals/fwd-start/send-conecta', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deals: dealPayloads })
-            }).then(function(r) { return r.json(); })
+            // O servidor confere status e 4-olhos ANTES do arquivo e grava o
+            // Sent no mesmo pedido (§685). O PATCH por linha e o POST de
+            // "criar a linha que falta" saíram: com eles recusados o arquivo ia
+            // para a B3 e a linha seguia Approved, pronta para ir de novo. E o
+            // casamento é pelo Deal/Client do PAYLOAD: o antigo lia d[3]/d[10],
+            // que nesta grade são LE e Acronym, não Deal e Client.
+            otcNdWrite('/api/new-deals/fwd-start/send-conecta', 'POST', { deals: dealPayloads })
             .then(function(res) {
-                if (res.ok) {
-                    sendableRows.forEach(function(item) {
-                        var rowId = _sh(item.data[3]) || '';
-                        if (rowId) {
-                            var sendChanges    = { Checker: CURRENT_USER_SID, Status: 'Sent' };
-                            var capturedClient = _sh(item.data[10]);
-                            (function(capturedData, capturedRowId, capturedChanges, capturedCli) {
-                                fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(capturedRowId) + '?client=' + encodeURIComponent(capturedCli), {
-                                    method: 'PATCH',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify(capturedChanges)
-                                }).then(function(r) {
-                                    if (r.status === 404) {
-                                        var fullDeal = rowDataToNdfDeal(capturedData, capturedRowId, capturedChanges);
-                                        console.log('[NDF-DEALS SEND] PATCH 404 → creating missing cache entry', capturedRowId);
-                                        fetch('/api/new-deals/fwd-start/cache', {
-                                            method:  'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body:    JSON.stringify(fullDeal)
-                                        }).catch(function(e2) { console.warn('Send POST fallback failed:', e2); });
-                                    }
-                                }).catch(function(err) { console.warn('Cache PATCH failed:', err); });
-                            })(item.data, rowId, sendChanges, capturedClient);
-                        }
-                        table.cell(item.rowIdx, STATUS_COL_INDEX).data(
-                            '<span class="badge otc-status badge-sent bg-gradient">Sent</span>'
-                        );
-                    });
-                    selectedRowIds.clear();
-                    toggleActionButtons(false);
-                    table.draw(false);
-                    var _fnames = (res.files||[]).map(function(f){return f.filename;}).join(', ') || res.filename || '';
-                    Swal.fire({ title: t('swal-sent-title', 'Sent'), text: res.count + ' ' + t('swal-deals-written', 'deal(s) written to') + ' ' + _fnames + '.', icon: 'success', timer: 2500, showConfirmButton: false });
-                } else {
-                    Swal.fire({ title: t('swal-conecta-error-title', 'Conecta Error'), text: res.error || t('swal-file-gen-failed', 'File generation failed.'), icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
-                }
+                var marcados = otcNdKeySet(res.marked);
+                sendableRows.forEach(function(item, i) {
+                    if (!marcados[otcNdKey(dealPayloads[i].Deal, dealPayloads[i].Client)]) return;
+                    table.cell(item.rowIdx, STATUS_COL_INDEX).data(
+                        '<span class="badge otc-status badge-sent bg-gradient">Sent</span>'
+                    );
+                });
+                selectedRowIds.clear();
+                toggleActionButtons(false);
+                table.draw(false);
+                if (otcNdSendIssues(res)) return;
+                var _fnames = (res.files||[]).map(function(f){return f.filename || f;}).join(', ') || res.filename || '';
+                Swal.fire({ title: t('swal-sent-title', 'Sent'), text: res.count + ' ' + t('swal-deals-written', 'deal(s) written to') + ' ' + _fnames + '.', icon: 'success', timer: 2500, showConfirmButton: false });
             })
             .catch(function(err) {
-                Swal.fire({ title: t('swal-conecta-error-title', 'Conecta Error'), text: t('swal-request-failed', 'Request failed:') + ' ' + err.message, icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+                if (err.body && otcNdSendIssues(err.body)) return;
+                Swal.fire({ title: t('swal-conecta-error-title', 'Conecta Error'), text: err.message || t('swal-file-gen-failed', 'File generation failed.'), icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
             });
         });
     });
@@ -2320,8 +2301,10 @@ $(document).ready(function() {
         }).then(function(result) {
             if (!result.isConfirmed) return;
 
-            // Pass 1 (sync): update DataTable cells + collect patches
+            // Pass 1 (sync): collect patches — a grade só muda DEPOIS do
+            // servidor, e só nas linhas que ele gravou (§685)
             var patches = [];
+            var ui = [];
             var processedCount = 0, skippedCount = 0;
 
             // DT2.x defaults to {page:'current'} — use all pages + no search filter
@@ -2364,40 +2347,44 @@ $(document).ready(function() {
                         plainVal = newValue;
                         cellHtml = newValue;
                     }
-                    table.cell(rowIdx, colIdx).data(cellHtml);
                     var jsonField = COL_TO_JSON_FIELD[colIdx];
                     if (jsonField) changedFields[jsonField] = plainVal;
                 }
 
                 var newStatus = isStatusCol ? 'Approved' : 'Pending';
-                table.cell(rowIdx, STATUS_COL_INDEX).data(
-                    isStatusCol
-                        ? '<span class="badge otc-status text-bg-secondary bg-gradient">Approved</span>'
-                        : '<span class="badge otc-status text-bg-warning bg-gradient">Pending</span>'
-                );
                 changedFields['Status'] = newStatus;
                 // Whoever edits (→Pending) or approves (→Approved) becomes the new Maker
-                table.cell(rowIdx, MAKER_COL_INDEX).data(CURRENT_USER_SID);
                 changedFields['Maker'] = CURRENT_USER_SID;
                 processedCount++;
                 patches.push({ deal_id: rowId, client: clientClean, updates: changedFields });
+                ui.push({ rowIdx: rowIdx, cellHtml: isStatusCol ? null : cellHtml,
+                          key: otcNdKey(rowId, clientClean) });
             });
 
-            selectedRowIds.clear();
-            toggleActionButtons(false);
-            table.draw(false);
-
-            // Pass 2 (async): single bulk-patch request — one read+write per file, no race condition
-            if (patches.length > 0) {
-                fetch('/api/new-deals/fwd-start/cache/bulk-patch', {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ patches: patches })
-                }).then(function(r) { return r.json(); })
-                  .then(function(j) { console.log('[NDF-DEALS APPLY] bulk-patch OK — updated:', j.updated, 'of', patches.length); })
-                  .catch(function(err) { console.error('[NDF-DEALS APPLY] bulk-patch error:', err); });
-            }
             console.log('[NDF-DEALS APPLY] processed=' + processedCount + ' skipped=' + skippedCount + ' patches=' + patches.length);
+            if (!patches.length) return;
+            // Pass 2: single bulk-patch request — one read+write per file. O
+            // status pintado é o que o SERVIDOR gravou (`done`): linha já
+            // enviada volta Amend ou fica como estava.
+            otcNdWrite('/api/new-deals/fwd-start/cache/bulk-patch', 'POST', { patches: patches })
+            .then(function(res) {
+                var feitos = otcNdKeySet(res.done, 'deal_id');
+                ui.forEach(function(u) {
+                    var f = feitos[u.key];
+                    if (!f) return;
+                    if (u.cellHtml !== null) table.cell(u.rowIdx, colIdx).data(u.cellHtml);
+                    var st = f.status || '';
+                    var cls = st === 'Approved' ? 'text-bg-secondary' : st === 'Sent' ? 'badge-sent'
+                            : st === 'Success' ? 'text-bg-success' : 'text-bg-warning';
+                    table.cell(u.rowIdx, STATUS_COL_INDEX).data('<span class="badge otc-status ' + cls + ' bg-gradient">' + st + '</span>');
+                    table.cell(u.rowIdx, MAKER_COL_INDEX).data(CURRENT_USER_SID);
+                });
+                selectedRowIds.clear();
+                toggleActionButtons(false);
+                table.draw(false);
+                otcNdPartial(res);
+            })
+            .catch(function(err) { otcNdFail('save', err); });
         });
     });
 
@@ -2468,32 +2455,26 @@ $(document).ready(function() {
                 }
             });
 
-            fetch('/api/new-deals/fwd-start/cache/bulk-delete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pairs: pairs })
-            }).then(function(r) {
-                return r.json();
-            }).then(function(res) {
-                console.log('[NDF-DEALS DELETE] Backend response:', res);
-                if (res.deleted !== pairs.length) {
-                    console.warn('[NDF-DEALS DELETE] Mismatch — sent:', pairs.length, 'deleted in backend:', res.deleted, 'not_found:', res.not_found);
-                }
-            }).catch(function(err) {
-                console.error('[NDF-DEALS DELETE] Fetch error:', err);
-            });
-
-            // Sort descending so each splice doesn't shift the indices of remaining rows
-            rowsToDelete.sort(function(a, b) { return b.rowIdx - a.rowIdx; });
-            console.log('[NDF-DEALS DELETE] Removing from DataTable (sorted desc):', rowsToDelete.map(function(r){ return 'idx='+r.rowIdx+' deal='+r.rowId; }));
-            rowsToDelete.forEach(function(r) { table.row(r.rowIdx).remove(); });
-            console.log('[NDF-DEALS DELETE] DataTable rows after removal:', table.rows().count());
             console.groupEnd();
-
-            selectedRowIds.clear();
-            toggleActionButtons(false);
             bsModal.hide();
-            table.draw(false);
+            // Só sai da grade o par que o servidor APAGOU (§430/§685): tirada
+            // antes, a linha que ele não achou ou não pôde ler voltava no
+            // recarregamento, sem aviso nenhum.
+            otcNdWrite('/api/new-deals/fwd-start/cache/bulk-delete', 'POST', { pairs: pairs })
+            .then(function(res) {
+                console.log('[NDF-DEALS DELETE] Backend response:', res);
+                var apagados = otcNdKeySet(res.done);
+                // Sort descending so each splice doesn't shift the indices of remaining rows
+                rowsToDelete.sort(function(a, b) { return b.rowIdx - a.rowIdx; });
+                rowsToDelete.forEach(function(r) {
+                    if (apagados[otcNdKey(r.rowId, r.client)]) table.row(r.rowIdx).remove();
+                });
+                selectedRowIds.clear();
+                toggleActionButtons(false);
+                table.draw(false);
+                otcNdPartial(res, 'deal');
+            })
+            .catch(function(err) { otcNdFail('delete', err); });
         });
 
         bsModal.show();
@@ -2734,7 +2715,10 @@ $(document).ready(function() {
     var DATE_COL_INDICES      = [6, 8, 13, 14, 15];
     var QUOTED_COL_INDEX      = -1;   // no Quoted-in-Cents column on this page
     var STATUS_COL_INDEX      = 2;
-    var MAKER_COL_INDEX       = 30;  // SID do maker — coluna oculta no fim
+    // 31, não 30 (26/10/2026): a 30 é a Settlement Location (o FWD Start tem
+    // uma coluna a mais que o Vanilla) — o Confirm escrevia o SID nela e a
+    // trava do Send lia a Settlement Location como Maker
+    var MAKER_COL_INDEX       = 31;  // SID do maker — coluna oculta no fim
     // Columns never turned into inputs (auto-populated or structural)
     var SKIP_EDIT_COLS        = [0, 1, 2, 9, 11, 12]; // checkbox, actions, status, SPN, Client, TaxID
 
@@ -3033,99 +3017,9 @@ $(document).ready(function() {
         if (typeof arOpenEditModal === 'function') arOpenEditModal(tr[0]);
     });
 
-    // ── SAVE EDIT ─────────────────────────────────────────────────────────
-    // Collects edited values, sets status to Pending, restores action buttons
-    $(document).on('click', '#deals-processing-table tbody .btn-row-save-edit', function(e) {
-        e.preventDefault();
-        var tr = $(this).closest('tr');
-
-        var statusNode = table.cell(tr[0], STATUS_COL_INDEX).node();
-        var badge = statusNode ? $(statusNode).find('.badge') : $();
-        var currentStatus = badge.length ? badge.text().trim() : '';
-        var origClient = _sh(table.cell(tr[0], 11).data());
-
-        var changedFields = {};
-
-        // Save all editable fields back to plain text; capture plain values for JSON sync
-        for (var colIdx = 2; colIdx <= 26; colIdx++) {
-            if (SKIP_EDIT_COLS.indexOf(colIdx) !== -1) {
-                var roNode = table.cell(tr[0], colIdx).node();
-                if (!roNode) continue;
-                var roTd = $(roNode);
-                var roSpan = roTd.find('.dt-cell-readonly');
-                if (roSpan.length) {
-                    var roVal = roSpan.text().trim();
-                    roTd.html(roVal);
-                    var jfRo = COL_TO_JSON_FIELD[colIdx];
-                    if (jfRo && roVal !== '') changedFields[jfRo] = roVal;
-                }
-                continue;
-            }
-
-            var cellNode = table.cell(tr[0], colIdx).node();
-            if (!cellNode) continue;
-            var td = $(cellNode);
-
-            var editField = td.find('.row-edit-field');
-            if (!editField.length) continue;
-
-            var newVal, plainVal;
-            if (editField.is('input[type="date"]')) {
-                plainVal = iso2dmy(editField.val());
-                newVal   = plainVal;
-            } else if (colIdx === QUOTED_COL_INDEX) {
-                plainVal = editField.val();
-                newVal   = plainVal === 'YES'
-                    ? '<span class="badge otc-status text-bg-success rounded-pill">YES</span>'
-                    : plainVal === 'MISSING'
-                        ? '<span class="badge otc-status text-bg-secondary rounded-pill">Missing B3</span>'
-                        : '<span class="badge otc-status text-bg-warning rounded-pill">NO</span>';
-            } else {
-                plainVal = editField.val() || '';
-                newVal   = plainVal;
-            }
-
-            td.html(newVal);
-
-            var jsonField = COL_TO_JSON_FIELD[colIdx];
-            if (jsonField) changedFields[jsonField] = plainVal;
-        }
-
-        // Maker = editor's SID; sync to DataTable hidden col
-        var rowId = _sh(table.cell(tr[0], 4).data()) || '';
-        table.cell(tr[0], MAKER_COL_INDEX).data(CURRENT_USER_SID);
-        changedFields['Maker'] = CURRENT_USER_SID;
-
-        // Status always becomes Pending after an edit
-        if (currentStatus !== 'Pending') {
-            if (statusNode) {
-                $(statusNode).html('<span class="badge otc-status text-bg-warning bg-gradient">Pending</span>');
-            }
-        }
-        changedFields['Status'] = 'Pending';
-
-        // Restore original action buttons in col 1 before invalidating DOM
-        var actNode = table.cell(tr[0], 1).node();
-        if (actNode) {
-            $(actNode).find('[data-bs-toggle="tooltip"]').each(function() {
-                var inst = bootstrap.Tooltip.getInstance(this);
-                if (inst) { inst.hide(); inst.dispose(); }
-            });
-            $(actNode).html(ACTIONS_HTML);
-        }
-
-        if (rowId) {
-            fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(origClient), {
-                method:  'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify(changedFields)
-            }).catch(function(err) { console.warn('Cache PATCH failed:', err); });
-        }
-
-        tr.removeAttr('data-editing');
-        table.row(tr[0]).invalidate('dom');
-        table.draw(false);
-    });
+    // O Save de edição NA LINHA (`.btn-row-save-edit`) saiu (26/10/2026): o
+    // botão vivia só no EDIT_ACTIONS_HTML, que nada insere — o Edit é sempre o
+    // modal (§572) —, e o handler gravava por um PATCH que ninguém conferia.
 
     // ── CANCEL EDIT ───────────────────────────────────────────────────────
     // New row (no rowId) → remove it; existing row → redraw from DT internal data
@@ -3155,8 +3049,11 @@ $(document).ready(function() {
         var tr = $(this).closest('tr');
 
         var statusNode = table.cell(tr[0], STATUS_COL_INDEX).node();
-        var badge = statusNode ? $(statusNode).find('.badge') : $();
-        var currentStatus = badge.length ? badge.text().trim() : '';
+        // O status é o DADO da célula, nunca o texto do badge: o
+        // missing-counterparty.js troca o badge no DOM por "Missing
+        // Counterparty" (o dado fica intacto), e lido dali o Confirm saía
+        // CALADO — sem nem o aviso de cadastrar a contraparte (§685).
+        var currentStatus = _sh(table.cell(tr[0], STATUS_COL_INDEX).data());
 
         // New e Amend → Approved direto (mesa, 23/09/2026). O passo Pending
         // existe para quem EDITOU submeter a alteração à revisão, e este
@@ -3187,20 +3084,21 @@ $(document).ready(function() {
             }
             var directStatus = directToApproved ? 'Approved' : 'Pending';
             var directBadge  = directToApproved ? 'text-bg-secondary' : 'text-bg-warning';
-            if (statusNode) {
-                $(statusNode).html('<span class="badge otc-status ' + directBadge + ' bg-gradient">' + directStatus + '</span>');
-            }
-            table.cell(tr[0], MAKER_COL_INDEX).data(CURRENT_USER_SID);
             var pendRowId = _sh(table.cell(tr[0], 4).data()) || '';
-            if (pendRowId) {
-                fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(pendRowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 11).data())), {
-                    method:  'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ Status: directStatus, Maker: CURRENT_USER_SID })
-                }).catch(function(err) { console.warn('Cache PATCH failed:', err); });
-            }
-            table.row(tr[0]).invalidate('dom');
-            table.draw(false);
+            if (!pendRowId) { otcNdFail('confirm', new Error(otcNdT('e_no_deal'))); return; }
+            // a linha só muda com o servidor aceitando (§685): 403 do 4-olhos,
+            // 409 da aba velha e 503 do banco ocupado aparecem com o motivo
+            otcNdWrite('/api/new-deals/fwd-start/cache/' + encodeURIComponent(pendRowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 11).data())),
+                       'PATCH', { Status: directStatus, Maker: CURRENT_USER_SID })
+            .then(function () {
+                if (statusNode) {
+                    $(statusNode).html('<span class="badge otc-status ' + directBadge + ' bg-gradient">' + directStatus + '</span>');
+                }
+                table.cell(tr[0], MAKER_COL_INDEX).data(CURRENT_USER_SID);
+                table.row(tr[0]).invalidate('dom');
+                table.draw(false);
+            })
+            .catch(function (err) { otcNdFail('confirm', err); });
             return;
         }
 
@@ -3229,21 +3127,20 @@ $(document).ready(function() {
                 });
                 return;
             }
-            if (statusNode) {
-                $(statusNode).html('<span class="badge otc-status text-bg-secondary bg-gradient">Approved</span>');
-            }
-            // Approver becomes the new Maker → next step (Send) must be a different user
-            table.cell(tr[0], MAKER_COL_INDEX).data(CURRENT_USER_SID);
             var approveRowId = _sh(table.cell(tr[0], 4).data()) || '';
-            if (approveRowId) {
-                fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(approveRowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 11).data())), {
-                    method:  'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ Status: 'Approved', Maker: CURRENT_USER_SID })
-                }).catch(function(err) { console.warn('Cache PATCH failed:', err); });
-            }
-            table.row(tr[0]).invalidate('dom');
-            table.draw(false);
+            if (!approveRowId) { otcNdFail('confirm', new Error(otcNdT('e_no_deal'))); return; }
+            otcNdWrite('/api/new-deals/fwd-start/cache/' + encodeURIComponent(approveRowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 11).data())),
+                       'PATCH', { Status: 'Approved', Maker: CURRENT_USER_SID })
+            .then(function () {
+                if (statusNode) {
+                    $(statusNode).html('<span class="badge otc-status text-bg-secondary bg-gradient">Approved</span>');
+                }
+                // Approver becomes the new Maker → next step (Send) must be a different user
+                table.cell(tr[0], MAKER_COL_INDEX).data(CURRENT_USER_SID);
+                table.row(tr[0]).invalidate('dom');
+                table.draw(false);
+            })
+            .catch(function (err) { otcNdFail('confirm', err); });
         }
         // status Approved/Sent/Success → do nothing
     });
@@ -3293,7 +3190,7 @@ $(document).ready(function() {
         e.preventDefault();
         var tr = $(this).closest('tr');
         var statusNode = table.cell(tr[0], STATUS_COL_INDEX).node();
-        var currentStatus = statusNode ? $(statusNode).find('.badge').text().trim() : '';
+        var currentStatus = _sh(table.cell(tr[0], STATUS_COL_INDEX).data());   // o dado, não o badge (§685)
         var makerSid = table.cell(tr[0], MAKER_COL_INDEX).data() || '';
 
         if (currentStatus !== 'Approved' && currentStatus !== 'Error') {
@@ -3332,31 +3229,22 @@ $(document).ready(function() {
         }).then(function(result) {
             if (!result.isConfirmed) return;
             var dealPayload = extractRowDeal(tr[0]);
-            fetch('/api/new-deals/fwd-start/send-conecta', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deals: [dealPayload] })
-            }).then(function(r) { return r.json(); })
+            // O servidor confere status e 4-olhos ANTES do arquivo e grava o
+            // Sent no mesmo pedido (§685): a tela pinta só o que ele marcou.
+            otcNdWrite('/api/new-deals/fwd-start/send-conecta', 'POST', { deals: [dealPayload] })
             .then(function(res) {
-                if (res.ok) {
-                    var rowId = _sh(table.cell(tr[0], 4).data()) || '';
-                    if (rowId) {
-                        fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 11).data())), {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ Checker: CURRENT_USER_SID, Status: 'Sent' })
-                        }).catch(function(err) { console.warn('Cache PATCH failed:', err); });
-                    }
+                var marcados = otcNdKeySet(res.marked);
+                if (marcados[otcNdKey(dealPayload.Deal, dealPayload.Client)]) {
                     table.cell(tr[0], STATUS_COL_INDEX).data(
                         '<span class="badge otc-status badge-sent bg-gradient">Sent</span>'
                     );
                     table.draw(false);
-                } else {
-                    Swal.fire({ title: t('swal-conecta-error-title', 'Conecta Error'), text: res.error || t('swal-file-gen-failed', 'File generation failed.'), icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
                 }
+                otcNdSendIssues(res);
             })
             .catch(function(err) {
-                Swal.fire({ title: t('swal-conecta-error-title', 'Conecta Error'), text: t('swal-request-failed', 'Request failed:') + ' ' + err.message, icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+                if (err.body && otcNdSendIssues(err.body)) return;
+                Swal.fire({ title: t('swal-conecta-error-title', 'Conecta Error'), text: err.message || t('swal-file-gen-failed', 'File generation failed.'), icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
             });
         });
     });
@@ -4156,7 +4044,9 @@ $(document).ready(function() {
         arOpenEditModal = function (tr) {
             var d = table.row(tr).data();
             if (!d) return;
-            $(arModalEl).data('editRowId', _sh(d[4]) || '').data('editTr', tr);
+            // o Client que a linha TEM: é por ele que o servidor a acha — o do
+            // campo pode ter mudado no modal (trocar o Acronym o reescreve)
+            $(arModalEl).data('editRowId', _sh(d[4]) || '').data('editTr', tr).data('editClient', _sh(d[11]));
             arModalEl.querySelector('.modal-title').innerHTML = '<i class="ti ti-edit me-1"></i>Edit Deal &mdash; NDF FWD Start';
             $('#ar-le').val(_sh(d[3]));
             $('#ar-deal').val(_sh(d[4]));
@@ -4296,14 +4186,14 @@ $(document).ready(function() {
             }
 
             if (editRowId) {
-                var editClient = $('#ar-client').val().trim();
-                fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(editRowId) + '?client=' + encodeURIComponent(editClient), {
-                    method:  'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify(deal)
-                })
-                .then(function (r) { return r.json(); })
-                .then(function () {
+                // A grade só muda com o servidor dizendo que gravou, e com o
+                // status que ELE gravou (linha já enviada volta como Amend ou
+                // fica como estava — §685). Recusa mantém o modal aberto.
+                otcNdWrite('/api/new-deals/fwd-start/cache/' + encodeURIComponent(editRowId) + '?client=' + encodeURIComponent($(arModalEl).data('editClient') || ''),
+                           'PATCH', deal)
+                .then(function (res) {
+                    if (res.status) deal.Status = res.status;
+                    if (res.b3_id !== undefined) deal.B3_ID = res.b3_id;
                     if (editTr) table.row(editTr).data(dealJsonToRow(deal)).draw(false);
                     bootstrap.Modal.getInstance(arModalEl).hide();
                     $(arModalEl).removeData('editRowId').removeData('editTr');
@@ -4314,33 +4204,20 @@ $(document).ready(function() {
                         Swal.fire({ title: 'Saved', text: 'Deal updated.', icon: 'success', timer: 1800, showConfirmButton: false });
                     }
                 })
-                .catch(function (err) {
-                    Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK' });
-                });
+                .catch(function (err) { otcNdFail('save', err); });
             } else {
-                fetch('/api/new-deals/fwd-start/cache', {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify(deal)
+                otcNdWrite('/api/new-deals/fwd-start/cache', 'POST', deal)
+                .then(function () {
+                    table.row.add(dealJsonToRow(deal)).draw(false);
+                    bootstrap.Modal.getInstance(arModalEl).hide();
+                    Swal.fire({ title: 'Added', text: 'Deal saved.', icon: 'success', timer: 1800, showConfirmButton: false });
                 })
-                .then(function (r) { return r.json(); })
-                .then(function (res) {
-                    if (res.success) {
-                        table.row.add(dealJsonToRow(deal)).draw(false);
-                        bootstrap.Modal.getInstance(arModalEl).hide();
-                        Swal.fire({ title: 'Added', text: 'Deal saved.', icon: 'success', timer: 1800, showConfirmButton: false });
-                    } else {
-                        Swal.fire({ title: 'Error', text: res.message || 'Failed to save row.', icon: 'error', confirmButtonText: 'OK' });
-                    }
-                })
-                .catch(function (err) {
-                    Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK' });
-                });
+                .catch(function (err) { otcNdFail('save', err); });
             }
         });
 
         $(arModalEl).on('hidden.bs.modal', function () {
-            $(arModalEl).removeData('editRowId').removeData('editTr');
+            $(arModalEl).removeData('editRowId').removeData('editTr').removeData('editClient');
         });
     }());
 

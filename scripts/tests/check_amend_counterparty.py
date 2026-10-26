@@ -239,8 +239,10 @@ for pg in ('ndf-commodities', 'ndf-fwdstart', 'ndf-otherpublisher', 'ndf-vanilla
     check('%s: New e Amend -> Approved' % pg,
           ("if (currentStatus === 'New' || currentStatus === 'Amend') {\n"
            "            var directToApproved = true;") in html, True)
+    # o Save do MODAL (o Save na linha, que escrevia `changedFields['Status']`,
+    # era código morto e saiu no §685)
     check('%s: o Save do Edit continua pondo em Pending' % pg,
-          "changedFields['Status'] = 'Pending';" in html, True)
+          re.search(r"editRowId \? (?:\(promoteToSuccess \? 'Success' : )?'Pending'", html) is not None, True)
 
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

@@ -105,6 +105,12 @@ tmp = tempfile.mkdtemp(prefix='check-conecta-')
 orig = (R.CONECTA_NEW_PATH, R._create_notification)
 R.CONECTA_NEW_PATH = tmp
 R._create_notification = lambda *a, **kw: None
+# o NOME é o assunto aqui: a conferência do status no banco e a marcação de
+# Sent (§685, `check_nd_write_verdict.py`) ficam de fora
+from apps.pages.features.new_deals import entrypoint as _NDE   # noqa: E402
+_orig_envio = (_NDE._nd_conferir_envio, _NDE._nd_marcar_enviados)
+_NDE._nd_conferir_envio = lambda *a, **k: []
+_NDE._nd_marcar_enviados = lambda *a, **k: ([], [])
 DEALS = [{'Deal': 'D1', 'Client': 'CLIENTE QUALQUER SA', 'TradeDate': '2026-10-20'},
          {'Deal': 'D2', 'Client': 'BANCO J.P MORGAN S.A', 'TradeDate': '2026-10-20'}]
 try:
@@ -141,6 +147,7 @@ try:
 finally:
     R._mapping_rows = orig_rows
     R.CONECTA_NEW_PATH, R._create_notification = orig
+    _NDE._nd_conferir_envio, _NDE._nd_marcar_enviados = _orig_envio
     shutil.rmtree(tmp, ignore_errors=True)
 
 print('\n== 5. todo gerador da New passa pelo nome com a conta ==')
