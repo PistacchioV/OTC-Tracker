@@ -29963,11 +29963,17 @@ Cetes):
 As outras telas (NDF, Opções) seguem com o download sem a conta.
 `check_conecta_file_name.py` §6.
 
-No mesmo preview (`file-preview.js`), a coluna Value estava espremida: com o
-layout automático e o Value quebrando em qualquer caractere, era ele que cedia,
-e o Block levava metade da tabela. Block, Field e Format agora encolhem até o
-conteúdo (`width: 1%` + `nowrap` no `th`) e o Value fica com a sobra — em toda
-tela que usa o `otcFilePreview`.
+No mesmo preview (`file-preview.js`), a coluna Value estava espremida. A
+causa é o título de BLOCO mais longo do 0301 de fluxo não constante
+("Funcionalidade/Titular da Funcionalidade/Prêmio (1) de Funcionalidade/Prêmio
+(2) de Funcionalidade", 98 caracteres): a célula do Block não quebrava linha,
+e com o layout automático ela levava ~490px — o Value, que quebra em qualquer
+caractere, era a coluna que cedia. Por isso o 0034 (blocos curtos) saía
+certo e o 0301 não. A primeira tentativa (`width: 1%` + `nowrap`) não muda
+nada com um título desses: o `nowrap` é o mínimo da coluna. Hoje Block tem
+150px e Field 280px FIXOS, os dois quebrando dentro da largura (o Block com
+`overflow-wrap: anywhere`), Format no conteúdo e o Value com a sobra — em
+toda tela que usa o `otcFilePreview`.
 
 ## §699 — Swaps: o B2B × Lawton (CEM), o Create B2B no card, a guarda-chuva CLIENT 1 (2026-10-26)
 
