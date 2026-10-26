@@ -29968,3 +29968,39 @@ layout automático e o Value quebrando em qualquer caractere, era ele que cedia,
 e o Block levava metade da tabela. Block, Field e Format agora encolhem até o
 conteúdo (`width: 1%` + `nowrap` no `th`) e o Value fica com a sobra — em toda
 tela que usa o `otcFilePreview`.
+
+## §699 — Swaps: o B2B × Lawton (CEM), o Create B2B no card, a guarda-chuva CLIENT 1 (2026-10-26)
+
+Pedidos da equipe, todos nas telas de swap (Bullet e Cashflow; o Cetes só no
+Add Deal):
+
+- **Add Row → Add Deal** (catálogo: `add_label`; Bullet no template).
+- **Create B2B** no card do deal contra cliente: a operação do cliente com as
+  pernas ATIVA e PASSIVA trocadas, × o fundo da LOB — **CEM × Lawton, EDG ×
+  Atacama** —, e o modal de Add aberto para editar (`static/js/swap-deal.js`,
+  `otcSwapB2B`; o quinto botão do `deal-cards.js`, só com `onB2B`). A troca é
+  campo a campo (`CurveA…` ↔ `CurveB…`, inclusive cotação, DCC e cupom), o
+  `VcpHolder`/`VanillaHolder` acompanha, o pagador do prêmio inverte (o cliente
+  pagava → o Banco paga ao fundo) e sai tudo que identifica a operação do
+  cliente (Deal, B3 ID, SPN, conta, Meu Número). Sem LOB não há B2B — aviso.
+- **O backend só sabia o B2B × Atacama.** `swap_deal_ticket` ganhou o fundo
+  como dado (`B2B_FUNDS`, `b2b_fund`, `set_pair`, `fund_in_text`): visões
+  `bank` + `atacama`/`lawton`, `le_pair(view, deal)` (a visão do Banco é contra
+  o fundo do deal), conta e participante do fundo no `b3-accounts`, lacuna da
+  conta do fundo, arquivos `SWAP_CF_CEM_LAWTON.txt` etc., e a Intrag Swap na
+  carteira do fundo (`_INTRAG_FUND`: INTRAGJP633 Atacama, INTRAGJP552 Lawton —
+  o nome do Cetes). O `enrich` reconhece a SPN do Lawton no `le-spn`, e o LE
+  ganhou `LAWTON` no select das telas de swap (só nelas).
+- **A guarda-chuva da contraparte sem conta própria é a CLIENT 1**
+  (73760.10-2): o 0301 da Boticario saía com a 73760.20-5 (CLIENT 2), uma
+  escolha do §480 sem amostra da equipe. Continua vindo do `b3-accounts` pelo
+  TIPO; o deal gravado com a guarda-chuva (`ClientAccountNote = omnibus`) é
+  relido no preview e no Send (`swap_new_deals.with_current_omnibus`), sem
+  reimportar.
+- **O card**: Trade Date ao lado do Start → Maturity; a curva com o percentual
+  (fora dos 100%) e o spread, "CDI + 3.00%" (`otcSwapCurveText`, tipo `curve`
+  no catálogo); o Type ("Fluxo de Caixa", termo da B3 gravado no deal) no
+  idioma da tela (`otcSwapTypeLabel`, tipo `swap-type` no subtítulo).
+
+`check_swap_cashflow.py` §11 (Lawton ponta a ponta, Intrag, CLIENT 1) e §12 (o
+JS no node, o catálogo, as traduções); `check_swap_bullet.py` com a CLIENT 1.
