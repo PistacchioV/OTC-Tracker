@@ -294,9 +294,12 @@ exista no módulo (`__module__` mente sob `functools.wraps`; quem diz é o
   `b3-accounts` (aceita a LE, o balde `BANCO` e o par `MGT x CLI`). Os nomes
   saem TODOS antes do primeiro arquivo (visão sem conta recusa o lote), um
   arquivo é de UMA visão só (as Opções juntavam Banco e Lawton no
-  `FXO_Banco.txt`) e o download do preview fica sem a conta.
-  `check_conecta_file_name.py` §5 varre por AST: quem lê o `CONECTA_NEW_PATH`
-  chama o nomeador.
+  `FXO_Banco.txt`) e o download do preview fica sem a conta — MENOS nos
+  SWAPS (Bullet, Cashflow, Cetes; equipe, 26/10/2026, §698): ali o Send com
+  download e o Export do preview levam a conta como a New (o arquivo baixado é
+  o que vai ao Conecta); no preview a visão sem conta fica com o nome de
+  sempre, e quem recusa é o Send. `check_conecta_file_name.py` §5 varre por
+  AST: quem lê o `CONECTA_NEW_PATH` chama o nomeador; §6 prende os swaps.
 - **`/static/data/...` do navegador também sai do `DATA_DIR`**: a rota
   `static_data_file` resolve pelo `data_path()` e vence o `/static/<path>`
   embutido; serve RefData/CPD/calendários do BANCO quando fresco. Raiz e caminho
