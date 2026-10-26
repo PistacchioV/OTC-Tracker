@@ -75,14 +75,23 @@ OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_<nome>.py
   a ponte (`_raiz_no_shared_drive`) aponta o `OTC_STRATOS_ROOT` para ele antes
   do `import apps`, e a chave da sessão vai junto. O porte para o Stratos NoSQL
   (MongoDB) ficou para depois da virada; a prod segue na instância da equipe
-  até o Stratos estar 100%, e os passos que faltam (travas no EFS, a chegada do
-  pacote sem pisar nos bancos em uso, o backup de hora em hora) estão no §681.
+  até o Stratos estar 100%, e os passos que faltam (a chegada do pacote sem
+  pisar nos bancos em uso, o backup de hora em hora) estão no §681. As travas
+  no EFS têm PROVA (§689, `stratos/src/prova_travas.py`, rota
+  `/stratos/prova-travas`, só do master): o risco é o NFS emular o `flock` com
+  trava POSIX, que é do PROCESSO — um segundo descritor no mesmo arquivo a
+  converte e fechá-lo a solta —, e as conferências `mesmo_processo_*` o acusam.
   As pastas do share que o app usa chegam e saem por uma PONTE (§683):
   `stratos/ponte_share.py` numa máquina da rede do JPM e os manifestos da
   thread do contêiner, com a regra no `stratos/src/ponte_comum.py`. Pasta NOVA
   do share na dev entra na lista `PASTAS` de lá, senão no Stratos ela fica
-  vazia sem erro nenhum. Até a virada a ponte é ESPELHO (só do share para o
-  Stratos) e nunca escreve no share.
+  vazia sem erro nenhum, e com o SENTIDO certo (`entrada`, `saida`, `ambos`
+  ou `desce`): pasta que o app só GRAVA e nunca lê é `desce` (§690) — o
+  espelho a pula e o alinhar só registra na base o que o share tem, sem subir
+  gigabytes que o app não usa. Até a virada a ponte é ESPELHO (só do share
+  para o Stratos) e nunca escreve no share. Caminho do share passa pelo
+  `ponte_comum.longo` (`\\?\UNC\…`): o Electronic Inventory tem pasta acima
+  do limite de 248 caracteres do Windows.
 - **O bloco DEV BYPASS (`/dev-login`) do `routes.py` nunca vai para o
   repositório.** É removido antes de cada commit e restaurado depois.
 - **Nunca fixe um de-para novo no código.** Tudo que é mapeável se cadastra
@@ -3339,6 +3348,12 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   relativo; `I:\` é relativo em qualquer sistema que não seja Windows — as
   pastas `I:\Confirmation\...` na raiz do repo vieram daí).
 - **SMTP** `mailhost.jpmchase.net:25` sem auth; fora da rede falha em silêncio.
+  **No Stratos o relay não responde**: a ponte troca o `smtplib.SMTP` pelo
+  Email block do stratos-blocks (`stratos/src/email_stratos.py`, §691; os
+  senders não mudam, porque todos leem `smtplib.SMTP` na hora do envio). Sender
+  novo usa o mesmo `with smtplib.SMTP(...) as server: server.sendmail(...)`;
+  imagem do corpo vai por `cid:` (o block casa pelo NOME do arquivo, e a ponte
+  reescreve o `cid:`). `OTC_STRATOS_EMAIL=0` volta ao SMTP.
 - **Athena**: `build_session()` com `trust_env=False` (o proxy corporativo
   causava `WinError 10061`); no Windows exige `requests-negotiate-sspi`
   (declarado com marcador de plataforma; sem ele `401` no
