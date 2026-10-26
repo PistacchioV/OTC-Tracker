@@ -284,8 +284,14 @@ def _main(R, app, catalog, bullet, bullet_q, commands, domain, entrypoint, queri
         pares = [(str(s), str(s)) for s in range(1, 19)] + [(str(s), str(s)) for s in range(26, 40)] + \
             [('47', '41'), ('48', '42'), ('49', '43'), ('50', '44'), ('51', '45'), ('52', '46'),
              ('53', '47'), ('54', '48'), ('55', '49'), ('56', '50'), ('116', '98')]
-        dif = [(b, c) for b, c in pares if b not in ('15', '17') and bv[b] != vals[c]]
+        # Sinal/Juros da curva VCP (os 36/37 da Contraparte aqui) o cashflow
+        # leva e o Bullet não (equipe, 26/10/2026)
+        vcp_sj = {str(b + o) for b, sd in ((26, 'A'), (33, 'B'))
+                  if domain.dtk._curve(deal, sd)['category'] == 'VCP' for o in (3, 4)}
+        dif = [(b, c) for b, c in pares if b not in ('15', '17') and c not in vcp_sj and bv[b] != vals[c]]
         check('%s: os campos que os dois layouts têm saem IGUAIS aos do Bullet' % view, dif == [], dif)
+        check('%s: a curva VCP leva Sinal e Juros (%% aa)' % view,
+              all(vals[c].strip() for c in vcp_sj) and bool(vcp_sj), {c: vals[c] for c in vcp_sj})
         check('%s: posições do manual (tipo, Meu Número, contas, datas, valor base, curva, LOB)' % view,
               _pos(linha, 1, 10) == 'SWAP 10301' and _pos(linha, 11, 20) == MY and _pos(linha, 21, 28) == '73760009'
               and _pos(linha, 53, 60) == '74220005' and _pos(linha, 85, 92) == '20260915' and _pos(linha, 93, 100) == '20270607'
@@ -307,6 +313,26 @@ def _main(R, app, catalog, bullet, bullet_q, commands, domain, entrypoint, queri
     check('fluxo: data de pagamento nas duas pontas e a taxa 9(03)v9(05)',
           _pos(lf[0], 1, 8) == '20261215' and _pos(lf[0], 50, 57) == '02500000' and _pos(lf[0], 58, 65) == '20261215'
           and _pos(lf[0], 107, 114) == '02500000' and _pos(lf[2], 50, 57) == '05000000', lf[0][:120])
+    # as taxas de juros das duas pontas (equipe, 26/10/2026): as da curva de
+    # cada uma no 0301 — P1 = a ponta da menor conta (aqui a Parte, a JPM)
+    vcf = domain.contract_record_values(cf, 'client', accounts, codes, MY)
+    _h, _r, lfc = domain.flow_values(cf, 'client', accounts, MY, '1234567890', codes['amortization'],
+                                     'JPMORGANBM', '20260916', codes)
+    lfc = [R._fi_build_line(commands.FLOW_FI_KEY, 'fluxo', x) for x in lfc]
+    check('fluxo: Sinal e Taxa de Juros P1 (9-17) = os da Parte no 0301; P2 (66-74) = os da Contraparte',
+          all(_pos(x, 9, 10) == vcf['29'] and _pos(x, 11, 17) == vcf['30']
+              and _pos(x, 66, 67) == vcf['36'] and _pos(x, 68, 74) == vcf['37'] for x in lfc)
+          and all(len(x) == domain.FLOW_LINE_LENGTH for x in lfc),
+          (lfc[0][8:17], lfc[0][65:74], vcf['29'], vcf['30'], vcf['36'], vcf['37']))
+    # o exemplo da equipe: P1 0,95% e P2 4,8824% (USD, TAXAS DE CAMBIO)
+    cfx = dict(cf, CurveACategory='JUROS', CurveARate='0.9500', CurveASign='+',
+               CurveBCategory='TAXAS DE CAMBIO', CurveBRate='4.8824', CurveBSign='+')
+    _h, _r, lfx = domain.flow_values(cfx, 'client', accounts, MY, '1', codes['amortization'],
+                                     'JPMORGANBM', '20260916', dict(codes, signA='00', signB='00'))
+    lfx = [R._fi_build_line(commands.FLOW_FI_KEY, 'fluxo', x) for x in lfx]
+    check('   no exemplo: 00 0009500 na P1 e 00 0048824 na P2; a VCP também leva a dela',
+          all(_pos(x, 9, 17) == '000009500' and _pos(x, 66, 74) == '000048824' for x in lfx)
+          and lfc[0][65:74].strip(), (lfx[0][8:17], lfx[0][65:74], lfc[0][65:74]))
     ha, rega, _l = domain.flow_values(cf, 'atacama', accounts, MY, '1', '00', 'INTRAGATACAMAFDO', '20260916')
     check('na visão da Atacama a ponta da parte é 01 (85398005 > 73760009)', rega['9'] == '01')
 
@@ -610,6 +636,17 @@ def _main(R, app, catalog, bullet, bullet_q, commands, domain, entrypoint, queri
               vals['49'] == '000000051150000' and vals['50'] == '01', (vals['49'], vals['50']))
         check('0301: a Parte (Curva A, CDI) fica sem cupom limpo', vals['47'].strip() == '' and vals['48'].strip() == '')
         check('   e Curva A = C03 (DI + 0,15%)', vals['27'] == 'C03' and vals['30'] == '0001500', (vals['27'], vals['30']))
+        # Com Atualização de Notional (a termo): Cupom Limpo em branco, mas a
+        # Data de Cotação VAI — sem a coluna, o D-n da fixação ao início.
+        dt9 = dict(d9b, CurveBQuote='', NotionalIndex='PTAX-V', NotionalObsDate='2026-09-01')
+        ct9 = dict(commands.queries.codes_for(d9b), termo_index='15', termo_quote='01')
+        vt9 = domain.contract_record_values(dt9, 'client', acc, ct9, '1234567890')
+        check('a termo: Cupom Limpo da moeda em branco e a Data de Cotação = o D-n do termo (01)',
+              not vt9['49'].strip() and vt9['50'] == '01', (vt9['49'], vt9['50']))
+        lt9 = {x['code'] for x in domain.missing_for_send(dt9, ct9, sw.own_accounts(), '')}
+        check('   e a Data de Cotação não é lacuna', 'swc_fx_quote' not in lt9, sorted(lt9))
+        vt9b = domain.contract_record_values(dict(dt9, CurveBQuote='D-3'), 'client', acc, ct9, '1234567890')
+        check('   a coluna Curve B Quote preenchida vence', vt9b['50'] == '03', vt9b['50'])
     finally:
         R._mapping_rows = _mr
     check('fx_quote_code: D-1/1/01 → 01; D0 → 00; D-7 e texto → vazio',
@@ -707,10 +744,21 @@ def _main(R, app, catalog, bullet, bullet_q, commands, domain, entrypoint, queri
         lac10 = {x['code'] for x in domain.missing_for_send(d10, cod10, sw.own_accounts(), cod10.get('amortization'))}
         check('a termo o Preço Inicial do VCP não é pedido; sem lacuna', not lac10, sorted(lac10))
         v10 = domain.contract_record_values(d10, 'client', {'JPM': '73760009'}, cod10, '1234567890')
-        check('0301: 14 = 216.000.000,00; 19 = Data da operação; 20 = 15; 21 = 100%; 22-24 em branco; 99 = 02',
+        check('0301: 14 = 216.000.000,00; 19 = Data da operação; 20 = 15; 21 = 100%; 22 = o FX inicial 5,4; '
+              '23-24 em branco; 99 = 02',
               v10['14'] == '0000021600000000' and v10['19'] == '20261106' and v10['20'] == '15'
-              and v10['21'] == '10000' and not (v10['22'] + v10['23'] + v10['24']).strip() and v10['99'] == '02',
-              {k: v10[k] for k in ('14', '19', '20', '21', '99')})
+              and v10['21'] == '10000' and v10['22'] == '0000000000000540000000'
+              and not (v10['23'] + v10['24']).strip() and v10['99'] == '02',
+              {k: v10[k] for k in ('14', '19', '20', '21', '22', '99')})
+        check('0301: a curva VCP do cliente leva Sinal e Juros (36/37)',
+              v10['36'] == '00' and v10['37'].isdigit() and len(v10['37']) == 7, (v10['36'], v10['37']))
+        v10q = domain.contract_record_values(dict(d10, QuoteDateCode='', CurveBQuote=''), 'client',
+                                             {'JPM': '73760009'}, cod10, '1234567890')
+        check('0301: sem Quote Date D-n, a Data de Cotação da VCP a termo = o D-n do termo (02)',
+              v10q['50'] == '02' and not v10q['49'].strip(), (v10q['49'], v10q['50']))
+        l10f = {x['code'] for x in domain.missing_for_send(dict(d10, FXStart=''), cod10, sw.own_accounts(),
+                                                            cod10.get('amortization'))}
+        check('   a termo sem FX Start é lacuna (o PU Inicial)', 'swc_fx_coupon' in l10f, sorted(l10f))
         check('0301: com FWD Start e Atualização de Notional, o Cupom Limpo (47/49) vai em BRANCO',
               not v10['47'].strip() and not v10['49'].strip())
         check('0301: a perna VCP do cliente (guarda-chuva) leva PU 1, 17922, a Denominação e D-1',

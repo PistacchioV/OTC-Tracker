@@ -973,6 +973,9 @@ $(document).ready(function() {
             html += '<div class="' + w + '">' + fieldInput(f, c[1], e[f] != null ? String(e[f]) : '') + '</div>';
         });
         document.getElementById('swbEditGrid').innerHTML = html;
+        // formato da equipe, CNPJ e a conta B3 dos holders (swap-deal.js)
+        if (window.otcSwapModalPrep) otcSwapModalPrep(document.getElementById('swbEditGrid'), e);
+        $(modalEl).data('entry', e);
         if (window.otcDateField) document.querySelectorAll('#swbEditGrid input.swb-date:not([readonly])').forEach(function(el){ window.otcDateField(el); });
         // A contraparte é a do Reference Data pela SPN: digitou a SPN, puxa
         // nome, conta B3 e CNPJ na hora (o servidor re-puxa ao gravar).
@@ -987,7 +990,7 @@ $(document).ready(function() {
                     if (leEl && res.le) leEl.value = (res.le === 'ATACAMA' || res.le === 'LAWTON') ? res.le : 'JPM';
                     if (cli) cli.value = res.client || cli.value;
                     if (acc) acc.value = res.account || '';
-                    if (tax) tax.value = res.account ? '' : (res.taxid || '');
+                    if (tax) { tax.value = res.account ? '' : (res.taxid || ''); tax.dispatchEvent(new Event('input')); }
                     if (cli) cli.classList.remove('is-invalid');
                 } else {
                     if (cli) cli.classList.add('is-invalid');
@@ -999,9 +1002,13 @@ $(document).ready(function() {
         bootstrap.Modal.getOrCreateInstance(modalEl).show();
     }
     function readModal() {
-        var out = {};
+        var out = {}, ent = $(modalEl).data('entry') || {};
         document.querySelectorAll('#swbEditGrid [data-f]').forEach(function(el){
             var f = el.getAttribute('data-f'), v = (el.value || '').trim();
+            if (window.otcSwapModalValue && !el.classList.contains('swb-date') && f !== 'TradeDate') {
+                v = otcSwapModalValue(el, ent);
+                if (v === null) return;          // só de leitura (a conta do holder)
+            }
             if (el.classList.contains('swb-date') || f === 'TradeDate') {
                 if (el._flatpickr && el._flatpickr.selectedDates[0]) { var d = el._flatpickr.selectedDates[0]; v = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
                 else v = /^\d{2}\/\d{2}\/\d{4}$/.test(v) ? _dmyToIso(v) : v;
@@ -1135,6 +1142,7 @@ $(document).ready(function() {
             if (!result.success) { console.warn('Search failed:', result.message); Swal.fire({ icon: 'warning', title: t('nd-search-failed-title', 'Operations not loaded'), text: (result.error === 'database_busy' || result.error === 'database_unreadable') ? t('nd-search-' + result.error, result.message || '') : (result.message || result.error || '') }); return; }
             selected.clear();
             ENTRIES = result.deals || [];
+            if (window.otcSwapSetAccounts) otcSwapSetAccounts(result.own_accounts);
             renderAll();
         })
         .catch(function(err) { console.error('Search error:', err); });

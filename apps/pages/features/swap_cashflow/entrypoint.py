@@ -123,7 +123,9 @@ def api_swap_cashflow_search():
     if not isinstance(filters, list):
         filters = []
     matched = [d for d in queries.entries() if _R()._deal_matches(d, filters)]
+    # as contas próprias do b3-accounts: o modal mostra a conta B3 dos holders
     return jsonify({'success': True, 'deals': matched, 'backend': True,
+                    'own_accounts': queries.own_accounts(),
                     'fields': list(domain.SWC_FIELDS), 'labels': list(domain.SWC_LABELS)})
 
 

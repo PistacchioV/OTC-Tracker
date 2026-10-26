@@ -580,6 +580,28 @@ def fx_quote_code(deal, side):
     return '%02d' % int(m.group(1))
 
 
+def fx_quote(deal, side, codes):
+    """A Data de Cotação (48/50) da perna de moeda: a `Curve X Quote`; no
+    contrato a TERMO sem ela, o D-n da fixação do índice ao início (o mesmo
+    `termo_quote` do campo 99) — com Atualização de Notional o Cupom Limpo vai
+    em branco, mas a Data de Cotação VAI (equipe, 26/10/2026)."""
+    q = fx_quote_code(deal, side)
+    if not q and is_termo(deal) and (codes or {}).get('termo_index') != '00':
+        q = str((codes or {}).get('termo_quote') or '').strip()
+    return q
+
+
+def vcp_quote(deal, side, codes):
+    """A Data de Cotação (48/50) da perna VCP: o `Quote Date D-n` do deal, a
+    `Curve X Quote` da curva e, no contrato a TERMO sem nenhum dos dois, o D-n
+    da fixação ao início — com Atualização de Notional ela VAI preenchida
+    (equipe, 26/10/2026)."""
+    q = str(deal.get('QuoteDateCode') or '').strip()
+    if q:
+        return q.zfill(2)
+    return fx_quote(deal, side, codes)
+
+
 # ── O contrato a TERMO (FWD Start com Atualização de Notional, §697) ──────────
 # O swap pactuado hoje cujo Valor Base em reais só se fixa depois (`Initial FX:
 # PTAX-V 06-Nov-2026`): o 0301 o registra a termo — Data da operação (19), o
@@ -682,19 +704,22 @@ def contract_record_values(deal, view, accounts, codes, my_number):
         vals['19'] = dtk.ymd(deal.get('TradeDate')).ljust(8)
         vals['20'] = (codes.get('termo_index') or '').rjust(2)[:2] or _blank(2)
         vals['21'] = dtk.b3_num(TERMO_PERCENT, 3, 2)
+        # PU Inicial/Cupom Limpo do índice termo = o FX inicial (o `FX: 5.40` do
+        # recap) com qualquer Índice Termo (equipe, 26/10/2026) — era só no VCP.
+        vals['22'] = dtk.b3_num(dtk.parse_number(deal.get('FXStart')), 14, 8) or _blank(22)
         if codes.get('termo_index') == '00':
-            vals['22'] = dtk.b3_num(dtk.parse_number(deal.get('FXStart')), 14, 8) or _blank(22)
             vals['23'] = d(codes.get('termo_class')).zfill(5)[-5:] if d(codes.get('termo_class')) else _blank(5)
             vals['24'] = termo_denomination(deal)[:320].ljust(320)
     # Curva para Atualização: 26-32 Parte, 33-39 Contraparte (as mesmas do Bullet).
     for base, side in ((26, parte), (33, contra)):
         c = dtk._curve(deal, side['curve'])
-        juros = c['category'] != 'VCP'
         vals[str(base)] = dtk.b3_num(c['pct'], 3, 2) or _blank(5)
         vals[str(base + 1)] = (codes.get('curve' + side['curve']) or '').ljust(3)[:3]
         vals[str(base + 2)] = _blank(8)
-        vals[str(base + 3)] = (codes.get('sign' + side['curve']) or '00') if juros else _blank(2)
-        vals[str(base + 4)] = (dtk.b3_num(c['rate'], 3, 4) or '0000000') if juros else _blank(7)
+        # Sinal e Juros (% aa) em TODA curva, a VCP inclusive (equipe,
+        # 26/10/2026 — no Bullet a VCP vai sem eles).
+        vals[str(base + 3)] = codes.get('sign' + side['curve']) or '00'
+        vals[str(base + 4)] = dtk.b3_num(c['rate'], 3, 4) or '0000000'
         vals[str(base + 5)] = dtk.b3_num(c['floor'], 8, 8) or _blank(16)
         vals[str(base + 6)] = dtk.b3_num(c['cap'], 8, 8) or _blank(16)
     vals['40'] = _blank(35)             # Terceira curva: não se usa.
@@ -719,15 +744,14 @@ def contract_record_values(deal, view, accounts, codes, my_number):
             vals[str(base + 2)] = _blank(320)
             vals[str(cl_base)] = ((dtk.b3_num(fx_clean_coupon(deal, lado), 8, 7) or _blank(15))
                                   if not termo else _blank(15))
-            vals[str(cl_base + 1)] = fx_quote_code(deal, lado) or _blank(2)
+            vals[str(cl_base + 1)] = fx_quote(deal, lado, codes) or _blank(2)
         elif c['category'] == 'VCP':
             vals[str(base)] = dtk.b3_num(1, 14, 8)
             vals[str(base + 1)] = d(deal.get('VcpCode')).zfill(5)[-5:] if d(deal.get('VcpCode')) else _blank(5)
             com_texto = side is parte or (side is contra and contra_desc)
             vals[str(base + 2)] = text[:320].ljust(320) if com_texto else _blank(320)
             vals[str(cl_base)] = (dtk.b3_num(price, 8, 7) or _blank(15)) if not termo else _blank(15)
-            vals[str(cl_base + 1)] = (str(deal.get('QuoteDateCode') or '').zfill(2)
-                                      if str(deal.get('QuoteDateCode') or '').strip() else _blank(2))
+            vals[str(cl_base + 1)] = vcp_quote(deal, side['curve'], codes) or _blank(2)
         else:
             vals[str(base)] = _blank(22)
             vals[str(base + 1)] = _blank(5)
@@ -759,12 +783,24 @@ def contract_record_values(deal, view, accounts, codes, my_number):
 # ── O registro 0034 (o cronograma) ───────────────────────────────────────────
 
 def flow_values(deal, view, accounts, contract_my_number, flow_my_number, amort_code, participant,
-                today_ymd):
+                today_ymd, codes=None):
     """(header, registro, [linhas de fluxo]) do 0034 — cada um {seq: valor na
     largura}. Papel = a PONTA da Parte pela conta MENOR (o critério do 0897,
     manual 4.2.12 — SUPOSIÇÃO: a 4.2.8 não o repete). As duas pontas levam a
-    mesma data e a mesma taxa de amortização: o cronograma do DT é um só."""
+    mesma data e a mesma taxa de amortização: o cronograma do DT é um só. O
+    Sinal e a Taxa de Juros de cada ponta (2-3, 8-9) são os da curva dela no
+    0301 (equipe, 26/10/2026): a P1 é a ponta da MENOR conta, a VCP inclusive."""
     parte, contra = dtk.view_sides(deal, view, accounts)
+    codes = codes or {}
+    p1, p2 = ((parte, contra) if dtk._ponta(parte['account'], parte['account'], contra['account']) == '00'
+              else (contra, parte))
+
+    def _juros(side):
+        c = dtk._curve(deal, side['curve'])
+        return ((codes.get('sign' + side['curve']) or '00'),
+                dtk.b3_num(c['rate'], 3, 4) or '0000000')
+    s1, t1 = _juros(p1)
+    s2, t2 = _juros(p2)
     flows = normalize_schedule(deal.get(SCHEDULE_FIELD))
     header = {'1': 'SWAP ', '2': '0', '3': '0034', '4': str(participant or '').ljust(20)[:20],
               '5': today_ymd}
@@ -781,8 +817,8 @@ def flow_values(deal, view, accounts, contract_my_number, flow_my_number, amort_
     for fl in flows:
         data = dtk.ymd(fl.get('PaymentDate')).ljust(8)
         amort = dtk.b3_num(dtk.parse_number(fl.get('AmortizationPct')) or 0, 3, 5)
-        linha = {'1': data, '2': _blank(2), '3': _blank(7), '4': _blank(16), '5': _blank(16), '6': amort,
-                 '7': data, '8': _blank(2), '9': _blank(7), '10': _blank(16), '11': _blank(16), '12': amort}
+        linha = {'1': data, '2': s1, '3': t1, '4': _blank(16), '5': _blank(16), '6': amort,
+                 '7': data, '8': s2, '9': t2, '10': _blank(16), '11': _blank(16), '12': amort}
         for seq in range(13, 23):
             linha[str(seq)] = _blank(8)
         linhas.append(linha)
@@ -807,6 +843,10 @@ def missing_for_send(deal, codes, accounts, amort_code):
     out = [lacuna('swc_missing', t, field=t) for t in dtk.missing_for_send(deal, codes, accounts)
            if not (termo and t == 'Initial Price')]
     if termo:
+        # o PU Inicial do índice termo (22) é o FX inicial, com qualquer índice
+        if dtk.parse_number(deal.get('FXStart')) is None:
+            out.append(lacuna('swc_fx_coupon', 'Forward start: FX Start (the initial PU of the forward index)',
+                              side='-'))
         if not str(codes.get('termo_index') or '').strip():
             out.append(lacuna('swc_termo_index', 'Forward start: index %r has no Índice Termo code in '
                               '/mapping › Swap — Forward-start Index' % deal.get('NotionalIndex'),
@@ -816,8 +856,6 @@ def missing_for_send(deal, codes, accounts, amort_code):
                 out.append(lacuna('swc_termo_class', 'Forward start fixing on the start date (VCP): the '
                                   'Tipo/Classe of index %r — /mapping › Swap — Forward-start Index'
                                   % deal.get('NotionalIndex'), index=str(deal.get('NotionalIndex') or '')))
-            if dtk.parse_number(deal.get('FXStart')) is None:
-                out.append(lacuna('swc_fx_coupon', 'Forward start (VCP): FX Start', side='-'))
         elif not str(codes.get('termo_quote') or '').strip():
             out.append(lacuna('swc_termo_quote', 'Forward start: the fixing date (%s) must be D0 to D-5 '
                               'business days before the Start Date' % deal.get('NotionalObsDate'),
@@ -859,7 +897,7 @@ def missing_for_send(deal, codes, accounts, amort_code):
             if fx_clean_coupon(deal, side) is None:
                 out.append(lacuna('swc_fx_coupon', 'Curve %s (currency): initial FX quote — FX Start or '
                                   'Clean Coupon' % side, side=side))
-            if not fx_quote_code(deal, side):
+            if not fx_quote(deal, side, codes):
                 out.append(lacuna('swc_fx_quote', 'Curve %s (currency): Quote date D-n (D0 to D-5)'
                                   % side, side=side))
         if not str(deal.get('Curve' + side + 'Category') or '').strip():

@@ -19,6 +19,17 @@
  *     paga ao cliente, que é a que ele recebe do fundo), a LE e o Client = o
  *     fundo, quem paga o prêmio invertido, e sem nada que identifique a
  *     operação do cliente (Deal, B3 ID, SPN, conta). null sem fundo.
+ *
+ *   otcSwapModalPrep(grid, e) / otcSwapModalValue(el, e) — os campos do modal
+ *     de Edit/Add no formato da equipe: valores #,##0.00 (Notional, Notional
+ *     Foreign Ccy, Premium Amount), FX Start #0.00000000, o Client Tax ID com a
+ *     máscara de CNPJ, e o VCP/Vanilla Holder pela CONTA B3 de quem carrega a
+ *     perna (só leitura: o texto do DT segue gravado, é o que o e-mail lê). O
+ *     `Value` devolve o dado CRU (sem milhar, sem pontuação), e o valor que só
+ *     mudou de formato volta como estava — o Edit não vira Amend por isso.
+ *
+ *   otcSwapSetAccounts(map) — as contas PRÓPRIAS do `b3-accounts` ({LE: conta}),
+ *     que a busca da página devolve (`own_accounts`).
  */
 (function () {
   'use strict';
@@ -95,5 +106,105 @@
      'MyNumber', 'MyNumberMirror', 'FlowMyNumber', 'FlowMyNumberMirror', 'PremiumMyNumber',
      'PremiumMyNumberMirror', 'Pair', 'Title'].forEach(function (k) { if (k in d) d[k] = ''; });
     return d;
+  };
+
+  // ── O modal ────────────────────────────────────────────────────────────
+  var OWN = {};
+  window.otcSwapSetAccounts = function (m) { if (m && typeof m === 'object') OWN = m; };
+
+  var MONEY = { Notional: 1, NotionalFC: 1, PremiumAmount: 1 };
+  var DEC = { FXStart: 8 };
+  var HOLDER = { VcpHolder: 1, VanillaHolder: 1 };
+
+  function digits(v) { return String(v == null ? '' : v).replace(/\D/g, ''); }
+  function rawNum(v) { return String(v == null ? '' : v).replace(/,/g, '').trim(); }
+
+  // 73760009 → 73760.00-9 (a grafia da B3)
+  window.otcSwapAccountText = function (v) {
+    var d = digits(v);
+    return d.length === 8 ? d.slice(0, 5) + '.' + d.slice(5, 7) + '-' + d.slice(7) : d;
+  };
+
+  function cnpjText(d) {
+    var t = d.slice(0, 2);
+    if (d.length > 2) t += '.' + d.slice(2, 5);
+    if (d.length > 5) t += '.' + d.slice(5, 8);
+    if (d.length > 8) t += '/' + d.slice(8, 12);
+    if (d.length > 12) t += '-' + d.slice(12, 14);
+    return t;
+  }
+  // CNPJ só quando o texto é número; Tax ID estrangeiro ou N/A fica como veio
+  function taxText(v) {
+    v = String(v == null ? '' : v);
+    if (!v.trim() || /[A-Za-z]/.test(v)) return v;
+    var d = digits(v);
+    return d.length > 11 ? cnpjText(d.slice(-14).padStart(14, '0')) : cnpjText(d);
+  }
+
+  function numText(f, v) {
+    var n = parseFloat(rawNum(v));
+    if (isNaN(n) || !String(v == null ? '' : v).trim()) return v == null ? '' : String(v);
+    if (MONEY[f]) return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return n.toFixed(DEC[f]);
+  }
+
+  // A conta B3 de quem carrega a perna: o Banco é a conta própria da JPM; o
+  // outro é a contraparte da linha — o fundo no B2B, a conta do cliente (ou a
+  // guarda-chuva) contra cliente.
+  window.otcSwapHolderAccount = function (e, nome) {
+    nome = String(nome || '').trim();
+    if (!nome) return '';
+    if (OURS.test(nome)) return OWN.JPM || '';
+    var le = String((e && e.LE) || '').trim().toUpperCase();
+    if (FUND_NAME[le]) return OWN[le] || digits(e.ClientAccount);
+    return digits(e && e.ClientAccount);
+  };
+
+  window.otcSwapModalPrep = function (grid, e) {
+    if (!grid) return;
+    e = e || {};
+    grid.querySelectorAll('input[data-f]').forEach(function (el) {
+      var f = el.getAttribute('data-f');
+      if (MONEY[f] || DEC[f]) {
+        el.value = numText(f, el.value);
+        el.classList.add('text-end');
+        el.addEventListener('focus', function () { el.value = rawNum(el.value); });
+        el.addEventListener('blur', function () { el.value = numText(f, el.value); });
+      } else if (f === 'ClientTaxId') {
+        el.value = taxText(el.value);
+        el.setAttribute('placeholder', '00.000.000/0000-00');
+        el.setAttribute('autocomplete', 'off');
+        el.addEventListener('input', function () {
+          if (/[A-Za-z]/.test(el.value)) return;
+          var t = cnpjText(digits(el.value).slice(0, 14));
+          if (t !== el.value) el.value = t;
+        });
+      } else if (HOLDER[f]) {
+        var acc = window.otcSwapHolderAccount(e, e[f]);
+        el.value = acc ? window.otcSwapAccountText(acc) : '';
+        el.title = String(e[f] || '');
+        el.readOnly = true;
+        el.setAttribute('data-view', '1');      // mostra a conta; não volta ao servidor
+      }
+    });
+  };
+
+  // O dado cru do campo; `null` = o campo não volta ao servidor
+  window.otcSwapModalValue = function (el, e) {
+    var f = el.getAttribute('data-f'), v = (el.value || '').trim();
+    var orig = e && e[f] != null ? String(e[f]) : '';
+    // o holder mostra a conta e devolve o texto do DT como estava (o Create B2B
+    // leva o dele para o deal novo)
+    if (el.getAttribute('data-view')) return orig || null;
+    if (MONEY[f] || DEC[f]) {
+      v = rawNum(v);
+      var a = parseFloat(v), b = parseFloat(rawNum(orig));
+      return !isNaN(a) && !isNaN(b) && Math.abs(a - b) < 1e-9 ? orig : v;
+    }
+    if (f === 'ClientTaxId' && !/[A-Za-z]/.test(v)) {
+      v = digits(v);
+      return v.replace(/^0+/, '') === digits(orig).replace(/^0+/, '') ? orig : v;
+    }
+    return v;
   };
 })();
