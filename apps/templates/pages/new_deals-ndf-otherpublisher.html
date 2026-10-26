@@ -4174,7 +4174,7 @@ $(document).ready(function() {
                     bootstrap.Modal.getInstance(arModalEl).hide();
                     $(arModalEl).removeData('editRowId').removeData('editTr').removeData('editClient');
                     if (promoteToSuccess) {
-                        Swal.fire({ title: t('swal-b3-confirmed-title', 'Confirmed'), text: t('swal-b3-confirmed-text', 'B3 ID saved — status set to Success and sent to Intrag.'), icon: 'success', timer: 2200, showConfirmButton: false });
+                        Swal.fire({ title: t('swal-b3-confirmed-title', 'Confirmed'), text: t('swal-b3-confirmed-text', 'B3 ID saved — status set to Success.'), icon: 'success', timer: 2200, showConfirmButton: false });
                         if (typeof window.fetchNotifications === 'function') window.fetchNotifications();
                     } else {
                         Swal.fire({ title: 'Saved', text: 'Deal updated.', icon: 'success', timer: 1800, showConfirmButton: false });

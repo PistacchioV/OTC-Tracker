@@ -1429,6 +1429,24 @@ class StageNotPending(Exception):
     """MO/FO assinando antes do OTC. A mensagem é o Trade ID."""
 
 
+def validation_blocker(row, stage, comment='', rules=None):
+    """O que IMPEDE validar `stage` nesta linha — `StageNotPending`,
+    `SlaCommentRequired` ou None. A MESMA regra do `mark_validated` (que a usa
+    sob a trava): quem valida em LOTE pergunta antes de gravar a primeira, e
+    um lote que recusaria na quinta linha não deixa as quatro primeiras
+    assinadas sem o espelho no Pending (§696). `rules` é o cadastro já lido."""
+    if row is None:
+        return None
+    rule, _found = rule_for(row.get('Produto'), row.get('LOB'), rules)
+    if stage != STAGE_OTC and rule[STAGE_OTC] and not _filled(row, 'Conferido OTC'):
+        return StageNotPending(str(row.get(KEY_COLUMN, '') or '').strip())
+    if _filled(row, STAGE_COLUMNS[stage][0]):
+        return None
+    if sla_breached(row, stage) and not str(comment or '').strip():
+        return SlaCommentRequired(stage)
+    return None
+
+
 def mark_validated(key, stage, sid, comment=''):
     """Valida uma etapa: carimba a data, o horário e o SPN de quem validou.
 
@@ -1452,13 +1470,13 @@ def mark_validated(key, stage, sid, comment=''):
         # A ETAPA também: MO e FO conferem o documento que o OTC validou, e
         # assinar antes dele era possível por POST direto. E validar de novo
         # uma etapa já validada não troca o carimbo de quem assinou primeiro.
-        rule, _found = rule_for(row.get('Produto'), row.get('LOB'))
-        if stage != STAGE_OTC and rule[STAGE_OTC] and not _filled(row, 'Conferido OTC'):
-            raise StageNotPending(str(row.get(KEY_COLUMN, '') or key).strip())
+        bloqueio = validation_blocker(row, stage, comment)
+        if isinstance(bloqueio, StageNotPending) and not str(bloqueio):
+            bloqueio = StageNotPending(str(key).strip())
+        if bloqueio is not None:
+            raise bloqueio
         if _filled(row, STAGE_COLUMNS[stage][0]):
             return
-        if sla_breached(row, stage) and not comment:
-            raise SlaCommentRequired(stage)
         if comment:
             col = STAGE_COMMENT_COLUMN.get(str(stage or '').upper())
             if col:

@@ -746,7 +746,8 @@ def delete(athena_id, ref_date=''):
     # gerado ou ja enviada ao cliente e REGISTRO: apagar a recompra levaria
     # embora o rastro de quem assinou, e o documento continuaria na pasta da
     # contraparte sem nada que o explique.
-    if not _R()._mc_mod.row_untouched(str(athena_id or '').strip()):
+    chave_mc = domain.chave_esteira(lst[idx])
+    if chave_mc and not _R()._mc_mod.row_untouched(chave_mc):
         raise ValueError('This unwind already has a signed trail entry (document generated, '
                          'validated or sent to the client). Delete it on the Confirmations '
                          'Monitor first, or keep the line.')
@@ -767,7 +768,7 @@ def delete(athena_id, ref_date=''):
     # E a cobranca do documento: sem isto ficava um card de Pending OTC de uma
     # recompra que nao existe mais, com o Generate respondendo "nenhuma
     # operacao encontrada no arquivo-dia" para sempre.
-    esteira_sem_a_recompra([athena_id])
+    esteira_sem_a_recompra([chave_mc])
     intrag_sem_a_recompra([apagada], ref_date)
     return True
 
@@ -968,7 +969,8 @@ def termo_salvar(payload, sid=''):
             fh.write(xml_str)
         xml_files.append(xml_path)
         _R().log.info('[UNWIND NDF FX] XML do Termo -> %s', xml_path)
-        _R()._conf_pc_set_fepweb([d.get('Deal') for d, _s in picked], numero_contrato)
+        _R()._conf_pc_set_fepweb([d.get('_mc_key') or d.get('Deal') for d, _s in picked],
+                                 numero_contrato)
     else:
         # Sem grupo elegível não há de onde tirar valor, moeda e CNPJ: o
         # documento sai e o XML fica faltando DIZENDO isso, em vez de sair com
@@ -1072,6 +1074,10 @@ def confirmation_deal(linha, ref=None):
         # grupo aparecia no Monitor sem gerar documento.
         'Status':         'Success',
         '_unwind':        True,
+        # A chave no Pending Confirmation e na esteira (§696): `Deal` continua
+        # o Athena ID (é o que o documento e o XML leem), mas ele é o `Deal` do
+        # contrato ORIGINAL — quem casa a recompra lá é esta.
+        '_mc_key':        domain.chave_esteira(linha),
     }
 
 
@@ -1088,7 +1094,7 @@ def confirmation_deals(ref_dt):
             + produto.confirmation_deals(ref))
 
 
-def esteira_sem_a_recompra(athena_ids):
+def esteira_sem_a_recompra(chaves):
     """Tira da esteira e do Pending Confirmation as recompras que sumiram.
 
     O gatilho da esteira e o IMPORT (§488), entao a cobranca do documento nasce
@@ -1098,9 +1104,10 @@ def esteira_sem_a_recompra(athena_ids):
     sempre: pendencia que nao fecha e que ninguem consegue resolver pela tela.
 
     Quem chama ja conferiu que a linha esta INTOCADA (`row_untouched`): esta
-    funcao apaga, nao decide."""
+    funcao apaga, nao decide. `chaves` sao as da esteira (`domain.chave_esteira`),
+    nunca o Athena ID cru — ele e o `Deal` da operacao ORIGINAL (§696)."""
     R = _R()
-    for aid in athena_ids or []:
+    for aid in chaves or []:
         chave = str(aid or '').strip()
         if not chave:
             continue
@@ -1129,7 +1136,7 @@ def esteira_data_da_operacao(linha, ref, row=_LER):
     So mexe na linha INTOCADA: mesa que ja carimbou decidiu com a data que
     estava la, e mover o prazo dela por baixo seria reescrever a historia."""
     R = _R()
-    chave = str((linha or {}).get('AthenaID') or '').strip()
+    chave = domain.chave_esteira(linha)
     if not chave:
         return False
     try:
@@ -1176,10 +1183,12 @@ def esteira_da_recompra(linhas, ref=None):
     for l in linhas or []:
         try:
             if e_do_fundo(l):
-                esteira_fora_do_fundo(l.get('AthenaID'), fila)
+                esteira_fora_do_fundo(domain.chave_esteira(l), fila)
                 continue
             deal = confirmation_deal(l, ref)
-            itens.append((deal, MC_SOURCE, {'source': MC_SOURCE, 'trade_number': deal['Deal']}))
+            if not deal['_mc_key']:
+                continue
+            itens.append((deal, MC_SOURCE, {'source': MC_SOURCE, 'trade_number': deal['_mc_key']}))
             clientes.append(l)
         except Exception:                                   # noqa: BLE001
             R.log.warning('[UNWIND NDF FX] esteira: %s ficou de fora — %s',
@@ -1193,16 +1202,18 @@ def esteira_da_recompra(linhas, ref=None):
             for deal, pt, kw in itens:
                 try:
                     R._pc_save_from_deal(deal, pt, **kw)
-                except Exception:                           # noqa: BLE001
+                except Exception as exc:                    # noqa: BLE001
                     R.log.warning('[UNWIND NDF FX] esteira: %s ficou de fora — %s',
                                   deal.get('Deal'), traceback.format_exc())
+                    from apps.pages.platform import mirrors
+                    mirrors.falhou('pc', kw.get('trade_number') or deal.get('Deal'), exc)
     # A linha que JA existia nao e reescrita pelo save (um amend nao pode
     # apagar carimbo de ninguem), e por isso a data de quem reimportou noutro
     # dia se acerta aqui. A `fila` foi lida ANTES do save, e serve: a linha
     # que o save criou já nasceu com a data certa, e a que existia ele não
     # tocou.
     for l in clientes:
-        chave = str(l.get('AthenaID') or '').strip()
+        chave = domain.chave_esteira(l)
         esteira_data_da_operacao(
             l, ref or R._parse_date_any(l.get('SettlementDate')) or _hoje(),
             _LER if fila is None else fila.get(chave))
@@ -1489,9 +1500,11 @@ def _intrag_uma(linha, ref):
             if avisos:
                 _R().log.warning('[UNWIND NDF FX] Intrag %s: %s', l.get('AthenaID'),
                                  '; '.join(a['text'] for a in avisos))
-        except Exception:                                   # noqa: BLE001
+        except Exception as exc:                            # noqa: BLE001
             _R().log.warning('[UNWIND NDF FX] Intrag: %s ficou de fora — %s',
                              l.get('AthenaID'), traceback.format_exc())
+            from apps.pages.platform import mirrors
+            mirrors.falhou('intrag', l.get('AthenaID'), exc)
     return out
 
 

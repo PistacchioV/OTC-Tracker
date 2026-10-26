@@ -239,5 +239,21 @@ cru = next(x for x in S.read(os.path.join(B.INTRAG_NDF_CACHE_DIR, '2026', '08',
 check('   e o arquivo-dia fica como esta (limpeza e de leitura)',
       cru['na_2'], 'PTAX|BRR[PTAX')
 
+print('\n== 9. Intrag Option: re-save pela origem NAO apaga o Intrag ID (§696) ==')
+from apps.pages.features.intrag import commands as IC     # noqa: E402
+_deal = {'Deal': 'OPT-9', 'Client': 'BANCO J.P. MORGAN S.A.', 'TradeDate': '20/08/2026',
+         'Direction': 'BUY', 'Instrument': 'CALL', 'Strike': '10', 'TotalNotional': '100'}
+IC._save_intrag_opt_entry(dict(_deal))
+_fp = os.path.join(B.INTRAG_OPT_CACHE_DIR, '2026', '08', '20260820_intrag_opt.json')
+_rows = S.read(_fp)
+for _e in _rows:
+    if _e['_deal'] == 'OPT-9':
+        _e.update({'intrag_id': '7654321', 'status': 'Success'})
+R._atomic_write_json(_fp, _rows)
+IC._save_intrag_opt_entry(dict(_deal, Strike='11'))      # o Edit da Opt Comm regrava
+_e = next(x for x in S.read(_fp) if x['_deal'] == 'OPT-9')
+check('o Intrag ID e o Success ficam; o dado novo entra',
+      (_e.get('intrag_id'), _e.get('status'), _e.get('call_strike_price')), ('7654321', 'Success', '11.00000000'))
+
 print(('FAIL: %d' % len(fails)) if fails else 'TUDO OK')
 sys.exit(1 if fails else 0)

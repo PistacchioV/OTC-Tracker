@@ -421,21 +421,34 @@ def api_mc_upsert():
                 if not str(row.get(col_stamp, '') or '').strip():
                     row[col_stamp] = _mc.stamp_now(sid)
             elif antes[stage] and not depois:
+                # Desfazer a validação pela grade é ato da mesa da ETAPA (§696):
+                # a grade aceitava de qualquer papel, e um Edit com a linha velha
+                # da página (até numa aba aberta antes do deploy) apagava a
+                # assinatura que outra mesa deu depois. O OTC reabre a esteira
+                # inteira pelo `Pending OTC`, que tem a trava dele acima.
+                if not _R()._mc_can_validate(stage):
+                    return jsonify({'success': False, 'stage_forbidden': True,
+                                    'stage': stage, 'key': key,
+                                    'message': _R()._mc_stage_denied(stage)}), 403
                 # Desfez a validação: o carimbo não sobrevive a ela. Deixá-lo
                 # afirmaria que alguém assinou uma etapa que está pendente.
                 row[col_stamp] = ''
         pendentes.append((original, row))
 
     saved = []
-    for original, row in pendentes:
-        if original is None:
-            _mc.upsert_row(row)              # Add Row: linha nova de verdade
-            saved.append(row)
-            continue
-        gravada = _mc.save_changes(original, row)
-        if gravada is not None:
-            saved.append(gravada)
-    _R()._mc_pc_sync(saved)
+    try:
+        for original, row in pendentes:
+            if original is None:
+                _mc.upsert_row(row)              # Add Row: linha nova de verdade
+                saved.append(row)
+                continue
+            gravada = _mc.save_changes(original, row)
+            if gravada is not None:
+                saved.append(gravada)
+    finally:
+        # Mesmo com o laço levantando no meio, o que JÁ foi gravado vai para o
+        # Pending Confirmation (§696) — o resto da linha nunca mais espelharia.
+        _R()._mc_pc_sync(saved)
     return jsonify({'success': True, 'rows': saved})
 
 @blueprint.route('/api/manual-confirmation/legal-release', methods=['POST'])
@@ -452,14 +465,18 @@ def api_mc_legal_release():
     payload = request.get_json(silent=True) or {}
     keys = [str(k).strip() for k in (payload.get('keys') or []) if str(k or '').strip()]
     saved = []
-    for k in keys:
-        row = _mc.find_row(k)
-        if row is None or _mc.upper_norm(row.get('Pending')) != _mc.upper_norm(_mc.PENDING_LEGAL):
-            continue                     # só solta o que está de fato no hold
-        depois = dict(row, Pending='')   # a derivação decide a etapa real
-        gravada = _mc.save_changes(row, depois)
-        if gravada is not None:
-            saved.append(gravada)
+    try:
+        for k in keys:
+            row = _mc.find_row(k)
+            if row is None or _mc.upper_norm(row.get('Pending')) != _mc.upper_norm(_mc.PENDING_LEGAL):
+                continue                     # só solta o que está de fato no hold
+            depois = dict(row, Pending='')   # a derivação decide a etapa real
+            gravada = _mc.save_changes(row, depois)
+            if gravada is not None:
+                saved.append(gravada)
+    except Exception:
+        _R()._mc_pc_sync(saved)              # o que já saiu do hold, no Pending (§696)
+        raise
     if not saved:
         return jsonify({'success': False,
                         'message': 'No confirmation in Pending Legal for these trades.'}), 404
@@ -520,14 +537,17 @@ def api_mc_fepweb_sent():
                                    'happen before marking as sent.'
                                    .format(len(sem_cb))}), 409
     saved = []
-    for row in alvo:
-        depois = dict(row)
-        if not str(depois.get(_mc.SENT_COLUMN, '') or '').strip():
-            depois[_mc.SENT_COLUMN] = hoje
-        gravada = _mc.save_changes(row, depois)
-        if gravada is not None:
-            saved.append(gravada)
-    _R()._mc_pc_sync(saved)
+    try:
+        for row in alvo:
+            depois = dict(row)
+            if not str(depois.get(_mc.SENT_COLUMN, '') or '').strip():
+                depois[_mc.SENT_COLUMN] = hoje
+            gravada = _mc.save_changes(row, depois)
+            if gravada is not None:
+                saved.append(gravada)
+    finally:
+        # Com o laço levantando no meio, o que JÁ foi marcado vai ao Pending (§696).
+        _R()._mc_pc_sync(saved)
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Manual Confirmation', 'Confirmation',
                          'Sent to client (FepWeb) · {}{}'.format(
@@ -606,8 +626,23 @@ def api_mc_validate():
                         'message': _R()._mc_stage_denied(stage)}), 403
     comment = str(payload.get('comment') or '').strip()
     try:
-        rows = [r for r in (_mc.mark_validated(k, stage, session.get('user_sid', ''), comment)
-                            for k in keys) if r is not None]
+        # O lote inteiro é conferido ANTES de assinar a primeira (§696): cada
+        # `mark_validated` é uma transação, e a recusa da quinta deixava as
+        # quatro primeiras assinadas sem o espelho no Pending Confirmation.
+        regras = _mc.validation_rules()
+        for k in keys:
+            bloqueio = _mc.validation_blocker(_mc.find_row(k), stage, comment, regras)
+            if bloqueio is not None:
+                raise bloqueio
+        rows = []
+        try:
+            for k in keys:
+                r = _mc.mark_validated(k, stage, session.get('user_sid', ''), comment)
+                if r is not None:
+                    rows.append(r)
+        except Exception:
+            _mc_sync_parcial(keys)
+            raise
     except _mc.StageNotPending as exc:
         return jsonify({'success': False, 'stage_not_pending': True, 'stage': stage,
                         'key': str(exc),
@@ -648,6 +683,26 @@ def api_mc_validate():
 # reabrir (Pending Legal, ou limpar as validações da etapa de destino em diante)
 # e pular etapas assina as do meio. A trava do Validate pelo documento continua
 # a de sempre: o admin assina pelo documento só como OTC.
+def _mc_sync_parcial(keys):
+    """O laço de gravação levantou no meio (banco ocupado, corrida): as linhas
+    que JÁ foram gravadas vão para o Pending Confirmation mesmo assim (§696).
+    Cada `mutate_row` é uma transação, então metade do lote fica gravada — e
+    sem isto o Pending ficava com a etapa antiga para sempre, porque nada mais
+    espelha aquela linha. Relê a esteira UMA vez; falhar aqui só loga (a
+    exceção original é que sobe)."""
+    from apps.pages import manual_conf as _mc
+    try:
+        alvo = {str(k or '').strip() for k in keys or ()} - {''}
+        if not alvo:
+            return
+        rows = [r for r in _mc.load_all(strict=True)
+                if str(r.get(_mc.KEY_COLUMN, '') or '').strip() in alvo]
+        _R()._mc_pc_sync(rows)
+    except Exception:                                       # noqa: BLE001
+        _R().log.warning('[manual-conf] espelho parcial no Pending falhou:\n%s',
+                         traceback.format_exc())
+
+
 _MC_COLS = ('LEGAL', 'OTC', 'MO', 'FO', 'FEPWEB', 'OK')
 _MC_RANK = {'LEGAL': 0, 'OTC': 1, 'MO': 2, 'FO': 2, 'MO/FO': 2, 'FEPWEB': 3, 'OK': 4}
 # o próximo passo de cada coluna, para quem não é admin
@@ -667,14 +722,42 @@ def _mc_col(row, rules):
             _mc.STATUS_OK: 'OK'}.get(st, '')
 
 
-def _mc_move_one(row, src, dst, sid, comment, admin, rules):
-    """Leva UMA linha de `src` para `dst`. Devolve a linha gravada (ou None)."""
+def _mc_move_one(row, src, dst, sid, comment, admin, rules, dry=False):
+    """Leva UMA linha de `src` para `dst`. Devolve a linha gravada (ou None).
+
+    `dry=True` SIMULA o caminho inteiro sem gravar nada, levantando as MESMAS
+    recusas (callback, justificativa do prazo, OTC antes de MO/FO) — §696: o
+    endpoint simula todas as linhas antes de gravar a primeira. Sem isso o
+    admin que arrastava de OTC para OK uma linha sem callback assinava OTC, MO
+    e FO e só então recebia o 409, com a esteira em Pending FepWeb e o Pending
+    Confirmation em Pending OTC para sempre."""
     from apps.pages import manual_conf as _mc
     from apps.pages.platform import manual_confirmation as _pmc
     key = str(row.get(_mc.KEY_COLUMN, '') or '').strip()
+    hoje = datetime.now().strftime('%d/%m/%Y')
+
+    def salvar(antes, depois):
+        if dry:
+            return dict(depois)
+        return _mc.save_changes(antes, depois)
+
+    def validar(linha, st):
+        if not dry:
+            return _mc.mark_validated(key, st, sid, comment)
+        bloqueio = _mc.validation_blocker(linha, st, comment, rules)
+        if bloqueio is not None:
+            raise bloqueio
+        r = dict(linha)
+        col = _mc.STAGE_COLUMNS[st][0]
+        if not _mc._filled(r, col):
+            r[col] = hoje
+        if st == _mc.STAGE_OTC and not _mc._filled(r, 'Data envio validação MO/FO'):
+            r['Data envio validação MO/FO'] = hoje
+        return r
+
     cur = _mc_col(row, rules)
     if dst == 'LEGAL':                                    # hold do jurídico (só admin chega aqui)
-        return _mc.save_changes(row, dict(row, Pending=_mc.PENDING_LEGAL))
+        return salvar(row, dict(row, Pending=_mc.PENDING_LEGAL))
     if _MC_RANK.get(dst, 0) < _MC_RANK.get(cur, 0):       # para trás: reabrir (só admin)
         depois = dict(row, Pending='')
         limpar = {'OTC': (_mc.STAGE_OTC, _mc.STAGE_MO, _mc.STAGE_FO), 'MO': (_mc.STAGE_MO,),
@@ -683,16 +766,16 @@ def _mc_move_one(row, src, dst, sid, comment, admin, rules):
             for col in _mc.STAGE_COLUMNS[st]:
                 depois[col] = ''
         depois[_mc.SENT_COLUMN] = ''
-        return _mc.save_changes(row, depois)
+        return salvar(row, depois)
     out = row
     for _ in range(6):                                    # para frente: etapa a etapa
         cur = _mc_col(out, rules)
         if cur == dst or (dst in ('MO', 'FO') and cur == 'MO/FO') or _MC_RANK.get(cur, 9) >= _MC_RANK.get(dst, 0):
             break
         if cur == 'LEGAL':
-            out = _mc.save_changes(out, dict(out, Pending='')) or _mc.find_row(key)
+            out = salvar(out, dict(out, Pending='')) or _mc.find_row(key)
         elif cur == 'OTC':
-            out = _mc.mark_validated(key, _mc.STAGE_OTC, sid, comment)
+            out = validar(out, _mc.STAGE_OTC)
         elif cur in ('MO', 'FO', 'MO/FO'):
             if admin:
                 etapas = {'MO': (_mc.STAGE_MO,), 'FO': (_mc.STAGE_FO,),
@@ -700,13 +783,13 @@ def _mc_move_one(row, src, dst, sid, comment, admin, rules):
             else:
                 etapas = (src,)                           # a mesa assina só a SUA
             for st in etapas:
-                out = _mc.mark_validated(key, st, sid, comment) or out
+                out = validar(out, st) or out
         elif cur == 'FEPWEB':
             if not _mc._filled(out, 'Data Callback') and not _pmc._mc_row_is_mgt(out):
                 raise _CallbackRequired(key)
             depois = dict(out)
-            depois[_mc.SENT_COLUMN] = datetime.now().strftime('%d/%m/%Y')
-            out = _mc.save_changes(out, depois) or _mc.find_row(key)
+            depois[_mc.SENT_COLUMN] = hoje
+            out = salvar(out, depois) or _mc.find_row(key)
         if out is None or not admin:
             break                                         # a mesa anda UM passo
     return out
@@ -751,21 +834,38 @@ def api_mc_move():
             return jsonify({'success': False, 'code': 'stale_card', 'key': k, 'stage': cur,
                             'message': 'The board was out of date: {} is now in {}.'.format(k, cur or '?')}), 409
         rows.append(row)
-    saved = []
-    for row in rows:
-        try:
-            r = _mc_move_one(row, src, dst, sid, comment, admin, rules)
-        except _mc.SlaCommentRequired as exc:
+    def _recusa(exc):
+        if isinstance(exc, _mc.SlaCommentRequired):
             return jsonify({'success': False, 'code': 'sla_comment_required', 'sla_comment_required': True,
                             'stage': str(exc), 'message': 'Late validation: give the reason for the delay.'}), 409
-        except _mc.StageNotPending as exc:
+        if isinstance(exc, _mc.StageNotPending):
             return jsonify({'success': False, 'code': 'stage_not_pending', 'key': str(exc),
                             'message': '{}: the OTC validation must come first.'.format(exc)}), 409
-        except _CallbackRequired as exc:
-            return jsonify({'success': False, 'code': 'callback_required', 'callback_required': True,
-                            'key': str(exc), 'message': 'Callback pending: fill the Callback Date first.'}), 409
-        if r is not None:
-            saved.append(r)
+        return jsonify({'success': False, 'code': 'callback_required', 'callback_required': True,
+                        'key': str(exc), 'message': 'Callback pending: fill the Callback Date first.'}), 409
+
+    _recusas = (_mc.SlaCommentRequired, _mc.StageNotPending, _CallbackRequired)
+    # 1º o card INTEIRO em simulação: o que recusaria no meio recusa antes de
+    # gravar a primeira linha (§696).
+    for row in rows:
+        try:
+            _mc_move_one(row, src, dst, sid, comment, admin, rules, dry=True)
+        except _recusas as exc:
+            return _recusa(exc)
+    saved = []
+    try:
+        for row in rows:
+            r = _mc_move_one(row, src, dst, sid, comment, admin, rules)
+            if r is not None:
+                saved.append(r)
+    except _recusas as exc:
+        # Só numa corrida (outra mesa mexeu entre a simulação e a gravação):
+        # o que já foi gravado vai para o Pending antes da recusa.
+        _mc_sync_parcial([str(r.get(_mc.KEY_COLUMN, '') or '') for r in rows])
+        return _recusa(exc)
+    except Exception:
+        _mc_sync_parcial([str(r.get(_mc.KEY_COLUMN, '') or '') for r in rows])
+        raise
     if not saved:
         return jsonify({'success': False, 'code': 'not_found', 'message': 'Confirmation not found.'}), 404
     R._mc_pc_sync(saved)
@@ -810,8 +910,12 @@ def api_mc_reject():
     sid = session.get('user_sid', '')
     # O documento inteiro volta para o OTC: rejeitar só uma operação deixaria as
     # outras esperando um papel que já foi devolvido.
-    for k in keys:
-        _mc.reject(k, stage, sid, comment)
+    try:
+        for k in keys:
+            _mc.reject(k, stage, sid, comment)
+    except Exception:
+        _mc_sync_parcial(keys)             # o que já voltou ao OTC, no Pending (§696)
+        raise
     _R()._mc_pc_sync([r for r in (_mc.find_row(k) for k in keys) if r is not None])
     emailed = False
     try:

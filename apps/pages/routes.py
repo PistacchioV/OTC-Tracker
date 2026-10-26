@@ -469,6 +469,23 @@ def add_security_headers(response):
     return response
 
 
+@blueprint.after_request
+def add_mirror_failed_header(response):
+    """A cópia para o Pending Confirmation, a esteira ou a Intrag que falhou
+    neste request vai no cabeçalho `X-OTC-Mirror-Failed` (§696), e o
+    `session-guard.js` diz na tela. Sem isto a falha só ia para o log, e a
+    tela confirmava o que não aconteceu."""
+    try:
+        if request.path.startswith('/api/'):
+            from apps.pages.platform import mirrors as _pf_mirrors
+            v = _pf_mirrors.cabecalho()
+            if v:
+                response.headers['X-OTC-Mirror-Failed'] = v
+    except Exception:
+        pass
+    return response
+
+
 @blueprint.route('/csp-report', methods=['POST'])
 def csp_report():
     """Collector for Content-Security-Policy-Report-Only violations. Report-only
@@ -6115,6 +6132,28 @@ def _ndfadv_otm_by_suffix(ref):
     return out, spn
 
 
+@_req_cached
+def _ndfadv_otm_ids(ref):
+    """{sufixo → Trade Id INTEIRO do OTM} do dia (`85000H-1PMHHP`).
+
+    É o mesmo join pelo sufixo do `_ndfadv_otm_by_suffix`, guardando o
+    identificador em vez do valor: é o Trade Id do OTM que identifica a
+    liquidação de commodities no HUB, e o WHT o informa no lugar do Nº da
+    Confirmação (que só compartilha o sufixo). Dois Trade Ids com o mesmo
+    sufixo: vale o de maior |Σ Amount| (o fluxo que de fato liquida)."""
+    _jp, otm = _otm_load(ref)
+    soma = {}
+    for rec in (otm or []):
+        tid = str(rec.get('Trade Id', '') or '').strip().upper()
+        suf = tid.rsplit('-', 1)[-1] if tid else ''
+        if not suf:
+            continue
+        amt = _conf_to_float(rec.get('Amount'))
+        por_tid = soma.setdefault(suf, {})
+        por_tid[tid] = por_tid.get(tid, 0.0) + (amt or 0.0)
+    return {suf: max(t.items(), key=lambda kv: abs(kv[1]))[0] for suf, t in soma.items()}
+
+
 _NDFADV_IR_COL = 9                             # 'IR 0,005% (R$)'
 _NDFADV_LIQ_COL = 10                           # 'Resultado Líquido (R$)'
 
@@ -6219,6 +6258,7 @@ def _ndfadv_collect(ref, with_ir=True):
             by_contract.setdefault(k, row)
 
     otm_by_suffix, otm_spn = _ndfadv_otm_by_suffix(ref)
+    otm_ids = _ndfadv_otm_ids(ref)
     spn_by_name = _ndfsum_refdata_spn()
     cpd = _cpd_load()
 
@@ -6300,6 +6340,8 @@ def _ndfadv_collect(ref, with_ir=True):
             'net_type': net_type,
             'commodity': _subjacente_commodity(_lcell(lrow, 'Codigo do Ativo Subjacente')),
             'b3_id': titulo, 'internal_id': conf,
+            # O Trade Id do OTM (o mesmo sufixo do `conf`): é ele que o WHT informa.
+            'otm_id': otm_ids.get(suf, '') if suf else '',
             'apurado': apurado, 'ir': ir, 'liquido': liq,
             'b3': sum(b3_vals) if b3_vals else None,
             # O TIPO de liquidação (Maturity · Premium · Unwind), pelo cadastro
@@ -6746,6 +6788,7 @@ def _optadv_collect(ref, with_ir=True):
             by_codigo_if.setdefault(k, row)
 
     otm_by_suffix, otm_spn = _ndfadv_otm_by_suffix(ref)
+    otm_ids = _ndfadv_otm_ids(ref)
     # O MESMO elo que o SWAP de equity usa (`_ops_equity_link`): Operations B3
     # (Título) → Latam Desk Position → OTM Settlements. Ele é o plano B do valor
     # e do SPN quando o caminho normal — o sufixo da Combinação de operações —
@@ -6910,6 +6953,8 @@ def _optadv_collect(ref, with_ir=True):
             'product_label': _optadv_product_label(classe),
             'premium': bool(evs) and evs == {_ops_norm_event('PAGAMENTO DE PREMIO')},
             'b3_id': titulo, 'internal_id': conf,
+            # Trade Id do OTM pelo sufixo — só fora do câmbio (que não passa pelo OTM).
+            'otm_id': (otm_ids.get(suf, '') if suf and not e_fx else ''),
             'apurado': apurado, 'ir': ir, 'liquido': liq,
             'b3': sum(b3_vals) if b3_vals else None,
             # Premium · Exercise · Unwind, pelo cadastro `opb3-events` (o mesmo
@@ -11986,6 +12031,13 @@ _MAP_INTERBOOK_FIELDS = [
 ]
 
 
+def _wht_codes_upgrade(rows):
+    """O `wht-codes` gravado com `NDF COMM`/`OPTION COMM` → produto × LOB
+    COMMODITIES (a regra é do WHT: `features/wht/domain.wht_codes_upgrade`)."""
+    from apps.pages.features.wht import domain as _wht_dom
+    return _wht_dom.wht_codes_upgrade(rows)
+
+
 def _interbook_upgrade(rows):
     """Converte linhas do formato antigo (coluna RULE com o par fixo, FIELD A/B
     guardando só os valores) para o par genérico campo+valor. Vale para arquivos
@@ -14017,7 +14069,10 @@ _MAPPING_DEFS = {
         'label': 'WHT — Tax Codes',
         'columns': [
             {'key': 'PRODUCT', 'label': 'Product', 'type': 'select',
-             'options': ['NDF', 'NDF COMM', 'OPTION', 'OPTION COMM', 'SWAP']},
+             'options': ['NDF', 'OPTION', 'SWAP']},
+            # A mercadoria é LOB, não produto (equipe, 26/10/2026): NDF e OPTION
+            # × COMMODITIES. O cadastro gravado com NDF COMM/OPTION COMM é
+            # convertido pelo `upgrade`.
             {'key': 'LOB', 'label': 'LOB (blank = any)'},
             {'key': 'EVENT', 'label': 'Event (blank = any)'},
             {'key': 'TAXATION', 'label': 'Taxation', 'type': 'select',
@@ -14043,10 +14098,10 @@ _MAPPING_DEFS = {
                 ('NDF', '', '', 'Exempt', '', '5557ME12050', 'NDF (OTC)', 'NDF'),
                 ('NDF', '', '', 'Taxable', 'Resident', '5557MT12050', 'NDF (OTC)', 'NDF'),
                 ('NDF', '', '', 'Taxable', 'Non-Resident', '5286MT12050', 'NDF (OTC)', 'NDF'),
-                ('NDF COMM', '', '', 'Exempt', '', '5557PE12050', 'COMMODITIES-NDF (OTC)', 'CON'),
-                ('NDF COMM', '', '', 'Taxable', '', '5557PT12050', 'COMMODITIES-NDF (OTC)', 'CON'),
-                ('OPTION COMM', '', '', 'Exempt', '', '5557RE12050', 'COMMODITIES-Options OTC', 'COO'),
-                ('OPTION COMM', '', '', 'Taxable', '', '5557RT12050', 'COMMODITIES-Options OTC', 'COO'),
+                ('NDF', 'COMMODITIES', '', 'Exempt', '', '5557PE12050', 'COMMODITIES-NDF (OTC)', 'CON'),
+                ('NDF', 'COMMODITIES', '', 'Taxable', '', '5557PT12050', 'COMMODITIES-NDF (OTC)', 'CON'),
+                ('OPTION', 'COMMODITIES', '', 'Exempt', '', '5557RE12050', 'COMMODITIES-Options OTC', 'COO'),
+                ('OPTION', 'COMMODITIES', '', 'Taxable', '', '5557RT12050', 'COMMODITIES-Options OTC', 'COO'),
                 ('OPTION', '', '', 'Exempt', '', '5557NE12050', 'FX Options OTC', 'OPT'),
                 ('OPTION', '', '', 'Taxable', 'Resident', '5557NT12050', 'FX Options OTC', 'OPT'),
                 ('OPTION', '', '', 'Taxable', 'Non-Resident', '5286NT12050', 'Options OTC', 'OPT'),
@@ -14057,6 +14112,7 @@ _MAPPING_DEFS = {
                 ('SWAP', '', '', 'Taxable', 'Non-Resident', '5286OT12046', 'SWAPS (OTC)', 'SWP'),
                 ('SWAP', '', 'DIVIDEND', 'Exempt', '', '5273OE12001', 'Dividendos provenientes de ações', 'SWP'),
             )],
+        'upgrade': _wht_codes_upgrade,
     },
     # A EMPRESA e a FILIAL de cada entidade nossa no EasyTributos: o relatório do
     # HUB vem em blocos "Empresa: 00001 - Banco J.P. Morgan S.A.", e o arquivo que

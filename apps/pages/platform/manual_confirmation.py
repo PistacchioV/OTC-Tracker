@@ -227,15 +227,19 @@ def _mc_save_from_deal(deal, source, trade_number=None):
     'Conferido OTC' que alguém carimbou.
     """
     if source not in _MC_CONFIRMATION_SOURCES:
-        return
+        return None
+    key = str(trade_number or (deal or {}).get('Deal', '') or '').strip()
     try:
         from apps.pages import manual_conf as _mc
-        key = str(trade_number or deal.get('Deal', '') or '').strip()
         if not key or _mc.find_row(key) is not None:
-            return
+            return None
         _mc.upsert_row(_mc_row_from_deal(deal, source, key))
-    except Exception:
+        return True
+    except Exception as exc:
         log.warning('[manual-conf] save-from-deal falhou:\n%s', traceback.format_exc())
+        # §696: a falha vai para a tela, não só para o log.
+        from apps.pages.platform import mirrors
+        return mirrors.falhou('mc', key, exc)
 
 
 def _mc_save_from_deals(items):
@@ -317,6 +321,12 @@ def _mc_conf_trade_keys(picked, product):
     out = []
     for item in (picked or []):
         d = item[0] if isinstance(item, (list, tuple)) else item
+        # O deal que declara a própria chave (a recompra, `_mc_key`, §696) vence:
+        # o `Deal` dela é o Athena ID do contrato ORIGINAL.
+        _k = str((d or {}).get('_mc_key') or '').strip()
+        if _k:
+            out.append(_k)
+            continue
         # A família MGT junta Vanilla (chave = Deal) e FWD Start (chave = B3
         # ID) no mesmo gerador: cada deal diz de que página veio.
         if product == 'ndf-mgt':
@@ -1043,17 +1053,24 @@ def _mc_pc_sync(rows):
     (grade, validação, reject, os botões do Monitor) atualiza a linha irmã.
 
     O estágio entra verbatim (Pending Legal/OTC/MO/FO/MO-FO/FepWeb). `Ok` — o
-    Enviado p/ cliente preenchido — vira **Pending Digital Signature** ou
-    **Pending Original** pelo Signature Type da contraparte no Reference Data
-    (§254): o documento saiu e o que se espera agora é a assinatura, no meio
-    que a contraparte usa.
+    Enviado p/ cliente preenchido — vira o status de ASSINATURA pela regra do
+    próprio Pending (`_pc_signature_pending_status`, pelo Signature Type:
+    Digital → Pending Digital Signature, Internal → Exception Digital Fep Web,
+    o resto → Pending Original), §254 — e SÓ enquanto o Pending ainda está numa
+    etapa da esteira (§696): depois disso o status é da equipe (Signed
+    Digitally, Concluded…), e reescrevê-lo a cada gravação da esteira (uma
+    Data Callback editada, um comentário) devolvia a linha resolvida para o
+    banco `pending`.
 
-    Falha aqui só loga: o espelho não pode derrubar a gravação da esteira — e
-    linha sem irmã no PC (importada da planilha antiga) simplesmente não tem o
-    que espelhar.
+    Leitura ESTRITA e só das linhas do lote (`_pc_find_rows`): a tolerante lia
+    banco ocupado como "não há linha" e o espelho pulava calado, para sempre.
+    Falha aqui só loga (e vai para a tela, `mirrors.falhou`): o espelho não
+    pode derrubar a gravação da esteira — e linha sem irmã no PC (importada da
+    planilha antiga) simplesmente não tem o que espelhar.
     """
     from apps.pages import routes
     from apps.pages import manual_conf as _mc
+    from apps.pages.platform import pending_confirmation as _pcm
     alvo = {}
     for row in rows or []:
         tn = str(row.get(_mc.KEY_COLUMN, '') or '').strip()
@@ -1062,29 +1079,29 @@ def _mc_pc_sync(rows):
     if not alvo:
         return
     try:
-        vistos, updates = set(), []
-        for cat in ('backlog', 'pending', 'ok'):
-            for pc in routes._pc_load_rows(cat):
-                tn = str(pc.get('Trade Number', '') or '').strip()
-                if tn not in alvo or tn in vistos:
-                    continue
-                vistos.add(tn)
-                pend = alvo[tn]
-                if pend == _mc.STATUS_OK:
-                    sig = routes._pc_norm(pc.get('Signature Type', ''))
-                    if not sig:
-                        rec = routes._pc_refdata_lookup({'SPN': pc.get('SPN', ''),
-                                                  'Client': pc.get('Client', '')},
-                                                 routes._fxo_refdata_by_spn(), routes._pc_refdata_by_name())
-                        sig = routes._pc_norm((rec or {}).get('SIGNATURE TYPE', ''))
-                    novo = 'Pending Digital Signature' if sig == 'digital' else 'Pending Original'
-                else:
-                    novo = pend
-                if novo and str(pc.get('Pending Status', '') or '').strip() != novo:
-                    pc['Pending Status'] = novo
-                    updates.append(pc)
-        if updates:                 # fora do laço de leitura: o upsert reescreve os DBs
+        updates = []
+        for tn, pc in _pcm._pc_find_rows(list(alvo)).items():
+            pend = alvo.get(tn, '')
+            atual = str(pc.get('Pending Status', '') or '').strip()
+            if pend == _mc.STATUS_OK:
+                if atual and not _pcm._pc_is_esteira_status(atual):
+                    continue            # já é da equipe (assinatura, resolvido)
+                sig = str(pc.get('Signature Type', '') or '').strip()
+                rec = {'SIGNATURE TYPE': sig} if sig else routes._pc_refdata_lookup(
+                    {'SPN': pc.get('SPN', ''), 'Client': pc.get('Client', '')},
+                    routes._fxo_refdata_by_spn(), routes._pc_refdata_by_name())
+                # Sem datas: a regra do prazo curto é do Vanilla/Other Publisher,
+                # que não têm esteira; aqui só o tipo de assinatura responde.
+                novo = _pcm._pc_signature_pending_status(rec or {}, None, None)
+            else:
+                novo = pend
+            if novo and atual != novo:
+                pc['Pending Status'] = novo
+                updates.append(pc)
+        if updates:
             routes._pc_upsert_rows(updates)   # lote: 3 aberturas, não 4×N
-    except Exception:
+    except Exception as exc:
         log.warning('[manual-conf] espelho no Pending Confirmation falhou:\n%s',
                     traceback.format_exc())
+        from apps.pages.platform import mirrors
+        mirrors.falhou('pc', ', '.join(sorted(alvo))[:120], exc)

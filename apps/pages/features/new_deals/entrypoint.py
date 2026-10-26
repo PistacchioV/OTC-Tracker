@@ -20,6 +20,7 @@ from apps.pages import blueprint
 from apps.pages import data_store as _store  # noqa: E402
 from apps.pages.features.new_deals import catalog
 from apps.pages.platform import authz as _authz
+from apps.pages.platform import mirrors as _mirrors
 
 
 def _R():
@@ -1379,6 +1380,7 @@ def api_ndf_update_deal_cache(deal_id):
             _R()._intrag_engine()._save_intrag_ndf_entry(updated_deal)
         except Exception as exc:
             _R().log.error('[NDF PATCH] Failed to save Intrag entry for deal=%r: %s', deal_id, exc)
+            _mirrors.falhou('intrag', deal_id, exc)
     # External clients (non-intragroup) instead become a fresh outstanding
     # confirmation → Pending Confirmation. Manual-mapping twin of the return-file
     # scan trigger; _pc_save_from_deal skips internal/intragroup legs itself.
@@ -1617,6 +1619,7 @@ def api_ndf_mapping_b3():
                     _R()._intrag_engine()._save_intrag_ndf_entry(intrag_candidate)
                 except Exception as exc:
                     _R().log.error('[MAPPING-B3] Intrag save failed for deal=%r: %s', deal_text, exc)
+                    _mirrors.falhou('intrag', deal_text, exc)
             _R()._pc_save_from_deal(intrag_candidate, 'NDF COMM')       # → pending confirmation
 
         # O que volta é o que FICOU GRAVADO. Não gravou, não há B3 ID a mostrar:
@@ -2337,6 +2340,7 @@ def api_generic_nd_update_cache(product, deal_id):
             except Exception as exc:
                 _R().log.error('[ND %s] Intrag moeda save failed for deal=%r: %s',
                           product, deal_id, exc)
+                _mirrors.falhou('intrag', deal_id, exc)
         _R()._generic_nd_pc_trigger(product, updated_deal)       # → pending confirmation
 
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
@@ -2700,6 +2704,7 @@ def api_generic_nd_mapping_b3(product):
                 except Exception as exc:
                     _R().log.error('[MAPPING-%s] Intrag moeda save failed for deal=%r: %s',
                               product, deal_text, exc)
+                    _mirrors.falhou('intrag', deal_text, exc)
             _R()._generic_nd_pc_trigger(product, success_deal)   # → pending confirmation
 
         # Só entra no resultado quem MUDOU. Varrendo o dia inteiro, a lista

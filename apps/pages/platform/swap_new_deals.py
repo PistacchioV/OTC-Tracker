@@ -430,5 +430,7 @@ def b3_mapped(deal, tag='SWAP'):
             # perna interna sozinho e é ele quem chama o `_mc_save_from_deal`.
             _R()._pc_save_from_deal(confirmation_deal(deal), tipo, pending_status='Pending OTC',
                                     trade_number=b3, source=tipo)
-    except Exception:                                       # noqa: BLE001
+    except Exception as exc:                                # noqa: BLE001
         _R().log.warning('[%s] post-mapping flow failed for %s:\n%s', tag, b3, traceback.format_exc())
+        from apps.pages.platform import mirrors
+        mirrors.falhou('intrag' if _dtk.is_b2b(deal) else 'pc', b3, exc)
