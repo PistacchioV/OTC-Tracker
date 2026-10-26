@@ -260,6 +260,56 @@ def _read_page_access(sid):
     return (configurado, urls)
 
 
+# Acesso TOTAL é o MARCADOR, não a lista (26/10/2026, pedido da equipe). O
+# toggle "Full access" do /page-access marcava todas as caixas e o Save gravava
+# a LISTA daquele dia: a página que entrava no menu depois não estava nela, e
+# quem tinha acesso total perdia a tela nova sem ninguém ter mexido — admin,
+# master ou não. Agora a lista que cobre tudo é gravada como `["*"]`
+# (`_set_page_access`), e a leitura expande o marcador para as páginas
+# controláveis do momento. Quem já tinha tudo é convertido uma vez na subida
+# (`page_access_upgrade_full`).
+PAGE_ACCESS_FULL = '*'
+
+# A tela do File Interpreter mudou de URL (/file-interface → /file-interpreter):
+# o valor antigo gravado no cadastro segue valendo — renomear página não pode
+# revogar acesso em silêncio. O item CGD virou a seção Onboarding, e o mesmo
+# vale para ele. O New Deals Monitor virou o Intraday Monitor (§567).
+_RENOMEADAS = {'/file-interface': '/file-interpreter',
+               '/cgd': '/onboarding',
+               '/new-deals-monitor': '/intraday-monitor',
+               # o Projects virou Initiatives também no endereço (§638)
+               '/projects': '/initiatives',
+               # o card do aviso entrou no da agenda (§567)
+               '/control-panel#dealsmonitor': '/control-panel#intradaytasks'}
+
+
+def _controllable_urls():
+    """As páginas e cards que a checklist do /page-access concede."""
+    return set(_NAV_URLS) | set(_CP_CARD_TOKENS)
+
+
+def _parse_page_access(raw):
+    """O `Page_Access` gravado → conjunto (com o marcador, se houver), ou
+    `None` quando não é uma lista (= não configurado)."""
+    raw = (raw or '').strip()
+    if not raw:
+        return None
+    try:
+        arr = json.loads(raw)
+    except Exception:                                       # noqa: BLE001
+        return None
+    if not isinstance(arr, list):
+        return None
+    return set(_RENOMEADAS.get(str(u), str(u)) for u in arr)
+
+
+def _cobre_tudo(urls):
+    todas = _controllable_urls()
+    # sem a lista de páginas (o sidenav não foi lido) nada "cobre tudo" —
+    # senão qualquer Save viraria acesso total
+    return bool(todas) and todas <= set(urls or ())
+
+
 def _read_user_authz(sid):
     """A linha do usuário como está no banco, sem cache: (configured, urls, role, position)."""
     from apps.pages import routes
@@ -284,25 +334,14 @@ def _read_user_authz(sid):
     raw = (row[0] or '').strip()
     if not raw:
         return (False, set(), papel, cargo)
-    try:
-        arr = json.loads(raw)
-        if isinstance(arr, list):
-            # A tela do File Interpreter mudou de URL (/file-interface →
-            # /file-interpreter): o valor antigo gravado no cadastro segue
-            # valendo — renomear página não pode revogar acesso em silêncio.
-            # O item CGD virou a seção Onboarding, e o mesmo vale para ele.
-            # O New Deals Monitor virou o Intraday Monitor (§567).
-            _renomeadas = {'/file-interface': '/file-interpreter',
-                           '/cgd': '/onboarding',
-                           '/new-deals-monitor': '/intraday-monitor',
-                           # o Projects virou Initiatives também no endereço (§638)
-                           '/projects': '/initiatives',
-                           # o card do aviso entrou no da agenda (§567)
-                           '/control-panel#dealsmonitor': '/control-panel#intradaytasks'}
-            return (True, set(_renomeadas.get(str(u), str(u)) for u in arr), papel, cargo)
-    except Exception:
-        pass
-    return (False, set(), papel, cargo)
+    urls = _parse_page_access(raw)
+    if urls is None:
+        return (False, set(), papel, cargo)
+    if PAGE_ACCESS_FULL in urls:
+        # acesso TOTAL: todas as páginas controláveis de HOJE — a que nasceu
+        # depois do Save entra sozinha (ver PAGE_ACCESS_FULL)
+        urls = (urls - {PAGE_ACCESS_FULL}) | _controllable_urls()
+    return (True, urls, papel, cargo)
 
 
 def refresh_session_role():
@@ -367,7 +406,10 @@ def _set_page_access(sid, urls):
     from apps.pages import routes
     conn = routes.get_db_connection()
     try:
-        payload = json.dumps(sorted(set(str(u) for u in (urls or []))))
+        lista = set(str(u) for u in (urls or []))
+        if PAGE_ACCESS_FULL in lista or _cobre_tudo(lista):
+            lista = {PAGE_ACCESS_FULL}          # acesso total: vale para página nova
+        payload = json.dumps(sorted(lista))
         conn.execute("UPDATE users SET Page_Access = ? WHERE SID = ?", [payload, sid])
         conn.commit()
     finally:
@@ -375,6 +417,33 @@ def _set_page_access(sid, urls):
     # DEPOIS do commit: esquecendo antes, uma leitura concorrente repovoaria o
     # cache com o valor velho e a mudança só valeria daqui a um TTL.
     _page_access_forget(sid)
+
+
+def page_access_upgrade_full():
+    """Converte para o marcador quem JÁ tem todas as páginas (o toggle "Full
+    access" ligado na tela). Idempotente; roda na subida. Devolve os SIDs
+    convertidos. Quem perdeu uma página que nasceu antes desta conversão não
+    é reconhecido — esse precisa de um Save com o Full access ligado."""
+    from apps.pages import routes
+    if not _controllable_urls():
+        return []
+    conn = routes.get_db_connection(readonly=True)
+    try:
+        rows = conn.execute("SELECT SID, Page_Access FROM users "
+                            "WHERE Page_Access IS NOT NULL AND Page_Access <> ''").fetchall()
+    finally:
+        conn.close()
+    alvos = []
+    for sid, raw in rows:
+        urls = _parse_page_access(raw)
+        if urls and PAGE_ACCESS_FULL not in urls and _cobre_tudo(urls):
+            alvos.append(sid)
+    for sid in alvos:
+        _set_page_access(sid, [PAGE_ACCESS_FULL])
+    if alvos:
+        log.warning('[page-access] %d usuário(s) com todas as páginas passaram a ACESSO TOTAL '
+                    '(página nova entra habilitada): %s', len(alvos), ', '.join(alvos))
+    return alvos
 
 
 # Master users: top-of-hierarchy superusers pinned by SID (not by DB role, so the

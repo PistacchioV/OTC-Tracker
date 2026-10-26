@@ -93,8 +93,11 @@
   // mostra as do tema (`data-tone`, otc.scss §2b) e a escolhida no outro tema
   // aparece pela da outra ponta (`WALL_PAIR`). A COR quem dá é o CSS, que
   // define as duas versões de cada parede; aqui é só qual miniatura fica
-  // marcada. A padrão (`frost`) é a sem `data-wall`: o `:root` do §2b.
-  var WALL_DEFAULT = 'frost';
+  // marcada. A `frost` é a sem `data-wall` (o `:root` do §2b); a PADRÃO de
+  // quem nunca escolheu é a `aurora`, com o vidro `clear` (26/10/2026) — o
+  // `<head>` (head-css.html) tem a mesma regra.
+  var WALL_BASE = 'frost';
+  var WALL_DEFAULT = 'aurora';
   var WALL_TONE = { abyss: 'dark', midnight: 'dark', slate: 'dark', steel: 'dark', fog: 'light', frost: 'light' };
   var WALL_PAIR = { abyss: 'frost', midnight: 'fog', slate: 'fog', steel: 'fog', fog: 'midnight', frost: 'abyss' };
   function shownWall(wall, theme) {
@@ -109,7 +112,7 @@
       theme: p.theme || 'light',
       accent: p.accent || 'blue',
       wall: p.wall || WALL_DEFAULT,
-      glass: p.glass || 'tinted'
+      glass: p.glass || 'clear'
     };
   }
   function writePrefs(p) { try { localStorage.setItem(UI_KEY, JSON.stringify(p)); } catch (e) {} }
@@ -121,7 +124,7 @@
     var go = function () {
       root.setAttribute('data-bs-theme', effectiveTheme(p.theme));
       if (p.accent && p.accent !== 'blue') root.setAttribute('data-accent', p.accent); else root.removeAttribute('data-accent');
-      if (p.wall && p.wall !== WALL_DEFAULT) root.setAttribute('data-wall', p.wall); else root.removeAttribute('data-wall');
+      if (p.wall && p.wall !== WALL_BASE) root.setAttribute('data-wall', p.wall); else root.removeAttribute('data-wall');
       if (p.glass === 'clear') root.setAttribute('data-glass', 'clear'); else root.removeAttribute('data-glass');
     };
     // A troca reavalia a cor de quase todo elemento; sem suprimir as

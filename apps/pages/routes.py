@@ -109,6 +109,15 @@ def _capture_flask_app(state):
         log.error('[notif-db] a subida não conseguiu preparar %s — o sino fica '
                   'vazio até a próxima gravação conseguir:\n%s',
                   NOTIF_DB_PATH, traceback.format_exc())
+    # Quem tem TODAS as páginas passa ao marcador de acesso total, para a
+    # página nova entrar habilitada (26/10/2026, `authz.PAGE_ACCESS_FULL`).
+    # Idempotente; fora dos testes, que não gravam no cadastro de verdade.
+    if os.environ.get('OTC_DISABLE_SCHEDULERS') != '1':
+        try:
+            _pf_authz.page_access_upgrade_full()
+        except Exception:                                   # noqa: BLE001
+            log.error('[page-access] conversão para acesso total falhou na subida:\n%s',
+                      traceback.format_exc())
     _start_schedulers()
 
 

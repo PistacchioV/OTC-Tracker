@@ -403,6 +403,11 @@
         } else if (allowed === null) {
           note.hidden = false; note.className = 'pa-note pa-note--info';
           note.innerHTML = '<i data-lucide="info" style="width:16px;height:16px"></i> Not restricted yet — this user currently has full access. Saving will start enforcing the selection.';
+        } else if (document.getElementById('pa-full').checked) {
+          // acesso total é gravado como tal (authz.PAGE_ACCESS_FULL): a página
+          // que entrar no menu depois já nasce habilitada para este usuário
+          note.hidden = false; note.className = 'pa-note pa-note--info';
+          note.innerHTML = '<i data-lucide="infinity" style="width:16px;height:16px"></i> Full access — pages added to the menu later are granted automatically.';
         } else { note.hidden = true; }
         if (window.lucide && lucide.createIcons) lucide.createIcons();
       });
@@ -421,7 +426,10 @@
         var note = document.getElementById('pa-note');
         if (!current.role || current.role.toUpperCase() !== 'ADMIN') {
           note.hidden = false; note.className = 'pa-note pa-note--info';
-          note.innerHTML = '<i data-lucide="check" style="width:16px;height:16px"></i> ' + esc(current.name) + ' can now access ' + pages.length + ' page(s).';
+          var cheio = document.getElementById('pa-full').checked;
+          note.innerHTML = '<i data-lucide="check" style="width:16px;height:16px"></i> ' + esc(current.name) +
+            (cheio ? ' has full access — pages added to the menu later are granted automatically.'
+                   : ' can now access ' + pages.length + ' page(s).');
           if (window.lucide && lucide.createIcons) lucide.createIcons();
         }
         if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Saved',
