@@ -97,6 +97,9 @@ def api_cp_daily_settlement_save():
             _R()._ds_handle(name, raw, p, ref, processed, skipped)
 
     if processed:
+        # Os arquivos do dia alimentam o NDF Summary e o Other Products: o WHT
+        # recoleta o dia em background.
+        _R()._wht_engine().refresh_async(ref, ('ndf', 'ops'), session.get('user_sid', ''))
         types = ', '.join(p['type'] for p in processed)
         _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                              'Daily Settlement Saved', 'Control Panel',

@@ -52,6 +52,10 @@ def api_ops_data():
                          settle_ref.strftime('%Y-%m-%d'), traceback.format_exc())
         return jsonify({'success': False, 'error': 'collect_failed',
                         'date': settle_ref.strftime('%Y-%m-%d')}), 500
+    # O Trade Level do dia flui para o WHT — só INTEIRO: com uma família que
+    # estourou, a fatia gravada esconderia as operações dela.
+    if not g.get('_ops_trade_failed'):
+        _R()._wht_engine().flow(settle_ref, 'ops', trade, session.get('user_sid', ''))
     try:
         summary = _R()._opssum_rows(trade, datetime(settle_ref.year, settle_ref.month, settle_ref.day))
     except Exception:
