@@ -29,7 +29,10 @@ src/apps/ — e sobe o `solution.py` com um Stratos de MENTIRA (o stratos-blocks
   6. a ponte do share (`ponte_share.py` + `src/ponte_comum.py`), pelo
      `check_ponte.py`;
   7. a prova das travas no Shared Drive (`src/prova_travas.py`): a rota só do
-     master, aqui, e o resto pelo `check_prova_travas.py`.
+     master, aqui, e o resto pelo `check_prova_travas.py`;
+  8. o e-mail pelo Email block (`src/email_stratos.py`): o código de
+     verificação do app montado sai pelo `stratosblocks.email.send`, aqui, e a
+     tradução da mensagem pelo `check_email_stratos.py`.
 
     OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python stratos/tests/check_stratos.py
 """
@@ -49,6 +52,7 @@ BASE = '/76521/otc-tracker-ops-ai-citizen'
 MARCA = '########### DO NOT DELETE ###########'
 
 FALHAS = []
+EMAILS = []   # o que o Email block de mentira recebeu
 
 
 def ok(cond, msg):
@@ -279,6 +283,7 @@ def _stubs(com_phonebook=True):
         os.environ['HTTP_PROXY'] = os.environ['HTTPS_PROXY'] = PROXY_TESTE
 
     modulo('stratosblocks.connectivity', configure_proxy_env_vars=proxy_do_stratos)
+    modulo('stratosblocks.email', send=lambda **kw: EMAILS.append(kw))
     if com_phonebook:
         modulo('stratosblocks.utilities', get_phonebook_data=_phonebook,
                get_shared_drive=_get_shared_drive)
@@ -309,7 +314,7 @@ def _stubs(com_phonebook=True):
 def confere_subida(tmp, sem_awmpy):
     src = os.path.join(tmp, 'src')
     os.makedirs(src)
-    for nome in ('solution.py', 'run.py', 'otc_stratos.py', 'prova_travas.py'):
+    for nome in ('solution.py', 'run.py', 'otc_stratos.py', 'prova_travas.py', 'email_stratos.py'):
         shutil.copy(os.path.join(STRATOS, 'src', nome), src)
     os.symlink(os.path.join(RAIZ, 'apps'), os.path.join(src, 'apps'))
     # Com phonebook a raiz sai do Shared Drive (o `get_shared_drive` está no
@@ -461,6 +466,23 @@ def confere_subida(tmp, sem_awmpy):
        % (d.get('tempos') or {}).get('banco_de_cadastro'))
     r = c.get(BASE + '/stratos/prova-travas?modo=xyz', headers=MASTER)
     ok(r.status_code == 400, 'prova das travas: modo desconhecido e 400')
+
+    # O e-mail: o relay do JPM não responde do contêiner, e o smtplib.SMTP do
+    # app inteiro vira o Email block (email_stratos.py).
+    import smtplib
+    import email_stratos
+    ok(smtplib.SMTP is email_stratos.SmtpStratos, 'e-mail: o smtplib.SMTP do app e o Email block')
+    with app.app_context():
+        enviado = routes.send_verification_email('fulana.teste@jpmorgan.com', '493817', 'Fulana')
+    e = EMAILS[-1] if EMAILS else {}
+    ok(enviado is True and e.get('recipient') == ['fulana.teste@jpmorgan.com']
+       and e.get('sender') == routes.SHARED_MAILBOX and e.get('is_html_message') is True
+       and '493817' in re.sub(r'<[^>]+>|\s+', '', e.get('body') or ''),   # um digito por caixa
+       'e-mail: o codigo de verificacao sai pelo Email block (%s %r)'
+       % (enviado, {k: e.get(k) for k in ('subject', 'recipient', 'sender')}))
+    ok([os.path.basename(x) for x in e.get('inline_images') or ()] == ['otc_logo.png']
+       and 'cid:otc_logo.png' in (e.get('body') or ''),
+       'e-mail: o logo vai como imagem do corpo, com o cid do arquivo')
 
     # O login de verdade: o SSO devolve no /login/callback, que guarda a
     # identidade na sessão. A ponte não pode barrar o callback nem apagar a
@@ -757,6 +779,12 @@ def main():
         if linha.startswith('FAIL'):
             print('      ponte: ' + linha)
     ok(r.returncode == 0, 'ponte do share: espelho, travas, alinhar e virada')
+    r = subprocess.run([sys.executable, os.path.join(AQUI, 'check_email_stratos.py')],
+                       capture_output=True, text=True)
+    for linha in r.stdout.splitlines():
+        if linha.startswith('FAIL'):
+            print('      email: ' + linha)
+    ok(r.returncode == 0, 'e-mail: a mensagem do app traduzida para o Email block')
     r = subprocess.run([sys.executable, os.path.join(AQUI, 'check_prova_travas.py')],
                        capture_output=True, text=True)
     for linha in r.stdout.splitlines():

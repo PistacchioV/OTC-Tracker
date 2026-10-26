@@ -25,7 +25,9 @@ bancos DuckDB moram no Shared Drive (EFS) da solução, que sobrevive ao deploy
 que o app usa chegam e saem por uma PONTE com a máquina do JPM
 (`_ponte_manifestos` aqui, `stratos/ponte_share.py` lá). Se as travas do
 app valem nesse drive, a rota `/stratos/prova-travas` responde
-(`_rota_prova_travas`, `prova_travas.py`).
+(`_rota_prova_travas`, `prova_travas.py`). E o e-mail: o relay SMTP do JPM
+não responde do contêiner, e o `smtplib.SMTP` que os 23 senders do app usam
+vira o Email block do stratos-blocks (`email_stratos.py`).
 
 Este arquivo, o `solution.py` e o `run.py` existem SÓ na branch
 OTC-Tracker-Stratos; o código do app continua nascendo na dev.
@@ -126,6 +128,8 @@ def _monta(app, stratos_auth, base):
     primeira mudança da dev."""
     _proxy_do_stratos()
     _garante_awmpy()
+    import email_stratos
+    email_stratos.instala()   # o smtplib.SMTP do app vira o Email block (o relay não responde aqui)
     _raiz_no_shared_drive()   # antes do import: o bloco ENV:STRATOS lê a raiz nele
 
     import apps as otc
