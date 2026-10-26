@@ -29941,3 +29941,30 @@ do 0301, inclusive a fixação no dia do início).
 **Falta da equipe:** a LOB (o e-mail não diz CEM/EDG — lacuna, não se chuta) e
 o "At maturity" no `/mapping › Swap — Tipo de Amortização` se ainda não estiver
 lá; conferir o primeiro arquivo gerado com o que a macro gerava.
+
+## §698 — Swaps: o arquivo BAIXADO leva a conta no nome; o preview com o Valor legível (2026-10-26)
+
+A equipe baixou o 0301 e o 0034 do Swap Cashflow da Boticario pelo preview e
+recebeu `SWAP_CF_CEM_CLIENTE.txt` / `FLUXO_SWAP_CF_CEM_CLIENTE.txt` — sem a
+conta da visão na frente (`73760009.…`), que é como o Conecta os espera. O
+Send que GRAVA na New já nomeava pelo `routes._conecta_file_name` (§646); os
+dois caminhos de DOWNLOAD (o Send com `download` e o Export do preview, que
+baixa o `file_name` de cada aba) ficavam de fora por decisão do §646 ("o
+download do preview fica sem a conta"). Nos swaps o arquivo baixado é o que
+vai ao Conecta, e a regra foi revista para as três telas (Bullet, Cashflow,
+Cetes):
+
+- `send(download=True)` calcula os nomes da New ANTES do ramo de download e os
+  usa — visão sem conta recusa, como o Send;
+- `preview` passa os arquivos por `_com_conta`: o `file_name` vira o da New, e
+  a visão sem conta cadastrada fica com o nome de sempre (o preview não deixa
+  de abrir por isso).
+
+As outras telas (NDF, Opções) seguem com o download sem a conta.
+`check_conecta_file_name.py` §6.
+
+No mesmo preview (`file-preview.js`), a coluna Value estava espremida: com o
+layout automático e o Value quebrando em qualquer caractere, era ele que cedia,
+e o Block levava metade da tabela. Block, Field e Format agora encolhem até o
+conteúdo (`width: 1%` + `nowrap` no `th`) e o Value fica com a sobra — em toda
+tela que usa o `otcFilePreview`.

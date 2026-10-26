@@ -108,12 +108,18 @@
                 (hasFmt ? '<td style="padding:2px 8px;border:none;font-size:.75em;color:#888;white-space:nowrap">' + esc(x.format) + '</td>' : '') +
                 '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;word-break:break-all;text-align:left;white-space:pre-wrap">' + disp + '</td></tr>';
         }).join('');
-        var th = function (txt) { return '<th style="padding:5px 8px;text-align:left;font-weight:600">' + txt + '</th>'; };
+        // Bloco, Campo e Formato encolhem até o conteúdo (width:1% + nowrap) e o
+        // Valor fica com a sobra: com o layout automático, o Valor (que quebra em
+        // qualquer caractere) era a coluna que cedia, e o Bloco levava metade da tabela.
+        var th = function (txt, shrink) {
+            return '<th style="padding:5px 8px;text-align:left;font-weight:600' +
+                (shrink ? ';width:1%;white-space:nowrap' : '') + '">' + txt + '</th>';
+        };
         return '<div style="overflow-y:auto;max-height:42vh;border:1px solid rgba(0,0,0,.12);border-radius:6px">' +
             '<table style="width:100%;border-collapse:collapse;font-size:0.85em"><thead><tr style="background:#343a40;color:#fff;position:sticky;top:0">' +
-            (hasBlock ? th(esc(tr(t, 'nd-preview-col-block', 'Block'))) : '') +
-            th('<span data-lang="nd-preview-col-field">' + esc(tr(t, 'nd-preview-col-field', 'Field')) + '</span>') +
-            (hasFmt ? th(esc(tr(t, 'nd-preview-col-format', 'Format'))) : '') +
+            (hasBlock ? th(esc(tr(t, 'nd-preview-col-block', 'Block')), true) : '') +
+            th('<span data-lang="nd-preview-col-field">' + esc(tr(t, 'nd-preview-col-field', 'Field')) + '</span>', true) +
+            (hasFmt ? th(esc(tr(t, 'nd-preview-col-format', 'Format')), true) : '') +
             th('<span data-lang="nd-preview-col-value">' + esc(tr(t, 'nd-preview-col-value', 'Value')) + '</span>') +
             '</tr></thead><tbody>' + rows + '</tbody></table></div>';
     }
