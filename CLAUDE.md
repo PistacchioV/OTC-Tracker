@@ -734,7 +734,7 @@ escolhido, os outros dois se preenchem). **`file`** aponta para um JSON já
 existente (o `swap-index` edita o mesmo `SwapIndex.json` do Index Results —
 declare as colunas extras, senão o POST as derruba).
 
-São **51**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-ndf`, `commodities-b3`,
+São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currency-base`, `interbook-ndf`, `commodities-b3`,
 `publisher-ndf`, `le-accronym`, `le-spn`, `bank-name`, `fxo-conv-rate`,
 `ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`,
 `manual-conf-validation`, `manual-conf-sla`, `fxo-internal-cpty`,
@@ -1724,7 +1724,21 @@ São **51**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   EPP, que voltam como ignorados. Parte A = a perna que o BANCO recebe (a que
   o cliente PAGA); valor base = o notional em BRL, o da moeda em Notional
   (Foreign Ccy), `Initial FX` em FX Start; `At maturity` = 100% no último
-  fluxo. **A categoria das pernas sai dos CADASTROS**, nunca de lista no
+  fluxo. **O recap também chega no formato da Boticario** (§697): seção por
+  LETRA (`B) USD/BRL Onshore Cross-currency Swap`), contraparte pelo CNPJ do
+  Party B quando não há linha de SPN, `USD Notional:`, a tabela do cronograma
+  uma célula por linha (com a coluna de amortização), e o **FX de booking**
+  (`FX: 5.40`) que faz o Valor Base = FX × o notional na moeda. O `Initial FX`
+  que é uma FIXAÇÃO futura (`PTAX-V 06-Nov-2026`) é a **Atualização de
+  Notional**, e o 0301 vai **a termo** (FWD Start): Data da operação (19),
+  Índice Termo do cadastro `swap-termo-index` (20, o domínio do layout: 15 =
+  DOLAR), 100% (21), D-n ANBIMA da fixação ao início (99) — fixação no próprio
+  dia do início vira VCP (00) com PU, Tipo/Classe e Denominação (22-24) — e o
+  **Cupom Limpo (47/49) em BRANCO**. **Term SOFR vai como VCP** (C00 pelas
+  linhas `nM TERM SFR` do `swap-bullet-curve`, que têm o Tipo/Classe do
+  VCP.json na coluna VCP CODE), a fórmula do e-mail na Denominação; ela vai na
+  curva VCP do CLIENTE quando ele está na guarda-chuva (a regra da macro).
+  **A categoria das pernas sai dos CADASTROS**, nunca de lista no
   código: curva do recap → código B3 (`swap-bullet-curve`) → `Nome Categoria`
   no Swap Index (`swap-index`, pelo código). USD é **TAXAS DE CAMBIO**, código
   220 (mesa, 24/09/2026) — a linha `USD → 220` se cadastra no /mapping.

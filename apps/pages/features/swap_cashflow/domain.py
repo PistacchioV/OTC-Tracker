@@ -397,6 +397,10 @@ def recap_parts(section):
     em FX Start. Amortização 'At maturity' põe 100% no último fluxo."""
     f = section.get('fields') or {}
     pa, pb = f.get('PartyA', ''), f.get('PartyB', '')
+    # `Party B: Boticario … (CNPJ: 11.137.051/0001-86)` (§697): o nome sem o
+    # parêntese; o CNPJ identifica a contraparte quando o e-mail não traz SPN.
+    pb = re.sub(r'\s*\(\s*CNPJ\b.*$', '', pb, flags=re.I).strip() or pb
+    pa = re.sub(r'\s*\(\s*CNPJ\b.*$', '', pa, flags=re.I).strip() or pa
     nosso, cliente = (pa, pb) if dtk._is_ours(pa) or not dtk._is_ours(pb) else (pb, pa)
     legs = section.get('legs') or []
 
@@ -408,6 +412,13 @@ def recap_parts(section):
     a, b = dtk.recap_leg(rec['text'] if rec else ''), dtk.recap_leg(pag['text'] if pag else '')
     brl = next((v for ccy, v in section.get('notionals') or [] if ccy == 'BRL'), None)
     fc = next(((ccy, v) for ccy, v in section.get('notionals') or [] if ccy != 'BRL'), None)
+    # O FX de BOOKING (`FX: 5.40 (just to booking)`, §697) faz o Valor Base:
+    # FX × o notional na moeda (equipe, 26/10/2026) — a linha "BRL Notional" do
+    # e-mail é a mesma conta, e quando o Initial FX é uma fixação futura
+    # (`PTAX-V 06-Nov-2026`) ele é o único número que existe hoje.
+    fx_book = _numero_solto(f.get('FX'))
+    if fx_book is not None and fc:
+        brl = round(fx_book * fc[1], 2)
     notional = brl if brl is not None else (fc[1] if fc else None)
     ini, fim = dtk.recap_date(f.get('Effective')), dtk.recap_date(f.get('Maturity'))
     raw = {
@@ -433,17 +444,55 @@ def recap_parts(section):
     amort = f.get('Amortization', '')
     no_venc = 'MATURITY' in dtk.norm(amort) or 'VENCIMENTO' in dtk.norm(amort)
     pares = section.get('flows') or []
-    flows = [{'StartDate': dtk.iso(i), 'PaymentDate': dtk.iso(p),
-              'AmortizationPct': ('100' if k == len(pares) - 1 else '0') if no_venc else ''}
+    # A coluna Amortization da tabela (quando o e-mail a traz) vence a regra
+    # do "At maturity".
+    pct_tab = section.get('flow_amort') or {}
+
+    def _amort(k):
+        if k in pct_tab and pct_tab[k] is not None:
+            return ('%.5f' % pct_tab[k]).rstrip('0').rstrip('.')
+        return ('100' if k == len(pares) - 1 else '0') if no_venc else ''
+    flows = [{'StartDate': dtk.iso(i), 'PaymentDate': dtk.iso(p), 'AmortizationPct': _amort(k)}
              for k, (i, p) in enumerate(pares)]
     extras = {'vanilla_DCC': a['dcc'], 'vcp_DCC': b['dcc'], 'AmortizationType': amort,
               'Adhesion': f.get('Agreement', '')}
     if fc:
         extras['NotionalFC'] = '%.2f' % fc[1]
-    fx = dtk.parse_number(f.get('InitialFX'))
-    if fx is not None:
+    fx = _numero_solto(f.get('InitialFX'))
+    if fx_book is not None:
+        extras['FXStart'] = str(fx_book)
+    elif fx is not None:
         extras['FXStart'] = str(fx)
+    # `Initial FX: PTAX-V 06-Nov-2026` não é número: é a ATUALIZAÇÃO DE
+    # NOTIONAL — o Valor Base em reais será corrigido pela PTAX daquele dia
+    # (o contrato a termo dos campos 19-24/99 do 0301, §697).
+    if fx is None and f.get('InitialFX'):
+        obs = dtk.recap_date(f.get('InitialFX'))
+        if obs:
+            indice = _RECAP_DATE_ANY.split(str(f.get('InitialFX')))[0].strip(' :-')
+            extras['NotionalIndex'] = indice or str(f.get('InitialFX')).strip()
+            extras['NotionalObsDate'] = dtk.iso(obs)
+    # A perna de fórmula (`(6M TERM SFR + 0.60%)* 1.17647`) vai como VCP, com
+    # o texto do e-mail na Denominação (sem acento e sem a sigla VCP, como a
+    # macro da mesa).
+    formula = next((leg.get('formula') for leg in (a, b) if leg.get('formula')), '')
+    if formula:
+        extras['VcpText'] = re.sub(r'\bVCP\b', '', dtk.strip_accents(formula)).strip()
+    # `Fixings: PTAX-Ask T-1` → a Data de Cotação D-1 da perna VCP.
+    mfix = re.search(r'\b[TD]\s*-\s*(\d)\b', str(f.get('Fixings') or ''), re.I)
+    if mfix and int(mfix.group(1)) <= 5:
+        extras['QuoteDateCode'] = '%02d' % int(mfix.group(1))
     return raw, flows, extras
+
+
+_RECAP_DATE_ANY = re.compile(r'\b\d{1,2}[-/ ](?:[A-Za-z]{3,9}|\d{1,2})[-/ ]\d{2,4}\b')
+
+
+def _numero_solto(v):
+    """O número quando o campo É um número (`5.40`, `[5.1150]`,
+    `5.40 ( just to booking)`) — `PTAX-V 06-Nov-2026` não é."""
+    m = re.match(r'^\s*\[?\s*(\d[\d.,]*)\s*\]?\s*(?:\(.*\))?\s*$', str(v or ''))
+    return dtk.parse_number(m.group(1)) if m else None
 
 
 def deal_from_recap(section, trade_date_iso):
@@ -452,13 +501,25 @@ def deal_from_recap(section, trade_date_iso):
     B3 → categoria no Swap Index); sem cadastro, lacuna `swc_no_category`."""
     raw, flows, extras = recap_parts(section)
     adesao = extras.pop('Adhesion', '')
+    vcp_text = extras.pop('VcpText', '')
+    quote = extras.pop('QuoteDateCode', '')
     deal = deal_from_raw(raw, flows, trade_date_iso, extras)
+    cnpj = dtk.recap_cnpj((section.get('fields') or {}).get('PartyB'))
+    if cnpj and not str(deal.get('ClientTaxId') or '').strip():
+        deal['ClientTaxId'] = cnpj          # o `enrich` acha a contraparte por ele (§697)
     for side, pref in (('A', 'vanilla_'), ('B', 'vcp_')):
         cat = raw[pref + 'Category']
         deal['Curve' + side + 'Category'] = '' if cat == '-' else cat
     if 'VCP' not in (deal['CurveACategory'], deal['CurveBCategory']):
         deal['VcpCurve'] = ''
         deal['VcpText'] = ''
+    # Depois da limpeza acima: a categoria da perna de fórmula ainda está em
+    # branco (sai do cadastro no `enrich`, C00 → VCP), e o texto dela é o do
+    # e-mail. O `enrich` o apaga se a perna não virar VCP.
+    if vcp_text:
+        deal['VcpText'] = vcp_text
+    if quote:
+        deal['QuoteDateCode'] = quote
     if adesao:
         deal['Adhesion'] = adesao.strip().upper()
     deal['Source'] = 'Trade Recap'
@@ -519,6 +580,72 @@ def fx_quote_code(deal, side):
     return '%02d' % int(m.group(1))
 
 
+# ── O contrato a TERMO (FWD Start com Atualização de Notional, §697) ──────────
+# O swap pactuado hoje cujo Valor Base em reais só se fixa depois (`Initial FX:
+# PTAX-V 06-Nov-2026`): o 0301 o registra a termo — Data da operação (19), o
+# Índice Termo (20) que corrige o Valor Base, Percentual 100% (21) e a Data de
+# Cotação Final do índice de moeda (99, D-n da fixação ao início). Índice 00
+# (VCP: a fixação no próprio dia do início — a regra da macro da mesa) leva PU
+# Inicial, Tipo/Classe e Denominação (22-24) em vez do D-n. E com o Valor Base
+# a ser corrigido, o Cupom Limpo das curvas (47/49) vai em BRANCO (equipe,
+# 26/10/2026).
+TERMO_PERCENT = 100
+
+
+def is_termo(deal):
+    """O deal é a termo? — tem a Atualização de Notional (índice e data)."""
+    return bool(str((deal or {}).get('NotionalIndex') or '').strip()
+                and dtk.parse_date((deal or {}).get('NotionalObsDate')))
+
+
+def termo_row(rows, text):
+    """A linha do cadastro `swap-termo-index` do índice escrito (`PTAX-V`):
+    `Exact` vence `Contains`, entre os `Contains` o mais longo. → dict ou None."""
+    alvo = dtk.norm(text)
+    if not alvo:
+        return None
+    exato, contem = None, (None, -1)
+    for r in rows or []:
+        pat = dtk.norm((r or {}).get('INDEX'))
+        if not pat or not str((r or {}).get('CODE') or '').strip():
+            continue
+        if dtk.norm((r or {}).get('MATCH', 'Exact')) == 'CONTAINS':
+            if pat in alvo and len(pat) > contem[1]:
+                contem = (r, len(pat))
+        elif pat == alvo:
+            exato = r
+    return exato if exato is not None else contem[0]
+
+
+def termo_codes(deal, rows, biz_diff):
+    """{'termo_index', 'termo_class', 'termo_quote'} do deal a termo (vazio
+    fora dele). `biz_diff(a, b)` conta os dias úteis ANBIMA em (a, b] — a
+    `NetworkDays − 1` da macro. Fixação no dia do início → índice 00 (VCP),
+    com o Tipo/Classe da linha; senão o D-n da fixação até o início."""
+    if not is_termo(deal):
+        return {}
+    obs = dtk.parse_date(deal.get('NotionalObsDate'))
+    ini = dtk.parse_date(deal.get('StartDate'))
+    r = termo_row(rows, deal.get('NotionalIndex'))
+    if obs and ini and obs == ini:
+        return {'termo_index': '00', 'termo_class': dtk._digits((r or {}).get('VCP CLASS')),
+                'termo_quote': ''}
+    code = str((r or {}).get('CODE') or '').strip()
+    n = biz_diff(obs, ini) if (obs and ini) else None
+    return {'termo_index': code.zfill(2) if code.isdigit() else code, 'termo_class': '',
+            'termo_quote': ('%02d' % n) if n is not None and 0 <= n <= 5 else ''}
+
+
+def termo_denomination(deal):
+    """A Denominação do VCP a termo (24), no texto da macro, sem acento."""
+    fx = dtk.parse_number(deal.get('FXStart'))
+    obs = dtk.parse_date(deal.get('NotionalObsDate'))
+    t = 'Valor base convertido pelo FX Inicial: %s e sera atualizado em %s pelo indice %s' % (
+        ('%.7f' % fx) if fx is not None else '', obs.strftime('%d/%m/%Y') if obs else '',
+        str(deal.get('NotionalIndex') or '').strip())
+    return re.sub(r'\bVCP\b', '', dtk.strip_accents(t)).strip()
+
+
 def contract_record_values(deal, view, accounts, codes, my_number):
     """Os 117 campos do registro tipo 1 do 4.2.7 v00003, por seq, JÁ na
     largura do manual. As regras das pernas são as do Bullet
@@ -546,9 +673,19 @@ def contract_record_values(deal, view, accounts, codes, my_number):
     vals['16'] = codes.get('premium_schedule') or ('00' if prem else '01')
     vals['17'] = _blank(2)
     vals['18'] = _blank(100)            # Observação: opcional, não vai (como no Bullet)
-    # 19-24: contrato a TERMO — não se aplica ao swap registrado em D0.
+    # 19-24: contrato a TERMO (FWD Start com Atualização de Notional, §697);
+    # o swap registrado em D0 os deixa em branco.
     for seq, w in ((19, 8), (20, 2), (21, 5), (22, 22), (23, 5), (24, 320), (25, 42)):
         vals[str(seq)] = _blank(w)
+    termo = is_termo(deal)
+    if termo:
+        vals['19'] = dtk.ymd(deal.get('TradeDate')).ljust(8)
+        vals['20'] = (codes.get('termo_index') or '').rjust(2)[:2] or _blank(2)
+        vals['21'] = dtk.b3_num(TERMO_PERCENT, 3, 2)
+        if codes.get('termo_index') == '00':
+            vals['22'] = dtk.b3_num(dtk.parse_number(deal.get('FXStart')), 14, 8) or _blank(22)
+            vals['23'] = d(codes.get('termo_class')).zfill(5)[-5:] if d(codes.get('termo_class')) else _blank(5)
+            vals['24'] = termo_denomination(deal)[:320].ljust(320)
     # Curva para Atualização: 26-32 Parte, 33-39 Contraparte (as mesmas do Bullet).
     for base, side in ((26, parte), (33, contra)):
         c = dtk._curve(deal, side['curve'])
@@ -564,6 +701,12 @@ def contract_record_values(deal, view, accounts, codes, my_number):
     # Se curva(s) = VCP: 41-43 Parte, 44-46 Contraparte; Cupom Limpo 47-48 / 49-50.
     price = dtk.parse_number(deal.get('InitialPrice'))
     text = str(deal.get('VcpText') or '').strip() or dtk.vcp_text(deal)
+    # A Denominação vai na curva VCP da PARTE; e na da CONTRAPARTE quando a
+    # Parte não é VCP e o cliente está na conta guarda-chuva — a regra da macro
+    # da mesa (§697: o Term SOFR que o CLIENTE recebe).
+    parte_vcp = dtk._curve(deal, parte['curve'])['category'] == 'VCP'
+    contra_desc = (view == 'client' and not parte_vcp
+                   and dtk.norm(deal.get('ClientAccountNote')) == 'OMNIBUS')
     for base, cl_base, side in ((41, 47, parte), (44, 49, contra)):
         c = dtk._curve(deal, side['curve'])
         if dtk.is_fx_category(c['category']):
@@ -574,13 +717,15 @@ def contract_record_values(deal, view, accounts, codes, my_number):
             vals[str(base)] = _blank(22)
             vals[str(base + 1)] = _blank(5)
             vals[str(base + 2)] = _blank(320)
-            vals[str(cl_base)] = dtk.b3_num(fx_clean_coupon(deal, lado), 8, 7) or _blank(15)
+            vals[str(cl_base)] = ((dtk.b3_num(fx_clean_coupon(deal, lado), 8, 7) or _blank(15))
+                                  if not termo else _blank(15))
             vals[str(cl_base + 1)] = fx_quote_code(deal, lado) or _blank(2)
         elif c['category'] == 'VCP':
             vals[str(base)] = dtk.b3_num(1, 14, 8)
             vals[str(base + 1)] = d(deal.get('VcpCode')).zfill(5)[-5:] if d(deal.get('VcpCode')) else _blank(5)
-            vals[str(base + 2)] = text[:320].ljust(320) if side is parte else _blank(320)
-            vals[str(cl_base)] = dtk.b3_num(price, 8, 7) or _blank(15)
+            com_texto = side is parte or (side is contra and contra_desc)
+            vals[str(base + 2)] = text[:320].ljust(320) if com_texto else _blank(320)
+            vals[str(cl_base)] = (dtk.b3_num(price, 8, 7) or _blank(15)) if not termo else _blank(15)
             vals[str(cl_base + 1)] = (str(deal.get('QuoteDateCode') or '').zfill(2)
                                       if str(deal.get('QuoteDateCode') or '').strip() else _blank(2))
         else:
@@ -606,6 +751,8 @@ def contract_record_values(deal, view, accounts, codes, my_number):
                    (107, 2), (108, 8), (109, 15), (110, 2), (111, 2), (112, 2), (113, 8),
                    (114, 2), (115, 15), (116, 2), (117, 15)):
         vals[str(seq)] = _blank(w)
+    if termo and codes.get('termo_index') != '00' and codes.get('termo_quote'):
+        vals['99'] = codes['termo_quote']   # D-n do índice de moeda (fixação → início)
     return vals
 
 
@@ -654,7 +801,27 @@ def missing_for_send(deal, codes, accounts, amort_code):
     """As lacunas do cashflow: as do Bullet (as mesmas perguntas sobre datas,
     notional, códigos, contas e contraparte), mais o cronograma e o tipo de
     amortização. Cada item é `lacuna(...)`; vazia = pode enviar."""
-    out = [lacuna('swc_missing', t, field=t) for t in dtk.missing_for_send(deal, codes, accounts)]
+    termo = is_termo(deal)
+    # A termo, o Cupom Limpo vai em BRANCO (§697): o Preço Inicial do VCP não
+    # é pedido.
+    out = [lacuna('swc_missing', t, field=t) for t in dtk.missing_for_send(deal, codes, accounts)
+           if not (termo and t == 'Initial Price')]
+    if termo:
+        if not str(codes.get('termo_index') or '').strip():
+            out.append(lacuna('swc_termo_index', 'Forward start: index %r has no Índice Termo code in '
+                              '/mapping › Swap — Forward-start Index' % deal.get('NotionalIndex'),
+                              index=str(deal.get('NotionalIndex') or '')))
+        elif codes.get('termo_index') == '00':
+            if not str(codes.get('termo_class') or '').strip():
+                out.append(lacuna('swc_termo_class', 'Forward start fixing on the start date (VCP): the '
+                                  'Tipo/Classe of index %r — /mapping › Swap — Forward-start Index'
+                                  % deal.get('NotionalIndex'), index=str(deal.get('NotionalIndex') or '')))
+            if dtk.parse_number(deal.get('FXStart')) is None:
+                out.append(lacuna('swc_fx_coupon', 'Forward start (VCP): FX Start', side='-'))
+        elif not str(codes.get('termo_quote') or '').strip():
+            out.append(lacuna('swc_termo_quote', 'Forward start: the fixing date (%s) must be D0 to D-5 '
+                              'business days before the Start Date' % deal.get('NotionalObsDate'),
+                              date=str(deal.get('NotionalObsDate') or '')))
     flows = normalize_schedule(deal.get(SCHEDULE_FIELD))
     if not flows:
         out.append(lacuna('swc_no_flows', 'Cash Flow schedule (no flow)'))

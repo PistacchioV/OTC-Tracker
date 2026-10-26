@@ -29893,3 +29893,51 @@ operação original nos mappings de NDF e Option (`sem_recompra`).
 mudança (`check_b3_pattern`, `check_export_advanced`,
 `check_lp_counterparty_name`, `check_mt300`, `check_ndf_advice`,
 `check_req_cache`, `check_swap_advice` — conferidas com o código anterior).
+
+
+## §697 — Swap Cashflow: o recap da Boticario (Term SOFR como VCP, Valor Base pelo FX de booking, o 0301 a termo) (2026-10-26)
+
+O "B) USD/BRL Onshore Cross-currency Swap" da Boticario não entrava: o leitor
+do Trade Recap (§555) só aceitava seção numerada (`I)`), exigia a linha
+`<Cliente> SPN : n`, lia o notional só como `Notional: USD …`, o cronograma só
+com as duas datas na MESMA linha, e não entendia `(6M TERM SFR + 0.60%)*
+1.17647 (A/360)` — o e-mail virava uma "planilha" e era ignorado (`deals=0`).
+E mesmo lido, a perna Term SOFR seria recusada (`swc_intl_curve`).
+
+Regras da equipe (26/10/2026), com a macro antiga como referência:
+
+- **Term SOFR vai como VCP.** É cadastro: as linhas `1M/3M/6M/12M TERM
+  SFR|SOFR` → C00 no `swap-bullet-curve`, com a coluna nova **VCP CODE** (o
+  Tipo/Classe do VCP.json: 17924, 17923, 17922, 17921). O `upgrade` as acrescenta
+  ao cadastro gravado (só as que faltam, pelo DT CURVE). A fórmula do e-mail vai
+  na Denominação; e ela vai na curva VCP do CLIENTE quando a Parte não é VCP e o
+  cliente está na conta guarda-chuva — a regra da macro (`DescricaoVCPP`).
+- **O Valor Base é o FX de booking × o notional em USD** (`FX: 5.40 (just to
+  booking)` × 40 mi = 216 mi); FX Start = 5,40.
+- **É FWD Start, com Atualização de Notional** (`Initial FX: PTAX-V
+  06-Nov-2026`): o 0301 vai a termo, como a macro (colunas T–Y e CV):
+  19 = Data da operação; 20 = Índice Termo pelo cadastro novo
+  **`swap-termo-index`** (o domínio do layout 4.2.7: 00 VCP, 01 SELIC, 03 DI,
+  15 DOLAR, 33 EURO, 35 IENE, 36 LIBRA, 53 EURO-BCE, 78 FRANCO SUÍÇO BCE —
+  `PTAX` → 15); 21 = 100%; 99 = D-n ANBIMA da fixação ao início (06/11 → 10/11
+  = 02). Fixação no próprio dia do início vira VCP (00): PU = FX Inicial,
+  Tipo/Classe (coluna VCP CLASS do cadastro, lacuna `swc_termo_class` sem ela)
+  e a Denominação "Valor base convertido pelo FX Inicial: … e sera atualizado em
+  … pelo indice …", sem o 99.
+- **Com FWD Start e Atualização de Notional, o Cupom Limpo (47/49) vai em
+  BRANCO**, e o Preço Inicial do VCP deixa de ser lacuna.
+- `Fixings: PTAX-Ask T-1` → Data de Cotação D-1 da perna VCP.
+
+O leitor agora aceita seção por letra com `)`, abre seção de SWAP sem a linha
+de SPN (a contraparte vem pelo CNPJ do Party B, procurado no Reference Data por
+dígitos no `enrich`), lê `USD Notional: …` (e ignora a linha da fórmula), o
+`FX:`, `Fixings:` e a tabela uma célula por linha com a coluna de amortização.
+O formato antigo (Vibra, §555) segue igual. O FWD Start sem Atualização de
+Notional não tem gatilho: hoje é a termo quem tem a atualização (índice e data).
+
+`check_swap_cashflow.py` §10 (o e-mail inteiro, o deal, os códigos e os campos
+do 0301, inclusive a fixação no dia do início).
+
+**Falta da equipe:** a LOB (o e-mail não diz CEM/EDG — lacuna, não se chuta) e
+o "At maturity" no `/mapping › Swap — Tipo de Amortização` se ainda não estiver
+lá; conferir o primeiro arquivo gerado com o que a macro gerava.
