@@ -300,8 +300,9 @@ def main():
     e = lst[idx]
     check('nasce New com os quatro Meu Número', e['Status'] == 'New' and all(len(e[k]) == 10 for k in ('MyNumber', 'MyNumberMirror', 'PremiumMyNumber', 'PremiumMyNumberMirror')))
     lacuna_cli = res['missing'].get(cli['_id'], [])
-    check('cliente sem conta B3 no RefData da dev cai no omnibus (sem lacuna de conta)',
-          e['ClientAccount'] in ('74220005', '73760205') and not any('Client B3 Account' in x for x in lacuna_cli))
+    # a guarda-chuva é a CLIENT 1 (73760.10-2; equipe, 26/10/2026, §698)
+    check('cliente sem conta B3 no RefData da dev cai no omnibus CLIENT 1 (sem lacuna de conta)',
+          e['ClientAccount'] in ('74220005', '73760102') and not any('Client B3 Account' in x for x in lacuna_cli))
     check('SPN fora do Reference Data é LACUNA; o nome do DT fica em ClientDT',
           (e.get('ClientRefData') == 'ok' or any('Reference Data' in x for x in lacuna_cli)) and e['ClientDT'] == 'Safra')
     # A contraparte é a do Reference Data pela SPN: com cadastro, o nome vem de lá.
@@ -517,7 +518,7 @@ def main():
     from apps.pages import otc_emails
     hoje = datetime.now().strftime('%d/%m/%Y')
     fi = dict(cli, TradeDate=datetime.now().strftime('%Y-%m-%d'), ClientAccount='74220005', ClientRefData='ok', Client='BANCO SAFRA S.A.')
-    omni = dict(fi, ClientAccount='73760205', ClientAccountNote='omnibus')
+    omni = dict(fi, ClientAccount='73760102', ClientAccountNote='omnibus')
     drafts = otc_emails.build_swap_bullet_affirmation_emails([fi, omni, dict(b2b, TradeDate=fi['TradeDate']), dict(fi, TradeDate='2026-01-02')])
     check('um rascunho: só a IF com conta própria, na data; omnibus, B2B e outro dia ficam fora', len(drafts) == 1)
     dr = drafts[0]

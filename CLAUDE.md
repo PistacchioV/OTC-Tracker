@@ -1716,6 +1716,21 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   Cashflow (`routes._swap_cashflow_engine`) — sem isso o Generate do Monitor não
   achava a operação —, e o backfill tem as famílias da pasta `Swap/Cashflow`.
   `check_swap_cashflow.py`.
+- **O B2B do swap é × o FUNDO da LOB: EDG × Atacama, CEM × Lawton** (equipe,
+  26/10/2026, §699). `swap_deal_ticket.B2B_FUNDS`/`b2b_fund`/`set_pair`: a LE
+  da linha (ATACAMA/LAWTON) diz o fundo, as visões são `bank` + `atacama` ou
+  `lawton` (arquivos `…_LAWTON.txt`, a conta e o participante do fundo no
+  `b3-accounts`) e a Intrag Swap vai na carteira dele (INTRAGJP633 ×
+  INTRAGJP552). `le_pair(view, deal)`: a visão do Banco é contra o fundo do
+  DEAL — chamador que não passa o deal cai na Atacama. O card do deal contra
+  cliente (Bullet e Cashflow) tem o **Create B2B** (`static/js/swap-deal.js`,
+  `otcSwapB2B`): as pernas A e B trocadas campo a campo (`CurveA…` ↔
+  `CurveB…`), LE/Client = o fundo, o pagador do prêmio invertido, sem Deal/B3
+  ID/SPN/conta, e o modal de Add aberto para editar; sem LOB não há B2B. A
+  guarda-chuva de cliente sem conta própria é a **CLIENT 1** (73760.10-2), e o
+  preview/Send releem a do cadastro (`with_current_omnibus`). Nas telas de swap
+  o botão é **Add Deal**; a curva do card diz o spread (`otcSwapCurveText`:
+  "CDI + 3.00%") e o Type sai no idioma da tela (`otcSwapTypeLabel`).
 - **O swap da CEM chega no CORPO do "Internal Trade Recap", não em planilha**
   (mesa, 24/09/2026, §555). O corpo é PARÁGRAFO do Outlook (`<p
   class=MsoNormal>`), não tabela — a única `<table>` é a do AFR, e era ela que

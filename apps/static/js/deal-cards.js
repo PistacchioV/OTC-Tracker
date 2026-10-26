@@ -21,6 +21,8 @@
  *     meta: fn(e) → texto,
  *     canConfirm: fn(e), canSend: fn(e), t: fn(chave, padrão),
  *     onConfirm / onEdit / onDelete / onSend / onPreview: fn(chave),
+ *     canB2B: fn(e), onB2B: fn(chave)   — opcional: o Create B2B (§698), um
+ *       quinto botão depois do Send, só no deal contra cliente
  *     onSelect: fn()                       // a seleção mudou
  *   });
  *   cards.render(lista);  cards.selectAll(true|false);  cards.sync();
@@ -66,7 +68,9 @@
         botao('btn-row-confirm' + (o.canConfirm && !o.canConfirm(e) ? ' d-none' : ''), 'btn-success', 'ti-check', tr(o, 'nd-card-confirm', 'Confirm'), 'tooltip-success') +
         botao('btn-row-edit', 'btn-info', 'ti-edit', tr(o, 'nd-card-edit', 'Edit'), 'tooltip-info') +
         botao('btn-row-delete', 'btn-danger', 'ti-trash', tr(o, 'nd-card-delete', 'Delete'), 'tooltip-danger') +
-        botao('btn-row-send' + (o.canSend && !o.canSend(e) ? ' d-none' : ''), 'btn-primary', 'ti-brand-telegram', tr(o, 'nd-card-send', 'Send'), 'tooltip-primary');
+        botao('btn-row-send' + (o.canSend && !o.canSend(e) ? ' d-none' : ''), 'btn-primary', 'ti-brand-telegram', tr(o, 'nd-card-send', 'Send'), 'tooltip-primary') +
+        (o.onB2B && (!o.canB2B || o.canB2B(e))
+          ? botao('btn-row-b2b', 'btn-warning', 'ti-arrows-exchange', tr(o, 'nd-card-b2b', 'Create B2B'), 'tooltip-warning') : '');
       return '<div class="otc-deal-card' + (on ? ' is-selected' : '') + '" data-key="' + esc(k) + '" tabindex="0" ' +
         'title="' + esc(tr(o, 'nd-card-dblclick', 'Double-click to preview the B3 files')) + '">' +
         '<div class="otc-deal-card__head">' +
@@ -121,7 +125,7 @@
       if (o.onSelect) o.onSelect();
     });
     el.addEventListener('click', function (ev) {
-      var b = ev.target.closest('.btn-row-confirm, .btn-row-edit, .btn-row-delete, .btn-row-send');
+      var b = ev.target.closest('.btn-row-confirm, .btn-row-edit, .btn-row-delete, .btn-row-send, .btn-row-b2b');
       if (!b) return;
       ev.preventDefault();
       var k = chaveDe(b);
@@ -132,6 +136,7 @@
       else if (b.classList.contains('btn-row-edit') && o.onEdit) o.onEdit(k);
       else if (b.classList.contains('btn-row-delete') && o.onDelete) o.onDelete(k);
       else if (b.classList.contains('btn-row-send') && o.onSend) o.onSend(k);
+      else if (b.classList.contains('btn-row-b2b') && o.onB2B) o.onB2B(k);
     });
     // duplo clique = o preview (fora da caixa e dos botões); sem selecionar texto
     el.addEventListener('mousedown', function (ev) {

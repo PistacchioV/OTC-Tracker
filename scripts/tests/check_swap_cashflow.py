@@ -31,6 +31,7 @@ Roda em tmp: o cache, a pasta Conecta e a Intrag apontam para temporários, e
 o sino, o Pending Confirmation e a esteira são espiões.
 """
 import io
+import json
 import os
 import re
 import sys
@@ -738,6 +739,118 @@ def _main(R, app, catalog, bullet, bullet_q, commands, domain, entrypoint, queri
               == len(R._SWAP_TERM_SOFR_CURVES))
     finally:
         R._mapping_rows = _mr10
+
+    print('== 11. o B2B × Lawton (CEM) e a guarda-chuva CLIENT 1 (§698) ==')
+    _f, la, ia = queries.find(b2b['_id'], '2026-09-16')
+    law = dtk.set_pair(dict(la[ia], LE='LAWTON', Client='Lawton'))
+    check('set_pair: LE e par do Lawton', (law['LE'], law['Pair']) == ('LAWTON', 'JPM x LAWTON'))
+    check('o fundo, as visões e os pares', dtk.b2b_fund(law) == 'LAWTON' and dtk.views_of(law) == ['bank', 'lawton']
+          and dtk.le_pair('bank', law) == 'JPM x LAWTON' and dtk.le_pair('lawton', law) == 'LAWTON x JPM'
+          and dtk.le_pair('bank') == 'JPM x ATACAMA')
+    check('a Atacama segue igual', dtk.views_of(la[ia]) == ['bank', 'atacama'] and dtk.b2b_fund(la[ia]) == 'ATACAMA')
+    check('pelo Client, sem LE de fundo', dtk.set_pair({'LE': 'JPM', 'Client': 'LAWTON FIM'})['LE'] == 'LAWTON'
+          and dtk.set_pair({'LE': '', 'Client': 'BANCO SAFRA'})['Pair'] == 'JPM x CLI')
+    contas = sw.own_accounts()
+    check('a conta própria do Lawton vem do b3-accounts', contas.get('LAWTON') == '00041007', contas.get('LAWTON'))
+    fl = commands.preview(law)
+    check('preview: contrato + cronograma + prêmio × Banco e Lawton',
+          [(f['kind'], f['view']) for f in fl] == [('swap', 'bank'), ('flow', 'bank'), ('premium', 'bank'),
+                                                   ('swap', 'lawton'), ('flow', 'lawton'), ('premium', 'lawton')],
+          [(f['kind'], f['view']) for f in fl])
+    nomes = [f['file_name'] for f in fl]
+    check('arquivos do Lawton com a conta dele na frente',
+          '00041007.SWAP_CF_CEM_LAWTON.txt' in nomes and '73760009.SWAP_CF_CEM_BANCO.txt' in nomes, nomes)
+    rb, rl = fl[0]['records'][0], fl[3]['records'][0]
+    check('0301: Banco × Lawton na visão do Banco, Lawton × Banco na dele',
+          (rb[20:28], rb[52:60], rl[20:28], rl[52:60]) == ('73760009', '00041007', '00041007', '73760009'),
+          (rb[20:28], rb[52:60], rl[20:28], rl[52:60]))
+    check('o espelho leva o Meu Número do espelho', rl[10:20] == law['MyNumberMirror'])
+    check('header do Lawton com o participante dele', fl[3]['header'][10:30].strip() == sw.participant('LAWTON'),
+          fl[3]['header'])
+    ent = dtk.intrag_swap_entry(dict(law, B3ID='26X1'), sw.codes_for(law))
+    ent_a = dtk.intrag_swap_entry(dict(la[ia], B3ID='26X2'), sw.codes_for(la[ia]))
+    check('Intrag Swap na carteira do fundo do deal', (ent['carteira'], ent['parte'], ent_a['carteira'], ent_a['parte'])
+          == ('INTRAGJP552', 'Lawton', 'INTRAGJP633', 'Atacama'), (ent['carteira'], ent['parte']))
+    check('sem a conta do Lawton, lacuna dele', any('LAWTON own account' in str(x) for x in
+          dtk.missing_for_send(law, sw.codes_for(law), {'JPM': '73760009'})))
+    R._refdata_records().append({'SPN': '3871464', 'COUNTERPARTY': 'BOTICARIO PRODUTOS DE BELEZA LTDA',
+                'TAX ID': '11.137.051/0001-86', 'B3 ACCOUNT': ''})
+    bot = sw.enrich({'SPN': '3871464', 'LE': 'JPM', 'Client': 'Boticario'})
+    check('cliente sem conta própria: a guarda-chuva CLIENT 1 (73760102) + o CNPJ',
+          (bot['ClientAccount'], bot['ClientAccountNote'], bot['ClientTaxId'])
+          == ('73760102', 'omnibus', '11137051000186'), (bot.get('ClientAccount'), bot.get('ClientTaxId')))
+    velho = dict(bot, ClientAccount='73760205')
+    check('o deal com a guarda-chuva antiga gravada sai com a de hoje (preview/Send)',
+          sw.with_current_omnibus(velho)['ClientAccount'] == '73760102' and velho['ClientAccount'] == '73760205')
+    check('   e a conta própria do cliente não é tocada',
+          sw.with_current_omnibus({'ClientAccount': '74220005'})['ClientAccount'] == '74220005')
+
+    print('== 12. a tela: Add Deal, a curva com o spread, o Type traduzido e o Create B2B ==')
+    import shutil
+    import subprocess
+    js = os.path.join(ROOT, 'apps', 'static', 'js', 'swap-deal.js')
+    node = shutil.which('node')
+    if not node:
+        check('node disponível', False)
+    else:
+        prog = r'''
+global.window = global; require(process.argv[1]);
+var cli = {LE:'JPM', LOB:'CEM', Client:'BOTICARIO', SPN:'3871464', Deal:'D1', B3ID:'26X', _id:'SWC-1',
+  ClientAccount:'73760102', CurveA:'CDI', CurveACategory:'JUROS', CurveAPct:'100.00', CurveARate:'3.0000', CurveASign:'+',
+  CurveB:'6M TERM SFR', CurveBCategory:'VCP', CurveBPct:'110.00', CurveBRate:'0.5000', CurveBSign:'-', CurveBQuote:'01',
+  PremiumPayer:'BOTICARIO', CashFlows:[{PaymentDate:'2027-01-01'}], Notional:'216000000.00'};
+var b = otcSwapB2B(cli);
+console.log(JSON.stringify({
+  a: otcSwapCurveText(cli,'A'), b: otcSwapCurveText(cli,'B'),
+  zero: otcSwapCurveText({CurveA:'CDI', CurveARate:'0.0000', CurveAPct:'100'},'A'),
+  fino: otcSwapCurveText({CurveA:'IPCA', CurveARate:'5.1234'},'A'),
+  tipo: [otcSwapTypeLabel('Fluxo de Caixa'), otcSwapTypeLabel('Pagamento Final'), otcSwapTypeLabel('X')],
+  b2b: b, edg: otcSwapB2B({LOB:'EDG', PremiumPayer:'Banco JP Morgan'}), semlob: otcSwapB2B({LOB:''}),
+  isb2b: [otcSwapIsB2B(b), otcSwapIsB2B(cli)]}));
+'''
+        out = subprocess.run([node, '-e', prog, js], capture_output=True, text=True, timeout=30)
+        try:
+            r = json.loads(out.stdout.strip().splitlines()[-1])
+        except Exception:                                            # noqa: BLE001
+            r = {}
+        check('curva com spread: "CDI + 3.00%", e o percentual fora dos 100%',
+              (r.get('a'), r.get('b')) == ('CDI + 3.00%', '110.00% 6M TERM SFR - 0.50%'), (r, out.stderr[-300:]))
+        check('   sem spread só o nome; quatro casas quando há', (r.get('zero'), r.get('fino')) == ('CDI', 'IPCA + 5.1234%'),
+              (r.get('zero'), r.get('fino')))
+        check('Type no idioma da tela (fallback em inglês)', r.get('tipo') == ['Cash Flow', 'Bullet', 'X'], r.get('tipo'))
+        b2 = r.get('b2b') or {}
+        check('B2B da CEM: × Lawton, pernas trocadas campo a campo',
+              (b2.get('LE'), b2.get('Client'), b2.get('CurveA'), b2.get('CurveB'), b2.get('CurveARate'), b2.get('CurveBRate'),
+               b2.get('CurveASign'), b2.get('CurveBPct'), b2.get('CurveAQuote'), b2.get('CurveBQuote'))
+              == ('LAWTON', 'Lawton', '6M TERM SFR', 'CDI', '0.5000', '3.0000', '-', '100.00', '01', ''), b2)
+        check('   sem o que identifica a operação do cliente, com o cronograma',
+              not any(b2.get(k) for k in ('Deal', 'B3ID', '_id', 'SPN', 'ClientAccount'))
+              and b2.get('CashFlows') == [{'PaymentDate': '2027-01-01'}] and b2.get('Notional') == '216000000.00')
+        check('   o prêmio inverte: o cliente pagava → o Banco paga ao fundo; o Banco pagava → o fundo paga',
+              b2.get('PremiumPayer') == 'Banco' and (r.get('edg') or {}).get('PremiumPayer') == 'Atacama'
+              and (r.get('edg') or {}).get('LE') == 'ATACAMA')
+        check('   sem LOB não há B2B (não se chuta); o B2B não oferece outro',
+              r.get('semlob') is None and r.get('isb2b') == [True, False])
+    pag = catalog.PAGES['/new_deals-swap-cashflow']
+    check('catálogo: Add Deal nos swaps, Create B2B só no Cashflow, a curva como "curve"',
+          pag['add_label'] == 'Add Deal' and pag['b2b'] is True
+          and catalog.PAGES['/new_deals-swap-cetes']['add_label'] == 'Add Deal'
+          and catalog.PAGES['/new_deals-swap-cetes']['b2b'] is False
+          and catalog.PAGES['/new_deals-opt-edg']['add_label'] == 'Add Row'
+          and ['CurveA', 'Curve A', 'curve'] in pag['cards']['facts'] and 'LAWTON' in pag['selects']['LE']
+          and 'LAWTON' not in catalog.PAGES['/new_deals-opt-edg']['selects']['LE'])
+    swb = io.open(os.path.join(ROOT, 'apps', 'templates', 'pages', 'new_deals-swap-bullet.html'), encoding='utf-8').read()
+    cards = io.open(os.path.join(ROOT, 'apps', 'static', 'js', 'deal-cards.js'), encoding='utf-8').read()
+    for nome, h in (('catálogo', tpl), ('Bullet', swb)):
+        check('%s: carrega o swap-deal.js e abre o modal de Add com o B2B' % nome,
+              "js/swap-deal.js?v={{ asset_v('js/swap-deal.js') }}" in h and 'openModal(null, d)' in h
+              and 'onB2B' in h and "t('nd-add-deal', 'Add Deal')" in h)
+    check('deal-cards: o quinto botão (Create B2B) só com onB2B', 'btn-row-b2b' in cards and 'o.onB2B &&' in cards)
+    for lg in ('en', 'br', 'es'):
+        trj = json.load(io.open(os.path.join(ROOT, 'apps', 'static', 'data', 'translations', lg + '.json'), encoding='utf-8'))
+        faltam = [k for k in ('nd-add-deal', 'nd-add-deal-tip', 'nd-card-b2b', 'w_nd_b2b_no_lob',
+                              'nd-swap-type-cashflow', 'nd-swap-type-bullet') if not trj.get(k)]
+        check('tradução %s das chaves novas' % lg, not faltam, faltam)
 
 
 if __name__ == '__main__':
