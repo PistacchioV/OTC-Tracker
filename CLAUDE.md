@@ -1721,7 +1721,11 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   gerados), IPCA e termo também faltam. O `_conf_load_swap` lê Bullet E
   Cashflow (`routes._swap_cashflow_engine`) — sem isso o Generate do Monitor não
   achava a operação —, e o backfill tem as famílias da pasta `Swap/Cashflow`.
-  `check_swap_cashflow.py`.
+  **No 0034 o Sinal/Taxa de Juros de cada ponta é o da curva dela no 0301**
+  (P1 = a ponta da menor conta), e **a termo** o campo 22 é o FX inicial com
+  qualquer índice, toda curva (a VCP inclusive, ao contrário do Bullet) leva
+  Sinal/Juros, e o Cupom Limpo vai em branco mas a Data de Cotação VAI — sem a
+  coluna, o D-n do termo (§700). `check_swap_cashflow.py`.
 - **O B2B do swap é × o FUNDO da LOB: EDG × Atacama, CEM × Lawton** (equipe,
   26/10/2026, §699). `swap_deal_ticket.B2B_FUNDS`/`b2b_fund`/`set_pair`: a LE
   da linha (ATACAMA/LAWTON) diz o fundo, as visões são `bank` + `atacama` ou
@@ -1736,7 +1740,10 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   guarda-chuva de cliente sem conta própria é a **CLIENT 1** (73760.10-2), e o
   preview/Send releem a do cadastro (`with_current_omnibus`). Nas telas de swap
   o botão é **Add Deal**; a curva do card diz o spread (`otcSwapCurveText`:
-  "CDI + 3.00%") e o Type sai no idioma da tela (`otcSwapTypeLabel`).
+  "CDI + 3.00%") e o Type sai no idioma da tela (`otcSwapTypeLabel`). **O modal dos swaps formata** (`otcSwapModalPrep`, §700):
+  valores `#,##0.00`, FX Start com 8 casas, CNPJ mascarado e os holders pela
+  CONTA B3 (só leitura — o texto do DT segue gravado, o e-mail o lê); o Save
+  devolve o dado cru, e o que só mudou de formato volta como estava.
 - **O swap da CEM chega no CORPO do "Internal Trade Recap", não em planilha**
   (mesa, 24/09/2026, §555). O corpo é PARÁGRAFO do Outlook (`<p
   class=MsoNormal>`), não tabela — a única `<table>` é a do AFR, e era ela que
