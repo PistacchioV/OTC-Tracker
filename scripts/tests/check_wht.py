@@ -98,8 +98,24 @@ def secao_dominio():
     check('NDF tributável residente', cod('NDF', '', 'MATURITY', True, True) == ('5557MT12050', '55571'))
     check('NDF isento', cod('NDF', '', 'MATURITY', False, True) == ('5557ME12050', '5557E'))
     check('NDF não residente → 5286', cod('NDF', '', '', True, False) == ('5286MT12050', '52861'))
-    check('termo de mercadoria tributável', cod('NDF COMM', 'COMMODITIES', '', True, True) == ('5557PT12050', '55571'))
-    check('opção de mercadoria isenta', cod('OPTION COMM', 'COMMODITIES', 'EXERCISE', False, True) == ('5557RE12050', '5557E'))
+    check('termo de mercadoria tributável (NDF × COMMODITIES)', cod('NDF', 'COMMODITIES', '', True, True) == ('5557PT12050', '55571'))
+    check('opção de mercadoria isenta (OPTION × COMMODITIES)', cod('OPTION', 'COMMODITIES', 'EXERCISE', False, True) == ('5557RE12050', '5557E'))
+    check('NDF da CEM fica no código do NDF de moeda', cod('NDF', 'CEM', 'MATURITY', True, True) == ('5557MT12050', '55571'))
+    # A mercadoria é LOB, não produto (equipe, 26/10/2026).
+    check('produto × LOB: NDF COMM', D.produto_lob('NDF COMM', '') == ('NDF', 'COMMODITIES'))
+    check('produto × LOB: OPTION COMM', D.produto_lob('OPTION COMM', 'COMMODITIES') == ('OPTION', 'COMMODITIES'))
+    check('produto × LOB: TERMO', D.produto_lob('TERMO', 'COMMODITIES', 'ops') == ('NDF', 'COMMODITIES'))
+    check('produto × LOB: INDICES INTERNACIONAIS → EDG',
+          D.produto_lob('OPTION', 'ÍNDICES INTERNACIONAIS') == ('OPTION', 'EDG'))
+    check('produto × LOB: NDF do Cockpit sem LOB → CEM', D.produto_lob('NDF', '', 'ndf') == ('NDF', 'CEM'))
+    up = D.wht_codes_upgrade([{'PRODUCT': 'NDF COMM', 'LOB': '', 'CODE': 'X'},
+                              {'PRODUCT': 'OPTION COMM', 'LOB': '', 'CODE': 'Y'},
+                              {'PRODUCT': 'SWAP', 'LOB': '', 'CODE': 'Z'}])
+    check('o upgrade do cadastro gravado leva a mercadoria para a LOB',
+          [(u['PRODUCT'], u['LOB'], u['CODE']) for u in up]
+          == [('NDF', 'COMMODITIES', 'X'), ('OPTION', 'COMMODITIES', 'Y'), ('SWAP', '', 'Z')], up)
+    check('o seed não tem mais NDF COMM/OPTION COMM',
+          not any(D.norm(r['PRODUCT']).endswith('COMM') for r in seed))
     check('swap tributável', cod('SWAP', 'CEM', 'CASHFLOW', True, True) == ('5273OT12046', '52731'))
     check('swap de COMMODITIES (LOB) vence o genérico', cod('SWAP', 'COMMODITIES', '', False, True) == ('5273QE12046', '5273E'))
     check('swap: o evento DIVIDEND vence o genérico', cod('SWAP', 'EDG', 'DIVIDEND', False, True) == ('5273OE12001', '5273E'))
@@ -187,11 +203,13 @@ OPS = {
          '_tax_n': 1322526.62, '_legal': 'BANCO J.P. MORGAN S.A.'},
         # Prêmio de opção: a mesma contraparte paga 1.000 e recebe 300 → UMA linha
         # de 700; a outra só recebe → nada; o exercício pago entra (isento).
-        {'product': 'OPTION', 'lob': 'COMMODITIES', 'settle_type': 'PREMIUM', 'internal_id': 'OPT-P-1',
-         'id_b3': '26OP0000001', 'counterparty': 'CLIENTE F SA', '_settle_n': -1000.0, '_tax_n': 0.05,
+        # Commodities: o id que vai ao HUB é o Trade Id do OTM (`_otm_id`), não o
+        # Nº da Confirmação — que só compartilha o sufixo.
+        {'product': 'OPTION', 'lob': 'COMMODITIES', 'settle_type': 'PREMIUM', 'internal_id': 'XE-1OPTP1',
+         '_otm_id': '85000H-1OPTP1', 'id_b3': '26OP0000001', 'counterparty': 'CLIENTE F SA', '_settle_n': -1000.0, '_tax_n': 0.05,
          '_legal': 'BANCO J.P. MORGAN S.A.'},
-        {'product': 'OPTION', 'lob': 'COMMODITIES', 'settle_type': 'PREMIUM', 'internal_id': 'OPT-P-2',
-         'id_b3': '26OP0000002', 'counterparty': 'CLIENTE F SA', '_settle_n': 300.0, '_tax_n': 0.0,
+        {'product': 'OPTION', 'lob': 'COMMODITIES', 'settle_type': 'PREMIUM', 'internal_id': 'XE-1OPTP2',
+         '_otm_id': '85000H-1OPTP2', 'id_b3': '26OP0000002', 'counterparty': 'CLIENTE F SA', '_settle_n': 300.0, '_tax_n': 0.0,
          '_legal': 'BANCO J.P. MORGAN S.A.'},
         {'product': 'OPTION', 'lob': 'COMMODITIES', 'settle_type': 'PREMIUM', 'internal_id': 'OPT-P-3',
          'id_b3': '26OP0000003', 'counterparty': 'CLIENTE G SA', '_settle_n': 500.0, '_tax_n': 0.0,
@@ -199,8 +217,8 @@ OPS = {
         {'product': 'OPTION', 'lob': 'COMMODITIES', 'settle_type': 'EXERCISE', 'internal_id': 'OPT-E-1',
          'id_b3': '26OP0000004', 'counterparty': 'CLIENTE G SA', '_settle_n': -2000.0, '_tax_n': 0.0,
          '_legal': 'BANCO J.P. MORGAN S.A.'},
-        {'product': 'TERMO', 'lob': 'COMMODITIES', 'settle_type': 'MATURITY', 'internal_id': '85101H-1OKXWV',
-         'id_b3': '26J00000777', 'counterparty': 'LAWTONMULTIME', '_settle_n': -112610.32,
+        {'product': 'TERMO', 'lob': 'COMMODITIES', 'settle_type': 'MATURITY', 'internal_id': 'XE-1OKXWV',
+         '_otm_id': '85101H-1OKXWV', 'id_b3': '26J00000777', 'counterparty': 'LAWTONMULTIME', '_settle_n': -112610.32,
          '_tax_n': 0.0, '_legal': 'BANCO J.P. MORGAN S.A.'},
     ],
 }
@@ -249,6 +267,19 @@ def secao_api():
     def ops(d):
         chamadas.append(('ops', d))
         return [dict(t) for t in OPS.get(d, [])]
+    # O Trade Id do OTM pelo sufixo do Nº da Confirmação; dois Trade Ids com o
+    # mesmo sufixo: vale o de maior |Σ Amount|.
+    otm_orig = R._otm_load
+    R._otm_load = lambda ref: ('x', [
+        {'Trade Id': '85000H-1PMHHP', 'Amount': '184834.98'},
+        {'Trade Id': '85000H-1PMHHP', 'Amount': '-10'},
+        {'Trade Id': '85101H-1PMHHP', 'Amount': '-5'},
+        {'Trade Id': '85101H-1PMHUK', 'Amount': '-154914.01'}, {'Trade Id': '', 'Amount': '1'}])
+    with app.test_request_context('/'):
+        ids = R._ndfadv_otm_ids(datetime(2026, 10, 26))
+    R._otm_load = otm_orig
+    check('mapa sufixo → Trade Id do OTM', ids == {'1PMHHP': '85000H-1PMHHP', '1PMHUK': '85101H-1PMHUK'}, ids)
+
     R._ndfsum_collect = ndfsum
     R._ops_trade_rows = ops
     Q._refdata_index = lambda: {'CLIENTEDLTDA': '04.885.503/0001-42'}
@@ -310,10 +341,21 @@ def secao_api():
     check('termo de mercadoria do Lawton: isento, código PE',
           por_id['85101H-1OKXWV']['OTC_id'] == '5557PE12050' and por_id['85101H-1OKXWV']['OTC_IR'] == 0.0)
     check('tudo Unmatched OTC antes do HUB', {x['status'] for x in r['rows']} == {'Unmatched OTC'})
-    pr = por_id.get('OPT-P-1') or {}
+    t = por_id.get('85101H-1OKXWV') or {}
+    check('termo de mercadoria: Product NDF, LOB COMMODITIES',
+          (t.get('Product'), t.get('LOB')) == ('NDF', 'COMMODITIES'), (t.get('Product'), t.get('LOB')))
+    n = por_id.get('STP-AAA-0000002-0-0') or {}
+    check('NDF do Cockpit: LOB CEM', (n.get('Product'), n.get('LOB')) == ('NDF', 'CEM'),
+          (n.get('Product'), n.get('LOB')))
+    check('commodities: o Internal ID é o Trade Id do OTM, não o Nº da Confirmação',
+          'XE-1OKXWV' not in por_id and 'XE-1OPTP1' not in por_id)
+    pr = por_id.get('85000H-1OPTP1') or {}
+    check('prêmio de mercadoria: Product OPTION, LOB COMMODITIES',
+          (pr.get('Product'), pr.get('LOB')) == ('OPTION', 'COMMODITIES'), (pr.get('Product'), pr.get('LOB')))
     check('prêmio: UMA linha com o net (1.000 pago − 300 recebido) e o imposto sobre ele',
           pr.get('OTC_GV') == 700.0 and pr.get('Devido') == 0.04 and pr.get('Event') == 'PREMIUM'
-          and pr.get('OTC_net_of') == 'OPT-P-1, OPT-P-2' and 'OPT-P-2' not in por_id, pr)
+          and pr.get('OTC_net_of') == '85000H-1OPTP1, 85000H-1OPTP2' and '85000H-1OPTP2' not in por_id, pr)
+    check('sem Trade Id do OTM, fica o id de antes', 'OPT-E-1' in por_id)
     check('prêmio em que o banco só RECEBE não entra', 'OPT-P-3' not in por_id)
     ex = por_id.get('OPT-E-1') or {}
     check('exercício pago pelo banco entra, isento (código RE)', ex.get('OTC_id') == '5557RE12050'
