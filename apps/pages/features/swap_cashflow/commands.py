@@ -266,7 +266,7 @@ def deal_files(deal, view, today_ymd=None):
                 'fields': _sw.fields_of(CONTRACT_FI_KEY, {'header': hdr}, vals)})
     # 2. o cronograma (4.2.8)
     h, reg, linhas = domain.flow_values(deal, view, accounts, my_swap, my_flow, codes.get('amortization'),
-                                        participant, today_ymd)
+                                        participant, today_ymd, codes)
     fh = _line(FLOW_FI_KEY, 'header', h, view, deal)
     fr = _line(FLOW_FI_KEY, 'registro', reg, view, deal)
     fl = [_line(FLOW_FI_KEY, 'fluxo', x, view, deal) for x in linhas]
