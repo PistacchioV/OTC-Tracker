@@ -10,6 +10,7 @@ que está listado abaixo existe apenas nesta branch.
 | `stratos/src/solution.py` | `src/solution.py` | o template do Stratos, com os blocos `DO NOT DELETE` intactos e o OTC montado na área liberada |
 | `stratos/src/run.py` | `src/run.py` | o do template, sem mudança |
 | `stratos/src/otc_stratos.py` | `src/otc_stratos.py` | a ponte: monta o OTC no `app` do template, SSO, prefixo de URL |
+| `stratos/src/prova_travas.py` | `src/prova_travas.py` | a prova de que as travas do app valem no Shared Drive (`/stratos/prova-travas`, §689) |
 | `stratos/requirements.txt` | `requirements.txt` | o bloco do template + o que o OTC precisa (gerado) |
 | `apps/config.py` (bloco `ENV:STRATOS`) | — | caminhos de dados no contêiner |
 | `stratos-sync.bat` | — | copia o que mudou para o repositório do Stratos |
@@ -130,6 +131,28 @@ Stratos começa com os bancos vazios, só com o que a semeadura traz.
 **Backup:** o drive tem uma foto por noite, guardada 35 dias, sem versão por
 arquivo. Na pior hora se perde até um dia; uma cópia de hora em hora para o File
 Library (o S3, que guarda todas as versões por 70 dias) é um dos passos do §681.
+
+## As travas no Shared Drive (§681 passo B, §689)
+
+O DuckDB no drive só é seguro se as travas do app valem ali entre processos: a
+do `portalocker` (o `.lock` de cada banco) e a do próprio DuckDB. Quem prova é a
+rota só do master (pela identidade do Stratos), aberta no navegador:
+
+```
+<solução>/stratos/prova-travas                       os testes neste contêiner
+<solução>/stratos/prova-travas?modo=segurar&segundos=300   deixa as travas presas
+<solução>/stratos/prova-travas?modo=conferir         tenta pegá-las (noutro host)
+<solução>/stratos/prova-travas?modo=conferir&soltar=1      e solta no fim
+```
+
+A resposta é JSON: `veredito`, um `casos` por conferência (`esperado`,
+`obtido`, `ok`, o erro da trava), os `tempos` (abrir o maior banco de dia e o
+maior de cadastro, gravar, `fsync`, `stat`) e os `hosts_vistos` na última hora
+— é por eles que se sabe quantos contêineres servem a solução. O veredito
+`as travas valem entre processos, mas no mesmo processo são do PROCESSO` é o
+NFS emulando o `flock` com travas POSIX, e quer dizer que o app não pode ter
+mais de um contêiner gravando o mesmo `db/`. O `conferir` só prova o caso entre
+contêineres quando o `host` dele é diferente do `segurando.host`.
 
 ## A ponte do share
 

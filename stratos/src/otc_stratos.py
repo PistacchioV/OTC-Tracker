@@ -23,7 +23,9 @@ E a rede: a saída para a internet é pelo proxy do Stratos
 bancos DuckDB moram no Shared Drive (EFS) da solução, que sobrevive ao deploy
 (`_raiz_no_shared_drive`), e não no disco do contêiner; e as pastas do share
 que o app usa chegam e saem por uma PONTE com a máquina do JPM
-(`_ponte_manifestos` aqui, `stratos/ponte_share.py` lá).
+(`_ponte_manifestos` aqui, `stratos/ponte_share.py` lá). Se as travas do
+app valem nesse drive, a rota `/stratos/prova-travas` responde
+(`_rota_prova_travas`, `prova_travas.py`).
 
 Este arquivo, o `solution.py` e o `run.py` existem SÓ na branch
 OTC-Tracker-Stratos; o código do app continua nascendo na dev.
@@ -176,6 +178,7 @@ def _monta(app, stratos_auth, base):
     # de trás para a frente): a reescrita vê o corpo final.
     app.after_request_funcs.setdefault(None, []).insert(0, _prefixa_resposta(base))
     _ponte_manifestos(app)
+    _rota_prova_travas(app, stratos_auth)
 
 
 # ── O portão: o que responde enquanto o OTC sobe ────────────────────────────
@@ -342,6 +345,55 @@ def _ponte_manifestos(app):
     t.start()
     log.warning('[ponte] manifestos em %s (instancia %s)', pasta_ponte, instancia)
     return t
+
+
+def _rota_prova_travas(app, stratos_auth):
+    """`/stratos/prova-travas`, só do master: a prova de que as travas do app
+    valem no Shared Drive (HANDOFF §681, passo B; o trabalho é do
+    `prova_travas.py`, que roda processos filhos sobre `<raiz>/prova-travas`).
+
+        ?modo=local                       (o padrão) os testes neste contêiner
+        ?modo=segurar&segundos=300        deixa as travas presas e volta
+        ?modo=conferir[&soltar=1]         tenta pegá-las (vale noutro host)
+
+    Fica fora do blueprint do OTC (como o whoami): quem a autoriza é a
+    identidade do Stratos, não a sessão do app. A medida de abertura dos bancos
+    vai pelo `duckdb_read`, que respeita as travas dos bancos em uso."""
+    from apps.pages import routes
+    from apps.pages.database_access import duckdb_read
+
+    def otc_stratos_prova_travas():
+        sid, _ = _identidade(stratos_auth, routes)
+        if sid not in routes._MASTER_SIDS:
+            return jsonify({'success': False, 'code': 'master_only', 'params': {},
+                            'text': 'Only the master can run the lock probe.'}), 403
+        raiz = (os.getenv('OTC_STRATOS_ROOT') or '').strip()
+        if not raiz:
+            return jsonify({'success': False, 'code': 'no_shared_drive', 'params': {},
+                            'text': 'OTC_STRATOS_ROOT is not set: there is no drive to probe.'}), 409
+        import prova_travas as PT
+        modo = (request.args.get('modo') or 'local').strip().lower()
+        if modo not in ('local', 'segurar', 'conferir'):
+            return jsonify({'success': False, 'code': 'bad_mode', 'params': {'modo': modo},
+                            'text': 'modo must be local, segurar or conferir.'}), 400
+        try:
+            segundos = int(request.args.get('segundos') or 300)
+        except ValueError:
+            segundos = 300
+        log.warning('[stratos] prova das travas: modo=%s SID=%s', modo, sid)
+        try:
+            out = PT.roda(modo, os.path.join(raiz, 'prova-travas'),
+                          db_dir=app.config.get('DATABASE_DIR'), abre=duckdb_read,
+                          segundos=segundos, soltar=request.args.get('soltar') == '1')
+        except Exception as e:                              # noqa: BLE001
+            log.exception('[stratos] a prova das travas quebrou')
+            return jsonify({'success': False, 'code': 'probe_failed', 'params': {},
+                            'text': '%s: %s' % (type(e).__name__, e)}), 500
+        out['success'] = True
+        return jsonify(out)
+
+    app.add_url_rule('/stratos/prova-travas', 'otc_stratos_prova_travas',
+                     otc_stratos_prova_travas)
 
 
 def _chave_de_sessao(otc, app):

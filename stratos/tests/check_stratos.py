@@ -27,7 +27,9 @@ src/apps/ — e sobe o `solution.py` com um Stratos de MENTIRA (o stratos-blocks
      `check_exporta_dados.py` — ele usa por dentro o `recover_duckdb_wal.py` da
      dev, e um helper renomeado lá quebra a exportação sem quebrar a dev;
   6. a ponte do share (`ponte_share.py` + `src/ponte_comum.py`), pelo
-     `check_ponte.py`.
+     `check_ponte.py`;
+  7. a prova das travas no Shared Drive (`src/prova_travas.py`): a rota só do
+     master, aqui, e o resto pelo `check_prova_travas.py`.
 
     OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python stratos/tests/check_stratos.py
 """
@@ -307,7 +309,7 @@ def _stubs(com_phonebook=True):
 def confere_subida(tmp, sem_awmpy):
     src = os.path.join(tmp, 'src')
     os.makedirs(src)
-    for nome in ('solution.py', 'run.py', 'otc_stratos.py'):
+    for nome in ('solution.py', 'run.py', 'otc_stratos.py', 'prova_travas.py'):
         shutil.copy(os.path.join(STRATOS, 'src', nome), src)
     os.symlink(os.path.join(RAIZ, 'apps'), os.path.join(src, 'apps'))
     # Com phonebook a raiz sai do Shared Drive (o `get_shared_drive` está no
@@ -440,6 +442,25 @@ def confere_subida(tmp, sem_awmpy):
        'pendente na API: 403 account_pending')
     r = c.get(BASE + '/', headers=MASTER)
     ok(r.status_code == 302, 'mesmo navegador, SID de volta ao master: sessao reaberta')
+
+    # A prova das travas no Shared Drive (§681, passo B): só do master, pela
+    # identidade do Stratos.
+    r = c.get(BASE + '/stratos/prova-travas')
+    ok(r.status_code == 403 and (r.get_json() or {}).get('code') == 'master_only',
+       'prova das travas sem identidade: 403 master_only')
+    r = c.get(BASE + '/stratos/prova-travas', headers=NOVO)
+    ok(r.status_code == 403, 'prova das travas para quem nao e master: 403')
+    r = c.get(BASE + '/stratos/prova-travas', headers=MASTER)
+    d = r.get_json() or {}
+    ok(r.status_code == 200 and d.get('veredito') == 'as travas valem' and len(d.get('casos') or ()) == 11
+       and d.get('pasta', '').startswith(os.path.join(raiz, 'prova-travas')),
+       'prova das travas pelo master: as 11 conferencias no drive (%s %s %s)'
+       % (r.status_code, d.get('veredito'), d.get('falhas') or d.get('text')))
+    ok('erro' not in (d.get('tempos') or {}).get('banco_de_cadastro', {'erro': 1}),
+       'a prova mede a abertura de um banco de cadastro pelo duckdb_read (%s)'
+       % (d.get('tempos') or {}).get('banco_de_cadastro'))
+    r = c.get(BASE + '/stratos/prova-travas?modo=xyz', headers=MASTER)
+    ok(r.status_code == 400, 'prova das travas: modo desconhecido e 400')
 
     # O login de verdade: o SSO devolve no /login/callback, que guarda a
     # identidade na sessão. A ponte não pode barrar o callback nem apagar a
@@ -736,6 +757,12 @@ def main():
         if linha.startswith('FAIL'):
             print('      ponte: ' + linha)
     ok(r.returncode == 0, 'ponte do share: espelho, travas, alinhar e virada')
+    r = subprocess.run([sys.executable, os.path.join(AQUI, 'check_prova_travas.py')],
+                       capture_output=True, text=True)
+    for linha in r.stdout.splitlines():
+        if linha.startswith('FAIL'):
+            print('      travas: ' + linha)
+    ok(r.returncode == 0, 'prova das travas: acusa a trava por processo e segura entre requests')
     print('\n%d falha(s)' % len(FALHAS))
     return 1 if FALHAS else 0
 
