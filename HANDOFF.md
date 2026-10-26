@@ -30003,6 +30003,11 @@ Add Deal):
   TIPO; o deal gravado com a guarda-chuva (`ClientAccountNote = omnibus`) é
   relido no preview e no Send (`swap_new_deals.with_current_omnibus`), sem
   reimportar.
+- **O botão** é o quinto squircle do card (`btn-row-b2b`, `btn-warning`,
+  `ti-arrows-exchange`, depois do Send). A forma do botão de linha é regra do
+  tema POR CLASSE (`otc.scss` §6b), e a classe nova nasceu fora da lista: saiu
+  como a pílula do `.btn` até entrar nas duas listas (a da forma e o par com
+  `.d-none`).
 - **O card**: Trade Date ao lado do Start → Maturity; a curva com o percentual
   (fora dos 100%) e o spread, "CDI + 3.00%" (`otcSwapCurveText`, tipo `curve`
   no catálogo); o Type ("Fluxo de Caixa", termo da B3 gravado no deal) no
