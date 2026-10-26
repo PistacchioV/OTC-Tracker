@@ -231,7 +231,7 @@ O tempo focado soma no *Focused today* e no anel *Focus*. Enquanto você está e
 |---|---|
 | **Profile** | A sua foto (ou as suas iniciais, sem foto cadastrada), nome, e-mail, mesa e SID — vêm do cadastro (3.7) e não se editam aqui |
 | **Notifications** | Liga e desliga os avisos do sino que são **para você**: *Task assigned* (uma tarefa foi passada a você), *Comments* (comentaram numa tarefa sua), *Initiative lead* (você virou líder de uma iniciativa), *Initiative team* (você foi incluído no time de uma iniciativa), *Due dates* (às 08:00 do dia em que uma tarefa sua vence) e *Focus finished* (fim de uma sessão de foco) |
-| **Appearance** | **Theme** (*Light · Dark · Auto* — *Auto* segue o Windows), **Wallpaper** (as cores lisas da paleta do sistema — **Abyss, Midnight, Slate e Steel** no tema escuro, **Fog e Frost** no claro; a lista mostra só as do tema atual, e trocar de tema leva à cor equivalente do outro, voltando à sua ao retornar — e os papéis desenhados **Aurora, Smoke, Tide, Dusk, Fjord e Glacier**, que valem nos dois temas; cada miniatura mostra a parede no tema escolhido. O padrão é **Frost** no claro e **Abyss** no escuro), **Accent** (a cor de destaque dos botões e seleções), **Glass** (*Clear* mostra mais o papel de parede; *Tinted* é o padrão) e **Reduce transparency** (superfícies sólidas, sem vidro, e a troca de página sem as animações de entrada — o modo das máquinas sem placa de vídeo, onde elas pesam). O sistema liga *Reduce transparency* sozinho em máquina sem placa de vídeo ou com os **Efeitos de transparência** do Windows desligados; **desligar o botão vale sempre**, mesmo nesses casos |
+| **Appearance** | **Theme** (*Light · Dark · Auto* — *Auto* segue o Windows), **Wallpaper** (as cores lisas da paleta do sistema — **Abyss, Midnight, Slate e Steel** no tema escuro, **Fog e Frost** no claro; a lista mostra só as do tema atual, e trocar de tema leva à cor equivalente do outro, voltando à sua ao retornar — e os papéis desenhados **Aurora, Smoke, Tide, Dusk, Fjord e Glacier**, que valem nos dois temas; cada miniatura mostra a parede no tema escolhido. Quem nunca escolheu começa com **Aurora**), **Accent** (a cor de destaque dos botões e seleções), **Glass** (*Clear*, o padrão, mostra mais o papel de parede; *Tinted* deixa o vidro mais fechado) e **Reduce transparency** (superfícies sólidas, sem vidro, e a troca de página sem as animações de entrada — o modo das máquinas sem placa de vídeo, onde elas pesam). O sistema liga *Reduce transparency* sozinho em máquina sem placa de vídeo ou com os **Efeitos de transparência** do Windows desligados; **desligar o botão vale sempre**, mesmo nesses casos |
 | **Focus** | A duração da **sessão**, da **pausa** e a **meta diária** de foco, com **−** e **+**. **Start** começa uma sessão agora |
 | **Data** | **Export my tasks as CSV** baixa as suas tarefas, uma por linha. **Reset to defaults** volta aparência, avisos e foco ao original |
 
@@ -601,6 +601,8 @@ O fluxo é o mesmo nas seis; o que muda são as colunas e os botões próprios d
 2. **Dê um duplo clique na linha** para ver todos os campos daquela operação numa janela, com os nomes que a B3 usa no arquivo de registro. É a forma mais rápida de conferir sem rolar a tabela para o lado. O rodapé da janela tem três botões, os mesmos em toda tela que gera arquivo: **Export** (baixa o arquivo como ele vai para a B3 ou a Intrag, sem gravar nada e sem mudar o status), **Edit** (abre a edição daquela linha) e **Close**.
 3. Para corrigir, clique no botão **Edit** (o lápis) da linha, altere o que precisa e clique em **Save** (4.9).
 4. Salvando uma edição, o status vai para `Pending` — a alteração precisa da aprovação de outra pessoa.
+5. **Linha já enviada** (`Sent` ou `Success`): se você mudou um dado **econômico** (contraparte, valor, prazo, strike…), ela volta como **`Amend`**, precisa de aprovação e de um novo envio. Se a mudança é só de cadastro interno, como o book, o status fica como estava.
+6. Se o servidor recusar (outra pessoa mudou a linha, o banco está em uso, a operação não foi achada), a janela **continua aberta** e um aviso diz o motivo. Nada muda na tabela até a gravação dar certo.
 
 **Células destacadas.** Numa linha `Amend`, as células que a API mudou ficam realçadas. Confira **essas** — é o que mudou desde a última vez.
 
@@ -613,12 +615,14 @@ O fluxo é o mesmo nas seis; o que muda são as colunas e os botões próprios d
 1. Clique no botão **Confirm** (o quadrado verde com o ✓) da linha.
 2. O que acontece depende do status:
    - `New` → vai direto para **`Approved`**. Não houve edição nenhuma, então não há o que revisar.
-   - `Amend` → vai para **`Pending`**. A API mudou dado econômico e alguém precisa olhar; a aprovação acontece num segundo clique.
+   - `Amend` → também vai direto para **`Approved`**: quem confere a célula destacada e clica é quem aprova.
+   - `Pending` → vai para **`Approved`**, desde que quem aprova não seja quem editou.
 3. Aprovando um `New`, o sistema faz **duas conferências** antes de deixar passar e recusa com um aviso se:
    - a **contraparte** não estiver cadastrada no Reference Data;
    - o **ativo subjacente** não estiver cadastrado no **Index B3**.
 
    Nos dois casos, faça o cadastro na tela indicada e volte.
+4. O status só muda **depois** que o servidor grava. Se ele recusar, aparece *Could not confirm* com o motivo, e a linha fica como estava.
 
 **Várias linhas de uma vez (edição em massa):**
 
@@ -628,12 +632,18 @@ O fluxo é o mesmo nas seis; o que muda são as colunas e os botões próprios d
 4. Para **enviar** todas: clique em **Send**.
 5. Para **apagar** todas: clique em **Delete** (pede confirmação).
 
+Nas três ações em massa, só muda — ou sai da tabela — a linha que o servidor de fato gravou. Se alguma ficou de fora (já enviada, aprovação pela mesma pessoa, não achada), um aviso lista quais e por quê.
+
 ### 5.6. Enviar para registro na B3
 
 1. A linha precisa estar em **`Approved`** (ou em `Error`, para reenviar). Em qualquer outro status o sistema recusa e diz o que falta.
 2. Clique no botão **Send** (o quadrado azul com o avião de papel) da linha.
 3. Confirme na janela que abre.
 4. O status vira **`Sent`** e o arquivo segue para a B3 pelo Conecta.
+
+> **O servidor confere antes de gerar o arquivo.** Se o status da operação no banco não permitir o envio — outra pessoa a editou e ela está `Pending`, por exemplo —, ou se for a mesma pessoa que a importou ou editou, **nada é gravado na pasta da B3** e o aviso lista as operações recusadas. Recarregue a página e confira.
+>
+> **"Sent — status not saved".** Raro: o arquivo já foi para a pasta da B3, mas o status não pôde ser gravado. **Não envie de novo** — recarregue a página; a operação já está a caminho da B3.
 5. Quando o retorno chega, o status vira **`Success`** e o **B3 ID** aparece na coluna.
 
 > **Quem importou ou editou não pode enviar.** O sistema recusa o Send feito pela mesma pessoa que consta como *Maker* da linha — o envio precisa de um segundo par de olhos. Se aparecer *"You cannot send a deal you imported or last edited"*, peça a um colega para enviar.
@@ -649,6 +659,8 @@ Depois que a B3 devolve o arquivo de retorno:
 > Entra operação em **qualquer status** — não precisa estar *Sent* ou *Error*. Uma operação registrada por outro caminho, ou editada depois do envio, também recebe o B3 ID. Ficam de fora só as canceladas e as que já estão *Success* com B3 ID. Quem não aparece no retorno fica como está; só vira *Error* quem tinha sido enviado e esperava a resposta.
 
 > Este botão trabalha a partir do **arquivo do dia inteiro**, e não do que está na tela: operações que você não filtrou também são atualizadas.
+
+> **O arquivo de retorno só sai da pasta quando todas as linhas dele foram gravadas.** Um retorno com operações de outro dia (por exemplo, o de ontem lido com a *Reference Date* de hoje) fica lá até você rodar o Mapping no dia certo — nenhum B3 ID se perde.
 
 ### 5.8. Os botões próprios de cada produto
 
@@ -2006,6 +2018,8 @@ Este merece um passo a passo próprio, porque tem uma opção que os outros não
 5. Salve.
 
 > **Lista vazia = acesso total.** Enquanto ninguém configurar a lista de uma pessoa, ela vê tudo. A partir do primeiro salvamento, ela vê **só** o que está marcado.
+>
+> **Full access vale para as páginas futuras.** Com o *Full access* ligado (todas as páginas marcadas), a página que entrar no menu depois **já nasce liberada** para essa pessoa, seja ela admin ou não. Quem tem uma página desmarcada continua com a lista dela: página nova não entra sozinha.
 >
 > **Profile** e **Page Access** nunca são bloqueados — é o que impede alguém de ficar sem nenhuma tela.
 
