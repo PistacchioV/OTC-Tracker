@@ -207,14 +207,14 @@ def le_for_spn(rows, spn):
     return None
 
 
-def curve_code(rows, curve_name, category):
-    """`Curva X(03)` da B3 para a curva do DT, pelo cadastro `swap-bullet-curve`
-    (DT CURVE × MATCH Exact/Contains → B3 CODE). Exact vence Contains; entre
-    os Contains vence o token mais longo. Categoria VCP sem linha cai na linha
-    cujo DT CURVE é 'VCP' (é assim que 'MSFT US' vira C00 sem cadastrar cada
-    ativo). Sem resposta → ''."""
+def curve_row(rows, curve_name, category=''):
+    """A linha do cadastro `swap-bullet-curve` da curva do DT (DT CURVE × MATCH
+    Exact/Contains → B3 CODE). Exact vence Contains; entre os Contains vence o
+    token mais longo. Categoria VCP sem linha cai na linha cujo DT CURVE é
+    'VCP' (é assim que 'MSFT US' vira C00 sem cadastrar cada ativo). Sem
+    resposta → None."""
     alvo = norm(curve_name)
-    exato, contem = '', ('', -1)
+    exato, contem = None, (None, -1)
     for r in rows or []:
         pat = norm(r.get('DT CURVE', ''))
         code = str(r.get('B3 CODE', '') or '').strip()
@@ -223,18 +223,24 @@ def curve_code(rows, curve_name, category):
         mode = norm(r.get('MATCH', 'Exact'))
         if mode == 'CONTAINS':
             if alvo and pat in alvo and len(pat) > contem[1]:
-                contem = (code, len(pat))
+                contem = (r, len(pat))
         elif pat == alvo:
-            exato = code
-    if exato:
+            exato = r
+    if exato is not None:
         return exato
-    if contem[0]:
+    if contem[0] is not None:
         return contem[0]
     if norm(category) == 'VCP':
         for r in rows or []:
             if norm(r.get('DT CURVE', '')) == 'VCP' and str(r.get('B3 CODE', '') or '').strip():
-                return str(r['B3 CODE']).strip()
-    return ''
+                return r
+    return None
+
+
+def curve_code(rows, curve_name, category):
+    """`Curva X(03)` da B3 para a curva do DT (`curve_row`). Sem resposta → ''."""
+    r = curve_row(rows, curve_name, category)
+    return str(r.get('B3 CODE', '') or '').strip() if r else ''
 
 
 # ── Números e datas do DT ────────────────────────────────────────────────────
@@ -1336,14 +1342,27 @@ def html_to_lines(html_text):
     return p.out
 
 
-_RECAP_SECTION = re.compile(r'^\s*([IVX]+|\d{1,2})\s*[).]\s*([A-Za-z].*)$')
+# A seção é numerada (`I)`, `2.`) ou por LETRA com parêntese (`B) USD/BRL
+# Onshore Cross-currency Swap`, §697) — só com `)`: `A. Smith` não é seção.
+_RECAP_SECTION = re.compile(r'^\s*(?:(?:[IVX]+|\d{1,2})\s*[).]|[A-Z]\s*\))\s*([A-Za-z].*)$')
 _RECAP_SPN = re.compile(r'^(.*?)\bSPN\b\s*[:#-]?\s*(\d{3,})', re.I)
 _RECAP_LEG = re.compile(r'^(.+?)\s+(Recs|Receives|Rec|Pays|Pay)\b\s*[:\-]?\s*(.+)$', re.I)
 _RECAP_FIELDS = (('PARTY A', 'PartyA'), ('PARTY B', 'PartyB'), ('AGREEMENT', 'Agreement'),
                  ('EFFECTIVE DATE', 'Effective'), ('EFFECTIVE', 'Effective'), ('START DATE', 'Effective'),
                  ('MATURITY DATE', 'Maturity'), ('MATURITY', 'Maturity'),
-                 ('INITIAL FX', 'InitialFX'), ('FX START', 'InitialFX'), ('AMORTIZATION', 'Amortization'),
-                 ('AMORTISATION', 'Amortization'), ('NOTIONAL', 'Notional'))
+                 ('INITIAL FX', 'InitialFX'), ('FX START', 'InitialFX'), ('FX', 'FX'),
+                 ('AMORTIZATION', 'Amortization'), ('AMORTISATION', 'Amortization'),
+                 ('FIXINGS', 'Fixings'), ('FIXING', 'Fixings'),
+                 ('INTEREST PAYMENT FREQUENCY', 'Frequency'), ('NOTIONAL', 'Notional'))
+# `USD Notional: 40,000,000` (a moeda ANTES do rótulo, §697). Linha sem número
+# (`BRL Notional: USD Notional * Initial FX`, a fórmula) não é notional.
+_RECAP_CCY_NOTIONAL = re.compile(r'^\s*([A-Z]{3})\s+NOTIONAL\b\s*:?\s*(.*)$', re.I)
+# A tabela do cronograma colada do Excel chega UMA CÉLULA por linha: o
+# cabeçalho são estas palavras soltas, e as datas e a amortização vêm depois.
+_RECAP_CRON_HEADERS = {'STARTDATE', 'ENDDATE', 'PAYMENTDATE', 'AMORTIZATION', 'AMORTIZACAO',
+                       'INICIO', 'FIM', 'DATASDEFLUXO'}
+_RECAP_PCT = re.compile(r'^\s*(-?[\d.,]+)\s*%\s*$')
+_RECAP_CNPJ = re.compile(r'\bCNPJ\b\s*[:#]?\s*([\d./-]{14,18})', re.I)
 _RECAP_DATE = re.compile(r'\b(\d{1,2}[-/ ](?:[A-Za-z]{3,9})[-/ ]\d{2,4}|\d{1,2}/\d{1,2}/\d{2,4})\b')
 
 
@@ -1361,11 +1380,20 @@ def recap_date(text):
     return parse_date(re.sub(r'\s+', '-', m.group(1))) if m else None
 
 
+def recap_cnpj(text):
+    """O CNPJ escrito na linha (`Party B: Boticario … (CNPJ: 11.137.051/0001-86)`)
+    → só dígitos, ou ''."""
+    m = _RECAP_CNPJ.search(str(text or ''))
+    return re.sub(r'\D', '', m.group(1)) if m else ''
+
+
 def is_trade_recap(lines):
-    """O corpo é um trade recap de swap? (uma linha de SPN, uma seção
-    numerada com 'Swap' e as linhas Party A / Effective / Maturity)."""
+    """O corpo é um trade recap de swap? (a contraparte identificada — uma
+    linha de SPN ou o CNPJ no Party B, §697 —, uma seção numerada com 'Swap' e
+    as linhas Party A / Effective / Maturity)."""
     up = [norm(ln) for ln in lines]
-    return (any(_RECAP_SPN.match(ln) for ln in lines)
+    return ((any(_RECAP_SPN.match(ln) for ln in lines)
+             or any(u.startswith('PARTYB') and recap_cnpj(ln) for u, ln in zip(up, lines)))
             and any(_RECAP_SECTION.match(ln) and 'SWAP' in norm(ln) for ln in lines)
             and any(u.startswith('PARTYA') for u in up) and any(u.startswith('MATURITY') for u in up))
 
@@ -1375,6 +1403,7 @@ def parse_trade_recap(lines):
     notionals[(ccy, valor)], legs[{who, dir, text}], flows[(início, pagamento)]}].
     Sem nenhum casamento de nome com cadastro — isso é do `commands`."""
     secoes, cliente, spn, cur, cron = [], '', '', None, False
+    soltas = []                      # datas da tabela colada, uma célula por linha
     for ln in lines:
         m = _RECAP_SPN.match(ln)
         if m and not _RECAP_SECTION.match(ln):
@@ -1382,32 +1411,53 @@ def parse_trade_recap(lines):
             cur, cron = None, False
             continue
         m = _RECAP_SECTION.match(ln)
-        if m and spn:
+        # Sem a linha de SPN (a contraparte vem pelo CNPJ do Party B, §697), só
+        # título de SWAP abre seção — o resto do e-mail antes dele é texto.
+        if m and (spn or 'SWAP' in norm(ln)):
             # Qualquer título numerado DEPOIS de um cliente abre seção —
             # inclusive o que não é swap (o TRS, o EPP): senão as linhas dele se
             # somariam à seção de cima. Quem escolhe o que importar é o chamador
             # (`is_onshore_swap`). Antes do SPN é o texto do e-mail, não seção.
             cur = {'title': ln.strip(), 'client': cliente, 'spn': spn, 'fields': {},
-                   'notionals': [], 'legs': [], 'flows': []}
+                   'notionals': [], 'legs': [], 'flows': [], 'flow_amort': {}}
             secoes.append(cur)
-            cron = False
+            cron, soltas = False, []
             continue
         if cur is None:
             continue
         u = norm(ln)
-        if u.startswith('INICIO') or 'DATASDEFLUXO' in u or u.startswith('STARTDATEPAYMENTDATE'):
-            cron = True
+        if u.startswith('INICIO') or 'DATASDEFLUXO' in u or u.startswith('STARTDATEPAYMENTDATE') \
+                or u == 'STARTDATE':
+            cron, soltas = True, []
             continue
         if cron:
+            if u in _RECAP_CRON_HEADERS:
+                continue                       # o resto do cabeçalho, célula a célula
             datas = [parse_date(re.sub(r'\s+', '-', d)) for d in _RECAP_DATE.findall(ln)]
             datas = [d for d in datas if d]
             if len(datas) >= 2:
                 cur['flows'].append((datas[0], datas[1]))
                 continue
-            if datas or not ln.strip():
+            if len(datas) == 1:
+                soltas.append(datas[0])
+                if len(soltas) == 2:           # início e fim, cada um na sua linha
+                    cur['flows'].append((soltas[0], soltas[1]))
+                    soltas = []
+                continue
+            mp = _RECAP_PCT.match(ln)
+            if mp and cur['flows'] and not soltas:
+                cur['flow_amort'][len(cur['flows']) - 1] = parse_number(mp.group(1))
+                continue
+            if not ln.strip():
                 continue
             cron = False                       # a tabela acabou
         up = strip_accents(ln).upper()
+        mc = _RECAP_CCY_NOTIONAL.match(up)
+        if mc:
+            num = re.match(r'\s*\[?\s*([\d.,]+)', mc.group(2))
+            if num and parse_number(num.group(1)) is not None:
+                cur['notionals'].append((mc.group(1).upper(), parse_number(num.group(1))))
+            continue
         hit = False
         for rot, campo in _RECAP_FIELDS:
             if up.startswith(rot) and (len(up) == len(rot) or not up[len(rot)].isalnum()):
@@ -1430,7 +1480,12 @@ def parse_trade_recap(lines):
     return secoes
 
 
-_LEG_DCC = re.compile(r'\b(act/360|act/365|30/360|bd/252|du/252|dc/360)\b', re.I)
+_LEG_DCC = re.compile(r'\b(act/360|act/365|30/360|bd/252|du/252|dc/360|a/360|a/365)\b', re.I)
+# `(6M TERM SFR + 0.60%)* 1.17647 (A/360)`: índice com spread e MULTIPLICADOR
+# (§697) — a perna de juros internacionais que vai à B3 como VCP, com a
+# fórmula na Denominação.
+_LEG_FORMULA = re.compile(r'^\(?\s*([A-Za-z0-9][A-Za-z0-9 .]*?)\s*([+-])\s*([\d.,]+)\s*%\s*\)?'
+                          r'\s*\*\s*([\d.,]+)', re.I)
 
 
 def recap_leg(text):
@@ -1439,6 +1494,11 @@ def recap_leg(text):
     (o recap marca o que é indicativo) são ignorados."""
     t = re.sub(r'[\[\]]', '', str(text or '')).strip()
     dcc = (_LEG_DCC.search(t).group(1).upper() if _LEG_DCC.search(t) else '')
+    m = _LEG_FORMULA.match(t)
+    if m:
+        return {'curve': re.sub(r'\s+', ' ', m.group(1)).strip().upper(), 'pct': '100',
+                'sign': m.group(2), 'rate': m.group(3), 'dcc': dcc, 'mult': m.group(4),
+                'formula': t}
     m = re.match(r'([\d.,]+)\s*%\s*(?:of\s+)?(?:the\s+)?([A-Z]{2,6})\b', t, re.I)
     if m:
         return {'curve': m.group(2).upper(), 'pct': m.group(1), 'sign': '+', 'rate': '0', 'dcc': dcc}

@@ -624,6 +624,121 @@ def _main(R, app, catalog, bullet, bullet_q, commands, domain, entrypoint, queri
     check('recap sem Onshore Swap: 400 com código e as seções ignoradas',
           r.status_code == 400 and r.get_json()['code'] == 'swc_no_deal_ticket' and len(r.get_json()['ignored']) == 3)
 
+    print('\n== 10. o recap da Boticario (§697): seção por letra, CNPJ, FX de booking, Term SOFR como VCP, a termo ==')
+    # Seção `B)`, sem a linha de SPN (a contraparte vem pelo CNPJ do Party B),
+    # notional "USD Notional: …", o FX de booking que faz o Valor Base, o
+    # Initial FX que é uma FIXAÇÃO futura (a Atualização de Notional), a perna
+    # Term SOFR com multiplicador e a tabela do cronograma uma célula por linha.
+    def _tab(cells):
+        return ''.join('<td><p class=MsoNormal>%s</p></td>' % c for c in cells)
+    corpo10 = ''.join([
+        "<html><body><div class=WordSection1>", _p('Hi team,'),
+        _p('<b><u>B) USD/BRL Onshore Cross-currency Swap</u></b>'), _p('&nbsp;'),
+        _p('<b>Party A:</b> Banco J.P. Morgan'),
+        _p('<b>Party B:</b> Boticario Produtos de Beleza LTDA (CNPJ: 11.137.051/0001-86)'),
+        _p('<b>Effective Date:</b> 10-Nov-26'), _p('<b>Maturity Date:</b> 13-Nov-29'),
+        _p('<b>USD Notional</b>: <span style="color:red">40,000,000</span>'),
+        _p('<b>BRL Notional: 216,000,000 <a href="mailto:x">@Brazil OTC Ops</a></b>'),
+        _p('<b>FX: 5.40 ( just to booking)</b>'), _p('<b>Initial FX:</b> PTAX-V 06-Nov-2026'),
+        _p('<b>BRL Notional:</b> USD Notional * Initial FX'),
+        _p('<b>Boticario Receives:</b> (6M TERM SFR + 0.60%)* 1.17647 (A/360)'),
+        _p('<b>Boticario Pays:</b> CDI+0.30% (bd/252)'),
+        _p('<b>Interest Payment Frequency:</b> Semiannual'),
+        _p('<b>Amortization:</b> At maturity'), _p('<b>Fixings:</b> PTAX-Ask T-1'), _p('&nbsp;'),
+        '<table class=MsoNormalTable><tr>', _tab(['<b>Start Date</b>', '<b>End Date</b>', '<b>Amortization</b>']), '</tr>']
+        + ['<tr>%s</tr>' % _tab(r) for r in (('10-Nov-26', '10-May-27', '0%'), ('10-May-27', '10-Nov-27', '0%'),
+                                             ('10-Nov-27', '10-May-28', '0%'), ('10-May-28', '10-Nov-28', '0%'),
+                                             ('10-Nov-28', '10-May-29', '0%'), ('10-May-29', '13-Nov-29', '100%'))]
+        + ['</table></div></body></html>'])
+    em10 = email.message.EmailMessage()
+    em10['Subject'] = 'Internal Trade Recap - Boticario USD/BRL Onshore XCCY'
+    em10['From'] = 'desk@jpmorgan.com'; em10['To'] = 'ops@jpmorgan.com'
+    em10.set_content('plain'); em10.add_alternative(corpo10, subtype='html')
+    eml10 = em10.as_bytes()
+    R._refdata_records().append({'SPN': '7777777', 'COUNTERPARTY': 'BOTICARIO PRODUTOS DE BELEZA LTDA',
+                                 'TAX ID': '11.137.051/0001-86', 'B3 ACCOUNT': ''})
+    _mr10 = R._mapping_rows
+    termo_seed = R._MAPPING_DEFS['swap-termo-index']['seed']
+
+    def _mr_10(key, *a, **k):
+        rows = list(_mr10(key, *a, **k) or [])
+        if key == 'swap-bullet-curve':
+            rows = R._swap_bullet_curve_upgrade([r for r in rows if 'TERM' not in str(r.get('DT CURVE')).upper()])
+        if key == 'swap-index':
+            for code, nome, cat in (('C00', 'VCP', 'VCP'), ('C03', 'DI', 'JUROS')):
+                if not any(str(r.get('Codigo Referencia Externa')) == code for r in rows):
+                    rows.append({'Codigo Referencia Externa': code, 'Nome Curva': nome, 'Nome Categoria': cat,
+                                 'STATUS': 'ACTIVE'})
+        if key == 'swap-termo-index':
+            rows = [dict(r) for r in termo_seed]
+        if key == 'swap-amortizacao' and not any('MATURITY' in str(r).upper() for r in rows):
+            rows.append({'LABEL': 'At maturity', 'CODE': '03', 'NOTES': 'Na Data de Vencimento'})
+        return rows
+    R._mapping_rows = _mr_10
+    try:
+        sec10 = [p2 for k, _t, p2 in sw.read_upload('recap.eml', eml10) if k == 'recap']
+        check('a seção "B)" é lida sem a linha de SPN', len(sec10) == 1 and sec10[0]['title'].startswith('B)'),
+              [t for _k, t, _p2 in sw.read_upload('recap.eml', eml10)])
+        res10 = commands.import_upload('recap.eml', eml10, datetime(2026, 11, 6), sid='A111111', dry_run=True)
+        check('vira UM deal', len(res10['deals']) == 1, res10.get('ignored'))
+        d10 = res10['deals'][0]
+        check('contraparte pelo CNPJ do Party B (Reference Data)',
+              d10['SPN'] == '7777777' and d10['Client'] == 'BOTICARIO PRODUTOS DE BELEZA LTDA', (d10['SPN'], d10['Client']))
+        check('Valor Base = FX de booking 5,40 × USD 40 mi; FX Start 5,4; Notional FC 40 mi',
+              d10['Notional'] == '216000000.00' and d10['FXStart'] == '5.4' and d10['NotionalFC'] == '40000000.00',
+              (d10['Notional'], d10['FXStart'], d10['NotionalFC']))
+        check('o Initial FX "PTAX-V 06-Nov-2026" é a Atualização de Notional (índice e data)',
+              d10['NotionalIndex'] == 'PTAX-V' and d10['NotionalObsDate'] == '2026-11-06',
+              (d10['NotionalIndex'], d10['NotionalObsDate']))
+        check('Curva A = CDI + 0,30% (o banco recebe); Curva B = 6M TERM SFR → VCP 17922, D-1 (Fixings T-1)',
+              d10['CurveA'] == 'CDI' and d10['CurveACategory'] == 'JUROS' and d10['CurveB'] == '6M TERM SFR'
+              and d10['CurveBCategory'] == 'VCP' and d10['VcpCode'] == '17922' and d10['QuoteDateCode'] == '01'
+              and d10['VcpText'] == '(6M TERM SFR + 0.60%)* 1.17647 (A/360)',
+              {k: d10.get(k) for k in ('CurveA', 'CurveACategory', 'CurveB', 'CurveBCategory', 'VcpCode', 'VcpText')})
+        f10 = d10['CashFlows']
+        check('o cronograma da tabela uma célula por linha: 6 fluxos, 100% no último',
+              len(f10) == 6 and f10[0]['StartDate'] == '2026-11-10' and f10[-1]['PaymentDate'] == '2029-11-13'
+              and f10[-1]['AmortizationPct'] == '100' and all(x['AmortizationPct'] == '0' for x in f10[:-1]), f10)
+        d10['LOB'] = 'CEM'
+        cod10 = commands.queries.codes_for(d10)
+        check('Índice Termo 15 (DOLAR, pelo cadastro) e D-2 (06/11 → 10/11, dias úteis ANBIMA)',
+              (cod10.get('termo_index'), cod10.get('termo_quote')) == ('15', '02'), cod10)
+        lac10 = {x['code'] for x in domain.missing_for_send(d10, cod10, sw.own_accounts(), cod10.get('amortization'))}
+        check('a termo o Preço Inicial do VCP não é pedido; sem lacuna', not lac10, sorted(lac10))
+        v10 = domain.contract_record_values(d10, 'client', {'JPM': '73760009'}, cod10, '1234567890')
+        check('0301: 14 = 216.000.000,00; 19 = Data da operação; 20 = 15; 21 = 100%; 22-24 em branco; 99 = 02',
+              v10['14'] == '0000021600000000' and v10['19'] == '20261106' and v10['20'] == '15'
+              and v10['21'] == '10000' and not (v10['22'] + v10['23'] + v10['24']).strip() and v10['99'] == '02',
+              {k: v10[k] for k in ('14', '19', '20', '21', '99')})
+        check('0301: com FWD Start e Atualização de Notional, o Cupom Limpo (47/49) vai em BRANCO',
+              not v10['47'].strip() and not v10['49'].strip())
+        check('0301: a perna VCP do cliente (guarda-chuva) leva PU 1, 17922, a Denominação e D-1',
+              v10['34'] == 'C00' and v10['44'] == '0000000000000100000000' and v10['45'] == '17922'
+              and v10['46'].strip() == '(6M TERM SFR + 0.60%)* 1.17647 (A/360)' and v10['50'] == '01'
+              and not v10['43'].strip(), {k: v10[k].strip() for k in ('34', '44', '45', '46', '50')})
+        # A fixação no PRÓPRIO dia do início: o índice vira VCP (00), com PU,
+        # Tipo/Classe e Denominação, e sem o D-n (a regra da macro da mesa).
+        d10b = dict(d10, NotionalObsDate='2026-11-10')
+        cb = domain.termo_codes(d10b, termo_seed, lambda a, b: 0)
+        check('fixação no dia do início → Índice Termo 00 (VCP); sem Tipo/Classe é lacuna',
+              cb['termo_index'] == '00' and 'swc_termo_class' in {
+                  x['code'] for x in domain.missing_for_send(d10b, dict(cod10, **cb), sw.own_accounts(), '03')}, cb)
+        vb = domain.contract_record_values(d10b, 'client', {'JPM': '73760009'},
+                                           dict(cod10, termo_index='00', termo_class='12345', termo_quote=''), '1')
+        check('   e o 0301 leva PU = FX 5,4, Tipo/Classe e a Denominação, sem o 99',
+              vb['20'] == '00' and vb['22'] == '0000000000000540000000' and vb['23'] == '12345'
+              and vb['24'].startswith('Valor base convertido pelo FX Inicial: 5.4000000 e sera atualizado em '
+                                      '10/11/2026 pelo indice PTAX-V') and not vb['99'].strip(), (vb['22'], vb['24'][:90]))
+        sem = dict(d10, NotionalIndex='', NotionalObsDate='')
+        vs = domain.contract_record_values(sem, 'client', {'JPM': '73760009'}, commands.queries.codes_for(sem), '1')
+        check('sem Atualização de Notional, 19-24 e 99 seguem em branco (o swap em D0)',
+              not (vs['19'] + vs['20'] + vs['21'] + vs['99']).strip())
+        check('o upgrade do cadastro de curvas acrescenta o Term SOFR só onde falta',
+              len(R._swap_bullet_curve_upgrade([{'DT CURVE': '6M TERM SFR', 'B3 CODE': 'X'}]))
+              == len(R._SWAP_TERM_SOFR_CURVES))
+    finally:
+        R._mapping_rows = _mr10
+
 
 if __name__ == '__main__':
     sys.exit(main())

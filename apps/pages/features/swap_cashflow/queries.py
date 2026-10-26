@@ -100,4 +100,9 @@ def codes_for(deal):
     mais o do Tipo de Amortização (`amortization`, 9(02) do 0034)."""
     codes = dict(_sw.codes_for(deal))
     codes['amortization'] = domain.amortization_code(amortization_rows(), deal.get('AmortizationType', ''))
+    # O contrato a TERMO (§697): o Índice Termo pelo cadastro e o D-n ANBIMA.
+    if domain.is_termo(deal):
+        def _biz(a, b):
+            return _R()._anbima_biz_diff(datetime(a.year, a.month, a.day), datetime(b.year, b.month, b.day))
+        codes.update(domain.termo_codes(deal, _R()._mapping_rows('swap-termo-index'), _biz))
     return codes
