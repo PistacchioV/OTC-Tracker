@@ -102,6 +102,16 @@ def _ndf_ter_path(ref, max_back=10, exact=False):
         cur = routes._prev_anbima_bizday(cur)
     return None, None
 
+# O que um FINDER nunca lê como "não achei" (26/10/2026): banco ocupado sem
+# cópia em memória, ilegível ou sem canal. Lidos como ausência, PATCH, Delete e
+# Mapping respondiam 404 "Deal not found" com a operação no banco — e o bulk
+# contava como inexistente a linha que só não deu para ler. Sobem até o
+# tratador global (503 `database_busy`/`database_unreadable`, CLAUDE.md §4).
+# As leituras vão com `strict=True` no `_day_json`: com cópia boa em memória
+# ele a serve, e quem GRAVA relê o arquivo sob a trava.
+_FINDER_SOBE = (_store.BancoOcupado, _store.SemCanal)
+
+
 def _find_deal_in_cache(deal_name, client_name=None):
     """Search all YYYYMMDD_optcomm.json files for a deal by Deal + Client.
     Returns (file_path, list_index) or (None, None).
@@ -121,7 +131,7 @@ def _find_deal_in_cache(deal_name, client_name=None):
         fname = os.path.basename(fpath)
         files_scanned += 1
         try:
-            deals = routes._day_json(fpath, mtime, size)
+            deals = routes._day_json(fpath, mtime, size, strict=True)
             for i, deal in enumerate(deals):
                 d_name   = (deal.get('Deal')   or '').strip()
                 d_client = (deal.get('Client') or '').strip()
@@ -137,6 +147,8 @@ def _find_deal_in_cache(deal_name, client_name=None):
                             'stored_client': repr(d_client),
                             'wanted_client': repr(want)
                         })
+        except _FINDER_SOBE:
+            raise
         except Exception:
             log.warning("[_find_opt] Error reading %s: %s", fpath, traceback.format_exc())
             continue
@@ -359,7 +371,7 @@ def _find_fxo(deal_name, client_name=None):
     from apps.pages import routes
     for fpath, mtime, size in reversed(_optfxo_file_list()):   # newest first
         try:
-            deals = routes._day_json(fpath, mtime, size)
+            deals = routes._day_json(fpath, mtime, size, strict=True)
             for i, deal in enumerate(deals):
                 d_name   = (deal.get('Deal')   or '').strip()
                 d_client = (deal.get('Client') or '').strip()
@@ -367,6 +379,8 @@ def _find_fxo(deal_name, client_name=None):
                     want = (client_name or '').strip()
                     if not want or d_client == want:
                         return fpath, i
+        except _FINDER_SOBE:
+            raise
         except Exception:
             continue
     return None, None
@@ -599,8 +613,8 @@ def _fxo_persist_deals(deals):
                 existing = _store.read(fpath)
                 if not isinstance(existing, list):
                     existing = [existing]
-            except (IOError, json.JSONDecodeError):
-                existing = []
+            except FileNotFoundError:
+                existing = []       # só o dia AUSENTE (ver _generic_nd_persist_new_deals)
             for d in ds:
                 idx = next((i for i, e in enumerate(existing)
                             if (e.get('Deal') or '').strip() == (d.get('Deal') or '').strip()
@@ -894,7 +908,11 @@ def _fxo_persist_new_deals(deals):
                     existing = _store.read(fpath)
                     if not isinstance(existing, list):
                         existing = [existing]
-                except (IOError, json.JSONDecodeError):
+                except FileNotFoundError:
+                    # Só o dia AUSENTE é vazio. `BancoOcupado`/`BancoIlegivel` são
+                    # IOError: lidos como [], a gravação abaixo escrevia o dia só
+                    # com os deals novos, por cima dos Sent/Success e dos B3 ID
+                    # (o laço da API roda a cada 30 min) — 26/10/2026.
                     existing = []
                 idx, by_deal = _nd_amend_index(existing)
                 seen_files[fpath] = {'existing': existing, 'idx': idx,
@@ -1536,7 +1554,11 @@ def _generic_nd_persist_new_deals(product, deals):
                     existing = _store.read(fpath)
                     if not isinstance(existing, list):
                         existing = [existing]
-                except (IOError, json.JSONDecodeError):
+                except FileNotFoundError:
+                    # Só o dia AUSENTE é vazio. `BancoOcupado`/`BancoIlegivel` são
+                    # IOError: lidos como [], a gravação abaixo escrevia o dia só
+                    # com os deals novos, por cima dos Sent/Success e dos B3 ID
+                    # (o laço da API roda a cada 30 min) — 26/10/2026.
                     existing = []
                 idx, by_deal = _nd_amend_index(existing)
                 seen_files[fpath] = {'dir': dir_path, 'existing': existing,
@@ -1867,7 +1889,7 @@ def _find_ndf_deal_in_cache(deal_name, client_name=None):
         fname = os.path.basename(fpath)
         files_scanned += 1
         try:
-            deals = routes._day_json(fpath, mtime, size)
+            deals = routes._day_json(fpath, mtime, size, strict=True)
             if not isinstance(deals, list):
                 deals = [deals]
             for i, deal in enumerate(deals):
@@ -1888,6 +1910,8 @@ def _find_ndf_deal_in_cache(deal_name, client_name=None):
                             'stored_client': repr(d_client),
                             'wanted_client': repr(client_name)
                         })
+        except _FINDER_SOBE:
+            raise
         except Exception:
             log.warning("[_find_ndf] Error reading %s: %s", fpath, traceback.format_exc())
             continue
@@ -2244,12 +2268,14 @@ def _find_generic_nd_deal(cfg, deal_name, client_name=None):
         return None, None
     for fpath, mtime, size in reversed(_nd_file_list(base, cfg['suffix'])):
         try:
-            deals = routes._day_json(fpath, mtime, size)
+            deals = routes._day_json(fpath, mtime, size, strict=True)
             if not isinstance(deals, list):
                 deals = [deals]
             for i, deal in enumerate(deals):
                 if deal.get('Deal', '') == deal_name and (client_name is None or deal.get('Client', '') == client_name):
                     return fpath, i
+        except _FINDER_SOBE:
+            raise
         except Exception:
             continue
     return None, None
@@ -2789,8 +2815,10 @@ def _generic_nd_mapping_candidates(cfg, product, ref_date):
         deals = duck_read.day_records(fpath)
         if not isinstance(deals, list):
             deals = [deals]
-    except (IOError, json.JSONDecodeError):
-        return []
+    except FileNotFoundError:
+        return []           # sumiu entre o isfile e a leitura
+    # ocupado/ilegível SOBE: lido como [], o Mapping respondia "No matching
+    # deals" com o retorno da B3 na pasta (26/10/2026)
 
     out, seen = [], set()
     for d in deals:
