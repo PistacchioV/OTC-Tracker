@@ -29392,3 +29392,64 @@ Pull que falha ou checkout sujo só LISTA, e o `apply` recusa.
 A consequência é que a correção nasce no repositório (dev → prod pelo merge),
 não editada no checkout da máquina. Uma edição local bloqueia o `apply`, como
 no `stratos-sync`.
+
+
+## §689 — Stratos: a prova das travas no Shared Drive (2026-10-26)
+
+O passo B do §681. O DuckDB no Shared Drive só é seguro se as travas de que o
+app depende valem no EFS (NFS v4.1) entre processos, e a documentação do Stratos
+não fala delas. A prova roda no contêiner, porque só lá existe o drive montado:
+a rota `/stratos/prova-travas`, só do master. Ela fica fora do blueprint, como
+o whoami, e quem autoriza é a identidade do Stratos. O trabalho é do
+`stratos/src/prova_travas.py`, que não importa o `apps` e usa a si mesmo como
+processo filho para segurar as travas.
+
+**O que ela confere** (onze casos, `esperado` × `obtido`):
+- `portalocker`, com a mesma chamada do `database_access` (`flock`,
+  `NON_BLOCKING`, `a+b`): a exclusiva de outro processo barra a exclusiva e a
+  compartilhada; a trava solta quando o processo sai; duas compartilhadas
+  convivem; a compartilhada barra a exclusiva;
+- DuckDB: o banco aberto em escrita por outro processo recusa a escrita e a
+  leitura daqui, e o que ele gravou e fechou chega inteiro;
+- **as três `mesmo_processo_*`**: a pergunta que o NFS responde diferente do
+  disco local. O Linux emula o `flock` em NFS com travas POSIX, e trava POSIX é
+  do PROCESSO, não do descritor. Se for o caso, um segundo descritor no mesmo
+  processo pega a compartilhada sobre a exclusiva (e a converte), e fechar
+  QUALQUER descritor do `.lock` solta a trava inteira. O app abre o `.lock` em
+  cada operação, de várias threads ao mesmo tempo. A leitura que termina
+  soltaria a trava da gravação em curso, e a instância vizinha entraria no
+  meio, sem erro nenhum. Dentro de UM processo o app não depende do `.lock`: o
+  semáforo e o `db_gate` cuidam. O risco é só com dois contêineres no mesmo
+  `db/`, o que inclui o velho e o novo durante um deploy.
+
+E mede os `tempos`: abrir duas vezes o maior banco de dia e o maior de cadastro
+(pelo `duckdb_read`, que respeita os bancos em uso), gravar 200 mil linhas com
+CHECKPOINT, 1 MB com `fsync` e o `stat`.
+
+**Entre contêineres** a prova local não alcança: dois processos no mesmo
+contêiner são o mesmo cliente NFS, e a trava pode valer entre eles sem passar
+pelo servidor. Para isso, `?modo=segurar&segundos=N` deixa um processo
+segurando o `.lock` e o DuckDB de `prova-travas/cruzada/` e volta na hora;
+`?modo=conferir` tenta pegá-los. Só vale quando o `host` do `conferir` é outro
+(no mesmo host o veredito é "inconclusivo"). `soltar=1` libera no fim. Cada
+chamada anota o host em `prova-travas/hosts/`, e a resposta lista os vistos na
+última hora: é como se descobre quantos contêineres a solução tem.
+
+**O que o resultado decide:**
+- tudo `ok`: segue o passo C;
+- só as `mesmo_processo_*` falham: o Stratos roda com UM contêiner, e o deploy
+  não pode sobrepor o velho e o novo gravando, ou a trava do app passa a
+  ser `fcntl` por processo com uma trava em memória por arquivo na frente (a
+  mudança é da dev, na `database_access`);
+- as de processo ou as do DuckDB falham: dois processos corrompem o banco, e o
+  NoSQL volta para a frente da fila (§678).
+
+`stratos/tests/check_prova_travas.py`, chamado pelo `check_stratos.py`:
+- no disco local os onze casos passam;
+- com `OTC_PROVA_LOCKER=lockf` (as travas POSIX, o que o NFS faz por baixo)
+  falham exatamente as três `mesmo_processo_*`, e o veredito diz isso;
+- o ciclo `segurar` → `conferir` → `soltar`.
+
+O `check_stratos.py` cobre ainda a rota pelo app montado: 403 sem identidade e
+para quem não é master, 200 com os onze casos para o master, 400 para modo
+desconhecido.
