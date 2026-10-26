@@ -16303,6 +16303,10 @@ body.otc-nav-unpinned .otc-menu-btn {
   animation: otc-spin var(--otc-spin-dur) linear infinite;
 }
 
+.swal2-loader {
+  animation-duration: var(--otc-spin-dur) !important;
+}
+
 .is-busy > i.ti::before {
   content: "\f226";
 }
@@ -22401,7 +22405,7 @@ html .fc .fc-list-empty {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :where(:not(.otc-spin, .ti-spin, .ti-loader, .ti-loader-2, .ti-loader-3, .is-busy > .ti, .is-busy > svg, .spinner-border, .spinner-grow, .dt-processing *, .is-flying)), :where(:not(.otc-spin, .ti-spin, .ti-loader, .ti-loader-2, .ti-loader-3, .is-busy > .ti, .is-busy > svg, .spinner-border, .spinner-grow, .dt-processing *, .is-flying))::before, :where(:not(.otc-spin, .ti-spin, .ti-loader, .ti-loader-2, .ti-loader-3, .is-busy > .ti, .is-busy > svg, .spinner-border, .spinner-grow, .dt-processing *, .is-flying))::after {
+  :where(:not(.otc-spin, .ti-spin, .ti-loader, .ti-loader-2, .ti-loader-3, .is-busy > .ti, .is-busy > svg, .spinner-border, .spinner-grow, .swal2-loader, .dt-processing *, .is-flying)), :where(:not(.otc-spin, .ti-spin, .ti-loader, .ti-loader-2, .ti-loader-3, .is-busy > .ti, .is-busy > svg, .spinner-border, .spinner-grow, .swal2-loader, .dt-processing *, .is-flying))::before, :where(:not(.otc-spin, .ti-spin, .ti-loader, .ti-loader-2, .ti-loader-3, .is-busy > .ti, .is-busy > svg, .spinner-border, .spinner-grow, .swal2-loader, .dt-processing *, .is-flying))::after {
     animation-duration: 1ms !important;
     animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;

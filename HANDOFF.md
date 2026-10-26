@@ -29671,3 +29671,87 @@ Não entrou: tarefa no Intraday Monitor (o WHT é decendial, e o catálogo não 
 essa agenda) nem notificação no sino.
 
 `scripts/tests/check_wht.py`.
+
+## §693 — Ponte do share: cada pasta numa thread, a listagem em paralelo (2026-10-26)
+
+**O que o dry-run mostrou.** O primeiro `--dry-run` de verdade (`--env dev`,
+26/10/2026) levou **44 minutos** (14:00:46 → 14:44:57). As 15 pastas menores
+não tinham ação (já batiam com a base), e o Electronic Inventory tinha 6.436
+ações, o EI inteiro para subir. O tempo não é dos arquivos, e sim das PASTAS:
+o EI tem milhares de subpastas de contraparte (Confirmations/ano/mês/dia/tipo,
+SSI, CGD…), e cada `scandir` é uma ida e volta no SMB.
+
+**Por que isso quebrava o `--loop`.** As pastas rodavam em SEQUÊNCIA: a cada
+10 minutos o EI prendia o laço por ~40, e nesse tempo o Batch Conecta
+(New/Return, a cada 20 s) não andava — o arquivo gerado para a B3 esperaria
+40 minutos para subir. Na primeira passada real seria pior: 6.436 envios a ~1 s
+são mais 2 horas de laço preso.
+
+**O que mudou.**
+
+- `ponte_share.laco`: cada pasta roda numa THREAD própria. A lenta não segura
+  as outras, uma pasta nunca roda duas vezes ao mesmo tempo, o intervalo conta
+  do FIM da passada (com a passada mais longa que o intervalo, ela recomeçaria
+  na hora), e a pasta que quebra não derruba o laço. Sem `--loop` (dry-run,
+  `--alinhar`) é uma passada de cada, e o laço espera todas. O aviso no drive
+  é renovado a cada volta, com as threads trabalhando.
+- Uma `Ponte` e um cliente do drive POR PASTA: o `SharedDrive` do
+  stratosblocks não promete ser seguro entre threads.
+- `ponte_comum.lista(..., workers=N, progresso=fn)`: abre N subpastas do share
+  ao mesmo tempo, nível a nível da árvore (padrão 8, `--workers` /
+  `OTC_PONTE_WORKERS`). O resultado é o MESMO da listagem em sequência,
+  inclusive os `pulados` (a subpasta que não abre) e a raiz que levanta. O
+  contêiner (`escreve_manifesto`) segue com 1: lá é o EFS, não o SMB.
+- A passada longa diz a cada 30 s onde está (pastas abertas e arquivos na
+  listagem, `n de m ação(ões)` na cópia), e o `--medir` diz quanto cada pasta
+  levou para ser listada.
+- O `--dry-run` imprime um bloco por pasta (`== <pasta>: n ação(ões)`), sem
+  misturar as linhas das threads.
+
+**A conferir na máquina do JPM:** o tempo da listagem do EI com 8 workers
+(`--medir --so electronic-inventory`). A espera é de rede e o paralelo deve
+dividir o tempo, mas o SMB do share pode limitar conexões por cliente; se não
+cair, subir para 16 ou descer para 4 diz qual é o gargalo.
+
+`stratos/tests/check_ponte.py` §6.
+
+## §694 — WHT na instância: D-1, o Import em segundo plano, o prêmio em net; o spinner do Swal; a data do prêmio no card do Bullet (2026-10-26)
+
+**O Import Settlements levava "uma eternidade", com o spinner parado.** Eram
+duas coisas:
+
+- **A demora é do share.** O botão recoletava os dias UM A UM dentro do
+  request: no 2º decêndio, os 8 dias dele mais os 6 do 1º que faltavam (o piso
+  é do mês), cada um custando o NDF Summary e o Other Products inteiros. Hoje o
+  Import é um TRABALHO em segundo plano por decêndio (`commands.start_import`,
+  em memória: um processo serve a instância), com os dias coletados em
+  PARALELO (`OTC_WHT_IMPORT_WORKERS`, padrão 4), cada um no seu
+  request-context (os coletores memoizam no `g`). A tela mostra "x de y dias",
+  a janela pode ser fechada (a faixa acima da tabela acompanha pelo
+  `/api/wht/import-status`), o segundo clique no mesmo decêndio devolve o
+  trabalho que já roda, e a tela se redesenha no fim.
+- **O spinner parado é de TODO `Swal.showLoading()` do app.** O anel do
+  SweetAlert (`.swal2-loader`) não estava no `$otc-progress` do `otc.scss`, e
+  com o movimento reduzido das máquinas do JP (§647) ele dava UMA volta de 1 ms
+  e parava — medido no Chromium com `reduced_motion='reduce'`: antes
+  `animation-iteration-count: 1` e `0.001s`, agora `infinite` e `1.2s`. Entrou
+  na lista e no ritmo da casa (`--otc-spin-dur`), e o `check_send_contrail.py`
+  §5/§6 o prende junto dos outros spinners. Ele só anima dentro do
+  `.swal2-container` (é o seletor do SweetAlert): o guarda o monta assim.
+
+**A Reference date nasce no D-1** (dia útil ANBIMA) já no HTML; antes ela
+nascia vazia e só se preenchia com a resposta. A data do link continua vencendo.
+
+**O prêmio de opção é UMA linha com o NET** (pedido da equipe): por entidade ×
+contraparte × produto no dia, o imposto sobre o net (a regra do
+`_optadv_apply_ir`), e só o net em que o banco paga. A linha leva o id da
+operação que mais paga e o selo `net ×n` no Internal ID diz quais entraram
+(`OTC_net_of`). O resto segue a regra de sempre: só o que o banco/MGT PAGOU,
+com ou sem imposto (o exercício pago entra, isento). O swap com evento de
+prêmio não foi tocado — ele não tem a regra do net.
+
+**New Deals › Swap › Bullet: a data de pagamento do prêmio no card.** O
+`deal-cards.js` aceita `show(e)` por fato (o fato que só existe em parte das
+operações sai do card em vez de virar "—" em todas). No Bullet, Premium e
+Premium Date ficam lado a lado só quando há prêmio, e o Notional ocupa a linha
+inteira para os pares não desalinharem.

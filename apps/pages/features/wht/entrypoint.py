@@ -26,7 +26,10 @@ def wht_page():
     """Regulatory › WHT — o item do menu existia desde o começo como placeholder."""
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
-    return render_template('pages/wht.html', segment='wht')
+    # A Reference date nasce no D-1 (dia útil ANBIMA): no dia do recolhimento o
+    # que se confere é o decêndio que acabou de fechar.
+    return render_template('pages/wht.html', segment='wht',
+                           ref_date=queries.parse_ref(None).isoformat())
 
 
 @blueprint.route('/api/wht/data')
@@ -34,26 +37,36 @@ def api_wht_data():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     try:
-        payload = queries.build(queries.parse_ref(request.args.get('date')))
+        ref = queries.parse_ref(request.args.get('date'))
+        payload = queries.build(ref)
     except Exception as exc:                                # noqa: BLE001
         return _erro(exc)
     payload['success'] = True
+    payload['import_job'] = commands.job_status(ref)
     return jsonify(payload)
 
 
 @blueprint.route('/api/wht/import-settlements', methods=['POST'])
 def api_wht_import_settlements():
+    """Dispara o Import Settlements do decêndio em SEGUNDO PLANO e devolve o
+    trabalho (`job`); a tela acompanha pelo `/api/wht/import-status`."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     p = request.get_json(silent=True) or {}
     ref = queries.parse_ref(p.get('date'))
     try:
-        res = commands.import_settlements(ref, session.get('user_sid', ''))
-        payload = queries.build(ref)
+        job = commands.start_import(ref, session.get('user_sid', ''))
     except Exception as exc:                                # noqa: BLE001
         return _erro(exc)
-    payload.update({'success': True, 'imported': res})
-    return jsonify(payload)
+    return jsonify({'success': True, 'job': job, 'ref': ref.isoformat()})
+
+
+@blueprint.route('/api/wht/import-status')
+def api_wht_import_status():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    return jsonify({'success': True,
+                    'job': commands.job_status(queries.parse_ref(request.args.get('date')))})
 
 
 @blueprint.route('/api/wht/hub-import', methods=['POST'])

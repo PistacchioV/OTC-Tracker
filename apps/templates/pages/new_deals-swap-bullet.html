@@ -546,6 +546,10 @@ $(document).ready(function() {
         var taxa = e['Curve' + x + 'Rate'] && parseFloat(e['Curve' + x + 'Rate']) ? ' + ' + e['Curve' + x + 'Rate'] + '%' : '';
         return (nome || cat) ? (nome || cat) + taxa : '';
     }
+    function _temPremio(e) {
+        var s = String(e.PremiumSchedule || '').trim().toUpperCase();
+        return !!(parseFloat(e.PremiumAmount) || s === 'SIM' || s === 'YES' || s === 'S' || s === 'Y');
+    }
     var cards = window.otcDealCards ? otcDealCards({
         el: '#swbCards', selected: selected, t: t,
         key: function(e){ return e._id; },
@@ -559,8 +563,12 @@ $(document).ready(function() {
             { label: t('nd-col-b3-id', 'B3 ID'), value: function(e){ return e.B3ID || ''; } },
             { label: t('nd-swb-col-startdate', 'Start') + ' → ' + t('nd-swb-col-maturitydate', 'Maturity'), wide: true,
               value: function(e){ var a = _isoToDmy(e.StartDate || ''), b = _isoToDmy(e.MaturityDate || ''); return (a || b) ? (a || '—') + ' → ' + (b || '—') : ''; } },
-            { label: t('nd-swb-col-notional', 'Notional'), value: function(e){ return e.Notional ? fmtMoney(e.Notional) + (e.Currency ? ' ' + e.Currency : '') : ''; } },
-            { label: t('nd-swb-col-premiumamount', 'Premium'), value: function(e){ return e.PremiumAmount ? fmtMoney(e.PremiumAmount) : ''; } },
+            { label: t('nd-swb-col-notional', 'Notional'), wide: true, value: function(e){ return e.Notional ? fmtMoney(e.Notional) + (e.Currency ? ' ' + e.Currency : '') : ''; } },
+            // Prêmio e a DATA DE PAGAMENTO dele lado a lado, só na operação que
+            // tem prêmio (o Notional ocupa a linha inteira para os pares não
+            // desalinharem quando os dois saem).
+            { label: t('nd-swb-col-premiumamount', 'Premium'), show: _temPremio, value: function(e){ return e.PremiumAmount ? fmtMoney(e.PremiumAmount) : ''; } },
+            { label: t('nd-swb-col-premiumdate', 'Premium Date'), show: _temPremio, value: function(e){ return _isoToDmy(e.PremiumDate || ''); } },
             { label: t('nd-swb-col-curvea', 'Curve A'), value: function(e){ return _curva(e, 'A'); } },
             { label: t('nd-swb-col-curveb', 'Curve B'), value: function(e){ return _curva(e, 'B'); } }
         ],

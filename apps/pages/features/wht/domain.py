@@ -387,6 +387,8 @@ def row_of(o, h):
         'OTC_LE': o.get('le') or '', 'HUB_LE': h.get('le') or '',
         'OTC_taxid': o.get('taxid') or '', 'HUB_taxid': h.get('cnpj') or '',
         'HUB_doc': h.get('docto') or '', 'OTC_doc': o.get('doc') or '',
+        # O prêmio de opção é UMA linha com o net do dia: quais operações entraram.
+        'OTC_net_of': ', '.join(o.get('net_of') or ()),
         'HUB_file': h.get('file') or '',
     }
     for k, _nome in CHECKS:
