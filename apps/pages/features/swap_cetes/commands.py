@@ -188,9 +188,21 @@ def deal_files(deal, view, today_ymd=None):
             'fields': queries.fields_of(SWAP_FI_KEY, {'header': hdr}, vals)}
 
 
+def _com_conta(files):
+    """O preview mostra (e o Export dele baixa) o nome que o arquivo terá na
+    New: a conta da visão na frente (§646). Visão sem conta cadastrada fica com
+    o nome de sempre — quem recusa é o Send, o preview não deixa de abrir."""
+    for f in files:
+        try:
+            f['file_name'] = _R()._conecta_file_name(f['le_pair'], f['file_name'])
+        except ValueError:
+            pass
+    return files
+
+
 def preview(deal):
     """Os dois arquivos do deal (Banco e Lawton), sem gravar nada."""
-    return [deal_files(deal, view) for view in domain.VIEWS]
+    return _com_conta([deal_files(deal, view) for view in domain.VIEWS])
 
 
 class EnvioRecusado(ValueError):
@@ -241,12 +253,14 @@ def send(items, sid='', download=False):
     if not grupos:
         raise ValueError('No valid rows provided')
     gerados = []
+    # O nome leva a conta da visão na frente (§646) também no download: o
+    # arquivo baixado é o que vai ao Conecta. Todos antes do primeiro arquivo.
+    nomes = {nome: _R()._conecta_file_name(g['le_pair'], nome) for nome, g in grupos.items()}
     if download:
         for nome, g in grupos.items():
-            gerados.append({'filename': nome, 'count': g['count'],
+            gerados.append({'filename': nomes[nome], 'count': g['count'],
                             'content': '\n'.join([g['header']] + g['records'])})
         return {'files': gerados, 'count': len(alvos)}
-    nomes = {nome: _R()._conecta_file_name(g['le_pair'], nome) for nome, g in grupos.items()}
     out_dir = _R().CONECTA_NEW_PATH
     os.makedirs(out_dir, exist_ok=True)
     with _R()._cache_lock:

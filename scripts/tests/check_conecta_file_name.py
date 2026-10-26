@@ -179,5 +179,16 @@ for raiz, _d, arqs in os.walk(PAGES):
 check('os geradores da New foram achados (9 em 20/10/2026)', len(usa) >= 9, True)
 check('nenhum grava na New sem a conta no nome', crus, [])
 
+print('\n== 6. swaps: o download e o preview levam a conta no nome ==')
+# O arquivo baixado (Send com `download`, Export do preview) é o que a equipe
+# leva ao Conecta: sem a conta na frente ele não vai (mesa, 26/10/2026).
+for vert in ('swap_bullet', 'swap_cashflow', 'swap_cetes'):
+    src = open(os.path.join(ROOT, 'apps', 'pages', 'features', vert, 'commands.py'),
+               encoding='utf-8').read()
+    dl = src[src.index('    if download:'):src.index("return {'files': gerados")]
+    check('%s: o download usa o nome da New' % vert,
+          "'filename': nomes[nome]" in dl and src.index('    nomes = {') < src.index('    if download:'), True)
+    check('%s: o preview mostra o nome com a conta' % vert, 'return _com_conta(' in src, True)
+
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)
