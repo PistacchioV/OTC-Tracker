@@ -915,7 +915,9 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   `border-radius:10px !important`, ícone Tabler `1rem` (nunca `.fs-13`),
   tooltip colorido delegado no primeiro hover (os `<td>` são reescritos a cada
   redraw). Regra GLOBAL no `otc.scss` §6b (a página NÃO redeclara o
-  `.btn-act`); ordem Confirm `ti-check` →
+  `.btn-act`), POR CLASSE: botão de linha NOVO (o `btn-row-b2b` do Create
+  B2B, §699) entra nas duas listas de lá — a da forma e o par com `.d-none` —,
+  senão sai como a pílula redonda do `.btn`; ordem Confirm `ti-check` →
   Edit `ti-edit` → Delete `ti-trash` → Send `ti-brand-telegram`; edição Save
   `ti-device-floppy` + Cancel `ti-x`. **A COR é semântica e o guarda varre TODA
   página**: Confirm/Approve `btn-success`, Edit `btn-info`, Delete `btn-danger`,
@@ -1050,7 +1052,11 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   sem endpoint de download usa `download: 'raw'` — o helper baixa o arquivo
   cru de cada aba, com o `file_name` e o `encoding` dela (`cp1252` onde a B3
   conta bytes, §480) — e o Edit é um `onEdit` que dispara o Edit da LINHA
-  (some junto, em `Sent`). `check_file_preview_buttons.py`.
+  (some junto, em `Sent`). **As colunas têm largura FIXA** (§698): Bloco 150px
+  e Campo 280px quebrando dentro dela, Formato no conteúdo, Valor com a sobra —
+  com o layout automático e o Bloco sem quebra, o título de bloco de 98
+  caracteres do 0301 de fluxo não constante levava metade da tabela.
+  `check_file_preview_buttons.py`.
 - **As telas de SWAP são CARDS, não tabela** (mesa, 21/10/2026, §650): Bullet,
   Cashflow e Cetes mostram uma operação por card (`static/js/deal-cards.js` +
   `otc.scss` §6e `.otc-deal-card`) — caixa de seleção, status, os números, os
