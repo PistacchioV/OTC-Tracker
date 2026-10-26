@@ -166,10 +166,13 @@ if sync_playwright:
 
 print('=== 5. Os ícones que giram, num ritmo só ===')
 # Todo spinner da casa: o ícone da Tabler, o refresh ocupado, o anel do
-# Bootstrap (o do botão e o solto) e o `.otc-spin` das telas (§647).
-GIRAM = ['a', 'b', 'c', 'd', 'e', 'f']
+# Bootstrap (o do botão e o solto), o `.otc-spin` das telas (§647) e o anel do
+# `Swal.showLoading()` — fora da lista, com o movimento reduzido das máquinas do
+# JP ele dava uma volta e parava, e o Import parecia travado (§692).
+GIRAM = ['a', 'b', 'c', 'd', 'e', 'f', 'g']
 SPIN_HTML = (
     '<!doctype html><html><head><link rel="stylesheet" href="file://%s/css/vendors.min.css">'
+    '<link rel="stylesheet" href="file://%s/plugins/sweetalert2/sweetalert2.min.css">'
     '<link rel="stylesheet" href="file://%s/css/otc.css"></head><body>'
     '<button class="cp-run-btn"><i class="ti ti-loader-2 ti-spin" id="a"></i></button>'
     '<button class="btn btn-sm btn-icon is-busy"><i class="ti ti-refresh" id="b"></i></button>'
@@ -177,6 +180,7 @@ SPIN_HTML = (
     '<button class="btn btn-primary" id="btn"><span class="spinner-border spinner-border-sm me-1" id="d"></span> Loading</button>'
     '<div class="spinner-border" id="e"></div>'
     '<span class="otc-spin" id="f" style="width:14px;height:14px;border:2px solid;border-radius:50%%"></span>'
+    '<div class="swal2-container"><div class="swal2-loader" id="g"></div></div>'
     '<div id="deco" style="animation: otc-spin 3s linear infinite">enfeite</div>'
     '<div class="otc-enter" id="ent">entrada</div>'
     '<button class="btn btn-primary btn-row-send is-flying" id="voo"><i class="ti ti-brand-telegram"></i></button>'
@@ -185,13 +189,13 @@ DUR = "(ids) => ids.map(i => getComputedStyle(document.getElementById(i)).animat
 REP = "(ids) => ids.map(i => getComputedStyle(document.getElementById(i)).animationIterationCount)"
 if sync_playwright:
     arq = os.path.join(tmp, 'spin.html')
-    io.open(arq, 'w', encoding='utf-8').write(SPIN_HTML % (STATIC, STATIC))
+    io.open(arq, 'w', encoding='utf-8').write(SPIN_HTML % (STATIC, STATIC, STATIC))
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page()
         pg.goto('file://' + arq)
         pg.wait_for_timeout(200)
-        check('  todo spinner (Tabler, refresh ocupado, anel do Bootstrap, .otc-spin): 1,2 s por volta',
+        check('  todo spinner (Tabler, refresh ocupado, anel do Bootstrap, .otc-spin, Swal): 1,2 s por volta',
               pg.evaluate(DUR, GIRAM), ['1.2s'] * len(GIRAM))
         check('  o refresh ocupado vira o ARCO do loader (as setas dele são anti-horárias)',
               pg.evaluate("getComputedStyle(document.getElementById('b'), '::before').content"), '""')
