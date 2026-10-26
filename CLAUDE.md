@@ -3425,6 +3425,13 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   abortaria em toda cópia bem-sucedida. E **`/COPY:DAT` PRESERVA o timestamp da
   origem**: data de arquivo no share não diz quando o deploy rodou (foi o que
   me fez descartar esta hipótese uma vez).
+- **O `hotfix.bat` leva a correção pontual para a versão NO AR** (o que
+  difere entre o checkout da `StreamFlow-prod` e a pasta do `link.txt`; sem
+  argumento lista, `hotfix apply` copia) e, como o `stratos-sync.bat`, **puxa
+  do GitHub antes** (§688): `git pull --ff-only` em bloco com auto-chamada,
+  branch conferida e `apps\` sem nada fora do git — pull que falha ou checkout
+  sujo só lista, o `apply` recusa. A correção nasce no repositório (dev → prod
+  pelo merge), nunca editada no checkout da máquina.
 - **Parêntese dentro de bloco `( … )` do `.bat` vai escapado** (`^(`/`^)`) —
   erro de PARSE. `check_bat_blocks.py`.
 - **`SECRET_KEY` é estado da máquina**: sem variável, o app mantém
