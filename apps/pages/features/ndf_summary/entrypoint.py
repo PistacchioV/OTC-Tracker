@@ -111,6 +111,10 @@ def api_ndf_summary_data():
                          ref.strftime('%Y-%m-%d'), traceback.format_exc())
         return jsonify({'success': False, 'error': 'collect_failed',
                         'date': ref.strftime('%Y-%m-%d')}), 500
+    # As operações do dia fluem para o WHT (o IR por decêndio × o relatório do
+    # HUB) — melhor esforço, a tela daqui nunca cai por causa dele.
+    _R()._wht_engine().flow(ref, 'ndf', payload.get('email_trades') or [],
+                            session.get('user_sid', ''))
     payload.pop('email_trades', None)          # backend-only (settlement notices)
     payload.update({'success': True, 'date': ref.strftime('%Y-%m-%d'),
                     # O acumulado de IR do mês ainda não estava inteiro (a cura

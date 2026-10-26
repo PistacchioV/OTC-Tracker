@@ -49,6 +49,9 @@ def api_ndfc_import():
     p = request.get_json(silent=True) or {}
     res = _R()._ndfc_import(_R()._api_ref_date(p.get('date')))
     if res.get('success'):
+        # O dia importado passa a valer no WHT sem ninguém abrir o Summary.
+        _R()._wht_engine().refresh_async(_R()._api_ref_date(p.get('date')), ('ndf',),
+                                         session.get('user_sid', ''))
         _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                              'NDF Cockpit Imported', 'NDF Cockpit',
                              '{}: {} row(s) ({})'.format(res.get('file', ''), res.get('rows', 0), res.get('date', '')))
