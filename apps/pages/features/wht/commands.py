@@ -55,11 +55,10 @@ def flow(day, source, trades, by=''):
         return False
 
 
-def import_settlements(ref, by=''):
-    """O botão Import Settlements: recoleta TODOS os dias úteis do decêndio de
-    `ref` (até hoje) das duas fontes, e os dias dos decêndios ANTERIORES do mês
-    que ainda não têm fatia — o piso de R$ 1,00 é do mês. Dia que falha fica
-    como estava e volta em `failed`."""
+def _dias_do_import(ref):
+    """[(dia, fontes)] do Import Settlements: TODOS os dias úteis do decêndio de
+    `ref` (até hoje), das duas fontes, e os dias dos decêndios ANTERIORES do mês
+    que ainda não têm fatia — o piso de R$ 1,00 é do mês."""
     R = _R()
     y, m, n = domain.decendio_of(ref)
     ini, fim = domain.decendio_bounds(y, m, n)
@@ -74,18 +73,129 @@ def import_settlements(ref, by=''):
             if fontes:
                 dias.append((d, fontes))
         d += timedelta(days=1)
-    feitos, falhas, linhas = [], [], 0
-    for d, fontes in dias:
-        res = queries.collect_day(d, fontes)
-        for src, rows in res.items():
-            if isinstance(rows, Exception):
-                falhas.append({'day': d.isoformat(), 'source': src,
-                               'error': '%s: %s' % (type(rows).__name__, rows)})
-                continue
-            _put(d, src, rows, by)
-            linhas += len(rows)
-        feitos.append(d.isoformat())
-    return {'days': feitos, 'failed': falhas, 'rows': linhas}
+    return dias
+
+
+try:
+    IMPORT_WORKERS = int(os.getenv('OTC_WHT_IMPORT_WORKERS', '4') or 4)
+except ValueError:
+    IMPORT_WORKERS = 4
+
+
+def import_settlements(ref, by='', workers=1, contexto=None, progresso=None):
+    """O Import Settlements: recoleta os dias de `_dias_do_import`. Dia que falha
+    fica como estava e volta em `failed`.
+
+    No share, cada dia custa o NDF Summary e o Other Products inteiros (de
+    segundos a minutos), e uma quinzena um a um passava de meia hora. Com
+    `workers` > 1 os dias são coletados AO MESMO TEMPO, cada um numa thread com
+    o seu request-context (`contexto()`, um gerenciador de contexto: os
+    coletores memoizam no `g`). `progresso(dia, falhas)` é chamado a cada dia
+    que termina."""
+    from concurrent.futures import ThreadPoolExecutor
+    dias = _dias_do_import(ref)
+
+    def um(item):
+        d, fontes = item
+        falhas, linhas = [], 0
+        try:
+            if contexto is not None:
+                with contexto():
+                    res = queries.collect_day(d, fontes)
+            else:
+                res = queries.collect_day(d, fontes)
+            for src, rows in res.items():
+                if isinstance(rows, Exception):
+                    falhas.append({'day': d.isoformat(), 'source': src,
+                                   'error': '%s: %s' % (type(rows).__name__, rows)})
+                    continue
+                _put(d, src, rows, by)
+                linhas += len(rows)
+        except Exception as exc:                            # noqa: BLE001
+            falhas.append({'day': d.isoformat(), 'source': '+'.join(fontes),
+                           'error': '%s: %s' % (type(exc).__name__, exc)})
+        if progresso:
+            progresso(d, falhas)
+        return d, falhas, linhas
+
+    if workers > 1 and len(dias) > 1:
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            res = list(ex.map(um, dias))
+    else:
+        res = [um(x) for x in dias]
+    return {'days': [d.isoformat() for d, _f, _n in res],
+            'failed': [f for _d, fs, _n in res for f in fs],
+            'rows': sum(n for _d, _f, n in res)}
+
+
+# ── O Import em segundo plano ───────────────────────────────────────────────
+#  Uma quinzena no share leva minutos mesmo em paralelo, e segurar o request
+#  deixava a tela parada no spinner. O Import vira um TRABALHO por decêndio
+#  (em memória: um processo só serve a instância), que a tela acompanha pelo
+#  `job_status` — fechar a janela não para nada, e clicar de novo no mesmo
+#  decêndio devolve o trabalho que já está rodando.
+_jobs = {}
+_jobs_lock = threading.Lock()
+
+
+def _snapshot(job):
+    return {k: (list(v) if isinstance(v, list) else v) for k, v in job.items()}
+
+
+def job_status(ref):
+    key = domain.decendio_key(*domain.decendio_of(ref))
+    with _jobs_lock:
+        job = _jobs.get(key)
+        return _snapshot(job) if job else None
+
+
+def start_import(ref, by=''):
+    """Dispara (ou devolve, se já roda) o Import Settlements do decêndio de `ref`."""
+    R = _R()
+    key = domain.decendio_key(*domain.decendio_of(ref))
+    dias = _dias_do_import(ref)
+    with _jobs_lock:
+        atual = _jobs.get(key)
+        if atual and atual['state'] == 'running':
+            return _snapshot(atual)
+        job = {'key': key, 'state': 'running', 'total': len(dias), 'done': 0,
+               'days': [], 'failed': [], 'rows': 0, 'by': by,
+               'started': store.now(), 'finished': '', 'error': ''}
+        _jobs[key] = job
+    app = getattr(R, '_FLASK_APP', None)
+
+    def contexto():
+        from contextlib import ExitStack
+        pilha = ExitStack()
+        pilha.enter_context(R._app_context())
+        if app is not None:
+            pilha.enter_context(app.test_request_context('/__wht-import'))
+        return pilha
+
+    def progresso(d, falhas):
+        with _jobs_lock:
+            job['done'] += 1
+            job['days'].append(d.isoformat())
+            job['failed'].extend(falhas)
+
+    def corre():
+        try:
+            res = import_settlements(ref, by, workers=IMPORT_WORKERS, contexto=contexto,
+                                     progresso=progresso)
+            with _jobs_lock:
+                job['rows'] = res['rows']
+        except Exception as exc:                            # noqa: BLE001
+            R.log.warning('[wht] Import Settlements de %s falhou:\n%s', key, traceback.format_exc())
+            with _jobs_lock:
+                job['error'] = '%s: %s' % (type(exc).__name__, exc)
+        finally:
+            with _jobs_lock:
+                job['state'] = 'done'
+                job['finished'] = store.now()
+            R.log.warning('[wht] Import Settlements de %s: %d dia(s), %d linha(s), %d falha(s)',
+                          key, job['done'], job['rows'], len(job['failed']))
+    threading.Thread(target=corre, name='wht-import', daemon=True).start()
+    return _snapshot(job)
 
 
 def refresh_async(day, sources=('ndf', 'ops'), by=''):

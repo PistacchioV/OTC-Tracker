@@ -15,7 +15,10 @@
  *     el: '#swbCards', selected: selected, key: function (e) { return e._id; },
  *     title: fn(e) → texto, subtitle: fn(e) → texto, status: fn(e) → HTML,
  *     lob: fn(e) → 'CEM' | 'EDG' | ''      // a pílula da LOB, antes do status
- *     facts: [{label, value: fn(e) → texto, wide: bool}], meta: fn(e) → texto,
+ *     facts: [{label, value: fn(e) → texto, wide: bool, show: fn(e) → bool}],
+ *       (`show` falso tira o fato do card: o que só existe em parte das
+ *       operações, como a data do prêmio, não vira um "—" em toda as outras)
+ *     meta: fn(e) → texto,
  *     canConfirm: fn(e), canSend: fn(e), t: fn(chave, padrão),
  *     onConfirm / onEdit / onDelete / onSend / onPreview: fn(chave),
  *     onSelect: fn()                       // a seleção mudou
@@ -54,7 +57,7 @@
 
     function card(e) {
       var k = o.key(e), on = sel.has(k);
-      var facts = (o.facts || []).map(function (f) {
+      var facts = (o.facts || []).filter(function (f) { return !f.show || f.show(e); }).map(function (f) {
         var v = f.value(e);
         return '<div' + (f.wide ? ' class="is-wide"' : '') + '><dt>' + esc(f.label) + '</dt><dd>' +
           (v === '' || v == null ? '<span class="otc-deal-card__none">—</span>' : esc(v)) + '</dd></div>';

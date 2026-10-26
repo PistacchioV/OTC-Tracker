@@ -185,6 +185,20 @@ OPS = {
         {'product': 'SWAP', 'lob': 'CEM', 'settle_type': 'CASHFLOW', 'internal_id': '270RI70427368',
          'id_b3': '22J00000001', 'counterparty': 'CLIENTE D LTDA', '_settle_n': -8816844.15,
          '_tax_n': 1322526.62, '_legal': 'BANCO J.P. MORGAN S.A.'},
+        # Prêmio de opção: a mesma contraparte paga 1.000 e recebe 300 → UMA linha
+        # de 700; a outra só recebe → nada; o exercício pago entra (isento).
+        {'product': 'OPTION', 'lob': 'COMMODITIES', 'settle_type': 'PREMIUM', 'internal_id': 'OPT-P-1',
+         'id_b3': '26OP0000001', 'counterparty': 'CLIENTE F SA', '_settle_n': -1000.0, '_tax_n': 0.05,
+         '_legal': 'BANCO J.P. MORGAN S.A.'},
+        {'product': 'OPTION', 'lob': 'COMMODITIES', 'settle_type': 'PREMIUM', 'internal_id': 'OPT-P-2',
+         'id_b3': '26OP0000002', 'counterparty': 'CLIENTE F SA', '_settle_n': 300.0, '_tax_n': 0.0,
+         '_legal': 'BANCO J.P. MORGAN S.A.'},
+        {'product': 'OPTION', 'lob': 'COMMODITIES', 'settle_type': 'PREMIUM', 'internal_id': 'OPT-P-3',
+         'id_b3': '26OP0000003', 'counterparty': 'CLIENTE G SA', '_settle_n': 500.0, '_tax_n': 0.0,
+         '_legal': 'BANCO J.P. MORGAN S.A.'},
+        {'product': 'OPTION', 'lob': 'COMMODITIES', 'settle_type': 'EXERCISE', 'internal_id': 'OPT-E-1',
+         'id_b3': '26OP0000004', 'counterparty': 'CLIENTE G SA', '_settle_n': -2000.0, '_tax_n': 0.0,
+         '_legal': 'BANCO J.P. MORGAN S.A.'},
         {'product': 'TERMO', 'lob': 'COMMODITIES', 'settle_type': 'MATURITY', 'internal_id': '85101H-1OKXWV',
          'id_b3': '26J00000777', 'counterparty': 'LAWTONMULTIME', '_settle_n': -112610.32,
          '_tax_n': 0.0, '_legal': 'BANCO J.P. MORGAN S.A.'},
@@ -251,19 +265,37 @@ def secao_api():
     check('página 200 em /regulatory/wht', pg.status_code == 200, pg.status_code)
     html = pg.data.decode('utf-8')
     check('a tabela nomeia o export', 'data-export-name="WHT"' in html)
+    check('a Reference date nasce no D-1', 'autocomplete="off" value="2026-10-21"' in html)
 
     d0 = cl.get('/api/wht/data?date=2026-10-20').get_json()
     check('decêndio vazio responde', d0['success'] and d0['rows'] == [] and d0['decendio']['n'] == 2, d0.get('error'))
     check('...e avisa os dias sem liquidação', any(w['code'] == 'missing_days' for w in d0['warnings']))
     check('recolhimento do 2º decêndio = 21/10', d0['decendio']['payment'] == '21/10/2026')
 
-    r = cl.post('/api/wht/import-settlements', json={'date': '2026-10-20'}).get_json()
-    check('Import Settlements', r['success'], r.get('error'))
-    im = r['imported']
+    import time as _t
+    j = cl.post('/api/wht/import-settlements', json={'date': '2026-10-20'}).get_json()
+    check('Import Settlements dispara o trabalho em segundo plano',
+          j['success'] and j['job']['state'] == 'running' and j['job']['total'] == 14, j)
+    j2 = cl.post('/api/wht/import-settlements', json={'date': '2026-10-15'}).get_json()
+    check('...e o segundo clique no mesmo decêndio devolve o MESMO trabalho',
+          j2['job']['started'] == j['job']['started'] and j2['job']['key'] == '2026-10-D2', j2)
+    limite = _t.time() + 60
+    while _t.time() < limite:
+        job = cl.get('/api/wht/import-status?date=2026-10-20').get_json()['job']
+        if job['state'] == 'done':
+            break
+        _t.sleep(0.1)
+    check('o trabalho termina com os 14 dias e sem falha',
+          job['state'] == 'done' and job['done'] == 14 and not job['failed'] and not job['error'], job)
+    check('os dias foram coletados em PARALELO (cada um no seu request-context)',
+          sorted(set(d for _s, d in chamadas)) == sorted(set(date.fromisoformat(x) for x in job['days'])))
+    r = cl.get('/api/wht/data?date=2026-10-20').get_json()
+    check('a tela recebe o trabalho terminado', r['import_job']['state'] == 'done')
+    im = dict(job, days=job['days'])
     check('recoleta os dias do decêndio e os dias do 1º que faltam',
           '2026-10-12' in im['days'] and '2026-10-20' in im['days'] and '2026-10-02' in im['days']
           and '2026-10-21' not in im['days'], im['days'])
-    check('só as liquidações em que o banco PAGA (a positiva ficou de fora)', im['rows'] == 7, im)
+    check('só as liquidações em que o banco PAGA (a positiva ficou de fora)', im['rows'] == 9, im)
     check('sem aviso de dia faltando depois do import', not any(w['code'] in ('missing_days', 'missing_prev')
                                                                for w in r['warnings']), r['warnings'])
     por_id = {x['Internal ID']: x for x in r['rows']}
@@ -278,6 +310,14 @@ def secao_api():
     check('termo de mercadoria do Lawton: isento, código PE',
           por_id['85101H-1OKXWV']['OTC_id'] == '5557PE12050' and por_id['85101H-1OKXWV']['OTC_IR'] == 0.0)
     check('tudo Unmatched OTC antes do HUB', {x['status'] for x in r['rows']} == {'Unmatched OTC'})
+    pr = por_id.get('OPT-P-1') or {}
+    check('prêmio: UMA linha com o net (1.000 pago − 300 recebido) e o imposto sobre ele',
+          pr.get('OTC_GV') == 700.0 and pr.get('Devido') == 0.04 and pr.get('Event') == 'PREMIUM'
+          and pr.get('OTC_net_of') == 'OPT-P-1, OPT-P-2' and 'OPT-P-2' not in por_id, pr)
+    check('prêmio em que o banco só RECEBE não entra', 'OPT-P-3' not in por_id)
+    ex = por_id.get('OPT-E-1') or {}
+    check('exercício pago pelo banco entra, isento (código RE)', ex.get('OTC_id') == '5557RE12050'
+          and ex.get('OTC_IR') == 0.0, ex)
 
     f5557 = _xlsx([('00001 - Banco J.P. Morgan S.A.', [
         _hub('11111111000111', 'CLIENTE A SA', '5557MT12050', 'STP-AAA-0000002-0-', 7000.0, '55571', '13/10/2026', 0.0),
@@ -305,14 +345,14 @@ def secao_api():
     check('Partial do Lawton: contraparte (acrônimo × nome) e entidade (JPM × 00017)',
           lw['Status'] == 'Partial - Counterparty, Legal Entity' and lw['Check_IR'] is True
           and lw['Check_LE'] is False and lw['HUB_LE'] == 'MGT', lw['Status'])
-    check('Unmatched OTC: o isento e o swap', st['STP-BBB-0000004-0-0']['status'] == 'Unmatched OTC'
+    check('Unmatched OTC: o isento, o swap e as duas opções', st['STP-BBB-0000004-0-0']['status'] == 'Unmatched OTC'
           and st['270RI70427368']['status'] == 'Unmatched OTC')
     check('Unmatched HUB: as duas que o OTC não tem',
           sum(1 for x in r['rows'] if x['status'] == 'Unmatched HUB') == 2)
     check('o que pede ação vem primeiro', r['rows'][0]['status'] == 'Unmatched HUB')
     c = r['counts']
     check('contagem dos cards', (c['Unmatched HUB'], c['Unmatched OTC'], c['Partial'], c['Matched'], c['total'])
-          == (2, 2, 3, 1, 8), c)
+          == (2, 4, 3, 1, 10), c)
     sm = {s['code']: s for s in r['summary']}
     check('resumo por código: 5557MT dos dois lados',
           sm['5557MT12050']['otc_n'] == 3 and sm['5557MT12050']['hub_n'] == 4
@@ -338,8 +378,8 @@ def secao_api():
 
     hf = cl.post('/api/wht/hub-file', json={'date': '2026-10-20'})
     corpo = hf.data.decode('cp1252')
-    check('arquivo do HUB: só as Unmatched OTC (o isento e o swap)', hf.status_code == 200
-          and hf.headers.get('X-WHT-Count') == '2' and corpo.count('\r\n') == 8, (hf.status_code, corpo[:300]))
+    check('arquivo do HUB: só as Unmatched OTC (o isento, o swap e as duas opções)', hf.status_code == 200
+          and hf.headers.get('X-WHT-Count') == '4' and corpo.count('\r\n') == 16, (hf.status_code, corpo[:300]))
     check('nome pelo decêndio', hf.headers.get('X-WHT-Name') == 'WHT_HUB_20261011_20261020.txt')
     check('a linha do swap com o CNPJ do Reference Data, o prefixo e a data de liquidação',
           '00001000104885503000142SWP-270RI70427368 161020265273OT12046\r\n' in corpo, corpo[:200])

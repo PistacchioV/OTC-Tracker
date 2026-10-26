@@ -744,7 +744,7 @@ Duas coisas para saber desde já:
 
 A tela de **Swap Bullet** e a de **Swap Cashflow** ganharam as informações que o *Deal Ticket* da CEM traz e o da EDG não trazia: **FX Início**, **Valor Base em moeda estrangeira**, **Cotação**, **DCC** e **Cupom Limpo** de cada curva, o bloco de **Atualização de Notional** e as **Observações**. No deal da EDG esses campos ficam em branco. No *Cashflow*, o **cronograma de fluxos** (data inicial, data de pagamento, amortização, dias úteis e corridos, data do fixing) é editado dentro do modal da operação; na grade aparece só a quantidade de fluxos.
 
-> **As telas de Swap mostram uma operação por card** (Bullet, Cashflow e Cetes), no lugar da tabela de dezenas de colunas. Cada card traz o status, a **LOB** (CEM/EDG), o **Deal** e o **B3 ID** (com "—" enquanto estão em branco), as datas, os valores e as curvas, e os botões de sempre — **Confirm**, **Edit**, **Delete** e **Send**. No **Edit**, o **Trade Date** também se altera — a operação passa para o dia novo. A caixa no canto do card seleciona; **Select all** seleciona todos, e os botões **Send** e **Delete** da barra agem sobre os selecionados. O **duplo clique** no card abre o preview dos arquivos da B3. O **Export** continua o mesmo, com todas as colunas.
+> **As telas de Swap mostram uma operação por card** (Bullet, Cashflow e Cetes), no lugar da tabela de dezenas de colunas. Cada card traz o status, a **LOB** (CEM/EDG), o **Deal** e o **B3 ID** (com "—" enquanto estão em branco), as datas, os valores e as curvas (no **Bullet**, quando há prêmio, o valor e a **data de pagamento do prêmio**), e os botões de sempre — **Confirm**, **Edit**, **Delete** e **Send**. No **Edit**, o **Trade Date** também se altera — a operação passa para o dia novo. A caixa no canto do card seleciona; **Select all** seleciona todos, e os botões **Send** e **Delete** da barra agem sobre os selecionados. O **duplo clique** no card abre o preview dos arquivos da B3. O **Export** continua o mesmo, com todas as colunas.
 
 ### 5.12. Swap Cetes — o "cetip usd irs" das Cetes
 
@@ -1668,13 +1668,13 @@ No **MtM** há ainda o botão **New Mapping**, para cadastrar um de-para novo se
 
 **De onde vêm os dois lados:**
 
-- **OTC** — as liquidações em que o **banco paga** (a contraparte recebe e o imposto incide), do **NDF Summary** (termo de moeda e as recompras) e do **Other Products** (swap, termo de mercadoria e opção). Elas chegam sozinhas quando alguém abre essas telas, importa o Cockpit ou salva o *Daily Settlement Files*; o botão **Import Settlements** busca de uma vez todos os dias úteis do decêndio (e os dias do mês que ainda faltam).
+- **OTC** — só as liquidações que o **banco ou a MGT pagaram**, com ou sem imposto (as isentas também). O **prêmio de opção** vem em **uma linha só, com o net** da contraparte no dia (o selo *net ×n* diz quantas operações entraram). As fontes são o **NDF Summary** (termo de moeda e as recompras) e o **Other Products** (swap, termo de mercadoria e opção). Elas chegam sozinhas quando alguém abre essas telas, importa o Cockpit ou salva o *Daily Settlement Files*; o botão **Import Settlements** busca de uma vez todos os dias úteis do decêndio (e os dias do mês que ainda faltam).
 - **HUB** — o relatório que o HUB manda, solto no **dropzone**. Pode ser **um arquivo ou vários** (o 5557 num e o 5273 noutro, ou tudo junto). Reenviar um relatório corrigido **substitui** as linhas daquela empresa e daquele DARF no decêndio — não duplica.
 
 **Passo a passo:**
 
-1. Escolha a **Reference date** (o decêndio dela abre; sem data, abre o decêndio do dia útil anterior).
-2. Clique em **Import Settlements** — o aviso amarelo lista os dias do decêndio que ainda não foram importados.
+1. A **Reference date** abre no dia útil anterior (D-1); troque-a para ver outro decêndio.
+2. Clique em **Import Settlements**. Ele roda em segundo plano e mostra quantos dias já leu: pode fechar a janela, a faixa acima da tabela acompanha e a tela se atualiza sozinha no fim. O aviso amarelo lista os dias do decêndio que ainda não foram importados.
 3. Solte o(s) relatório(s) do HUB no dropzone e clique em **Import HUB**.
 4. Confira os cartões e a tabela. Clicar num cartão filtra a tabela por aquele status.
 5. Para as operações que o HUB **não tem**, clique em **HUB File**: sai o arquivo que a equipe do HUB insere à mão. Com linhas marcadas na tabela, o arquivo leva só as marcadas.
