@@ -489,7 +489,7 @@ Os módulos abaixo estão previstos no menu lateral mas **ainda não foram desen
 - [ ] **ATHENA-NDF** — `/regulatory/e-financeira/athena-ndf`
 - [ ] **ATHENA-FXO** — `/regulatory/e-financeira/athena-fxo`
 - [ ] **PYRAMID** — `/regulatory/e-financeira/pyramid`
-- [ ] **WHT** — `/regulatory/wht`
+- [x] **WHT** — `/regulatory/wht` — *implementado* (o IR das liquidações por decêndio — NDF Summary + Other Products — batido com o relatório "Posição de Tributos" do HUB; o arquivo para o HUB inserir o que falta; HANDOFF §692)
 
 **Produtos — New Deals (Products)**
 

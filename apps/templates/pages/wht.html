@@ -1,0 +1,704 @@
+{% extends "layouts/vertical.html" %}
+
+{# WHT — Withholding Tax / Imposto. O IR das liquidações do decêndio (o lado
+   OTC: o que o NDF Summary e o Other Products liquidaram) batido com o
+   relatório "Posição de Tributos" do HUB, que entra pelo dropzone. As colunas
+   de DADO, na ordem da tela, UMA vez: o <thead> (estático, para o
+   I18nManager traduzir no load) e o JS saem desta lista. `name` é a chave da
+   linha que o servidor devolve; `kind` diz como a célula se desenha. #}
+{% set WHT_COLS = [
+    {'name': 'Status', 'kind': 'status'},
+    {'name': 'Internal ID', 'kind': 'text'},
+    {'name': 'B3 Id', 'kind': 'text'},
+    {'name': 'Product', 'kind': 'text'},
+    {'name': 'LOB', 'kind': 'text'},
+    {'name': 'Event', 'kind': 'text'},
+    {'name': 'OTC_TD', 'kind': 'text'},
+    {'name': 'HUB_TD', 'kind': 'text'},
+    {'name': 'Check_TD', 'kind': 'check'},
+    {'name': 'OTC_GV', 'kind': 'num'},
+    {'name': 'HUB_GV', 'kind': 'num'},
+    {'name': 'Check_GV', 'kind': 'check'},
+    {'name': 'OTC_IR', 'kind': 'num'},
+    {'name': 'HUB_IR', 'kind': 'num'},
+    {'name': 'Devido', 'kind': 'num'},
+    {'name': 'Check_IR', 'kind': 'check'},
+    {'name': 'OTC_cntpy', 'kind': 'ell'},
+    {'name': 'HUB_cntpy', 'kind': 'ell'},
+    {'name': 'Check_cntpy', 'kind': 'check'},
+    {'name': 'OTC_id', 'kind': 'text'},
+    {'name': 'HUB_id', 'kind': 'text'},
+    {'name': 'Check_id', 'kind': 'check'},
+    {'name': 'OTC_tributo', 'kind': 'text'},
+    {'name': 'HUB_tributo', 'kind': 'text'},
+    {'name': 'Check_tributo', 'kind': 'check'},
+    {'name': 'OTC_LE', 'kind': 'text'},
+    {'name': 'HUB_LE', 'kind': 'text'},
+    {'name': 'Check_LE', 'kind': 'check'}
+] %}
+
+{% block title %}WHT{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/dropzone/dropzone.css" rel="stylesheet" type="text/css"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<style>
+{# Só o que é DESTA tela: os cards de contagem que FILTRAM a tabela pelo status,
+   o chip do decêndio, o resumo por código (tabela solta, fora do DataTables) e
+   a largura das colunas. Painel, tabela, botões, dropzone e funil vêm do tema. #}
+#wht-page .wht-panel { padding: 1rem 1.1rem 1.15rem; }
+#wht-page .date-wrap { width: 132px; }
+#wht-page .wht-dec { font-size: .74rem; color: var(--otc-text-2); }
+#wht-page .wht-dec b { color: var(--otc-text); font-variant-numeric: tabular-nums; }
+
+/* ── Cards de contagem (montados pelo JS; clicar filtra pelo status) ── */
+#wht-page .wht-kpi {
+    padding: .9rem 1rem; height: 100%; cursor: pointer;
+    display: flex; align-items: center; gap: .75rem;
+    transition: box-shadow var(--otc-dur-base) var(--otc-ease-out);
+}
+/* O chip do ícone é o `otc-icon-tile` do tema (gradiente na cor do `--hue`); o tamanho é da página. */
+#wht-page .wht-kpi__ico { width: 38px; height: 38px; font-size: 1.15rem; border-radius: var(--otc-r-sm); }
+#wht-page .wht-kpi.wht-on { box-shadow: 0 0 0 2px var(--otc-accent-ink), var(--otc-depth); }
+#wht-page .wht-k-hub .wht-kpi__ico { --hue: var(--otc-purple); }
+#wht-page .wht-k-otc .wht-kpi__ico { --hue: var(--otc-danger); }
+#wht-page .wht-k-partial .wht-kpi__ico { --hue: var(--otc-orange); }
+#wht-page .wht-k-ok .wht-kpi__ico { --hue: var(--otc-green); }
+#wht-page .wht-k-total .wht-kpi__ico { background: linear-gradient(100deg, var(--otc-accent), color-mix(in srgb, var(--otc-accent) 60%, var(--otc-teal))); }
+#wht-page .wht-kpi__n { font-size: 1.4rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: var(--otc-text); }
+#wht-page .wht-kpi__l { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--otc-text-2); }
+
+/* ── Resumo por código: tabela solta (o tema centraliza só as DataTables) ── */
+#wht-summary th { text-align: center; vertical-align: middle; font-size: .7rem; white-space: normal; }
+#wht-summary td { text-align: center; vertical-align: middle; font-size: .8rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#wht-summary tfoot td { font-weight: 700; }
+#wht-summary td.wht-diff { color: var(--otc-danger); font-weight: 700; }
+
+/* ── Tabela ─────────────────────────────────────────────────────── */
+#wht-table td.wht-num { font-variant-numeric: tabular-nums; }
+#wht-table td.wht-ell { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+#wht-page .wht-cols-menu { max-height: 320px; overflow-y: auto; min-width: 14rem; font-size: .78rem; }
+#wht-page .wht-src { font-size: .7rem; color: var(--otc-text-2); }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" id="wht-page">
+
+    <div class="page-title-head d-flex align-items-center mb-3">
+        <div class="flex-grow-1">
+            <h4 class="fs-xl fw-bold m-0" data-lang="wht-title">WHT</h4>
+            <div class="otc-page-sub" data-lang="wht-subtitle">Withholding Tax / Imposto — OTC × HUB, by decendio</div>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="javascript: void(0);" data-lang="regulatory-title">Regulatory</a></li>
+                <li class="breadcrumb-item active" data-lang="nav-wht">WHT</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="wht-panel mb-3">
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="wht-lbl-date">Reference date:</label>
+                <div class="date-wrap">
+                    <input type="text" id="wht-date" class="form-control form-control-sm otc-datefield" placeholder="dd/mm/aaaa" autocomplete="off">
+                </div>
+            </div>
+            <span class="wht-dec" id="wht-dec"></span>
+
+            <button class="btn btn-sm btn-success bg-gradient btn-toolbar-all" id="wht-import-st">
+                <i class="ti ti-refresh me-1"></i><span data-lang="wht-btn-import-st">Import Settlements</span>
+            </button>
+            <button class="btn btn-sm btn-toolbar-import bg-gradient btn-toolbar-all" id="wht-import-hub">
+                <i class="ti ti-upload me-1"></i><span data-lang="wht-btn-import-hub">Import HUB</span>
+            </button>
+            <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="wht-hub-file">
+                <i class="ti ti-file-export me-1"></i><span data-lang="wht-btn-hub-file">HUB File</span>
+            </button>
+
+            <div class="dropdown">
+                <button class="btn btn-sm btn-soft-primary btn-toolbar-all dropdown-toggle" type="button"
+                        data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                    <i class="ti ti-columns me-1"></i><span data-lang="wht-btn-columns">Columns</span>
+                </button>
+                <div class="dropdown-menu p-2 wht-cols-menu" id="wht-cols-menu"></div>
+            </div>
+
+            <div class="dropdown">
+                <button class="btn btn-sm btn-info bg-gradient btn-toolbar-all dropdown-toggle"
+                        type="button" data-bs-toggle="dropdown">
+                    <i class="ti ti-download me-1"></i><span data-lang="wht-btn-export">Export</span>
+                </button>
+                <ul class="dropdown-menu" id="wht-export-menu">
+                    <li><a class="dropdown-item" href="#" data-exp="copy">Copy</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="csv">CSV</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="excel">Excel</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="print">Print</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="pdf">PDF</a></li>
+                </ul>
+            </div>
+
+            <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="wht-clear">
+                <i class="ti ti-filter-off me-1"></i><span data-lang="wht-btn-clear">Clear Filters</span>
+            </button>
+
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <span style="font-size:.72rem;" data-lang="wht-show">Show</span>
+                <select id="wht-len" class="form-select form-select-sm"
+                        style="width:auto;font-size:.75rem;height:31px;">
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                    <option value="-1">All</option>
+                </select>
+                <span style="font-size:.72rem;" data-lang="wht-entries">entries</span>
+            </div>
+        </div>
+
+        {# O relatório do HUB: um ou mais arquivos (o 5557 num, o 5273 noutro, ou
+           tudo junto) — o servidor lê pelo conteúdo. #}
+        <div class="mt-3">
+            <form action="/" class="dropzone" id="wht-dropzone">
+                <div class="fallback"><input name="file" type="file" multiple/></div>
+                <div class="dz-message needsclick">
+                    <div class="avatar-lg mx-auto mb-3">
+                        <span class="avatar-title nd-upload-icon rounded-circle">
+                            <i class="fs-24 ti ti-cloud-upload"></i>
+                        </span>
+                    </div>
+                    <h4 class="mb-2" data-lang="wht-dropzone-title">Drop the HUB tax report(s) here, or click to upload.</h4>
+                    <p class="text-muted fst-italic mb-3" data-lang="wht-dropzone-hint">EasyTributos "Posição de Tributos" (xls, xlsx) — one file or several, then click Import HUB.</p>
+                    <button class="btn btn-sm shadow btn-default" type="button" data-lang="nd-browse">Browse</button>
+                </div>
+            </form>
+            <div class="dropzone-previews mt-2" id="wht-previews"></div>
+            <div class="d-none" id="wht-preview-tpl">
+                <div class="card mt-1 mb-0 border-dashed border">
+                    <div class="p-2">
+                        <div class="row align-items-center">
+                            <div class="col-auto">
+                                <div class="avatar-sm rounded bg-light d-flex align-items-center justify-content-center">
+                                    <i class="file-icon fs-24 text-success ti ti-file-spreadsheet"></i>
+                                </div>
+                            </div>
+                            <div class="col ps-0">
+                                <a class="fw-semibold" data-dz-name="" href="javascript:void(0);"></a>
+                                <p class="mb-0 text-muted" data-dz-size=""></p>
+                            </div>
+                            <div class="col-auto">
+                                <a class="btn btn-link btn-lg text-danger" data-dz-remove="" href="">
+                                    <i class="ti ti-x"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3" id="wht-kpis"></div>
+
+    <div class="wht-panel mb-3">
+        <div class="d-flex align-items-center mb-2">
+            <h6 class="mb-0 fw-semibold" data-lang="wht-summary-title">Summary by tax code</h6>
+            <div class="ms-auto wht-src" id="wht-src"></div>
+        </div>
+        <div class="otc-mini-table-wrap">
+            <table class="table table-sm otc-mini-table mb-0" id="wht-summary">
+                <thead>
+                    <tr>
+                        <th data-lang="wht-s-code">Tax Code</th>
+                        <th data-lang="wht-s-tributo">Tributo</th>
+                        <th data-lang="wht-s-otc-n">OTC Ops</th>
+                        <th data-lang="wht-s-otc-gross">OTC Gross</th>
+                        <th data-lang="wht-s-otc-ir">OTC Tax</th>
+                        <th data-lang="wht-s-hub-n">HUB Ops</th>
+                        <th data-lang="wht-s-hub-gross">HUB Gross</th>
+                        <th data-lang="wht-s-hub-ir">HUB Tax</th>
+                        <th data-lang="wht-s-diff-gross">Gross Diff.</th>
+                        <th data-lang="wht-s-diff-ir">Tax Diff.</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+                <tfoot></tfoot>
+            </table>
+        </div>
+    </div>
+
+    <div class="wht-panel">
+        <div id="wht-warnings"></div>
+        <div class="table-responsive">
+            <table id="wht-table" class="table table-hover table-sm w-100 mb-0" data-export-name="WHT">
+                <thead>
+                    <tr>
+                        <th class="wht-noexp"><input type="checkbox" id="whtAll" class="form-check-input"></th>
+                        {% for c in WHT_COLS %}
+                        <th>{{ c.name }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+{# jQuery ANTES do DataTables: o `vendors.min.js` do tema não o expõe. #}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script>
+(function () {   // registro síncrono do JSZip — sem ele o Excel não faz nada
+    var jz = window.JSZip || window.jszip;
+    if (jz && window.jQuery && jQuery.fn.dataTable && jQuery.fn.dataTable.Buttons &&
+        typeof jQuery.fn.dataTable.Buttons.jszip === 'function') {
+        jQuery.fn.dataTable.Buttons.jszip(jz);
+    }
+})();
+</script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/dropzone/dropzone-min.js"></script>
+{# SweetAlert2 LOCAL: a instância do JPM roda sem internet. #}
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+{# DEPOIS do buttons.html5 e com asset_v: o patch do Excel (§477) e o nome do arquivo. #}
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
+<script>
+(function ($) {
+    'use strict';
+
+    var _TRANS = {
+        en: { total: 'Total', only_hub: 'Unmatched HUB', only_otc: 'Unmatched OTC', partial: 'Partial', matched: 'Matched',
+              decendio: 'decendio', d1: '1st', d2: '2nd', d3: '3rd', payment: 'payment',
+              empty: 'Nothing for this decendio yet — click Import Settlements and drop the HUB report.',
+              importing: 'Importing the settlements…',
+              importingTxt: 'Reading what the NDF Summary and Other Products settled on each business day of the decendio.',
+              imported: 'Settlements imported', importFail: 'Import failed',
+              importSummary: '{days} day(s), {rows} operation(s) paid by the bank.',
+              failedDays: 'Not imported:',
+              hubImporting: 'Reading the HUB report(s)…', hubImported: 'HUB report imported',
+              hubSummary: '{file}: {rows} row(s)', hubFail: 'HUB import failed',
+              nothingToImport: 'Nothing to import', dropFirst: 'Drop the HUB report(s) in the box above first.',
+              fileFail: 'HUB file not generated', fileDone: 'HUB file generated',
+              fileSummary: '{n} operation(s) in {name}.',
+              hubFiles: 'HUB report(s):', days: 'Days imported:', rowsWord: 'row(s)',
+              w_missing_days: 'Business days of this decendio without imported settlements: {days} — click Import Settlements.',
+              w_missing_prev: 'The R$ 1.00 floor is MONTHLY: days {days} of the previous decendio(s) were not imported, so the carried tax may be incomplete.',
+              w_no_code: '{n} operation(s) without a row in the WHT — Tax Codes mapping: {sample}.',
+              w_ir_unknown: '{n} swap(s) without an IR rate in the Trade Level (term or direction missing): {sample}.',
+              w_no_company: 'Legal entity without a company in the WHT — Company mapping: {les}.',
+              e_hub_empty: 'No operation row found in the HUB file(s): {files}.',
+              e_hub_file_empty: 'No operation for the HUB file in this decendio (only Unmatched OTC rows, or the rows you select, go into it).',
+              e_no_company: 'Legal entity without a company in the WHT — Company mapping: {les}.',
+              e_no_file: 'No file was sent.' },
+        br: { total: 'Total', only_hub: 'Só no HUB', only_otc: 'Só no OTC', partial: 'Parcial', matched: 'Batido',
+              decendio: 'decêndio', d1: '1º', d2: '2º', d3: '3º', payment: 'recolhimento',
+              empty: 'Nada neste decêndio ainda — clique em Import Settlements e solte o relatório do HUB.',
+              importing: 'Importando as liquidações…',
+              importingTxt: 'Lendo o que o NDF Summary e o Other Products liquidaram em cada dia útil do decêndio.',
+              imported: 'Liquidações importadas', importFail: 'A importação falhou',
+              importSummary: '{days} dia(s), {rows} operação(ões) pagas pelo banco.',
+              failedDays: 'Não importado:',
+              hubImporting: 'Lendo o(s) relatório(s) do HUB…', hubImported: 'Relatório do HUB importado',
+              hubSummary: '{file}: {rows} linha(s)', hubFail: 'A importação do HUB falhou',
+              nothingToImport: 'Nada para importar', dropFirst: 'Solte primeiro o(s) relatório(s) do HUB na caixa acima.',
+              fileFail: 'Arquivo do HUB não gerado', fileDone: 'Arquivo do HUB gerado',
+              fileSummary: '{n} operação(ões) em {name}.',
+              hubFiles: 'Relatório(s) do HUB:', days: 'Dias importados:', rowsWord: 'linha(s)',
+              w_missing_days: 'Dias úteis deste decêndio sem liquidação importada: {days} — clique em Import Settlements.',
+              w_missing_prev: 'O piso de R$ 1,00 é MENSAL: os dias {days} do(s) decêndio(s) anterior(es) não foram importados, e o imposto acumulado pode estar incompleto.',
+              w_no_code: '{n} operação(ões) sem linha no cadastro WHT — Tax Codes: {sample}.',
+              w_ir_unknown: '{n} swap(s) sem alíquota de IR no Trade Level (prazo ou direção ausente): {sample}.',
+              w_no_company: 'Entidade sem empresa no cadastro WHT — Company: {les}.',
+              e_hub_empty: 'Nenhuma linha de operação no(s) arquivo(s) do HUB: {files}.',
+              e_hub_file_empty: 'Nenhuma operação para o arquivo do HUB neste decêndio (entram só as linhas Só no OTC, ou as que você marcar).',
+              e_no_company: 'Entidade sem empresa no cadastro WHT — Company: {les}.',
+              e_no_file: 'Nenhum arquivo foi enviado.' },
+        es: { total: 'Total', only_hub: 'Solo en HUB', only_otc: 'Solo en OTC', partial: 'Parcial', matched: 'Conciliado',
+              decendio: 'decenio', d1: '1º', d2: '2º', d3: '3º', payment: 'pago',
+              empty: 'Nada en este decenio todavía — haga clic en Import Settlements y suelte el informe del HUB.',
+              importing: 'Importando las liquidaciones…',
+              importingTxt: 'Leyendo lo que el NDF Summary y el Other Products liquidaron en cada día hábil del decenio.',
+              imported: 'Liquidaciones importadas', importFail: 'La importación falló',
+              importSummary: '{days} día(s), {rows} operación(es) pagadas por el banco.',
+              failedDays: 'No importado:',
+              hubImporting: 'Leyendo el/los informe(s) del HUB…', hubImported: 'Informe del HUB importado',
+              hubSummary: '{file}: {rows} línea(s)', hubFail: 'La importación del HUB falló',
+              nothingToImport: 'Nada para importar', dropFirst: 'Suelte primero el/los informe(s) del HUB en el cuadro de arriba.',
+              fileFail: 'Archivo del HUB no generado', fileDone: 'Archivo del HUB generado',
+              fileSummary: '{n} operación(es) en {name}.',
+              hubFiles: 'Informe(s) del HUB:', days: 'Días importados:', rowsWord: 'línea(s)',
+              w_missing_days: 'Días hábiles de este decenio sin liquidación importada: {days} — haga clic en Import Settlements.',
+              w_missing_prev: 'El piso de R$ 1,00 es MENSUAL: los días {days} del/los decenio(s) anterior(es) no se importaron, y el impuesto acumulado puede estar incompleto.',
+              w_no_code: '{n} operación(es) sin línea en el registro WHT — Tax Codes: {sample}.',
+              w_ir_unknown: '{n} swap(s) sin alícuota de IR en el Trade Level (plazo o dirección ausente): {sample}.',
+              w_no_company: 'Entidad sin empresa en el registro WHT — Company: {les}.',
+              e_hub_empty: 'Ninguna línea de operación en el/los archivo(s) del HUB: {files}.',
+              e_hub_file_empty: 'Ninguna operación para el archivo del HUB en este decenio (entran solo las líneas Solo en OTC, o las que usted marque).',
+              e_no_company: 'Entidad sin empresa en el registro WHT — Company: {les}.',
+              e_no_file: 'No se envió ningún archivo.' }
+    };
+    function lang() {
+        try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) { return 'en'; }
+    }
+    function t(k) { return (_TRANS[lang()] || _TRANS.en)[k] || (_TRANS.en[k] || k); }
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+    function fill(tpl, params) {
+        return String(tpl).replace(/\{(\w+)\}/g, function (m, k) {
+            return (params && params[k] != null) ? String(params[k]) : '';
+        });
+    }
+    // Texto de servidor chega ESTRUTURADO — {code, params, text} — e é dito aqui,
+    // no idioma de quem usa; o `text` é só o fallback (§486).
+    function msgText(w, prefix) {
+        if (w == null) { return ''; }
+        if (typeof w === 'string') { return w; }
+        var tpl = w.code ? ((_TRANS[lang()] || {})[prefix + w.code] || _TRANS.en[prefix + w.code]) : '';
+        return tpl ? fill(tpl, w.params) : String(w.text || '');
+    }
+    function errText(j) {
+        if (j && j.error_code) { return msgText({ code: j.error_code, params: j.error_params, text: j.error }, 'e_'); }
+        return String((j && j.error) || 'error');
+    }
+
+    var COLS = {{ WHT_COLS | tojson }};
+    var STATUS = {
+        'Unmatched HUB': { key: 'only_hub', badge: 'text-bg-primary' },
+        'Unmatched OTC': { key: 'only_otc', badge: 'text-bg-danger' },
+        'Partial':       { key: 'partial',  badge: 'text-bg-warning' },
+        'Matched':       { key: 'matched',  badge: 'text-bg-success' }
+    };
+    var KPIS = [
+        { st: 'Unmatched HUB', key: 'only_hub', cls: 'wht-k-hub', icon: 'ti-building-bank' },
+        { st: 'Unmatched OTC', key: 'only_otc', cls: 'wht-k-otc', icon: 'ti-file-alert' },
+        { st: 'Partial',       key: 'partial',  cls: 'wht-k-partial', icon: 'ti-adjustments-alt' },
+        { st: 'Matched',       key: 'matched',  cls: 'wht-k-ok', icon: 'ti-circle-check' },
+        // O Total vem por último, com a cor da marca: é a soma dos cards acima.
+        { st: '', key: 'total', cls: 'wht-k-total', icon: 'ti-sum', soma: true }
+    ];
+
+    var table = null, dados = [], bucket = '', hidden = {}, picked = {}, refIso = '';
+
+    function fmt2(v) {
+        return (typeof v === 'number' && isFinite(v))
+            ? v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+    }
+    function badge(r) {
+        var m = STATUS[r.status] || {};
+        return '<span class="badge otc-status rounded-pill bg-gradient ' + (m.badge || 'text-bg-secondary') +
+               '">' + esc(r.Status) + '</span>';
+    }
+    // O check é a célula da planilha da equipe: TRUE/FALSE, verde/vermelho.
+    // Não é status (a pílula do Proper o leria "True"): badge suave, sem a marca.
+    function check(v) {
+        if (v === true) { return '<span class="badge badge-soft-success">TRUE</span>'; }
+        if (v === false) { return '<span class="badge badge-soft-danger">FALSE</span>'; }
+        return '';
+    }
+
+    function dataCol(c) {
+        return {
+            data: function (r) { var v = r[c.name]; return v == null ? '' : v; },
+            className: c.kind === 'num' ? 'wht-num' : (c.kind === 'ell' ? 'wht-ell' : ''),
+            visible: !hidden[c.name],
+            render: function (v, type, r) {
+                if (c.kind === 'num') { return type === 'display' || type === 'filter' ? fmt2(r[c.name]) : (r[c.name] == null ? '' : r[c.name]); }
+                if (c.kind === 'check') {
+                    var b = r[c.name];
+                    if (type === 'display') { return check(b); }
+                    return b === true ? 'TRUE' : (b === false ? 'FALSE' : '');
+                }
+                if (type !== 'display') { return v; }
+                if (c.kind === 'status') { return badge(r); }
+                if (c.kind === 'ell') { return '<span title="' + esc(v) + '">' + esc(v) + '</span>'; }
+                return esc(v);
+            }
+        };
+    }
+
+    function desenha() {
+        var rows = bucket ? dados.filter(function (r) { return r.status === bucket; }) : dados;
+        if (table) { table.destroy(); $('#wht-table tbody').empty(); }
+        var columns = [{
+            data: null, orderable: false, searchable: false, className: 'wht-noexp',
+            render: function (d, type, r) {
+                return type === 'display'
+                    ? '<input type="checkbox" class="form-check-input wht-pick" value="' + esc(r.key) + '"' +
+                      (picked[r.key] ? ' checked' : '') + '>' : '';
+            }
+        }].concat(COLS.map(dataCol));
+        table = $('#wht-table').DataTable({
+            data: rows, columns: columns,
+            paging: true, pageLength: parseInt($('#wht-len').val(), 10) || 50,
+            lengthChange: false, searching: true, info: true,
+            dom: "rt<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+            scrollX: true, autoWidth: true,
+            order: [],                       // a ordem do servidor: o que pede ação primeiro
+            language: { emptyTable: t('empty') }
+        });
+        table.on('draw.wht', function () { table.columns.adjust(); });
+        table.columns.adjust();
+        setTimeout(function () { table.columns.adjust().draw(false); }, 150);
+        $(window).off('resize.wht').on('resize.wht', function () { table.columns.adjust(); });
+        $(table.table().container()).off('click.wht').on('click.wht', '#whtAll', function () {
+            var on = this.checked;
+            table.rows({ search: 'applied' }).every(function () {
+                var k = this.data().key;
+                if (on) { picked[k] = true; } else { delete picked[k]; }
+            });
+            $('#wht-table .wht-pick').prop('checked', on);
+        });
+        botoes();
+        menuColunas();
+    }
+
+    function botoes() {
+        var comuns = {
+            exportOptions: {
+                columns: ':visible:not(.wht-noexp)',
+                // Com linhas marcadas, exporta SÓ as marcadas; sem nenhuma, tudo
+                // o que os filtros deixam passar.
+                rows: function (idx, data) { return !Object.keys(picked).length || !!picked[data.key]; },
+                modifier: { page: 'all', search: 'applied', order: 'applied' }
+            }
+        };
+        new $.fn.dataTable.Buttons(table, { buttons: [
+            $.extend({ extend: 'copyHtml5', name: 'copy' }, comuns),
+            $.extend({ extend: 'csvHtml5', name: 'csv', fieldSeparator: ';', bom: true }, comuns),
+            $.extend({ extend: 'excelHtml5', name: 'excel' }, comuns),
+            $.extend({ extend: 'print', name: 'print' }, comuns),
+            $.extend({ extend: 'pdfHtml5', name: 'pdf', orientation: 'landscape', pageSize: 'A3' }, comuns)
+        ] });
+        $('#wht-export-menu').off('click.wht').on('click.wht', 'a[data-exp]', function (e) {
+            e.preventDefault();
+            table.button($(this).data('exp') + ':name').trigger();
+        });
+    }
+
+    function menuColunas() {
+        $('#wht-cols-menu').html(COLS.map(function (c) {
+            return '<label class="dropdown-item d-flex align-items-center gap-2 mb-0">' +
+                '<input type="checkbox" class="form-check-input m-0" data-colname="' + esc(c.name) + '"' +
+                (hidden[c.name] ? '' : ' checked') + '> ' + esc(c.name) + '</label>';
+        }).join(''));
+    }
+    $(document).on('change', '#wht-cols-menu input[data-colname]', function () {
+        var n = $(this).data('colname');
+        if (this.checked) { delete hidden[n]; } else { hidden[n] = true; }
+        var i = -1;
+        COLS.forEach(function (c, k) { if (c.name === n) { i = k + 1; } });
+        if (table && i > 0) { table.column(i).visible(this.checked); table.columns.adjust(); }
+    });
+    $(document).on('change', '#wht-table .wht-pick', function () {
+        if (this.checked) { picked[this.value] = true; } else { delete picked[this.value]; }
+    });
+
+    function kpis(c) {
+        c = c || {};
+        $('#wht-kpis').html(KPIS.map(function (k) {
+            var n = k.soma ? (c.total || 0) : (c[k.st] || 0);
+            return '<div class="col-6 col-md-4 col-xl">' +
+                '<div class="wht-kpi ' + k.cls + (!k.soma && bucket === k.st ? ' wht-on' : '') +
+                  '" data-b="' + esc(k.st) + '">' +
+                  '<span class="wht-kpi__ico otc-icon-tile"><i class="ti ' + k.icon + '"></i></span>' +
+                  '<div><div class="wht-kpi__n">' + esc(n) + '</div>' +
+                       '<div class="wht-kpi__l">' + esc(t(k.key)) + '</div></div>' +
+                '</div></div>';
+        }).join(''));
+    }
+    $(document).on('click', '#wht-kpis .wht-kpi', function () {
+        var b = String($(this).data('b') || '');
+        bucket = (bucket === b) ? '' : b;
+        kpis(ultimo.counts);
+        desenha();
+    });
+
+    function resumo(linhas) {
+        var tot = { otc_n: 0, otc_gross: 0, otc_ir: 0, hub_n: 0, hub_gross: 0, hub_ir: 0, diff_gross: 0, diff_ir: 0 };
+        function celDiff(v) {
+            return '<td class="' + (Math.abs(v || 0) > 0.009 ? 'wht-diff' : '') + '">' + esc(fmt2(v || 0)) + '</td>';
+        }
+        $('#wht-summary tbody').html((linhas || []).map(function (s) {
+            Object.keys(tot).forEach(function (k) { tot[k] += s[k] || 0; });
+            return '<tr><td>' + esc(s.code) + '</td><td>' + esc(s.tributo) + '</td>' +
+                '<td>' + esc(s.otc_n) + '</td><td>' + esc(fmt2(s.otc_gross)) + '</td><td>' + esc(fmt2(s.otc_ir)) + '</td>' +
+                '<td>' + esc(s.hub_n) + '</td><td>' + esc(fmt2(s.hub_gross)) + '</td><td>' + esc(fmt2(s.hub_ir)) + '</td>' +
+                celDiff(s.diff_gross) + celDiff(s.diff_ir) + '</tr>';
+        }).join(''));
+        $('#wht-summary tfoot').html((linhas || []).length
+            ? '<tr><td>' + esc(t('total')) + '</td><td></td><td>' + esc(tot.otc_n) + '</td><td>' + esc(fmt2(tot.otc_gross)) +
+              '</td><td>' + esc(fmt2(tot.otc_ir)) + '</td><td>' + esc(tot.hub_n) + '</td><td>' + esc(fmt2(tot.hub_gross)) +
+              '</td><td>' + esc(fmt2(tot.hub_ir)) + '</td>' + celDiff(tot.diff_gross) + celDiff(tot.diff_ir) + '</tr>'
+            : '');
+    }
+
+    var ultimo = {};
+    function pinta(j) {
+        ultimo = j || {};
+        dados = j.rows || [];
+        picked = {};
+        var d = j.decendio || {};
+        $('#wht-dec').html(d.key
+            ? '<b>' + esc(t('d' + d.n)) + ' ' + esc(t('decendio')) + '</b> · ' + esc(d.start_fmt) + ' – ' +
+              esc(d.end_fmt) + ' · ' + esc(t('payment')) + ' <b>' + esc(d.payment) + '</b>'
+            : '');
+        var fontes = (j.hub_files || []).map(function (f) {
+            return '<code>' + esc(f.name) + '</code> (' + esc(f.rows) + ' ' + esc(t('rowsWord')) + ', ' + esc(f.at) + ')';
+        });
+        $('#wht-src').html((fontes.length ? '<div><i class="ti ti-building-bank"></i> ' + esc(t('hubFiles')) + ' ' + fontes.join(' · ') + '</div>' : '') +
+            '<div><i class="ti ti-calendar"></i> ' + esc(t('days')) + ' ' +
+            esc((j.imported_days || []).map(function (x) { return x.slice(8, 10) + '/' + x.slice(5, 7); }).join(', ') || '—') + '</div>');
+        $('#wht-warnings').html((j.warnings || []).length
+            ? '<div class="otc-banner mb-2">' + (j.warnings || []).map(function (w) {
+                  return '<div>• ' + esc(msgText(w, 'w_')) + '</div>'; }).join('') + '</div>'
+            : '');
+        if (j.ref) { refIso = j.ref; poeData(j.ref); }
+        kpis(j.counts);
+        resumo(j.summary);
+        desenha();
+    }
+
+    function dataAtual() {
+        return $('#wht-date').val() || refIso || (window.otcLinkIso && window.otcLinkIso()) || '';
+    }
+
+    function carrega() {
+        var d = dataAtual();
+        fetch('/api/wht/data' + (d ? '?date=' + encodeURIComponent(d) : ''), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (j && j.success) { pinta(j); }
+                else if (window.Swal) { Swal.fire({ icon: 'error', title: 'WHT', html: esc(errText(j)), confirmButtonColor: '#0066cc' }); }
+            });
+    }
+
+    function carregando(titulo, texto) {
+        if (window.Swal) {
+            Swal.fire({ title: titulo, html: esc(texto || ''), allowOutsideClick: false, allowEscapeKey: false,
+                        showConfirmButton: false, didOpen: function () { Swal.showLoading(); } });
+        }
+    }
+    function falha(titulo, html) {
+        if (window.Swal) { Swal.fire({ icon: 'error', title: titulo, html: html, confirmButtonColor: '#0066cc' }); }
+    }
+
+    // ── Import Settlements: os dias do decêndio, das duas telas de liquidação ──
+    $('#wht-import-st').on('click', function () {
+        carregando(t('importing'), t('importingTxt'));
+        fetch('/api/wht/import-settlements', {
+            method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: dataAtual() })
+        }).then(function (r) { return r.json(); }).then(function (j) {
+            if (!j || !j.success) { throw new Error(errText(j)); }
+            pinta(j);
+            var im = j.imported || {};
+            var html = esc(fill(t('importSummary'), { days: (im.days || []).length, rows: im.rows || 0 }));
+            if ((im.failed || []).length) {
+                html += '<div class="text-start mt-2 fs-xs text-danger"><b>' + esc(t('failedDays')) + '</b><br>' +
+                    im.failed.map(function (f) { return esc(f.day + ' · ' + f.source + ' — ' + f.error); }).join('<br>') + '</div>';
+            }
+            if (window.Swal) {
+                Swal.fire({ icon: (im.failed || []).length ? 'warning' : 'success', title: t('imported'), html: html,
+                            showConfirmButton: !!(im.failed || []).length, timer: (im.failed || []).length ? undefined : 2200 });
+            }
+        }).catch(function (e) { falha(t('importFail'), esc(String(e && e.message || e))); });
+    });
+
+    // ── Import HUB: todos os arquivos do dropzone num pedido só ──────────────
+    var dz = null;
+    if (window.Dropzone) {
+        Dropzone.autoDiscover = false;
+        dz = new Dropzone('#wht-dropzone', {
+            url: '/', autoProcessQueue: false, acceptedFiles: '.xls,.xlsx,.htm,.html,.csv,.txt',
+            previewsContainer: '#wht-previews',
+            previewTemplate: document.getElementById('wht-preview-tpl').innerHTML
+        });
+    }
+    $('#wht-import-hub').on('click', function () {
+        var files = dz ? dz.files.slice() : [];
+        if (!files.length) {
+            if (window.Swal) { Swal.fire({ icon: 'info', title: t('nothingToImport'), text: t('dropFirst'), confirmButtonColor: '#0066cc' }); }
+            return;
+        }
+        var fd = new FormData();
+        files.forEach(function (f) { fd.append('files', f, f.name); });
+        fd.append('date', dataAtual());
+        carregando(t('hubImporting'), '');
+        fetch('/api/wht/hub-import', { method: 'POST', body: fd, credentials: 'same-origin' })
+            .then(function (r) { return r.json(); }).then(function (j) {
+                if (!j || !j.success) { throw new Error(errText(j)); }
+                files.forEach(function (f) { try { dz.removeFile(f); } catch (e) {} });
+                pinta(j);
+                var html = ((j.hub || {}).files || []).map(function (f) {
+                    return esc(fill(t('hubSummary'), { file: f.file, rows: f.rows })) + (f.error ? ' — ' + esc(f.error) : '');
+                }).join('<br>');
+                if (window.Swal) { Swal.fire({ icon: 'success', title: t('hubImported'), html: html, timer: 2600, showConfirmButton: false }); }
+            }).catch(function (e) { falha(t('hubFail'), esc(String(e && e.message || e))); });
+    });
+
+    // ── HUB File: o que o HUB não tem (ou as linhas marcadas) ───────────────
+    $('#wht-hub-file').on('click', function () {
+        var keys = Object.keys(picked);
+        fetch('/api/wht/hub-file', {
+            method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: dataAtual(), keys: keys })
+        }).then(function (r) {
+            var tipo = r.headers.get('Content-Type') || '';
+            if (!r.ok || tipo.indexOf('application/json') >= 0) {
+                return r.json().then(function (j) { throw new Error(errText(j)); });
+            }
+            var nome = r.headers.get('X-WHT-Name') || 'WHT_HUB.txt';
+            var n = r.headers.get('X-WHT-Count') || '';
+            return r.blob().then(function (b) {
+                var a = document.createElement('a');
+                a.href = URL.createObjectURL(b);
+                a.download = nome;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+                if (window.otcToast) { otcToast(t('fileDone') + ': ' + fill(t('fileSummary'), { n: n, name: nome })); }
+            });
+        }).catch(function (e) { falha(t('fileFail'), esc(String(e && e.message || e))); });
+    });
+
+    $('#wht-len').on('change', function () {
+        if (table) { table.page.len(parseInt(this.value, 10)).draw(); }
+    });
+    $('#wht-clear').on('click', function () {
+        bucket = '';
+        if (table) { table.search('').columns().search(''); }
+        kpis(ultimo.counts);
+        desenha();
+    });
+    $('#wht-date').on('change', function () { bucket = ''; refIso = ''; carrega(); });
+
+    // A data que o servidor respondeu volta ao campo pelo PICKER, sem disparar
+    // o `change` (que recarregaria a página).
+    function poeData(iso) {
+        var el = document.getElementById('wht-date');
+        if (el && el._flatpickr) { el._flatpickr.setDate(iso, false); }
+        else if (el) { el.value = iso; }
+    }
+    if (window.otcDateField) { otcDateField('#wht-date'); }
+
+    $(carrega);
+})(jQuery);
+</script>
+{% endblock extra_javascript %}

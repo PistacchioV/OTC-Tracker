@@ -11009,6 +11009,10 @@ def _ndfsum_collect(ref):
                 'counterparty': cpty,
                 'legal': str(row[ci['LEGAL']] or '').strip(),
                 'athena': str(row[ci['ID_SOURCE_DEAL']] or '').strip(),
+                # B3 ID e Settlement Type viajam junto para o WHT (features/wht),
+                # que informa ao HUB cada operação pelos dois.
+                'b3': b3,
+                'settle_type': settle_type,
                 'trade_date': trade_date,
                 'notional_fc': abs(_mtm_parse_num(row[ci['VL_NOTIONAL_FC']]) or 0.0),
                 'ccy': str(row[ci['CCY_NOTIONAL_FC']] or '').strip(),
@@ -11051,6 +11055,7 @@ def _ndfsum_collect(ref):
             })
             u = dict(u)
             u['_trade_idx'] = len(trade) - 1
+            u['settle_type'] = 'UNWIND'
             raws.append(u)
     except Exception:                                       # noqa: BLE001
         log.warning('[ndfsum] recompras do dia ficaram de fora:\n%s', traceback.format_exc())
@@ -11686,6 +11691,15 @@ def _unwind_engine():
     só são importados no fim deste arquivo. Devolve o `commands`
     (`confirmation_deals`)."""
     from apps.pages.features.unwinds import commands
+    return commands
+
+
+def _wht_engine():
+    """Gancho para a vertical WHT (features/wht): as telas de liquidação (NDF
+    Summary, Other Products, Cockpit, Daily Settlement) entregam as linhas que
+    acabaram de montar por aqui — feature não importa feature. Devolve o
+    `commands` (`flow`, `refresh_async`)."""
+    from apps.pages.features.wht import commands
     return commands
 
 
@@ -13992,6 +14006,87 @@ _MAPPING_DEFS = {
         ],
         'seed': [],
     },
+    # O código de cada operação no relatório de tributos do HUB (EasyTributos):
+    # produto × tributação (Taxable/Exempt) × residência → o T.Oper (`CODE`), o
+    # Tributo e o prefixo do documento do arquivo que o OTC Tracker gera. LOB,
+    # EVENT e RESIDENCE em branco são coringa; a linha mais específica vence
+    # (`features/wht/domain.resolve_code`). `MONTHLY FLOOR` = Yes é o imposto de
+    # 0,005% com o piso de R$ 1,00 do mês (§423), que a página WHT quebra por
+    # operação; o swap (tabela regressiva) não tem piso.
+    'wht-codes': {
+        'label': 'WHT — Tax Codes',
+        'columns': [
+            {'key': 'PRODUCT', 'label': 'Product', 'type': 'select',
+             'options': ['NDF', 'NDF COMM', 'OPTION', 'OPTION COMM', 'SWAP']},
+            {'key': 'LOB', 'label': 'LOB (blank = any)'},
+            {'key': 'EVENT', 'label': 'Event (blank = any)'},
+            {'key': 'TAXATION', 'label': 'Taxation', 'type': 'select',
+             'options': ['Taxable', 'Exempt']},
+            {'key': 'RESIDENCE', 'label': 'Residence (blank = any)', 'type': 'select',
+             'options': ['', 'Resident', 'Non-Resident']},
+            {'key': 'DARF', 'label': 'DARF'},
+            {'key': 'DEPARTMENT', 'label': 'Department Code'},
+            {'key': 'DESCRIPTION', 'label': 'Income Reference'},
+            {'key': 'CODE', 'label': 'Tax Code (T.Oper)'},
+            {'key': 'TRIBUTO', 'label': 'Tributo'},
+            {'key': 'DOC PREFIX', 'label': 'Document Prefix', 'type': 'select',
+             'options': ['NDF', 'OPT', 'SWP', 'CON', 'COO', 'COS']},
+            {'key': 'MONTHLY FLOOR', 'label': 'R$ 1.00 Monthly Floor', 'type': 'select',
+             'options': ['Yes', 'No']},
+        ],
+        'seed': [
+            {'PRODUCT': p, 'LOB': lob, 'EVENT': ev, 'TAXATION': tx, 'RESIDENCE': res,
+             'DARF': code[:4], 'DEPARTMENT': code[4], 'DESCRIPTION': desc, 'CODE': code,
+             'TRIBUTO': code[:4] + ('E' if tx == 'Exempt' else '1'), 'DOC PREFIX': pref,
+             'MONTHLY FLOOR': 'Yes' if code.startswith('5557') else 'No'}
+            for p, lob, ev, tx, res, code, desc, pref in (
+                ('NDF', '', '', 'Exempt', '', '5557ME12050', 'NDF (OTC)', 'NDF'),
+                ('NDF', '', '', 'Taxable', 'Resident', '5557MT12050', 'NDF (OTC)', 'NDF'),
+                ('NDF', '', '', 'Taxable', 'Non-Resident', '5286MT12050', 'NDF (OTC)', 'NDF'),
+                ('NDF COMM', '', '', 'Exempt', '', '5557PE12050', 'COMMODITIES-NDF (OTC)', 'CON'),
+                ('NDF COMM', '', '', 'Taxable', '', '5557PT12050', 'COMMODITIES-NDF (OTC)', 'CON'),
+                ('OPTION COMM', '', '', 'Exempt', '', '5557RE12050', 'COMMODITIES-Options OTC', 'COO'),
+                ('OPTION COMM', '', '', 'Taxable', '', '5557RT12050', 'COMMODITIES-Options OTC', 'COO'),
+                ('OPTION', '', '', 'Exempt', '', '5557NE12050', 'FX Options OTC', 'OPT'),
+                ('OPTION', '', '', 'Taxable', 'Resident', '5557NT12050', 'FX Options OTC', 'OPT'),
+                ('OPTION', '', '', 'Taxable', 'Non-Resident', '5286NT12050', 'Options OTC', 'OPT'),
+                ('SWAP', 'COMMODITIES', '', 'Exempt', '', '5273QE12046', 'COMMODITIES-SWAPS (OTC)', 'COS'),
+                ('SWAP', 'COMMODITIES', '', 'Taxable', '', '5273QT12046', 'COMMODITIES-SWAPS (OTC)', 'COS'),
+                ('SWAP', '', '', 'Exempt', '', '5273OE12046', 'SWAPS (OTC)', 'SWP'),
+                ('SWAP', '', '', 'Taxable', 'Resident', '5273OT12046', 'SWAPS (OTC)', 'SWP'),
+                ('SWAP', '', '', 'Taxable', 'Non-Resident', '5286OT12046', 'SWAPS (OTC)', 'SWP'),
+                ('SWAP', '', 'DIVIDEND', 'Exempt', '', '5273OE12001', 'Dividendos provenientes de ações', 'SWP'),
+            )],
+    },
+    # A EMPRESA e a FILIAL de cada entidade nossa no EasyTributos: o relatório do
+    # HUB vem em blocos "Empresa: 00001 - Banco J.P. Morgan S.A.", e o arquivo que
+    # o OTC Tracker gera começa por elas.
+    'wht-company': {
+        'label': 'WHT — Company',
+        'columns': [
+            {'key': 'LE', 'label': 'Legal Entity', 'type': 'select', 'options': _MAP_LE_SPN_OPTIONS},
+            {'key': 'COMPANY', 'label': 'Company (Easy)'},
+            {'key': 'BRANCH', 'label': 'Branch'},
+            {'key': 'NAME', 'label': 'Name'},
+        ],
+        'seed': [
+            {'LE': 'JPM', 'COMPANY': '00001', 'BRANCH': '0001', 'NAME': 'Banco J.P. Morgan S.A.'},
+            {'LE': 'MGT', 'COMPANY': '00017', 'BRANCH': '0001', 'NAME': 'JPMorgan Chase Bank'},
+        ],
+    },
+    # As contrapartes NÃO residentes: o IR delas é o DARF 5286 (Aplicações
+    # Financeiras de Residentes no Exterior), na linha `Non-Resident` do
+    # `wht-codes`. Casa pelo CNPJ ou pelo nome.
+    'wht-non-resident': {
+        'label': 'WHT — Non-Resident Counterparties',
+        'columns': [
+            {'key': 'COUNTERPARTY', 'label': 'Counterparty', 'refdata': 'name'},
+            {'key': 'SPN', 'label': 'SPN', 'refdata': 'spn'},
+            {'key': 'CNPJ', 'label': 'CNPJ', 'refdata': 'taxid'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [],
+    },
 }
 
 _mapping_cache = {}
@@ -15456,6 +15551,7 @@ from apps.pages.features.swap_cetes import entrypoint as _f_swap_cetes          
 from apps.pages.features.swap_strategy import entrypoint as _f_swap_strategy    # noqa: E402,F401
 from apps.pages.features.unwinds import entrypoint as _f_unwinds                # noqa: E402,F401
 _schedule_on_start('unwind-api', _f_unwinds.start_scheduler)
+from apps.pages.features.wht import entrypoint as _f_wht                      # noqa: E402,F401
 from apps.pages.features.projects import entrypoint as _f_projects            # noqa: E402,F401
 
 

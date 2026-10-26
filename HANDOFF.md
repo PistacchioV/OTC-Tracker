@@ -29564,3 +29564,110 @@ bytes dos arquivos no momento do envio. Ele cobre a mensagem como o app a monta
 texto, o `send_message`, a falha e o `instala`. O `check_stratos.py` manda o
 código de verificação de verdade (`routes.send_verification_email`) pelo app
 montado e confere o que chegou ao Email block.
+
+## §692 — Regulatory › WHT: o IR do decêndio, OTC × HUB (2026-10-26)
+
+**O pedido.** A página WHT (Withholding Tax / Imposto), que era só um item no
+menu (`/regulatory/wht` dava 404). O IR das liquidações é recolhido por
+DECÊNDIO (01–10, 11–20, 21–fim, cada um pago no primeiro dia útil depois), e a
+equipe confere numa planilha o que o OTC liquidou com o relatório "Posição de
+Tributos" que o HUB manda (EasyTributos, `.xls`). O que falta no HUB vai num
+arquivo que a equipe do HUB insere à mão.
+
+**O lado OTC são as linhas das telas de liquidação, não uma leitura nova.** O
+NDF Summary entrega o `email_trades` do `_ndfsum_collect` (o termo de moeda e
+as recompras do dia; ganhou `b3` e `settle_type`, aditivos) e o Other Products
+o `_ops_trade_rows` (swap, termo de mercadoria, opção). Entra só a liquidação
+em que o BANCO paga — é a contraparte recebendo rendimento que gera imposto e
+linha no relatório do HUB. As fontes fluem sozinhas: o `/data` dos dois
+Summaries entrega o dia (`routes._wht_engine().flow`, melhor esforço: a tela de
+liquidação nunca cai pelo WHT), e o import do Cockpit e o Save Daily Settlement
+Files recoletam o dia numa thread (`refresh_async`, desligada com
+`OTC_DISABLE_SCHEDULERS=1` ou `OTC_WHT_AUTOFLOW=0`). O botão **Import
+Settlements** recoleta todos os dias úteis do decêndio e os dias dos decêndios
+anteriores do mês que ainda não têm fatia.
+
+**O armazém** é um documento por MÊS (`wht/wht_AAAAMM.json`, no banco), com uma
+fatia por dia × fonte que a coleta SUBSTITUI e só grava se mudou. Coleta vazia
+de um dia que não tem fatia NÃO cria o dia: a tela do Summary aberta num dia
+sem importação diria que ele foi importado e não teve nada, e o aviso "dias sem
+liquidação importada" sumiria. O mês inteiro mora junto porque o piso é do mês.
+
+**A quebra do piso de R$ 1,00 (`domain.allocate`).** O 0,005% só é retido
+quando o acumulado do MÊS da contraparte chega a R$ 1,00 (§423, §674). O
+relatório do HUB mostra o imposto onde ele foi RECOLHIDO — as anteriores
+zeradas e a que passou do piso com tudo —, mas o que tem de constar é o imposto
+de cada operação no seu decêndio. A regra, com os três cenários da equipe
+(0,60 + 0,35 + 0,10):
+
+- decêndios ANTERIORES ao que passou do piso: zero (é como foram informados);
+- o decêndio em que passou: cada operação com o SEU imposto, e a que cruzou
+  leva também o acumulado dos decêndios anteriores;
+- decêndios seguintes: o imposto de cada uma; mês que não chega a R$ 1,00: zero.
+
+`OTC_IR` é essa quebra; `Devido` é o imposto da própria operação (0,005% do
+bruto no termo de moeda, no de mercadoria e no PRÊMIO de opção, isento pelo
+`ndfc-ir-exempt`; a tabela regressiva no swap, que não tem piso). O balde é
+entidade × contraparte (CNPJ, senão o nome). Dentro do dia a ordem é a de
+chegada (NDF antes de Other Products) — ver "a conferir".
+
+**Os cadastros, nenhum código no código.** `wht-codes`: produto (NDF, NDF
+COMM, OPTION, OPTION COMM, SWAP) × tributação × residência, com LOB e evento
+como coringa, → o T.Oper (`5557MT12050`…), o Tributo (`55571`/`5557E`), o
+prefixo do documento (NDF, OPT, SWP, CON, COO, COS) e se há o piso; a linha
+mais específica vence. O seed é a tabela de códigos da equipe. `wht-company`:
+a empresa e a filial de cada entidade no EasyTributos (JPM 00001, MGT 00017).
+`wht-non-resident`: as contrapartes que vão no DARF 5286.
+
+**O batimento.** O Docto do HUB tem no máximo 18 caracteres: a operação que
+entrou pelo sistema vem com o id CORTADO (`STP-4T6-3LS149D-0-`), a que entrou
+pelo arquivo vem com o prefixo (`SWP-270RI70427368`); `doc_matches` aceita os
+dois, e com vários candidatos vence a mesma entidade, contraparte, data e o
+bruto mais perto. Status: `Matched`, `Partial - <campos>` (Trade Date, Gross
+Value, Tax, Counterparty, Code, Tributo, Legal Entity — nomes que sobrevivem ao
+Proper da pílula), `Unmatched OTC`, `Unmatched HUB`. A contraparte compara pelo
+CNPJ quando os dois lados o têm, senão pelo nome (o termo de mercadoria fala
+pelo acrônimo, `LAWTONMULTIME`, e o HUB pelo nome inteiro). O resumo do topo é
+por código, cada lado pelo SEU código.
+
+**O relatório do HUB** entra pelo dropzone, um ou vários arquivos, lido pelo
+conteúdo (`_latam_read_rows`: xls, xlsx, html, texto): blocos "Empresa: 00001 -
+…", cada um com o seu cabeçalho, a coluna do nome sem rótulo, CNPJ e valor que
+a planilha grava como número. Cada linha vai para o mês do seu Fato Gerador, e
+o que entra SUBSTITUI, no decêndio, as linhas da mesma empresa e do mesmo DARF
+— o relatório corrigido não duplica nem deixa a linha que o HUB tirou.
+
+**O arquivo do HUB** (`HUB File`) leva as `Unmatched OTC` do decêndio (ou as
+linhas marcadas). Quatro linhas por operação, reconstruídas do arquivo que a
+planilha auxiliar gera: (1) empresa 5, filial 4, CNPJ 14, documento 18, data
+do movimento 8, tipo de operação 11 = 60; (2) os 13 valores 15V2 de g a s
+(rendimento, IRRF em k, valor da operação em n e base IRRF em q) e as três
+alíquotas 2V2 = 233; (3) w1–w4, data da aplicação em branco e data de inclusão
+= 84; (4) ex1–ex5 = 85. cp1252, CRLF. O `check_wht.py` prende a primeira
+operação do exemplo BYTE A BYTE.
+
+**A conferir com a equipe / no primeiro uso real:**
+
+- os campos de texto depois da data de inclusão (documento auxiliar, centro de
+  custo, observação…) não aparecem no exemplo e não são escritos — confirmar
+  com um `.txt` gerado pela planilha se o importador do HUB exige as linhas
+  completadas com espaço;
+- a ALÍQUOTA (campo t) vai como `IR ÷ bruto × 100` em 2 casas: no 0,005% isso
+  dá `0001` (0,01%). O exemplo só tem linhas com IR zero;
+- o Tributo do 5286 foi semeado como `52861` (a mesma regra do `55571`/`52731`),
+  sem amostra;
+- na opção, o devido é 0,005% do prêmio de CADA linha; o app retém sobre o NET
+  do dia por contraparte (`_optadv_apply_ir`). Só diverge com prêmios opostos
+  no mesmo dia;
+- swap de COMMODITIES só cai no código Q se o Trade Level disser `LOB =
+  COMMODITIES` (hoje os tokens são EDG/CEM/CEMHYB);
+- o relatório real do HUB em `.xls` binário ainda não passou pelo leitor (o
+  teste usa xlsx com o mesmo desenho);
+- várias operações da mesma contraparte no dia em que o piso é cruzado: o
+  acumulado vai para a que cruza na ordem de chegada; se o HUB escolher outra,
+  a diferença aparece como `Partial - Tax` nas duas.
+
+Não entrou: tarefa no Intraday Monitor (o WHT é decendial, e o catálogo não tem
+essa agenda) nem notificação no sino.
+
+`scripts/tests/check_wht.py`.
