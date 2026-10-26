@@ -29367,3 +29367,28 @@ O que mudou é a escolha padrão: no `otc.js`, `WALL_BASE = 'frost'` e
 `WALL_DEFAULT = 'aurora'`, e `glass` vai para `clear` quando não está gravado.
 O `<head>` (`head-css.html`) e o Reset da Settings dizem o mesmo. Quem já
 gravou uma escolha fica com ela. `check_wallpapers.py` prende os três lugares.
+
+
+## §688 — hotfix.bat: puxa do GitHub e copia num .bat só (2026-10-26)
+
+Pedido da equipe: o `hotfix.bat` no estilo do `stratos-sync.bat`. Antes o
+`git pull` do checkout da prod era um passo à mão. Esquecido, o hotfix
+comparava o checkout velho com a versão no ar e dizia "nada a copiar" com a
+correção já no repositório.
+
+Antes de comparar, ele agora faz três coisas:
+
+1. **Atualiza do GitHub** com `git pull --ff-only`. É o mesmo desenho de bloco
+   com auto-chamada do `stratos-sync`, porque um pull que mude o próprio `.bat`
+   no meio da execução faria o cmd ler o resto no deslocamento errado.
+2. **Confere a branch `StreamFlow-prod`** (`BRANCH`, ou a variável
+   `OTC_HOTFIX_BRANCH`). É ela que tem o `config.py` da instância; de outra
+   branch iriam os caminhos da dev.
+3. **Confere que `apps\` não tem nada fora do git.** O `static\data` fica de
+   fora da conferência, menos as traduções, que o hotfix leva.
+
+Pull que falha ou checkout sujo só LISTA, e o `apply` recusa.
+
+A consequência é que a correção nasce no repositório (dev → prod pelo merge),
+não editada no checkout da máquina. Uma edição local bloqueia o `apply`, como
+no `stratos-sync`.
