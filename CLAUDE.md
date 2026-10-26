@@ -734,7 +734,7 @@ escolhido, os outros dois se preenchem). **`file`** aponta para um JSON já
 existente (o `swap-index` edita o mesmo `SwapIndex.json` do Index Results —
 declare as colunas extras, senão o POST as derruba).
 
-São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-ndf`, `commodities-b3`,
+São **51**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-ndf`, `commodities-b3`,
 `publisher-ndf`, `le-accronym`, `le-spn`, `bank-name`, `fxo-conv-rate`,
 `ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`,
 `manual-conf-validation`, `manual-conf-sla`, `fxo-internal-cpty`,
@@ -743,7 +743,8 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 `ndfc-advice-split`, `tools-swap-index`, `opb3-msg-asset`,
 `swap-funcionalidade`, `swap-amortizacao`, `swap-code-labels`,
 `quotes-equity`, `quotes-commodity`, `mt300`, `settlement-exception`,
-`gdt-codes`, `equity-leg-prefix`, os sete `dce-*` e os quatro `cgd-*`.
+`gdt-codes`, `equity-leg-prefix`, os sete `dce-*`, os quatro `cgd-*` e os três `wht-*`
+(`wht-codes`, `wht-company`, `wht-non-resident`).
 
 ### Regras fáceis de quebrar pela tela
 
@@ -2706,6 +2707,28 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   `_nc_fixing` na importação (`_ndfsum_fixing`); sem ele, a célula FIXING
   RATE; nunca a forward (§438).
 
+- **Regulatory › WHT (`/regulatory/wht`, `features/wht`, §692) bate o IR do
+  DECÊNDIO** (01–10, 11–20, 21–fim; recolhido no 1º dia útil depois) com o
+  relatório "Posição de Tributos" do HUB. O lado OTC são as MESMAS linhas das
+  telas de liquidação — o `email_trades` do `_ndfsum_collect` e o
+  `_ops_trade_rows` —, só as que o BANCO paga, e elas FLUEM sozinhas: o
+  `/data` dos dois Summaries entrega o dia (`routes._wht_engine().flow`), e o
+  import do Cockpit e o Save Daily Settlement Files o recoletam em background.
+  O armazém é um documento por MÊS (`wht/wht_AAAAMM.json`), uma fatia por dia ×
+  fonte que a coleta SUBSTITUI (coleta vazia não cria o dia — senão o aviso de
+  dia faltando sumiria). **O imposto que cada operação informa ao HUB é a
+  QUEBRA do piso de R$ 1,00 do mês** (`domain.allocate`), não o que foi retido:
+  os decêndios anteriores ao que passou do piso ficam zerados, no que passou
+  cada operação leva o SEU imposto e a que cruzou leva também o acumulado dos
+  anteriores (`OTC_IR`; o `Devido` é o da própria operação). Código, tributo,
+  prefixo do documento e se há piso saem do `wht-codes`, NUNCA do código; a
+  empresa/filial do EasyTributos, do `wht-company`. O arquivo do HUB (as
+  `Unmatched OTC`) tem quatro linhas por operação, reconstruídas do exemplo da
+  equipe (`domain.hub_file_lines`, 60/233/84/85) — o `check_wht.py` prende o
+  exemplo byte a byte. Coluna nova no Trade Level que o WHT precise lê-se no
+  adaptador (`queries.ndf_rows`/`ops_rows`), nunca numa segunda leitura dos
+  arquivos.
+
 ### Esteira de confirmação manual
 
 - **Opção de commodities de CO1-2 (Brent rolling) usa o documento da família
@@ -3501,7 +3524,7 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (209 scripts)
+### `scripts/tests/` (210 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

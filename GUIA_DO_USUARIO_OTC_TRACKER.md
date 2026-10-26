@@ -150,7 +150,7 @@ O menu é em **níveis**: um item com **›** à direita tem submenu. Clicar nel
 | **PRODUCTS › New Deals** | COE *(em construção)* · **DCE** (Deliverable Forward · NDF · Option · Swap — abrem as telas da Intrag › DCE, capítulo 11) |
 | **PRODUCTS › Unwinds** | **Swap** (CEM · EDG) · **NDF** (FX · Commodities) · **Options** (FXO · Commodities · EDG) · COE · **DCE** (Deliverable Forward · NDF · Option · Swap) *(NDF › FX e NDF › Commodities com o ciclo completo; as demais importam, conferem e enviam à B3 — ver 5.11)* |
 | **PRODUCTS › Intrag** | NDF · Option · Swap · Unwind · **DCE** (Option · Swap · NDF · DFW) |
-| **REGULATORY** | e-Financeira (KAPITAL · ATHENA-NDF · ATHENA-FXO · PYRAMID) *(em construção)* · Accrual · MtM · WHT *(em construção)* |
+| **REGULATORY** | e-Financeira (KAPITAL · ATHENA-NDF · ATHENA-FXO · PYRAMID) *(em construção)* · Accrual · MtM · **WHT** |
 | **DATA BASE** | Reference Data · Index B3 · Mapping · **Database Explorer** *(só o master)* · **Users** (Roles · Page Access) · **Support Center** (Tickets List · Ticket Details) |
 
 > Os itens marcados **(em construção)** aparecem no menu mas ainda não têm tela: clicar neles devolve uma página de "não encontrado". Os marcados **(tela pronta; importação em construção)** abrem normalmente, com a grade e as colunas do produto, mas ainda não importam nem enviam — a tela avisa isso em vez de falhar. A lista completa está no anexo 18.3.
@@ -1660,6 +1660,47 @@ Nas três telas prontas o ciclo é o de sempre: conferir, **Send**, e o **Mappin
 
 No **MtM** há ainda o botão **New Mapping**, para cadastrar um de-para novo sem sair da tela.
 
+### 12.1. WHT — o imposto retido, por decêndio
+
+**Menu › REGULATORY › WHT**
+
+**Para que serve:** conferir o IR das liquidações de cada **decêndio** com o relatório de tributos do HUB (*Posição de Tributos*, do EasyTributos). O imposto é recolhido por decêndio — dias **1 a 10**, **11 a 20** e **21 ao fim do mês** —, no primeiro dia útil depois do fim de cada um. A tela mostra o decêndio da *Reference date* e a data do recolhimento.
+
+**De onde vêm os dois lados:**
+
+- **OTC** — as liquidações em que o **banco paga** (a contraparte recebe e o imposto incide), do **NDF Summary** (termo de moeda e as recompras) e do **Other Products** (swap, termo de mercadoria e opção). Elas chegam sozinhas quando alguém abre essas telas, importa o Cockpit ou salva o *Daily Settlement Files*; o botão **Import Settlements** busca de uma vez todos os dias úteis do decêndio (e os dias do mês que ainda faltam).
+- **HUB** — o relatório que o HUB manda, solto no **dropzone**. Pode ser **um arquivo ou vários** (o 5557 num e o 5273 noutro, ou tudo junto). Reenviar um relatório corrigido **substitui** as linhas daquela empresa e daquele DARF no decêndio — não duplica.
+
+**Passo a passo:**
+
+1. Escolha a **Reference date** (o decêndio dela abre; sem data, abre o decêndio do dia útil anterior).
+2. Clique em **Import Settlements** — o aviso amarelo lista os dias do decêndio que ainda não foram importados.
+3. Solte o(s) relatório(s) do HUB no dropzone e clique em **Import HUB**.
+4. Confira os cartões e a tabela. Clicar num cartão filtra a tabela por aquele status.
+5. Para as operações que o HUB **não tem**, clique em **HUB File**: sai o arquivo que a equipe do HUB insere à mão. Com linhas marcadas na tabela, o arquivo leva só as marcadas.
+
+**Os status:**
+
+| Status | O que quer dizer |
+|---|---|
+| **Matched** | A operação está nos dois lados e tudo bate |
+| **Partial - …** | Está nos dois lados, mas algum campo diverge — o status diz quais (*Trade Date*, *Gross Value*, *Tax*, *Counterparty*, *Code*, *Tributo*, *Legal Entity*) |
+| **Unmatched OTC** | Só no OTC Tracker — vai para o **HUB File** |
+| **Unmatched HUB** | Só no relatório do HUB |
+
+No topo, o **resumo por código** soma, para cada código de imposto, as operações, o bruto e o imposto dos dois lados, e mostra a diferença.
+
+**O piso de R$ 1,00:** o IR de 0,005% só é retido quando o acumulado do **mês** da contraparte chega a R$ 1,00. O relatório do HUB mostra o imposto onde ele foi recolhido, mas o que tem de constar é o imposto de **cada operação**, no seu decêndio. A coluna **OTC_IR** já traz essa quebra, e **Devido** traz o imposto da própria operação:
+
+- no decêndio em que o acumulado passou de R$ 1,00, cada operação leva o **seu** imposto, e a que passou leva também o que veio dos decêndios anteriores do mês;
+- os decêndios **anteriores** a esse ficam com imposto **zero** (é como eles foram informados);
+- os decêndios seguintes levam o imposto de cada operação;
+- se o mês não chega a R$ 1,00, tudo fica zero.
+
+**Exemplo:** 0,60 em 02/10, 0,35 em 11/10 e 0,10 em 15/10. A de 02/10 fica com 0,00 no 1º decêndio. No 2º, a de 11/10 leva 0,35 e a de 15/10 leva 0,70 (os 0,10 dela mais os 0,60 de 02/10).
+
+**Os cadastros** (tela **Mapping**): **WHT — Tax Codes** (o código de imposto, o tributo e o prefixo do documento de cada produto, tributável ou isento), **WHT — Company** (a empresa e a filial de cada entidade no EasyTributos) e **WHT — Non-Resident Counterparties** (as contrapartes não residentes, que vão no DARF 5286).
+
 ---
 
 ## 13. Cadastros e ferramentas
@@ -2363,7 +2404,6 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 - **Intrag › DCE › DFW** (e **New Deals › DCE › Deliverable Forward**, que abre a mesma tela) — a tela abre e diz que está em construção
 - **New Deals › Options › EDG** — *a tela já abre*, mas ainda **não importa nem envia** (capítulo 5.11)
 - **Regulatory › e-Financeira** — Kapital · Athena NDF · Athena FXO · Pyramid
-- **Regulatory › WHT**
 
 ### 19.4. Problemas comuns
 
