@@ -46,7 +46,10 @@ scss = read('apps/static/scss/otc.scss')
 part = read('apps/templates/partials/wallpaper.html')
 head = read('apps/templates/partials/head-css.html')
 RETIRADAS = ('ash', 'sand', 'sage', 'bloom', 'ember', 'grove', 'canyon')
+# a parede SEM data-wall (o :root) e a escolhida por padrão (26/10/2026:
+# Aurora com o vidro Clear) são duas coisas
 PADRAO = 'frost'
+ESCOLHA = 'aurora'
 # a paleta do sistema, do mais escuro ao mais claro: (parede, tom, cor)
 PALETA = (('abyss', 'dark', '#06141b'), ('midnight', 'dark', '#11212d'), ('slate', 'dark', '#253745'),
           ('steel', 'dark', '#4a5c6a'), ('fog', 'light', '#9ba8ab'), ('frost', 'light', '#ccd0cf'))
@@ -109,7 +112,9 @@ mp = re.search(r"var WALL_PAIR = \{([^}]*)\}", js)
 par = dict(re.findall(r"(\w+): '(\w+)'", mp.group(1))) if mp else {}
 mt = re.search(r"var WALL_TONE = \{([^}]*)\}", js)
 tom = dict(re.findall(r"(\w+): '(\w+)'", mt.group(1))) if mt else {}
-check(re.search(r"var WALL_DEFAULT = '%s'" % PADRAO, js) is not None, 'otc.js: a padrão é a %s' % PADRAO)
+check(re.search(r"var WALL_BASE = '%s'" % PADRAO, js) is not None, 'otc.js: a %s é a sem data-wall' % PADRAO)
+check(re.search(r"var WALL_DEFAULT = '%s'" % ESCOLHA, js) is not None, 'otc.js: a padrão é a %s' % ESCOLHA)
+check("glass: p.glass || 'clear'" in js, "otc.js: o vidro padrão é o clear")
 check(base(r':root, \[data-art\]') == cor['frost'], ':root claro = Frost (%s)' % cor['frost'])
 check(base(r'\[data-bs-theme=dark\], \[data-bs-theme=dark\] \[data-art\]') == cor['abyss'], ':root escuro = Abyss (%s)' % cor['abyss'])
 for w, t, c in PALETA:
@@ -128,7 +133,10 @@ check(re.search(r':root\[data-bs-theme=dark\] \[data-wall-pick\]\[data-tone=ligh
       'a gaveta esconde as lisas do outro tema')
 check('data-tone="\' + WALL_TONE[k]' in js and "data-tone=\"' + tones[k]" in st,
       'a gaveta e a Settings marcam o tom de cada miniatura')
-check(re.search(r"p\.wall && p\.wall !== '%s'" % PADRAO, head) is not None, 'o <head> trata a %s como a sem data-wall' % PADRAO)
+check(re.search(r"var wall = p\.wall \|\| '%s'" % ESCOLHA, head) is not None, 'o <head> nasce na %s' % ESCOLHA)
+check(re.search(r"wall !== '%s'\) r\.setAttribute" % PADRAO, head) is not None, 'o <head> trata a %s como a sem data-wall' % PADRAO)
+check("(p.glass || 'clear') === 'clear'" in head, 'o <head> nasce com o vidro clear')
+check("wall: '%s', glass: 'clear'" % ESCOLHA in st, 'o Reset da Settings volta à %s com o vidro clear' % ESCOLHA)
 
 # 6 · as retiradas não voltam e a preferência delas é migrada
 for w in RETIRADAS:
