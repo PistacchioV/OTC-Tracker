@@ -248,7 +248,7 @@ def own_accounts():
     return out
 
 
-def omnibus_account(le='JPM', kind='CLIENT 2'):
+def omnibus_account(le='JPM', kind='CLIENT 1'):
     """A conta guarda-chuva de clientes da LE (o omnibus)."""
     for row in _R()._mapping_rows('b3-accounts'):
         if str(row.get('LE', '') or '').strip().upper() != le:
@@ -256,6 +256,17 @@ def omnibus_account(le='JPM', kind='CLIENT 2'):
         if _R()._b3_account_type(row.get('ACCOUNT TYPE', '')) == kind:
             return re.sub(r'\D', '', str(row.get('ACCOUNT', '') or ''))
     return ''
+
+
+def with_current_omnibus(deal):
+    """Uma CÓPIA do deal com a guarda-chuva de clientes de HOJE no cadastro,
+    quando a conta da contraparte é ela (`ClientAccountNote = omnibus`): o
+    arquivo e o preview leem o deal gravado, e a conta gravada no import pode
+    ser de antes de uma mudança no `b3-accounts` (§698)."""
+    if (deal or {}).get('ClientAccountNote') != 'omnibus':
+        return deal
+    omni = omnibus_account('JPM', 'CLIENT 1')
+    return dict(deal, ClientAccount=omni) if omni else deal
 
 
 def le_by_spn(spn):
@@ -334,16 +345,17 @@ def fields_of(key, per_block, record_vals):
 def enrich(deal):
     """Completa o deal com o que NÃO está no DT: a conta B3 e o CNPJ da
     contraparte (Reference Data pela SPN; sem conta própria, o omnibus de
-    clientes do Banco + o Tax ID), e o código D-n da Data de Cotação (dias
+    clientes do Banco — a CLIENT 1 — + o Tax ID), e o código D-n da Data de Cotação (dias
     úteis ANBIMA até o vencimento). Só preenche o que está em branco — o que
     a mesa editou fica."""
-    # SPN de entidade NOSSA (cadastro le-spn): a contraparte é a Atacama (o
-    # B2B), ou outra perna intragrupo — nome e conta vêm do cadastro, não do
-    # Reference Data, onde essa SPN nunca esteve.
+    # SPN de entidade NOSSA (cadastro le-spn): a contraparte é o fundo do B2B
+    # (Atacama ou Lawton, §698), ou outra perna intragrupo — nome e conta vêm
+    # do cadastro, não do Reference Data, onde essa SPN nunca esteve.
     le = le_by_spn(deal.get('SPN', '')) if deal.get('SPN') else None
     if le:
-        deal['LE'] = 'ATACAMA' if le['LE'] == 'ATACAMA' else deal.get('LE') or 'JPM'
-        deal['Pair'] = 'JPM x ATACAMA' if le['LE'] == 'ATACAMA' else 'JPM x CLI'
+        fund = le['LE'] if le['LE'] in _dtk.B2B_FUNDS else ''
+        deal['LE'] = fund or deal.get('LE') or 'JPM'
+        deal['Pair'] = 'JPM x ' + fund if fund else 'JPM x CLI'
         deal['Client'] = le['NAME'] or le['LE']
         deal['ClientRefData'] = 'ok'
         deal['ClientTaxId'] = ''
@@ -385,8 +397,11 @@ def enrich(deal):
                 if acc:
                     deal['ClientAccount'] = acc
                     deal['ClientTaxId'] = ''        # conta própria do cliente: sem CNPJ no registro
-        if not deal.get('ClientAccount'):
-            omni = omnibus_account('JPM', 'CLIENT 2')
+        # Sem conta própria, a guarda-chuva de clientes do Banco: a CLIENT 1
+        # (73760.10-2; equipe, 26/10/2026, §698 — era a CLIENT 2). O deal que já
+        # tem a guarda-chuva gravada (`omnibus`) acompanha o cadastro.
+        if not deal.get('ClientAccount') or deal.get('ClientAccountNote') == 'omnibus':
+            omni = omnibus_account('JPM', 'CLIENT 1')
             if omni:
                 deal['ClientAccount'] = omni
                 deal['ClientAccountNote'] = 'omnibus'
@@ -427,8 +442,8 @@ def confirmation_deal(deal):
 
 
 def b3_mapped(deal, tag='SWAP'):
-    """O deal ganhou B3 ID. No B2B, a linha da **Intrag Swap** (a visão da
-    Atacama, na carteira dela); contra cliente, a linha do **Pending
+    """O deal ganhou B3 ID. No B2B, a linha da **Intrag Swap** (a visão do
+    fundo — Atacama ou Lawton —, na carteira dele); contra cliente, a linha do **Pending
     Confirmation** e a da esteira de **Manual Confirmations** (Produto SWAP /
     SWAP CORPORATE, chave = B3 ID, LOB do deal). Cada braço se protege: a
     falha vai para o log com o traceback e não derruba a gravação da grade.

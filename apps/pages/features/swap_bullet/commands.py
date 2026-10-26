@@ -28,9 +28,10 @@ PAGE_URL = '/new_deals-swap-bullet'
 # SWAP_EDG_CLIENTE.txt e PREMIO_SWAP_EDG_CLIENTE.txt. Deals de LOBs diferentes
 # no mesmo lote caem em arquivos diferentes — o `send` agrupa pelo nome.
 SWAP_FILE_NAMES = {'client': 'SWAP_{lob}CLIENTE.txt', 'bank': 'SWAP_{lob}BANCO.txt',
-                   'atacama': 'SWAP_{lob}ATACAMA.txt'}
+                   'atacama': 'SWAP_{lob}ATACAMA.txt', 'lawton': 'SWAP_{lob}LAWTON.txt'}
 PREMIUM_FILE_NAMES = {'client': 'PREMIO_SWAP_{lob}CLIENTE.txt', 'bank': 'PREMIO_SWAP_{lob}BANCO.txt',
-                      'atacama': 'PREMIO_SWAP_{lob}ATACAMA.txt'}
+                      'atacama': 'PREMIO_SWAP_{lob}ATACAMA.txt',
+                      'lawton': 'PREMIO_SWAP_{lob}LAWTON.txt'}
 
 
 def _rand10():
@@ -140,7 +141,7 @@ def _file_name(key, view, default, deal=None):
     """O `file_name` cadastrado na variante do par vence; senão o padrão da
     visão com a LOB do deal no lugar de `{lob}`."""
     try:
-        nome = _R()._fi_variant_file_name(key, PAGE_URL, domain.le_pair(view))
+        nome = _R()._fi_variant_file_name(key, PAGE_URL, domain.le_pair(view, deal))
     except Exception:                                   # noqa: BLE001
         nome = ''
     if nome:
@@ -163,7 +164,7 @@ def _build_blocks(key, values, view, deal, skip=('header',)):
         if b.get('id') in skip:
             continue
         parts.append(_R()._fi_build_line(key, b['id'], values, page_url=PAGE_URL,
-                                         le_pair=domain.le_pair(view), deal=deal))
+                                         le_pair=domain.le_pair(view, deal), deal=deal))
     if not parts:
         raise ValueError('file-interpreter template missing: ' + key)
     return ''.join(parts)
@@ -175,37 +176,41 @@ def deal_files(deal, view, today_ymd=None):
     `fields` é a lista [{seq, block, field, value}] para o preview. Levanta
     ValueError com as lacunas."""
     today_ymd = today_ymd or _today_ymd()
+    deal = _sw.with_current_omnibus(deal)
     accounts = queries.own_accounts()
     codes = queries.codes_for(deal)
     faltas = domain.missing_for_send(deal, codes, accounts)
     if faltas:
         raise ValueError('missing: ' + '; '.join(faltas))
-    parte_le = 'ATACAMA' if view == 'atacama' else 'JPM'
+    # A visão do FUNDO (Atacama ou Lawton, §698) é o espelho: participante e
+    # Meu Número dele.
+    espelho = view in ('atacama', 'lawton')
+    parte_le = view.upper() if espelho else 'JPM'
     participant = _participant(parte_le)
-    my_swap = deal.get('MyNumberMirror' if view == 'atacama' else 'MyNumber') or _rand10()
-    my_prem = deal.get('PremiumMyNumberMirror' if view == 'atacama' else 'PremiumMyNumber') or _rand10()
+    my_swap = deal.get('MyNumberMirror' if espelho else 'MyNumber') or _rand10()
+    my_prem = deal.get('PremiumMyNumberMirror' if espelho else 'PremiumMyNumber') or _rand10()
     out = []
     vals = domain.swap_record_values(deal, view, accounts, codes, my_swap)
     hdr = domain.swap_header_values(participant, today_ymd)
     header = _R()._fi_build_line(SWAP_FI_KEY, 'header', hdr, page_url=PAGE_URL,
-                                 le_pair=domain.le_pair(view), deal=deal)
+                                 le_pair=domain.le_pair(view, deal), deal=deal)
     record = _build_blocks(SWAP_FI_KEY, vals, view, deal)
     if len(record) != domain.SWAP_RECORD_LENGTH:
         raise ValueError('0301 record has %d characters, the layout wants %d (check the '
                          'file-interpreter template %s)' % (len(record), domain.SWAP_RECORD_LENGTH, SWAP_FI_KEY))
-    out.append({'kind': 'swap', 'key': SWAP_FI_KEY, 'view': view, 'le_pair': domain.le_pair(view),
+    out.append({'kind': 'swap', 'key': SWAP_FI_KEY, 'view': view, 'le_pair': domain.le_pair(view, deal),
                 'file_name': _file_name(SWAP_FI_KEY, view, SWAP_FILE_NAMES[view], deal),
                 'header': header, 'records': [record],
                 'fields': _fields_of(SWAP_FI_KEY, {'header': hdr}, vals)})
     if domain.premium_applies(deal):
         h, reg, flow = domain.premium_values(deal, view, accounts, my_swap, my_prem, participant, today_ymd)
         header_p = _R()._fi_build_line(PREMIUM_FI_KEY, 'header', h, page_url=PAGE_URL,
-                                       le_pair=domain.le_pair(view), deal=deal)
+                                       le_pair=domain.le_pair(view, deal), deal=deal)
         reg_line = _R()._fi_build_line(PREMIUM_FI_KEY, 'registro', reg, page_url=PAGE_URL,
-                                       le_pair=domain.le_pair(view), deal=deal)
+                                       le_pair=domain.le_pair(view, deal), deal=deal)
         flow_line = _R()._fi_build_line(PREMIUM_FI_KEY, 'fluxo', flow, page_url=PAGE_URL,
-                                        le_pair=domain.le_pair(view), deal=deal)
-        out.append({'kind': 'premium', 'key': PREMIUM_FI_KEY, 'view': view, 'le_pair': domain.le_pair(view),
+                                        le_pair=domain.le_pair(view, deal), deal=deal)
+        out.append({'kind': 'premium', 'key': PREMIUM_FI_KEY, 'view': view, 'le_pair': domain.le_pair(view, deal),
                     'file_name': _file_name(PREMIUM_FI_KEY, view, PREMIUM_FILE_NAMES[view], deal),
                     'header': header_p, 'records': [reg_line, flow_line],
                     'fields': _fields_of(PREMIUM_FI_KEY, {'header': h, 'registro': reg, 'fluxo': flow}, None)})
@@ -342,10 +347,7 @@ def edit(deal_id, trade_date, changes, sid=''):
                 v = domain.iso(domain.parse_date(v)) if v else ''
             d[k] = v
         if 'LE' in changes or 'Client' in changes:
-            if 'ATACAMA' in domain.norm(d.get('Client')):
-                d['LE'] = 'ATACAMA'
-            d['LE'] = 'ATACAMA' if domain.norm(d.get('LE')) == 'ATACAMA' else 'JPM'
-            d['Pair'] = 'JPM x ATACAMA' if d['LE'] == 'ATACAMA' else 'JPM x CLI'
+            domain.set_pair(d)
         if 'QuoteDate' in changes or 'MaturityDate' in changes:
             d['QuoteDateCode'] = ''
         if 'SPN' in changes and str(changes.get('SPN') or '').strip() != spn_antes:
@@ -358,7 +360,7 @@ def edit(deal_id, trade_date, changes, sid=''):
             d.pop('ClientAccountNote', None)
             if d.get('ClientDT'):
                 d['Client'] = d['ClientDT']
-            if 'LE' not in changes and 'ATACAMA' not in domain.norm(d.get('ClientDT')):
+            if 'LE' not in changes and not domain.fund_in_text(d.get('ClientDT')):
                 d['LE'] = 'JPM'
                 d['Pair'] = 'JPM x CLI'
         if not touched_text and (str(d.get('VcpText') or '').strip() == before_text.strip()
@@ -413,11 +415,7 @@ def add(fields, trade_date, sid=''):
             if k in domain.SWB_DATE_FIELDS:
                 v = domain.iso(domain.parse_date(v)) if v else ''
             d[k] = v
-    if 'ATACAMA' in domain.norm(d.get('Client')) or domain.norm(d.get('LE')) == 'ATACAMA':
-        d['LE'] = 'ATACAMA'
-    else:
-        d['LE'] = 'JPM'
-    d['Pair'] = 'JPM x ATACAMA' if d['LE'] == 'ATACAMA' else 'JPM x CLI'
+    domain.set_pair(d)
     d['_id'] = domain.make_deal_id(d)
     d['Deal'] = str(fields.get('Deal') or '').strip()
     d['B3ID'] = str(fields.get('B3ID') or '').strip()

@@ -162,17 +162,21 @@ _CETES = (
 # ({'field': campo} ou {'fixed': valor}). Deal e B3 ID sao os DOIS PRIMEIROS fatos
 # (mesa, 21/10/2026, §655): fato vazio mostra '—', e no pe eles sumiam
 # enquanto estavam em branco — que e justamente quando a mesa os procura.
+# O Trade Date vem logo depois do Start → Maturity (equipe, 26/10/2026, §698):
+# e o dia do arquivo, o que o chip da busca e o Edit do card mexem (§656).
 _FACTS_ID = [['Deal', 'Deal', 'text', 'nd-col-deal'],
              ['B3ID', 'B3 ID', 'text', 'nd-col-b3-id']]
 _CARDS_SWAP = {
     'title': [['Client', '']],
-    'subtitle': [['Type', '']],
+    'subtitle': [['Type', '', 'swap-type']],      # traduzido na tela (§698)
     'lob': {'field': 'LOB'},
     'facts': _FACTS_ID + [
               ['StartDate,MaturityDate', 'Start → Maturity', 'daterange'],
+              ['TradeDate', 'Trade Date', 'date', 'nd-col-trade-date'],
               ['Notional', 'Notional', 'money'],
-              ['CurveA', 'Curve A', 'text'],
-              ['CurveB', 'Curve B', 'text'],
+              # a curva com o percentual e o spread ("CDI + 3.00%", §698)
+              ['CurveA', 'Curve A', 'curve'],
+              ['CurveB', 'Curve B', 'curve'],
               ['Currency', 'Currency', 'text'],
               ['CashFlows', 'Flows', 'count']],
     'meta': [['SPN', 'SPN']],
@@ -186,6 +190,7 @@ _CARDS_CETES = {
               ['Banco', 'Party', 'fixed', 'nd-card-party'],
               ['Client', 'Counterparty', 'text', 'nd-card-counterparty'],
               ['StartDate,MaturityDate', 'Effective → Maturity', 'daterange'],
+              ['TradeDate', 'Trade Date', 'date', 'nd-col-trade-date'],
               ['FixedRate', 'Fixed Rate %', 'number'],
               ['NotionalUSD', 'USD Notional', 'money'],
               ['FxRate', 'FX Rate', 'number'],
@@ -196,7 +201,8 @@ _CARDS_CETES = {
 
 _SEL_COMUM = {'LE': ['JPM', 'ATACAMA'], 'LOB': ['EDG', 'CEM'],
               'Adhesion': ['CGD', 'CSA', 'CGD/CSA', 'SEM ADESAO']}
-_SEL_SWAP = dict(_SEL_COMUM, **{
+# No swap o B2B é × Atacama (EDG) ou × Lawton (CEM), §698.
+_SEL_SWAP = dict(_SEL_COMUM, **{'LE': ['JPM', 'ATACAMA', 'LAWTON'],
     'PremiumSchedule': ['Sim', 'Não'], 'Reset': ['Não', 'Sim'],
     'CurveACategory': ['JUROS', 'JUROS INTERNACIONAIS', 'VCP'],
     'CurveBCategory': ['JUROS', 'JUROS INTERNACIONAIS', 'VCP'],
@@ -224,6 +230,9 @@ def _page(slug, group, product, columns, **kw):
         # cards: None = a tabela de sempre; mapping: o botao Mapping B3 ID
         # (`<api>/mapping-b3`); econ_aff: o botao do Economic Affirmation.
         'cards': None, 'mapping': False, 'econ_aff': True,
+        # add_label: o texto do botão de inclusão (as telas de swap dizem Add
+        # Deal, §698); b2b: o Create B2B no card do deal contra cliente.
+        'add_label': 'Add Row', 'b2b': False,
     }
     p.update(kw)
     return p
@@ -245,7 +254,7 @@ PAGES = dict((p['path'], p) for p in (
                     'CurveBPct': '100.00', 'CurveBSign': '+', 'CurveBRate': '0.0000'},
           preview_hint='Double-click a card to preview the B3 files.',
           send_text='The swap contract and cash flow files are written to Batch Conecta › New.',
-          cards=_CARDS_SWAP),
+          cards=_CARDS_SWAP, add_label='Add Deal', b2b=True),
     # O "cetip usd irs" do e-mail das Cetes (§650): Banco × Lawton, o registro
     # 0301 na versao 1 do layout, nas duas visoes; no Success, a Intrag Swap.
     _page('swap-cetes', 'Swap', 'Cetes', _CETES + _MAKER,
@@ -262,7 +271,7 @@ PAGES = dict((p['path'], p) for p in (
           preview_hint='Double-click a card to preview the B3 files (Banco and Lawton).',
           send_text='SWAP_CETES_BANCO.txt and SWAP_CETES_LAWTON.txt (contract 0301) are written to '
                     'Batch Conecta › New.',
-          cards=_CARDS_CETES, mapping=True, econ_aff=False),
+          cards=_CARDS_CETES, mapping=True, econ_aff=False, add_label='Add Deal'),
     _page('opt-edg', 'Options', 'EDG', _OPT_EDG + _MAKER,
           group_lang='nav-options', product_lang='nav-edg',
           hidden=['ClientTaxId', 'Maker', 'Checker'],

@@ -31,11 +31,12 @@ PAGE_URL = '/new_deals-swap-cashflow'
 # Conecta com o mesmo prefixo SWAP_ (SUPOSIÇÃO de nome — o Conecta lê o layout
 # pelo header, não pelo nome do arquivo).
 CONTRACT_FILE_NAMES = {'client': 'SWAP_CF_{lob}CLIENTE.txt', 'bank': 'SWAP_CF_{lob}BANCO.txt',
-                       'atacama': 'SWAP_CF_{lob}ATACAMA.txt'}
+                       'atacama': 'SWAP_CF_{lob}ATACAMA.txt', 'lawton': 'SWAP_CF_{lob}LAWTON.txt'}
 FLOW_FILE_NAMES = {'client': 'FLUXO_SWAP_CF_{lob}CLIENTE.txt', 'bank': 'FLUXO_SWAP_CF_{lob}BANCO.txt',
-                   'atacama': 'FLUXO_SWAP_CF_{lob}ATACAMA.txt'}
+                   'atacama': 'FLUXO_SWAP_CF_{lob}ATACAMA.txt', 'lawton': 'FLUXO_SWAP_CF_{lob}LAWTON.txt'}
 PREMIUM_FILE_NAMES = {'client': 'PREMIO_SWAP_CF_{lob}CLIENTE.txt', 'bank': 'PREMIO_SWAP_CF_{lob}BANCO.txt',
-                      'atacama': 'PREMIO_SWAP_CF_{lob}ATACAMA.txt'}
+                      'atacama': 'PREMIO_SWAP_CF_{lob}ATACAMA.txt',
+                      'lawton': 'PREMIO_SWAP_CF_{lob}LAWTON.txt'}
 
 # O Conecta lê o arquivo como ANSI (cp1252): cada caractere é UM byte (§480).
 FILE_ENCODING = 'cp1252'
@@ -198,7 +199,7 @@ def _file_name(key, view, default, deal=None):
     """O `file_name` cadastrado na variante do par vence; senão o padrão da
     visão com a LOB do deal no lugar de `{lob}`."""
     try:
-        nome = _R()._fi_variant_file_name(key, PAGE_URL, _dtk.le_pair(view))
+        nome = _R()._fi_variant_file_name(key, PAGE_URL, _dtk.le_pair(view, deal))
     except Exception:                                   # noqa: BLE001
         nome = ''
     if nome:
@@ -208,7 +209,7 @@ def _file_name(key, view, default, deal=None):
 
 
 def _line(key, block, values, view, deal):
-    return _R()._fi_build_line(key, block, values, page_url=PAGE_URL, le_pair=_dtk.le_pair(view), deal=deal)
+    return _R()._fi_build_line(key, block, values, page_url=PAGE_URL, le_pair=_dtk.le_pair(view, deal), deal=deal)
 
 
 def _record(key, values, view, deal, skip=('header',)):
@@ -234,18 +235,21 @@ def deal_files(deal, view, today_ymd=None):
     records, fields, view, le_pair}] — o contrato (0301) e o cronograma
     (0034) sempre; o prêmio (0897) quando há agenda. Levanta `Lacunas`."""
     today_ymd = today_ymd or _today_ymd()
+    deal = _sw.with_current_omnibus(deal)
     accounts = queries.own_accounts()
     codes = queries.codes_for(deal)
     faltas = domain.missing_for_send(deal, codes, accounts, codes.get('amortization'))
     if faltas:
         raise Lacunas(faltas)
-    parte_le = 'ATACAMA' if view == 'atacama' else 'JPM'
+    # A visão do FUNDO (Atacama ou Lawton, §698) é o espelho: participante e
+    # Meu Número dele.
+    espelho = view in ('atacama', 'lawton')
+    parte_le = view.upper() if espelho else 'JPM'
     participant = _sw.participant(parte_le)
-    espelho = view == 'atacama'
     my_swap = deal.get('MyNumberMirror' if espelho else 'MyNumber') or _rand10()
     my_flow = deal.get('FlowMyNumberMirror' if espelho else 'FlowMyNumber') or _rand10()
     my_prem = deal.get('PremiumMyNumberMirror' if espelho else 'PremiumMyNumber') or _rand10()
-    pair = _dtk.le_pair(view)
+    pair = _dtk.le_pair(view, deal)
     out = []
     # 1. o contrato (4.2.7)
     vals = domain.contract_record_values(deal, view, accounts, codes, my_swap)
@@ -421,11 +425,7 @@ def _apply_fields(d, fields):
 
 
 def _pair_from_le(d):
-    if 'ATACAMA' in _dtk.norm(d.get('Client')) or _dtk.norm(d.get('LE')) == 'ATACAMA':
-        d['LE'] = 'ATACAMA'
-    else:
-        d['LE'] = 'JPM'
-    d['Pair'] = 'JPM x ATACAMA' if d['LE'] == 'ATACAMA' else 'JPM x CLI'
+    _dtk.set_pair(d)
 
 
 def edit(deal_id, trade_date, changes, sid=''):
@@ -458,7 +458,7 @@ def edit(deal_id, trade_date, changes, sid=''):
             d.pop('ClientAccountNote', None)
             if d.get('ClientDT'):
                 d['Client'] = d['ClientDT']
-            if 'LE' not in changes and 'ATACAMA' not in _dtk.norm(d.get('ClientDT')):
+            if 'LE' not in changes and not _dtk.fund_in_text(d.get('ClientDT')):
                 d['LE'] = 'JPM'
                 d['Pair'] = 'JPM x CLI'
         if not touched_text and (str(d.get('VcpText') or '').strip() == before_text.strip()

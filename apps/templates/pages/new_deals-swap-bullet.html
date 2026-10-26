@@ -217,6 +217,7 @@
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/file-preview.js?v={{ asset_v('js/file-preview.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/deal-cards.js?v={{ asset_v('js/deal-cards.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/swap-deal.js?v={{ asset_v('js/swap-deal.js') }}"></script>
 
 <script>
 // ── Contrato com o servidor (domain.SWB_COLUMNS, na ordem) ──────────────────
@@ -243,7 +244,7 @@ var SWB_NUM  = { Notional:1, NotionalFC:1, FXStart:1, PremiumAmount:1, CurveAPct
 var SWB_MONEY = { Notional:1, NotionalFC:1, PremiumAmount:1 };
 var SWB_SELECT = {
     // A LOB é o que encaixa CEM e EDG na MESMA página (mesa, 21/09/2026).
-    LE: ['JPM', 'ATACAMA'], LOB: ['EDG', 'CEM'], Adhesion: ['CGD', 'CSA', 'CGD/CSA', 'SEM ADESAO'],
+    LE: ['JPM', 'ATACAMA', 'LAWTON'], LOB: ['EDG', 'CEM'], Adhesion: ['CGD', 'CSA', 'CGD/CSA', 'SEM ADESAO'],
     PremiumSchedule: ['Sim', 'Não'], Reset: ['Não', 'Sim'], CurveACategory: ['JUROS', 'JUROS INTERNACIONAIS', 'VCP'], CurveBCategory: ['JUROS', 'JUROS INTERNACIONAIS', 'VCP'],
     CurveASign: ['+', '-'], CurveBSign: ['+', '-'], Currency: ['BRL', 'USD', 'EUR']
 };
@@ -412,10 +413,11 @@ $(document).ready(function() {
                 var btn = document.createElement('button');
                 btn.id = 'addRow';
                 btn.className = 'btn btn-sm btn-primary bg-gradient btn-toolbar-all btn-toolbar-addrow';
-                btn.textContent = 'Add Row +';
+                // Nas telas de swap o botão diz Add Deal (equipe, 26/10/2026, §698).
+                btn.textContent = t('nd-add-deal', 'Add Deal') + ' +';
                 btn.setAttribute('type', 'button');
                 btn.setAttribute('data-bs-toggle', 'tooltip'); btn.setAttribute('data-bs-placement', 'bottom');
-                btn.setAttribute('data-bs-title', 'Add a new row'); btn.setAttribute('data-bs-custom-class', 'tooltip-primary');
+                btn.setAttribute('data-bs-title', t('nd-add-deal-tip', 'Add a new deal')); btn.setAttribute('data-bs-custom-class', 'tooltip-primary');
                 btnContainer.appendChild(btn);
                 btn.addEventListener('click', function(){ openModal(null); });
             }
@@ -541,11 +543,8 @@ $(document).ready(function() {
     }
 
     // ── Os CARDS (§650): uma operação por card, no lugar das 60 colunas ─────
-    function _curva(e, x) {
-        var nome = e['Curve' + x] || '', cat = e['Curve' + x + 'Category'] || '';
-        var taxa = e['Curve' + x + 'Rate'] && parseFloat(e['Curve' + x + 'Rate']) ? ' + ' + e['Curve' + x + 'Rate'] + '%' : '';
-        return (nome || cat) ? (nome || cat) + taxa : '';
-    }
+    // a curva com o percentual e o spread: "CDI + 3.00%" (swap-deal.js, §698)
+    function _curva(e, x) { return otcSwapCurveText(e, x); }
     function _temPremio(e) {
         var s = String(e.PremiumSchedule || '').trim().toUpperCase();
         return !!(parseFloat(e.PremiumAmount) || s === 'SIM' || s === 'YES' || s === 'S' || s === 'Y');
@@ -554,7 +553,7 @@ $(document).ready(function() {
         el: '#swbCards', selected: selected, t: t,
         key: function(e){ return e._id; },
         title: function(e){ return e.Client || e.ClientDT || e._id; },
-        subtitle: function(e){ return [e.LE === 'ATACAMA' ? 'B2B Banco × Atacama' : '', e.Type || ''].filter(Boolean).join(' · '); },
+        subtitle: function(e){ return [e.LE === 'ATACAMA' ? 'B2B Banco × Atacama' : e.LE === 'LAWTON' ? 'B2B Banco × Lawton' : '', otcSwapTypeLabel(e.Type || '', t)].filter(Boolean).join(' · '); },
         status: function(e){ return statusBadge(e.Status); },
         lob: function(e){ return String(e.LOB || '').trim(); },
         // Deal e B3 ID primeiro e SEMPRE (§655): vazios, mostram '—'
@@ -563,10 +562,13 @@ $(document).ready(function() {
             { label: t('nd-col-b3-id', 'B3 ID'), value: function(e){ return e.B3ID || ''; } },
             { label: t('nd-swb-col-startdate', 'Start') + ' → ' + t('nd-swb-col-maturitydate', 'Maturity'), wide: true,
               value: function(e){ var a = _isoToDmy(e.StartDate || ''), b = _isoToDmy(e.MaturityDate || ''); return (a || b) ? (a || '—') + ' → ' + (b || '—') : ''; } },
-            { label: t('nd-swb-col-notional', 'Notional'), wide: true, value: function(e){ return e.Notional ? fmtMoney(e.Notional) + (e.Currency ? ' ' + e.Currency : '') : ''; } },
+            // O Trade Date ao lado do Notional (equipe, 26/10/2026, §698): é o
+            // dia do arquivo, o que o chip da busca e o Edit do card mexem.
+            { label: t('nd-col-trade-date', 'Trade Date'), value: function(e){ return _isoToDmy(e.TradeDate || ''); } },
+            { label: t('nd-swb-col-notional', 'Notional'), value: function(e){ return e.Notional ? fmtMoney(e.Notional) + (e.Currency ? ' ' + e.Currency : '') : ''; } },
             // Prêmio e a DATA DE PAGAMENTO dele lado a lado, só na operação que
-            // tem prêmio (o Notional ocupa a linha inteira para os pares não
-            // desalinharem quando os dois saem).
+            // tem prêmio (o par Trade Date · Notional fecha a linha antes, para
+            // os pares não desalinharem quando os dois saem).
             { label: t('nd-swb-col-premiumamount', 'Premium'), show: _temPremio, value: function(e){ return e.PremiumAmount ? fmtMoney(e.PremiumAmount) : ''; } },
             { label: t('nd-swb-col-premiumdate', 'Premium Date'), show: _temPremio, value: function(e){ return _isoToDmy(e.PremiumDate || ''); } },
             { label: t('nd-swb-col-curvea', 'Curve A'), value: function(e){ return _curva(e, 'A'); } },
@@ -579,6 +581,9 @@ $(document).ready(function() {
         onEdit: function(k){ if (DEALS[k]) openModal(DEALS[k]); },
         onDelete: function(k){ deleteDeals([k]); },
         onSend: function(k){ sendDeals([k]); },
+        // Create B2B (§698): só no deal contra cliente
+        canB2B: function(e){ return !otcSwapIsB2B(e); },
+        onB2B: function(k){ createB2B(k); },
         onPreview: function(k){ previewDeal(k); },
         onSelect: function(){ table.draw(false); }
     }) : null;
@@ -935,14 +940,29 @@ $(document).ready(function() {
         // Data: VALUE em ISO (é o que o otcDateField guarda; o altInput mostra dd/mm/aaaa).
         return lab + '<input type="text" class="form-control form-control-sm' + (SWB_DATE[f] ? ' swb-date' : '') + '" id="' + id + '" data-f="' + f + '" value="' + esc(value) + '"' + extra + (SWB_READONLY[f] ? ' readonly' : '') + '>';
     }
-    function openModal(entry) {
+    // ── Create B2B (§698): a operação do cliente com as pernas trocadas, × o
+    // fundo da LOB (CEM → Lawton, EDG → Atacama), no modal de Add para editar
+    function createB2B(k) {
+        var e = DEALS[k]; if (!e) return;
+        var d = otcSwapB2B(e);
+        if (!d) {
+            Swal.fire({ icon: 'warning', title: t('nd-card-b2b', 'Create B2B'),
+                        text: t('w_nd_b2b_no_lob', 'Set the LOB of the client deal first: CEM goes × Lawton, EDG × Atacama.'),
+                        confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+            return;
+        }
+        openModal(null, d);
+    }
+    function openModal(entry, prefill) {
         var isEdit = !!entry;
         modalEl.querySelector('.modal-title').innerHTML = isEdit
             ? '<i class="ti ti-edit me-1"></i>' + t('nd-swb-modal-edit', 'Edit Deal — Swap Bullet') + ' · ' + esc(entry.Deal || entry.Client || '')
+            : prefill
+            ? '<i class="ti ti-arrows-exchange me-1"></i>' + t('nd-card-b2b', 'Create B2B') + ' — Swap Bullet · ' + esc(prefill.Client || '')
             : '<i class="ti ti-plus me-1"></i>' + t('nd-swb-modal-add', 'Add Deal — Swap Bullet');
-        var e = entry || { Type: 'Pagamento Final', LE: 'JPM', LOB: 'EDG', Currency: 'BRL', Adhesion: 'CGD', Functionality: 'N/A', PremiumSchedule: 'Não', Reset: 'Não', LOB: 'EDG',
+        var e = entry || prefill || { Type: 'Pagamento Final', LE: 'JPM', LOB: 'EDG', Currency: 'BRL', Adhesion: 'CGD', Functionality: 'N/A', PremiumSchedule: 'Não', Reset: 'Não', LOB: 'EDG',
                            CurveACategory: 'JUROS', CurveAPct: '100.00', CurveASign: '+', CurveARate: '0.0000', CurveBCategory: 'VCP', CurveBPct: '100.00', CurveBSign: '+', CurveBRate: '0.0000' };
-        var html = '<div class="col-md-2">' + '<label class="form-label fs-xs text-muted mb-1" data-lang="nd-col-trade-date">Trade Date</label><input type="text" class="form-control form-control-sm swb-date" id="swb-f-TradeDate" data-f="TradeDate" value="' + esc(isEdit ? (e.TradeDate || '') : (apiRefDate() || _todayIso())) + '" placeholder="dd/mm/aaaa" autocomplete="off"></div>';
+        var html = '<div class="col-md-2">' + '<label class="form-label fs-xs text-muted mb-1" data-lang="nd-col-trade-date">Trade Date</label><input type="text" class="form-control form-control-sm swb-date" id="swb-f-TradeDate" data-f="TradeDate" value="' + esc(isEdit || prefill ? (e.TradeDate || '') : (apiRefDate() || _todayIso())) + '" placeholder="dd/mm/aaaa" autocomplete="off"></div>';
         html += '<div class="col-md-2">' + fieldInput('LE', 'LE', e.LE || 'JPM') + '</div>' +
                 '<div class="col-md-2">' + fieldInput('LOB', 'LOB', e.LOB || '') + '</div>' +
                 '<div class="col-md-2">' + fieldInput('Deal', 'Deal', e.Deal || '') + '</div>' +
@@ -964,7 +984,7 @@ $(document).ready(function() {
                 var cli = document.getElementById('swb-f-Client'), acc = document.getElementById('swb-f-ClientAccount'), tax = document.getElementById('swb-f-ClientTaxId');
                 if (res && res.found) {
                     var leEl = document.getElementById('swb-f-LE');
-                    if (leEl && res.le) leEl.value = res.le === 'ATACAMA' ? 'ATACAMA' : 'JPM';
+                    if (leEl && res.le) leEl.value = (res.le === 'ATACAMA' || res.le === 'LAWTON') ? res.le : 'JPM';
                     if (cli) cli.value = res.client || cli.value;
                     if (acc) acc.value = res.account || '';
                     if (tax) tax.value = res.account ? '' : (res.taxid || '');

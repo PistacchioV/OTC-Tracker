@@ -3183,5 +3183,11 @@
   "wht-s-diff-ir": "Dif. Impuesto",
   "map-tab-wht-codes": "WHT — Códigos de Impuesto",
   "map-tab-wht-company": "WHT — Empresa",
-  "map-tab-wht-nonres": "WHT — Contrapartes No Residentes"
+  "map-tab-wht-nonres": "WHT — Contrapartes No Residentes",
+  "nd-add-deal": "Agregar Operación",
+  "nd-add-deal-tip": "Agregar una nueva operación",
+  "nd-card-b2b": "Crear B2B",
+  "w_nd_b2b_no_lob": "Complete antes la LOB de la operación del cliente: CEM va × Lawton, EDG × Atacama.",
+  "nd-swap-type-cashflow": "Flujo de Caja",
+  "nd-swap-type-bullet": "Pago Final"
 }

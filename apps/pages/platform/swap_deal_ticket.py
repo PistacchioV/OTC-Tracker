@@ -123,6 +123,13 @@ SWB_DATE_FIELDS = ('StartDate', 'MaturityDate', 'PremiumDate', 'QuoteDate', 'Not
 # Ativo Curva Vanilla / Pagador do Prêmio). Cego a caixa e acento.
 _OUR_SIDE_RE = re.compile(r'J\.?\s*P\.?\s*MORGAN|\bJPM\b', re.I)
 _ATACAMA_RE = re.compile(r'ATACAMA', re.I)
+_LAWTON_RE = re.compile(r'LAWTON', re.I)
+
+# Os fundos NOSSOS que fazem o B2B com o Banco (equipe, 26/10/2026, §698): o
+# swap da EDG vai × Atacama e o da CEM × Lawton. Cada um gera o arquivo do Banco
+# e o espelho na visão dele, e no Success a linha da Intrag Swap na carteira dele.
+B2B_FUNDS = ('ATACAMA', 'LAWTON')
+B2B_FUND_BY_LOB = {'EDG': 'ATACAMA', 'CEM': 'LAWTON'}
 
 STATUS_SENDABLE = ('New', 'Approved')
 
@@ -688,8 +695,8 @@ def deal_from_raw(raw, trade_date_iso, deal_id=None):
         a, b = van, vcp
         a_cat, b_cat = 'JUROS', 'VCP'
     client = g('Client')
-    is_ata = bool(_ATACAMA_RE.search(client))
-    pair = 'JPM x ATACAMA' if is_ata else 'JPM x CLI'
+    fund = 'ATACAMA' if _ATACAMA_RE.search(client) else ('LAWTON' if _LAWTON_RE.search(client) else '')
+    pair = 'JPM x ' + fund if fund else 'JPM x CLI'
     notional_txt = g('Notional')
     ccy = ''
     mccy = re.search(r'\b([A-Z]{3})\b', strip_accents(notional_txt).upper())
@@ -706,9 +713,9 @@ def deal_from_raw(raw, trade_date_iso, deal_id=None):
         'Type': 'Pagamento Final',
         'Title': g('_title'),
         'Pair': pair,
-        # LE da linha: JPM contra cliente; ATACAMA no B2B (a perna intragrupo,
-        # que gera o arquivo do Banco E o espelho da Atacama).
-        'LE': 'ATACAMA' if is_ata else 'JPM',
+        # LE da linha: JPM contra cliente; o FUNDO no B2B (a perna intragrupo,
+        # que gera o arquivo do Banco E o espelho do fundo).
+        'LE': fund or 'JPM',
         'Client': client,
         'ClientDT': client,
         'SPN': re.sub(r'\.0$', '', g('SPN')),
@@ -855,7 +862,8 @@ def _digits(s):
 
 # ── As visões do deal (quem é Parte e quem é Contraparte em cada arquivo) ────
 
-VIEWS = ('client', 'bank', 'atacama')
+VIEWS = ('client', 'bank', 'atacama', 'lawton')
+_FUND_VIEWS = ('atacama', 'lawton')
 
 
 def view_sides(deal, view, accounts):
@@ -866,8 +874,9 @@ def view_sides(deal, view, accounts):
 
       client  → Parte JPM  · Contraparte cliente (conta do Reference Data ou
                 omnibus + CNPJ)                                — par JPM x CLI
-      bank    → Parte JPM  · Contraparte ATACAMA               — par JPM x ATACAMA
+      bank    → Parte JPM  · Contraparte o FUNDO (Atacama/Lawton) — par JPM x ATACAMA
       atacama → Parte ATACAMA · Contraparte JPM (curvas trocadas) — ATACAMA x JPM
+      lawton  → Parte LAWTON  · Contraparte JPM (curvas trocadas) — LAWTON x JPM
     """
     jpm = {'le': 'JPM', 'account': accounts.get('JPM', ''), 'taxid': '', 'curve': 'A',
            'name': 'JPM'}
@@ -876,8 +885,9 @@ def view_sides(deal, view, accounts):
                'taxid': _digits(deal.get('ClientTaxId')), 'curve': 'B',
                'name': deal.get('Client', '')}
         return jpm, cli
-    ata = {'le': 'ATACAMA', 'account': accounts.get('ATACAMA', ''), 'taxid': '', 'curve': 'B',
-           'name': 'ATACAMA'}
+    fund = view.upper() if view in _FUND_VIEWS else (b2b_fund(deal) or 'ATACAMA')
+    ata = {'le': fund, 'account': accounts.get(fund, ''), 'taxid': '', 'curve': 'B',
+           'name': fund}
     if view == 'bank':
         return jpm, ata
     ata_p = dict(ata, curve='B')
@@ -885,18 +895,51 @@ def view_sides(deal, view, accounts):
     return ata_p, jpm_c
 
 
-def le_pair(view):
-    return {'client': 'JPM x CLI', 'bank': 'JPM x ATACAMA', 'atacama': 'ATACAMA x JPM'}[view]
+def le_pair(view, deal=None):
+    """O par de LEs da visão (o `le_pair` do File Interpreter e do nome na
+    New). A visão do Banco no B2B é contra o fundo do DEAL."""
+    if view == 'client':
+        return 'JPM x CLI'
+    if view in _FUND_VIEWS:
+        return view.upper() + ' x JPM'
+    return 'JPM x ' + ((b2b_fund(deal) if deal else '') or 'ATACAMA')
+
+
+def b2b_fund(deal):
+    """O fundo do B2B ('ATACAMA'/'LAWTON'), pela LE da linha ou pelo par; ''
+    contra cliente."""
+    le = norm(deal.get('LE', ''))
+    if le in B2B_FUNDS:
+        return le
+    pair = norm(deal.get('Pair', ''))
+    return next((f for f in B2B_FUNDS if f in pair), '')
+
+
+def fund_in_text(text):
+    """O fundo do B2B que um texto (o Client, o nome do DT) nomeia, ou ''."""
+    t = norm(text)
+    return next((f for f in B2B_FUNDS if f in t), '')
+
+
+def set_pair(deal):
+    """LE e Pair do deal pela LE digitada ou, sem ela, pelo Client: o fundo
+    (Atacama/Lawton) é o B2B, o resto é JPM contra cliente."""
+    le = norm(deal.get('LE', ''))
+    fund = le if le in B2B_FUNDS else fund_in_text(deal.get('Client'))
+    deal['LE'] = fund or 'JPM'
+    deal['Pair'] = 'JPM x ' + fund if fund else 'JPM x CLI'
+    return deal
 
 
 def is_b2b(deal):
-    """O deal é o B2B Banco × Atacama? Pela LE da linha (ATACAMA) ou pelo par."""
-    return norm(deal.get('LE', '')) == 'ATACAMA' or 'ATACAMA' in norm(deal.get('Pair', ''))
+    """O deal é um B2B Banco × fundo (Atacama ou Lawton)?"""
+    return bool(b2b_fund(deal))
 
 
 def views_of(deal):
-    """As visões que o deal gera: cliente → ['client']; B2B → ['bank', 'atacama']."""
-    return ['bank', 'atacama'] if is_b2b(deal) else ['client']
+    """As visões que o deal gera: cliente → ['client']; B2B → ['bank', <o fundo>]."""
+    fund = b2b_fund(deal)
+    return ['bank', fund.lower()] if fund else ['client']
 
 
 def _curve(deal, side):
@@ -984,8 +1027,8 @@ def missing_for_send(deal, codes, accounts):
     if not accounts.get('JPM'):
         faltas.append('JPM own account (B3 Accounts)')
     if is_b2b(deal):
-        if not accounts.get('ATACAMA'):
-            faltas.append('ATACAMA own account (B3 Accounts)')
+        if not accounts.get(b2b_fund(deal)):
+            faltas.append('%s own account (B3 Accounts)' % b2b_fund(deal))
     else:
         # A contraparte é a do Reference Data pela SPN do DT: sem SPN, ou com
         # SPN que o cadastro não tem, o nome e a conta não têm de onde vir.
@@ -1041,6 +1084,9 @@ INTRAG_SWAP_FIELDS = (
 
 _INTRAG_BANK_NAME = 'Banco JP Morgan'
 _INTRAG_ATACAMA_NAME = 'Atacama'
+# (carteira, nome) de cada fundo na Intrag; o Lawton é o mesmo da Cetes.
+_INTRAG_FUND = {'ATACAMA': (INTRAG_SWAP_PORTFOLIO, _INTRAG_ATACAMA_NAME),
+                'LAWTON': ('INTRAGJP552', 'Lawton')}
 
 
 def has_withdrawal_option(deal):
@@ -1070,13 +1116,14 @@ def _functionality_text(deal):
 
 
 def intrag_swap_entry(deal, codes):
-    """A linha da Intrag Swap do B2B — a visão da ATACAMA: Parte = Atacama com
-    a perna DELA (a Curva B do deal, a contraparte do Banco), Contraparte =
+    """A linha da Intrag Swap do B2B — a visão do FUNDO (Atacama ou Lawton, na
+    carteira dele): Parte = o fundo com a perna DELE (a Curva B do deal, a contraparte do Banco), Contraparte =
     Banco com a Curva A. Bloco 1 é a curva da Parte, bloco 2 a da
     Contraparte; só a perna VCP leva Código (Tipo/Classe), Data de Cotação,
     Descrição (a denominação e o ativo) e Preço Inicial. `codes` são os
     códigos B3 das curvas (`queries.codes_for`)."""
     prem = norm(deal.get('PremiumSchedule')) in ('SIM', 'YES', 'S', 'Y')
+    carteira, fund_name = _INTRAG_FUND[b2b_fund(deal) or 'ATACAMA']
 
     def leg(side):
         c = _curve(deal, side)
@@ -1099,20 +1146,20 @@ def intrag_swap_entry(deal, codes):
 
     parte, contra = leg('B'), leg('A')
     entry = {
-        'carteira': INTRAG_SWAP_PORTFOLIO,
+        'carteira': carteira,
         'b3_id': str(deal.get('B3ID') or '').strip(),
         'start_date': iso(parse_date(deal.get('StartDate'))),
         'maturity_date': iso(parse_date(deal.get('MaturityDate'))),
         'base_value': plain_num(deal.get('Notional')),
         'funcionalidades': _functionality_text(deal),
-        'parte': _INTRAG_ATACAMA_NAME,
+        'parte': fund_name,
         'curva_parte': 'VCP' if parte['categoria'] == 'VCP' else 'Vanilla',
         'contraparte': _INTRAG_BANK_NAME,
         'curva_contraparte': 'VCP' if contra['categoria'] == 'VCP' else 'Vanilla',
         'agenda_premios': 'Sim' if prem else 'Não',
         'premium_payment_date': iso(parse_date(deal.get('PremiumDate'))) if prem else '',
         'premium_payer': ((_INTRAG_BANK_NAME if _is_ours(deal.get('PremiumPayer', ''))
-                           else _INTRAG_ATACAMA_NAME) if prem else ''),
+                           else fund_name) if prem else ''),
         'premio': plain_num(deal.get('PremiumAmount')) if prem else '',
     }
     for n, lg in ((1, parte), (2, contra)):
