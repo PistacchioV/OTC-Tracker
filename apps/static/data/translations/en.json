@@ -841,7 +841,7 @@
   "swal-mapping-b3-title": "Mapping B3 ID",
   "nd-b3id-hint": "(fill to confirm Sent/Error → Success)",
   "swal-b3-confirmed-title": "Confirmed",
-  "swal-b3-confirmed-text": "B3 ID saved — status set to Success and sent to Intrag.",
+  "swal-b3-confirmed-text": "B3 ID saved — status set to Success.",
   "swal-mapping-none": "No operations to map.",
   "swal-mapping-no-new": "No operations with status \"New\", \"Sent\" or \"Error\" to map.",
   "swal-err-title": "Error",

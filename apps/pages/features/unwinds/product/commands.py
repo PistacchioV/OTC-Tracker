@@ -372,8 +372,8 @@ def apagar(page, row_id, date_str):
             raise domain.Recusa('unwind_already_sent', 'This unwind was already sent to B3', 409)
         # A esteira sai junto com a recompra — mas nao por cima de carimbo de
         # mesa (documento gerado, validacao, envio ao cliente): isso e REGISTRO.
-        k = chave(lst[idx])
-        if com_esteira(page) and k and not _R()._mc_mod.row_untouched(k):
+        k = chave_esteira(page, lst[idx]) if com_esteira(page) else ''
+        if k and not _R()._mc_mod.row_untouched(k):
             raise domain.Recusa('unwind_trail_signed',
                                 'This unwind already has a signed trail entry (document '
                                 'generated, validated or sent to the client)', 409)
@@ -591,9 +591,11 @@ def intrag(page, linhas):
                  if isinstance(e, dict) and fase1_cmd.e_do_fundo(e)]
         if fundo:
             fase1_cmd.intrag_da_recompra(fundo)
-    except Exception:                                       # noqa: BLE001
+    except Exception as exc:                                # noqa: BLE001
         _R().log.warning('[UNWIND %s] Intrag ficou de fora:\n%s', page['label'],
                          traceback.format_exc())
+        from apps.pages.platform import mirrors
+        mirrors.falhou('intrag', page['label'], exc)
 
 
 def _marcar_enviadas(page, alvos, sid, nomes):
@@ -704,22 +706,32 @@ def esteira(page, linhas, ref):
             # Termo e Pending Confirmation so contra o CLIENTE (mesa, 28/09/2026,
             # §580); a perna do fundo vai para a Intrag no Send.
             if fase1_cmd.e_do_fundo(l):
-                fase1_cmd.esteira_fora_do_fundo(chave(l))
+                fase1_cmd.esteira_fora_do_fundo(chave_esteira(page, l))
                 continue
             deal = confirmation_deal(page, l, d)
-            if not deal['Deal']:
+            if not deal['_mc_key']:
                 continue
-            _R()._pc_save_from_deal(deal, source, source=source, trade_number=deal['Deal'])
+            _R()._pc_save_from_deal(deal, source, source=source, trade_number=deal['_mc_key'])
             fase1_cmd.esteira_data_da_operacao(para_o_termo(page, l), d)
-        except Exception:                                   # noqa: BLE001
+        except Exception as exc:                            # noqa: BLE001
             _R().log.warning('[UNWIND %s] esteira: %s ficou de fora — %s', page['label'],
                              chave(l), traceback.format_exc())
+            from apps.pages.platform import mirrors
+            mirrors.falhou('pc', chave(l), exc)
+
+
+def chave_esteira(page, linha):
+    """A chave da recompra no Pending Confirmation e na esteira (§696) — a
+    da Fase 1 sobre a linha no formato dela (`UNW-<_id>`)."""
+    from apps.pages.features.unwinds import domain as fase1_dom
+    return fase1_dom.chave_esteira(para_o_termo(page, linha))
 
 
 def esteira_sem(page, linha):
-    if com_esteira(page) and chave(linha):
+    k = chave_esteira(page, linha) if com_esteira(page) else ''
+    if k:
         from apps.pages.features.unwinds import commands as fase1_cmd
-        fase1_cmd.esteira_sem_a_recompra([chave(linha)])
+        fase1_cmd.esteira_sem_a_recompra([k])
 
 
 def termo_carimbar(chaves, ref_date, doc_path, pdf_path, link='', sid=''):

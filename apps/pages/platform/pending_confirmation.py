@@ -840,12 +840,17 @@ def _pc_save_from_deal(deal, product_type, pending_status=None, trade_number=Non
     pending_status overrides the default 'Pending OTC' (signature-type rules);
     trade_number overrides the Deal id (FWD Start rows are keyed by B3 ID).
     `source` distingue as três páginas genéricas de NDF, que gravam o MESMO
-    Product Type — sem ele o FWD Start não se separa de Vanilla/Other Publisher."""
+    Product Type — sem ele o FWD Start não se separa de Vanilla/Other Publisher.
+
+    Devolve o VEREDITO (§696): True gravou, None não se aplica (perna interna),
+    False falhou — e a falha é registrada no request (`mirrors.falhou`), para a
+    tela dizer que a cópia não foi feita em vez de só ir para o log."""
     from apps.pages import routes
+    from apps.pages.platform import mirrors
     try:
         row = _pc_row_from_deal(deal, product_type, pending_status, trade_number, source)
         if row is None:
-            return          # bank / Lawton / intragroup leg → not a client confirmation
+            return None     # bank / Lawton / intragroup leg → not a client confirmation
         # A linha que JÁ EXISTE não volta a ser uma linha nova: todo PATCH
         # `Success` do New Deals, todo `b3_mapped` e todo reimport da recompra
         # passam por aqui, e a linha em branco apagava EA, Send/Return Date,
@@ -858,9 +863,12 @@ def _pc_save_from_deal(deal, product_type, pending_status=None, trade_number=Non
         _pc_upsert_rows([row])       # routes to pending (or backlog if >12 months)
         # A MESMA operação entra na esteira de validação da confirmação — só os
         # produtos que geram documento (ver _MC_CONFIRMATION_SOURCES).
-        routes._mc_save_from_deal(deal, source or product_type, trade_number=row['Trade Number'])
-    except Exception:
+        mc_ok = routes._mc_save_from_deal(deal, source or product_type,
+                                          trade_number=row['Trade Number'])
+        return mc_ok is not False
+    except Exception as exc:
         log.warning('[pending-confirmation] save-from-deal failed:\n%s', traceback.format_exc())
+        return mirrors.falhou('pc', trade_number or (deal or {}).get('Deal'), exc)
 
 
 def _pc_save_from_deals(items):

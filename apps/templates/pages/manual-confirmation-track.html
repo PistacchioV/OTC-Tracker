@@ -1050,6 +1050,10 @@
                 }
                 inp.appendTo(col);
                 grid.append(col);
+                // O valor com que o campo ABRIU: o Save manda só o que mudou
+                // (§696). A linha vem da última carga da página, e mandá-la
+                // inteira desfazia a validação que outra mesa deu depois.
+                inp.attr('data-orig', inp.val() || '');
             });
             new bootstrap.Modal(document.getElementById('mcEditModal')).show();
         }
@@ -1063,7 +1067,12 @@
             var o = {};
             $('#mcEditGrid [data-col]').each(function () {
                 var c = $(this).attr('data-col');
-                if (editable(c)) o[c] = $(this).val() || '';
+                if (!editable(c)) return;
+                var v = $(this).val() || '';
+                // Edição: só o campo MEXIDO vai ao servidor (§696). Linha nova
+                // vai inteira.
+                if (!adding && v === ($(this).attr('data-orig') || '')) return;
+                o[c] = v;
             });
             if (!adding) o[KEY] = editing;
             var key = String(o[KEY] || '').trim();

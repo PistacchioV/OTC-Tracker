@@ -534,7 +534,9 @@ def b3_mapped(deal):
         td = domain.parse_date(deal.get('TradeDate')) or domain.parse_date(deal.get('StartDate'))
         day = datetime(td.year, td.month, td.day) if td else None
         _R()._intrag_engine()._save_intrag_swap_entry(entry, day)
-    except Exception:                                       # noqa: BLE001
+    except Exception as exc:                                # noqa: BLE001
         import traceback
         _R().log.warning('[SWAP CETES] post-mapping flow failed for %s:\n%s', deal.get('B3ID'),
                          traceback.format_exc())
+        from apps.pages.platform import mirrors
+        mirrors.falhou('intrag', deal.get('B3ID'), exc)

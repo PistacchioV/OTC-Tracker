@@ -771,7 +771,9 @@ def main():
         rid = e_cli.get('_id')
         st, j = _post(pg_ndf['api'] + '/delete', {'id': rid, 'date': '2026-09-21'})
         check('delete tira da esteira e do Pending Confirmation',
-              st == 200 and 'D5NQ-HMNV-CLI' in mc_apagados, (st, j, mc_apagados))
+              # A chave da recompra do catálogo é `UNW-<_id>` (§696), não o
+              # Deal ID — que é o `Deal` do NDF Comm original.
+              st == 200 and ('UNW-' + str(rid)) in mc_apagados, (st, j, mc_apagados))
     finally:
         R._intrag_engine = ie_orig
         R._mc_mod, R._pc_save_from_deal = mc_orig, pcsave_orig

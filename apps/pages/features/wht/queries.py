@@ -145,19 +145,34 @@ def ndf_rows(day, trades):
             refdata = _refdata_index() if refdata is None else refdata
             taxid = refdata.get(domain.alnum(cpty), '')
         event = r.get('settle_type') or ('UNWIND' if r.get('unwind') else 'MATURITY')
-        out.append(_linha(day, 'ndf', len(out), r.get('athena'), r.get('b3'), 'NDF', '',
+        # O NDF de moeda vem do Cockpit: é da CEM (`domain.produto_lob`).
+        out.append(_linha(day, 'ndf', len(out), r.get('athena'), r.get('b3'), 'NDF',
+                          domain.LOB_NDF_PADRAO,
                           event, gross, 0.0 if exempt else gross * rate, not exempt,
                           cpty, taxid, r.get('legal')))
     return _ids(out)
 
 
 def _produto_ops(r):
-    prod, lob = domain.norm(r.get('product')), domain.norm(r.get('lob'))
-    if prod == 'SWAP':
-        return 'SWAP'
-    if prod in ('TERMO', 'NDF COMMODITIES'):
-        return 'NDF COMM'
-    return 'OPTION COMM' if lob == 'COMMODITIES' else 'OPTION'
+    """(PRODUCT, LOB) da linha do Trade Level: SWAP, NDF (o termo de
+    mercadoria, LOB COMMODITIES) ou OPTION com a LOB da classe do ativo — a
+    regra é a de `domain.produto_lob`."""
+    prod = domain.norm(r.get('product'))
+    if prod not in ('SWAP', 'TERMO', 'NDF COMMODITIES'):
+        prod = 'OPTION'
+    return domain.produto_lob(prod, r.get('lob'), 'ops')
+
+
+def _ops_id(r, product):
+    """O identificador que vai ao HUB. Na liquidação de COMMODITIES (termo e
+    opção) é o Trade Id do OTM (`85000H-1PMHHP`), que a linha do Trade Level
+    traz em `_otm_id`; o Nº da Confirmação do Athena só tem o mesmo sufixo e
+    não casa com o Docto do HUB. Sem OTM, fica o de antes."""
+    if domain.norm(r.get('lob')) == domain.LOB_COMMODITIES and product in ('NDF', 'OPTION'):
+        otm = str(r.get('_otm_id') or '').strip()
+        if otm:
+            return otm
+    return r.get('internal_id')
 
 
 def ops_rows(day, trades):
@@ -177,10 +192,10 @@ def ops_rows(day, trades):
         s = r.get('_settle_n')
         if s is None:
             continue
-        product = _produto_ops(r)
+        product, lob = _produto_ops(r)
         event = str(r.get('settle_type', '') or '')
-        if product in ('OPTION', 'OPTION COMM') and 'PREMIUM' in domain.norm(event):
-            k = (domain.alnum(r.get('_legal')), domain.alnum(r.get('counterparty')), product)
+        if product == 'OPTION' and 'PREMIUM' in domain.norm(event):
+            k = (domain.alnum(r.get('_legal')), domain.alnum(r.get('counterparty')), product, lob)
             if k not in premios:
                 premios[k] = []
                 ordem.append(k)
@@ -199,10 +214,10 @@ def ops_rows(day, trades):
         else:
             # Termo de mercadoria paga por contrato; na opção, exercício e
             # recompra são liquidação isenta (só o prêmio paga, acima).
-            taxable = product == 'NDF COMM' and not R._ndfc_ir_exempt(cpty)
+            taxable = product == 'NDF' and not R._ndfc_ir_exempt(cpty)
             devido = gross * rate if taxable else 0.0
-        out.append(_linha(day, 'ops', len(out), r.get('internal_id'), r.get('id_b3'), product,
-                          r.get('lob'), event, gross, devido, taxable, cpty,
+        out.append(_linha(day, 'ops', len(out), _ops_id(r, product), r.get('id_b3'), product,
+                          lob, event, gross, devido, taxable, cpty,
                           refdata.get(domain.alnum(cpty), ''), r.get('_legal'), unknown))
     for k in ordem:
         linhas = premios[k]
@@ -213,11 +228,11 @@ def ops_rows(day, trades):
         cpty = str(rep.get('counterparty', '') or '').strip()
         gross = abs(net)
         taxable = not R._ndfc_ir_exempt(cpty)
-        x = _linha(day, 'ops', len(out), rep.get('internal_id'), rep.get('id_b3'), k[2],
-                   rep.get('lob'), 'PREMIUM', gross, gross * rate if taxable else 0.0, taxable,
+        x = _linha(day, 'ops', len(out), _ops_id(rep, k[2]), rep.get('id_b3'), k[2],
+                   k[3], 'PREMIUM', gross, gross * rate if taxable else 0.0, taxable,
                    cpty, refdata.get(domain.alnum(cpty), ''), rep.get('_legal'))
         if len(linhas) > 1:
-            x['net_of'] = [str(r.get('internal_id') or r.get('id_b3') or '') for r in linhas]
+            x['net_of'] = [str(_ops_id(r, k[2]) or r.get('id_b3') or '') for r in linhas]
         out.append(x)
     return _ids(out)
 
@@ -281,6 +296,9 @@ def enrich_otc(rows, codes=None, por_le=None, nonres=None):
     for r in rows:
         o = dict(r)
         o['date'] = domain.parse_date(o.get('day'))
+        # O mês gravado antes da regra (`NDF COMM`, `OPTION COMM`, NDF sem LOB,
+        # `INDICES INTERNACIONAIS`) sai certo sem recoletar.
+        o['product'], o['lob'] = domain.produto_lob(o.get('product'), o.get('lob'), o.get('source'))
         resident = not (domain.cnpj_key(o.get('taxid')) in nr_cnpj
                         or domain.alnum(o.get('counterparty')) in nr_nome)
         c = domain.resolve_code(codes, o.get('product'), o.get('lob'), o.get('event'),

@@ -285,7 +285,9 @@ def _conf_segregate(deals, family_fn, merc_fn=None):
         # todo produto e o B3 ID para o FWD Start, então os dois vão juntos.
         # Casar por contraparte × mercadoria seria um de-para por texto entre
         # dois cadastros que normalizam nomes de jeitos diferentes.
-        for _c in ('Deal', 'B3_ID'):
+        # A recompra declara a dela em `_mc_key` (§696): o Athena ID que ela
+        # leva no `Deal` é o da operação ORIGINAL.
+        for _c in ('_mc_key', 'Deal', 'B3_ID'):
             _v = str(deal.get(_c) or '').strip()
             if _v:
                 g['trades'].append(_v)

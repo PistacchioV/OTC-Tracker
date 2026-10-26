@@ -76,6 +76,7 @@ def main():
     from run import app  # noqa: F401
     from apps.pages import routes as R
     from apps.pages.features.unwinds import commands, domain, queries
+    K1 = domain.chave_esteira(L1)          # a chave da recompra na esteira (§696)
     from apps.pages.features.unwinds.infra import persistence
 
     tmp = tempfile.mkdtemp(prefix='otc-termo-')
@@ -373,7 +374,10 @@ def main():
     if vistos:
         d, pt, kw = vistos[0]
         check('com o Product Type UNWIND NDF', pt == 'UNWIND NDF', pt)
-        check('e chaveada pelo Athena ID', kw.get('trade_number') == L1['AthenaID'])
+        # A chave NÃO é o Athena ID cru (§696): ele é o `Deal` da operação
+        # ORIGINAL na Vanilla/Other Publisher.
+        check('e chaveada pela chave PROPRIA da recompra (UNW-…)',
+              kw.get('trade_number') == K1 and K1.startswith('UNW-' + L1['AthenaID']), kw)
         check('com o Status que a segregacao le como elegivel', d['Status'] == 'Success')
     # Falha no espelho NAO derruba o import: a linha ja esta no arquivo-dia.
     def _explode(*a, **k):
@@ -400,8 +404,8 @@ def main():
         g = grupos[0]
         check('o eixo do grupo e a moeda', g['mercadoria'] == 'USD', g['mercadoria'])
         check('a familia e o termo', g['family'] == 'termo-resilicao')
-        check('e os Athena IDs sao as chaves da esteira',
-              L1['AthenaID'] in g['trades'] and L2['AthenaID'] in g['trades'])
+        check('e as chaves da esteira (UNW-…) estao no grupo',
+              K1 in g['trades'] and domain.chave_esteira(L2) in g['trades'], g['trades'])
     check('e a familia tem template',
           'termo-resilicao' in R._CONF_UNWIND_FAMILY_TEMPLATES)
     check('que aponta para a rota do documento',
@@ -416,7 +420,7 @@ def main():
     linha_esteira = {'Cliente': L1['Counterparty'], 'Produto': commands.MC_SOURCE,
                      'LOB': 'CEM', 'Moeda': 'USD', 'Legal Entity': '',
                      'Data Operação': HOJE.strftime('%d/%m/%Y'),
-                     'Trade ID': L1['AthenaID']}
+                     'Trade ID': K1}
     check('o Produto da esteira traduz para o TIPO do documento',
           _mc.confirmation_type(commands.MC_SOURCE, 'CEM') == 'TERMO DE RESILICAO',
           _mc.confirmation_type(commands.MC_SOURCE, 'CEM'))
@@ -431,7 +435,7 @@ def main():
           _mc.confirmation_label(commands.MC_SOURCE, 'CEM') not in _mc.CONFIRMATION_TYPES)
     check('produto sem recompra nao ganha sufixo',
           _mc.confirmation_label('NDF COMM', 'CEM') == _mc.confirmation_type('NDF COMM', 'CEM'))
-    url, motivo = R._mc_generate_url(linha_esteira, [L1['AthenaID']])
+    url, motivo = R._mc_generate_url(linha_esteira, [K1])
     check('o Generate resolve a URL (nao devolve motivo)', bool(url) and not motivo, motivo)
     check('e ela e a do Termo de Resilicao, com contraparte e moeda',
           url.startswith(commands.TERMO_URL + '?') and 'mercadoria=USD' in url
@@ -440,7 +444,7 @@ def main():
     # Data Operacao de um dia SEM recompra: o 404 tem de dizer por que, em vez
     # de abrir o documento de outro dia.
     _u2, _m2 = R._mc_generate_url(dict(linha_esteira, **{'Data Operação': '01/01/2026'}),
-                                  [L1['AthenaID']])
+                                  [K1])
     check('dia sem a recompra recusa dizendo o motivo', not _u2 and 'arquivo-dia' in (_m2 or ''),
           (_u2, _m2))
 
@@ -452,27 +456,27 @@ def main():
     R._pc_save_from_deal = _pc_save_original
     persistence.upsert(datetime(HOJE.year, HOJE.month, HOJE.day), [dict(L1)])
     commands.esteira_da_recompra([dict(L1)], HOJE)
-    check('a recompra entrou na esteira', _mcdb.find_row(L1['AthenaID']) is not None)
+    check('a recompra entrou na esteira', _mcdb.find_row(K1) is not None)
     def _no_pc(tn):
         return any(str(r.get('Trade Number', '') or '').strip() == tn
                    for cat in ('backlog', 'pending', 'ok')
                    for r in R._pc_load_rows(cat))
-    check('e no Pending Confirmation', _no_pc(L1['AthenaID']))
+    check('e no Pending Confirmation', _no_pc(K1))
     # Reimportada NOUTRO dia: a linha aponta para o arquivo-dia novo, senao o
     # Generate procura onde a recompra nao esta mais.
     outro = date(2026, 9, 21)
     commands.esteira_data_da_operacao(dict(L1), datetime(outro.year, outro.month, outro.day))
     check('reimportada noutro dia, a Data Operacao acompanha',
-          (_mcdb.find_row(L1['AthenaID']) or {}).get('Data Operação') == '21/09/2026',
-          (_mcdb.find_row(L1['AthenaID']) or {}).get('Data Operação'))
+          (_mcdb.find_row(K1) or {}).get('Data Operação') == '21/09/2026',
+          (_mcdb.find_row(K1) or {}).get('Data Operação'))
     # Mas nao por cima de carimbo: mesa que ja validou decidiu com a data que
     # estava la.
-    _row = _mcdb.find_row(L1['AthenaID'])
+    _row = _mcdb.find_row(K1)
     _row['Conferido OTC'] = '19/09/2026'
     _mcdb.upsert_row(_row)
     commands.esteira_data_da_operacao(dict(L1), datetime(HOJE.year, HOJE.month, HOJE.day))
     check('linha ja carimbada NAO tem a data mexida',
-          (_mcdb.find_row(L1['AthenaID']) or {}).get('Data Operação') == '21/09/2026')
+          (_mcdb.find_row(K1) or {}).get('Data Operação') == '21/09/2026')
     # E o Delete: com carimbo ele RECUSA (apagar levaria o rastro de quem
     # assinou); sem carimbo, a linha sai da esteira junto com a recompra.
     check('com a esteira carimbada o Delete RECUSA',
@@ -480,13 +484,71 @@ def main():
           _erro(commands.delete, L1['AthenaID'], HOJE.strftime('%Y-%m-%d')))
     check('e a recompra continua no arquivo-dia',
           queries.find(L1['AthenaID'], HOJE.strftime('%Y-%m-%d'))[2] is not None)
-    _row = _mcdb.find_row(L1['AthenaID'])
+    _row = _mcdb.find_row(K1)
     _row['Conferido OTC'] = ''
     _mcdb.upsert_row(_row)
     check('sem carimbo o Delete passa',
           commands.delete(L1['AthenaID'], HOJE.strftime('%Y-%m-%d')) is True)
-    check('e a linha sai da esteira junto', _mcdb.find_row(L1['AthenaID']) is None)
-    check('e do Pending Confirmation tambem', not _no_pc(L1['AthenaID']))
+    check('e a linha sai da esteira junto', _mcdb.find_row(K1) is None)
+    check('e do Pending Confirmation tambem', not _no_pc(K1))
+
+    from apps.pages.platform import pending_confirmation as _pcm
+    print('\n== 15. a recompra NAO pisa na confirmacao do contrato original (§696) ==')
+    # O Athena ID da recompra e o `DEAL NAME` do trade original — o MESMO
+    # `Deal` com que a Vanilla grava a confirmacao dele. Com a mesma chave, a
+    # recompra reescrevia a linha da original no Pending, nunca entrava na
+    # esteira e o Delete dela apagava a confirmacao original.
+    orig_pc = {'Trade Number': L1['AthenaID'], 'Product Type': 'NDF VANILLA',
+               'Pending Status': 'Pending OTC', 'Client': 'COFCO INTERNATIONAL BRASIL SA',
+               'Trade Date': '01/06/2026', 'Maturity Date': '01/12/2026'}
+    R._pc_upsert_rows([dict(orig_pc)])
+    _mcdb.upsert_row({'Trade ID': L1['AthenaID'], 'Produto': 'NDF VANILLA', 'Cliente': 'COFCO',
+                      'Data Operação': '01/06/2026'})
+    persistence.upsert(datetime(HOJE.year, HOJE.month, HOJE.day), [dict(L1)])
+    commands.esteira_da_recompra([dict(L1)], HOJE)
+    _pc_orig = _pcm._pc_find_row(L1['AthenaID'])
+    check('a confirmacao original continua NDF VANILLA no Pending',
+          (_pc_orig or {}).get('Product Type') == 'NDF VANILLA', _pc_orig)
+    check('a recompra tem a linha DELA no Pending', _no_pc(K1))
+    check('e a recompra ENTROU na esteira (a original nao a bloqueia)',
+          (_mcdb.find_row(K1) or {}).get('Produto') == commands.MC_SOURCE, _mcdb.find_row(K1))
+    check('o Delete da recompra passa', commands.delete(L1['AthenaID'], HOJE.strftime('%Y-%m-%d')) is True)
+    check('e a original fica no Pending e na esteira',
+          _pcm._pc_find_row(L1['AthenaID']) is not None and _mcdb.find_row(L1['AthenaID']) is not None)
+
+    print('\n== 16. a migracao leva o estado ANTIGO para a chave nova (§696) ==')
+    # O estado que a chave antiga deixou: a recompra gravada no Pending e na
+    # esteira pelo Athena ID cru. O script a leva para `UNW-…`.
+    import importlib.util as _ilu
+    _sp = _ilu.spec_from_file_location('mig', os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), '..', 'migrate_unwind_esteira_keys.py'))
+    MIG = _ilu.module_from_spec(_sp)
+    _sp.loader.exec_module(MIG)
+    from apps.pages.features.unwinds.product import commands as _prod
+    _pag_orig = _prod.paginas_com_esteira
+    _prod.paginas_com_esteira = lambda: []          # só a Fase 1 neste teste
+    _pcm._pc_delete_trade_number(L1['AthenaID'])
+    _mcdb.delete_row(L1['AthenaID'])
+    persistence.upsert(datetime(HOJE.year, HOJE.month, HOJE.day), [dict(L1)])
+    R._pc_upsert_rows([{'Trade Number': L1['AthenaID'], 'Product Type': commands.MC_SOURCE,
+                        'Pending Status': 'Pending OTC', 'Client': L1['Counterparty'],
+                        'Trade Date': HOJE.strftime('%d/%m/%Y'), 'Maturity Date': ''}])
+    _mcdb.upsert_row({'Trade ID': L1['AthenaID'], 'Produto': commands.MC_SOURCE,
+                      'Cliente': 'COFCO', 'Data Operação': HOJE.strftime('%d/%m/%Y'),
+                      'Conferido OTC': '20/09/2026'})
+    try:
+        MIG.main([])
+        check('sem --gravar nada muda', _mcdb.find_row(L1['AthenaID']) is not None
+              and _mcdb.find_row(K1) is None)
+        MIG.main(['--gravar'])
+        _r = _mcdb.find_row(K1) or {}
+        check('a linha da esteira foi para a chave nova, com o carimbo',
+              _r.get('Conferido OTC') == '20/09/2026' and _mcdb.find_row(L1['AthenaID']) is None, _r)
+        check('e a do Pending tambem', _no_pc(K1) and _pcm._pc_find_row(L1['AthenaID']) is None)
+        MIG.main(['--gravar'])
+        check('rodar de novo nao muda nada', _mcdb.find_row(K1) is not None and _no_pc(K1))
+    finally:
+        _prod.paginas_com_esteira = _pag_orig
 
     print('\n' + ('tudo ok' if not FALHAS else 'FALHAS: ' + '; '.join(FALHAS)))
     return 1 if FALHAS else 0

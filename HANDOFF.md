@@ -29755,3 +29755,141 @@ prêmio não foi tocado — ele não tem a regra do net.
 operações sai do card em vez de virar "—" em todas). No Bullet, Premium e
 Premium Date ficam lado a lado só quando há prêmio, e o Notional ocupa a linha
 inteira para os pares não desalinharem.
+
+## §695 — WHT: a liquidação de commodities vai ao HUB com o Trade Id do OTM (2026-10-26)
+
+**O termo e a opção de COMMODITIES iam ao WHT com o Nº da Confirmação do
+Athena** (o `Codigo Identificador` / `Combinação de operações` da posição), e o
+HUB identifica essas liquidações pelo **Trade Id do OTM** (`85000H-1PMHHP`, o
+da tela OTM Settlements). Os dois só têm em comum o pedaço depois do último
+hífen — é por ele que o aviso já casava o valor (`_ndfadv_otm_by_suffix`) —, e
+com o número errado o documento não casava com o Docto do HUB e a operação
+ficava `Unmatched OTC`.
+
+- `routes._ndfadv_otm_ids(ref)`: o mesmo join pelo sufixo, guardando o Trade Id
+  inteiro (dois Trade Ids com o mesmo sufixo: vale o de maior |Σ Amount|).
+  Função separada, e não um terceiro valor do `_ndfadv_otm_by_suffix`, porque
+  os testes trocam aquela por um par.
+- O aviso de termo (`_ndfadv_collect`) e o de opção (`_optadv_collect`, fora do
+  câmbio, que não passa pelo OTM) levam `otm_id`; o Trade Level o carrega como
+  `_otm_id` (`settlement._ops_ndfc_trade_rows`/`_ops_opt_trade_rows`) — o WHT
+  continua lendo só o Trade Level, sem uma segunda leitura do OTM.
+- `wht.queries._ops_id`: NDF COMM e OPTION COMM usam o `_otm_id` no Internal
+  ID, no número do documento, no batimento e no `net_of` do prêmio; sem OTM,
+  fica o id de antes. Swap, opção de câmbio/equity e o NDF Summary não mudam.
+
+Os dias já gravados trocam de id na próxima coleta (abrir o Summary do dia ou
+o Import Settlements). A recompra de commodities segue com a chave dela: não
+se sabe se o OTM a traz com Trade Id próprio. `check_wht.py` §7.
+
+**Product × LOB na tela (pedido da equipe, mesmo dia).** A mercadoria deixou
+de ser PRODUTO: `OPTION COMM` vira `OPTION` × `COMMODITIES` e `NDF COMM` vira
+`NDF` × `COMMODITIES`; o NDF de moeda (que vem do Cockpit) sem LOB vira `CEM`; a
+classe `INDICES INTERNACIONAIS` da opção vira `EDG`. É uma regra só
+(`domain.produto_lob`), aplicada na coleta e na LEITURA (`enrich_otc`) — o mês
+já gravado com os nomes antigos sai certo sem recoletar. O `wht-codes` agora
+tem só NDF/OPTION/SWAP no Product e separa a mercadoria pela coluna LOB (que já
+existia e já era mais específica que o coringa); o seed mudou e o `upgrade`
+(`domain.wht_codes_upgrade`) converte o cadastro gravado na instância. Os
+códigos não mudam: NDF × COMMODITIES é o 5557P, OPTION × COMMODITIES o 5557R,
+e o NDF × CEM continua no 5557M do NDF de moeda.
+
+
+## §696 — A esteira: Intrag, Pending Confirmation e Track sem quebra calada (2026-10-26)
+
+Auditoria do caminho das operações até a Intrag, o Pending Confirmation e a
+esteira (Track/Confirmations Monitor). Os 29 testes da área passavam; os
+defeitos estavam em caminhos que nenhum cobria. Seis corrigidos:
+
+**1. A Intrag Option perdia o Intrag ID.** O re-save da linha preservava
+status/maker/checker/números e NÃO o `intrag_id` (o `_intrag_day_persist` dos
+outros produtos preserva). E o Edit da Opt Comm/Opt FXO manda `Success` em
+qualquer edição de linha com B3 ID, o que regrava o espelho: editar qualquer
+campo na origem apagava o Intrag ID calado. `intrag/commands.py` agora o
+preserva (`check_intrag_api.py` §9).
+
+**2. A chave da recompra era a da operação ORIGINAL.** O Athena ID da recompra
+de NDF FX é o `DEAL NAME` do trade original — o `Deal` com que a Vanilla e a
+Other Publisher gravam a confirmação dele no Pending; no catálogo o Deal ID (o
+`Codigo Identificador`) pode ser o `Deal` do NDF Comm. Com a mesma chave a
+recompra reescrevia a linha da original no Pending (Product Type `UNWIND NDF`,
+datas da recompra), nunca entrava na esteira quando a original já tinha linha,
+duas parciais do mesmo contrato dividiam uma linha, e o **Delete da recompra
+apagava a confirmação original**. Chave nova (`unwinds.domain.chave_esteira`):
+`UNW-<Athena ID>-<AAAAMMDD da liquidação>` na Fase 1 (a liquidação é preservada
+no reimport) e `UNW-<_id>` no catálogo. O deal leva `_mc_key`, que vence na
+segregação (`_conf_segregate`), no carimbo (`_mc_conf_trade_keys`) e no FepWeb
+ID do Termo; o `Deal` continua o Athena ID (o documento e o XML o leem). O
+backfill das famílias de recompra também foi consertado: filtrava `Success`
+(a recompra entra na esteira em qualquer status, no import) e a família NDF FX
+não tinha chave nenhuma (`sem_chave` sempre). **Dados de antes:
+`scripts/migrate_unwind_esteira_keys.py` (sem `--gravar` só relata)** — muda a
+chave das linhas `UNWIND …`, refaz pela porta do mapeamento a confirmação
+original que a recompra reescreveu (o que a equipe tinha preenchido nela —
+EA, comentários, FepWeb ID — não volta; a lista sai no fim) e faz entrar as
+recompras que nunca tiveram linha. `check_unwind_termo.py` §15 (a colisão) e
+§16 (a migração).
+
+**3. A cópia que falhava era muda.** `_pc_save_from_deal`, `_mc_save_from_deal`,
+os espelhos da Intrag (New Deals, Opt, swaps, Cetes, recompras) engoliam a
+exceção e só logavam; a tela dizia "B3 ID saved — status set to Success **and
+sent to Intrag**" (até para cliente externo, que nunca vai à Intrag) e nada
+tentava de novo — o Mapping ignora a linha que já é Success. Hoje
+`platform/mirrors.falhou(alvo, ref, exc)` registra no request, o
+`after_request` devolve no cabeçalho `X-OTC-Mirror-Failed` de `/api/*`, e o
+`session-guard.js` (que já embrulha o fetch de toda página) mostra o aviso
+traduzido DEPOIS do Swal de sucesso da página. Os dois `_save_from_deal`
+devolvem o veredito (True/None/False). A frase "and sent to Intrag" saiu das
+seis páginas e das traduções. `check_mirror_failed.py`. **Fica para depois:**
+o Intraday Monitor ainda não conta como pendência a operação Success que devia
+ter ido à Intrag e não foi (`domain.intrag_destino` devolve None para Success).
+
+**4. O Edit do Track apagava a assinatura de outra mesa.** O modal mandava a
+linha INTEIRA da última carga da página; o `save_changes` compara com a linha
+relida, então o valor velho contava como mudança. Track aberto às 9h, MO valida
+pelo Monitor às 9h10, Edit da Data Callback às 9h20 → `VALIDADO p/ MO` vazio, a
+linha de volta a Pending MO e o Pending junto. O modal agora manda só o campo
+mexido (`data-orig`), e desfazer uma validação pela grade é da mesa da ETAPA
+(403 para as outras — vale contra a aba aberta antes do deploy); o OTC reabre a
+esteira inteira pelo `Pending OTC`, como antes.
+
+**5. Gravação pela metade nos laços do Monitor.** Cada `mutate_row` é uma
+transação. O admin que arrastava de OTC para OK uma linha sem Data Callback
+assinava OTC, MO e FO e só então recebia o 409 — esteira em Pending FepWeb,
+Pending em Pending OTC para sempre; o Validate em lote com uma linha atrasada
+deixava as anteriores assinadas sem espelho. Agora o arrastar SIMULA o caminho
+(`_mc_move_one(..., dry=True)`, os mesmos ramos sem gravar) e o Validate
+pergunta ao `manual_conf.validation_blocker` (a MESMA regra que o
+`mark_validated` usa sob a trava) ANTES da primeira gravação; o que ainda
+levanta no meio (banco ocupado) espelha no Pending o que já gravou
+(`_mc_sync_parcial` no move/validate/reject, `finally` na grade, no Mark as sent
+e no Legal release).
+
+**6. O espelho da esteira desfazia o que o Pending resolveu.** Com a esteira em
+Ok, toda gravação (uma Data Callback, um comentário em massa) reescrevia
+"Pending Digital Signature/Original" por cima do que a equipe já tinha marcado
+no Pending (Concluded, Signed Digitally) e a linha voltava ao banco `pending`. E
+a assinatura `Internal` saía "Pending Original", contra a regra do próprio
+Pending (`Exception Digital Fep Web`). O `_mc_pc_sync` agora lê ESTRITO e só as
+linhas do lote (`_pc_find_rows`; a tolerante lia banco ocupado como "não há"),
+usa o `_pc_signature_pending_status` (sem o prazo) e no Ok só escreve enquanto
+o Pending está numa etapa da esteira. Reabrir a esteira continua levando o
+Pending de volta à etapa. `check_mc_pending_sync.py` (reprova o código antigo em
+10 pontos).
+
+**Achados que NÃO foram mexidos** (estão na auditoria, com arquivo e linha):
+a Intrag que duplica quando o dia ou a chave muda (Trade Date editado, UnwindDate
+do catálogo, swap mapeado editado); a recompra que vence no Pending no dia da
+própria liquidação (a Maturity é a SettlementDate da recompra); a manutenção
+das 11:30 sem trava entre instâncias e gravando o `ok` por último; o upsert da
+tela do Pending que grava a linha inteira da grade velha; a grade do Track sem
+as travas do Monitor (MO antes do OTC, envio sem callback); o Delete da
+esteira/Pending que falha sem acusar; Intrag ID de recompra que pode ir para a
+operação original nos mappings de NDF e Option (`sem_recompra`).
+
+**Na instância:** pull + restart, e então
+`python scripts/migrate_unwind_esteira_keys.py` (ler o relatório) e
+`--gravar`. A suíte inteira roda com 7 falhas que já existiam antes desta
+mudança (`check_b3_pattern`, `check_export_advanced`,
+`check_lp_counterparty_name`, `check_mt300`, `check_ndf_advice`,
+`check_req_cache`, `check_swap_advice` — conferidas com o código anterior).

@@ -2281,6 +2281,15 @@ São **51**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   recompra levaria o Intrag ID da operação original. O que só aparece na boleta
   original volta em `only_original`, sem gravar. O card do Monitor fecha em
   `Sent` ou `Success`.
+- **A chave da recompra no Pending e na esteira é PRÓPRIA** (§696):
+  `UNW-<Athena ID>-<AAAAMMDD da liquidação>` na Fase 1 e `UNW-<_id>` no
+  catálogo (`unwinds.domain.chave_esteira`; o deal leva `_mc_key`, que vence no
+  `_conf_segregate` e no `_mc_conf_trade_keys`). O Athena ID cru é o `DEAL NAME`
+  do trade ORIGINAL — o `Deal` com que a Vanilla e a Other Publisher gravam a
+  confirmação dele —, e com a mesma chave a recompra reescrevia a original no
+  Pending, nunca entrava na esteira e o Delete dela apagava a original. O `Deal`
+  do deal da recompra segue o Athena ID (o documento e o XML o leem). Dados de
+  antes: `scripts/migrate_unwind_esteira_keys.py`.
 - **A esteira nasce e morre com a recompra.** Apagar a recompra tira a linha do
   Pending Confirmation e da esteira (`esteira_sem_a_recompra`) — sem isso ficava
   um card de Pending OTC de uma operação que não existe mais, com o Generate
@@ -2718,7 +2727,15 @@ São **51**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   fonte que a coleta SUBSTITUI (coleta vazia não cria o dia — senão o aviso de
   dia faltando sumiria). O Import Settlements é um TRABALHO em segundo plano,
   com os dias em paralelo (§694); o prêmio de opção entra como UMA linha com o
-  net do dia. **O imposto que cada operação informa ao HUB é a
+  net do dia. **Termo e opção de COMMODITIES vão com o Trade Id do OTM**
+  (`85000H-1PMHHP`, §695), não com o Nº da Confirmação: o Trade Level o traz
+  em `_otm_id` (`routes._ndfadv_otm_ids`, pelo sufixo) e o `queries._ops_id`
+  escolhe. **A mercadoria é LOB, não produto** (equipe, 26/10/2026):
+  Product só `NDF`/`OPTION`/`SWAP`, e termo e opção de mercadoria são
+  `× COMMODITIES`; o NDF do Cockpit é `CEM` e a classe `INDICES
+  INTERNACIONAIS` é `EDG` — UMA regra (`domain.produto_lob`) na coleta e na
+  LEITURA (o mês já gravado sai certo), e o `wht-codes` separa pela coluna
+  LOB (o `upgrade` converte o cadastro gravado com `NDF COMM`/`OPTION COMM`). **O imposto que cada operação informa ao HUB é a
   QUEBRA do piso de R$ 1,00 do mês** (`domain.allocate`), não o que foi retido:
   os decêndios anteriores ao que passou do piso ficam zerados, no que passou
   cada operação leva o SEU imposto e a que cruzou leva também o acumulado dos
@@ -2750,7 +2767,23 @@ São **51**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 - Ciclo: `(Pending Legal) → Pending OTC → Pending MO e/ou FO → Pending FepWeb
   → Ok`. Legal é hold manual; FepWeb é derivado; Ok exige `Enviado p/
   cliente`; `Pending OTC` digitado REABRE (limpa validações). Toda gravação
-  espelha no Pending Confirmation (`_mc_pc_sync`).
+  espelha no Pending Confirmation (`_mc_pc_sync`, leitura ESTRITA das linhas do
+  lote): a etapa entra verbatim e o Ok vira o status de assinatura pela regra
+  do PRÓPRIO Pending (`_pc_signature_pending_status`, sem o prazo) **só enquanto
+  o Pending está numa etapa da esteira** — depois o status é da equipe
+  (Concluded, Signed Digitally) e a esteira não o reescreve (§696).
+- **Laço que grava várias linhas confere TUDO antes da primeira** (§696): cada
+  `mark_validated`/`save_changes` é uma transação, e a recusa no meio deixava
+  metade assinada sem espelho. O Validate pergunta ao
+  `manual_conf.validation_blocker` (a MESMA regra do `mark_validated`), o
+  arrastar SIMULA o caminho (`_mc_move_one(..., dry=True)`); e o que ainda
+  levanta no meio (banco ocupado) espelha no Pending o que já gravou
+  (`_mc_sync_parcial` ou `finally`). Endpoint novo da esteira em laço segue o
+  mesmo desenho.
+- **O Edit do Track manda só o campo MEXIDO** (`data-orig` no modal, §696): a
+  linha vem da última carga da página, e mandá-la inteira apagava a validação
+  que outra mesa deu depois. E desfazer uma validação pela grade é da mesa da
+  ETAPA (403 para as outras); o OTC reabre a esteira inteira pelo `Pending OTC`.
 - **SLA em dias ÚTEIS ANBIMA a partir do TRADE DATE**: OTC D+3, MO D+4, FO D+6
   em paralelo (`manual-conf-sla`, branco = histórico). `sla_state()`: ok/warn/
   late/**done**. Passado o prazo a validação exige justificativa (409
@@ -3309,6 +3342,13 @@ São **51**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   das páginas que nascem do New Deals) e a mesa fala em B3 ID — o texto passa
   por `intrag/entrypoint._notif_ref` (B3 ID da linha, sem ele a chave).
   `check_intrag_notif_ref.py`.
+- **Cópia para outra tela que falha é DITA na tela** (§696): espelho de
+  melhor esforço (Pending Confirmation, esteira, Intrag) chama
+  `platform/mirrors.falhou(alvo, ref, exc)` no `except` — além do log, o
+  `after_request` põe no `X-OTC-Mirror-Failed` de `/api/*` e o
+  `session-guard.js` avisa depois do Swal da página. `_pc_save_from_deal` e
+  `_mc_save_from_deal` devolvem o veredito (True/None/False). Tela não afirma
+  cópia que não conferiu ("sent to Intrag" saiu).
 - **Notificação nova exige o rótulo `page` nos TRÊS mapas** (`_NOTIF_PAGE_URL`,
   `PAGE_URL` do `topbar.html` e do `sw-push.js`); sem ele o clique não vai a
   lugar nenhum. `check_notif_page_url.py` varre por AST.
@@ -3510,6 +3550,7 @@ São **51**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 | `import_cgd_sharepoint.py` · `import_cgd_auxiliar.py` | lista de CGDs e as três abas do `Auxiliar.xlsx` |
 | `fill_cgd_from_refdata_spn.py [--dry-run] [--force] [--db] [--refdata]` | completa o Tracking Docs pelo **SPN**: Economic Group, ECI, CASID e UCN do Reference Data. Chave de dígitos (sem zero à esquerda e sem `.0`), célula com o grupo (`;`) junta os valores, **SPN ambíguo no cadastro não preenche** a coluna divergente, só o vazio (`0`/`N/A` contam) sem `--force`, UMA abertura do banco (`cgd_docs.update_rows`). `check_cgd_spn_fill.py` |
 | `import_file_interpreter_template.py [--key <k>] [--force] [--dry-run]` | leva ao BANCO um template do File Interpreter corrigido no repositório. O `.json` versionado é a SEED, e a semeadura da subida não sobrescreve o que o banco tem (§434/§488): sem este script o motor segue lendo o layout velho e o arquivo vai errado para a B3, sem erro nenhum. Template que o banco tem EDITADO (algum `source` preenchido) fica de fora sem `--force` |
+| `migrate_unwind_esteira_keys.py [--gravar]` | leva as recompras do Pending e da esteira da chave antiga (Athena ID cru / Deal ID) para a PRÓPRIA (`UNW-…`, §696): a linha `UNWIND …` da chave antiga muda de chave (destino primeiro), a confirmação ORIGINAL que a recompra reescreveu no Pending é refeita pelo `_generic_nd_pc_trigger` (o que a equipe tinha preenchido nela não volta — a lista sai no fim) e a recompra que nunca entrou na esteira entra pela porta do import. Sem `--gravar` só relata; idempotente |
 | `split_notifications_db.py --dry-run` | mostra o que a separação do sino vai copiar |
 | `dev_seed_positions.py` | só na DEV: reemite a última posição B3 numa data recente (`--from … --force`) |
 | `convert_json_to_duckdb.py` + `scripts/convert/` (40 fatias) | a IMPORTAÇÃO JSON → DuckDB (o cutover do §434 e o legado fora da janela), incremental por `_manifest`, `--meses` 12 por padrão (`0` = tudo), `--only/--force/--dry-run/--bloco`; reconverte sozinho o payload-objeto sem `__raw` |
@@ -3526,7 +3567,7 @@ São **51**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (210 scripts)
+### `scripts/tests/` (215 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

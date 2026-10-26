@@ -44,6 +44,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import datetime
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
@@ -128,21 +129,23 @@ FAMILIES = {
     # criaria um card sozinho), então a família declara a raiz por FUNÇÃO — a
     # mesma `data_paths.unwinds_cache_root()` que a gravação e o Monitor usam,
     # nunca um caminho escrito de novo aqui.
+    # A chave é a da esteira (`_mc_key`, §696: `UNW-<Athena ID>-<liquidação>`),
+    # e a linha da recompra entra em QUALQUER status: a esteira nasce no IMPORT.
     'Unwind NDF FX':      {'root': 'unwinds', 'dir': ('NDF', 'FX'),
-                           'source': 'UNWIND NDF', 'key': 'deal'},
+                           'source': 'UNWIND NDF', 'key': 'mc', 'unwind_fase1': True},
     # A recompra de NDF de Commodities (28/09/2026): a linha da página vira
     # deal pelo MESMO `confirmation_deal` que o import usa (a chave é o Deal ID,
     # o `Codigo Identificador` do Live Position).
     'Unwind NDF Commodities': {'root': 'unwinds', 'dir': ('NDF', 'Commodities'),
-                               'source': 'UNWIND NDF COMM', 'key': 'deal',
+                               'source': 'UNWIND NDF COMM', 'key': 'mc',
                                'unwind_page': 'ndf/commodities'},
     # A Opção de Commodities e o Swap EDG (mesa, 21/10/2026): o mesmo Termo,
     # pelo mesmo `confirmation_deal` do import.
     'Unwind Options Commodities': {'root': 'unwinds', 'dir': ('Options', 'Commodities'),
-                                   'source': 'UNWIND OPTION COMM', 'key': 'deal',
+                                   'source': 'UNWIND OPTION COMM', 'key': 'mc',
                                    'unwind_page': 'options/commodities'},
     'Unwind Swap EDG': {'root': 'unwinds', 'dir': ('Swap', 'EDG'),
-                        'source': 'UNWIND SWAP', 'key': 'deal',
+                        'source': 'UNWIND SWAP', 'key': 'mc',
                         'unwind_page': 'swap/edg'},
 }
 
@@ -173,10 +176,16 @@ def iter_deals(root):
             except (OSError, ValueError):
                 print('  ! não consegui ler {}'.format(os.path.relpath(path, REPO_ROOT)))
                 continue
+            # O dia do ARQUIVO (AAAAMMDD no começo do nome): a recompra da Fase 1
+            # leva-o na `Data Operação` da esteira, como no import.
+            try:
+                dia = datetime.strptime(fname[:8], '%Y%m%d')
+            except ValueError:
+                dia = None
             if isinstance(deals, list):
                 for deal in deals:
                     if isinstance(deal, dict):
-                        yield deal
+                        yield dict(deal, _day_ref=dia) if dia else deal
 
 
 def main():
@@ -226,7 +235,8 @@ def main():
             continue
         for deal in iter_deals(root):
             varridos += 1
-            if str(deal.get('Status', '') or '').strip() != 'Success':
+            e_recompra = bool(cfg.get('unwind_page') or cfg.get('unwind_fase1'))
+            if not e_recompra and str(deal.get('Status', '') or '').strip() != 'Success':
                 continue
             success += 1
 
@@ -266,6 +276,14 @@ def main():
                 dia = R._parse_date_any(str(deal.get('ImportedAt') or '')[:10]) \
                     or R._parse_date_any(deal.get('UnwindDate'))
                 deal = _ucmd.confirmation_deal(_ucat.page(cfg['unwind_page']), deal, dia)
+            if cfg.get('unwind_fase1'):
+                # A recompra de NDF FX também vem no formato da PÁGINA (sem
+                # `Deal`): o MESMO tradutor do import. O dia é o do arquivo-dia.
+                from apps.pages.features.unwinds import commands as _ufase1
+                if _ufase1.e_do_fundo(deal):
+                    fora_regra += 1
+                    continue
+                deal = _ufase1.confirmation_deal(deal, deal.get('_day_ref'))
             if cfg.get('swap'):
                 # O deal do Swap Bullet vem no formato da PÁGINA (B3ID, sem
                 # SettlementDate): o mesmo tradutor do mapeamento o põe no
@@ -277,6 +295,8 @@ def main():
 
             if cfg['key'] == 'b3id':
                 key = str(deal.get('B3_ID', '') or '').strip()
+            elif cfg['key'] == 'mc':
+                key = str(deal.get('_mc_key', '') or '').strip()
             else:
                 key = str(deal.get('Deal', '') or '').strip()
             if not key:

@@ -25,8 +25,47 @@ from decimal import ROUND_HALF_UP, Decimal
 IR_MIN = 1.00            # o piso do mês por contraparte (§423, §674)
 TOL = 0.01               # valor e imposto batem até 1 centavo
 
-# Os produtos como o cadastro `wht-codes` os conhece (coluna PRODUCT).
-PRODUCTS = ('NDF', 'NDF COMM', 'OPTION', 'OPTION COMM', 'SWAP')
+# Os produtos como o cadastro `wht-codes` os conhece (coluna PRODUCT). A
+# mercadoria NÃO é produto: é a LOB `COMMODITIES` do NDF e da OPTION (equipe,
+# 26/10/2026) — o cadastro a separa pela coluna LOB.
+PRODUCTS = ('NDF', 'OPTION', 'SWAP')
+LOB_COMMODITIES = 'COMMODITIES'
+# O NDF de moeda vem do NDF Cockpit, que é da CEM; a classe de ativo
+# `INDICES INTERNACIONAIS` da opção (e do swap) é da EDG.
+LOB_NDF_PADRAO = 'CEM'
+_LOB_DE_PARA = {'INDICESINTERNACIONAIS': 'EDG'}
+
+
+def produto_lob(product, lob, source=''):
+    """(PRODUCT, LOB) da linha como a tela e o `wht-codes` os leem. Uma regra
+    para a coleta e para a LEITURA (o mês já gravado com `NDF COMM`/`OPTION
+    COMM` sai certo sem recoletar):
+      * `NDF COMM`/`TERMO`/`NDF COMMODITIES` → NDF × COMMODITIES;
+      * `OPTION COMM` → OPTION × COMMODITIES;
+      * LOB `INDICES INTERNACIONAIS` → EDG;
+      * NDF sem LOB (o do Cockpit, fonte `ndf`) → CEM."""
+    p, l = norm(product), norm(lob)
+    if p in ('NDF COMM', 'TERMO', 'NDF COMMODITIES'):
+        p, l = 'NDF', LOB_COMMODITIES
+    elif p == 'OPTION COMM':
+        p, l = 'OPTION', LOB_COMMODITIES
+    l = _LOB_DE_PARA.get(alnum(l), l)
+    if p == 'NDF' and not l and source in ('', 'ndf'):
+        l = LOB_NDF_PADRAO
+    return p, l
+
+
+def wht_codes_upgrade(rows):
+    """O cadastro `wht-codes` gravado com os produtos `NDF COMM`/`OPTION COMM`
+    → o produto com a LOB `COMMODITIES` (o seed só roda com o cadastro AUSENTE,
+    §6). Linha de outro produto passa intocada."""
+    out = []
+    for r in rows or ():
+        p = norm((r or {}).get('PRODUCT'))
+        if p in ('NDF COMM', 'OPTION COMM'):
+            r = dict(r, PRODUCT=p.split()[0], LOB=str(r.get('LOB') or '').strip() or LOB_COMMODITIES)
+        out.append(r)
+    return out
 # O número do documento no arquivo e no relatório do HUB tem no máximo 18
 # caracteres, e o que o OTC Tracker gera começa pelo prefixo do produto.
 DOC_MAX = 18

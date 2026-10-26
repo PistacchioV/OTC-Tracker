@@ -9,6 +9,8 @@
  * traduzido e a volta ao login. A promessa da página fica pendente de
  * propósito, para o Swal de erro dela não cobrir este.
  *
+ * O mesmo embrulho diz a CÓPIA que falhou (§696, `X-OTC-Mirror-Failed`).
+ *
  * Só é incluído em página renderizada com sessão (base.html), e carrega no
  * <head>: os fetches da página rodam antes do footer.
  */
@@ -50,12 +52,66 @@
         } catch (e) { return false; }
     }
 
+    // O espelho que FALHOU (§696): a origem gravou, mas a cópia para o Pending
+    // Confirmation, a esteira (Confirmations Track) ou a Intrag não. O servidor
+    // diz no cabeçalho `X-OTC-Mirror-Failed` (platform/mirrors.py) e o aviso
+    // sai DEPOIS do Swal de sucesso da página — um Swal substitui o outro, e o
+    // da página viria por cima deste.
+    var MTXT = {
+        en: { t: 'Saved — but a copy failed',
+              m: 'The operation was saved, but it was NOT copied to: {alvos}. Operations: {refs}. Save it again or tell support (details in the log).',
+              pc: 'Pending Confirmation', mc: 'Confirmations Track', intrag: 'Intrag' },
+        br: { t: 'Gravado — mas uma cópia falhou',
+              m: 'A operação foi gravada, mas NÃO foi copiada para: {alvos}. Operações: {refs}. Grave de novo ou avise o suporte (detalhes no log).',
+              pc: 'Pending Confirmation', mc: 'Confirmations Track', intrag: 'Intrag' },
+        es: { t: 'Guardado — pero una copia falló',
+              m: 'La operación fue guardada, pero NO fue copiada a: {alvos}. Operaciones: {refs}. Guárdela de nuevo o avise al soporte (detalles en el log).',
+              pc: 'Pending Confirmation', mc: 'Confirmations Track', intrag: 'Intrag' }
+    };
+    function mtr() {
+        var l = 'en';
+        try { l = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) {}
+        return MTXT[l] || MTXT.en;
+    }
+    var pendentes = [], agendado = false;
+    function mirrorFailed(raw) {
+        var lst;
+        try { lst = JSON.parse(raw); } catch (e) { return; }
+        if (!Array.isArray(lst)) return;
+        lst.forEach(function (x) {
+            if (x && !pendentes.some(function (y) { return y.target === x.target && y.ref === x.ref; }))
+                pendentes.push(x);
+        });
+        if (agendado) return;
+        agendado = true;
+        var tentativas = 0;
+        (function mostra() {
+            var aberto = window.Swal && Swal.isVisible && Swal.isVisible();
+            if (aberto && tentativas++ < 40) { setTimeout(mostra, 500); return; }
+            agendado = false;
+            var x = mtr(), alvos = [], refs = [];
+            pendentes.forEach(function (p) {
+                var a = x[p.target] || p.target;
+                if (alvos.indexOf(a) < 0) alvos.push(a);
+                if (refs.indexOf(p.ref) < 0) refs.push(p.ref);
+            });
+            pendentes = [];
+            var msg = x.m.replace('{alvos}', alvos.join(', ')).replace('{refs}', refs.join(', '));
+            if (window.Swal) Swal.fire({ icon: 'warning', title: x.t, text: msg });
+            else if (window.console) console.warn(msg);
+        })();
+    }
+
     var orig = window.fetch;
     window.fetch = function (input) {
         var p = orig.apply(this, arguments);
         if (!isAppApi(input)) return p;
         return p.then(function (r) {
-            if (r.status !== 401) return r;
+            if (r.status !== 401) {
+                var mf = r.headers && r.headers.get && r.headers.get('X-OTC-Mirror-Failed');
+                if (mf) setTimeout(function () { mirrorFailed(mf); }, 400);
+                return r;
+            }
             ended();
             return new Promise(function () {});
         });

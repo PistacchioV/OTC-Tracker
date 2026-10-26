@@ -795,8 +795,13 @@ def para_o_termo(page, linha):
     else:
         ativo = (texto(l.get('Commodity')) or texto(l.get('Currency'))).upper()
         moeda_contrato = texto((linha or {}).get('Currency')).upper()
+    _id = texto((linha or {}).get(catalog.KEY_FIELD))
     l.update({
         'AthenaID': chave_da_esteira(linha),
+        # A chave no Pending Confirmation e na esteira (§696): o `_id` interno,
+        # estável entre reimports e que nunca é o `Deal` de outra operação — o
+        # Deal ID (o `Codigo Identificador`) é o `Deal` do NDF Comm original.
+        '_mc_key': ('UNW-' + _id) if _id else '',
         'Currency': ativo,
         'MoedaDoContrato': moeda_contrato,
         'ClientAcronym': '',
