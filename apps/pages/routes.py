@@ -12031,6 +12031,24 @@ _MAP_INTERBOOK_FIELDS = [
 ]
 
 
+# O Term SOFR vai à B3 como VCP (equipe, 26/10/2026, §697): C00 com o
+# Tipo/Classe do prazo (VCP.json: TERM SOFR 1M 17924, 3M 17923, 6M 17922, 12M
+# 17921). O Trade Recap escreve `6M TERM SFR`.
+_SWAP_TERM_SOFR_CURVES = [
+    {'DT CURVE': '%dM TERM %s' % (m, t), 'MATCH': 'Contains', 'B3 CODE': 'C00',
+     'VCP CODE': str(code), 'NOTES': 'TERM SOFR %dM (VCP)' % m}
+    for m, code in ((1, 17924), (3, 17923), (6, 17922), (12, 17921)) for t in ('SFR', 'SOFR')]
+
+
+def _swap_bullet_curve_upgrade(rows):
+    """O cadastro gravado antes do §697 não tem as curvas do Term SOFR (o seed só
+    roda com o arquivo AUSENTE, §6): acrescenta a linha que FALTA, pelo DT
+    CURVE — linha que a equipe editou fica como está."""
+    tem = {str((r or {}).get('DT CURVE') or '').strip().upper() for r in rows or []}
+    return list(rows or []) + [dict(r) for r in _SWAP_TERM_SOFR_CURVES
+                               if r['DT CURVE'].upper() not in tem]
+
+
 def _wht_codes_upgrade(rows):
     """O `wht-codes` gravado com `NDF COMM`/`OPTION COMM` → produto × LOB
     COMMODITIES (a regra é do WHT: `features/wht/domain.wht_codes_upgrade`)."""
@@ -13728,6 +13746,9 @@ _MAPPING_DEFS = {
             {'key': 'DT CURVE', 'label': 'Curve as written on the Deal Ticket'},
             {'key': 'MATCH', 'label': 'Match', 'type': 'select', 'options': ['Exact', 'Contains']},
             {'key': 'B3 CODE', 'label': 'B3 Code (Curva X(03))'},
+            # O Tipo/Classe (VCP.json) da curva que vai à B3 como VCP quando o
+            # documento não o diz — o Trade Recap (§697): `6M TERM SFR` → 17922.
+            {'key': 'VCP CODE', 'label': 'VCP Tipo/Classe (when B3 Code is C00)'},
             {'key': 'NOTES', 'label': 'Notes'},
         ],
         'seed': [
@@ -13738,6 +13759,37 @@ _MAPPING_DEFS = {
             {'DT CURVE': 'CDI', 'MATCH': 'Exact', 'B3 CODE': 'C03', 'NOTES': 'DI'},
             {'DT CURVE': 'DI', 'MATCH': 'Exact', 'B3 CODE': 'C03', 'NOTES': 'DI'},
             {'DT CURVE': 'SELIC', 'MATCH': 'Exact', 'B3 CODE': 'C01', 'NOTES': ''},
+        ] + _SWAP_TERM_SOFR_CURVES,
+        'upgrade': _swap_bullet_curve_upgrade,
+    },
+    # O ÍNDICE TERMO do 0301 (campo 20, §697): o índice que corrige o Valor
+    # Base da operação a termo (a Atualização de Notional: `Initial FX: PTAX-V
+    # 06-Nov-2026`) → o código do layout 4.2.7. O domínio é o do próprio
+    # manual (00 VCP, 01 SELIC, 03 DI, 15 DOLAR, 33 EURO, 35 IENE, 36 LIBRA,
+    # 53 EURO-BCE, 78 FRANCO SUÍÇO BCE). `Exact` vence `Contains`; entre os
+    # `Contains` vence o mais longo. VCP CLASS é o Tipo/Classe do VCP a termo
+    # (fixação no próprio dia do início: o índice vira VCP, a regra da macro).
+    'swap-termo-index': {
+        'label': 'Swap — Forward-start Index (Índice Termo)',
+        'columns': [
+            {'key': 'INDEX', 'label': 'Index as written (e.g. PTAX-V)'},
+            {'key': 'MATCH', 'label': 'Match', 'type': 'select', 'options': ['Exact', 'Contains']},
+            {'key': 'CODE', 'label': 'Índice Termo (B3 code)'},
+            {'key': 'VCP CLASS', 'label': 'VCP Tipo/Classe (fixing on the start date)'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [
+            {'INDEX': 'PTAX', 'MATCH': 'Contains', 'CODE': '15', 'VCP CLASS': '', 'NOTES': 'DOLAR'},
+            {'INDEX': 'USD', 'MATCH': 'Contains', 'CODE': '15', 'VCP CLASS': '', 'NOTES': 'DOLAR'},
+            {'INDEX': 'DOLAR', 'MATCH': 'Contains', 'CODE': '15', 'VCP CLASS': '', 'NOTES': 'DOLAR'},
+            {'INDEX': 'SELIC', 'MATCH': 'Contains', 'CODE': '01', 'VCP CLASS': '', 'NOTES': 'SELIC'},
+            {'INDEX': 'CDI', 'MATCH': 'Contains', 'CODE': '03', 'VCP CLASS': '', 'NOTES': 'DI'},
+            {'INDEX': 'DI', 'MATCH': 'Exact', 'CODE': '03', 'VCP CLASS': '', 'NOTES': 'DI'},
+            {'INDEX': 'EURO-BCE', 'MATCH': 'Contains', 'CODE': '53', 'VCP CLASS': '', 'NOTES': 'EURO-BCE'},
+            {'INDEX': 'EUR', 'MATCH': 'Contains', 'CODE': '33', 'VCP CLASS': '', 'NOTES': 'EURO'},
+            {'INDEX': 'JPY', 'MATCH': 'Contains', 'CODE': '35', 'VCP CLASS': '', 'NOTES': 'IENE'},
+            {'INDEX': 'GBP', 'MATCH': 'Contains', 'CODE': '36', 'VCP CLASS': '', 'NOTES': 'LIBRA'},
+            {'INDEX': 'CHF', 'MATCH': 'Contains', 'CODE': '78', 'VCP CLASS': '', 'NOTES': 'FRANCO SUICO BCE'},
         ],
     },
     # Cotações: **Código do Ativo Subjacente** (o mesmo do Index B3) → o símbolo

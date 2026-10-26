@@ -356,6 +356,15 @@ def enrich(deal):
         # apelido — 'Safra'): quem responde nome, CNPJ e conta B3 é o
         # Reference Data. Sem SPN, tenta o nome do DT como último recurso.
         rec = refdata_by_spn(deal.get('SPN', '')) if deal.get('SPN') else {}
+        # Sem SPN, o CNPJ que o e-mail escreveu (`Party B … (CNPJ: …)`, §697)
+        # identifica a contraparte no Reference Data — por dígitos, sem os
+        # zeros à esquerda (o cadastro guarda mascarado).
+        cnpj = re.sub(r'\D', '', str(deal.get('ClientTaxId') or '')).lstrip('0')
+        if not rec and not deal.get('SPN') and cnpj:
+            for r in _R()._refdata_records():
+                if re.sub(r'\D', '', str(r.get('TAX ID', '') or '')).lstrip('0') == cnpj:
+                    rec = r
+                    break
         if not rec and not deal.get('SPN') and deal.get('ClientDT'):
             alvo = _dtk.norm(deal.get('ClientDT'))
             for r in _R()._refdata_records():
@@ -387,6 +396,17 @@ def enrich(deal):
         if q and m:
             n = _R()._anbima_biz_diff(datetime(q.year, q.month, q.day), datetime(m.year, m.month, m.day))
             deal['QuoteDateCode'] = str(min(max(n, 0), 5)).zfill(2)
+    # O Tipo/Classe da perna VCP que o DT não diz (o Trade Recap, §697) sai da
+    # coluna VCP CODE da linha da curva no `swap-bullet-curve` (`6M TERM SFR`
+    # → 17922, o TERM SOFR 6M do VCP.json) — nunca de um de-para no código.
+    if not _dtk._digits(deal.get('VcpCode')):
+        rows = _R()._mapping_rows('swap-bullet-curve')
+        for side in ('A', 'B'):
+            r = _dtk.curve_row(rows, deal.get('Curve' + side, ''), deal.get('Curve%sCategory' % side, ''))
+            vc = _dtk._digits((r or {}).get('VCP CODE'))
+            if vc:
+                deal['VcpCode'] = vc
+                break
     if not str(deal.get('VcpText') or '').strip():
         deal['VcpText'] = _dtk.vcp_text(deal)
     return deal

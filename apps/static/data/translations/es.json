@@ -2500,6 +2500,7 @@
   "nd-swb-modal-add": "Nueva Operación — Swap Bullet",
   "nd-swb-file-raw": "Archivo crudo",
   "map-tab-swap-bullet-curve": "Swap Bullet — Curva (Deal Ticket → B3)",
+  "map-tab-swap-termo-index": "Swap — Índice Termo (inicio a plazo)",
   "nd-swb-col-type": "Tipo de Swap",
   "nd-swb-col-pair": "Par",
   "nd-swb-col-client": "Cliente",
