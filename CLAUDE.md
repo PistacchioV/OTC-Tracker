@@ -1201,7 +1201,7 @@ São **51**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
 - **Ícone que gira tem UM ritmo: `--otc-spin-dur` (1,2 s por volta)** — o
   `ti-spin`/`ti-loader*`, o `.is-busy` (refresh ocupado, que vira o ARCO do
   loader: as setas do refresh são anti-horárias), o anel `spinner-border` do
-  Bootstrap e o `.otc-spin`, no `otc.scss` (§644, §647). Spinner próprio de
+  Bootstrap, o anel do `Swal.showLoading()` (`.swal2-loader`, §694) e o `.otc-spin`, no `otc.scss` (§644, §647). Spinner próprio de
   tela (anel de CSS, svg do Lucide) leva a classe `.otc-spin` — keyframes de
   giro na página o `check_send_contrail` §7 recusa. **O movimento reduzido
   NÃO toca nele** (§647): as máquinas do JP têm as animações do Windows
@@ -2716,7 +2716,9 @@ São **51**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   import do Cockpit e o Save Daily Settlement Files o recoletam em background.
   O armazém é um documento por MÊS (`wht/wht_AAAAMM.json`), uma fatia por dia ×
   fonte que a coleta SUBSTITUI (coleta vazia não cria o dia — senão o aviso de
-  dia faltando sumiria). **O imposto que cada operação informa ao HUB é a
+  dia faltando sumiria). O Import Settlements é um TRABALHO em segundo plano,
+  com os dias em paralelo (§694); o prêmio de opção entra como UMA linha com o
+  net do dia. **O imposto que cada operação informa ao HUB é a
   QUEBRA do piso de R$ 1,00 do mês** (`domain.allocate`), não o que foi retido:
   os decêndios anteriores ao que passou do piso ficam zerados, no que passou
   cada operação leva o SEU imposto e a que cruzou leva também o acumulado dos
