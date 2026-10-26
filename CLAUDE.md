@@ -669,6 +669,11 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   `{'/users-profile', '/page-access', '/user-home', '/settings'}` (as duas
   últimas são pessoais, §632). `/api/*` e `/static*` nunca são bloqueados
   aqui.
+- **Acesso TOTAL é o marcador `["*"]`, não a lista** (§686): a lista que
+  cobre todas as páginas controláveis é gravada assim (`_set_page_access`) e a
+  leitura a expande para as páginas do MOMENTO — a página nova entra
+  habilitada para quem tem o Full access, admin ou não. A subida converte uma
+  vez quem já tinha tudo (`page_access_upgrade_full`).
 - **Por card (Control Panel)**: tokens `/control-panel#<id>`
   (`_CONTROL_PANEL_CARDS`, na ordem da tela — monta a checklist do
   `/page-access`); `enforce_control_panel_cards` bloqueia o endpoint da rotina
@@ -1269,8 +1274,10 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   Midnight, Slate e Steel só no tema escuro, Fog e Frost só no claro
   (`WALL_TONE`; a gaveta esconde as do outro tema pelo `data-tone`), e no
   outro tema cada uma vale pela da outra ponta (`WALL_PAIR`, e o CSS define as
-  duas versões). A padrão é a Frost, o `:root` sem `data-wall` (Abyss no
-  escuro). Cor escura no tema claro (e o contrário) apagava o título e o
+  duas versões). A Frost é o `:root` sem `data-wall` (Abyss no escuro), mas a
+  PADRÃO de quem nunca escolheu é a **Aurora com o vidro Clear** (26/10/2026:
+  `WALL_BASE`/`WALL_DEFAULT` do `otc.js` e o `<head>` dizem o mesmo; quem já
+  gravou uma escolha fica com ela). Cor escura no tema claro (e o contrário) apagava o título e o
   breadcrumb, que ficam DIRETO sobre o fundo. Parede RETIRADA entra na lista
   `retiradas` do `head-css.html`, que devolve à padrão quem a tinha gravada.
   Parede nova entra no §2b, na lista `WALLS` e nos três mapas `walls` do
@@ -1313,6 +1320,17 @@ São **48**: `swap-bullet-curve`, `swap-cetes-leg`, `currency-base`, `interbook-
   (`_ndf_le_refdata`) → senão o SPN da API → nada (badge *Missing
   Counterparty*, que é a falha desejada). Amend recheca; linha achada por
   `(Deal, Client)`, e só pelo Deal se ele for único no arquivo-dia.
+- **Toda gravação das seis telas espera o servidor e pinta o que ELE gravou**
+  (§685, `static/js/nd-write.js`): Edit, Confirm, Send, Apply Column e Delete.
+  O bulk responde par a par (`done`/`not_found`/`refused`); o PATCH devolve o
+  `status` gravado (Edit numa linha Sent/Success segue a régua do Amend:
+  econômico → `Amend`, cosmético → fica); o **send-conecta confere status e
+  4-olhos no SERVIDOR antes do arquivo e marca `Sent` no mesmo pedido**
+  (`status_failed` = o arquivo já foi, não reenviar); o Mapping só apaga o
+  retorno que absorveu INTEIRO; o status do Confirm/Send é o DADO da célula —
+  o `missing-counterparty.js` troca o badge no DOM. Gravação nova nessas telas
+  usa o `otcNdWrite`, nunca `fetch(...).catch(console.warn)`
+  (`check_nd_write_ui.py`, `check_nd_write_verdict.py`).
 - **A busca (`cache/search`) das telas lê o dia ESTRITO** (§608):
   `_day_files(..., strict=True)` e `_day_json(..., strict=True)` — banco
   ocupado sem cópia em memória ou ilegível SOBE (503 com o motivo, aviso

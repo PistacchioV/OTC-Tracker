@@ -29206,3 +29206,164 @@ sai pelo botão.
 O Edit, o Confirm e o Send têm a trava do *Missing Counterparty* (§8, "Counterparty
 Not Registered"), de propósito; a causa do erro do Edit na prod ainda depende da
 mensagem que a equipe viu.
+
+
+## §685 — New Deals: o veredito de toda gravação sai da gravação (2026-10-26)
+
+Depois do §684 a equipe pediu para ver se outras telas tinham o mesmo
+problema. A varredura (seis frentes, servidor e navegador) achou cerca de
+sessenta casos no app inteiro. Este é o **lote 1**, as seis telas de New Deals,
+porque é o que falhava na prod. O resto está em lotes no fim da seção.
+
+**A causa do "dá erro ou não faz nada" das Opt Comm na prod** eram três:
+
+- **O Edit do modal nunca lia a resposta.** O modal sempre manda
+  `Status: 'Pending'`. Numa linha `Sent` o 4-olhos do servidor responde 409
+  `status_regression`, e a tela mostrava "Saved". Além disso, a URL levava o
+  Client NOVO do campo: trocar o Acronym no modal dava 404.
+- **O Confirm saía calado em linha de contraparte não cadastrada.** O
+  `missing-counterparty.js` troca o BADGE de status por "Missing
+  Counterparty", só no DOM. O Confirm lia o status pelo texto do badge, não
+  caía em New, Amend nem Pending, e não fazia nada. Não chegava nem ao aviso
+  de cadastrar a contraparte. O status agora é o DADO da célula, no Confirm e
+  no Send.
+- **O Confirm, o Send, o Apply Column e o Delete em lote** pintavam a grade e
+  disparavam a gravação com um `.catch(console.warn)`.
+
+**O que mudou no servidor** (`features/new_deals/entrypoint.py`):
+
+- **Edit numa linha já enviada.** O `Pending` COM campos de dado não é aba
+  velha. Ele segue a régua do Amend da API (`_nd_amend_is_economic`):
+  mudança econômica vira `Amend` com `AmendChanged`, mudança só cosmética
+  mantém o status. Status sozinho de uma aba velha segue recusado. O genérico
+  passa o produto ao guard, porque o Strike do FWD Start é cosmético.
+- **O PATCH devolve `status`/`b3_id`**, o que de fato gravou.
+- **`bulk-delete` e `bulk-patch` viraram dois helpers** (`_nd_bulk_delete`,
+  `_nd_bulk_patch`) no lugar das quatro cópias. Eles respondem par a par:
+  `done`, `not_found` e `refused`.
+- **O ENVIO confere no servidor e marca `Sent` no mesmo pedido.**
+  `_nd_conferir_envio` roda antes do arquivo: só passam Approved e Error, e
+  não o do próprio Maker com 4-olhos. Se não passa, responde 409
+  `not_sendable` com a lista. `_nd_marcar_enviados` roda depois do arquivo:
+  o que não gravar volta em `status_failed`, e a tela avisa para NÃO reenviar.
+  - Antes, o arquivo ia para a B3 e o `Sent` era um PATCH solto. Com ele
+    recusado, a linha seguia `Approved` e ia de novo.
+  - E uma linha que outro usuário editou (Pending no banco) ia ao arquivo sem
+    a segunda aprovação.
+  - O "404 → POST da linha inteira" do Send em lote saiu. Nas três de NDF ele
+    usava as colunas 3 e 10 (LE e Acronym): o PATCH sempre dava 404, e a linha
+    era reescrita inteira por cima, fora do guard.
+- **O Mapping B3 ID só apaga o retorno que absorveu inteiro**
+  (`_nd_apaga_retornos`), que é a regra do Swap Bullet e da recompra.
+  - As candidatas são as do DIA da Reference Date. Um retorno de ontem lido
+    com a data de hoje era apagado, e os B3 IDs dele se perdiam.
+  - O `saved: false` dizia "tente de novo" com o arquivo já apagado.
+  - No OPC, uma tela de opção apagava as linhas da outra.
+  - O que fica é relido na próxima passada, e o log diz qual arquivo ficou.
+- **`_grava_mapeamento` acha a linha de novo na leitura fresca**, em vez de
+  usar o índice da leitura memoizada (com o dia mudado, o B3 ID caía na
+  operação do lado).
+- **O NDF Comm só põe `Error` em quem esperava retorno**
+  (`_ND_MAPPING_ERRORABLE`), como o genérico. A tela agora manda o `Status`.
+- **O POST sem `_import` não substitui a operação gravada** (409
+  `deal_exists`). Antes, um Add Row com o Deal de um Sent o devolvia a Pending
+  sem o B3 ID.
+- **Banco ocupado SOBE.**
+  - Nos quatro finders (`_FINDER_SOBE`, `_day_json(strict=True)`): o 404
+    "Deal not found" virou 503.
+  - Nas leituras de quem grava (`_nd_le_dia`).
+  - Nas candidatas do mapping.
+  - E nas duas importações da API (`_generic_nd_persist_new_deals`,
+    `_fxo_persist_deals`). Elas liam o banco ocupado como dia VAZIO e
+    gravavam o dia só com os deals novos. O laço roda a cada 30 min.
+
+**No navegador**, o `static/js/nd-write.js` faz:
+
+- `otcNdWrite`, que só resolve com o sucesso do servidor;
+- as recusas por código em en/br/es;
+- o aviso do que o bulk não fez e o aviso do envio.
+
+As seis telas só mudam a linha que o servidor confirmou. O Save de edição na
+linha (`.btn-row-save-edit`) saiu: era código morto, porque o
+`EDIT_ACTIONS_HTML` nunca é inserido. O import do dropzone
+(`otc-fileupload.js`) tira a linha que o POST não gravou e devolve a do Amend
+que o PATCH recusou, num aviso só por lote.
+
+**Achados no caminho:**
+- **FWD Start: o `MAKER_COL_INDEX` era 30, que é a Settlement Location.** A
+  tela tem uma coluna a mais que o Vanilla, e o Maker é a 31 (o que o
+  `rowDataToNdfDeal` lê). O Confirm escrevia o SID na Settlement Location, e
+  a trava do Send lia ela como Maker. Corrigido para 31.
+- **Pendente:** o campo de valor do Apply Column (o handler do
+  `#massColumnSelect`) usa índices de coluna deslocados nas três telas de
+  NDF. A coluna Client recebe a máscara de CNPJ do Tax ID, e as datas e os
+  selects caem em colunas vizinhas. A gravação em si está certa; o que sai
+  errado é o tipo de campo oferecido para digitar o valor.
+
+**Testes:**
+- `check_nd_write_verdict.py`: o servidor.
+- `check_nd_write_ui.py`: o guarda estático das seis telas.
+- O comportamento foi provado no Chromium com as respostas interceptadas:
+  aceito, recusado, `not_found`, `status_failed`.
+
+**Os lotes que faltam**, da varredura de 26/10/2026:
+- **Lote 2: leitura que falha vira vazio e a gravação escreve por cima.**
+  - Os comentários da Recon FXO e da Conf. Matching.
+  - O overlay do NDF Summary e o do Other Products.
+  - Os edits do Settlement Advice e os fatores do Swap VCP.
+  - O mapping de Hybrids e o upload do MtM.
+  - Os destinatários dos dez cards do Control Panel.
+  - O import de atualização do Pending Confirmation.
+  - Na Page Access, uma falha de leitura mostra acesso total, e o Save grava.
+- **Lote 3: Intrag.**
+  - O Edit pinta até em erro de rede, e o Add Row só existe no navegador.
+  - O Delete tira o `not_found` da grade.
+  - O Send pula o 4-olhos e grava o arquivo antes do status.
+  - Os finders tratam o banco ocupado como `OSError`.
+- **Lote 4: Pending Confirmation.** Todas as gravações são otimistas.
+- **Lote 5:**
+  - Index B3: o Delete não recarrega, os índices deslocam e o próximo Edit
+    cai no vizinho.
+  - O Page Access acima.
+  - Control Panel.
+- **Lote 6: mensagens que dizem sucesso.**
+  - Os e-mails "enviados" que só entraram na fila: Accrual, MtM e Pay/Rec.
+  - O Print Advice que esconde a família que falhou.
+  - O Run das recons, que diz sucesso com a gravação falhando.
+- **Fora da família:** o Edit do Swap Cashflow devolve a Pending uma linha
+  com B3 ID (o defeito que o §554 corrigiu no Bullet).
+
+
+## §686 — Page Access: acesso total vale para a página nova (2026-10-26)
+
+O toggle "Full access" marcava todas as caixas, e o Save gravava a LISTA
+daquele dia. A página que entrava no menu depois não estava nela, e quem
+tinha acesso total perdia a tela nova. Isso valia para qualquer usuário, admin
+ou não, e a equipe pediu que esse usuário receba a página nova sozinho.
+
+Agora a lista que cobre todas as páginas controláveis (as do `sidenav` mais os
+cards do Control Panel) é gravada como o marcador `["*"]`
+(`authz.PAGE_ACCESS_FULL`, no `_set_page_access`), e a leitura
+(`_read_user_authz`) o expande para as páginas do momento. Sem a lista de
+páginas (o sidenav não foi lido), nada vira acesso total.
+
+Quem já tinha todas é convertido uma vez na subida
+(`page_access_upgrade_full`, no `record_once`; idempotente, fora dos testes).
+Quem perdeu uma página criada ANTES desta conversão não é reconhecido: esse
+usuário precisa de um Save com o Full access ligado.
+
+A tela diz, para o acesso total, que as páginas futuras entram sozinhas.
+Teste: `check_page_access_full.py`.
+
+
+## §687 — A aparência padrão: Aurora com o vidro Clear (2026-10-26)
+
+Pedido da equipe: quem nunca escolheu a aparência nasce com o tema Light, o
+destaque azul, o papel de parede Aurora, o vidro Clear e o "Reduce
+transparency" automático.
+
+A Frost continua sendo a parede SEM `data-wall` (o `:root` do otc.scss §2b).
+O que mudou é a escolha padrão: no `otc.js`, `WALL_BASE = 'frost'` e
+`WALL_DEFAULT = 'aurora'`, e `glass` vai para `clear` quando não está gravado.
+O `<head>` (`head-css.html`) e o Reset da Settings dizem o mesmo. Quem já
+gravou uma escolha fica com ela. `check_wallpapers.py` prende os três lugares.
