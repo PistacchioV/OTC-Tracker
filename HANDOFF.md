@@ -29505,3 +29505,62 @@ prefixa duas vezes, fora do Windows) e o `confere_so_desce` (espelho sem ação 
 sem nada no drive, alinhar com o share intocado e a sobra da validação na
 lixeira, a planilha do app descendo, o arquivo de outra pessoa não subindo, a
 cópia extra da posição descendo).
+
+
+## §691 — Stratos: o e-mail pelo Email block do stratos-blocks (2026-10-26)
+
+O §681 já previa: o SMTP da rede (`mailhost.jpmchase.net:25`, sem auth)
+provavelmente não responde do contêiner. O caminho do Stratos é o Email block,
+`stratosblocks.email.send(subject, body, sender, recipient, cc_receiver,
+bcc_receiver, is_html_message, attachments, inline_images)`. A documentação
+veio do usuário em 26/10/2026.
+
+**O app manda e-mail em 23 lugares, todos do mesmo jeito:**
+`with smtplib.SMTP(SMTP_HOST, SMTP_PORT[, timeout]) as server:
+server.sendmail(remetente, destinatarios, msg.as_string())`. Estão no `routes`
+(código de verificação, CETIP), nas features (cobrança, BACC, MDEA, MtM, MT300,
+Support, versão nova, TED, Forecast, Deals Monitor), nas recons e no
+`email_validation`. Nenhum usa `send_message`, `starttls`, `login` nem
+`from smtplib import`. E `smtplib` é um objeto de módulo só para o app
+inteiro: é o que os testes da dev trocam (`R.smtplib.SMTP`). Por isso o ajuste
+mora só na branch do Stratos, sem tocar em sender nenhum:
+`stratos/src/email_stratos.py`, chamado pelo `_monta` antes do `import apps`,
+troca o `smtplib.SMTP` pelo `SmtpStratos`.
+
+**A tradução da mensagem MIME** (`desmonta`):
+- assunto e endereços decodificados (`=?utf-8?…?=`);
+- Para/Cc do cabeçalho, e Cco é o que está no ENVELOPE do `sendmail` e não no
+  cabeçalho, que é o que o SMTP faz com ele. Sem To/Cc, o envelope é o
+  destinatário;
+- o corpo é a parte HTML (`is_html_message=True`), senão a de texto;
+- parte com `Content-ID` é imagem do corpo. O Email block casa o `cid:` pelo
+  NOME do arquivo (a forma por caminho da documentação), então ela vai para um
+  temporário `<cid>.<ext>` e o HTML é reescrito (`cid:otc_logo` →
+  `cid:otc_logo.png`);
+- parte com nome é anexo, por arquivo temporário. O nome do arquivo é o nome que
+  o destinatário vê, e por isso vai como veio, com acento e espaço; só sai o
+  que o Linux não aceita. A primeira versão o "limpava", e `Aviso de
+  Liquidação.pdf` chegaria como `Aviso_de_Liquida_o.pdf`;
+- os temporários saem no fim, e a falha do `send` chega ao sender como
+  `smtplib.SMTPException` com o motivo (os senders já tratam a do SMTP).
+
+`OTC_STRATOS_EMAIL=0` mantém o SMTP. Sem o `stratosblocks.email` nada muda.
+
+**Perdido:** `Reply-To` e prioridade, que o `send` não recebe. Os avisos de
+recompra em alta prioridade (§569) são rascunho `.eml` baixado, não envio.
+
+**A conferir no contêiner:**
+- se o Email block aceita `otc.tracker@jpmorgan.com` como remetente;
+- o limite de tamanho dos anexos;
+- se o `cid` por caminho casa como a documentação sugere.
+
+O que lê a caixa do Outlook (box scan, o anexo do FEP da CGD e do Conf.
+Matching, o sync da User Home) é outro assunto: é COM do Windows e não existe
+no contêiner.
+
+`stratos/tests/check_email_stratos.py` tem o `send` de mentira, que guarda os
+bytes dos arquivos no momento do envio. Ele cobre a mensagem como o app a monta
+(mixed/related/alternative, logo por `cid:`, PDF, Cc, Cco só no envelope), o só
+texto, o `send_message`, a falha e o `instala`. O `check_stratos.py` manda o
+código de verificação de verdade (`routes.send_verification_email`) pelo app
+montado e confere o que chegou ao Email block.
