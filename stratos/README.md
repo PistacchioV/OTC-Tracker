@@ -250,6 +250,17 @@ nem são listadas. No `--alinhar` o share é só registrado, sem subir; na virad
 o que o app grava desce como numa pasta de saída, e o que outras pessoas gravam
 no share fica lá.
 
+**Cada pasta roda numa thread própria** (§693). O Electronic Inventory tem
+milhares de subpastas de contraparte, e abrir uma de cada vez pelo SMB levava
+~40 minutos por passada (o dry-run de 26/10/2026: 44 min). Com as pastas em
+sequência, o `--loop` ficava preso nele, e o Batch Conecta, que devia passar a
+cada 20 s, esperava. Hoje a pasta lenta não segura as outras, uma pasta nunca
+roda duas vezes ao mesmo tempo, e o intervalo dela conta do fim da passada. A
+listagem abre `--workers` subpastas ao mesmo tempo (padrão 8,
+`OTC_PONTE_WORKERS`), e a passada longa diz a cada 30 s onde está (pastas
+abertas e arquivos na listagem, `n de m ação(ões)` na cópia). O `--medir` diz
+quanto tempo cada pasta levou para ser listada.
+
 Caminho do share acima de 248 caracteres (pasta) ou 260 (arquivo) vai na forma
 estendida do Windows (`\\?\UNC\…`), na listagem e na cópia
 (`ponte_comum.longo`): o Electronic Inventory passa disso nas pastas `_files`

@@ -14,7 +14,9 @@ Stratos é escrito pela MESMA função que a thread do contêiner chama. O reló
   4. ALINHAR e VIRADA: o que o app grava desce, o que o Conecta tira do share
      sai do drive, o que o app tira do drive sai do share (para a lixeira
      local), conflito pelo sentido da pasta;
-  5. a thread do contêiner escreve os manifestos.
+  5. a thread do contêiner escreve os manifestos;
+  6. a listagem em PARALELO é a mesma listagem (pulados inclusive), e o laço
+     roda cada pasta numa thread: a lenta não segura as outras.
 
     python stratos/tests/check_ponte.py
 """
@@ -232,12 +234,12 @@ def confere_travas(tmp):
             raise PermissionError(13, 'Access is denied', p)
         return real(p)
 
-    orig = P.os.scandir
-    P.lista.__defaults__ = (scandir_que_recusa, None)
+    antes = P.lista.__defaults__
+    P.lista.__defaults__ = (scandir_que_recusa,) + antes[1:]
     try:
         u.passa('electronic-inventory')
     finally:
-        P.lista.__defaults__ = (orig, None)
+        P.lista.__defaults__ = antes
     ok(le(u.no_drive, EI + 'ABERTA/SSI/b.pdf') == 'b', 'pulada: o resto da pasta segue')
     ok(le(u.no_drive, EI + 'FECHADA/SSI/f.pdf') == 'f',
        '   e o que esta na subpasta que nao abriu NAO sai do drive')
@@ -422,6 +424,73 @@ def confere_thread(tmp):
                 os.environ[k] = v
 
 
+def confere_paralelo(tmp):
+    """A listagem em paralelo é a MESMA listagem, e o laço não deixa a pasta
+    lenta segurar as outras."""
+    import threading
+    raiz = os.path.join(tmp, 'paralelo')
+    velho = time.time() - 100
+    for c in range(12):
+        for sub in ('SSI', 'Confirmations/2026/10. October/2%d' % (c % 3), 'CGD'):
+            escreve(raiz, EI + 'CLIENTE %02d/%s/doc%d.pdf' % (c, sub, c), str(c), velho)
+    pasta = P.POR_SLUG['electronic-inventory']
+    agora = time.time()
+    um = P.lista(raiz, pasta, agora)
+    vistos = []
+    oito = P.lista(raiz, pasta, agora, workers=8, progresso=lambda d, a: vistos.append((d, a)))
+    ok(len(um) == 36 and oito == um, 'paralelo: 8 workers listam o mesmo que 1 (%d)' % len(oito))
+    ok(vistos and vistos[-1][1] == 36 and vistos[-1][0] > 12,
+       '   o progresso diz pastas abertas e arquivos (%s)' % (vistos[-1:],))
+    fechada = os.path.normpath(os.path.join(raiz, *(EI + 'CLIENTE 03').split('/')))
+
+    def recusa(p_):
+        if os.path.normpath(p_) == fechada:
+            raise PermissionError(13, 'Access is denied', p_)
+        return os.scandir(p_)
+    pulados = []
+    parcial = P.lista(raiz, pasta, agora, scandir=recusa, pulados=pulados, workers=8)
+    ok(pulados == [EI.rstrip('/') + '/CLIENTE 03'] and len(parcial) == 33,
+       'paralelo: a subpasta que não abre vai para os pulados e o resto segue (%s)' % pulados)
+    try:
+        P.lista(raiz, pasta, agora, scandir=recusa, workers=8)
+        ok(False, 'paralelo: sem `pulados`, a pasta que não abre levanta')
+    except OSError:
+        ok(True, 'paralelo: sem `pulados`, a pasta que não abre levanta')
+
+    Pz = P.Pasta
+    lenta, rapida, quebra = (Pz('lenta', 'x', P.ENTRADA, 0, None), Pz('rapida', 'y', P.SAIDA, 0, None),
+                             Pz('quebra', 'z', P.SAIDA, 0, None))
+    conta, mesmo_tempo, trava = {}, [0], threading.Lock()
+    rodando = set()
+
+    def roda(p_):
+        with trava:
+            conta[p_.slug] = conta.get(p_.slug, 0) + 1
+            if p_.slug in rodando:
+                mesmo_tempo[0] += 1
+            rodando.add(p_.slug)
+        try:
+            if p_.slug == 'lenta':
+                time.sleep(0.6)
+            if p_.slug == 'quebra':
+                raise RuntimeError('boom')
+            return {'pasta': p_.slug, 'acoes': 0, 'feitas': 0, 'erros': 0, 'recusa': ''}
+        finally:
+            with trava:
+                rodando.discard(p_.slug)
+    PS.laco([lenta, rapida, quebra], roda, 0.05, lambda: True, voltas=8)
+    ok(conta.get('lenta') == 1 and conta.get('rapida', 0) >= 5,
+       'laço: a pasta lenta não segura a rápida (%s)' % conta)
+    ok(mesmo_tempo[0] == 0, 'laço: a mesma pasta nunca roda duas vezes ao mesmo tempo')
+    ok(conta.get('quebra', 0) >= 5, 'laço: a pasta que quebra não derruba as outras nem o laço')
+    conta.clear()
+    PS.laco([lenta, rapida], roda, 0, lambda: True)
+    ok(conta == {'lenta': 1, 'rapida': 1}, 'laço sem --loop: uma passada de cada, e espera todas')
+    conta.clear()
+    PS.laco([lenta, rapida], roda, 0, lambda: False)
+    ok(conta == {}, 'laço: com o aviso de outra ponte, nada roda')
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix='otc-ponte-')
     try:
@@ -431,6 +500,7 @@ def main():
         confere_virada(tmp)
         confere_so_desce(tmp)
         confere_thread(tmp)
+        confere_paralelo(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print('\n%d falha(s)' % len(FALHAS))

@@ -48,6 +48,7 @@ import re
 import time
 import unicodedata
 from collections import namedtuple
+from concurrent.futures import ThreadPoolExecutor
 
 ESPELHO = 'espelho'
 VIRADA = 'virada'
@@ -165,7 +166,33 @@ def longo(p, nome_so=None):
     return p
 
 
-def lista(raiz, pasta, agora, scandir=os.scandir, pulados=None):
+def _le_pasta(scandir, absoluto, rel, pasta, agora):
+    """Uma pasta do share: ([(abs, rel)] das subpastas a abrir, {chave: item}
+    dos arquivos). Roda numa thread do `lista`; o `stat` vem da própria
+    listagem (no Windows o `DirEntry` já o traz, sem outra ida ao SMB)."""
+    subs, arqs = [], {}
+    with scandir(absoluto) as it:
+        for e in it:
+            if ignora(e.name):
+                continue
+            filho = rel + '/' + e.name
+            if e.is_dir(follow_symlinks=False):
+                # A pasta do DIA fora da janela nem é aberta; ano e mês
+                # (ainda sem data inteira) são.
+                if data_do_caminho(filho) is None or \
+                        na_janela(filho, pasta.janela_dias, agora):
+                    subs.append((e.path, filho))
+                continue
+            if not e.is_file(follow_symlinks=False):
+                continue
+            if not na_janela(filho, pasta.janela_dias, agora):
+                continue
+            st = e.stat(follow_symlinks=False)
+            arqs[chave(filho)] = (filho, round(st.st_mtime, 3), st.st_size)
+    return subs, arqs
+
+
+def lista(raiz, pasta, agora, scandir=os.scandir, pulados=None, workers=1, progresso=None):
     """{chave: (rel, mtime, tamanho)} dos arquivos de `pasta` sob `raiz`, com
     `rel` relativo à RAIZ e com `/`.
 
@@ -174,40 +201,45 @@ def lista(raiz, pasta, agora, scandir=os.scandir, pulados=None):
     ele (uma lista), a subpasta que não abre (sem permissão, nome que o SMB
     recusa) entra na lista e a listagem segue: quem a chama não decide nada
     debaixo dela — uma contraparte bloqueada não pode parar o Electronic
-    Inventory inteiro. A raiz da pasta que não abre levanta sempre."""
+    Inventory inteiro. A raiz da pasta que não abre levanta sempre.
+
+    `workers` abre várias pastas AO MESMO TEMPO (nível a nível da árvore): no
+    share o custo é a ida e volta de cada pasta aberta, não o arquivo, e o
+    Electronic Inventory tem milhares de subpastas de contraparte — uma de cada
+    vez eram ~40 minutos por passada. `progresso(pastas, arquivos)` é chamado a
+    cada nível, para a passada longa dizer que está viva."""
     # Forma estendida já na base: os `e.path` dos filhos a herdam.
     base = longo(os.path.join(raiz, *pasta.rel.split('/')))
     out = {}
     if not os.path.isdir(base):
         return out
-    pilha = [(base, pasta.rel)]
-    while pilha:
-        absoluto, rel = pilha.pop()
-        try:
-            it = scandir(absoluto)
-        except OSError:
-            if pulados is None or rel == pasta.rel:
-                raise
-            pulados.append(rel)
-            continue
-        with it:
-            for e in it:
-                if ignora(e.name):
+    nivel, abertas = [(base, pasta.rel)], 0
+    pool = ThreadPoolExecutor(max_workers=workers) if workers and workers > 1 else None
+    try:
+        while nivel:
+            def uma(item):
+                try:
+                    return item, _le_pasta(scandir, item[0], item[1], pasta, agora), None
+                except OSError as exc:
+                    return item, None, exc
+            res = list(pool.map(uma, nivel)) if pool else [uma(i) for i in nivel]
+            proximo = []
+            for (_abs, rel), lido, erro in res:
+                if erro is not None:
+                    if pulados is None or rel == pasta.rel:
+                        raise erro
+                    pulados.append(rel)
                     continue
-                filho = rel + '/' + e.name
-                if e.is_dir(follow_symlinks=False):
-                    # A pasta do DIA fora da janela nem é aberta; ano e mês
-                    # (ainda sem data inteira) são.
-                    if data_do_caminho(filho) is None or \
-                            na_janela(filho, pasta.janela_dias, agora):
-                        pilha.append((e.path, filho))
-                    continue
-                if not e.is_file(follow_symlinks=False):
-                    continue
-                if not na_janela(filho, pasta.janela_dias, agora):
-                    continue
-                st = e.stat(follow_symlinks=False)
-                out[chave(filho)] = (filho, round(st.st_mtime, 3), st.st_size)
+                subs, arqs = lido
+                proximo.extend(subs)
+                out.update(arqs)
+            abertas += len(nivel)
+            nivel = proximo
+            if progresso:
+                progresso(abertas, len(out))
+    finally:
+        if pool:
+            pool.shutdown(wait=True)
     return out
 
 

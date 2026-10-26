@@ -5,7 +5,7 @@
     python stratos\\ponte_share.py --env dev|prod [--solution-id 76521]
                                   [--modo espelho|virada] [--alinhar]
                                   [--loop 20] [--so slug,slug] [--dry-run]
-                                  [--permitir-apagar] [--medir]
+                                  [--permitir-apagar] [--medir] [--workers 8]
 
 Roda numa máquina da REDE do JPM, que enxerga o share, com o Python do
 DevShell (é o que tem o `stratosblocks`: o cliente `SharedDrive` fala com o
@@ -41,8 +41,11 @@ valem). Cada ambiente tem o SEU Shared Drive: com a solução no dev, uma ponte
 em `prod` gravaria num drive que o app não lê, sem erro nenhum.
 
 Uma ponte por vez: ela grava um aviso no drive (`<raiz>/ponte/ponte.json`) a
-cada passada, e uma segunda que encontre o de outra máquina com menos de 3
-minutos espera.
+cada volta do laço, e uma segunda que encontre o de outra máquina com menos de
+3 minutos espera. Dentro dela, cada pasta roda numa THREAD própria (`laco`): o
+Electronic Inventory, que lista milhares de subpastas, não segura o Batch
+Conecta. `--workers N` (padrão 8) abre N subpastas do share ao mesmo tempo na
+listagem.
 """
 import argparse
 import io
@@ -52,6 +55,7 @@ import os
 import shutil
 import socket
 import sys
+import threading
 import time
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
@@ -68,6 +72,11 @@ DRIVE_RAIZ = 'otc-tracker'          # a pasta do OTC no Shared Drive (otc_strato
 # `StratosAuth(app, 76521)` do solution.py.
 SOLUCAO = '76521'
 AVISO_VALIDO = 180                  # s: o aviso de outra ponte vale por isto
+# Pastas do share abertas AO MESMO TEMPO na listagem (`P.lista`): o custo é a
+# ida e volta de cada pasta no SMB, e o Electronic Inventory tem milhares.
+WORKERS = 8
+PROGRESSO_S = 30                    # s entre as linhas de progresso de uma passada longa
+_SAIDA = threading.Lock()           # o --dry-run imprime um bloco por pasta, sem misturar
 
 
 def _local():
@@ -185,7 +194,8 @@ def grava_base(pasta_local, slug, meta, itens):
 
 class Ponte(object):
     def __init__(self, share, drive, drive_raiz=DRIVE_RAIZ, pasta_local=None,
-                 modo=P.ESPELHO, permitir_apagar=False, dry_run=False, agora=time.time):
+                 modo=P.ESPELHO, permitir_apagar=False, dry_run=False, agora=time.time,
+                 workers=1):
         self.share = share
         self.drive = drive
         self.raiz = drive_raiz.strip('/')
@@ -194,6 +204,7 @@ class Ponte(object):
         self.permitir_apagar = permitir_apagar
         self.dry_run = dry_run
         self.agora = agora
+        self.workers = workers
 
     def _d(self, rel):
         return '%s/share/%s' % (self.raiz, rel)
@@ -225,7 +236,19 @@ class Ponte(object):
             res['recusa'] = 'virada sem --alinhar antes'
             return res
         pulados = []
-        share = P.lista(self.share, pasta, agora, pulados=pulados)
+        t0 = time.time()
+        marca = [t0]
+
+        def progresso(pastas, arquivos):
+            if time.time() - marca[0] >= PROGRESSO_S:
+                marca[0] = time.time()
+                log.info('[ponte] %s: listando o share — %d pasta(s) abertas, %d arquivo(s) '
+                         '(%.0fs)', pasta.slug, pastas, arquivos, marca[0] - t0)
+        share = P.lista(self.share, pasta, agora, pulados=pulados, workers=self.workers,
+                        progresso=progresso)
+        if time.time() - t0 >= PROGRESSO_S:
+            log.info('[ponte] %s: share listado em %.0fs — %d arquivo(s)', pasta.slug,
+                     time.time() - t0, len(share))
         if pulados:
             log.warning('[ponte] %s: %d subpasta(s) do share não abriram (%s%s); nada se '
                         'decide dentro delas nesta passada', pasta.slug, len(pulados),
@@ -251,12 +274,17 @@ class Ponte(object):
         res['acoes'] = len([a for a in acoes if a.tipo not in P.SO_BASE])
 
         if self.dry_run:
-            for a in acoes:
-                if a.tipo not in P.SO_BASE:
-                    print('  %-10s %s  (%s)' % (a.tipo, a.rel, a.motivo))
+            linhas = ['  %-10s %s  (%s)' % (a.tipo, a.rel, a.motivo)
+                      for a in acoes if a.tipo not in P.SO_BASE]
+            if linhas:
+                with _SAIDA:
+                    print('== %s: %d ação(ões)' % (pasta.slug, len(linhas)))
+                    print('\n'.join(linhas))
+                    sys.stdout.flush()
             return res
 
         dia = time.strftime('%Y%m%d', time.localtime(agora))
+        marca[0] = time.time()
         for i, a in enumerate(acoes):
             try:
                 if self._executa(a, share, drive, base, agora, dia):
@@ -267,6 +295,10 @@ class Ponte(object):
                             type(e).__name__, e)
             if i % 50 == 49:
                 grava_base(self.local, pasta.slug, meta, base)
+            if time.time() - marca[0] >= PROGRESSO_S:
+                marca[0] = time.time()
+                log.info('[ponte] %s: %d de %d ação(ões), %d feita(s), %d erro(s)', pasta.slug,
+                         i + 1, len(acoes), res['feitas'], res['erros'])
         meta['instancia'] = instancia or meta.get('instancia', '')
         if alinhar:
             meta['alinhado_em'] = agora
@@ -358,13 +390,67 @@ def toma_aviso(drive, raiz, agora):
     return True
 
 
+# ── O laço: uma thread por pasta ────────────────────────────────────────────
+
+def _resultado(slug, r):
+    if r['recusa'] or r['acoes'] or r['erros']:
+        log.info('[ponte] %s: %d ação(ões), %d feita(s), %d erro(s)%s', slug,
+                 r['acoes'], r['feitas'], r['erros'],
+                 (' — ' + r['recusa']) if r['recusa'] else '')
+
+
+def laco(pastas, roda, loop, aviso, relogio=time.time, dorme=time.sleep, voltas=None):
+    """Roda `roda(pasta)` para cada pasta, CADA UMA NUMA THREAD: a pasta lenta
+    (o Electronic Inventory lista milhares de subpastas e, na primeira vez, sobe
+    milhares de arquivos) não segura as outras — o Batch Conecta segue no
+    intervalo dele enquanto o EI trabalha. Uma pasta nunca roda duas vezes ao
+    mesmo tempo, e o intervalo dela conta do FIM da passada.
+
+    `aviso()` diz se esta máquina pode trabalhar (e renova o aviso no drive) a
+    cada volta. Sem `loop`, uma volta só, esperando todas terminarem. `voltas`
+    limita as voltas (o teste)."""
+    rodando, proximo = {}, {}
+
+    def tarefa(p):
+        try:
+            _resultado(p.slug, roda(p))
+        except OSError as e:
+            log.warning('[ponte] %s: o share não respondeu (%s); fica para a próxima', p.slug, e)
+        except Exception:                                   # noqa: BLE001
+            log.exception('[ponte] %s: a passada quebrou', p.slug)
+        finally:
+            proximo[p.slug] = relogio() + p.intervalo
+
+    n = 0
+    while True:
+        if aviso():
+            agora = relogio()
+            for p in pastas:
+                t = rodando.get(p.slug)
+                if t is not None and t.is_alive():
+                    continue
+                if loop and proximo.get(p.slug, 0) > agora:
+                    continue
+                t = threading.Thread(target=tarefa, args=(p,), name='ponte-' + p.slug,
+                                     daemon=True)
+                rodando[p.slug] = t
+                t.start()
+        n += 1
+        if not loop or (voltas is not None and n >= voltas):
+            for t in rodando.values():
+                t.join()
+            return 0
+        dorme(loop)
+
+
 # ── Linha de comando ────────────────────────────────────────────────────────
 
-def medir(share, pastas, agora):
+def medir(share, pastas, agora, workers=WORKERS):
     total_n = total_b = 0
     for p in pastas:
+        t0 = time.time()
         try:
-            itens = P.lista(share, p, agora)
+            itens = P.lista(share, p, agora, workers=workers)
         except OSError as e:
             print('%-22s ERRO: %s' % (p.slug, e))
             continue
@@ -372,7 +458,8 @@ def medir(share, pastas, agora):
         total_n += n
         total_b += b
         janela = ('%d dias' % p.janela_dias) if p.janela_dias else 'tudo'
-        print('%-22s %8d arquivos %10.1f MB  (%s, %s)' % (p.slug, n, b / 1e6, p.sentido, janela))
+        print('%-22s %8d arquivos %10.1f MB  (%s, %s, listado em %.0fs)'
+              % (p.slug, n, b / 1e6, p.sentido, janela, time.time() - t0))
     print('%-22s %8d arquivos %10.1f MB' % ('TOTAL', total_n, total_b / 1e6))
 
 
@@ -392,6 +479,8 @@ def main(argv=None):
     ap.add_argument('--dry-run', action='store_true')
     ap.add_argument('--permitir-apagar', action='store_true')
     ap.add_argument('--medir', action='store_true')
+    ap.add_argument('--workers', type=int, default=int(os.getenv('OTC_PONTE_WORKERS', WORKERS)),
+                    help='pastas do share abertas ao mesmo tempo na listagem (padrão %d)' % WORKERS)
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
@@ -405,47 +494,38 @@ def main(argv=None):
         pastas = [P.POR_SLUG[x] for x in pedidas]
 
     if a.medir:
-        medir(a.share, pastas, time.time())
+        medir(a.share, pastas, time.time(), a.workers)
         return 0
     if a.drive_local:
-        drive = DriveLocal(a.drive_local)
+        def fabrica():
+            return DriveLocal(a.drive_local)
     else:
         if not a.solution_id:
             ap.error('--solution-id (ou OTC_PONTE_SOLUTION_ID) é obrigatório')
         if a.env not in AMBIENTES:
             ap.error('--env dev ou --env prod (ou OTC_PONTE_ENV) é obrigatório: o ambiente '
                      'em que a solução está publicada. Cada um tem o seu Shared Drive.')
-        drive = DriveHttp(a.solution_id, AMBIENTES[a.env])
-    ponte = Ponte(a.share, drive, a.drive_raiz, modo=a.modo,
-                  permitir_apagar=a.permitir_apagar, dry_run=a.dry_run)
-    log.info('[ponte] %s, %s -> %s/share (%s), %d pasta(s)%s', a.modo, a.share, a.drive_raiz,
-             a.env or 'drive local', len(pastas), ' (alinhar)' if a.alinhar else '')
 
-    proximo = {}
-    while True:
-        agora = time.time()
-        if a.dry_run or toma_aviso(drive, ponte.raiz, agora):
-            for p in pastas:
-                if a.loop and proximo.get(p.slug, 0) > agora:
-                    continue
-                try:
-                    r = ponte.passada(p, alinhar=a.alinhar)
-                except OSError as e:
-                    log.warning('[ponte] %s: o share não respondeu (%s); fica para a próxima',
-                                p.slug, e)
-                    continue
-                except Exception:                           # noqa: BLE001
-                    log.exception('[ponte] %s: a passada quebrou', p.slug)
-                    continue
-                finally:
-                    proximo[p.slug] = agora + p.intervalo
-                if r['recusa'] or r['acoes'] or r['erros']:
-                    log.info('[ponte] %s: %d ação(ões), %d feita(s), %d erro(s)%s', p.slug,
-                             r['acoes'], r['feitas'], r['erros'],
-                             (' — ' + r['recusa']) if r['recusa'] else '')
-        if not a.loop or a.alinhar:
-            return 0
-        time.sleep(a.loop)
+        def fabrica():
+            return DriveHttp(a.solution_id, AMBIENTES[a.env])
+    drive = fabrica()
+    # Uma Ponte (e um cliente do drive) POR PASTA: cada pasta roda na sua
+    # thread, e o cliente HTTP não promete ser seguro entre threads.
+    pontes = {}
+
+    def ponte_de(p):
+        if p.slug not in pontes:
+            pontes[p.slug] = Ponte(a.share, fabrica(), a.drive_raiz, modo=a.modo,
+                                   permitir_apagar=a.permitir_apagar, dry_run=a.dry_run,
+                                   workers=a.workers)
+        return pontes[p.slug]
+    raiz = a.drive_raiz.strip('/')
+    log.info('[ponte] %s, %s -> %s/share (%s), %d pasta(s), %d worker(s)%s', a.modo, a.share,
+             a.drive_raiz, a.env or 'drive local', len(pastas), a.workers,
+             ' (alinhar)' if a.alinhar else '')
+    return laco(pastas, lambda p: ponte_de(p).passada(p, alinhar=a.alinhar),
+                0 if a.alinhar else a.loop,
+                lambda: a.dry_run or toma_aviso(drive, raiz, time.time()))
 
 
 if __name__ == '__main__':
