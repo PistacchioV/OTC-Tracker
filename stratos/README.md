@@ -225,6 +225,19 @@ As pastas por dia (CETIP, MtM, Accrual, Intrag, Comitente) levam só os
 cópia. O Electronic Inventory vai inteiro, e a primeira passada dele é a
 longa. Antes, o `--medir` diz quanto é.
 
+**Três pastas SÓ DESCEM** (`desce` no `--medir`, §690): `CETIP_NDF`,
+`CETIP_OPTIONS` e `Movimento\Pending Confirmation`. O app grava nelas e não as
+lê, e o que elas têm no share (18 GB no `--medir` de 26/10/2026, quase tudo de
+outras pessoas na do Pending Confirmation) não serve ao Stratos. No espelho elas
+nem são listadas. No `--alinhar` o share é só registrado, sem subir; na virada,
+o que o app grava desce como numa pasta de saída, e o que outras pessoas gravam
+no share fica lá.
+
+Caminho do share acima de 248 caracteres (pasta) ou 260 (arquivo) vai na forma
+estendida do Windows (`\\?\UNC\…`), na listagem e na cópia
+(`ponte_comum.longo`): o Electronic Inventory passa disso nas pastas `_files`
+dos documentos.
+
 **Pendente:** o cadastro `cetip-files` (/mapping) guarda as cópias extras como
 `I:\CETIP_OPTIONS` e `I:\CETIP_NDF`. No Linux do Stratos isso é um caminho
 relativo, e a cópia não cai na pasta da ponte.

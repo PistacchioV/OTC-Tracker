@@ -120,6 +120,15 @@ def confere_regras():
        and not P.ignora('Termo.docx'), 'ignora: lock do Office, Thumbs.db e temporario')
     ok(P.limite_de_remocao(5) == 10 and P.limite_de_remocao(1000) == 200,
        'limite de remocao: 10, ou 20% da pasta')
+    unc = '\\\\Nawest.ad.jpmorganchase.com\\lac\\BRA\\intra\\Confirmation'
+    ok(P.longo(unc, 'nt') == '\\\\?\\UNC\\Nawest.ad.jpmorganchase.com\\lac\\BRA\\intra\\Confirmation',
+       'caminho longo: o share UNC vira \\\\?\\UNC\\... no Windows (pasta acima de 248)')
+    ok(P.longo('C:\\x\\y', 'nt') == '\\\\?\\C:\\x\\y' and P.longo(P.longo(unc, 'nt'), 'nt')
+       == P.longo(unc, 'nt'), 'caminho longo: letra de drive, e nao prefixa duas vezes')
+    ok(P.longo(unc, 'posix') == unc and P.longo('x\\y', 'nt') == 'x\\y',
+       'caminho longo: fora do Windows e caminho relativo ficam como estao')
+    ok(PS._longo is not None and PS._longo(unc) == P.longo(unc),
+       'caminho longo: a copia usa a mesma regra da listagem')
     ok((PS.AMBIENTES['dev'], PS.AMBIENTES['prod']) == ('TEST', 'PRODUCTION'),
        'ambiente: dev/prod do stratos file viram TEST/PRODUCTION do stratosblocks')
     try:
@@ -322,6 +331,63 @@ def confere_virada(tmp):
     ok(le(m.no_drive, EI + 'ACME SA/SSI/nova.pdf') == 'nova', '   e sobe na passada seguinte')
 
 
+PCX = 'Confirmation/Derivativos/Movimento/Pending Confirmation/'
+NDF = 'CETIP_NDF/'
+
+
+def confere_so_desce(tmp):
+    """Pastas que o app só grava (§690): o histórico do share nunca sobe."""
+    ok(all(P.POR_SLUG[x].sentido == P.DESCE
+           for x in ('pending-confirmation', 'cetip-options', 'cetip-ndf')),
+       'so desce: CETIP_NDF, CETIP_OPTIONS e Pending Confirmation')
+    m = Mundo(os.path.join(tmp, 'desce'))
+    velho = m.t - 3600
+    hoje = time.localtime(m.t)
+    dia = '%04d/%02d/%02d/' % (hoje.tm_year, hoje.tm_mon, hoje.tm_mday)
+    escreve(m.share, PCX + 'de outra pessoa.xlsx', 'historico', velho)
+    escreve(m.share, PCX + 'PENDING - Outstanding Confirmation OTC.xlsx', 'planilha v1', velho)
+    escreve(m.share, NDF + dia + 'DPOSICAO-TER.TER', 'posicao', velho)
+    antes = foto(m.share)
+
+    for slug in ('pending-confirmation', 'cetip-ndf'):
+        r = m.passa(slug)
+        ok(r['acoes'] == 0 and not r['recusa'], 'so desce, espelho: %s sem acao %s' % (slug, r))
+    ok(foto(m.no_drive) == {}, 'so desce, espelho: nada sobe para o Stratos')
+
+    # Validação: o Stratos gerou a planilha e um arquivo próprio.
+    escreve(m.no_drive, PCX + 'PENDING - Outstanding Confirmation OTC.xlsx', 'do stratos', velho)
+    escreve(m.no_drive, PCX + 'teste.xlsx', 'teste', velho)
+    m.ponte.modo = P.VIRADA
+    r = m.passa('pending-confirmation', alinhar=True)
+    ok(foto(m.share) == antes, 'so desce, alinhar: o share fica intocado')
+    ok(le(m.no_drive, PCX + 'de outra pessoa.xlsx') is None
+       and le(m.no_drive, PCX + 'PENDING - Outstanding Confirmation OTC.xlsx') == 'do stratos',
+       'so desce, alinhar: o historico do share nao sobe nem sobrescreve o do Stratos')
+    ok(le(m.no_drive, PCX + 'teste.xlsx') is None,
+       'so desce, alinhar: o que so o Stratos tinha vai para a lixeira do drive')
+    m.passa('cetip-ndf', alinhar=True)
+
+    r = m.passa('pending-confirmation')
+    ok(r['acoes'] == 0, 'so desce, virada: depois do alinhar nada se move %s' % r)
+    # O app grava a planilha do dia: desce.
+    escreve(m.no_drive, PCX + 'PENDING - Outstanding Confirmation OTC.xlsx', 'planilha v2!', velho + 50)
+    m.passa('pending-confirmation')
+    ok(le(m.share, PCX + 'PENDING - Outstanding Confirmation OTC.xlsx') == 'planilha v2!',
+       'so desce, virada: a planilha que o app grava chega ao share')
+    # Outra pessoa grava no share: registra, não sobe.
+    escreve(m.share, PCX + 'nova de outra pessoa.xlsx', 'outra', velho)
+    escreve(m.share, PCX + 'de outra pessoa.xlsx', 'historico corrigido', velho + 60)
+    r = m.passa('pending-confirmation')
+    ok(r['acoes'] == 0 and le(m.no_drive, PCX + 'nova de outra pessoa.xlsx') is None
+       and le(m.no_drive, PCX + 'de outra pessoa.xlsx') is None,
+       'so desce, virada: o que outras pessoas gravam no share nao sobe %s' % r)
+    # A cópia extra da posição: desce.
+    escreve(m.no_drive, NDF + dia + 'DPOSICAO-TER-2.TER', 'nova posicao', velho)
+    m.passa('cetip-ndf')
+    ok(le(m.share, NDF + dia + 'DPOSICAO-TER-2.TER') == 'nova posicao',
+       'so desce, virada: a copia extra da posicao chega ao share')
+
+
 def confere_thread(tmp):
     raiz = os.path.join(tmp, 'thread')
     share = os.path.join(raiz, 'share')
@@ -363,6 +429,7 @@ def main():
         confere_espelho(tmp)
         confere_travas(tmp)
         confere_virada(tmp)
+        confere_so_desce(tmp)
         confere_thread(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

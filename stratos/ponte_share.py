@@ -76,11 +76,9 @@ def _local():
 
 
 def _longo(p):
-    """Caminho do share acima de 260 caracteres no Windows (o Electronic
-    Inventory tem nomes de contraparte longos)."""
-    if os.name != 'nt' or len(p) < 240 or p.startswith('\\\\?\\'):
-        return p
-    return '\\\\?\\UNC\\' + p[2:] if p.startswith('\\\\') else '\\\\?\\' + p
+    """Caminho do share na forma estendida do Windows (o Electronic Inventory
+    passa dos 260 caracteres); a regra é a mesma da listagem, `P.longo`."""
+    return P.longo(p)
 
 
 # ── O lado do Stratos ───────────────────────────────────────────────────────
@@ -211,6 +209,8 @@ class Ponte(object):
         """-> {'acoes': n, 'feitas': n, 'erros': n, 'recusa': motivo ou ''}."""
         agora = self.agora()
         res = {'pasta': pasta.slug, 'acoes': 0, 'feitas': 0, 'erros': 0, 'recusa': ''}
+        if pasta.sentido == P.DESCE and self.modo == P.ESPELHO and not alinhar:
+            return res      # só desce: no espelho não há o que fazer, nem listar o share
         man = self.manifesto(pasta)
         if man is None:
             res['recusa'] = 'sem manifesto do Stratos (o contêiner ainda não o escreveu)'
@@ -232,7 +232,7 @@ class Ponte(object):
                         ', '.join(pulados[:3]), '…' if len(pulados) > 3 else '')
 
         if alinhar:
-            acoes = P.plano_alinhar(share, drive, agora, drive_em)
+            acoes = P.plano_alinhar(share, drive, agora, drive_em, sentido=pasta.sentido)
         else:
             acoes = P.plano(share, drive, base, self.modo, pasta.sentido, agora, drive_em)
             remocoes = [a for a in acoes if a.tipo in ('lixo_drive', 'lixo_share')]
@@ -248,11 +248,11 @@ class Ponte(object):
         if self.modo == P.ESPELHO:
             # Defesa: no espelho nada toca o share, saia do plano o que sair.
             acoes = [a for a in acoes if a.tipo not in ('baixar', 'lixo_share')]
-        res['acoes'] = len([a for a in acoes if a.tipo not in ('adota', 'esquece', 'solta')])
+        res['acoes'] = len([a for a in acoes if a.tipo not in P.SO_BASE])
 
         if self.dry_run:
             for a in acoes:
-                if a.tipo not in ('adota', 'esquece', 'solta'):
+                if a.tipo not in P.SO_BASE:
                     print('  %-10s %s  (%s)' % (a.tipo, a.rel, a.motivo))
             return res
 
@@ -276,7 +276,7 @@ class Ponte(object):
     def _executa(self, a, share, drive, base, agora, dia):
         k = a.chave
         s, d, b = share.get(k), drive.get(k), base.get(k) or {}
-        if a.tipo == 'adota':
+        if a.tipo in ('adota', 'registra'):
             novo = dict(b, r=(s or d)[0], p=None)
             if s:
                 novo['s'] = [s[1], s[2]]

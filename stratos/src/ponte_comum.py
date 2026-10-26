@@ -29,6 +29,12 @@ Dois modos:
     passada) se resolve pelo SENTIDO da pasta: na de entrada vence o share, na
     de saída vence o Stratos, e o perdedor vai para a lixeira.
 
+As pastas que o app só GRAVA e nunca lê (`DESCE`: as cópias extras da posição
+e a planilha do Pending Confirmation) não sobem nunca: no espelho elas são
+puladas, e no `--alinhar` e na virada o que está no share é só REGISTRADO na
+base, sem cópia — é o que mantém o histórico de outras pessoas no share sem
+levá-lo ao Stratos (§690), e o que o app gravar desce como numa pasta de saída.
+
 Nada é apagado de verdade: o que sai vai para a LIXEIRA (no drive,
 `<raiz>/ponte/lixeira/<dia>/`; no share, uma pasta local da máquina da ponte),
 e uma passada que apagaria muito de uma vez é RECUSADA (`limite_de_remocao`).
@@ -49,6 +55,12 @@ VIRADA = 'virada'
 ENTRADA = 'entrada'   # alguém (B3, pessoas, relatórios) põe; o app lê e às vezes apaga
 SAIDA = 'saida'       # o app grava para alguém (B3, pessoas, outra equipe) pegar
 AMBOS = 'ambos'       # os dois: pessoas e o app gravam
+# O app grava e NÃO lê (§690): como SAIDA, mas o que está no share nunca sobe.
+# Sem isto o espelho levaria ao Stratos 18 GB de histórico que nenhuma tela
+# abre (o `--medir` de 26/10/2026): o CETIP_NDF, o CETIP_OPTIONS e a pasta
+# `Movimento\Pending Confirmation`, onde o app escreve UM arquivo e o resto é
+# de outras pessoas.
+DESCE = 'desce'
 
 Pasta = namedtuple('Pasta', 'slug rel sentido intervalo janela_dias')
 
@@ -71,9 +83,9 @@ PASTAS = (
     Pasta('comitente', _OTC + 'Reconciliations/Comitente', SAIDA, 120, 31),
     Pasta('cgd-input', 'Confirmation/Derivativos/Alteryx/Batimento CGD/Input', ENTRADA, 120, None),
     Pasta('pending-confirmation', 'Confirmation/Derivativos/Movimento/Pending Confirmation',
-          SAIDA, 120, None),
-    Pasta('cetip-options', 'CETIP_OPTIONS', SAIDA, 120, 31),
-    Pasta('cetip-ndf', 'CETIP_NDF', SAIDA, 120, 31),
+          DESCE, 120, None),
+    Pasta('cetip-options', 'CETIP_OPTIONS', DESCE, 120, 31),
+    Pasta('cetip-ndf', 'CETIP_NDF', DESCE, 120, 31),
     Pasta('electronic-inventory', _OTC + 'Electronic Inventory', AMBOS, 600, None),
 )
 POR_SLUG = {p.slug: p for p in PASTAS}
@@ -137,6 +149,22 @@ def na_janela(rel, janela_dias, agora):
     return dia is None or dia >= agora - (janela_dias + 1) * 86400
 
 
+def longo(p, nome_so=None):
+    """O caminho na forma ESTENDIDA do Windows (`\\\\?\\UNC\\…`), que não tem o
+    limite de 260 caracteres — 248 para uma PASTA. O Electronic Inventory passa
+    disso: `<contraparte>\\Confirmations\\AAAA\\mm. Mês\\dd\\<tipo>\\<documento>
+    _files` chega a ~260 já na pasta, e o `scandir` dela respondia "The system
+    cannot find the path specified" (WinError 3). Fora do Windows não muda nada.
+    Só caminho ABSOLUTO: a forma estendida não resolve `.`/`..` nem relativo."""
+    if (nome_so or os.name) != 'nt' or p.startswith('\\\\?\\'):
+        return p
+    if p.startswith('\\\\'):
+        return '\\\\?\\UNC\\' + p[2:]
+    if len(p) > 2 and p[1] == ':':
+        return '\\\\?\\' + p
+    return p
+
+
 def lista(raiz, pasta, agora, scandir=os.scandir, pulados=None):
     """{chave: (rel, mtime, tamanho)} dos arquivos de `pasta` sob `raiz`, com
     `rel` relativo à RAIZ e com `/`.
@@ -147,7 +175,8 @@ def lista(raiz, pasta, agora, scandir=os.scandir, pulados=None):
     recusa) entra na lista e a listagem segue: quem a chama não decide nada
     debaixo dela — uma contraparte bloqueada não pode parar o Electronic
     Inventory inteiro. A raiz da pasta que não abre levanta sempre."""
-    base = os.path.join(raiz, *pasta.rel.split('/'))
+    # Forma estendida já na base: os `e.path` dos filhos a herdam.
+    base = longo(os.path.join(raiz, *pasta.rel.split('/')))
     out = {}
     if not os.path.isdir(base):
         return out
@@ -236,7 +265,9 @@ Acao = namedtuple('Acao', 'tipo chave rel motivo')
 # tipo: 'subir' (share → drive), 'baixar' (drive → share), 'lixo_drive',
 #       'lixo_share', 'adota' (os dois lados já estão iguais: só registra),
 #       'esquece' (sumiu dos dois lados), 'solta' (o manifesto não mostrou o
-#       que a ponte subiu no prazo: deixa de esperar).
+#       que a ponte subiu no prazo: deixa de esperar), 'registra' (pasta
+#       DESCE: o que o share tem entra na base sem subir).
+SO_BASE = ('adota', 'esquece', 'solta', 'registra')   # não copiam nada
 
 
 def _sig(x):
@@ -253,7 +284,12 @@ def plano(share, drive, base, modo, sentido, agora, drive_em, assentar=ASSENTAR,
     {chave: {'r', 's', 'd', 'p', 'pt'}} (`s`/`d` = [mtime, tamanho] de cada lado;
     `p` = o tamanho que a ponte SUBIU e o manifesto ainda não mostrou, desde
     `pt`). `drive_em` é o `gerado_em` do manifesto.
+
+    Pasta `DESCE`: no espelho, nada; na virada, a regra da SAIDA com toda
+    subida trocada por `registra`.
     """
+    if sentido == DESCE and modo == ESPELHO:
+        return []
     acoes = []
     for k in sorted(set(share) | set(drive) | set(base)):
         s, d, b = share.get(k), drive.get(k), base.get(k)
@@ -296,7 +332,7 @@ def plano(share, drive, base, modo, sentido, agora, drive_em, assentar=ASSENTAR,
             if s and d:
                 if s[2] == d[2]:
                     acoes.append(Acao('adota', k, s[0], 'já igual nos dois lados'))
-                elif sentido == SAIDA:
+                elif sentido in (SAIDA, DESCE):
                     acoes.append(Acao('baixar', k, d[0], 'diferente dos dois lados; '
                                       'na pasta de saída vence o Stratos'))
                 else:
@@ -336,20 +372,27 @@ def plano(share, drive, base, modo, sentido, agora, drive_em, assentar=ASSENTAR,
                 acoes.append(Acao('baixar', k, d[0], 'saiu do share mas mudou no Stratos'))
             elif s[2] == d[2]:
                 acoes.append(Acao('adota', k, s[0], 'mudou dos dois lados, igual'))
-            elif sentido == SAIDA:
+            elif sentido in (SAIDA, DESCE):
                 acoes.append(Acao('baixar', k, d[0], 'conflito; na pasta de saída vence '
                                   'o Stratos'))
             else:
                 acoes.append(Acao('subir', k, s[0], 'conflito; vence o share'))
-    return acoes
+    return _so_desce(acoes) if sentido == DESCE else acoes
 
 
-def plano_alinhar(share, drive, agora, drive_em, assentar=ASSENTAR):
+def _so_desce(acoes):
+    """Pasta DESCE: o que subiria só entra na base (o share segue com o
+    histórico dele, o Stratos não o recebe)."""
+    return [Acao('registra', a.chave, a.rel, a.motivo + '; pasta que só desce')
+            if a.tipo == 'subir' else a for a in acoes]
+
+
+def plano_alinhar(share, drive, agora, drive_em, assentar=ASSENTAR, sentido=None):
     """A passada que COMEÇA a virada: o drive fica igual ao share, e o que só
     existe no drive vai para a lixeira dele. Sem isto, o primeiro minuto da
     virada levaria ao share o que o Stratos gerou durante a validação — numa
     `Batch Conecta\\New`, registro de verdade na B3. Não usa base: é dela que a
-    virada parte."""
+    virada parte. Pasta DESCE: o share é só registrado, sem subir."""
     acoes = []
     for k in sorted(set(share) | set(drive)):
         s, d = share.get(k), drive.get(k)
@@ -361,7 +404,7 @@ def plano_alinhar(share, drive, agora, drive_em, assentar=ASSENTAR):
             acoes.append(Acao('subir', k, s[0], 'alinhar: o share vale'))
         else:
             acoes.append(Acao('lixo_drive', k, d[0], 'alinhar: só no Stratos'))
-    return acoes
+    return _so_desce(acoes) if sentido == DESCE else acoes
 
 
 def sob(rel, prefixos):
