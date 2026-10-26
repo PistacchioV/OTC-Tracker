@@ -30015,3 +30015,42 @@ Add Deal):
 
 `check_swap_cashflow.py` §11 (Lawton ponta a ponta, Intrag, CLIENT 1) e §12 (o
 JS no node, o catálogo, as traduções); `check_swap_bullet.py` com a CLIENT 1.
+
+## §700 — Swaps: o modal no formato da equipe; as taxas no 0034 e o 0301 a termo completo (2026-10-26)
+
+**Modal de Edit/Add das três telas de swap** (Bullet, Cashflow, Cetes), uma regra
+só no `static/js/swap-deal.js` (`otcSwapModalPrep`/`otcSwapModalValue`), ligada
+pelos dois templates:
+
+- Notional, Notional (Foreign Ccy) e Premium Amount em `#,##0.00`; FX Start em
+  `#0.00000000`; o Client Tax ID com a máscara de CNPJ (Tax ID com letra fica
+  como veio).
+- **VCP Holder / Vanilla Holder mostram a CONTA B3** de quem carrega a perna: o
+  Banco = a conta própria da JPM; o outro = a contraparte da linha (o fundo no
+  B2B, a conta do cliente ou a guarda-chuva). Só leitura: o texto do DT segue
+  gravado — é o "Ativo VCP" do e-mail do Economic Affirmation e a pergunta do
+  parser sobre quem é a Parte A. As contas próprias vêm na resposta da busca
+  (`own_accounts`, do `b3-accounts` pelo TIPO), nunca fixas no JS.
+- O Save manda o dado CRU, e o valor que só mudou de FORMATO volta como estava
+  (`5.40000000` → o `5.4` gravado): sem isso todo Edit viraria Amend.
+
+**0034 (o cronograma do Cashflow)**: Sinal e Taxa de Juros da P1 (2-3) e da P2
+(8-9) saíam em branco; agora são os da curva de cada ponta no 0301 (o exemplo da
+equipe: `00 0009500` × `00 0048824`). A P1 é a ponta da MENOR conta — o critério
+do Papel (SUPOSIÇÃO: a 4.2.8 não o diz).
+
+**0301 a termo (Atualização de Notional, §697)**, pelo registro da Boticario na B3:
+
+- PU Inicial/Cupom Limpo do índice termo (22) = o FX inicial com QUALQUER Índice
+  Termo (era só no 00/VCP); sem FX Start a termo é lacuna (`swc_fx_coupon`).
+- Sinal e Juros (% aa) em TODA curva, a VCP inclusive (`+ 0,6000` no Term SOFR
+  da Boticario) — no Bullet a VCP segue sem eles, e o teste de paridade com o
+  Bullet exclui esses dois campos quando a curva é VCP.
+- O Cupom Limpo (47/49) segue em BRANCO a termo, mas a **Data de Cotação
+  (48/50) VAI**: a coluna do deal (`Quote Date D-n` na VCP, `Curve X Quote` na
+  moeda) e, sem ela, o D-n da fixação ao início (o `termo_quote` do campo 99) —
+  `fx_quote`/`vcp_quote`. A lacuna `swc_fx_quote` só fica quando nem isso há.
+
+`check_swap_cashflow.py` §4 (as taxas do 0034, o exemplo da equipe), §9 (a
+Data de Cotação a termo) e §10 (22 = FX, Sinal/Juros da VCP, a Data de Cotação
+sem a coluna).
