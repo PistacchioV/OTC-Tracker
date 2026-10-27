@@ -28,15 +28,19 @@ ALVOS = ('pc', 'mc', 'intrag')
 _TETO = 20          # refs por resposta: o cabeçalho tem de caber
 
 
-def falhou(alvo, ref, exc=None):
+def falhou(alvo, ref, exc=None, remocao=False):
     """Registra que a cópia para `alvo` ('pc', 'mc' ou 'intrag') da operação
-    `ref` não foi gravada. Devolve False, para quem chama devolver o veredito."""
+    `ref` não foi gravada — ou, com `remocao`, que a operação apagada na origem
+    NÃO saiu de lá. Devolve False, para quem chama devolver o veredito."""
     ref = str(ref or '').strip() or '?'
-    log.warning('[mirror] a copia para %s de %s NAO foi gravada: %s', alvo, ref,
+    log.warning('[mirror] %s %s de %s NAO foi feita: %s',
+                'a remocao' if remocao else 'a copia para', alvo, ref,
                 '%s: %s' % (type(exc).__name__, exc) if exc is not None else 'sem motivo')
     if has_request_context():
         lst = g.setdefault('_otc_mirror_failed', [])
         item = {'target': alvo, 'ref': ref}
+        if remocao:
+            item['op'] = 'remove'
         if item not in lst and len(lst) < _TETO:
             lst.append(item)
     return False

@@ -195,16 +195,46 @@ def api_pending_confirmation_upsert():
     # update: um upsert por linha eram 4 aberturas EXCLUSIVAS de banco no
     # share por request, × um request por linha — o lote faz tudo em três.
     srcs = body.get('rows')
+    origs = body.get('origs')
     if srcs is None:
         srcs = [body.get('row') or {}]
+        origs = [body.get('orig')]
     if not isinstance(srcs, list) or not srcs:
         return jsonify({'success': False, 'message': 'rows must be a list'}), 400
+    if not isinstance(origs, list) or len(origs) != len(srcs):
+        origs = [None] * len(srcs)
+    cols = _R()._PC_COLUMNS
     rows = []
     for src in srcs:
         if not isinstance(src, dict) or \
                 not str(src.get('Trade Number', '') or '').strip():
             return jsonify({'success': False, 'message': 'Trade Number required'}), 400
-        rows.append({c: str(src.get(c, '') or '') for c in _R()._PC_COLUMNS})
+        rows.append({c: str(src.get(c, '') or '') for c in cols})
+    # Só o que a tela MUDOU vai por cima da linha RELIDA (§696, o mesmo defeito
+    # do Track): a página manda a linha inteira da última carga, e gravá-la
+    # desfazia o que outra pessoa — ou a esteira, pelo `_mc_pc_sync` — gravou
+    # depois (o Concluded de outra pessoa voltava a Pending, um FepWeb ID
+    # sumia). O `orig` é a linha como a página a CARREGOU; coluna igual a ele
+    # não foi mexida e fica com o valor do banco. Linha sem `orig` (Add Row,
+    # Trade Number trocado no Edit) grava inteira, como antes.
+    merge = [(i, str(o.get('Trade Number', '') or '').strip())
+             for i, o in enumerate(origs) if isinstance(o, dict)]
+    merge = [(i, tn) for i, tn in merge if tn and tn == rows[i]['Trade Number'].strip()]
+    if merge:
+        frescas = _R()._pc_find_rows([tn for _i, tn in merge])   # estrita: ocupado sobe
+        sumidas = [tn for _i, tn in merge if tn not in frescas]
+        if sumidas:
+            # Apagada por outra pessoa depois da carga: gravar a recriaria.
+            return jsonify({'success': False, 'code': 'pc_row_gone', 'keys': sumidas,
+                            'message': ('{} is no longer in Pending Confirmation — '
+                                        'reload the page.'.format(', '.join(sumidas)))}), 409
+        for i, tn in merge:
+            orig = origs[i]
+            linha = {c: str(frescas[tn].get(c, '') or '') for c in cols}
+            for c in cols:
+                if rows[i][c] != str(orig.get(c, '') or ''):
+                    linha[c] = rows[i][c]
+            rows[i] = linha
     targets = _R()._pc_upsert_rows(rows)
     return jsonify({'success': True, 'category': targets[0], 'categories': targets})
 
@@ -231,8 +261,16 @@ def api_pending_confirmation_delete():
     tn = str((request.get_json(silent=True) or {}).get('trade_number', '') or '').strip()
     if not tn:
         return jsonify({'success': False, 'message': 'Trade Number required'}), 400
+    # A falha SOBE (vira o 503/500 JSON do tratador global): engolida, a tela
+    # respondia `success`, tirava a linha da grade e ela voltava no reload.
+    erro = None
     for cat in ('backlog', 'pending', 'ok'):
-        _R()._pc_delete_tn(cat, tn)
+        try:
+            _R()._pc_delete_tn(cat, tn, raise_errors=True)
+        except Exception as exc:                            # noqa: BLE001
+            erro = erro or exc
+    if erro is not None:
+        raise erro
     return jsonify({'success': True})
 
 @blueprint.route('/api/pending-confirmation/import-update', methods=['POST'])

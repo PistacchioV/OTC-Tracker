@@ -1111,12 +1111,21 @@ def esteira_sem_a_recompra(chaves):
         chave = str(aid or '').strip()
         if not chave:
             continue
+        # A recompra ja saiu do arquivo-dia; a linha que fica na esteira ou no
+        # Pending e DITA na tela (`mirrors`), nao so no log.
+        from apps.pages.platform import mirrors as _mirrors
         try:
             R._mc_mod.delete_row(chave)
-            R._pc_delete_trade_number(chave)
-        except Exception:                                   # noqa: BLE001
+        except Exception as exc:                            # noqa: BLE001
             R.log.warning('[UNWIND NDF FX] esteira: %s nao saiu da fila:\n%s',
                           chave, traceback.format_exc())
+            _mirrors.falhou('mc', chave, exc, remocao=True)
+        try:
+            R._pc_delete_trade_number(chave)
+        except Exception as exc:                            # noqa: BLE001
+            R.log.warning('[UNWIND NDF FX] pending: %s nao saiu:\n%s',
+                          chave, traceback.format_exc())
+            _mirrors.falhou('pc', chave, exc, remocao=True)
 
 
 _LER = object()   # `row` nao informado: o `find_row` le a esteira
