@@ -1458,10 +1458,18 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 - **NDF de MGT contra cliente tem documento PRÓPRIO e entra na esteira**
   (§453): `ndf-mgt-strike-me.html` serve Vanilla e FWD Start, com a Parte A
   fixa na filial brasileira da JPMORGAN CHASE e o eixo de grupo por PRODUTO
-  (a pasta do Inventory é o tipo). O Vanilla só ganha `source` de
+  (a pasta do Inventory é o tipo). O Vanilla ganha `source` de
   confirmação quando a LE é MGT (`_generic_nd_mc_source`) e nasce `Pending
-  OTC`; o do BANCO segue sem esteira. O FWD Start do BANCO deixou de listar
+  OTC`; o do BANCO só quando é ASIÁTICO ou BRL FIXED (§703,
+  `_generic_nd_vanilla_conf`), no documento do termo de moeda do Banco,
+  família `vanilla` (`/confirmation/ndf-fwdstart/vanilla`); o resto do
+  Vanilla do Banco segue sem esteira. O FWD Start do BANCO deixou de listar
   os de MGT, e o Generate do Monitor escolhe o editor pela Legal Entity.
+  **O ID é UMA regra** (equipe, 27/10/2026, §703) no Pending, na esteira, no
+  Nº e no FepWeb ID: FWD Start e swaps pelo B3 ID; Vanilla, FXO, NDF e opção
+  de commodities pelo Deal. Quem a diz é o `_mc_conf_trade_keys` (por deal,
+  `_conf_src`) e o `_conf_num_field` — Save novo grava o FepWeb ID por ele,
+  nunca por `d.get('Deal')` (o FWD Start ficava sem o FepWeb ID).
   **FWD Start é numerado pelo B3 ID em QUALQUER LE** (mesa, 23/09/2026; §539):
   coluna Nº do Anexo I E `numeroContrato` do XML, no documento do BANCO e no
   de MGT (`_conf_mgt_num_field`, `num_field` do `_conf_ndf_xml`; sem B3 ID o
@@ -1584,9 +1592,12 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   aponta cada pendência com a data no link (`static/js/deep-link.js`:
   `?tradedate=`/`?date=`) — página que vira destino lê `otcLinkDmy()`/
   `otcLinkIso()`. Teste não grava no registro (`task_runs._em_teste`).
-  **Owner e backup por tarefa e LE** (§701, botão Owners; edita o BO e o admin):
-  `control-panel/intraday_assignments.json` pelo `domain.clean_assignments`, e
-  quem é designado agora é avisado no SEU sino (página `Intraday Monitor`).
+  **Owner e backup por tarefa × produto × LE** (§701/§703, botão Owners;
+  edita o BO e o admin): `control-panel/intraday_assignments.json` pelo
+  `domain.clean_assignments`; o produto só nas três tarefas de zona
+  (`domain.assign_products`: os cards da zona; card de confirmação novo entra
+  no `ASSIGN_CONF_PRODUCTS`), e só BO/ADMIN/master são designáveis. Quem é
+  designado agora é avisado no SEU sino (página `Intraday Monitor`).
   `check_intraday_monitor.py`, `check_intraday_owners.py`.
 - **O Monitor não recebe lista de produto: ele VARRE o `cache/new deals/`**
   e agrupa pelos dois primeiros níveis não numéricos do caminho (§454). Quem
@@ -3653,6 +3664,7 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 | os scripts que leem RefData/calendário/arquivos-dia (`create_counterparty_folders`, `create_cetip_folders`, `import_pending_confirmation`, `update_pending_confirmation_*`, `backfill_manual_confirmations`, `export_new_deals_excel`, `fix_cgd_economic_group`) | leem pelo ARMAZÉM e pelo `data_path` (§440): o `apps/static/data/*.json` do checkout é a seed, não o dado |
 | `import_cgd_sharepoint.py` · `import_cgd_auxiliar.py` | lista de CGDs e as três abas do `Auxiliar.xlsx` |
 | `fill_cgd_from_refdata_spn.py [--dry-run] [--force] [--db] [--refdata]` | completa o Tracking Docs pelo **SPN**: Economic Group, ECI, CASID e UCN do Reference Data. Chave de dígitos (sem zero à esquerda e sem `.0`), célula com o grupo (`;`) junta os valores, **SPN ambíguo no cadastro não preenche** a coluna divergente, só o vazio (`0`/`N/A` contam) sem `--force`, UMA abertura do banco (`cgd_docs.update_rows`). `check_cgd_spn_fill.py` |
+| `fill_fepweb_ids_fwdstart.py [--gravar]` | preenche o FepWeb ID do Pending das confirmações de NDF FWD Start JÁ geradas (§703: o Save procurava a linha pelo Deal, e a do FWD Start é chaveada pelo B3 ID). Lê o `numeroContrato` do XML ao lado do PDF do `Confirmation Link` da esteira e só preenche o vazio; sem `--gravar` só relata; idempotente |
 | `import_file_interpreter_template.py [--key <k>] [--force] [--dry-run]` | leva ao BANCO um template do File Interpreter corrigido no repositório. O `.json` versionado é a SEED, e a semeadura da subida não sobrescreve o que o banco tem (§434/§488): sem este script o motor segue lendo o layout velho e o arquivo vai errado para a B3, sem erro nenhum. Template que o banco tem EDITADO (algum `source` preenchido) fica de fora sem `--force` |
 | `migrate_unwind_esteira_keys.py [--gravar]` | leva as recompras do Pending e da esteira da chave antiga (Athena ID cru / Deal ID) para a PRÓPRIA (`UNW-…`, §696): a linha `UNWIND …` da chave antiga muda de chave (destino primeiro), a confirmação ORIGINAL que a recompra reescreveu no Pending é refeita pelo `_generic_nd_pc_trigger` (o que a equipe tinha preenchido nela não volta — a lista sai no fim) e a recompra que nunca entrou na esteira entra pela porta do import. Sem `--gravar` só relata; idempotente |
 | `split_notifications_db.py --dry-run` | mostra o que a separação do sino vai copiar |
@@ -3671,7 +3683,7 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (220 scripts)
+### `scripts/tests/` (221 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

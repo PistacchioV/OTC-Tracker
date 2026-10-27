@@ -396,7 +396,10 @@
 #ndm-page .im-owner em { font-style: normal; font-weight: 700; font-size: .64rem; letter-spacing: .04em; padding: 0 5px; border-radius: var(--otc-r-pill); background: var(--otc-fill); color: var(--otc-text-2); }
 #ndm-page .im-owner small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ndm-page .im-av { width: 18px; height: 18px; flex: 0 0 auto; border-radius: 50%; object-fit: cover; display: inline-flex; align-items: center; justify-content: center; font-size: .55rem; font-weight: 700; color: #fff; background: var(--otc-accent); }
-#imAsgModal .im-asg-row { display: grid; grid-template-columns: minmax(0, 2fr) 110px minmax(0, 1.6fr) minmax(0, 1.6fr) 34px; gap: 8px; align-items: center; margin-bottom: 8px; }
+#imAsgModal .im-asg-row { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.6fr) 90px minmax(0, 1.4fr) minmax(0, 1.4fr) 32px; gap: 8px; align-items: center; margin-bottom: 8px; }
+/* Cancel, Save e o Remove da linha: o squircle dos botões de ação (32px, canto de 10px), §703 */
+#imAsgModal .btn-icon { width: 32px !important; height: 32px !important; min-width: 32px !important; min-height: 32px !important; padding: 0 !important; border-radius: 10px !important; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+#imAsgModal .btn-icon > i { font-size: 1rem; }
 #imAsgModal .im-asg-head { font: 650 .7rem/1.2 var(--otc-font); letter-spacing: .05em; text-transform: uppercase; color: var(--otc-text-3); margin-bottom: 6px; }
 #imAsgModal .im-asg-empty { color: var(--otc-text-2); font-size: .85rem; padding: 10px 0; }
 </style>
@@ -520,10 +523,10 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <p class="fs-xs text-muted mb-3" data-lang="im-owners-sub">Who answers for each task and who covers for them. Pick an entity to split a task by LE — blank (All) is the whole task.</p>
+        <p class="fs-xs text-muted mb-3" data-lang="im-owners-sub">Who answers for each task and who covers for them. B3 Registration, Confirmations and Intrag split by product, and any task by entity — All is the whole task. Only OTC Ops (BO), admins and the master can be owner or backup.</p>
         <div class="row g-3"><div class="col-12">
           <div class="im-asg-row im-asg-head">
-            <span data-lang="im-asg-task">Task</span><span data-lang="im-asg-le">Entity</span>
+            <span data-lang="im-asg-task">Task</span><span data-lang="im-asg-product">Product</span><span data-lang="im-asg-le">Entity</span>
             <span data-lang="im-owner">Owner</span><span data-lang="im-backup">Backup</span><span></span>
           </div>
           <div id="imAsgRows"></div>
@@ -531,8 +534,8 @@
         </div></div>
       </div>
       <div class="modal-footer py-2">
-        <button type="button" class="btn btn-danger btn-icon rounded-circle" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
-        <button type="button" class="btn btn-success btn-icon rounded-circle" id="imAsgSave" title="Save"><i class="ti ti-device-floppy"></i></button>
+        <button type="button" class="btn btn-danger btn-icon" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-success btn-icon" id="imAsgSave" title="Save"><i class="ti ti-device-floppy"></i></button>
       </div>
     </div>
   </div>
@@ -581,6 +584,7 @@
         // a mesma caixinha cinza repetida.
         'conf-ndf-commodities': 'ti-wheat',
         'conf-ndf-fwdstart':    'ti-player-skip-forward',
+        'conf-ndf-vanilla':     'ti-droplet',
         'conf-ndf-mgt':         'ti-building-bank',
         'conf-opt-commodities': 'ti-chart-candle',
         'conf-opt-fxo':         'ti-currency-dollar',
@@ -812,7 +816,7 @@
         { key: 'ndm-grp-ndf',     label: 'NDF',
           b3: ['ndf-commodities', 'ndf-fwdstart', 'ndf-otherpublisher', 'ndf-vanilla', 'unwind-ndf-fx',
                'unwind-ndf-commodities'],
-          conf: ['conf-ndf-commodities', 'conf-ndf-fwdstart', 'conf-ndf-mgt'],
+          conf: ['conf-ndf-commodities', 'conf-ndf-fwdstart', 'conf-ndf-vanilla', 'conf-ndf-mgt'],
           intrag: ['intrag-ndf', 'intrag-unwind-dce-ndf',
                    'intrag-unwind-dce-deliverable-forward'] },
         { key: 'ndm-grp-options', label: 'Options',
@@ -963,7 +967,7 @@
     // card devolve ao cálculo. O quadro não se redesenha no meio do arrasto.
     var IM_ME = {}, IMDRAG = null;
     // Owner e backup (§701): a lista gravada e o nome/foto de cada SID
-    var IM_ASSIGN = [], IM_PEOPLE = {};
+    var IM_ASSIGN = [], IM_PEOPLE = {}, IM_PRODUCTS = {};
     function pessoa(sid) { return IM_PEOPLE[sid] || { name: sid, photo: '' }; }
     function avatar(sid) {
         var p = pessoa(sid);
@@ -978,6 +982,7 @@
         return '<span class="im-owners">' + lista.map(function (a) {
             return '<span class="im-owner" title="' + esc(t('im-owner', 'Owner') + ': ' + pessoa(a.owner).name +
                        (a.backup ? ' · ' + t('im-backup', 'Backup') + ': ' + pessoa(a.backup).name : '')) + '">' +
+                     (a.product ? '<em>' + esc(IM_PRODUCTS[a.product] || a.product) + '</em>' : '') +
                      (a.le ? '<em>' + esc(a.le) + '</em>' : '') + avatar(a.owner) + '<b>' + esc(pessoa(a.owner).name) + '</b>' +
                      (a.backup ? '<small>· ' + esc(t('im-backup', 'Backup')) + ' ' + esc(pessoa(a.backup).name) + '</small>' : '') +
                    '</span>';
@@ -1191,6 +1196,7 @@
         IM_ME = snap.me || {};
         IM_ASSIGN = snap.assignments || [];
         IM_PEOPLE = snap.people || {};
+        IM_PRODUCTS = snap.assign_products || {};
         desenhaKpis(snap.kpis);
         desenhaPrev(snap.prev);
         desenhaQuadro(snap.tasks);
@@ -1333,7 +1339,13 @@
     // A lista inteira vai no Save; o servidor limpa (tarefa e LE do catálogo,
     // SID do cadastro Active, backup ≠ owner) e avisa no sino quem foi
     // designado agora.
-    var ASG = { tasks: [], people: [], les: [], canEdit: false };
+    var ASG = { tasks: [], people: [], les: [], products: {}, canEdit: false };
+    // Os produtos da tarefa (§703): só B3 Registration, Confirmations e Intrag
+    // se quebram por produto; nas outras o campo fica em All, travado.
+    function asgProdOpts(task, atual) {
+        var lista = (ASG.products[task] || []).map(function (p) { return [p.key, p.label]; });
+        return asgOpts([['', t('im-le-all', 'All')]].concat(lista), atual || '');
+    }
     function asgOpts(lista, atual, vazio) {
         return (vazio != null ? '<option value="">' + esc(vazio) + '</option>' : '') +
             lista.map(function (o) {
@@ -1347,11 +1359,14 @@
         return '<div class="im-asg-row" data-row>' +
             '<select class="form-select form-select-sm" data-k="task"' + dis + '>' +
               asgOpts(ASG.tasks.map(function (x) { return [x.id, t('im-task-' + x.id, x.label)]; }), a.task) + '</select>' +
+            '<select class="form-select form-select-sm" data-k="product"' +
+              (ASG.canEdit && (ASG.products[a.task] || []).length ? '' : ' disabled') + '>' +
+              asgProdOpts(a.task, a.product) + '</select>' +
             '<select class="form-select form-select-sm" data-k="le"' + dis + '>' +
               asgOpts(ASG.les.map(function (l) { return [l, l || t('im-le-all', 'All')]; }), a.le || '') + '</select>' +
             '<select class="form-select form-select-sm" data-k="owner"' + dis + '>' + asgOpts(gente, a.owner, '—') + '</select>' +
             '<select class="form-select form-select-sm" data-k="backup"' + dis + '>' + asgOpts(gente, a.backup, '—') + '</select>' +
-            (ASG.canEdit ? '<button type="button" class="btn btn-sm btn-soft-danger btn-icon im-asg-del" title="' +
+            (ASG.canEdit ? '<button type="button" class="btn btn-soft-danger btn-icon im-asg-del" title="' +
                 esc(t('im-asg-del', 'Remove')) + '"><i class="ti ti-trash"></i></button>' : '<span></span>') +
           '</div>';
     }
@@ -1367,7 +1382,8 @@
             .then(function (r) { return r.json(); })
             .then(function (j) {
                 if (!j || !j.success) throw new Error((j && (j.message || j.error)) || 'load');
-                ASG = { tasks: j.tasks || [], people: j.people || [], les: j.les || [''], canEdit: !!j.can_edit };
+                ASG = { tasks: j.tasks || [], people: j.people || [], les: j.les || [''],
+                        products: j.products || {}, canEdit: !!j.can_edit };
                 asgRender(j.assignments || []);
                 bootstrap.Modal.getOrCreateInstance(document.getElementById('imAsgModal')).show();
             })
@@ -1411,6 +1427,14 @@
         var del = ev.target.closest('#imAsgRows .im-asg-del');
         if (del) { del.closest('[data-row]').remove(); return; }
         if (ev.target.closest('#imAsgSave')) asgSave();
+    });
+    // trocar a tarefa refaz a lista de produtos da linha (e volta a All)
+    document.addEventListener('change', function (ev) {
+        var sel = ev.target.closest('#imAsgRows select[data-k="task"]');
+        if (!sel) return;
+        var prod = sel.closest('[data-row]').querySelector('select[data-k="product"]');
+        prod.innerHTML = asgProdOpts(sel.value, '');
+        prod.disabled = !(ASG.canEdit && (ASG.products[sel.value] || []).length);
     });
 
     document.addEventListener('DOMContentLoaded', function () {

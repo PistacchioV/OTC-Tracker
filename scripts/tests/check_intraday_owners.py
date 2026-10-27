@@ -3,15 +3,18 @@
 
 O que se prova:
   1. `domain.clean_assignments`: só tarefa do catálogo e LE de `ASSIGN_LES`,
-     owner obrigatório, backup ≠ owner, SID fora do cadastro sai, (tarefa, LE)
-     repetida vale a última, ordem do catálogo;
+     owner obrigatório, backup ≠ owner, SID fora do cadastro sai, (tarefa,
+     produto, LE) repetida vale a última, ordem do catálogo; o PRODUTO (§703)
+     só nas três tarefas de zona e só os cards da zona delas;
   2. `domain.assignment_news`: só quem passou a responder (owner ou backup
      novo), não quem já estava;
   3. a rota: GET devolve a lista e `can_edit`; POST é do BO e do admin (o MO
      leva 403), substitui a lista e avisa no sino SÓ o designado novo
      (`target_sid`);
   4. o snapshot do Monitor leva `assignments` e `people`; a página tem o botão,
-     o modal no padrão e o rótulo `Intraday Monitor` está nos três mapas.
+     o modal no padrão e o rótulo `Intraday Monitor` está nos três mapas;
+  5. (§703) só BO, ADMIN e o master podem ser designados; os produtos de
+     Confirmations são os cards da zona; Cancel/Save/Remove são squircle.
 """
 import os
 import re
@@ -56,23 +59,42 @@ got = D.clean_assignments([
     {'task': 'registration', 'le': 'MGT', 'owner': 'T222222'},
 ], SIDS)
 check('limpa, ordena pelo catálogo e a repetida vale a última', got, [
-    {'task': 'registration', 'le': 'MGT', 'owner': 'T222222', 'backup': ''},
-    {'task': 'confirmation', 'le': 'MGT', 'owner': 'A111111', 'backup': 'T222222'},
-    {'task': 'recon-payrec', 'le': '', 'owner': 'T222222', 'backup': ''},
+    {'task': 'registration', 'product': '', 'le': 'MGT', 'owner': 'T222222', 'backup': ''},
+    {'task': 'confirmation', 'product': '', 'le': 'MGT', 'owner': 'A111111', 'backup': 'T222222'},
+    {'task': 'recon-payrec', 'product': '', 'le': '', 'owner': 'T222222', 'backup': ''},
 ])
+got = D.clean_assignments([
+    {'task': 'registration', 'product': 'NDF-COMMODITIES', 'owner': 'A111111'},
+    {'task': 'registration', 'product': 'ndf-vanilla', 'le': 'MGT', 'owner': 'A111111', 'backup': 'T222222'},
+    {'task': 'registration', 'product': 'intrag-ndf', 'owner': 'A111111'},
+    {'task': 'intrag', 'product': 'intrag-ndf', 'owner': 'T222222'},
+    {'task': 'confirmation', 'product': 'ndf-vanilla', 'owner': 'T222222'},
+    {'task': 'confirmation', 'product': 'swap-cem', 'owner': 'T222222'},
+    {'task': 'recon-fxo', 'product': 'ndf-vanilla', 'owner': 'A111111'},
+], SIDS)
+check('produto: o card da zona da tarefa; o de outra zona e a tarefa sem produto saem',
+      [(a['task'], a['product'], a['le']) for a in got],
+      [('registration', 'ndf-commodities', ''), ('registration', 'ndf-vanilla', 'MGT'),
+       ('confirmation', 'ndf-vanilla', ''), ('intrag', 'intrag-ndf', '')])
+check('a mesma tarefa em dois produtos são duas linhas',
+      len(D.clean_assignments([{'task': 'registration', 'product': 'ndf-vanilla', 'owner': 'A111111'},
+                               {'task': 'registration', 'product': 'ndf-commodities', 'owner': 'T222222'}])), 2)
 check('lixo é lista vazia', D.clean_assignments('x'), [])
 
 print('\n== 2. assignment_news ==')
-antes = [{'task': 'registration', 'le': 'MGT', 'owner': 'A111111', 'backup': ''}]
-depois = [{'task': 'registration', 'le': 'MGT', 'owner': 'A111111', 'backup': 'T222222'},
-          {'task': 'confirmation', 'le': '', 'owner': 'T222222', 'backup': ''}]
-check('só o que é novo', D.assignment_news(antes, depois),
-      [('T222222', 'backup', 'registration', 'MGT'), ('T222222', 'owner', 'confirmation', '')])
+antes = [{'task': 'registration', 'product': '', 'le': 'MGT', 'owner': 'A111111', 'backup': ''}]
+depois = [{'task': 'registration', 'product': '', 'le': 'MGT', 'owner': 'A111111', 'backup': 'T222222'},
+          {'task': 'confirmation', 'product': '', 'le': '', 'owner': 'T222222', 'backup': ''},
+          {'task': 'registration', 'product': 'ndf-vanilla', 'le': 'MGT', 'owner': 'A111111', 'backup': ''}]
+check('só o que é novo (outro produto é outra linha)', D.assignment_news(antes, depois),
+      [('T222222', 'backup', 'registration', '', 'MGT'), ('T222222', 'owner', 'confirmation', '', ''),
+       ('A111111', 'owner', 'registration', 'ndf-vanilla', 'MGT')])
 
 print('\n== 3. a rota ==')
 GRAVADO = {'v': antes}
 P._load_assignments = lambda strict=False: list(GRAVADO['v'])
 P._save_assignments = lambda lista: GRAVADO.__setitem__('v', D.clean_assignments(lista))
+_PEOPLE_REAL = P._assignable_people
 P._assignable_people = lambda: [{'sid': 'A111111', 'name': 'Augusto', 'photo': ''},
                                 {'sid': 'T222222', 'name': 'Theodoro', 'photo': ''}]
 AVISOS = []
@@ -96,9 +118,14 @@ check('   nada gravado', GRAVADO['v'], antes)
 como('BO')
 r = cl.post('/api/intraday-monitor/assignments', json={'assignments': depois})
 check('POST do BO: grava', (r.status_code, GRAVADO['v']), (200, D.clean_assignments(depois)))
-check('   avisa só os designados novos, cada um no SEU sino',
+check('   avisa só os designados novos, cada um no SEU sino, com o produto',
       sorted((k.get('target_sid'), a[4]) for a, k in AVISOS),
-      [('T222222', 'Backup · B3 Registration (MGT)'), ('T222222', 'Owner · Confirmations')])
+      [('A111111', 'Owner · B3 Registration · NDF Vanilla (MGT)'),
+       ('T222222', 'Backup · B3 Registration (MGT)'), ('T222222', 'Owner · Confirmations')])
+j = cl.get('/api/intraday-monitor/assignments').get_json()
+check('GET: os produtos de cada tarefa de zona',
+      (sorted(j['products']), j['products']['confirmation'][2]),
+      (['confirmation', 'intrag', 'registration'], {'key': 'ndf-vanilla', 'label': 'NDF Vanilla'}))
 check('   na página Intraday Monitor', {a[3] for a, _k in AVISOS}, {'Intraday Monitor'})
 r = cl.post('/api/intraday-monitor/assignments', json={'assignments': 'x'})
 check('payload ruim: 400', r.status_code, 400)
@@ -111,9 +138,10 @@ Q_prev = Q._prev_items
 Q._prev_items = lambda ref: {'items': []}
 try:
     j = cl.get('/api/intraday-monitor').get_json()
-    check('o snapshot leva assignments, people e can_assign',
-          (j.get('assignments') == GRAVADO['v'], sorted(j.get('people') or {}), j['me'].get('can_assign')),
-          (True, ['A111111', 'T222222'], True))
+    check('o snapshot leva assignments, people, can_assign e o rótulo dos produtos',
+          (j.get('assignments') == GRAVADO['v'], sorted(j.get('people') or {}), j['me'].get('can_assign'),
+           (j.get('assign_products') or {}).get('intrag-ndf')),
+          (True, ['A111111', 'T222222'], True, 'Intrag NDF'))
 finally:
     Q._intraday_snapshot, Q._prev_items = _orig, Q_prev
 
@@ -131,6 +159,45 @@ check('o rótulo nos três mapas de notificação',
        "'Intraday Monitor': '/intraday-monitor'" in src('apps', 'static', 'js', 'sw-push.js'),
        bool(re.search(r"'Intraday Monitor':\s+'/intraday-monitor'", src('apps', 'templates', 'partials', 'topbar.html')))),
       (True, True, True))
+
+print('\n== 5. quem pode ser designado, os produtos e os botões (§703) ==')
+
+
+class _Con:
+    def execute(self, sql, *a):
+        class _R:
+            def fetchall(_s):
+                return [('A111111', 'Ana', 'Active', 'BO'), ('B222222', 'Beto', 'Active', 'ADMIN'),
+                        ('C333333', 'Caio', 'Active', 'MO'), ('D444444', 'Duda', 'Inactive', 'BO'),
+                        ('E930179', 'Master', 'Active', 'FO'), ('F555555', 'Fê', 'Active', '')]
+        return _R()
+
+    def close(self):
+        pass
+
+
+_gdc = R.get_db_connection
+R.get_db_connection = lambda readonly=False: _Con()
+P._people_memo['rows'] = None
+try:
+    _ap = _PEOPLE_REAL
+    check('só BO, ADMIN e o master, ativos', [p['sid'] for p in _ap()], ['A111111', 'B222222', 'E930179'])
+finally:
+    R.get_db_connection = _gdc
+qsrc = src('apps', 'pages', 'features', 'deals_monitor', 'queries.py')
+cards_conf = re.findall(r"'(conf-[a-z0-9-]+)'", qsrc)
+check('os produtos de Confirmations são os cards da zona',
+      sorted(k for k, _l in D.ASSIGN_CONF_PRODUCTS), sorted({c[5:] for c in cards_conf}))
+check('B3 Registration sem Intrag, Intrag só Intrag',
+      (any(k.startswith('intrag-') for k, _l in D.assign_products()['registration']),
+       all(k.startswith('intrag-') for k, _l in D.assign_products()['intrag'])), (False, True))
+modal = tpl[tpl.index('id="imAsgModal"'):tpl.index('{% endblock page_content %}')]
+check('Cancel e Save sem rounded-circle, e o squircle no CSS do modal',
+      ('rounded-circle' in modal,
+       bool(re.search(r'#imAsgModal \.btn-icon \{[^}]*height: 32px !important[^}]*border-radius: 10px !important', tpl))),
+      (False, True))
+check('a coluna Produto no modal e no card', ('data-lang="im-asg-product"' in tpl, 'IM_PRODUCTS[a.product]' in tpl),
+      (True, True))
 
 print(('\nFAIL: %d' % len(fails)) if fails else '\nTUDO OK')
 sys.exit(1 if fails else 0)

@@ -126,6 +126,7 @@ def api_intraday_monitor():
                   'sid': str(session.get('user_sid') or '').strip().upper()}
     # owner e backup de cada tarefa (§701): o card os mostra
     snap['assignments'] = persistence._load_assignments()
+    snap['assign_products'] = {k: l for lst in domain.assign_products().values() for k, l in lst}
     snap['people'] = {p['sid']: {'name': p['name'], 'photo': p['photo']}
                       for p in persistence._assignable_people()}
     snap['me']['can_assign'] = _pode_designar()
@@ -150,6 +151,8 @@ def api_intraday_assignments():
     if request.method == 'GET':
         return jsonify({'success': True, 'assignments': persistence._load_assignments(strict=True),
                         'people': pessoas, 'les': list(domain.ASSIGN_LES),
+                        'products': {t: [{'key': k, 'label': l} for k, l in lst]
+                                     for t, lst in domain.assign_products().items()},
                         'tasks': [{'id': t['id'], 'label': t['label'], 'icon': t['icon']} for t in domain.TASKS],
                         'can_edit': _pode_designar()})
     if not _pode_designar():
@@ -164,12 +167,15 @@ def api_intraday_assignments():
     persistence._save_assignments(limpa)
     R = _R()
     rotulo = {t['id']: t['label'] for t in domain.TASKS}
-    for sid, papel, task, le in domain.assignment_news(antes, limpa):
+    rot_prod = {k: l for lst in domain.assign_products().values() for k, l in lst}
+    for sid, papel, task, product, le in domain.assignment_news(antes, limpa):
         try:
             R._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                                    'Task Assigned', 'Intraday Monitor',
-                                   '{} · {}{}'.format('Owner' if papel == 'owner' else 'Backup',
-                                                      rotulo.get(task, task), ' (' + le + ')' if le else ''),
+                                   '{} · {}{}{}'.format('Owner' if papel == 'owner' else 'Backup',
+                                                        rotulo.get(task, task),
+                                                        ' · ' + rot_prod.get(product, product) if product else '',
+                                                        ' (' + le + ')' if le else ''),
                                    target_sid=sid)
         except Exception:                                   # noqa: BLE001
             R.log.warning('[intraday-monitor] aviso de designação para %s falhou', sid, exc_info=True)

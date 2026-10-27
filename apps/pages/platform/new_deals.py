@@ -2199,17 +2199,33 @@ def _generic_nd_is_mgt(deal):
     return str((deal or {}).get('LE') or '').strip().upper() == 'MGT'
 
 
+def _generic_nd_vanilla_conf(deal):
+    """O NDF Vanilla do BANCO que gera confirmação: o ASIÁTICO (First e Last
+    Fixing preenchidas e diferentes — a mesma regra do `asian_fix` do TER) e o
+    BRL FIXED (`IsBRRFixed = YES`, o notional em reais). Equipe, 27/10/2026
+    (§703): esses dois vão à esteira como o FWD Start; o resto do Vanilla do
+    Banco segue só no Pending Confirmation, pela regra de prazo/assinatura."""
+    from apps.pages import routes
+    d = deal or {}
+    if str(d.get('IsBRRFixed', '') or '').strip().upper() == 'YES':
+        return True
+    a = routes._parse_date_any(str(d.get('FirstFixingDate', '') or '').strip())
+    b = routes._parse_date_any(str(d.get('LastFixingDate', '') or '').strip())
+    return bool(a and b and a != b)
+
+
 def _generic_nd_mc_source(product, deal):
     """O `source` da esteira de Manual Confirmations para um deal genérico de
     NDF, ou None quando o produto não gera documento.
 
-    O FWD Start sempre gera. O Vanilla só gera quando é MGT contra cliente
-    (§453): a mesa pediu que essas confirmações passem pela esteira (OTC e
-    MO) e saiam no documento próprio da JPMORGAN CHASE. O Vanilla do BANCO
+    O FWD Start sempre gera. O Vanilla gera quando é MGT contra cliente
+    (§453: o documento próprio da JPMORGAN CHASE) e, no BANCO, quando é
+    asiático ou BRL fixed (§703, `_generic_nd_vanilla_conf`: o documento do
+    termo de moeda do Banco, família `vanilla`). O resto do Vanilla do BANCO
     continua sem documento — alimenta o Pending Confirmation e para por aí."""
     if product == 'fwd-start':
         return 'NDF FWD START'
-    if product == 'vanilla' and _generic_nd_is_mgt(deal):
+    if product == 'vanilla' and (_generic_nd_is_mgt(deal) or _generic_nd_vanilla_conf(deal)):
         return 'NDF VANILLA'
     return None
 
@@ -2231,9 +2247,10 @@ def _generic_nd_pending_status(product, deal):
     from apps.pages import routes
     if product == 'fwd-start':
         return 'Pending OTC'
-    # O Vanilla de MGT contra cliente entra na esteira como o FWD Start (§453):
-    # a etapa de quem entra é Pending OTC, e o prazo não a substitui.
-    if product == 'vanilla' and _generic_nd_is_mgt(deal):
+    # O Vanilla de MGT contra cliente (§453) e o do Banco asiático ou BRL fixed
+    # (§703) entram na esteira como o FWD Start: a etapa de quem entra é
+    # Pending OTC, e o prazo não a substitui.
+    if product == 'vanilla' and _generic_nd_mc_source(product, deal):
         return 'Pending OTC'
     return routes._pc_signature_pending_status(
         routes._fxo_refdata_by_spn().get(routes._norm_spn(deal.get('SPN', '')), {}),

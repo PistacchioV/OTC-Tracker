@@ -322,6 +322,13 @@ for _no in ast.walk(_arv):
     if _nome_fn != '_conf_ndf_xml':
         continue
     _kw = {k.arg: getattr(k.value, 'value', None) for k in _no.keywords}
+    # O documento do Banco serve o FWD Start e o Vanilla (§703): o prefixo é
+    # `'NDF' if vanilla else 'NDF_FwdStart'` — os dois ramos contam.
+    _pref = [k.value for k in _no.keywords if k.arg == 'prefixo']
+    if _pref and isinstance(_pref[0], ast.IfExp):
+        for _ramo in (_pref[0].body, _pref[0].orelse):
+            _tipos[getattr(_ramo, 'value', None)] = _kw.get('tipo') or 'NDF'
+        continue
     # A chamada sem `prefixo` e a do NDF Commodities, que usa o default.
     _tipos[_kw.get('prefixo') or 'NDF_Comm'] = _kw.get('tipo') or 'NDF'
 check('o XML do FWD Start sai com tipoOperacao NDF', _tipos.get('NDF_FwdStart'), 'NDF')
@@ -336,13 +343,35 @@ check('   e o tipo vai sempre em CAIXA ALTA',
 # ── 9. O numeroContrato do FWD Start do BANCO é o B3 ID ─────────────────────
 # (mesa, 23/09/2026) O XML saía com o Athena ID enquanto o Nº do Anexo I do
 # mesmo documento já era o B3 ID.
+# Desde §703 o documento do Banco serve também o Vanilla, e o campo sai da
+# regra ÚNICA (`_conf_num_field`: B3 ID no FWD Start, Deal no Vanilla) — o
+# guarda cobra que a chamada do Banco a use, e o comportamento está no
+# `check_ndf_vanilla_conf.py` §3/§7.
+def _tem_fwdstart(no):
+    for k in no.keywords:
+        if k.arg != 'prefixo':
+            continue
+        if getattr(k.value, 'value', None) == 'NDF_FwdStart':
+            return True
+        if isinstance(k.value, ast.IfExp) and 'NDF_FwdStart' in (
+                getattr(k.value.body, 'value', None), getattr(k.value.orelse, 'value', None)):
+            return True
+    return False
+
+
 _fs_calls = [n for n in ast.walk(_arv) if isinstance(n, ast.Call)
              and (getattr(n.func, 'id', '') or getattr(n.func, 'attr', '')) == '_conf_ndf_xml'
-             and any(k.arg == 'prefixo' and getattr(k.value, 'value', None) == 'NDF_FwdStart'
-                     for k in n.keywords)]
-check('o XML do FWD Start do banco pede o B3_ID',
-      [{k.arg: getattr(k.value, 'value', None) for k in c.keywords}.get('num_field')
-       for c in _fs_calls], ['B3_ID'])
+             and _tem_fwdstart(n)]
+_nf = []
+for c in _fs_calls:
+    v = next((k.value for k in c.keywords if k.arg == 'num_field'), None)
+    _nf.append(getattr(v, 'value', None) or (getattr(getattr(v, 'func', None), 'attr', '')
+                                              if isinstance(v, ast.Call) else None))
+check('o XML do FWD Start (Banco e MGT) pede o número pela regra do _conf_num_field',
+      sorted(_nf), ['_conf_mgt_num_field', '_conf_num_field'])
+check('   e a regra dá o B3_ID ao FWD Start',
+      __import__('apps.pages.platform.confirmations', fromlist=['x'])._conf_num_field(
+          [({'_conf_src': 'fwd-start'}, None)]), 'B3_ID')
 from apps.pages.platform import confirmations as _PC               # noqa: E402
 _deal = {'Deal': 'ATH-123', 'B3_ID': '26F00012345', 'TradeDate': '2026-09-23',
          'SettlementDate': '2026-12-23', 'Notional': '1000000', 'Strike': '5.0',
