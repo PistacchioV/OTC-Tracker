@@ -79,7 +79,7 @@ STATUSES = (ST_ONLY_HUB, ST_ONLY_OTC, ST_PARTIAL, ST_MATCHED)
 
 # (chave do check, nome que o Partial lista). O nome vai no Status da linha, e
 # a pílula de status passa pelo Proper do Excel (§649): por isso "Tax" e não "IR".
-CHECKS = (('TD', 'Trade Date'), ('GV', 'Gross Value'), ('IR', 'Tax'),
+CHECKS = (('ET', 'Event Date'), ('GV', 'Gross Value'), ('IR', 'Tax'),
           ('cntpy', 'Counterparty'), ('id', 'Code'), ('tributo', 'Tributo'),
           ('LE', 'Legal Entity'))
 
@@ -348,7 +348,7 @@ def _iguais(a, b):
 
 def _checks(o, h):
     return {
-        'TD': bool(o.get('date')) and o.get('date') == h.get('date'),
+        'ET': bool(o.get('date')) and o.get('date') == h.get('date'),
         'GV': o.get('gross') is not None and h.get('gross') is not None
               and abs(o['gross'] - h['gross']) <= TOL + 1e-9,
         'IR': abs((o.get('ir') or 0.0) - (h.get('ir') or 0.0)) <= TOL + 1e-9,
@@ -408,6 +408,10 @@ def row_of(o, h):
     o, h = o or {}, h or {}
     row = {
         'key': (o.get('id') or ('HUB|' + str(h.get('key') or ''))),
+        # as chaves das duas ORIGENS: é por elas que a edição e a exclusão
+        # gravam (§702) — a linha da tabela é só o par do batimento
+        'otc_key': o.get('id') or '',
+        'hub_key': ('HUB|' + str(h.get('key'))) if h.get('key') else '',
         'Status': status if status != ST_PARTIAL else '%s - %s' % (ST_PARTIAL, ', '.join(diff)),
         'status': status,
         'differences': diff,
@@ -416,7 +420,10 @@ def row_of(o, h):
         'Product': o.get('product') or '',
         'LOB': o.get('lob') or '',
         'Event': o.get('event') or '',
-        'OTC_TD': dmy(o.get('date')), 'HUB_TD': dmy(h.get('date')),
+        # OTC_TD é a data da OPERAÇÃO (só o OTC a tem); OTC_ET/HUB_ET são a data
+        # do EVENTO, a que o batimento compara (equipe, 27/10/2026)
+        'OTC_TD': dmy(o.get('trade_date_d') or parse_date(o.get('trade_date'))),
+        'OTC_ET': dmy(o.get('date')), 'HUB_ET': dmy(h.get('date')),
         'OTC_GV': _money(o.get('gross')), 'HUB_GV': _money(h.get('gross')),
         'OTC_IR': _money(o.get('ir')) if o else None, 'HUB_IR': _money(h.get('ir')) if h else None,
         'Devido': _money(o.get('devido')) if o else None,
@@ -628,6 +635,134 @@ def hub_file_lines(items, inclusion):
         linhas.append(''.join(_v(0) for _ in range(4)) + ' ' * 8 + inclusion.strftime('%d%m%Y'))
         linhas.append(''.join(_v(0) for _ in range(5)))
     return linhas
+
+
+# ── A EDIÇÃO e a EXCLUSÃO da tabela (§702) ──────────────────────────────────
+# A linha da tabela é montada na LEITURA (as liquidações coletadas × o
+# relatório do HUB), e a coleta seguinte SUBSTITUI a fatia do dia. Por isso a
+# edição não se grava na linha: é uma CORREÇÃO guardada à parte no documento
+# do mês (`edits`), por linha de ORIGEM — a operação OTC pelo `id` dela, a
+# linha do HUB por `HUB|<hub_key>` —, aplicada antes do batimento. Casamento,
+# checks, resumo e o HUB File já saem com o valor corrigido, e ela sobrevive a
+# um novo Import. Nasce `Pending` (maker = quem editou) e outro usuário a
+# confirma (`Approved`, §553). A exclusão (`deleted`) é a mesma ideia: a linha
+# de origem sai da leitura, e a coleta seguinte não a traz de volta.
+REVIEW_PENDING = 'Pending'
+REVIEW_APPROVED = 'Approved'
+
+# coluna da tela → (lado, campo da linha, tipo)
+EDIT_COLS = {
+    'Internal ID': ('otc', 'internal_id', 'text'), 'B3 Id': ('otc', 'b3_id', 'text'),
+    'Product': ('otc', 'product', 'select'), 'LOB': ('otc', 'lob', 'select'),
+    'Event': ('otc', 'event', 'select'), 'OTC_TD': ('otc', 'trade_date', 'tdate'),
+    'OTC_ET': ('otc', 'day', 'date'),
+    'OTC_GV': ('otc', 'gross', 'num'), 'OTC_IR': ('otc', 'ir', 'num'), 'Devido': ('otc', 'devido', 'num'),
+    'OTC_cntpy': ('otc', 'counterparty', 'text'), 'OTC_id': ('otc', 'code', 'text'),
+    'OTC_tributo': ('otc', 'tributo', 'text'), 'OTC_LE': ('otc', 'le', 'select'),
+    'OTC_taxid': ('otc', 'taxid', 'text'),
+    'HUB_ET': ('hub', 'date', 'date'), 'HUB_GV': ('hub', 'gross', 'num'), 'HUB_IR': ('hub', 'ir', 'num'),
+    'HUB_cntpy': ('hub', 'name', 'text'), 'HUB_id': ('hub', 'code', 'text'),
+    'HUB_tributo': ('hub', 'tributo', 'text'), 'HUB_taxid': ('hub', 'cnpj', 'text'),
+}
+# Na linha só do HUB o Internal ID é o Docto dele.
+HUB_ONLY_COLS = {'Internal ID': ('hub', 'docto', 'text')}
+# No WHT a entidade é JPM ou MGT (equipe, 27/10/2026).
+EVENTS = ('MATURITY', 'UNWIND', 'PREMIUM', 'EXERCISE', 'CASHFLOW')
+EDIT_SELECTS = {'Product': PRODUCTS, 'LOB': ('CEM', 'EDG', LOB_COMMODITIES), 'OTC_LE': ('JPM', 'MGT'),
+                'Event': EVENTS}
+_UPPER = {'product', 'lob', 'event', 'code', 'tributo', 'le'}
+# Os campos que entram ANTES do `enrich_otc` (o código e o documento saem
+# deles); `code`/`tributo` vão DEPOIS (o enrich os recalcularia) e `ir` depois
+# da quebra do piso (o `allocate` o recalcularia).
+OTC_POST_ENRICH = ('code', 'tributo')
+
+
+def event_of(raw, unwind=False):
+    """O evento da linha: a RECOMPRA é UNWIND, sempre (equipe, 27/10/2026) —
+    vinha também como o tipo da B3 juntado a outro (`UNWIND · CASHFLOW`) ou,
+    pela marca `unwind`, sem tipo nenhum."""
+    s = str(raw or '').strip().upper()
+    if unwind or 'UNWIND' in [t.strip() for t in re.split(r'[·,/]', s)]:
+        return 'UNWIND'
+    return s
+
+
+def edit_target(col, has_otc):
+    """(lado, campo, tipo) da coluna `col` numa linha com/sem o lado OTC, ou
+    None quando a coluna não se edita ali."""
+    if not has_otc and col in HUB_ONLY_COLS:
+        return HUB_ONLY_COLS[col]
+    return EDIT_COLS.get(col)
+
+
+def clean_edit(col, kind, raw, month, field=''):
+    """O valor gravável de `raw` para a coluna `col` — ou WhtError com o código.
+    Data é ISO e do MESMO mês do documento (`month` = 'AAAAMM'): noutro mês a
+    linha sairia da leitura deste e não entraria na do outro."""
+    if kind == 'num':
+        v = num(raw)
+        if v is None:
+            raise WhtError('edit_bad_number', '{col}: "{value}" não é um número', col=col, value=raw)
+        return r2(v)
+    if kind == 'tdate':           # a data da OPERAÇÃO: qualquer dia (em branco vale)
+        if not str(raw or '').strip():
+            return ''
+        d = parse_date(raw)
+        if not d:
+            raise WhtError('edit_bad_date', '{col}: "{value}" não é uma data', col=col, value=raw)
+        return d.isoformat()
+    if kind == 'date':
+        d = parse_date(raw)
+        if not d:
+            raise WhtError('edit_bad_date', '{col}: "{value}" não é uma data', col=col, value=raw)
+        if month_key(d) != month:
+            raise WhtError('edit_other_month', '{col}: a data tem de ser do mês do decêndio',
+                           col=col, value=raw)
+        return d.isoformat()
+    v = str(raw if raw is not None else '').strip()
+    if field in _UPPER:
+        v = v.upper()             # é como a coleta grava (o `_linha`)
+    if kind == 'select':
+        v = norm(v)
+        if v not in EDIT_SELECTS.get(col, ()):
+            raise WhtError('edit_bad_option', '{col}: "{value}" não é uma opção', col=col, value=raw)
+    return v
+
+
+def apply_edit(line, edit, fields=None, skip=()):
+    """A linha com os campos da correção `edit` (só `fields`, se dado; menos
+    `skip`). Não altera a original."""
+    if not edit or not edit.get('fields'):
+        return line
+    out = dict(line)
+    for k, v in edit['fields'].items():
+        if (fields is not None and k not in fields) or k in skip:
+            continue
+        if k == 'date':
+            v = parse_date(v)
+        out[k] = v
+    return out
+
+
+def review_of(edits, keys):
+    """O estado da edição de uma linha da tabela (as correções dos dois lados):
+    {'review', 'review_by', 'review_at', 'edited'} — `Pending` vence `Approved`,
+    `edited` = as colunas corrigidas."""
+    estado, por, quando, campos = '', '', '', []
+    volta = {(lado, campo): col for col, (lado, campo, _k) in EDIT_COLS.items()}
+    volta[('hub', 'docto')] = 'Internal ID'
+    for k in keys:
+        e = (edits or {}).get(k) if k else None
+        if not e:
+            continue
+        if e.get('status') == REVIEW_PENDING or not estado:
+            estado = e.get('status') or REVIEW_PENDING
+            por = e.get('maker_name') or e.get('maker') or ''
+            quando = e.get('at') or ''
+        lado = e.get('side')
+        campos += [volta.get((lado, f), f) for f in (e.get('fields') or {})]
+    return {'review': estado, 'review_by': por, 'review_at': quando,
+            'edited': sorted(set(campos))}
 
 
 # ── Mensagens estruturadas (a tela as diz no idioma de quem usa, §486) ──────

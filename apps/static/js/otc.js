@@ -1942,9 +1942,13 @@
     var els = root.classList.contains('otc-status') ? [root] : [];
     Array.prototype.push.apply(els, root.querySelectorAll('.otc-status'));
     els.forEach(function (el) {
+      // `data-case="upper"`: a tela que pede o status em CAIXA ALTA (o WHT,
+      // equipe 27/10/2026) — a mesma pílula, a mesma passagem no funil e no
+      // export, só a regra do texto muda
+      var up = el.getAttribute('data-case') === 'upper';
       var w = doc.createTreeWalker(el, NodeFilter.SHOW_TEXT), n, p;
       while ((n = w.nextNode())) {
-        p = otcProper(n.nodeValue);
+        p = up ? String(n.nodeValue).toLocaleUpperCase() : otcProper(n.nodeValue);
         if (p !== n.nodeValue) n.nodeValue = p;     // igual: nada a fazer, sem laço
       }
     });

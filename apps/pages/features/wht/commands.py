@@ -283,22 +283,21 @@ def hub_file(ref, keys=None):
     marcadas na tela (`keys`), desde que tenham o lado OTC. Devolve (nome,
     bytes, quantas)."""
     R = _R()
-    payload = queries.build(ref)
-    otc_por_id = {}
+    # As MESMAS linhas que a tela mostra, com as correções (§702).
+    payload = queries.build(ref, with_lines=True)
+    otc_por_id = payload.pop('_otc')
     y, m, n = domain.decendio_of(ref)
     ini, fim = domain.decendio_bounds(y, m, n)
-    doc = store.load(domain.month_key(ref))
-    mes = []
-    for day, fatias in (doc.get('otc') or {}).items():
-        for src in ('ndf', 'ops'):
-            mes.extend(((fatias or {}).get(src) or {}).get('rows') or [])
-    for o in queries.enrich_otc(mes):
-        otc_por_id[o['id']] = o
     escolhidas = set(keys or ())
     alvo = [r for r in payload['rows'] if r['key'] in otc_por_id and (
         r['key'] in escolhidas if escolhidas else r['status'] == domain.ST_ONLY_OTC)]
     if not alvo:
         raise domain.WhtError('hub_file_empty', 'Nenhuma operação para o arquivo do HUB no decêndio')
+    # A correção que ninguém confirmou não vai ao HUB (o 4-olhos, §702).
+    pendentes = [r['Internal ID'] or r['key'] for r in alvo if r.get('review') == domain.REVIEW_PENDING]
+    if pendentes:
+        raise domain.WhtError('hub_file_pending', 'Linha(s) com edição ainda não confirmada: {ids}',
+                              ids=', '.join(pendentes[:10]))
     itens, sem_emp = [], []
     for r in alvo:
         o = otc_por_id[r['key']]
@@ -316,3 +315,178 @@ def hub_file(ref, keys=None):
     linhas = domain.hub_file_lines(itens, R._br_now().date())
     nome = 'WHT_HUB_%s_%s.txt' % (ini.strftime('%Y%m%d'), fim.strftime('%Y%m%d'))
     return nome, ('\r\n'.join(linhas) + '\r\n').encode('cp1252', errors='replace'), len(itens)
+
+
+# ── Edit, Confirm e Delete da tabela (§702) ─────────────────────────────────
+#  A correção vai no documento do mês, por linha de ORIGEM (`domain.EDIT_COLS`
+#  diz de que lado é cada coluna). Tudo-ou-nada: o lote inteiro é conferido
+#  antes de gravar, dentro do mesmo `store.mutate`.
+def _origens(doc):
+    """({id da operação OTC: linha}, {HUB|chave: linha}) do documento — a
+    linha COLETADA/IMPORTADA, sem correção (é ela o `orig` da edição)."""
+    otc = {}
+    for fatias in (doc.get('otc') or {}).values():
+        for src in ('ndf', 'ops'):
+            for r in ((fatias or {}).get(src) or {}).get('rows') or []:
+                if r.get('id'):
+                    otc[r['id']] = r
+    for r in doc.get('manual') or ():
+        if r.get('id'):
+            otc[r['id']] = r
+    hub = {}
+    for h in doc.get('hub') or ():
+        d = domain.parse_date(h.get('date'))
+        if d:
+            hub['HUB|' + domain.hub_key(dict(h, date=d))] = h
+    return otc, hub
+
+
+def _confere_chaves(item, otc, hub):
+    ok = str(item.get('otc_key') or '')
+    hk = str(item.get('hub_key') or '')
+    if (ok and ok not in otc) or (hk and hk not in hub) or not (ok or hk):
+        raise domain.WhtError('edit_row_gone', 'A linha {key} não está mais no WHT — recarregue a tela',
+                              key=ok or hk or '?')
+    return ok, hk
+
+
+def edit(ref, items, sid='', name=''):
+    """Grava as correções de `items` = [{otc_key, hub_key, changes: {coluna:
+    valor}}] — a mesma `changes` em várias linhas é a edição em lote. Cada
+    linha corrigida volta a `Pending`, com quem editou como maker. → quantas
+    linhas."""
+    mes = domain.month_key(ref)
+    agora = store.now()
+
+    def fn(doc):
+        otc, hub = _origens(doc)
+        plano = []
+        for it in items or ():
+            ok, hk = _confere_chaves(it, otc, hub)
+            for col, raw in (it.get('changes') or {}).items():
+                alvo = domain.edit_target(col, bool(ok))
+                if not alvo:
+                    raise domain.WhtError('edit_bad_column', 'A coluna {col} não se edita', col=col)
+                lado, campo, tipo = alvo
+                chave = ok if lado == 'otc' else hk
+                if not chave:
+                    raise domain.WhtError('edit_no_side', '{col}: a linha não tem o lado {side}',
+                                          col=col, side=lado.upper())
+                plano.append((chave, lado, campo, domain.clean_edit(col, tipo, raw, mes, campo),
+                              (otc if lado == 'otc' else hub)[chave]))
+        edits = doc.setdefault('edits', {})
+        tocadas = set()
+        for chave, lado, campo, valor, origem in plano:
+            e = edits.setdefault(chave, {'side': lado, 'fields': {}, 'orig': {}})
+            if campo not in e['orig']:
+                e['orig'][campo] = origem.get(campo, origem.get('day') if campo == 'date' else None)
+            e['fields'][campo] = valor
+            tocadas.add(chave)
+        for chave in tocadas:
+            edits[chave].update({'status': domain.REVIEW_PENDING, 'maker': sid, 'maker_name': name,
+                                 'at': agora, 'checker': '', 'checker_name': '', 'checked_at': ''})
+        return len(items or ())
+    return store.mutate(mes, fn)
+
+
+def approve(ref, items, sid='', name=''):
+    """Confirma as correções `Pending` das linhas `items` = [{otc_key,
+    hub_key}]. O próprio maker não confirma (`authz.is_own_change`, §553) — o
+    lote inteiro recusa antes de gravar. → quantas correções."""
+    from apps.pages.platform import authz
+    mes = domain.month_key(ref)
+    agora = store.now()
+
+    def fn(doc):
+        edits = doc.get('edits') or {}
+        alvo = []
+        for it in items or ():
+            for k in (it.get('otc_key'), it.get('hub_key')):
+                e = edits.get(k) if k else None
+                if e and e.get('status') == domain.REVIEW_PENDING:
+                    if authz.is_own_change(e.get('maker'), sid):
+                        raise domain.WhtError('approve_own', 'Quem editou não confirma a própria edição')
+                    alvo.append(e)
+        if not alvo:
+            raise domain.WhtError('approve_none', 'Nenhuma edição pendente nas linhas escolhidas')
+        for e in alvo:
+            e.update({'status': domain.REVIEW_APPROVED, 'checker': sid, 'checker_name': name,
+                      'checked_at': agora})
+        return len(alvo)
+    return store.mutate(mes, fn)
+
+
+def delete(ref, items, sid='', name=''):
+    """Tira as linhas `items` = [{otc_key, hub_key}] do WHT: as duas origens
+    da linha (a operação OTC e a linha do HUB) vão para `deleted`, e a coleta
+    seguinte não as traz de volta. → quantas linhas."""
+    mes = domain.month_key(ref)
+    agora = store.now()
+
+    def fn(doc):
+        otc, hub = _origens(doc)
+        chaves = []
+        for it in items or ():
+            ok, hk = _confere_chaves(it, otc, hub)
+            chaves += [k for k in (ok, hk) if k]
+        apagadas = doc.setdefault('deleted', {})
+        for k in chaves:
+            apagadas[k] = {'by': sid, 'name': name, 'at': agora}
+        return len(items or ())
+    return store.mutate(mes, fn)
+
+
+# As colunas do Add Row (§702): o lado OTC. Obrigatórias: produto, LOB,
+# evento, LE, a data do evento, o valor e a contraparte — e o Trade Date no
+# swap (o IR é regressivo).
+ADD_REQUIRED = ('Product', 'LOB', 'Event', 'OTC_LE', 'OTC_ET', 'OTC_GV', 'OTC_cntpy')
+
+
+def add(ref, items, sid='', name=''):
+    """Inclui à mão as operações `items` = [{fields: {coluna: valor}}] no mês
+    do decêndio (`manual`): o código, o tributo e o imposto saem do
+    `queries.derive` (o IR digitado em `Devido` vence), e a linha nasce
+    `Pending` — outro usuário a confirma, como uma edição. → quantas."""
+    mes = domain.month_key(ref)
+    agora = store.now()
+    novas = []
+    for it in items or ():
+        f = dict(it.get('fields') or {})
+        falta = [c for c in ADD_REQUIRED if not str(f.get(c) or '').strip()]
+        if falta:
+            raise domain.WhtError('add_missing', 'Preencha: {cols}', cols=', '.join(falta))
+        v = {}
+        for col, raw in f.items():
+            alvo = domain.edit_target(col, True)
+            if not alvo or alvo[0] != 'otc' or (col in ('OTC_IR', 'OTC_id', 'OTC_tributo')):
+                continue
+            if col == 'Devido' and not str(raw or '').strip():
+                continue
+            v[alvo[1]] = domain.clean_edit(col, alvo[2], raw, mes, alvo[1])
+        calc = queries.derive({'product': v.get('product'), 'lob': v.get('lob'), 'event': v.get('event'),
+                               'gross': v.get('gross'), 'counterparty': v.get('counterparty'),
+                               'taxid': v.get('taxid'), 'trade_date': v.get('trade_date'),
+                               'day': v.get('day'), 'le': v.get('le')})
+        linha = {'day': v['day'], 'source': 'manual', 'seq': 0,
+                 'internal_id': v.get('internal_id', ''), 'b3_id': v.get('b3_id', ''),
+                 'product': v['product'], 'lob': v['lob'], 'event': domain.event_of(v['event']),
+                 'trade_date': v.get('trade_date', ''), 'gross': v['gross'],
+                 'devido': v['devido'] if 'devido' in v else calc['devido'], 'taxable': calc['taxable'],
+                 'counterparty': v['counterparty'], 'taxid': v.get('taxid', ''), 'le': v['le'],
+                 'ir_unknown': False, 'by': sid, 'at': agora}
+        novas.append(linha)
+
+    def fn(doc):
+        lista = doc.setdefault('manual', [])
+        edits = doc.setdefault('edits', {})
+        for linha in novas:
+            base = '%s|manual|%s|%s' % (linha['day'], linha['le'], linha['internal_id'] or linha['b3_id'] or 'X')
+            n = 1 + sum(1 for r in lista if str(r.get('id') or '').startswith(base + '|'))
+            linha['id'] = '%s|%d' % (base, n)
+            linha['seq'] = len(lista)
+            lista.append(linha)
+            edits[linha['id']] = {'side': 'otc', 'fields': {}, 'orig': {}, 'added': True,
+                                  'status': domain.REVIEW_PENDING, 'maker': sid, 'maker_name': name,
+                                  'at': agora, 'checker': '', 'checker_name': '', 'checked_at': ''}
+        return len(novas)
+    return store.mutate(mes, fn)

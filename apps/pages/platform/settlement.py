@@ -643,6 +643,8 @@ def _ops_swap_unwind_trade_row(u, by_titulo):
         'tax_income': _ops_fmt_amt(u['ir']), 'difference': _ops_fmt_amt(diff),
         '_settle_n': s, '_tax_n': u['ir'], '_b3_n': b3, '_legal': u['legal'],
         '_no_advice': u['fundo'],
+        # a data da operação, de onde sai o prazo do IR regressivo (o WHT a mostra)
+        '_trade_date': u.get('trade_date'),
     }
 
 
@@ -847,6 +849,8 @@ def _ops_swap_trade_rows(settle_ref):
             # linhas que a mesa usa hoje — é uma decisão de negócio, não um
             # efeito colateral desta correção.
             '_no_advice': bool(eq) and _ops_is_internal_cpty(counterparty, eq.get('spn', '')),
+            # a data da operação de onde saiu o prazo do `_tax_n` (o WHT a mostra)
+            '_trade_date': op_dt,
         })
     out.extend(_ops_swap_unwind_trade_row(u, by_titulo) for u in unw)
     return out
@@ -950,8 +954,17 @@ def _ops_ndfc_trade_rows(settle_ref):
             '_tax_n': r.get('ir'),
             '_b3_n': b3,
             '_legal': r.get('legal', ''),
+            '_trade_date': _ops_row_trade_date(r),
         })
     return out
+
+
+def _ops_row_trade_date(r):
+    """A data da operação de uma linha do Settlement Advice (termo e opção):
+    a da recompra, ou a coluna de início da operação (`cells[3]`, dd/mm/aaaa
+    — vazia sem a linha no Live Position)."""
+    cells = r.get('cells') or []
+    return r.get('trade_date') or (cells[3] if len(cells) > 3 else '') or ''
 
 
 def _ops_opt_trade_rows(settle_ref):
@@ -994,6 +1007,7 @@ def _ops_opt_trade_rows(settle_ref):
             # A recompra contra fundo nosso (o B2B) liquida e fica na tela; sai
             # só do documento e da TED (mesa, 21/10/2026 — vai para a Intrag).
             '_no_advice': bool(r.get('no_advice')),
+            '_trade_date': _ops_row_trade_date(r),
         })
     return out
 

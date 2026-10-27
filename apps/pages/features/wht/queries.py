@@ -105,11 +105,15 @@ def _refdata_index():
 
 # ── As fontes → as linhas do lado OTC ───────────────────────────────────────
 def _linha(day, source, seq, internal_id, b3_id, product, lob, event, gross, devido,
-           taxable, counterparty, taxid, legal, ir_unknown=False):
+           taxable, counterparty, taxid, legal, ir_unknown=False, trade_date=None, unwind=False):
+    td = domain.parse_date(trade_date)
     return {'day': day.isoformat(), 'source': source, 'seq': seq,
             'internal_id': str(internal_id or '').strip(), 'b3_id': str(b3_id or '').strip(),
             'product': product, 'lob': str(lob or '').strip().upper(),
-            'event': str(event or '').strip().upper(),
+            'event': domain.event_of(event, unwind),
+            # a data da OPERAÇÃO (só do lado OTC: o HUB não a tem) — a base do
+            # prazo do IR regressivo do swap
+            'trade_date': td.isoformat() if td else '',
             'gross': domain.r2(gross), 'devido': domain.r2(devido or 0.0),
             'taxable': bool(taxable), 'counterparty': str(counterparty or '').strip(),
             'taxid': str(taxid or '').strip(), 'le': le_token(legal),
@@ -149,7 +153,8 @@ def ndf_rows(day, trades):
         out.append(_linha(day, 'ndf', len(out), r.get('athena'), r.get('b3'), 'NDF',
                           domain.LOB_NDF_PADRAO,
                           event, gross, 0.0 if exempt else gross * rate, not exempt,
-                          cpty, taxid, r.get('legal')))
+                          cpty, taxid, r.get('legal'), trade_date=r.get('trade_date'),
+                          unwind=bool(r.get('unwind'))))
     return _ids(out)
 
 
@@ -218,7 +223,8 @@ def ops_rows(day, trades):
             devido = gross * rate if taxable else 0.0
         out.append(_linha(day, 'ops', len(out), _ops_id(r, product), r.get('id_b3'), product,
                           lob, event, gross, devido, taxable, cpty,
-                          refdata.get(domain.alnum(cpty), ''), r.get('_legal'), unknown))
+                          refdata.get(domain.alnum(cpty), ''), r.get('_legal'), unknown,
+                          trade_date=r.get('_trade_date')))
     for k in ordem:
         linhas = premios[k]
         net = sum(float(r['_settle_n']) for r in linhas)
@@ -230,7 +236,8 @@ def ops_rows(day, trades):
         taxable = not R._ndfc_ir_exempt(cpty)
         x = _linha(day, 'ops', len(out), _ops_id(rep, k[2]), rep.get('id_b3'), k[2],
                    k[3], 'PREMIUM', gross, gross * rate if taxable else 0.0, taxable,
-                   cpty, refdata.get(domain.alnum(cpty), ''), rep.get('_legal'))
+                   cpty, refdata.get(domain.alnum(cpty), ''), rep.get('_legal'),
+                   trade_date=rep.get('_trade_date'))
         if len(linhas) > 1:
             x['net_of'] = [str(_ops_id(r, k[2]) or r.get('id_b3') or '') for r in linhas]
         out.append(x)
@@ -299,6 +306,9 @@ def enrich_otc(rows, codes=None, por_le=None, nonres=None):
         # O mês gravado antes da regra (`NDF COMM`, `OPTION COMM`, NDF sem LOB,
         # `INDICES INTERNACIONAIS`) sai certo sem recoletar.
         o['product'], o['lob'] = domain.produto_lob(o.get('product'), o.get('lob'), o.get('source'))
+        # a recompra é UNWIND, também no mês gravado antes da regra
+        o['event'] = domain.event_of(o.get('event'))
+        o['trade_date_d'] = domain.parse_date(o.get('trade_date'))
         resident = not (domain.cnpj_key(o.get('taxid')) in nr_cnpj
                         or domain.alnum(o.get('counterparty')) in nr_nome)
         c = domain.resolve_code(codes, o.get('product'), o.get('lob'), o.get('event'),
@@ -315,22 +325,57 @@ def enrich_otc(rows, codes=None, por_le=None, nonres=None):
 
 
 def hub_rows_of(doc, ini, fim, por_emp=None):
+    """As linhas do HUB do decêndio, com a CORREÇÃO da tela aplicada (§702) e
+    sem as apagadas. A chave sai da linha IMPORTADA, antes da correção — é por
+    ela que a correção foi gravada."""
     por_emp = companies()[1] if por_emp is None else por_emp
+    edits, apagadas = doc.get('edits') or {}, doc.get('deleted') or {}
     out = []
     for h in doc.get('hub') or ():
-        d = domain.parse_date(h.get('date'))
+        d0 = domain.parse_date(h.get('date'))
+        if not d0:
+            continue
+        key = domain.hub_key(dict(h, date=d0))
+        if ('HUB|' + key) in apagadas:
+            continue
+        x = domain.apply_edit(dict(h, date=d0), edits.get('HUB|' + key))
+        d = x.get('date')
         if not d or not (ini <= d <= fim):
             continue
-        x = dict(h)
-        x['date'] = d
         x['le'] = por_emp.get(domain.digits(h.get('empresa')).zfill(5), '')
-        x['key'] = domain.hub_key(dict(h, date=d))
+        x['key'] = key
         out.append(x)
     return out
 
 
-def build(ref):
-    """O payload da página para o decêndio de `ref`."""
+def otc_lines(doc, fim, codes=None, por_le=None, nonres=None):
+    """As operações OTC do mês até `fim`, com a CORREÇÃO da tela (§702) e sem
+    as apagadas, enriquecidas — a leitura do `build` e do HUB File, uma só:
+    duas sairiam com valores diferentes no dia em que uma mudasse."""
+    edits, apagadas = doc.get('edits') or {}, doc.get('deleted') or {}
+    mes = []
+    fontes = []
+    for day, fatias in sorted((doc.get('otc') or {}).items()):
+        dd = domain.parse_date(day)
+        if not dd or dd > fim:
+            continue
+        for src in ('ndf', 'ops'):
+            fontes.extend(((fatias or {}).get(src) or {}).get('rows') or [])
+    # as operações incluídas à mão pelo Add Row (§702)
+    fontes.extend(r for r in doc.get('manual') or () if (domain.parse_date(r.get('day')) or fim) <= fim)
+    for r in fontes:
+        if r.get('id') in apagadas:
+            continue
+        mes.append(domain.apply_edit(r, edits.get(r.get('id')),
+                                     skip=domain.OTC_POST_ENRICH + ('ir',)))
+    mes = enrich_otc(mes, codes, por_le, nonres)
+    return [domain.apply_edit(o, edits.get(o.get('id')), fields=domain.OTC_POST_ENRICH) for o in mes]
+
+
+def build(ref, with_lines=False):
+    """O payload da página para o decêndio de `ref`. `with_lines`: devolve
+    também as operações OTC do decêndio por id (`_otc`), para o HUB File ler
+    as MESMAS linhas que a tela mostra."""
     R = _R()
     y, m, n = domain.decendio_of(ref)
     ini, fim = domain.decendio_bounds(y, m, n)
@@ -339,14 +384,8 @@ def build(ref):
     codes, nonres = code_rows(), non_resident_keys()
 
     # O mês até o fim do decêndio: o piso precisa dos decêndios anteriores.
-    mes = []
-    for day, fatias in sorted((doc.get('otc') or {}).items()):
-        dd = domain.parse_date(day)
-        if not dd or dd > fim:
-            continue
-        for src in ('ndf', 'ops'):
-            mes.extend(((fatias or {}).get(src) or {}).get('rows') or [])
-    mes = enrich_otc(mes, codes, por_le, nonres)
+    mes = otc_lines(doc, fim, codes, por_le, nonres)
+    edits = doc.get('edits') or {}
     informado = domain.allocate([{'id': o['id'], 'bucket': '%s|%s' % (
         o.get('le'), domain.cnpj_key(o.get('taxid')) or domain.alnum(o.get('counterparty'))),
         'date': o['date'], 'devido': o.get('devido'), 'floor': o.get('floor'),
@@ -355,12 +394,16 @@ def build(ref):
     for o in mes:
         if o.get('date') and ini <= o['date'] <= fim:
             o['ir'] = informado.get(o['id'], 0.0)
+            # o imposto corrigido na tela vence a quebra do piso (§702)
+            o = domain.apply_edit(o, edits.get(o['id']), fields=('ir',))
             otc.append(o)
     hub = hub_rows_of(doc, ini, fim, por_emp)
 
     rows = [domain.row_of(o, h) for o, h in domain.match(otc, hub)]
+    for r in rows:
+        r.update(domain.review_of(edits, (r['otc_key'], r['hub_key'])))
     ordem = {s: i for i, s in enumerate(domain.STATUSES)}
-    rows.sort(key=lambda r: (ordem.get(r['status'], 9), r['Product'], r['OTC_TD'] or r['HUB_TD'],
+    rows.sort(key=lambda r: (ordem.get(r['status'], 9), r['Product'], r['OTC_ET'] or r['HUB_ET'],
                              domain.norm(r['OTC_cntpy'] or r['HUB_cntpy'])))
 
     hoje = R._br_now().date()
@@ -410,4 +453,45 @@ def build(ref):
         'warnings': avisos,
         'hub_files': arquivos,
         'imported_days': sorted(d for d in fatias if ini.isoformat() <= d <= fim.isoformat()),
+        **({'_otc': {o['id']: o for o in otc}} if with_lines else {}),
     }
+
+
+# ── O Add Row: o código, o tributo e o imposto da operação digitada (§702) ──
+def derive(f):
+    """O que se calcula da operação digitada: `{code, tributo, devido,
+    taxable, doc}` pelas MESMAS regras das linhas coletadas — o código pelo
+    `wht-codes` (produto, LOB, evento, residência da contraparte), o imposto
+    pelo produto: 0,005% no termo de moeda e de mercadoria e no prêmio de
+    opção (isento pelo `ndfc-ir-exempt`; exercício e recompra de opção não
+    pagam), a tabela REGRESSIVA no swap — que precisa do prazo, do Trade Date
+    à data do evento (`_ops_swap_ir_rate`, a regra do Trade Level). `f` =
+    {product, lob, event, gross, counterparty, taxid, trade_date, day, le}."""
+    R = _R()
+    product = domain.norm(f.get('product'))
+    event = domain.event_of(f.get('event'))
+    gross = abs(domain.num(f.get('gross')) or 0.0)
+    cpty = str(f.get('counterparty') or '').strip()
+    rate = R._NDFADV_IR_RATE
+    if product == 'SWAP':
+        td, ed = domain.parse_date(f.get('trade_date')), domain.parse_date(f.get('day'))
+        if not td or not ed:
+            raise domain.WhtError('add_swap_trade_date', 'O IR do swap é regressivo: informe o Trade Date '
+                                  'e a data do evento')
+        aliq = R._ops_swap_ir_rate(cpty, (ed - td).days, True)
+        if aliq is None:
+            raise domain.WhtError('add_swap_rate', 'Sem alíquota de IR para o swap (contraparte ou prazo)')
+        devido, taxable = gross * aliq, aliq > 0
+    elif product == 'OPTION':
+        taxable = event == 'PREMIUM' and not R._ndfc_ir_exempt(cpty)
+        devido = gross * rate if taxable else 0.0
+    else:
+        taxable = not R._ndfc_ir_exempt(cpty)
+        devido = gross * rate if taxable else 0.0
+    linha = {'id': 'x', 'day': f.get('day') or '', 'source': 'manual', 'product': product,
+             'lob': domain.norm(f.get('lob')), 'event': event, 'taxable': taxable,
+             'counterparty': cpty, 'taxid': str(f.get('taxid') or ''), 'le': domain.norm(f.get('le')),
+             'internal_id': str(f.get('internal_id') or ''), 'b3_id': str(f.get('b3_id') or '')}
+    o = enrich_otc([linha])[0]
+    return {'code': o.get('code') or '', 'tributo': o.get('tributo') or '', 'doc': o.get('doc') or '',
+            'devido': domain.r2(devido), 'taxable': taxable, 'no_code': bool(o.get('no_code'))}
