@@ -30342,3 +30342,22 @@ Reversal — só é DEVIDA no dia com movimento (`total > 0`) e é `conditional`
 (não entra na linha "fora da agenda"). O detalhe produto × status embaixo não
 muda (a zona vazia já mostrava "nothing imported today"), nem o aviso das 19h
 ou o D-1: a zona vazia nunca foi pendência. `check_intraday_monitor.py` §4.
+
+## §706 — Intraday Monitor: o card da tarefa de zona mostra só os owners dos produtos com movimento (2026-10-27)
+
+**O pedido** (equipe, com o print do card B3 Registration): no dia só havia NDF
+Commodities, NDF Vanilla e FX Options importados, e o card listava os doze
+produtos com owner e backup (NDF FWD Start, Swaps, as recompras…) — "apenas os
+que precisam de alguma ação, para não ficar poluído". O §705 tirou do quadro a
+ZONA sem movimento; faltava o mesmo dentro da zona que se mexeu.
+
+**O que mudou:** o `/api/intraday-monitor` entrega no `assignments` só o que o
+card deve mostrar, pela regra pura do `domain`: `moving_products(cards,
+conf_cards)` diz, por tarefa de zona, os produtos com `total > 0` e as LEs com
+contagem (os cards de Confirmations não se quebram por LE: `None`, e a LE não
+filtra), e `assignments_of_day` corta o owner de produto parado e o de LE
+parada; a linha da tarefa inteira (produto em branco) fica se a zona se mexeu
+(com LE, se a LE se mexeu em algum produto). Tarefa que não é de zona não muda.
+O modal Owners continua lendo a lista INTEIRA pelo `/api/intraday-monitor/
+assignments` — o filtro é só do card. `check_intraday_owners.py` §4 (a rota) e
+§6 (as duas funções, com o caso do print).

@@ -1600,7 +1600,10 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   `domain.clean_assignments`; o produto só nas três tarefas de zona
   (`domain.assign_products`: os cards da zona; card de confirmação novo entra
   no `ASSIGN_CONF_PRODUCTS`), e só BO/ADMIN/master são designáveis. Quem é
-  designado agora é avisado no SEU sino (página `Intraday Monitor`).
+  designado agora é avisado no SEU sino (página `Intraday Monitor`). **O card
+  da tarefa de zona mostra só os owners dos produtos (e LEs) com movimento no
+  dia** (§706, `domain.moving_products`/`assignments_of_day`, no endpoint); o
+  modal Owners segue com a lista inteira.
   `check_intraday_monitor.py`, `check_intraday_owners.py`.
 - **O Monitor não recebe lista de produto: ele VARRE o `cache/new deals/`**
   e agrupa pelos dois primeiros níveis não numéricos do caminho (§454). Quem
