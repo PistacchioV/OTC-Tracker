@@ -30431,3 +30431,101 @@ o ativo é recusado.
 e as recusas, o ponteiro na subida, a rota), chamado pelo `check_stratos.py`,
 que passou a copiar o `pacotes_dados.py` para o `src` de mentira. O sync leva
 todo `*.py` de `stratos\src`, então o `.bat` não muda.
+
+## §709 — Stratos: a Athena pelo proxy do Stratos, e os comandos com o caminho certo (2026-10-27)
+
+**O sintoma** (usuário): no Stratos, importar operações da API da Athena dava
+`SyntaxError: Unexpected token 'u', "upstream r"... is not valid JSON`. O texto
+é do GATEWAY do Stratos (`upstream request timeout`, texto puro): o contêiner
+roda na AWS e não alcança host interno do JPM, a chamada ficava esperando a
+conexão, e o gateway cortava o pedido antes do app responder — a tela lia o
+texto como JSON.
+
+**A correção** (só na branch `OTC-Tracker-Stratos`): o caminho da documentação
+do Stratos é o `stratosblocks.utilities.get_proxied_url(internal_url, headers,
+files)` (URL do proxy + cabeçalhos com o `target-server` + `proxies`). O novo
+`stratos/src/proxy_interno.py`, instalado pela ponte logo depois do `import
+apps`, embrulha o `athena_api.build_session` — a sessão única que todo o app
+usa para a Athena, lida pelo atributo do módulo. O `send` da sessão desvia pelo
+proxy SÓ os hosts do JPM (`*.jpmchase.net`, `*.jpmorganchase.com`…;
+`OTC_STRATOS_INTERNOS` troca a lista): a mesma sessão vai ao BCB e ao Yahoo
+(Cotações, Tools), que são da internet e seguem pelo proxy de saída.
+
+O embrulho segue os redirecionamentos ele mesmo (o SSO passa pelo ADFS: cada
+salto, absoluto ou relativo, é desviado de novo), grava os cookies também sob o
+host INTERNO (o `requests` os guardaria sob o do proxy, e o salto seguinte iria
+sem eles), pede `files=True` para não fixar `Content-Type` (o form_post do ADFS
+é urlencoded) e devolve o `resp.url` interno. `OTC_STRATOS_PROXY_INTERNO=0`
+desliga. `stratos/tests/check_proxy_interno.py` (rede e proxy de mentira, o
+`athena_api` de verdade), chamado pelo `check_stratos.py`.
+
+**O que isto NÃO resolve, e o primeiro teste no contêiner diz qual:** (1) a
+Athena autentica por Kerberos, que no Linux não existe — 401 ou a página de
+login pedem outra autenticação (o token do usuário do Stratos?); (2) o host
+pode precisar entrar na allow list do proxy (ticket em go/stratossupport com o
+host e o ambiente); (3) importação mais longa que o gateway volta a cortar —
+aí ela vira trabalho em segundo plano.
+
+**Os comandos:** README do Stratos e o uso no topo de `envia_dados.py`,
+`exporta_dados.py` e `ponte_share.py` diziam `stratos\<script>.py`, mas eles
+rodam da pasta que CONTÉM a worktree: todo caminho começa por
+`OTC-Tracker-Stratos\`. Seção nova "A sequência completa (máquina do JPM)":
+variáveis (`PYDS` = Python do DevShell com o `stratosblocks`; `PYAPP` = o do
+`start-otc-tracker.bat`), o código novo primeiro (stratos-sync + push), os
+bancos (exporta → envia → Check/Activate → restart) e a ponte do share.
+
+## §710 — New Deals: a célula com amend legível no escuro, e o Amend da API só por coluna da tela (2026-10-27)
+
+**A cor.** As seis telas de New Deals e o `otc-fileupload.js` pintavam a célula
+alterada com `#ffe0e0` fixo no `style` do JS; no escuro, texto claro do tema
+sobre rosa claro. A célula ganha a classe `otc-amend-cell` e a cor mora no tema
+(`otc.scss` §7): o tom sai do `--otc-danger` de cada tema por `color-mix`, com
+contorno fino, texto `--otc-text`, sem `!important` (o pisca verde do Ctrl+C do
+`table-std.js` é inline e continua por cima).
+
+**O Amend.** O `_nd_api_amend` comparava TODO campo do deal da Athena, e o deal
+traz mais do que as telas mostram — a API os reescreve a cada pull sem a
+operação ter mudado, e a linha ia para `Amend` sem célula destacada.
+`_ND_TABLE_FIELDS` (Vanilla, FWD Start, Other Publisher, FXO) são as colunas de
+cada tela (o `COL_TO_JSON_FIELD` do template, sem os campos do fluxo); só
+mudança nelas faz Amend e entra no `AmendChanged`, e o resto é atualizado calado.
+`_nd_api_amend_full` devolve as duas listas — o FXO regrava o dia também quando
+só um campo calado mudou, sem contar a operação como amend no sino. Produto sem
+lista compara tudo. Linhas que já viraram Amend assim ficam como estão.
+`check_nd_amend_table_fields.py` cobra a paridade com os quatro templates:
+coluna nova numa dessas telas entra na lista.
+
+## §711 — New Deals: a operação corrigida na Athena seguia errada na tela (2026-10-27)
+
+**O sintoma** (usuário): operação de FXO (`D5WM-PLNXR`, Suzano) bookada no
+acronym/SPN errado (`SUZANOPEL33BRA`, 467172, a filial 0033) foi corrigida na
+Athena; a API mostra `SUZANOSA` / `0249556`, `isDead: false`, e a tela seguia
+com a filial, em `New`.
+
+**A causa: a TELA.** Reproduzido com o registro exato da API e os dois
+cadastros da Suzano, o servidor está certo: o pull resolve `SUZANOSA` → SUZANO
+SA, acha a linha gravada (pelo Deal, já que o Client mudou) e a grava em
+`Amend` com a contraparte nova. Mas o handler do pull nas quatro telas
+(Opt FXO, NDF Vanilla, FWD Start, Other Publisher) só redesenha as linhas do
+`deals` da resposta — que são só as NOVAS. A corrigida vem apenas na contagem
+`amended`, que o resumo nem mostrava, e o FXO ainda dizia "No new deals —
+everything from the API is already in the table": a grade ficava com o dado
+antigo até alguém pesquisar de novo.
+
+**A correção.** `apiAmended(res)` (o total do FXO, a soma das três páginas no
+NDF); havendo amend, remoção ou cancelamento, a tela relê a grade do servidor
+(`sfApply`) — num dia que não é hoje o `sfSetTradeDate` já relia. O resumo do
+aviso diz quantas foram alteradas (`swal-api-amended`) e o FXO troca o "nada
+novo" por "linhas que já estavam na tabela foram atualizadas"
+(`swal-api-updated`), nas três línguas.
+
+**E o que entrou antes, pela hipótese errada.** A primeira leitura foi a da
+versão `isDead` (o §173 importa as duas versões de um trade corrigido, e no
+laço de gravação a antiga, vindo por último, desfazia o Amend da nova). Não era
+o caso — o registro desta operação é único e vivo —, mas o defeito existe pelo
+código e o filtro ficou: `_api_live_records`, nos pulls de FXO e de NDF, fica só
+com as versões vivas de um DEAL NAME que tem alguma (a morta e a cancelada
+saem); trade só com versão morta segue importado, e o só cancelado segue
+cancelando. `check_api_live_version.py` (o filtro, o FXO de ponta a ponta nas
+duas ordens, o defeito com o filtro desligado e, no §4, as quatro telas
+relendo a grade).

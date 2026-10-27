@@ -1100,8 +1100,18 @@ $(document).ready(function() {
 
             /* Onde os registros da API foram parar. Sem isso, "veio 0" não
                distingue API vazia de tudo cancelado ou filtrado por interbook. */
+            /* Linhas JÁ NA TABELA que o pull corrigiu (Amend): no NDF a soma das três
+               páginas, no FXO o total. */
+            function apiAmended(res) {
+                if (res && res.targets) return Object.keys(res.targets).reduce(function (s, k) {
+                    return s + ((res.targets[k] && res.targets[k].amended) || 0); }, 0);
+                return (res && res.amended) || 0;
+            }
+
             function apiBreakdown(res) {
                 var p = [(res.fetched || 0) + ' ' + t('swal-api-fetched', 'fetched')];
+                var am = apiAmended(res);
+                if (am)           p.push(am + ' ' + t('swal-api-amended', 'amended (row updated)'));
                 if (res.dead)     p.push(res.dead + ' ' + t('swal-api-dead', 'cancelled on the API'));
                 if (res.removed)  p.push(res.removed + ' ' + t('swal-api-removed', 'rows removed (cancelled)'));
                 if (res.canceled) p.push(res.canceled + ' ' + t('swal-api-canceled', 'kept as Canceled (already at B3)'));
@@ -1175,10 +1185,17 @@ $(document).ready(function() {
                                     // mexer na tabela — o filtro padrão é Trade Date = hoje, que
                                     // esconderia tanto o que entrou agora quanto o que já estava.
                                     if (!apiRefIsToday()) sfSetTradeDate(apiRefDateLabel());
+                                    // `deals` traz só as operações NOVAS. A que o pull CORRIGIU numa linha que
+                                    // já estava na grade (Amend) e a que saiu por cancelamento vêm só na
+                                    // contagem: sem reler, a grade seguia com o dado antigo — o acronym/SPN
+                                    // errado de uma operação rebookada, com a API certa (equipe, 27/10/2026).
+                                    var apiMudou = apiAmended(res) || res.removed || res.canceled;
+                                    if (apiMudou && apiRefIsToday()) sfApply();
                                     var inserted = res.deals || [];
                                     if (!inserted.length) {
                                         Swal.fire({ icon: 'info', title: t('swal-imported', 'Imported'),
-                                            html: t('swal-fxo-api-none', 'No new deals — everything from the API is already in the table.') +
+                                            html: (apiMudou ? t('swal-api-updated', 'No new deals — rows already in the table were updated from the API.')
+                                                           : t('swal-fxo-api-none', 'No new deals — everything from the API is already in the table.')) +
                                                   '<br><small class="text-muted">' + apiBreakdown(res) + '</small>',
                                             showConfirmButton: true, confirmButtonText: t('swal-ok', 'OK') });
                                         return;
