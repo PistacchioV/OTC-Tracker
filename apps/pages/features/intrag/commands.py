@@ -141,6 +141,35 @@ def _save_intrag_ndf_entry(deal):
     persistence._intrag_ndf_persist(entry, td)
 
 
+# Família → (pasta, sufixo) do arquivo-dia; a regra do dia é de quem chama.
+def _intrag_family_files(family):
+    return {'ndf':    (persistence.INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json'),
+            'opt':    (persistence.INTRAG_OPT_CACHE_DIR, '_intrag_opt.json'),
+            'swap':   (persistence.INTRAG_SWAP_CACHE_DIR, '_intrag_swap.json'),
+            'unwind': (persistence.INTRAG_UNWIND_CACHE_DIR, '_intrag_unwind.json')}[family]
+
+
+def _intrag_follow(family, prev_td, prev_key, td, key):
+    """A linha da Intrag acompanha a origem que mudou de dia ou de chave
+    (`persistence._intrag_relocate`). Quem chama conhece a regra do dia do
+    produto e passa as datas JÁ resolvidas; sem mudança nada é lido."""
+    pasta, sufixo = _intrag_family_files(family)
+    return persistence._intrag_relocate(pasta, sufixo, prev_td, prev_key, td, key)
+
+
+def _intrag_follow_deal(family, antes, depois):
+    """O `_intrag_follow` das páginas de New Deals: dia = Trade Date, chave =
+    Deal (as regras do `_save_intrag_ndf_entry`/`_save_intrag_opt_entry`)."""
+    antes, depois = antes or {}, depois or {}
+    pd = _R()._parse_deal_date(antes.get('TradeDate', '') or '')
+    nd = _R()._parse_deal_date(depois.get('TradeDate', '') or '')
+    pk = str(antes.get('Deal', '') or '').strip()
+    nk = str(depois.get('Deal', '') or '').strip()
+    if (pd == nd or not nd) and pk == nk:
+        return False
+    return _intrag_follow(family, pd, pk, nd or pd, nk or pk)
+
+
 def _save_intrag_swap_entry(entry, day=None):
     """A linha da Intrag Swap que um swap montou (o B2B do Bullet/Cashflow na
     visão da Atacama, a Cetes na do Lawton) → o day-file de `day`, que é o

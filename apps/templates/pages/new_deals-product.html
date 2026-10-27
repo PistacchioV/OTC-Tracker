@@ -282,7 +282,7 @@ var _TRANS = {
           e_swc_import_failed: 'Import failed: {reason}', e_swc_save_failed: 'Save failed: {reason}',
           e_swc_send_failed: 'File generation failed: {reason}', e_swc_file_failed: 'File generation failed: {reason}',
           e_swc_no_deal_ticket: 'Nothing to import — the file needs a Deal Ticket (sheet/page with Valor Base and Vencimento) or, in the e-mail body, an Onshore Swap section of the Trade Recap.',
-          e_swc_no_rows: 'No rows provided', e_swc_missing_deal_id: 'Missing deal', e_swc_not_found: 'Entry not found',
+          e_swc_no_rows: 'No rows provided', e_swc_missing_deal_id: 'Missing deal', e_swc_not_found: 'Entry not found', e_swc_bad_flags: 'Mark not saved: the request had no operation or marks',
           e_swc_client_required: 'Client or SPN is required',
           e_swc_not_approvable: 'Only New or Pending entries can be approved.',
           e_swc_maker_checker: 'Maker cannot approve their own change — a different user must check it.',
@@ -312,7 +312,7 @@ var _TRANS = {
           e_swc_import_failed: 'O import falhou: {reason}', e_swc_save_failed: 'A gravação falhou: {reason}',
           e_swc_send_failed: 'A geração dos arquivos falhou: {reason}', e_swc_file_failed: 'A geração dos arquivos falhou: {reason}',
           e_swc_no_deal_ticket: 'Nada a importar — o arquivo precisa de um Deal Ticket (aba/página com Valor Base e Vencimento) ou, no corpo do e-mail, uma seção Onshore Swap do Trade Recap.',
-          e_swc_no_rows: 'Nenhuma linha enviada', e_swc_missing_deal_id: 'Operação não informada', e_swc_not_found: 'Linha não encontrada',
+          e_swc_no_rows: 'Nenhuma linha enviada', e_swc_missing_deal_id: 'Operação não informada', e_swc_not_found: 'Linha não encontrada', e_swc_bad_flags: 'Marca não gravada: o pedido veio sem a operação ou as marcas',
           e_swc_client_required: 'Informe o Cliente ou a SPN',
           e_swc_not_approvable: 'Só linhas New ou Pending podem ser aprovadas.',
           e_swc_maker_checker: 'Quem alterou não pode aprovar a própria alteração — outro usuário precisa conferir.',
@@ -342,7 +342,7 @@ var _TRANS = {
           e_swc_import_failed: 'La importación falló: {reason}', e_swc_save_failed: 'La grabación falló: {reason}',
           e_swc_send_failed: 'La generación de los archivos falló: {reason}', e_swc_file_failed: 'La generación de los archivos falló: {reason}',
           e_swc_no_deal_ticket: 'Nada que importar — el archivo necesita un Deal Ticket (hoja/página con Valor Base y Vencimento) o, en el cuerpo del e-mail, una sección Onshore Swap del Trade Recap.',
-          e_swc_no_rows: 'Ninguna fila enviada', e_swc_missing_deal_id: 'Operación no informada', e_swc_not_found: 'Fila no encontrada',
+          e_swc_no_rows: 'Ninguna fila enviada', e_swc_missing_deal_id: 'Operación no informada', e_swc_not_found: 'Fila no encontrada', e_swc_bad_flags: 'Marca no guardada: el pedido vino sin la operación o las marcas',
           e_swc_client_required: 'Informe el Cliente o el SPN',
           e_swc_not_approvable: 'Solo filas New o Pending pueden aprobarse.',
           e_swc_maker_checker: 'Quien modificó no puede aprobar su propio cambio — otro usuario debe revisarlo.',
@@ -719,8 +719,30 @@ $(document).ready(function() {
         canB2B: function(e){ return !otcSwapIsB2B(e); },
         onB2B: PAGE.b2b ? function(k){ createB2B(k); } : null,
         onPreview: function(k){ previewDeal(k); },
+        // As marcas do swap (§701), na página que as declara (`swap_flags`)
+        flags: PAGE.swap_flags ? function(e){ return otcSwapFlags(e, t); } : null,
+        onFlag: PAGE.swap_flags ? function(k, f, on){ saveFlag(k, f, on); } : null,
         onSelect: function(){ table.draw(false); }
     }) : null;
+    // Grava SÓ a correção: igual à detecção, a marca volta a ser automática
+    // (null). O status do deal não muda.
+    function saveFlag(k, f, on) {
+        var e = DEALS[k]; if (!e) return;
+        var det = (otcSwapFlags(e).filter(function(x){ return x.k === f; })[0] || {}).detected;
+        var flags = {}; flags[f] = (on === det) ? null : on;
+        fetch(PAGE.api + '/flags', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin', body: JSON.stringify({ deal_id: k, trade_date: e.TradeDate || '', flags: flags }) })
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+            if (!j || !j.success) {
+                Swal.fire({ icon: 'error', title: t('swal-err-title', 'Error'), text: (j && j.message) || '',
+                            confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+                renderAll(); return;
+            }
+            upsertEntry(j.entry);
+        })
+        .catch(function(){ renderAll(); });
+    }
     $(document).on('change', '#cardsSelectAll', function(){ if (cards) cards.selectAll(this.checked); });
     function upsertEntry(e) {
         var i = ENTRIES.findIndex(function(x){ return x && (x._id || x.Deal) === (e._id || e.Deal); });
@@ -896,7 +918,9 @@ $(document).ready(function() {
         btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i>';
         var _reset = function () { btn.dataset.running = ''; btn.style.pointerEvents = ''; btn.innerHTML = prevHtml; };
         fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-               body: JSON.stringify({ deals: ENTRIES }) })
+               // as operações MARCADAS vão com `_selected` (§701): o servidor
+               // afirma as IF do dia e, além delas, as marcadas
+               body: JSON.stringify({ deals: ENTRIES.map(function(e){ return selected.has(e._id) ? $.extend({}, e, { _selected: true }) : e; }) }) })
         .then(function (r) { return _handleEmailResponse(r, emptyText); })
         .then(function () { _reset(); })
         .catch(function (err) { _reset(); Swal.fire({ title: t('swal-err-title', 'Error'), text: t('swal-request-failed', 'Request failed:') + ' ' + err.message, icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' }); });
@@ -934,12 +958,12 @@ $(document).ready(function() {
         econAffBtn.className = 'btn btn-sm btn-soft-info bg-gradient btn-toolbar-all';
         econAffBtn.setAttribute('type', 'button');
         econAffBtn.setAttribute('data-bs-toggle', 'tooltip'); econAffBtn.setAttribute('data-bs-placement', 'bottom');
-        econAffBtn.setAttribute('data-bs-title', t('nd-btn-econaff', 'Economic Affirmation (IF, D0)'));
+        econAffBtn.setAttribute('data-bs-title', t('nd-btn-econaff-tip', 'Economic Affirmation (IF D0 + the marked operations)'));
         econAffBtn.innerHTML = '<i class="ti ti-mail-check me-1"></i><span data-lang="nd-btn-econaff">Econ. Affirmation</span>';
         econAffContainer.appendChild(econAffBtn);
         econAffBtn.addEventListener('click', function () {
             _runEmailAction(this, PAGE.api + '/economic-affirmation',
-                t('swal-econaff-none', 'No financial-institution operations traded today to affirm.'));
+                t('swal-econaff-none', 'No financial-institution operation traded today and no operation marked — mark the operations to affirm.'));
         });
     })();
 
@@ -1099,17 +1123,25 @@ $(document).ready(function() {
             : '<i class="ti ti-plus me-1"></i>' + t('nd-prod-modal-add', 'Add Deal') + ' — ' + esc(PAGE.name);
         var e = entry || prefill || $.extend({}, PAGE.defaults || {});
         var tdIni = isEdit || prefill ? (e.TradeDate || '') : (apiRefDate() || _todayIso());
-        var html = '<div class="col-md-2">' + '<label class="form-label fs-xs text-muted mb-1" data-lang="nd-col-trade-date">Trade Date</label><input type="text" class="form-control form-control-sm swb-date" id="swb-f-TradeDate" data-f="TradeDate" value="' + esc(tdIni) + '" placeholder="dd/mm/aaaa" autocomplete="off"></div>';
-        html += '<div class="col-md-2">' + fieldInput('LE', 'LE', e.LE || 'JPM') + '</div>' +
-                '<div class="col-md-2">' + fieldInput('LOB', 'LOB', e.LOB || '') + '</div>' +
-                '<div class="col-md-2">' + fieldInput('Deal', 'Deal', e.Deal || '') + '</div>' +
-                '<div class="col-md-2">' + fieldInput('B3ID', 'B3 ID', e.B3ID || '') + '</div>';
+        var cells = {};
+        cells.TradeDate = '<label class="form-label fs-xs text-muted mb-1" data-lang="nd-col-trade-date">Trade Date</label><input type="text" class="form-control form-control-sm swb-date" id="swb-f-TradeDate" data-f="TradeDate" value="' + esc(tdIni) + '" placeholder="dd/mm/aaaa" autocomplete="off">';
+        cells.LE = fieldInput('LE', 'LE', e.LE || 'JPM');
+        cells.LOB = fieldInput('LOB', 'LOB', e.LOB || '');
+        cells.Deal = fieldInput('Deal', 'Deal', e.Deal || '');
+        cells.B3ID = fieldInput('B3ID', 'B3 ID', e.B3ID || '');
         SWB_COLS.forEach(function(c){
             var f = c[0]; if (f === 'Maker' || f === 'Checker') return;
             if (f === 'Flows' && SCHEDULE.length) return;   // é a contagem do cronograma abaixo
-            var w = (f === 'VcpText' || f === 'Observations') ? 'col-12' : (f === 'VcpDescription' || f.indexOf('Denomination') === 0 || f === 'Client') ? 'col-md-4' : 'col-md-2';
-            html += '<div class="' + w + '">' + fieldInput(f, c[1], e[f] != null ? String(e[f]) : '') + '</div>';
+            cells[f] = fieldInput(f, c[1], e[f] != null ? String(e[f]) : '');
         });
+        // Nas telas de swap, os campos em BLOCOS (§701, `otcSwapModalLayout`);
+        // nas outras, a grade de sempre
+        var html;
+        if (PAGE.group === 'Swap' && window.otcSwapModalLayout) html = otcSwapModalLayout(cells, t);
+        else html = Object.keys(cells).map(function(f){
+            var w = (f === 'VcpText' || f === 'Observations') ? 'col-12' : (f === 'VcpDescription' || f.indexOf('Denomination') === 0 || f === 'Client') ? 'col-md-4' : 'col-md-2';
+            return '<div class="' + w + '">' + cells[f] + '</div>';
+        }).join('');
         if (SCHEDULE.length) html += scheduleHtml();
         document.getElementById('swbEditGrid').innerHTML = html;
         // formato da equipe, CNPJ e a conta B3 dos holders (swap-deal.js)

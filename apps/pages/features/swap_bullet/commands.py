@@ -334,6 +334,7 @@ def edit(deal_id, trade_date, changes, sid=''):
         if idx is None:
             return None
         d = lst[idx]
+        antes = dict(d)
         td_antes = d.get('TradeDate') or ''
         before_text = domain.vcp_text(d)
         spn_antes = str(d.get('SPN') or '').strip()
@@ -399,8 +400,25 @@ def edit(deal_id, trade_date, changes, sid=''):
             persistence.move_day(fp, lst, idx, datetime(td.year, td.month, td.day))
         else:
             persistence.write_day(fp, lst)
-    if mapped:
+    # A linha da Intrag Swap acompanha o Trade Date editado (§701), e regravada
+    # aqui ela ganha também o dia novo nas colunas.
+    moveu = _sw.intrag_follow(antes, d, tag='SWAP BULLET')
+    if mapped or (moveu and b3_novo):
         b3_mapped(d)
+    return d
+
+
+def set_flags(deal_id, trade_date, flags):
+    """Grava as correções das MARCAS do card (§701) — só o `SwapFlags`: o
+    status, o maker/checker e o arquivo da B3 não mudam (a marca é a leitura
+    da equipe, não dado da operação). → o deal ou None."""
+    with _R()._cache_lock:
+        fp, lst, idx = queries.find(deal_id, trade_date)
+        if idx is None:
+            return None
+        d = lst[idx]
+        d['SwapFlags'] = _sw.merge_flags(d.get('SwapFlags'), flags)
+        persistence.write_day(fp, lst)
     return d
 
 

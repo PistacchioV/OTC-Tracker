@@ -1256,7 +1256,12 @@ $(document).ready(function() {
             function _collectAllNdfDeals() {
                 var out = [];
                 table.rows({ search: 'none', page: 'all' }).every(function () {
-                    out.push(rowDataToNdfDeal(this.data(), this.data()[29] || ''));
+                    // a linha MARCADA vai com `_selected` (§701): o Economic
+                    // Affirmation afirma as IF do dia e, além delas, as marcadas
+                    var _d = rowDataToNdfDeal(this.data(), this.data()[29] || '');
+                    var _n = this.node();
+                    if (_n && $(_n).find('td:first input[type="checkbox"]').prop('checked')) _d._selected = true;
+                    out.push(_d);
                 });
                 return out;
             }
@@ -1269,7 +1274,7 @@ $(document).ready(function() {
                 econAffBtn.setAttribute('type', 'button');
                 econAffBtn.setAttribute('data-bs-toggle', 'tooltip');
                 econAffBtn.setAttribute('data-bs-placement', 'bottom');
-                econAffBtn.setAttribute('data-bs-title', t('nd-btn-econaff', 'Economic Affirmation (IF, D0)'));
+                econAffBtn.setAttribute('data-bs-title', t('nd-btn-econaff-tip', 'Economic Affirmation (IF D0 + the marked operations)'));
                 econAffBtn.innerHTML = '<i class="ti ti-mail-check me-1"></i><span data-lang="nd-btn-econaff">Econ. Affirmation</span>';
                 econAffContainer.appendChild(econAffBtn);
                 econAffBtn.addEventListener('click', function () {
@@ -1293,7 +1298,7 @@ $(document).ready(function() {
                             return r.json().then(function (res) {
                                 if (res.ok && (res.count || 0) === 0) {
                                     Swal.fire({ title: t('swal-email-none-title', 'Nothing to Generate'),
-                                        text: t('swal-econaff-none', 'No financial-institution operations traded today to affirm.'),
+                                        text: t('swal-econaff-none', 'No financial-institution operation traded today and no operation marked — mark the operations to affirm.'),
                                         icon: 'info', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#0066cc' });
                                     return;
                                 }

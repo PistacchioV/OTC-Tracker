@@ -359,8 +359,12 @@ def main():
         check('a busca da página responde pelo prefixo estático', r.status_code == 200 and r.get_json().get('success'))
     regras = {str(r) for r in app.url_map.iter_rules()}
     tplp = io.open(os.path.join(RAIZ, 'apps', 'templates', 'pages', 'new_deals-product.html'), encoding='utf-8').read()
-    acoes = sorted(set(re.findall(r"PAGE\.api \+ '/([a-z0-9\-/]+)", tplp)) - {'economic-affirmation'})
-    check('toda ação que a página chama tem rota ESTÁTICA na Cetes (o Econ. Affirmation ela não mostra)',
+    # o Econ. Affirmation ela não mostra, e as marcas do card (`flags`, §701)
+    # só existem na página que declara `swap_flags` — a Cetes não
+    acoes = sorted(set(re.findall(r"PAGE\.api \+ '/([a-z0-9\-/]+)", tplp)) - {'economic-affirmation', 'flags'})
+    check('a Cetes não tem as marcas do card (o Cashflow tem)', p.get('swap_flags') is False
+          and catalog.page('/new_deals-swap-cashflow').get('swap_flags') is True)
+    check('toda ação que a página chama tem rota ESTÁTICA na Cetes (sem o Econ. Affirmation e as marcas)',
           [x for x in acoes if '/api/new-deals/swap-cetes/' + x not in regras] == [])
     check('o cadastro swap-cetes-leg (semente: SOFR 17182 e FIXED 21 com a taxa)',
           [(r['LEG'], r['VCP CODE'], r['RATE']) for r in seed] == [('SOFR', '17182', 'No'), ('FIXED', '21', 'Yes')])

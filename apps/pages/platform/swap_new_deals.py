@@ -441,6 +441,60 @@ def confirmation_deal(deal):
     return out
 
 
+# As MARCAS do card dos swaps (§701): a leitura da equipe — Forward Start,
+# Atualização de Notional, Curva VCP, Prêmio — quando a detecção pelos campos
+# (`swap-deal.js`, `otcSwapFlags`) errou. Só a correção é gravada; `None`
+# devolve a marca à detecção. Não muda o arquivo da B3 nem o status.
+SWAP_FLAG_KEYS = ('fwd', 'notional', 'vcp', 'premium')
+
+
+def merge_flags(atual, novas):
+    """`SwapFlags` do deal com as correções `novas` ({chave: bool|None})
+    aplicadas; chave fora de `SWAP_FLAG_KEYS` e valor que não é bool/None
+    são ignorados. → dict (vazio = tudo pela detecção)."""
+    out = {k: v for k, v in (atual or {}).items()
+           if k in SWAP_FLAG_KEYS and isinstance(v, bool)} if isinstance(atual, dict) else {}
+    for k, v in (novas or {}).items() if isinstance(novas, dict) else ():
+        if k not in SWAP_FLAG_KEYS:
+            continue
+        if v is None:
+            out.pop(k, None)
+        elif isinstance(v, bool):
+            out[k] = v
+    return out
+
+
+def intrag_day(deal):
+    """O dia da linha do swap na Intrag Swap: o TRADE DATE (§656), a Data
+    Início só como plano B. É a regra do `b3_mapped` aqui e da Cetes."""
+    td = _dtk.parse_date((deal or {}).get('TradeDate')) or _dtk.parse_date((deal or {}).get('StartDate'))
+    return datetime(td.year, td.month, td.day) if td else None
+
+
+def intrag_key(deal):
+    """A chave da linha na Intrag Swap (o `_deal` do `intrag_swap_entry`)."""
+    return str((deal or {}).get('_id') or (deal or {}).get('Deal') or '').strip()
+
+
+def intrag_follow(antes, depois, tag='SWAP'):
+    """O Edit mudou o Trade Date (a operação muda de arquivo-dia, §656) ou a
+    chave: a linha da Intrag Swap vai junto (§701). Sem isto ela ficava no dia
+    antigo, e o mapeamento seguinte, que procura só no dia novo, criava outra.
+    Devolve True se moveu. A falha é DITA na tela (`mirrors`)."""
+    pd, nd = intrag_day(antes), intrag_day(depois)
+    pk, nk = intrag_key(antes), intrag_key(depois)
+    if (pd == nd or not nd) and pk == nk:
+        return False
+    try:
+        return _R()._intrag_engine()._intrag_follow('swap', pd, pk, nd or pd, nk or pk)
+    except Exception as exc:                                # noqa: BLE001
+        _R().log.warning('[%s] Intrag Swap: a linha de %s não acompanhou o Edit:\n%s',
+                         tag, pk, traceback.format_exc())
+        from apps.pages.platform import mirrors
+        mirrors.falhou('intrag', str((depois or {}).get('B3ID') or pk), exc)
+        return False
+
+
 def b3_mapped(deal, tag='SWAP'):
     """O deal ganhou B3 ID. No B2B, a linha da **Intrag Swap** (a visão do
     fundo — Atacama ou Lawton —, na carteira dele); contra cliente, a linha do **Pending
@@ -456,9 +510,7 @@ def b3_mapped(deal, tag='SWAP'):
             entry = _dtk.intrag_swap_entry(deal, codes_for(deal))
             # o dia da linha na Intrag Swap é o TRADE DATE (mesa, 21/10/2026,
             # §656); a Data Início é só o plano B do deal sem Trade Date
-            td = _dtk.parse_date(deal.get('TradeDate')) or _dtk.parse_date(deal.get('StartDate'))
-            day = datetime(td.year, td.month, td.day) if td else None
-            _R()._intrag_engine()._save_intrag_swap_entry(entry, day)
+            _R()._intrag_engine()._save_intrag_swap_entry(entry, intrag_day(deal))
         else:
             tipo = _dtk.confirmation_source(deal)
             # A mesma porta das outras páginas: o `_pc_save_from_deal` pula a
