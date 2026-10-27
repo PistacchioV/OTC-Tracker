@@ -1380,7 +1380,7 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   (`_ND_AMEND_COSMETIC_BY_PRODUCT`, por produto — produto vazio = econômico).
   A varredura do box não tem a proteção de propósito (paridade com
   `otc-fileupload.js`).
-- **O Amend da API conta só as COLUNAS da tela** (equipe, 27/10/2026):
+- **O Amend da API conta só as COLUNAS da tela** (equipe, 27/10/2026, §710):
   `_ND_TABLE_FIELDS` por produto (Vanilla, FWD Start, Other Publisher, FXO);
   campo do deal que a tela não mostra é atualizado calado, sem Amend nem
   `AmendChanged` — a Athena os reescreve a cada pull, e a linha virava Amend
@@ -1402,10 +1402,14 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   calendário ilegível LEVANTA. Eram dois calendários, e o 07/09 foi à B3.
 - **Só `isCancelled` é cancelado** na Athena; `isDead` importa normalmente —
   MENOS quando o mesmo DEAL NAME tem versão VIVA (`_api_live_records`, nos
-  pulls de NDF e FXO; equipe, 27/10/2026): a operação corrigida volta com a
+  pulls de NDF e FXO; equipe, 27/10/2026, §711): a operação corrigida volta com a
   versão antiga `isDead`, e as duas faziam Amend na mesma linha — vindo a antiga
-  por último, a tela ficava com o acronym/SPN errado com a API certa.
-  `check_api_live_version.py`.
+  por último, desfazia a correção. `check_api_live_version.py`.
+- **O pull da API devolve em `deals` só as operações NOVAS** (§711): a que ele
+  corrigiu numa linha que já estava na grade vem só na contagem `amended`. As
+  quatro telas (Opt FXO e os três NDF) releem a grade (`sfApply`) quando houve
+  amend, remoção ou cancelamento — sem isso a operação corrigida na Athena
+  seguia na tela com a contraparte antiga.
 - **O import do dropzone não decide sozinho se a operação é nova** (§625):
   a grade só tem o que a busca carregou. Linha que ela não acha vai num POST
   com `_import`, e o SERVIDOR procura (`_nd_import_upsert`: Deal + Acronym,
@@ -3578,7 +3582,12 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   pacote). Três timeouts: `REQUEST_TIMEOUT` 30 s (um produto/dia),
   `REPORT_TIMEOUT` 180 s (EOD da Recon FXO, Intrag DCE, `getTradesBySettle`),
   `CONNECT_TIMEOUT` 10 s; cadastráveis, malformado cai no padrão com aviso.
-  `check_athena_sso.py`.
+  `check_athena_sso.py`. **No Stratos a Athena é host interno inalcançável da
+  AWS**: a ponte embrulha o `athena_api.build_session` e desvia pelo
+  `get_proxied_url` do Stratos só os hosts do JPM (`stratos/src/proxy_interno.py`,
+  só na branch, §709) — por isso todo chamador lê `athena_api.build_session`
+  pelo atributo do módulo, nunca `from athena_api import build_session`. O
+  Kerberos segue sem existir no Linux.
 - **BCB/Yahoo (Quotes)**: mesma sessão, proxy volta como FILA (`QUOTES_PROXY`,
   a 9443 → proxy do sistema COPIADO → direto), primeira que responde fica. A
   porta antiga do desktop saiu da fila e não se escreve nem em comentário
