@@ -1702,9 +1702,20 @@ No **MtM** há ainda o botão **New Mapping**, para cadastrar um de-para novo se
 | Status | O que quer dizer |
 |---|---|
 | **Matched** | A operação está nos dois lados e tudo bate |
-| **Partial - …** | Está nos dois lados, mas algum campo diverge — o status diz quais (*Trade Date*, *Gross Value*, *Tax*, *Counterparty*, *Code*, *Tributo*, *Legal Entity*) |
+| **Partial - …** | Está nos dois lados, mas algum campo diverge — o status diz quais (*Event Date*, *Gross Value*, *Tax* — com tolerância de 1 centavo —, *Counterparty*, *Code*, *Tributo*, *Legal Entity*) |
 | **Unmatched OTC** | Só no OTC Tracker — vai para o **HUB File** |
 | **Unmatched HUB** | Só no relatório do HUB |
+
+Os status aparecem em **caixa alta** (*UNMATCHED OTC*). As datas: **OTC_TD** é o **Trade Date** da operação (só o OTC o tem — o relatório do HUB não traz), e **OTC_ET** / **HUB_ET** são a data do **evento** (a liquidação), que é a que o batimento compara. A recompra aparece sempre com o evento **UNWIND**.
+
+**Corrigir, incluir e apagar linhas.** A coluna **Actions** de cada linha tem **Edit** e **Delete**:
+
+1. **Edit** abre a janela com os campos do lado **OTC** e do lado **HUB** (só os que a linha tem). As colunas de opção fechada (produto, LOB, evento, LE — JPM ou MGT) são listas; valores, números; datas, o calendário. Salve: a linha mostra a pílula **PENDING** e o **Edit** vira **Confirm**.
+2. **Confirm** é de **outra pessoa** — quem editou não confirma a própria edição. Confirmada, a pílula vira **APPROVED**.
+3. A correção fica guardada à parte do que foi importado: um novo **Import Settlements** ou **Import HUB** não a desfaz. O **HUB File** não sai com uma linha ainda **PENDING**.
+4. **Delete** tira a linha do WHT (a operação e a linha do HUB dela), e uma nova importação não a traz de volta.
+5. **Em lote:** marque as linhas — aparece a barra com a coluna a alterar, o campo do valor (no formato da coluna: lista, data, número ou texto), **Apply** e **Delete**. Cada linha alterada fica **PENDING**.
+6. **Add Row** inclui uma operação que as telas de liquidação não trouxeram: preencha produto, LOB, evento, LE, a data do evento, o valor e a contraparte — o **ID** (código) e o **tributo** se preenchem sozinhos pelo cadastro, e o **IR** (*Devido*) pelo valor e pelo produto. No **swap** o IR é **regressivo**: preencha também o **Trade Date** (OTC_TD), porque é dele à data do evento que se conta o prazo. O IR digitado à mão vence o calculado. A linha incluída também nasce **PENDING**.
 
 No topo, o **resumo por código** soma, para cada código de imposto, as operações, o bruto e o imposto dos dois lados, e mostra a diferença.
 
