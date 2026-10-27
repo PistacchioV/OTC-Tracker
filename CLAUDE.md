@@ -3156,6 +3156,14 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   `unwind_rows`): casa pelo Trade Id (exato ou os 14 da direita) ou, sem ele,
   por contraparte (sem pontuação e sufixo societário) + valor dentro de R$ 1,00,
   cada recompra UMA perna. Vertical ilegível não derruba a recon (avisa no log).
+- **Pay/Rec: o Pending Payment / Pending Receivement passa para os dias
+  seguintes** até casar ou ser justificado (§704, `_apply_carry_forward`). O
+  dia anterior é o mais recente com resultado NO ARMAZÉM (`_prev_finalized`): o
+  histórico do End process e, sem ele, o do Run — nunca `glob` no disco, que
+  desde o §434 não tem o histórico e achava o JSON legado de julho. Marcar
+  depois do End process grava no HISTÓRICO (é dele que a tela e o dia seguinte
+  leem). `check_payrec_carry.py` (armazém de verdade; os outros testes stubam o
+  `_prev_finalized`).
 - **Pay/Rec: o SWAP casa e liquida até R$20** (`_TOL_SWAP`, 21/10/2026, §665):
   o lado interno sai líquido do IR regressivo do cadastro, e o pago difere em
   alguns reais. A janela larga é uma passada PRÓPRIA no fim do `_reconcile`
@@ -3683,7 +3691,7 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (221 scripts)
+### `scripts/tests/` (222 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
