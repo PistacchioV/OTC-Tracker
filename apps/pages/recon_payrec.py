@@ -1751,31 +1751,44 @@ def _gather_sources(files, mode):
     return srcs
 
 
+_WORK_DAY = re.compile(r'^(\d{4}-\d{2}-\d{2})\.json$')
+_HIST_DAY = re.compile(r'payrec_status_(\d{8})\.json$')
+
+
 def _prev_finalized(recon_date):
-    """Most recent finalized-day history strictly BEFORE recon_date.
-    Returns (data, 'YYYY-MM-DD') or None."""
+    """O dia mais recente ANTES de `recon_date` com resultado gravado — o
+    histórico do End process e, sem ele, o resultado do Run (o dia rodado e não
+    finalizado também tem as pendências marcadas, e as que ele trouxe dos dias
+    anteriores). Devolve (data, 'YYYY-MM-DD') ou None.
+
+    Enumera pelo ARMAZÉM (§434): o `glob` no disco não via nada gravado depois
+    de 09/09/2026 — o histórico só existe no banco — e achava, no lugar, o
+    último JSON legado que sobrou no disco (julho, na dev). As pendências de
+    Pending Payment/Receivement sumiam no dia seguinte. Leitura que falha SOBE
+    (banco ocupado): lida como "não há dia anterior", o Run gravaria o dia sem
+    as pendências e a corrente se partiria ali para sempre."""
     try:
         cur = datetime.strptime((recon_date or '')[:10], '%Y-%m-%d')
     except Exception:
         return None
-    best, best_dt = None, None
-    pattern = os.path.join(_HISTORY_BASE, '*', '*', '*', 'payrec_status_*.json')
-    for p in glob.glob(pattern):
-        m = re.search(r'payrec_status_(\d{8})\.json$', os.path.basename(p))
-        if not m:
-            continue
-        try:
-            dt = datetime.strptime(m.group(1), '%Y%m%d')
-        except Exception:
-            continue
-        if dt < cur and (best_dt is None or dt > best_dt):
-            best_dt, best = dt, p
-    if not best:
-        return None
+    dias = {}                                         # 'YYYY-MM-DD' → caminho (histórico vence)
     try:
-        return _store.read(best), best_dt.strftime('%Y-%m-%d')
-    except Exception:
+        for nome in _store.listdir(_CACHE_DIR):
+            m = _WORK_DAY.match(nome)
+            if m:
+                dias[m.group(1)] = os.path.join(_CACHE_DIR, nome)
+    except FileNotFoundError:
+        pass
+    for path, nome, _mt, _fs in _store.day_files(_HISTORY_BASE, sufixo='.json', strict=True):
+        m = _HIST_DAY.search(nome)
+        if m:
+            dias['{}-{}-{}'.format(m.group(1)[:4], m.group(1)[4:6], m.group(1)[6:])] = path
+    limite = cur.strftime('%Y-%m-%d')
+    anteriores = sorted(d for d in dias if d < limite)
+    if not anteriores:
         return None
+    dia = anteriores[-1]
+    return _store.read(dias[dia]), dia
 
 
 def _apply_carry_forward(recon_date, pend_pay, pend_rec, settled):
@@ -2150,9 +2163,7 @@ def justify_row(recon_date, table, index, comment, status=None):
 
 
 def _justify_locked(recon_date, table, index, comment, status):
-    data = _load_flat(recon_date, strict=True)
-    if not data:
-        return None
+    data = _load_flat(recon_date, strict=True) or {}
     key = {'pay': 'pending_payment', 'rec': 'pending_receivement'}.get(table)
     if not key:
         return None
@@ -2161,16 +2172,45 @@ def _justify_locked(recon_date, table, index, comment, status):
         index = int(index)
     except (TypeError, ValueError):
         return None
-    if not (0 <= index < len(rows)):
+    if index < 0:
         return None
     new_status = (status or '').strip()
-    if new_status.lower() in _CARRY_STATUSES:
-        rows[index]['status'] = new_status          # keep it as a carry-forward item
-    else:
-        rows[index]['status'] = 'Justified'         # comment-only on a Pending row
-    rows[index]['comment'] = str(comment or '').strip()
+    if new_status.lower() not in _CARRY_STATUSES:
+        new_status = 'Justified'                    # comment-only on a Pending row
+    comment = str(comment or '').strip()
+    # Dia já FINALIZADO: a tela mostra o histórico (`load_last`) e é dele que o
+    # carry-forward do dia seguinte lê — gravado só no cache de trabalho, o
+    # Pending Payment marcado depois do End process sumia no reload e no dia
+    # seguinte. O índice é o da tabela da tela, isto é, a do histórico.
+    hp = _history_path(recon_date)
+    if hp and _store.exists(hp):
+        from apps.pages import routes
+        hist = _store.read(hp)
+        hrows = hist.get(key) or []
+        if not (0 <= index < len(hrows)):
+            return None
+        alvo = dict(hrows[index])
+        hrows[index]['status'] = new_status
+        hrows[index]['comment'] = comment
+        routes._atomic_write_json(hp, hist)
+        # O cache de trabalho acompanha quando a linha do índice é a MESMA
+        # (um Run depois do End process pode tê-lo reordenado).
+        if index < len(rows) and _same_row(rows[index], alvo):
+            rows[index]['status'] = new_status
+            rows[index]['comment'] = comment
+            _persist(recon_date, data, strict=True)
+        return hist
+    if not (index < len(rows)):
+        return None
+    rows[index]['status'] = new_status              # Pending Payment/Receivement: carry-forward
+    rows[index]['comment'] = comment
     _persist(recon_date, data, strict=True)
     return data
+
+
+def _same_row(a, b):
+    campos = ('le', 'jpm_cpty', 'jpm_value', 'client', 'client_value', 'pay_receive')
+    return all(str(a.get(k, '')) == str(b.get(k, '')) for k in campos)
 
 
 # ── Match manual (débito × crédito da mesma contraparte) ─────────────────────
