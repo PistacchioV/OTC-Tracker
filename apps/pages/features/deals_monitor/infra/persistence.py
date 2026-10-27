@@ -6,6 +6,8 @@ para um tmp, e todo leitor deste módulo resolve pelo atributo na chamada.
 """
 import json
 import os
+import threading
+import time
 import traceback
 
 from apps.pages.features.deals_monitor import domain
@@ -108,3 +110,60 @@ def _save_intraday_tasks(cfg):
     normalizada pelo `domain.task_config` — o arquivo nunca guarda o que a
     leitura não saberia interpretar."""
     _R()._atomic_write_json(_INTRADAY_TASKS_FILE, domain.task_config(cfg))
+
+
+# ── Owner e backup das tarefas (§701) ────────────────────────────────────────
+_ASSIGN_FILE = os.path.join(_R()._DAILY_METRIC_DIR, 'intraday_assignments.json')
+
+
+def _load_assignments(strict=False):
+    """A lista SALVA de owner/backup, já limpa pelo `domain.clean_assignments`.
+    `strict=True` é a leitura de quem vai GRAVAR (o POST compara com o
+    anterior para avisar só os designados novos): ocupado SOBE, nunca vira
+    lista vazia — senão todo mundo seria avisado de novo."""
+    try:
+        d = _store.read(_ASSIGN_FILE)
+    except FileNotFoundError:
+        return []
+    except Exception:
+        if strict:
+            raise
+        _R().log.warning('[intraday-monitor] owners ilegíveis:\n%s', traceback.format_exc())
+        return []
+    return domain.clean_assignments(d)
+
+
+def _save_assignments(lista):
+    _R()._atomic_write_json(_ASSIGN_FILE, domain.clean_assignments(lista))
+
+
+_people_memo = {'at': 0.0, 'rows': None}
+_people_lock = threading.Lock()
+
+
+def _assignable_people():
+    """Quem pode ser owner/backup: o cadastro com Status ACTIVE, em ordem
+    alfabética, com a foto (`user_photos`). Uma leitura a cada 5 min (o
+    snapshot do Monitor pede a cada minuto); falha devolve a última lista boa."""
+    from apps.pages.platform import user_photos
+    with _people_lock:
+        if _people_memo['rows'] is not None and time.time() - _people_memo['at'] < 300:
+            return _people_memo['rows']
+    try:
+        conn = _R().get_db_connection(readonly=True)
+        try:
+            linhas = conn.execute('SELECT SID, Name, Status FROM users').fetchall()
+        finally:
+            conn.close()
+    except Exception:                                       # noqa: BLE001
+        _R().log.warning('[intraday-monitor] não li o cadastro de usuários', exc_info=True)
+        with _people_lock:
+            return _people_memo['rows'] or []
+    rows = sorted(({'sid': str(sid or '').strip().upper(), 'name': (nome or '').strip() or str(sid).upper(),
+                    'photo': user_photos.url(str(sid or '').strip().upper())}
+                   for sid, nome, st in linhas
+                   if str(sid or '').strip() and str(st or '').strip().upper() == 'ACTIVE'),
+                  key=lambda p: p['name'].lower())
+    with _people_lock:
+        _people_memo['at'], _people_memo['rows'] = time.time(), rows
+    return rows

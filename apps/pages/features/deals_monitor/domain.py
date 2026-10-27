@@ -392,6 +392,51 @@ TASK_IDS = tuple(t['id'] for t in TASKS)
 _HHMM = re.compile(r'^([01]\d|2[0-3]):([0-5]\d)$')
 
 
+# ── Owner e backup de cada tarefa (§701) ─────────────────────────────────────
+# Quem responde por uma tarefa do Monitor, e quem a cobre na ausência: por
+# tarefa e, quando a divisão é por entidade, por LE — "B3 Registration da
+# MGT: owner Augusto, backup Theodoro". LE em branco = a tarefa inteira. Uma
+# linha por (tarefa, LE); o backup é opcional e nunca o próprio owner.
+ASSIGN_LES = ('', 'JPM', 'MGT', 'LAW')
+
+
+def clean_assignments(raw, sids=None):
+    """A lista gravável: [{task, le, owner, backup}], na ordem do catálogo e
+    das LEs. Tarefa fora do catálogo, LE fora de `ASSIGN_LES` ou linha sem
+    owner saem; (tarefa, LE) repetida vale a ÚLTIMA. `sids` (opcional) é quem
+    pode ser designado: SID fora dele não entra."""
+    pos = {t: i for i, t in enumerate(TASK_IDS)}
+    out = {}
+    for a in raw if isinstance(raw, list) else []:
+        if not isinstance(a, dict):
+            continue
+        task = str(a.get('task') or '').strip()
+        le = str(a.get('le') or '').strip().upper()
+        owner = str(a.get('owner') or '').strip().upper()
+        backup = str(a.get('backup') or '').strip().upper()
+        if task not in pos or le not in ASSIGN_LES or not owner:
+            continue
+        if sids is not None and owner not in sids:
+            continue
+        if backup == owner or (sids is not None and backup and backup not in sids):
+            backup = ''
+        out[(task, le)] = {'task': task, 'le': le, 'owner': owner, 'backup': backup}
+    return sorted(out.values(), key=lambda a: (pos[a['task']], ASSIGN_LES.index(a['le'])))
+
+
+def assignment_news(antes, depois):
+    """Quem passou a responder por quê: [(sid, papel, task, le)] — o owner ou
+    o backup que a linha não tinha antes (é a quem o sino avisa)."""
+    velho = {(a['task'], a['le']): a for a in antes or []}
+    out = []
+    for a in depois or []:
+        v = velho.get((a['task'], a['le'])) or {}
+        for papel in ('owner', 'backup'):
+            if a.get(papel) and a[papel] != v.get(papel):
+                out.append((a[papel], papel, a['task'], a['le']))
+    return out
+
+
 def task_config(salvo):
     """A agenda de cada tarefa: o salvo no Control Panel por cima do padrão.
 

@@ -124,7 +124,56 @@ def api_intraday_monitor():
     snap['me'] = {'desk': str(session.get('user_role') or '').strip().upper(),
                   'is_admin': bool(_R()._session_is_admin()),
                   'sid': str(session.get('user_sid') or '').strip().upper()}
+    # owner e backup de cada tarefa (§701): o card os mostra
+    snap['assignments'] = persistence._load_assignments()
+    snap['people'] = {p['sid']: {'name': p['name'], 'photo': p['photo']}
+                      for p in persistence._assignable_people()}
+    snap['me']['can_assign'] = _pode_designar()
     return jsonify({'success': True, **snap})
+
+
+def _pode_designar():
+    """Quem designa owner/backup: a mesa das tarefas (BO) e admin/master — a
+    mesma regra de quem move a tarefa no quadro."""
+    return bool(_R()._session_is_admin()) or \
+        str(session.get('user_role') or '').strip().upper() in _IM_DESK
+
+
+@blueprint.route('/api/intraday-monitor/assignments', methods=['GET', 'POST'])
+def api_intraday_assignments():
+    """Owner e backup das tarefas (§701). GET: a lista, quem pode ser
+    designado e se a sessão edita. POST: substitui a lista inteira (BO e
+    admin); o designado NOVO é avisado no sino, só ele (`target_sid`)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    pessoas = persistence._assignable_people()
+    if request.method == 'GET':
+        return jsonify({'success': True, 'assignments': persistence._load_assignments(strict=True),
+                        'people': pessoas, 'les': list(domain.ASSIGN_LES),
+                        'tasks': [{'id': t['id'], 'label': t['label'], 'icon': t['icon']} for t in domain.TASKS],
+                        'can_edit': _pode_designar()})
+    if not _pode_designar():
+        return jsonify({'success': False, 'code': 'assign_not_allowed',
+                        'message': 'Only OTC Ops (BO) and admins assign task owners.'}), 403
+    lista = (request.get_json(silent=True) or {}).get('assignments')
+    if not isinstance(lista, list):
+        return jsonify({'success': False, 'code': 'bad_payload'}), 400
+    sids = {p['sid'] for p in pessoas}
+    antes = persistence._load_assignments(strict=True)
+    limpa = domain.clean_assignments(lista, sids)
+    persistence._save_assignments(limpa)
+    R = _R()
+    rotulo = {t['id']: t['label'] for t in domain.TASKS}
+    for sid, papel, task, le in domain.assignment_news(antes, limpa):
+        try:
+            R._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                                   'Task Assigned', 'Intraday Monitor',
+                                   '{} · {}{}'.format('Owner' if papel == 'owner' else 'Backup',
+                                                      rotulo.get(task, task), ' (' + le + ')' if le else ''),
+                                   target_sid=sid)
+        except Exception:                                   # noqa: BLE001
+            R.log.warning('[intraday-monitor] aviso de designação para %s falhou', sid, exc_info=True)
+    return jsonify({'success': True, 'assignments': limpa})
 
 
 # ── Arrastar o card de tarefa (§632) ───────────────────────────────────────────

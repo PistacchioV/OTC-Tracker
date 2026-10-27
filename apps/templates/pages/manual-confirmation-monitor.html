@@ -167,6 +167,24 @@
 #mc-monitor.is-dragging .mc-card { transition: opacity var(--otc-dur-fast) var(--otc-ease), box-shadow var(--otc-dur-fast) var(--otc-ease); }
 #mc-monitor.is-dragging .mc-card.is-forbidden { opacity: .45; }
 #mc-monitor .mc-card.is-over { box-shadow: var(--otc-depth), 0 0 0 2px var(--otc-accent-ink) !important; }
+/* As cinco colunas lado a lado (≥xl) descem até o pé da janela, com a MESMA
+   folga do sidenav embaixo (--otc-inset): a altura é medida pelo JS (`fitCards`,
+   --mc-h), porque o que vem acima delas (título, aviso de cadastro) varia. A
+   fila rola por dentro. Empilhadas (abaixo de xl) seguem com a altura delas. */
+@media (min-width: 1200px) {
+    #mc-monitor { padding-bottom: 0; }
+    #mc-monitor #mc-cards.is-fit .mc-card { height: var(--mc-h); }
+    #mc-monitor #mc-cards.is-fit .mc-list { min-height: 0; max-height: none; }
+}
+/* Com as colunas até o pé, a área de soltar em Ok não cabe embaixo delas: no
+   arrasto ela flutua no pé da janela, na largura das colunas (--mc-okl/-okw). */
+#mc-monitor.is-dragging .mc-okzone.is-allowed {
+    position: fixed; z-index: 1030; margin: 0;
+    left: var(--mc-okl, 50%); width: var(--mc-okw, auto);
+    bottom: calc(var(--otc-inset) + 12px);
+    backdrop-filter: var(--otc-blur); -webkit-backdrop-filter: var(--otc-blur);
+    box-shadow: var(--otc-depth);
+}
 #mc-monitor .mc-okzone { display: none; margin-top: var(--otc-gap, 18px); padding: 18px; border-radius: var(--otc-r-xl); border: 2px dashed color-mix(in srgb, var(--otc-green) 60%, transparent); background: color-mix(in srgb, var(--otc-green) 10%, transparent); color: var(--otc-text-2); text-align: center; font-weight: 650; }
 #mc-monitor.is-dragging .mc-okzone.is-allowed { display: block; }
 #mc-monitor .mc-okzone.is-over { background: color-mix(in srgb, var(--otc-green) 22%, transparent); color: var(--otc-text); }
@@ -381,6 +399,10 @@
             it.classList.add('is-dragging');
             $('#mc-monitor').addClass('is-dragging');
             $('#mc-monitor .mc-card').each(function () { $(this).toggleClass('is-forbidden', !aceita(DRAG.from, this.getAttribute('data-stage'))); });
+            var r = document.getElementById('mc-cards').getBoundingClientRect();
+            var mon = document.getElementById('mc-monitor');
+            mon.style.setProperty('--mc-okl', r.left + 'px');
+            mon.style.setProperty('--mc-okw', r.width + 'px');
             $('#mc-okzone').toggleClass('is-allowed', aceita(DRAG.from, 'OK'));
         }, 0);
     });
@@ -752,6 +774,28 @@
             esc(msg) + '</div></div></div>');
     }
 
+    // A altura das colunas: do topo delas até o pé da janela, menos a folga do
+    // sidenav (--otc-inset). Só com as cinco lado a lado; com menos de 24rem
+    // de janela sobrando, fica o piso (a fila rola).
+    function fitCards() {
+        var el = document.getElementById('mc-cards');
+        if (!el) return;
+        if (window.innerWidth < 1200) { el.classList.remove('is-fit'); return; }
+        var inset = parseFloat(getComputedStyle(document.documentElement)
+                               .getPropertyValue('--otc-inset')) || 10;
+        // o topo do CARD, não da linha: a `.row g-3` sobe o gutter e cada
+        // coluna o devolve como margem — medido na linha, sobravam 16px
+        var card = el.querySelector('.mc-card');
+        var topo = (card || el).getBoundingClientRect().top + window.scrollY;
+        var h = Math.max(window.innerHeight - topo - inset, 384);
+        el.style.setProperty('--mc-h', Math.floor(h) + 'px');
+        el.classList.add('is-fit');
+    }
+    var _fitT = null;
+    window.addEventListener('resize', function () {
+        clearTimeout(_fitT); _fitT = setTimeout(fitCards, 80);
+    });
+
     function load() {
         fetch('/api/manual-confirmation/monitor')
             .then(function (r) {
@@ -776,6 +820,7 @@
                 if (faltando.length) {
                     w.removeClass('d-none').text(t('warnMissing', { p: faltando.join(', ') }));
                 } else { w.addClass('d-none').empty(); }
+                fitCards();          // depois do aviso: ele empurra as colunas
             })
             .catch(function () {
                 fail(t('failTitle') + '. ' + t('failText'));
