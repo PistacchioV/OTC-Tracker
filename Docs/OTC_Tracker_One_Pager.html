@@ -147,6 +147,50 @@
   .foot strong { color: var(--text-2); font-weight: 650; }
   .conf { font-weight: 700; letter-spacing: .06em; text-transform: uppercase; font-size: 11.5px; }
 
+
+  /* ── página 2: o fluxo end to end ──────────────────────── */
+  .sheet + .sheet { margin-top: 18px; }
+  .hero--flow { grid-template-columns: 1fr auto; align-items: center; }
+  .hero--flow h1 { font-size: 28px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+  .legend__item { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-2); white-space: nowrap; }
+  .legend__swatch { width: 26px; height: 16px; border-radius: 5px; flex: none; }
+  .legend__swatch--in { background: linear-gradient(135deg, var(--navy), var(--blue)); }
+  .legend__swatch--out { border: 1.5px dashed rgba(40, 40, 70, .35); background: var(--card); }
+  .e2e-card { margin-top: 10px; }
+  .e2e-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .e2e-count { font-size: 13.5px; color: var(--text-2); }
+  .e2e-count b { color: var(--blue); font-size: 18px; font-weight: 750; font-variant-numeric: tabular-nums; }
+  .rail { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; margin-top: 4px; }
+  .node {
+    position: relative; border-radius: var(--r-md); padding: 10px 10px 11px; min-height: 128px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .node:not(:last-child)::after {
+    content: ""; position: absolute; right: -11px; top: 50%; width: 8px; height: 8px; margin-top: -4px;
+    border-top: 2px solid var(--text-3); border-right: 2px solid var(--text-3); transform: rotate(45deg); opacity: .7;
+  }
+  .node__top { display: flex; align-items: center; justify-content: space-between; }
+  .node__n { font-size: 11.5px; font-weight: 700; letter-spacing: .04em; }
+  .node__icon { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; }
+  .node__icon svg { width: 15px; height: 15px; }
+  .node__name { font-size: 14px; font-weight: 700; line-height: 1.2; }
+  .node__sub { font-size: 12px; line-height: 1.35; margin-top: auto; }
+  .node--in { background: linear-gradient(160deg, var(--navy), #1d5fb0 55%, var(--blue)); color: #fff; box-shadow: 0 6px 16px rgba(20, 71, 120, .22); }
+  .node--in .node__n { color: rgba(255, 255, 255, .7); }
+  .node--in .node__icon { background: rgba(255, 255, 255, .18); }
+  .node--in .node__sub { color: rgba(255, 255, 255, .85); font-weight: 600; }
+  .node--out { background: var(--card); border: 1.5px dashed rgba(40, 40, 70, .28); color: var(--text-3); }
+  .node--out .node__icon { background: var(--fill); color: var(--text-3); }
+  .node--out .node__name { color: var(--text-2); }
+  .e2e-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px; }
+  .e2e-step { background: var(--card); border-radius: var(--r-lg); box-shadow: var(--shadow); padding: 12px 16px 13px; position: relative; overflow: hidden; }
+  .e2e-step::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--hue, var(--blue)); }
+  .e2e-step .h2 { font-size: 15px; margin-bottom: 8px; }
+  .e2e-step .h2 small { display: block; font-size: 11.5px; font-weight: 700; color: var(--text-3); letter-spacing: .04em; }
+  .e2e-step ul.list li { font-size: 13.5px; }
+  .e2e-note { margin: 8px 2px 0; font-size: 12.5px; color: var(--text-3); }
+
   /* ── telas menores ─────────────────────────────────────── */
   @media screen and (max-width: 1080px) {
     .kpis { grid-template-columns: repeat(3, 1fr); }
@@ -154,6 +198,9 @@
     .step:nth-child(3n)::after { display: none; }
     .grid3 { grid-template-columns: 1fr 1fr; }
     .grid3 > :last-child { grid-column: 1 / -1; }
+    .rail { grid-template-columns: repeat(6, 1fr); }
+    .node:nth-child(6n)::after { display: none; }
+    .e2e-grid { grid-template-columns: 1fr 1fr; }
   }
   @media screen and (max-width: 720px) {
     .sheet { padding: 16px; }
@@ -169,6 +216,12 @@
     .step::after { display: none; }
     .grid3, .grid2 { grid-template-columns: 1fr; }
     .chip { white-space: normal; }
+    .hero--flow { grid-template-columns: 1fr; }
+    .legend { justify-content: flex-start; }
+    .rail { grid-template-columns: 1fr 1fr; }
+    .node { min-height: 0; }
+    .node::after { display: none; }
+    .e2e-grid { grid-template-columns: 1fr; }
   }
 
   /* ── impressão: uma folha A4 deitada ───────────────────── */
@@ -196,6 +249,10 @@
     .card, .kpi, .hero { box-shadow: 0 0 0 1px var(--sep); }
     .watch { box-shadow: none; }
     .ask { box-shadow: none; }
+    /* duas folhas: a do fluxo começa numa página nova */
+    .sheet + .sheet { break-before: page; margin-top: 0; }
+    .e2e-step { box-shadow: 0 0 0 1px var(--sep); }
+    .node--in { box-shadow: none; }
   }
 </style>
 </head>
@@ -303,7 +360,6 @@
         <li><span lang="pt"><strong>Um fluxo único e auditável</strong> no lugar de planilhas, fluxos Alteryx e controles por e-mail.</span><span lang="en"><strong>One auditable workflow</strong> replacing spreadsheets, Alteryx workflows and e-mail-based controls.</span></li>
         <li><span lang="pt"><strong>Alternativa interna a sistemas de terceiros:</strong> sem licença por volume e sem fila de customização de fornecedor.</span><span lang="en"><strong>An in-house alternative to vendor systems:</strong> no per-volume licensing and no vendor customization queue.</span></li>
         <li><span lang="pt"><strong>Regra nova vira cadastro, não projeto:</strong> a equipe de Operações mantém os de-para na tela e a mudança vale na hora.</span><span lang="en"><strong>A new rule is a screen entry, not a project:</strong> the Operations team maintains its mappings and changes apply immediately.</span></li>
-        <li><span lang="pt"><strong>Cerca de 100 telas em um só lugar,</strong> em português, inglês e espanhol.</span><span lang="en"><strong>About 100 screens in one place,</strong> in English, Portuguese and Spanish.</span></li>
       </ul>
       <div class="sub"><span lang="pt">Integrações</span><span lang="en">Integrations</span></div>
       <div class="integrations">
@@ -325,10 +381,7 @@
       <ul class="list">
         <li><span lang="pt"><strong>Maker-checker em toda operação:</strong> quem importa ou edita não aprova nem envia.</span><span lang="en"><strong>Maker-checker on every trade:</strong> whoever imports or edits cannot approve or send.</span></li>
         <li><span lang="pt"><strong>Segregação por equipe:</strong> a tela Page Access define as telas e rotinas que cada pessoa pode usar; cada etapa da confirmação é assinada só pela sua equipe (OTC, MO, FO), e o Onboarding passa por Legal, OTC e CEM MO, cada etapa com o seu responsável.</span><span lang="en"><strong>Segregation by team:</strong> the Page Access screen sets which screens and routines each person can use; each confirmation stage is signed only by its own team (OTC, MO, FO), and Onboarding moves through Legal, OTC and CEM MO, each stage with its own owner.</span></li>
-        <li><span lang="pt"><strong>Login por SID</strong> com código único enviado por e-mail e permissões por papel.</span><span lang="en"><strong>SID-based login</strong> with a one-time e-mail code and role-based permissions.</span></li>
         <li><span lang="pt"><strong>Trilha de auditoria permanente:</strong> maker, checker, data/hora e status de cada etapa.</span><span lang="en"><strong>Permanent audit trail:</strong> maker, checker, timestamp and status of every stage.</span></li>
-        <li><span lang="pt"><strong>Arquivos da B3, XML FepWeb e cálculos</strong> conferidos de ponta a ponta pelos testes automatizados.</span><span lang="en"><strong>B3 files, FepWeb XML and calculations</strong> checked end to end by the automated tests.</span></li>
-        <li><span lang="pt"><strong>Nenhuma aprovação por omissão:</strong> quando falta um dado, a reconciliação mostra que não foi possível conferir — nunca aparece “OK” por padrão.</span><span lang="en"><strong>No silent approvals:</strong> when data is missing, the reconciliation shows it could not be verified — it never shows “OK” by default.</span></li>
       </ul>
     </section>
 
@@ -337,14 +390,8 @@
         <span lang="pt">Visibilidade do dia</span><span lang="en">Daily visibility</span></h2>
       <ul class="list">
         <li><span lang="pt"><strong>Intraday Monitor:</strong> as tarefas do dia com prazo, progresso e quem executou cada uma.</span><span lang="en"><strong>Intraday Monitor:</strong> the day's tasks with deadlines, progress and who ran each one.</span></li>
-        <li><span lang="pt"><strong>E-mails automáticos:</strong> pendências às 19:00, 19:30 e 20:00, e o relatório BACC EA Metrics às 16:00.</span><span lang="en"><strong>Automatic e-mails:</strong> outstanding items at 7:00, 7:30 and 8:00 pm (BRT), and the BACC EA Metrics report at 4:00 pm.</span></li>
         <li><span lang="pt"><strong>Confirmations Monitor:</strong> quadro por etapa, com SLA de D+3 (OTC), D+4 (MO) e D+6 (FO) em dias úteis, justificativa obrigatória após o prazo e cobrança automática às segundas e quintas.</span><span lang="en"><strong>Confirmations Monitor:</strong> a board by stage, with SLAs of T+3 (OTC), T+4 (MO) and T+6 (FO) business days, mandatory justification once breached and automatic chasers on Mondays and Thursdays.</span></li>
-        <li><span lang="pt"><strong>Dashboard de Pending Confirmation:</strong> as confirmações em aberto por grupo econômico, responsável e tipo de assinatura, atualizado sozinho.</span><span lang="en"><strong>Pending Confirmation dashboard:</strong> open confirmations by economic group, owner and signature type, refreshed automatically.</span></li>
-        <li><span lang="pt"><strong>Resumos de liquidação:</strong> B3 × interno a cada data de liquidação, em quantidade e valor.</span><span lang="en"><strong>Settlement summaries:</strong> B3 vs. internal for each settlement date, by count and amount.</span></li>
-        <li><span lang="pt"><strong>Acompanhamento do Onboarding:</strong> a situação da documentação de cada cliente, etapa a etapa, com o aging em dias úteis.</span><span lang="en"><strong>Onboarding tracking:</strong> each client's documentation status, stage by stage, with ageing in business days.</span></li>
-        <li><span lang="pt"><strong>Initiatives e Tasks:</strong> acompanhamento dos projetos — responsável, equipe, tarefas, marcos e um quadro de tarefas.</span><span lang="en"><strong>Initiatives &amp; Tasks:</strong> project tracking — lead, team, tasks, milestones and a task board.</span></li>
-        <li><span lang="pt"><strong>User Home:</strong> o dia de cada pessoa — reuniões, tarefas próprias e um aviso às 08:00 do que vence no dia.</span><span lang="en"><strong>User Home:</strong> each person's day — meetings, own tasks and an 8:00 am reminder of what is due.</span></li>
-        <li><span lang="pt"><strong>Avisos no sino para a equipe da vez:</strong> cada confirmação avisa a equipe com quem ela está.</span><span lang="en"><strong>In-app alerts for the team on point:</strong> each confirmation notifies the team it now sits with.</span></li>
+        <li><span lang="pt"><strong>E-mails automáticos:</strong> pendências às 19:00, 19:30 e 20:00, e o relatório BACC EA Metrics às 16:00.</span><span lang="en"><strong>Automatic e-mails:</strong> outstanding items at 7:00, 7:30 and 8:00 pm (BRT), and the BACC EA Metrics report at 4:00 pm.</span></li>
       </ul>
     </section>
   </div>
@@ -380,20 +427,155 @@
   </footer>
 </main>
 
+<!-- Página 2: o fluxo end to end de uma operação -->
+<section class="sheet" aria-label="End to end">
+  <header class="hero hero--flow">
+    <div>
+      <div class="eyebrow"><span lang="pt">OTC Tracker · Fluxo end to end</span><span lang="en">OTC Tracker · End-to-end flow</span></div>
+      <h1><span lang="pt">Onde o OTC Tracker entra na vida de uma operação</span><span lang="en">Where OTC Tracker fits in a trade's lifecycle</span></h1>
+      <p class="lede"><span lang="pt">Os passos de uma operação de derivativo de balcão, da negociação à conta nostro.</span><span lang="en">The steps of an OTC derivative trade, from negotiation to the nostro account.</span></p>
+    </div>
+    <div class="legend">
+      <span class="legend__item"><span class="legend__swatch legend__swatch--in"></span><span lang="pt">Passa pelo OTC Tracker</span><span lang="en">Runs through OTC Tracker</span></span>
+      <span class="legend__item"><span class="legend__swatch legend__swatch--out"></span><span lang="pt">Fora do OTC Tracker</span><span lang="en">Outside OTC Tracker</span></span>
+    </div>
+  </header>
+
+  <section class="card e2e-card">
+    <div class="e2e-head">
+      <h2 class="h2"><span class="tile" style="--hue:var(--blue)"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></span>
+        <span lang="pt">Fluxo end to end</span><span lang="en">End-to-end flow</span></h2>
+      <div class="e2e-count"><b>8</b> <span lang="pt">de 12 passos passam pelo OTC Tracker</span><span lang="en">of 12 steps run through OTC Tracker</span></div>
+    </div>
+    <div class="rail">
+      <div class="node node--out"><div class="node__top"><span class="node__n">01</span><span class="node__icon"><svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span></div>
+        <div class="node__name"><span lang="pt">Negociação com o cliente</span><span lang="en">Client Negotiation</span></div>
+        <div class="node__sub"><span lang="pt">Vendas e Trading com o cliente</span><span lang="en">Sales &amp; Trading with the client</span></div></div>
+      <div class="node node--out"><div class="node__top"><span class="node__n">02</span><span class="node__icon"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg></span></div>
+        <div class="node__name"><span lang="pt">Booking no RMS</span><span lang="en">RMS Booking</span></div>
+        <div class="node__sub"><span lang="pt">Front Office registra no Athena</span><span lang="en">Front Office books in Athena</span></div></div>
+      <div class="node node--in"><div class="node__top"><span class="node__n">03</span><span class="node__icon"><svg viewBox="0 0 24 24"><path d="M4 13h4l2 3h4l2-3h4"/><path d="M4 13l2.5-7h11l2.5 7v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg></span></div>
+        <div class="node__name"><span lang="pt">Captura da operação</span><span lang="en">Trade Capture</span></div>
+        <div class="node__sub"><span lang="pt">OTC Tracker</span><span lang="en">OTC Tracker</span></div></div>
+      <div class="node node--in"><div class="node__top"><span class="node__n">04</span><span class="node__icon"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V10M19 21V10M9.5 21V10M14.5 21V10"/><path d="M3 10l9-6 9 6z"/></svg></span></div>
+        <div class="node__name"><span lang="pt">Registro na Clearing</span><span lang="en">Clearing Registration</span></div>
+        <div class="node__sub"><span lang="pt">OTC Tracker</span><span lang="en">OTC Tracker</span></div></div>
+      <div class="node node--in"><div class="node__top"><span class="node__n">05</span><span class="node__icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span></div>
+        <div class="node__name"><span lang="pt">Economic Affirmation</span><span lang="en">Economic Affirmation</span></div>
+        <div class="node__sub"><span lang="pt">OTC Tracker</span><span lang="en">OTC Tracker</span></div></div>
+      <div class="node node--in"><div class="node__top"><span class="node__n">06</span><span class="node__icon"><svg viewBox="0 0 24 24"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 14l2 2 4-4"/></svg></span></div>
+        <div class="node__name"><span lang="pt">Minuta de confirmação</span><span lang="en">Draft Confirmation</span></div>
+        <div class="node__sub"><span lang="pt">OTC Tracker</span><span lang="en">OTC Tracker</span></div></div>
+      <div class="node node--in"><div class="node__top"><span class="node__n">07</span><span class="node__icon"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2"/></svg></span></div>
+        <div class="node__name"><span lang="pt">Instrução Intrag</span><span lang="en">Intrag Instruction</span></div>
+        <div class="node__sub"><span lang="pt">OTC Tracker</span><span lang="en">OTC Tracker</span></div></div>
+      <div class="node node--in"><div class="node__top"><span class="node__n">08</span><span class="node__icon"><svg viewBox="0 0 24 24"><path d="M7 7h12l-3-3"/><path d="M17 17H5l3 3"/></svg></span></div>
+        <div class="node__name"><span lang="pt">Reconciliação</span><span lang="en">Reconciliation</span></div>
+        <div class="node__sub"><span lang="pt">OTC Tracker</span><span lang="en">OTC Tracker</span></div></div>
+      <div class="node node--in"><div class="node__top"><span class="node__n">09</span><span class="node__icon"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 9.5v.01M17.5 14.5v.01"/></svg></span></div>
+        <div class="node__name"><span lang="pt">Liquidação</span><span lang="en">Settlement</span></div>
+        <div class="node__sub"><span lang="pt">OTC Tracker</span><span lang="en">OTC Tracker</span></div></div>
+      <div class="node node--out"><div class="node__top"><span class="node__n">10</span><span class="node__icon"><svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span></div>
+        <div class="node__name"><span lang="pt">Liquidação</span><span lang="en">Settlement</span></div>
+        <div class="node__sub"><span lang="pt">Pagamento nos sistemas de pagamento</span><span lang="en">Payment in the payment systems</span></div></div>
+      <div class="node node--in"><div class="node__top"><span class="node__n">11</span><span class="node__icon"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span></div>
+        <div class="node__name"><span lang="pt">Regulatório</span><span lang="en">Regulatory</span></div>
+        <div class="node__sub"><span lang="pt">OTC Tracker</span><span lang="en">OTC Tracker</span></div></div>
+      <div class="node node--out"><div class="node__top"><span class="node__n">12</span><span class="node__icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span></div>
+        <div class="node__name"><span lang="pt">Nostro</span><span lang="en">Nostro</span></div>
+        <div class="node__sub"><span lang="pt">Conciliação das contas nostro</span><span lang="en">Nostro account reconciliation</span></div></div>
+    </div>
+  </section>
+
+  <div class="e2e-grid">
+    <section class="e2e-step" style="--hue:var(--blue)">
+      <h2 class="h2"><span class="tile" style="--hue:var(--blue)"><svg viewBox="0 0 24 24"><path d="M4 13h4l2 3h4l2-3h4"/><path d="M4 13l2.5-7h11l2.5 7v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg></span>
+        <span><small>03</small><span lang="pt">Captura da operação</span><span lang="en">Trade Capture</span></span></h2>
+      <ul class="list">
+        <li><span lang="pt"><strong>Importação automática</strong> da API Athena, de Deal Tickets e dos e-mails de recap.</span><span lang="en"><strong>Automatic import</strong> from the Athena API, deal tickets and recap e-mails.</span></li>
+        <li><span lang="pt"><strong>Contraparte e cadastros</strong> completados pelo Reference Data, sem digitação.</span><span lang="en"><strong>Counterparty and static data</strong> filled from Reference Data, with no retyping.</span></li>
+        <li><span lang="pt"><strong>Maker-checker</strong> antes de qualquer envio.</span><span lang="en"><strong>Maker-checker</strong> before anything is sent.</span></li>
+      </ul>
+    </section>
+    <section class="e2e-step" style="--hue:var(--navy)">
+      <h2 class="h2"><span class="tile" style="--hue:var(--navy)"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V10M19 21V10M9.5 21V10M14.5 21V10"/><path d="M3 10l9-6 9 6z"/></svg></span>
+        <span><small>04</small><span lang="pt">Registro na Clearing</span><span lang="en">Clearing Registration</span></span></h2>
+      <ul class="list">
+        <li><span lang="pt"><strong>Arquivos nos 38 leiautes da B3/CETIP,</strong> entregues pelo Batch Conecta.</span><span lang="en"><strong>Files in 38 B3/CETIP layouts,</strong> delivered through Batch Conecta.</span></li>
+        <li><span lang="pt"><strong>Retorno da B3 lido sozinho</strong> e ligado ao B3 ID de cada operação.</span><span lang="en"><strong>B3 returns read automatically</strong> and linked to each trade's B3 ID.</span></li>
+      </ul>
+    </section>
+    <section class="e2e-step" style="--hue:var(--teal)">
+      <h2 class="h2"><span class="tile" style="--hue:var(--teal)"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span>
+        <span><small>05</small><span lang="pt">Economic Affirmation</span><span lang="en">Economic Affirmation</span></span></h2>
+      <ul class="list">
+        <li><span lang="pt"><strong>E-mails de affirmation</strong> às contrapartes, montados a partir da operação.</span><span lang="en"><strong>Affirmation e-mails</strong> to counterparties, built from the trade itself.</span></li>
+        <li><span lang="pt"><strong>Validação por e-mail</strong> com instituições financeiras e fundos, com o arquivo da B3 anexo.</span><span lang="en"><strong>E-mail validation</strong> with financial institutions and funds, with the B3 file attached.</span></li>
+      </ul>
+    </section>
+    <section class="e2e-step" style="--hue:var(--indigo)">
+      <h2 class="h2"><span class="tile" style="--hue:var(--indigo)"><svg viewBox="0 0 24 24"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 14l2 2 4-4"/></svg></span>
+        <span><small>06</small><span lang="pt">Minuta de confirmação</span><span lang="en">Draft Confirmation</span></span></h2>
+      <ul class="list">
+        <li><span lang="pt"><strong>Word, PDF e XML do FepWeb</strong> gerados a partir da operação.</span><span lang="en"><strong>Word, PDF and FepWeb XML</strong> generated from the trade.</span></li>
+        <li><span lang="pt"><strong>Validação OTC → MO e FO com SLA</strong> no Confirmations Monitor; pendências no Pending Confirmation.</span><span lang="en"><strong>OTC → MO and FO validation with SLAs</strong> on the Confirmations Monitor; open items on Pending Confirmation.</span></li>
+      </ul>
+    </section>
+    <section class="e2e-step" style="--hue:var(--green)">
+      <h2 class="h2"><span class="tile" style="--hue:var(--green)"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2"/></svg></span>
+        <span><small>07</small><span lang="pt">Instrução Intrag</span><span lang="en">Intrag Instruction</span></span></h2>
+      <ul class="list">
+        <li><span lang="pt"><strong>Instrução da Intrag</strong> para as operações com os fundos Lawton e Atacama, gerada a partir da operação registrada.</span><span lang="en"><strong>Intrag instruction</strong> for trades with the Lawton and Atacama funds, generated from the registered trade.</span></li>
+        <li><span lang="pt"><strong>Retorno da Intrag</strong> ligado de volta pelo Intrag ID.</span><span lang="en"><strong>Intrag returns</strong> linked back through the Intrag ID.</span></li>
+      </ul>
+    </section>
+    <section class="e2e-step" style="--hue:var(--purple)">
+      <h2 class="h2"><span class="tile" style="--hue:var(--purple)"><svg viewBox="0 0 24 24"><path d="M7 7h12l-3-3"/><path d="M17 17H5l3 3"/></svg></span>
+        <span><small>08</small><span lang="pt">Reconciliação</span><span lang="en">Reconciliation</span></span></h2>
+      <ul class="list">
+        <li><span lang="pt"><strong>Pay/Rec, FXO, CGD, Comitente e FepWeb × Athena,</strong> com o resultado de cada dia gravado.</span><span lang="en"><strong>Pay/Rec, FXO, CGD, custodian and FepWeb vs. Athena,</strong> with each day's result stored.</span></li>
+        <li><span lang="pt"><strong>Pendência segue nos dias seguintes</strong> até casar ou ser justificada.</span><span lang="en"><strong>Open items carry forward</strong> until they are matched or justified.</span></li>
+      </ul>
+    </section>
+    <section class="e2e-step" style="--hue:var(--orange)">
+      <h2 class="h2"><span class="tile" style="--hue:var(--orange)"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 9.5v.01M17.5 14.5v.01"/></svg></span>
+        <span><small>09</small><span lang="pt">Liquidação</span><span lang="en">Settlement</span></span></h2>
+      <ul class="list">
+        <li><span lang="pt"><strong>Avisos de liquidação</strong> aos clientes e IR na fonte calculado.</span><span lang="en"><strong>Settlement advices</strong> to clients and withholding tax calculated.</span></li>
+        <li><span lang="pt"><strong>Resumo diário B3 × interno</strong> e e-mail de liberação de TED.</span><span lang="en"><strong>Daily B3 vs. internal summary</strong> and payment release e-mail.</span></li>
+      </ul>
+    </section>
+    <section class="e2e-step" style="--hue:var(--amber)">
+      <h2 class="h2"><span class="tile" style="--hue:var(--amber)"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span>
+        <span><small>11</small><span lang="pt">Regulatório</span><span lang="en">Regulatory</span></span></h2>
+      <ul class="list">
+        <li><span lang="pt"><strong>Accrual e MtM de fim de mês:</strong> arquivos B3/CETIP gerados e conciliados com o retorno.</span><span lang="en"><strong>Month-end Accrual and MtM:</strong> B3/CETIP files generated and reconciled with the returns.</span></li>
+        <li><span lang="pt"><strong>WHT:</strong> IR por decêndio × relatório do HUB. e-Financeira em desenvolvimento.</span><span lang="en"><strong>WHT:</strong> withholding tax per ten-day period vs. the HUB report. e-Financeira in development.</span></li>
+      </ul>
+    </section>
+  </div>
+  <p class="e2e-note"><span lang="pt">Os números dos cartões são os passos do fluxo acima. Antes e depois deles, a negociação, o booking, o pagamento e as contas nostro ficam com outras equipes e sistemas.</span><span lang="en">Card numbers match the steps in the flow above. Negotiation, booking, payment and the nostro accounts sit with other teams and systems.</span></p>
+
+  <footer class="foot">
+    <div><span class="conf"><span lang="pt">Confidencial — uso interno</span><span lang="en">Confidential — internal use</span></span></div>
+  </footer>
+</section>
+
 <script>
   (function () {
     var root = document.documentElement;
-    var sheet = document.querySelector('.sheet');
+    var sheets = Array.prototype.slice.call(document.querySelectorAll('.sheet'));
 
-    // Encaixe na janela: num computador a página inteira cabe na altura da
-    // janela, sem rolagem. A folha é medida sem zoom numa largura W/z (mais
+    // Encaixe na janela: num computador cada folha (a página 1 e a do fluxo)
+    // cabe inteira na altura da janela; a segunda vem logo abaixo. A folha é medida sem zoom numa largura W/z (mais
     // larga, mais baixa) e reduzida por z até caber. O z é o MAIOR que cabe,
     // por busca binária: a altura muda com a largura (o texto quebra menos),
     // e uma conta direta oscila e deixa sobra embaixo.
     // No celular (ou janela muito baixa) ela rola normalmente.
     var desk = window.matchMedia('(min-width: 900px) and (min-height: 480px)');
     var MIN_ZOOM = 0.5;
-    function fit() {
+    function fit() { sheets.forEach(fitOne); }
+    function fitOne(sheet) {
       sheet.style.zoom = '';
       sheet.style.width = '';
       if (!desk.matches) return;
@@ -411,7 +593,9 @@
     window.addEventListener('resize', refit);
     window.addEventListener('load', refit);
     // A impressão tem a própria folha (CSS @media print); ao voltar, reencaixa.
-    window.addEventListener('beforeprint', function () { sheet.style.zoom = ''; sheet.style.width = ''; });
+    window.addEventListener('beforeprint', function () {
+      sheets.forEach(function (sheet) { sheet.style.zoom = ''; sheet.style.width = ''; });
+    });
     window.addEventListener('afterprint', refit);
 
     function set(l) {
