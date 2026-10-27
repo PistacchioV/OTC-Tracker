@@ -477,7 +477,7 @@ As telas de **Swap** — **Bullet**, **Cashflow** e **Cetes** — seguem o mesmo
 
 | Tarefa | Quando | Está feita quando… |
 |---|---|---|
-| **B3 Registration** · **Confirmations** · **Intrag** | Todo dia útil | não sobra nenhuma operação **em aberto** na zona (a mesma regra do e-mail das 19h). Zona sem nada importado conta como feita |
+| **B3 Registration** · **Confirmations** · **Intrag** | Todo dia útil **em que a zona teve operação importada** — sem nada no dia, o cartão não aparece no quadro nem conta nos totais | não sobra nenhuma operação **em aberto** na zona (a mesma regra do e-mail das 19h) |
 | **Recon Pay/Rec** | Todo dia útil | o **End process** é rodado. Só rodar a recon deixa a tarefa **em andamento** |
 | **Branch Reversal** | Só no dia em que o Pay/Rec encontra liquidação com a Branch e reversão a fazer | a reversão casa no Pay/Rec |
 | **Recon FXO** · **Recon Conf. Matching** | Todo dia útil | a recon **roda** no dia |
@@ -1106,6 +1106,7 @@ São cinco batimentos, cada um comparando duas fontes que deveriam dizer a mesma
 2. Clique em **Run** (botão azul).
 3. Confira as linhas: o que não bate aparece com a diferença calculada.
 4. Escreva a explicação na coluna **Comment** da linha que divergiu.
+   - **Liquidação que não aconteceu:** no **Edit** da linha do Pending Payment ou do Pending Receivement, troque o status para **Pending Payment** ou **Pending Receivement**. Nos dias seguintes a linha volta sozinha na recon, com o comentário *Pagamento pendente de dd/mm/aaaa* (ou *Recebimento pendente*), até liquidar — quando o valor aparece no dia, ela vai para o **Settled** — ou até você justificá-la. Deixar o status em **Pending** com um comentário é **justificar**: a linha fica só naquele dia. A marcação vale também depois do **End process**; e se um dia ficou sem End process, o dia seguinte busca as pendências nele mesmo assim.
 5. **Casar à mão linhas que a recon deixou soltas** (uma perna dividida em várias, um estorno, uma TED devolvida): marque a caixinha de **duas ou mais** linhas no **Pending Payment** e/ou no **Pending Receivement** e clique em **Match** (botão azul). A janela mostra as linhas do **JPM** e as do **Client** lado a lado, com o total de cada lado. Havendo linhas dos dois lados, o que conta é a **diferença** entre os totais (duas pernas JPM contra uma do cliente, por exemplo); havendo só um lado, é a **soma** (um débito e o estorno dele). O Match só é aceito se todas as linhas forem da **mesma contraparte** (as variações de nome dos fundos da casa e do banco — *ATACAMA MULTIMERCADO* e o nome por extenso, por exemplo — contam como a mesma) e o valor ficar **dentro de R$ 1,00** (**R$ 20,00** quando todas as linhas do JPM são **SWAP** ou **EQUITIES**); fora disso, o botão Confirmar fica desabilitado e a janela diz o porquê. As linhas casadas vão para o **Settled** numa **linha só** — o lado do JPM e o do cliente juntos, com os totais — e com a marca *Manual*, e o casamento continua valendo se você rodar o **Run** de novo. Só aparece caixinha nas linhas que a recon não casou.
 6. Quando tudo estiver resolvido ou justificado, clique em **End process** (botão verde) — ele só habilita depois de o Run rodar, e é ele que fecha e comunica o resultado.
 
