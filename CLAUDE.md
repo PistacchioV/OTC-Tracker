@@ -3513,9 +3513,9 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 - **O one pager executivo (`Docs/OTC_Tracker_One_Pager.html`, §663) é HTML
   autocontido, não tela do app**: PT e EN no mesmo arquivo (par de `<span
   lang>`; texto novo vai nos DOIS), abre em inglês, cabe na janela por zoom
-  (busca binária, folha a folha) e imprime em DUAS A4 deitadas pelo `zoom: .61`
-  da impressão: a página 1 (cada card com os TRÊS bullets mais importantes) e a
-  do fluxo end to end (os 12 passos de uma operação, os 8 do OTC Tracker
+  (busca binária, folha a folha) e imprime em DUAS A4 deitadas pelo `zoom: .76`
+  da impressão: a página 1 (cada card com os TRÊS bullets mais importantes, sem
+  o card de ciclo de vida) e a do fluxograma end to end (os 12 passos de uma operação, os 8 do OTC Tracker
   destacados; equipe, 27/10/2026). Mexeu no conteúdo: confira o PDF nos dois
   idiomas — o PT, mais longo, é o que vaza de uma folha para a outra. Texto para a diretoria: "equipe", nunca
   "mesa".
