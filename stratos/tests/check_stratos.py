@@ -33,6 +33,9 @@ src/apps/ — e sobe o `solution.py` com um Stratos de MENTIRA (o stratos-blocks
   8. o e-mail pelo Email block (`src/email_stratos.py`): o código de
      verificação do app montado sai pelo `stratosblocks.email.send`, aqui, e a
      tradução da mensagem pelo `check_email_stratos.py`.
+  9. a Athena pelo proxy do Stratos (`src/proxy_interno.py`): o
+     `athena_api.build_session` embrulhado na subida, aqui, e o desvio por host
+     pelo `check_proxy_interno.py`.
 
     OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python stratos/tests/check_stratos.py
 """
@@ -286,7 +289,9 @@ def _stubs(com_phonebook=True):
     modulo('stratosblocks.email', send=lambda **kw: EMAILS.append(kw))
     if com_phonebook:
         modulo('stratosblocks.utilities', get_phonebook_data=_phonebook,
-               get_shared_drive=_get_shared_drive)
+               get_shared_drive=_get_shared_drive,
+               get_proxied_url=lambda internal_url, headers=None, files=False: (
+                   internal_url, dict(headers or {}), {}))
     modulo('stratosblocks.authentication')
     modulo('stratosblocks.authentication.web', StratosAuth=StratosAuth,
            StratosDispatcherMiddleware=dispatcher)
@@ -315,7 +320,7 @@ def confere_subida(tmp, sem_awmpy):
     src = os.path.join(tmp, 'src')
     os.makedirs(src)
     for nome in ('solution.py', 'run.py', 'otc_stratos.py', 'prova_travas.py', 'email_stratos.py',
-                 'pacotes_dados.py'):
+                 'pacotes_dados.py', 'proxy_interno.py'):
         shutil.copy(os.path.join(STRATOS, 'src', nome), src)
     os.symlink(os.path.join(RAIZ, 'apps'), os.path.join(src, 'apps'))
     # Com phonebook a raiz sai do Shared Drive (o `get_shared_drive` está no
@@ -365,6 +370,10 @@ def confere_subida(tmp, sem_awmpy):
     ok(app.root_path == os.path.join(src, 'apps'), 'root_path do app = src/apps')
     from apps.pages import quotes
     ok(quotes.QUOTES_PROXY == '', 'Cotacoes sem o proxy corporativo do desktop')
+    from apps.pages import athena_api
+    ok(getattr(athena_api.build_session, '_otc_stratos_proxy', False) is (not sem_awmpy),
+       'Athena: %s' % ('sem o get_proxied_url, a sessao de sempre' if sem_awmpy
+                       else 'a sessao pelo proxy do Stratos (get_proxied_url)'))
     rotas = [nome for nome, _ in quotes._routes()]
     ok(rotas[:1] == ['system proxy ' + PROXY_TESTE],
        'a primeira saida das Cotacoes e o proxy do Stratos %s' % rotas)
@@ -792,6 +801,12 @@ def main():
         if linha.startswith('FAIL'):
             print('      email: ' + linha)
     ok(r.returncode == 0, 'e-mail: a mensagem do app traduzida para o Email block')
+    r = subprocess.run([sys.executable, os.path.join(AQUI, 'check_proxy_interno.py')],
+                       capture_output=True, text=True)
+    for linha in r.stdout.splitlines():
+        if linha.startswith('FAIL'):
+            print('      proxy: ' + linha)
+    ok(r.returncode == 0, 'Athena pelo proxy do Stratos: desvio por host, redirecionamentos e cookies')
     r = subprocess.run([sys.executable, os.path.join(AQUI, 'check_prova_travas.py')],
                        capture_output=True, text=True)
     for linha in r.stdout.splitlines():

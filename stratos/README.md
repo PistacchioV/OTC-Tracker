@@ -365,7 +365,12 @@ no HANDOFF, §677 a §683.
 
 O contêiner não enxerga o share (`\\Nawest...`): confirmações, Batch Conecta,
 CETIP e Electronic Inventory chegam e saem pela ponte (acima). Não há Outlook (box scan,
-leitura de e-mail) e a Athena pede Kerberos, que no Linux não está configurado.
+leitura de e-mail). A Athena é host INTERNO do JPM: da AWS ela só se alcança pelo
+proxy do Stratos (`get_proxied_url`), e a ponte desvia por ele a sessão do
+`athena_api.build_session` — só os hosts do JPM; BCB e Yahoo seguem pelo proxy de
+saída (`src/proxy_interno.py`; `OTC_STRATOS_PROXY_INTERNO=0` desliga). O que o proxy
+não resolve é a AUTENTICAÇÃO: a Athena pede Kerberos, que no Linux não existe. Se o
+proxy recusar o host, é ticket em go/stratossupport com o host e o ambiente.
 E o SMTP da rede (`mailhost.jpmchase.net`) provavelmente não responde do
 contêiner: sem ele não saem os e-mails do app nem o código do login próprio
 (`OTC_STRATOS_SSO=0`). Cada uma dessas faltas pede uma solução própria antes de

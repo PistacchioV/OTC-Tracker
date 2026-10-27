@@ -28,6 +28,8 @@ app valem nesse drive, a rota `/stratos/prova-travas` responde
 (`_rota_prova_travas`, `prova_travas.py`). E o e-mail: o relay SMTP do JPM
 não responde do contêiner, e o `smtplib.SMTP` que os 23 senders do app usam
 vira o Email block do stratos-blocks (`email_stratos.py`).
+E a Athena: host interno do JPM, que da AWS só se alcança pelo proxy do
+Stratos (`get_proxied_url`, `proxy_interno.py`).
 
 Este arquivo, o `solution.py` e o `run.py` existem SÓ na branch
 OTC-Tracker-Stratos; o código do app continua nascendo na dev.
@@ -133,6 +135,8 @@ def _monta(app, stratos_auth, base):
     _raiz_no_shared_drive()   # antes do import: o bloco ENV:STRATOS lê a raiz nele
 
     import apps as otc
+    import proxy_interno
+    proxy_interno.instala()   # a Athena (host interno do JPM) pelo get_proxied_url do Stratos
     from apps.config import config_dict
     from apps.pages.database_access import (
         configure_database_access, validate_database_paths,
