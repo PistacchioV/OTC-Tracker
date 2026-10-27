@@ -184,6 +184,14 @@ check('a operação do Banco já conta na Intrag, antes do B3 ID',
       intrag['statuses'].get(D.AWAITING_B3), 1)
 check('a do cliente não', intrag['total'], 1)
 check('e a Intrag fica em aberto no quadro', (tk['intrag']['total'], tk['intrag']['open']), (1, 1))
+check('zona com movimento no dia é tarefa (B3 Registration, Intrag)',
+      (tk['registration']['due'], tk['intrag']['due']), (True, True))
+_vazias = [z for z in ('registration', 'confirmation', 'intrag') if not tk[z]['total']]
+check('zona SEM nada importado não entra no quadro nem na linha "fora da agenda"',
+      [(tk[z]['due'], tk[z].get('conditional')) for z in _vazias], [(False, True)] * len(_vazias))
+_tk24 = {t['id']: t for t in cl.get('/api/intraday-monitor?date=2026-09-24').get_json()['tasks']}
+check('dia sem importação: as três zonas fora do quadro',
+      [_tk24[z]['due'] for z in ('registration', 'confirmation', 'intrag')], [False, False, False])
 
 R._atomic_write_json(dia_nd, [{'Deal': '111', 'Client': BJ, 'Status': 'Success', 'B3_ID': '9'},
                               {'Deal': '222', 'Client': 'CARGILL', 'Status': 'New'}])

@@ -30328,3 +30328,17 @@ no Settled do dia ou par do outro lado dentro da tolerância). **Para recuperar
 o que já se perdeu:** rode de novo a recon dos dias a partir do primeiro com
 pendência marcada, em ordem — cada Run traz do anterior. `check_payrec_carry.py`
 usa o armazém de verdade (sem stub).
+
+## §705 — Intraday Monitor: a zona sem movimento no dia sai do quadro (2026-10-27)
+
+**O pedido** (equipe): nos cards das tarefas, só as de zona — B3 Registration,
+Confirmations, Intrag — que tiveram alguma ação no dia, "para não ficar
+poluído". A zona sem nada importado contava como FEITA (`feito = fechado >=
+total`, 0 ≥ 0) e ia para a coluna Completed com "Nothing imported for this
+date.", inflando também o "concluídas" dos KPIs com tarefa que não existiu.
+
+**O que mudou:** `queries._intraday_snapshot` trata a zona como a Branch
+Reversal — só é DEVIDA no dia com movimento (`total > 0`) e é `conditional`
+(não entra na linha "fora da agenda"). O detalhe produto × status embaixo não
+muda (a zona vazia já mostrava "nothing imported today"), nem o aviso das 19h
+ou o D-1: a zona vazia nunca foi pendência. `check_intraday_monitor.py` §4.
