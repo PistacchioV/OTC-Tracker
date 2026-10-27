@@ -124,8 +124,11 @@ def api_intraday_monitor():
     snap['me'] = {'desk': str(session.get('user_role') or '').strip().upper(),
                   'is_admin': bool(_R()._session_is_admin()),
                   'sid': str(session.get('user_sid') or '').strip().upper()}
-    # owner e backup de cada tarefa (§701): o card os mostra
-    snap['assignments'] = persistence._load_assignments()
+    # owner e backup de cada tarefa (§701): o card os mostra — nas tarefas de
+    # zona, só os dos produtos com movimento no dia
+    snap['assignments'] = domain.assignments_of_day(
+        persistence._load_assignments(),
+        domain.moving_products(snap.get('cards'), snap.get('conf_cards')))
     snap['assign_products'] = {k: l for lst in domain.assign_products().values() for k, l in lst}
     snap['people'] = {p['sid']: {'name': p['name'], 'photo': p['photo']}
                       for p in persistence._assignable_people()}
