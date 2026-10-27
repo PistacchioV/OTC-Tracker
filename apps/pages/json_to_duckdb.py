@@ -1139,7 +1139,7 @@ ROTINAS_CACHE = (
     # escopo da lista a produzir mais de um banco, e a fatia que roda três
     # recons em série é a que não termina enquanto duas pessoas esperam. A
     # recon de COMITENTES não está aqui de propósito: ela não tem cache JSON,
-    # grava direto no `matching_comitentes.db`.
+    # grava direto no `Comitentes_OTCTracker.db`.
     ('reconciliation/fxo', 'A reconciliação de FXO (DPOSICAO × Athena EOD).'),
     ('reconciliation/cgd', 'A reconciliação de CGD (lista do FEP × posição da B3).'),
     ('reconciliation/payrec', 'Os caches por data da reconciliação de Pay/Rec —\n'

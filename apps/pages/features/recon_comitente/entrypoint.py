@@ -10,7 +10,6 @@ from apps.pages.database_access import (
     DatabaseCleanupError,
     DatabaseLockTimeout,
     TransactionOutcomeUnknown,
-    verify_sqlite_integrity,
 )
 from apps.pages.features.recon_comitente import commands, queries
 from apps.pages.platform import task_runs
@@ -103,10 +102,10 @@ def reconciliation_comitente_run():
         # duplicaria a reconciliação do dia; não reexecutar pode deixá-la pela
         # metade. A resposta não escolhe por quem opera — ela diz que o
         # resultado é DESCONHECIDO e devolve o `operation_id` para a conferência.
-        from apps.pages.recon_comitente import DB_PATH
+        from apps.pages import recon_comitente as _rc
 
         try:
-            integrity_ok = verify_sqlite_integrity(DB_PATH)
+            integrity_ok = _rc.verify_integrity()
         except Exception:                                   # noqa: BLE001
             # A própria verificação falhar é informação, não motivo de queda:
             # `False` diz "não deu para confirmar", que é o que o operador tem

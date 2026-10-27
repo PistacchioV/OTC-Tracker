@@ -10,14 +10,16 @@ Modos de execução:
 import logging
 import os
 import tempfile
+import threading
 from datetime import datetime, date as _date, timedelta
 
 import pandas as pd
 
-# Locks e transações dos bancos de arquivo. O `sqlite_write` abre sob lock
+# Locks e transações dos bancos de arquivo. O `duckdb_write` abre sob lock
 # EXCLUSIVO de arquivo (vale entre processos, não só entre threads) e comita na
-# saída do bloco; o `sqlite_read` usa lock compartilhado e abre read-only.
-from apps.pages.database_access import sqlite_read, sqlite_write
+# saída do bloco; o `duckdb_read` usa lock compartilhado e abre read-only. O
+# `sqlite_read` só lê o banco SQLite de antes, uma vez, na migração (§707).
+from apps.pages.database_access import duckdb_read, duckdb_write, sqlite_read
 
 try:
     from rapidfuzz import fuzz as _fuzz
@@ -34,7 +36,117 @@ from apps.config import Config
 from apps.pages import data_store as _store  # noqa: E402
 
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.normpath(os.path.join(Config.DATABASE_DIR, 'matching_comitentes.db'))
+# DuckDB, como todos os outros bancos (§707). Era o ÚLTIMO SQLite do app, e o
+# nome novo é porque o arquivo antigo segue no lugar: a primeira leitura ou
+# gravação o importa (`_garante_migrado`) e o deixa intacto, como volta atrás.
+DB_PATH = os.path.normpath(os.path.join(Config.DATABASE_DIR, 'Comitentes_OTCTracker.db'))
+LEGACY_SQLITE_PATH = os.path.normpath(os.path.join(Config.DATABASE_DIR, 'matching_comitentes.db'))
+
+_MIGRADOS = set()                   # (DuckDB, SQLite) já conferidos neste processo
+_MIGRA_LOCK = threading.Lock()
+
+
+def _tipo_da_coluna(valores):
+    """O tipo DuckDB de uma coluna pelo que ela TRAZ: o SQLite guardava cada
+    valor sem tipo declarado, e o round-trip (int volta int, float volta float,
+    texto volta texto) é o que a tela e o `_compare_with_db` já esperam. Coluna
+    com tipos misturados, ou só de nulos, vira texto."""
+    vistos = [v for v in valores if v is not None]
+    if vistos and all(isinstance(v, int) and not isinstance(v, bool) for v in vistos):
+        return 'BIGINT'
+    if vistos and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in vistos):
+        return 'DOUBLE'
+    return 'VARCHAR'
+
+
+def _celula(v):
+    """O valor Python que vai ao banco: NaN/NaT do pandas é nulo, o escalar do
+    numpy vira o nativo (o `isinstance` do `_tipo_da_coluna` não o reconhece)."""
+    if v is None:
+        return None
+    try:
+        if pd.isna(v):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if hasattr(v, 'item') and not isinstance(v, (str, bytes)):
+        try:
+            return v.item()
+        except (TypeError, ValueError):
+            pass
+    return v
+
+
+def _grava_tabela(conn, df):
+    """Recria a tabela `comitentes` com as linhas do `df`, na transação do
+    `duckdb_write` de quem chama. As linhas vão por um DataFrame REGISTRADO
+    (`INSERT … SELECT`): o `executemany` do DuckDB é linha a linha e leva
+    segundos num lote de milhares, e no share isso é segundos com a trava
+    exclusiva na mão."""
+    cols = [str(c) for c in df.columns]
+    colunas = {c: [_celula(v) for v in df[orig].tolist()] for c, orig in zip(cols, df.columns)}
+    tipos = {c: _tipo_da_coluna(colunas[c]) for c in cols}
+    for c in cols:
+        if tipos[c] == 'VARCHAR':
+            colunas[c] = [None if v is None else str(v) for v in colunas[c]]
+    q = lambda c: '"{}"'.format(c.replace('"', '""'))
+    conn.execute('DROP TABLE IF EXISTS comitentes')
+    conn.execute('CREATE TABLE comitentes ({})'.format(
+        ', '.join('{} {}'.format(q(c), tipos[c]) for c in cols)))
+    if len(df):
+        # dtype object: o pandas não reinterpreta (int com nulo viraria float)
+        novos = pd.DataFrame({c: pd.Series(colunas[c], dtype=object) for c in cols})
+        conn.register('_comitentes_novos', novos)
+        try:
+            conn.execute('INSERT INTO comitentes SELECT {} FROM _comitentes_novos'.format(
+                ', '.join('CAST({} AS {})'.format(q(c), tipos[c]) for c in cols)))
+        finally:
+            conn.unregister('_comitentes_novos')
+
+
+def _garante_migrado():
+    """Na primeira leitura/gravação do processo, leva para o DuckDB o que o
+    SQLite antigo tem (§707). Só quando o DuckDB ainda não existe: depois dele,
+    o SQLite é só a volta atrás e ninguém mais o lê. Falha de leitura SOBE e
+    não marca — sem isso, o Run seguinte compararia contra o banco vazio (tudo
+    `New`) e gravaria o DuckDB por cima, escondendo o histórico para sempre."""
+    chave = (DB_PATH, LEGACY_SQLITE_PATH)
+    if chave in _MIGRADOS:
+        return
+    with _MIGRA_LOCK:
+        if chave in _MIGRADOS:
+            return
+        if _store.isfile(DB_PATH) or not _store.isfile(LEGACY_SQLITE_PATH):
+            _MIGRADOS.add(chave)
+            return
+        with sqlite_read(LEGACY_SQLITE_PATH) as conn:
+            tem = conn.execute("SELECT count(*) FROM sqlite_master "
+                               "WHERE type = 'table' AND name = 'comitentes'").fetchone()[0]
+            if tem:
+                cur = conn.execute('SELECT * FROM comitentes')
+                names = [d[0] for d in cur.description]
+                rows = cur.fetchall()
+        if not tem:
+            _log.warning('[comitente] %s sem a tabela comitentes: nada a migrar', LEGACY_SQLITE_PATH)
+            _MIGRADOS.add(chave)
+            return
+        df = pd.DataFrame([list(r) for r in rows], columns=names, dtype=object)
+        if 'index' in df.columns:
+            df = df.drop(columns=['index'])
+        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+        with duckdb_write(DB_PATH) as conn:
+            _grava_tabela(conn, df)
+        _log.warning('[comitente] migrado do SQLite: %d linha(s) de %s para %s '
+                     '(o SQLite fica intacto)', len(df), LEGACY_SQLITE_PATH, DB_PATH)
+        _MIGRADOS.add(chave)
+
+
+def verify_integrity(path=None):
+    """O banco abre e a tabela se lê — a conferência que a rota faz quando o
+    desfecho da gravação é desconhecido (era o `PRAGMA quick_check` do SQLite)."""
+    with duckdb_read(path or DB_PATH) as conn:
+        conn.execute('SELECT count(*) FROM comitentes').fetchone()
+    return True
 
 # ─── Helpers de normalização ──────────────────────────────────────────────────
 
@@ -304,9 +416,16 @@ def _has_required_missing(row):
 
 
 def _compare_with_db(df, db_path):
+    # FORA do try: a migração que falha (banco ocupado) não pode virar "banco
+    # vazio" aqui, senão o Run marca tudo `New` e grava o DuckDB por cima.
+    _garante_migrado()
     try:
-        with sqlite_read(db_path) as conn:
-            db_df = pd.read_sql('SELECT * FROM comitentes', conn)
+        with duckdb_read(db_path) as conn:
+            # Pelo cursor, não pelo `.df()`: ele traz o BIGINT com nulo como
+            # float (85 → 85.0), e o `str()` da comparação marcaria `Check`.
+            cur = conn.execute('SELECT * FROM comitentes')
+            names = [d[0] for d in cur.description]
+            db_df = pd.DataFrame([list(r) for r in cur.fetchall()], columns=names, dtype=object)
     except Exception:
         # Banco ainda inexistente (primeira execução) ou ilegível: comparar
         # contra um DataFrame vazio faz TODA linha nascer 'New', que é a
@@ -514,28 +633,11 @@ def run_reconciliation(file_b3_cgd, file_dcad, file_party, recon_date_str=None):
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     df = _compare_with_db(df, DB_PATH)
 
-    # Salva no SQLite, numa transação só.
-    #
-    # ⚠️ SQL explícito no lugar do `df.to_sql`, e a razão não é estilo: o
-    # `to_sql` do pandas COMITA por dentro. Dentro do `sqlite_write` — que abre
-    # a transação e comita na saída — o commit do pandas fecha a transação antes
-    # da hora, o nosso `COMMIT` encontra "no transaction is active" e o contexto
-    # levanta `TransactionOutcomeUnknown`. Ou seja: TODA gravação bem-sucedida
-    # devolveria à tela o alarme mais grave da rotina ("o resultado da gravação
-    # não pôde ser confirmado, não execute novamente"), num run que funcionou.
-    #
-    # As colunas são criadas SEM tipo declarado de propósito: no SQLite isso
-    # guarda cada valor como ele vem, e o round-trip (int volta int, float volta
-    # float) fica igual ao que o `to_sql` produzia.
-    cols = list(df.columns)
-    with sqlite_write(DB_PATH) as conn:
-        conn.execute('DROP TABLE IF EXISTS comitentes')
-        conn.execute('CREATE TABLE comitentes ({})'.format(
-            ', '.join('"{}"'.format(c) for c in cols)))
-        if len(df):
-            conn.executemany(
-                'INSERT INTO comitentes VALUES ({})'.format(', '.join('?' * len(cols))),
-                df.where(pd.notna(df), None).values.tolist())
+    # Salva no banco, numa transação só (a do `duckdb_write`). Nada de
+    # `df.to_sql`: ele comita por dentro, fecha a transação do contexto antes
+    # da hora e todo Run bem-sucedido sairia como `TransactionOutcomeUnknown`.
+    with duckdb_write(DB_PATH) as conn:
+        _grava_tabela(conn, df)
 
     result = _build_response(df)
 
@@ -550,10 +652,15 @@ def run_reconciliation(file_b3_cgd, file_dcad, file_party, recon_date_str=None):
 
 
 def load_from_db():
+    try:
+        _garante_migrado()
+    except Exception:                                       # noqa: BLE001
+        # A tela abre sem o histórico, e a próxima leitura tenta de novo.
+        _log.exception('[comitente] a migração do SQLite falhou')
     if not _store.exists(DB_PATH):
         return {'data': [], 'counts': {'total':0,'new':0,'check':0,'ok':0,'amend':0}}
     try:
-        with sqlite_read(DB_PATH) as conn:
+        with duckdb_read(DB_PATH) as conn:
             # `pd.read_sql` traria NaN para nulo e obrigaria a desfazer depois;
             # o cursor cru com nomes de coluna é o que a função já esperava.
             cur = conn.execute('SELECT * FROM comitentes')
