@@ -95,21 +95,6 @@
   .tile svg { width: 17px; height: 17px; }
   svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-  .flow-card { margin-top: 10px; }
-  .flow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; counter-reset: step; }
-  .step {
-    position: relative; background: var(--fill); border-radius: var(--r-md); padding: 10px 12px 11px;
-  }
-  .step:not(:last-child)::after {
-    content: ""; position: absolute; right: -9px; top: 26px; width: 8px; height: 8px;
-    border-top: 2px solid var(--text-3); border-right: 2px solid var(--text-3); transform: rotate(45deg); opacity: .6;
-  }
-  .step__head { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; }
-  .step__n { font-size: 11.5px; font-weight: 700; color: var(--text-3); }
-  .step__title { font-size: 14.5px; font-weight: 700; }
-  .step p { margin: 0; font-size: 13.5px; color: var(--text-2); }
-  .products { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center; }
-  .products__label { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); margin-right: 4px; }
   .chip {
     display: inline-flex; align-items: center; padding: 4px 11px; border-radius: 999px; font-size: 13px;
     background: color-mix(in srgb, var(--hue, var(--blue)) 10%, transparent);
@@ -220,8 +205,6 @@
   /* ── telas menores ─────────────────────────────────────── */
   @media screen and (max-width: 1080px) {
     .kpis { grid-template-columns: repeat(3, 1fr); }
-    .flow { grid-template-columns: repeat(3, 1fr); }
-    .step:nth-child(3n)::after { display: none; }
     .grid3 { grid-template-columns: 1fr 1fr; }
     .grid3 > :last-child { grid-column: 1 / -1; }
     .lane { grid-template-columns: repeat(3, 1fr); row-gap: 14px; }
@@ -239,8 +222,6 @@
     .brand img { width: 72px; }
     h1 { font-size: 28px; }
     .kpis { grid-template-columns: repeat(2, 1fr); }
-    .flow { grid-template-columns: 1fr; }
-    .step::after { display: none; }
     .grid3, .grid2 { grid-template-columns: 1fr; }
     .chip { white-space: normal; }
     .hero--flow { grid-template-columns: 1fr; }
@@ -253,21 +234,19 @@
   @page { size: A4 landscape; margin: 6mm; }
   @media print {
     body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    /* Folha larga e compacta, reduzida para caber numa página: medida no
-       Chromium (1700px de layout × zoom ≈ a largura útil do A4 deitado). */
-    .sheet { width: 1700px !important; max-width: none; padding: 0; zoom: .61 !important; }
+    /* Uma folha por página: medida no Chromium (1365px de layout × .76 ≈ a
+       largura útil do A4 deitado); cada folha enche a sua página. */
+    .sheet { width: 1365px !important; max-width: none; padding: 0; zoom: .76 !important; }
     .hero { padding: 12px 18px; }
     .lede { max-width: none; }
     .kpis { margin-top: 8px; gap: 10px; }
     .kpi { padding: 8px 12px; }
     .source { margin-top: 5px; }
     .card { padding: 12px 16px; }
-    .flow { gap: 8px; }
-    .step { padding: 10px 11px; }
-    .flow-card, .grid3, .grid2 { margin-top: 8px; }
+    .grid3, .grid2 { margin-top: 8px; }
     .h2 { margin-bottom: 7px; }
     ul.list { gap: 4px; }
-    .products, .integrations { margin-top: 8px; }
+    .integrations { margin-top: 8px; }
     .sub { margin: 9px 0 5px; }
     .foot { margin-top: 7px; }
     .lang { display: none; }
@@ -276,9 +255,6 @@
     .ask { box-shadow: none; }
     /* duas folhas: a do fluxo começa numa página nova */
     .sheet + .sheet { break-before: page; margin-top: 0; }
-    /* a folha do fluxo é mais baixa: layout mais estreito e zoom maior dão a
-       MESMA largura no papel (1700 × .61 = 1300 × .80) e enchem a página */
-    .sheet + .sheet { width: 1300px !important; zoom: .8 !important; }
     .fnode--in { box-shadow: none; }
   }
 </style>
@@ -324,59 +300,6 @@
     <span lang="pt">Volumes: caso de uso Stratos (set/2026). Demais números medidos no sistema em out/2026.</span>
     <span lang="en">Volumes: Stratos use case (Sep 2026). Other figures measured in the system in Oct 2026.</span>
   </p>
-
-  <!-- 3. Ciclo coberto -->
-  <section class="card flow-card">
-    <h2 class="h2"><span class="tile" style="--hue:var(--blue)"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5.3"/><path d="M18 3v4h-4"/><path d="M20 12a8 8 0 0 1-14 5.3"/><path d="M6 21v-4h4"/></svg></span>
-      <span lang="pt">Ciclo de vida coberto, de ponta a ponta</span><span lang="en">End-to-end lifecycle coverage</span></h2>
-    <div class="flow">
-      <div class="step">
-        <div class="step__head"><span class="tile" style="--hue:var(--blue)"><svg viewBox="0 0 24 24"><path d="M4 13h4l2 3h4l2-3h4"/><path d="M4 13l2.5-7h11l2.5 7v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg></span>
-          <div><div class="step__n">01</div><div class="step__title"><span lang="pt">Captura</span><span lang="en">Capture</span></div></div></div>
-        <p><span lang="pt">Operações importadas da API Athena, de Deal Tickets e dos e-mails de recap.</span><span lang="en">Trades imported from the Athena API, deal tickets and recap e-mails.</span></p>
-      </div>
-      <div class="step">
-        <div class="step__head"><span class="tile" style="--hue:var(--navy)"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V10M19 21V10M9.5 21V10M14.5 21V10"/><path d="M3 10l9-6 9 6z"/></svg></span>
-          <div><div class="step__n">02</div><div class="step__title"><span lang="pt">Registro na B3</span><span lang="en">B3 registration</span></div></div></div>
-        <p><span lang="pt">Arquivos gerados nos 38 leiautes da B3/CETIP; o retorno da B3 é ligado ao B3 ID de cada operação.</span><span lang="en">Files generated in 38 B3/CETIP layouts; B3 returns are linked back to each trade's B3 ID.</span></p>
-      </div>
-      <div class="step">
-        <div class="step__head"><span class="tile" style="--hue:var(--teal)"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span>
-          <div><div class="step__n">03</div><div class="step__title"><span lang="pt">Afirmação</span><span lang="en">Affirmation</span></div></div></div>
-        <p><span lang="pt">E-mails de economic affirmation enviados às contrapartes.</span><span lang="en">Economic affirmation e-mails sent to counterparties.</span></p>
-      </div>
-      <div class="step">
-        <div class="step__head"><span class="tile" style="--hue:var(--indigo)"><svg viewBox="0 0 24 24"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 14l2 2 4-4"/></svg></span>
-          <div><div class="step__n">04</div><div class="step__title"><span lang="pt">Confirmação</span><span lang="en">Confirmation</span></div></div></div>
-        <p><span lang="pt">Documento em Word, PDF e XML FepWeb; validação OTC → MO e FO, com SLA.</span><span lang="en">Word, PDF and FepWeb XML; OTC → MO and FO validation, with SLAs.</span></p>
-      </div>
-      <div class="step">
-        <div class="step__head"><span class="tile" style="--hue:var(--green)"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 9.5v.01M17.5 14.5v.01"/></svg></span>
-          <div><div class="step__n">05</div><div class="step__title"><span lang="pt">Liquidação</span><span lang="en">Settlement</span></div></div></div>
-        <p><span lang="pt">Avisos de liquidação, IR na fonte, resumo diário e e-mail de liberação de TED.</span><span lang="en">Settlement advices, withholding tax, daily summary and payment release e-mail.</span></p>
-      </div>
-      <div class="step">
-        <div class="step__head"><span class="tile" style="--hue:var(--purple)"><svg viewBox="0 0 24 24"><path d="M7 7h12l-3-3"/><path d="M17 17H5l3 3"/></svg></span>
-          <div><div class="step__n">06</div><div class="step__title"><span lang="pt">Reconciliação</span><span lang="en">Reconciliation</span></div></div></div>
-        <p><span lang="pt">Pay/Rec, FXO, CGD, Comitente e FepWeb × Athena.</span><span lang="en">Pay/Rec, FXO, CGD, custodian and FepWeb vs. Athena.</span></p>
-      </div>
-      <div class="step">
-        <div class="step__head"><span class="tile" style="--hue:var(--amber)"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span>
-          <div><div class="step__n">07</div><div class="step__title"><span lang="pt">Regulatório</span><span lang="en">Regulatory</span></div></div></div>
-        <p><span lang="pt">Accrual e MtM de fim de mês: arquivos B3/CETIP gerados e conciliados com o retorno da B3. WHT: IR por decêndio × HUB. e-Financeira em desenvolvimento.</span><span lang="en">Month-end Accrual and MtM: B3/CETIP files generated and reconciled with B3 returns. WHT: withholding tax by decendio × HUB. e-Financeira in development.</span></p>
-      </div>
-    </div>
-    <div class="products">
-      <span class="products__label"><span lang="pt">Cobertura</span><span lang="en">Coverage</span></span>
-      <span class="chip" style="--hue:var(--blue)"><b>NDF</b>FX · EDG · COMM</span>
-      <span class="chip" style="--hue:var(--teal)"><b><span lang="pt">Opções</span><span lang="en">Options</span></b>FX · COMM · EDG</span>
-      <span class="chip" style="--hue:var(--indigo)"><b>Swaps</b>CEM · EDG · COMM</span>
-      <span class="chip" style="--hue:#475569"><b><span lang="pt">Onshore e Offshore</span><span lang="en">Onshore &amp; Offshore</span></b></span>
-      <span class="chip" style="--hue:var(--orange)"><span lang="pt">New Deals e Recompras (unwinds)</span><span lang="en">New Deals &amp; Unwinds</span></span>
-      <span class="chip" style="--hue:var(--green)"><span lang="pt">Intrag (fundos)</span><span lang="en">Intrag (funds)</span></span>
-      <span class="chip" style="--hue:var(--navy)">Live Position</span>
-    </div>
-  </section>
 
   <!-- 4. Por que · Controles · Visibilidade -->
   <div class="grid3">
@@ -478,7 +401,7 @@
         </div>
         <div class="fnode fnode--out">
           <div class="fnode__top"><span class="fnode__icon"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg></span><div><div class="fnode__n">02</div><div class="fnode__name"><span lang="pt">Booking no RMS</span><span lang="en">RMS Booking</span></div></div></div>
-          <div class="fnode__what"><span lang="pt">O Front Office registra a operação no Athena.</span><span lang="en">Front Office books the trade in Athena.</span></div>
+          <div class="fnode__what"><span lang="pt">O Front Office registra a operação no Athena/Pyramid.</span><span lang="en">Front Office books the trade in Athena/Pyramid.</span></div>
           <span class="fnode__tag"><span lang="pt">Fora do OTC Tracker</span><span lang="en">Outside OTC Tracker</span></span>
         </div>
         <div class="fnode fnode--in">
@@ -496,7 +419,7 @@
           <div class="fnode__top"><span class="fnode__icon"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V10M19 21V10M9.5 21V10M14.5 21V10"/><path d="M3 10l9-6 9 6z"/></svg></span><div><div class="fnode__n">04</div><div class="fnode__name"><span lang="pt">Registro na Clearing</span><span lang="en">Clearing Registration</span></div></div></div>
           <div class="fnode__what"><span lang="pt">Registro da operação na B3/CETIP.</span><span lang="en">The trade is registered at B3/CETIP.</span></div>
           <ul class="fnode__list">
-            <li><span lang="pt">Arquivos nos 38 leiautes da B3</span><span lang="en">Files in 38 B3 layouts</span></li>
+            <li><span lang="pt">Arquivos nos 38 leiautes da B3</span><span lang="en">B3 files in 38 layouts</span></li>
             <li><span lang="pt">Envio pelo Batch Conecta</span><span lang="en">Delivered via Batch Conecta</span></li>
             <li><span lang="pt">Retorno da B3 ligado ao B3 ID</span><span lang="en">B3 return linked to the B3 ID</span></li>
           </ul>
