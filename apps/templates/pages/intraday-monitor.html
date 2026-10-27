@@ -385,6 +385,20 @@
 #ndm-page .im-task-manual { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: .72rem; font-weight: 650; color: var(--otc-accent-ink); }
 #ndm-page .im-auto { margin-left: auto; border: 0; background: var(--otc-fill); color: var(--otc-text-2); border-radius: var(--otc-r-pill); padding: 1px 8px; font-size: .7rem; font-weight: 650; }
 #ndm-page .im-auto:hover { color: var(--otc-text); background: var(--otc-fill-2, var(--otc-fill)); }
+/* Owner e backup da tarefa (§701): quem responde por ela, por entidade */
+#ndm-page .im-owners { display: flex; flex-direction: column; gap: 3px; margin-top: 7px; }
+#ndm-page .im-owner { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 5px; min-width: 0; font-size: .72rem; color: var(--otc-text-2); }
+/* o backup na linha de baixo, alinhado ao nome: o card é estreito e os dois
+   nomes numa linha só viravam reticências */
+#ndm-page .im-owner small { flex-basis: 100%; padding-left: 23px; }
+#ndm-page .im-owner em + .im-av + b + small, #ndm-page .im-owner em ~ small { padding-left: 0; }
+#ndm-page .im-owner b { color: var(--otc-text); font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ndm-page .im-owner em { font-style: normal; font-weight: 700; font-size: .64rem; letter-spacing: .04em; padding: 0 5px; border-radius: var(--otc-r-pill); background: var(--otc-fill); color: var(--otc-text-2); }
+#ndm-page .im-owner small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ndm-page .im-av { width: 18px; height: 18px; flex: 0 0 auto; border-radius: 50%; object-fit: cover; display: inline-flex; align-items: center; justify-content: center; font-size: .55rem; font-weight: 700; color: #fff; background: var(--otc-accent); }
+#imAsgModal .im-asg-row { display: grid; grid-template-columns: minmax(0, 2fr) 110px minmax(0, 1.6fr) minmax(0, 1.6fr) 34px; gap: 8px; align-items: center; margin-bottom: 8px; }
+#imAsgModal .im-asg-head { font: 650 .7rem/1.2 var(--otc-font); letter-spacing: .05em; text-transform: uppercase; color: var(--otc-text-3); margin-bottom: 6px; }
+#imAsgModal .im-asg-empty { color: var(--otc-text-2); font-size: .85rem; padding: 10px 0; }
 </style>
 {% endblock extra_css %}
 
@@ -402,6 +416,9 @@
         </p>
         <div class="im-bar">
             <span class="im-live otc-live"><i></i><span id="im-updated">—</span></span>
+            <button type="button" class="btn btn-sm btn-soft-primary bg-gradient" id="im-owners-btn">
+                <i class="ti ti-user-cog me-1"></i><span data-lang="im-owners">Owners</span>
+            </button>
             <button type="button" class="btn btn-sm btn-soft-primary btn-icon im-refresh" id="im-refresh"
                     data-bs-toggle="tooltip" title="Refresh now">
                 <i class="ti ti-refresh"></i>
@@ -493,6 +510,32 @@
          `.row` deixava o detalhe mais largo que os painéis de cima -->
     <div id="ndmZones"></div>
 
+</div>
+<!-- Owner e backup das tarefas (§701) -->
+<div class="modal fade" id="imAsgModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content liquid-glass">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6"><i class="ti ti-user-cog me-1"></i><span data-lang="im-owners-title">Task owners</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="fs-xs text-muted mb-3" data-lang="im-owners-sub">Who answers for each task and who covers for them. Pick an entity to split a task by LE — blank (All) is the whole task.</p>
+        <div class="row g-3"><div class="col-12">
+          <div class="im-asg-row im-asg-head">
+            <span data-lang="im-asg-task">Task</span><span data-lang="im-asg-le">Entity</span>
+            <span data-lang="im-owner">Owner</span><span data-lang="im-backup">Backup</span><span></span>
+          </div>
+          <div id="imAsgRows"></div>
+          <button type="button" class="btn btn-sm btn-soft-primary mt-1" id="imAsgAdd"><i class="ti ti-plus me-1"></i><span data-lang="im-asg-add">Add</span></button>
+        </div></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-danger btn-icon rounded-circle" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-success btn-icon rounded-circle" id="imAsgSave" title="Save"><i class="ti ti-device-floppy"></i></button>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock page_content %}
 
@@ -919,6 +962,27 @@
     // anda um passo à frente; admin e master, qualquer coluna — e o "↺ auto" do
     // card devolve ao cálculo. O quadro não se redesenha no meio do arrasto.
     var IM_ME = {}, IMDRAG = null;
+    // Owner e backup (§701): a lista gravada e o nome/foto de cada SID
+    var IM_ASSIGN = [], IM_PEOPLE = {};
+    function pessoa(sid) { return IM_PEOPLE[sid] || { name: sid, photo: '' }; }
+    function avatar(sid) {
+        var p = pessoa(sid);
+        if (p.photo) return '<img class="im-av" src="' + esc(p.photo) + '" alt="">';
+        var ini = String(p.name || sid).split(/\s+/).filter(Boolean);
+        ini = ini.length > 1 ? ini[0][0] + ini[ini.length - 1][0] : String(p.name || sid).slice(0, 2);
+        return '<span class="im-av">' + esc(ini.toUpperCase()) + '</span>';
+    }
+    function donos(tk) {
+        var lista = IM_ASSIGN.filter(function (a) { return a.task === tk.id; });
+        if (!lista.length) return '';
+        return '<span class="im-owners">' + lista.map(function (a) {
+            return '<span class="im-owner" title="' + esc(t('im-owner', 'Owner') + ': ' + pessoa(a.owner).name +
+                       (a.backup ? ' · ' + t('im-backup', 'Backup') + ': ' + pessoa(a.backup).name : '')) + '">' +
+                     (a.le ? '<em>' + esc(a.le) + '</em>' : '') + avatar(a.owner) + '<b>' + esc(pessoa(a.owner).name) + '</b>' +
+                     (a.backup ? '<small>· ' + esc(t('im-backup', 'Backup')) + ' ' + esc(pessoa(a.backup).name) + '</small>' : '') +
+                   '</span>';
+        }).join('') + '</span>';
+    }
     var IM_NEXT = { todo: ['in_progress'], in_progress: ['done'], late: ['done'] };
     function imPode(tk) { return !!(IM_ME.is_admin || IM_ME.desk === 'BO'); }
     function imAceita(from, to) {
@@ -957,6 +1021,7 @@
                  '<span class="im-task-due">' + prazoTxt(tk) + '</span>' +
                  '<span class="im-meter"><i style="width:' + (tk.progress || 0) + '%"></i></span>' +
                  '<span class="im-task-meta d-block">' + metaTxt(tk) + '</span>' +
+                 donos(tk) +
                  (tk.manual ? '<span class="im-task-manual"><i class="ti ti-hand-finger"></i>' + esc(t('im-manual', 'Manual')) +
                     ' · ' + esc(tk.manual.by || '') + (tk.manual.time ? ' ' + esc(tk.manual.time) : '') +
                     ((IM_ME.is_admin || (IM_ME.sid && String(tk.manual.sid || '').toUpperCase() === IM_ME.sid)) ? ' <button type="button" class="im-auto" data-auto="' + esc(tk.id) + '" title="' +
@@ -1124,6 +1189,8 @@
 
     function desenha(snap) {
         IM_ME = snap.me || {};
+        IM_ASSIGN = snap.assignments || [];
+        IM_PEOPLE = snap.people || {};
         desenhaKpis(snap.kpis);
         desenhaPrev(snap.prev);
         desenhaQuadro(snap.tasks);
@@ -1262,6 +1329,90 @@
         }
     }
 
+    // ── O modal de owner e backup (§701) ─────────────────────────────────
+    // A lista inteira vai no Save; o servidor limpa (tarefa e LE do catálogo,
+    // SID do cadastro Active, backup ≠ owner) e avisa no sino quem foi
+    // designado agora.
+    var ASG = { tasks: [], people: [], les: [], canEdit: false };
+    function asgOpts(lista, atual, vazio) {
+        return (vazio != null ? '<option value="">' + esc(vazio) + '</option>' : '') +
+            lista.map(function (o) {
+                return '<option value="' + esc(o[0]) + '"' + (o[0] === atual ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+            }).join('');
+    }
+    function asgRow(a) {
+        a = a || {};
+        var dis = ASG.canEdit ? '' : ' disabled';
+        var gente = ASG.people.map(function (p) { return [p.sid, p.name]; });
+        return '<div class="im-asg-row" data-row>' +
+            '<select class="form-select form-select-sm" data-k="task"' + dis + '>' +
+              asgOpts(ASG.tasks.map(function (x) { return [x.id, t('im-task-' + x.id, x.label)]; }), a.task) + '</select>' +
+            '<select class="form-select form-select-sm" data-k="le"' + dis + '>' +
+              asgOpts(ASG.les.map(function (l) { return [l, l || t('im-le-all', 'All')]; }), a.le || '') + '</select>' +
+            '<select class="form-select form-select-sm" data-k="owner"' + dis + '>' + asgOpts(gente, a.owner, '—') + '</select>' +
+            '<select class="form-select form-select-sm" data-k="backup"' + dis + '>' + asgOpts(gente, a.backup, '—') + '</select>' +
+            (ASG.canEdit ? '<button type="button" class="btn btn-sm btn-soft-danger btn-icon im-asg-del" title="' +
+                esc(t('im-asg-del', 'Remove')) + '"><i class="ti ti-trash"></i></button>' : '<span></span>') +
+          '</div>';
+    }
+    function asgRender(lista) {
+        var box = document.getElementById('imAsgRows');
+        box.innerHTML = lista.length ? lista.map(asgRow).join('')
+            : '<div class="im-asg-empty">' + esc(t('im-asg-empty', 'No owner assigned yet.')) + '</div>';
+        document.getElementById('imAsgAdd').classList.toggle('d-none', !ASG.canEdit);
+        document.getElementById('imAsgSave').classList.toggle('d-none', !ASG.canEdit);
+    }
+    function asgOpen() {
+        fetch('/api/intraday-monitor/assignments', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (!j || !j.success) throw new Error((j && (j.message || j.error)) || 'load');
+                ASG = { tasks: j.tasks || [], people: j.people || [], les: j.les || [''], canEdit: !!j.can_edit };
+                asgRender(j.assignments || []);
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('imAsgModal')).show();
+            })
+            .catch(function () {
+                if (window.Swal) Swal.fire({ icon: 'error', title: t('im-asg-fail', 'Could not load the owners'),
+                                             text: t('im-move-retry', 'Could not save now. Try again in a moment.') });
+            });
+    }
+    function asgRead() {
+        return Array.prototype.map.call(document.querySelectorAll('#imAsgRows [data-row]'), function (row) {
+            var o = {};
+            row.querySelectorAll('select[data-k]').forEach(function (s) { o[s.getAttribute('data-k')] = s.value; });
+            return o;
+        }).filter(function (o) { return o.task && o.owner; });
+    }
+    function asgSave() {
+        fetch('/api/intraday-monitor/assignments', {
+            method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ assignments: asgRead() })
+        }).then(function (r) { return r.json().catch(function () { return { success: false }; }); })
+          .then(function (j) {
+            if (!j.success) {
+                if (window.Swal) Swal.fire({ icon: 'error', title: t('im-asg-fail', 'Could not save the owners'),
+                    text: j.code === 'assign_not_allowed' ? t('im-asg-denied', 'Only OTC Ops (BO) and admins assign task owners.')
+                        : t('im-move-retry', 'Could not save now. Try again in a moment.') });
+                return;
+            }
+            bootstrap.Modal.getInstance(document.getElementById('imAsgModal')).hide();
+            if (window.otcToast) window.otcToast(t('im-asg-saved', 'Owners saved'));
+            load();
+          });
+    }
+    document.addEventListener('click', function (ev) {
+        if (ev.target.closest('#im-owners-btn')) { asgOpen(); return; }
+        if (ev.target.closest('#imAsgAdd')) {
+            var box = document.getElementById('imAsgRows');
+            var vazio = box.querySelector('.im-asg-empty'); if (vazio) vazio.remove();
+            box.insertAdjacentHTML('beforeend', asgRow({ task: (ASG.tasks[0] || {}).id }));
+            return;
+        }
+        var del = ev.target.closest('#imAsgRows .im-asg-del');
+        if (del) { del.closest('[data-row]').remove(); return; }
+        if (ev.target.closest('#imAsgSave')) asgSave();
+    });
+
     document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('ndm-page').classList.add('is-first');
         var rb = document.getElementById('im-refresh');
@@ -1276,6 +1427,12 @@
 <!-- Chaves de tradução usadas pelo JS (invisíveis; applyTranslations preenche) -->
 <div class="d-none" aria-hidden="true">
     <span data-lang="im-manual">Manual</span>
+    <span data-lang="im-le-all">All</span>
+    <span data-lang="im-asg-del">Remove</span>
+    <span data-lang="im-asg-empty">No owner assigned yet.</span>
+    <span data-lang="im-asg-fail">Could not save the owners</span>
+    <span data-lang="im-asg-denied">Only OTC Ops (BO) and admins assign task owners.</span>
+    <span data-lang="im-asg-saved">Owners saved</span>
     <span data-lang="im-auto-tip">Back to the automatic state</span>
     <span data-lang="im-move-fail">Not moved</span>
     <span data-lang="im-move-denied">Your desk can only move a task one step forward.</span>

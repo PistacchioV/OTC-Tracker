@@ -585,8 +585,31 @@ $(document).ready(function() {
         canB2B: function(e){ return !otcSwapIsB2B(e); },
         onB2B: function(k){ createB2B(k); },
         onPreview: function(k){ previewDeal(k); },
+        // As marcas (§701): Forward Start, Atualização de Notional, Curva VCP e
+        // Prêmio, detectadas pelos campos e corrigíveis à mão
+        flags: function(e){ return otcSwapFlags(e, t); },
+        onFlag: function(k, f, on){ saveFlag(k, f, on); },
         onSelect: function(){ table.draw(false); }
     }) : null;
+    // Grava SÓ a correção: igual à detecção, a marca volta a ser automática
+    // (null). O status do deal não muda.
+    function saveFlag(k, f, on) {
+        var e = DEALS[k]; if (!e) return;
+        var det = (otcSwapFlags(e).filter(function(x){ return x.k === f; })[0] || {}).detected;
+        var flags = {}; flags[f] = (on === det) ? null : on;
+        fetch('/api/new-deals/swap-bullet/flags', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin', body: JSON.stringify({ deal_id: k, trade_date: e.TradeDate || '', flags: flags }) })
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+            if (!j || !j.success) {
+                Swal.fire({ icon: 'error', title: t('swal-err-title', 'Error'), text: (j && j.message) || '',
+                            confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+                renderAll(); return;
+            }
+            upsertEntry(j.entry);
+        })
+        .catch(function(){ renderAll(); });
+    }
     $(document).on('change', '#cardsSelectAll', function(){ if (cards) cards.selectAll(this.checked); });
     function upsertEntry(e) {
         var i = ENTRIES.findIndex(function(x){ return x && (x._id || x.Deal) === (e._id || e.Deal); });
@@ -759,7 +782,9 @@ $(document).ready(function() {
         btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i>';
         var _reset = function () { btn.dataset.running = ''; btn.style.pointerEvents = ''; btn.innerHTML = prevHtml; };
         fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-               body: JSON.stringify({ deals: ENTRIES }) })
+               // as operações MARCADAS vão com `_selected` (§701): o servidor
+               // afirma as IF do dia e, além delas, as marcadas
+               body: JSON.stringify({ deals: ENTRIES.map(function(e){ return selected.has(e._id) ? $.extend({}, e, { _selected: true }) : e; }) }) })
         .then(function (r) { return _handleEmailResponse(r, emptyText); })
         .then(function () { _reset(); })
         .catch(function (err) { _reset(); Swal.fire({ title: t('swal-err-title', 'Error'), text: t('swal-request-failed', 'Request failed:') + ' ' + err.message, icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' }); });
@@ -797,12 +822,12 @@ $(document).ready(function() {
         econAffBtn.className = 'btn btn-sm btn-soft-info bg-gradient btn-toolbar-all';
         econAffBtn.setAttribute('type', 'button');
         econAffBtn.setAttribute('data-bs-toggle', 'tooltip'); econAffBtn.setAttribute('data-bs-placement', 'bottom');
-        econAffBtn.setAttribute('data-bs-title', t('nd-btn-econaff', 'Economic Affirmation (IF, D0)'));
+        econAffBtn.setAttribute('data-bs-title', t('nd-btn-econaff-tip', 'Economic Affirmation (IF D0 + the marked operations)'));
         econAffBtn.innerHTML = '<i class="ti ti-mail-check me-1"></i><span data-lang="nd-btn-econaff">Econ. Affirmation</span>';
         econAffContainer.appendChild(econAffBtn);
         econAffBtn.addEventListener('click', function () {
             _runEmailAction(this, '/api/new-deals/swap-bullet/economic-affirmation',
-                t('swal-econaff-none', 'No financial-institution operations traded today to affirm.'));
+                t('swal-econaff-none', 'No financial-institution operation traded today and no operation marked — mark the operations to affirm.'));
         });
     })();
 
@@ -962,17 +987,19 @@ $(document).ready(function() {
             : '<i class="ti ti-plus me-1"></i>' + t('nd-swb-modal-add', 'Add Deal — Swap Bullet');
         var e = entry || prefill || { Type: 'Pagamento Final', LE: 'JPM', LOB: 'EDG', Currency: 'BRL', Adhesion: 'CGD', Functionality: 'N/A', PremiumSchedule: 'Não', Reset: 'Não', LOB: 'EDG',
                            CurveACategory: 'JUROS', CurveAPct: '100.00', CurveASign: '+', CurveARate: '0.0000', CurveBCategory: 'VCP', CurveBPct: '100.00', CurveBSign: '+', CurveBRate: '0.0000' };
-        var html = '<div class="col-md-2">' + '<label class="form-label fs-xs text-muted mb-1" data-lang="nd-col-trade-date">Trade Date</label><input type="text" class="form-control form-control-sm swb-date" id="swb-f-TradeDate" data-f="TradeDate" value="' + esc(isEdit || prefill ? (e.TradeDate || '') : (apiRefDate() || _todayIso())) + '" placeholder="dd/mm/aaaa" autocomplete="off"></div>';
-        html += '<div class="col-md-2">' + fieldInput('LE', 'LE', e.LE || 'JPM') + '</div>' +
-                '<div class="col-md-2">' + fieldInput('LOB', 'LOB', e.LOB || '') + '</div>' +
-                '<div class="col-md-2">' + fieldInput('Deal', 'Deal', e.Deal || '') + '</div>' +
-                '<div class="col-md-2">' + fieldInput('B3ID', 'B3 ID', e.B3ID || '') + '</div>';
+        // Os campos em BLOCOS (§701, `otcSwapModalLayout`): identificação, datas
+        // e valores, prêmio, atualização de notional, as curvas lado a lado, VCP
+        var cells = {};
+        cells.TradeDate = '<label class="form-label fs-xs text-muted mb-1" data-lang="nd-col-trade-date">Trade Date</label><input type="text" class="form-control form-control-sm swb-date" id="swb-f-TradeDate" data-f="TradeDate" value="' + esc(isEdit || prefill ? (e.TradeDate || '') : (apiRefDate() || _todayIso())) + '" placeholder="dd/mm/aaaa" autocomplete="off">';
+        cells.LE = fieldInput('LE', 'LE', e.LE || 'JPM');
+        cells.LOB = fieldInput('LOB', 'LOB', e.LOB || '');
+        cells.Deal = fieldInput('Deal', 'Deal', e.Deal || '');
+        cells.B3ID = fieldInput('B3ID', 'B3 ID', e.B3ID || '');
         SWB_COLS.forEach(function(c){
             var f = c[0]; if (f === 'Maker' || f === 'Checker') return;
-            var w = (f === 'VcpText' || f === 'Observations') ? 'col-12' : (f === 'VcpDescription' || f.indexOf('Denomination') === 0 || f === 'Client') ? 'col-md-4' : 'col-md-2';
-            html += '<div class="' + w + '">' + fieldInput(f, c[1], e[f] != null ? String(e[f]) : '') + '</div>';
+            cells[f] = fieldInput(f, c[1], e[f] != null ? String(e[f]) : '');
         });
-        document.getElementById('swbEditGrid').innerHTML = html;
+        document.getElementById('swbEditGrid').innerHTML = otcSwapModalLayout(cells, t);
         // formato da equipe, CNPJ e a conta B3 dos holders (swap-deal.js)
         if (window.otcSwapModalPrep) otcSwapModalPrep(document.getElementById('swbEditGrid'), e);
         $(modalEl).data('entry', e);

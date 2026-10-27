@@ -8,6 +8,9 @@ dele não desfaz nada.
 (`queries.eligible`), resolvido pelo entrypoint.
 """
 import logging
+import threading
+import time
+from datetime import datetime
 
 from apps.pages.features.projects import domain
 from apps.pages.features.projects.infra import store
@@ -295,3 +298,154 @@ def delete_milestone(actor, project_id, ms_id):
         p['updated_at'] = store.now()
         return p
     return store.mutate(go)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# OS ALERTAS (§701): e-mail + sino, uma vez por alerta. A regra é o
+# `domain.alerts`; aqui é quem DISPARA: lê o documento, tira o que já saiu,
+# manda UM e-mail por iniciativa (o box Brazil OTC Ops e quem está nela, com
+# o Cc do card) e avisa no sino SÓ os envolvidos dela. A chave só é marcada
+# com o e-mail entregue — falhou, o próximo disparo tenta de novo, e o sino
+# não sai sozinho (sairia de novo junto com o e-mail).
+# ══════════════════════════════════════════════════════════════════════════
+ALERT_ACTION = 'Initiative Alert'
+ALERT_HOUR = 8
+_ALERT_TITLE = {'stale': 'No update for {days} business days (last on {since})',
+                'due_soon': 'Initiative due in {days} business day(s) — {due}',
+                'task_due': 'Task "{task}" due in {days} business day(s) — {due}',
+                'ends': 'Initiative deadline: {due}'}
+_PREF_KEY[ALERT_ACTION] = 'initiative_alerts'
+
+
+def _dmy(iso):
+    iso = str(iso or '')[:10]
+    return '%s/%s/%s' % (iso[8:10], iso[5:7], iso[:4]) if len(iso) == 10 else iso
+
+
+def alert_text(a):
+    """A frase de UM alerta (e-mail e sino), com as datas em dd/mm/aaaa."""
+    params = dict(a.get('params') or {})
+    for k in ('since', 'due'):
+        if k in params:
+            params[k] = _dmy(params[k])
+    return _ALERT_TITLE.get(a.get('kind'), a.get('kind') or '').format(**params)
+
+
+def _alert_email(project, lista, today):
+    from apps.pages import otc_emails as E
+    from apps.pages import routes
+    link = routes._otc_app_url('/initiatives/' + str(project.get('id') or ''))
+    intro = (E._ep('Hello team,') +
+             E._ep('The initiative below needs attention. Open it in the OTC Tracker to update '
+                   'the status, the tasks or the deadline.'))
+    resumo = E._email_kv('Initiative', [
+        ('Name', project.get('name') or ''), ('Category', project.get('category') or ''),
+        ('Lead', project.get('lead_name') or project.get('lead_sid') or ''),
+        ('Deadline', _dmy(project.get('due_date')) or '—'),
+        ('Last update', _dmy(project.get('updated_at')) or '—')])
+    linhas = []
+    for a in lista:
+        p = a.get('params') or {}
+        # o dono da linha: o responsável da tarefa; na da iniciativa, o Lead
+        quem = p.get('assignee') or project.get('lead_name') or ''
+        linhas.append([alert_text(a), quem or '—', _dmy(p.get('due') or p.get('since') or today)])
+    tabela = E._email_data_table(['Alert', 'Owner', 'Date'], linhas)
+    rodape = E._ep('<a href="%s">%s</a>' % (E._esc(link), E._esc(link)), muted=True)
+    corpo = (resumo + '<div style="height:16px;line-height:16px;font-size:0;">&nbsp;</div>' +
+             tabela + '<div style="height:12px;line-height:12px;font-size:0;">&nbsp;</div>' + rodape)
+    html = E._email_shell('Initiative alert', _dmy(today), intro, corpo,
+                          footer_extra='JPMC Internal Use Only')
+    assunto = 'Initiative alert — %s — %s' % (project.get('name') or project.get('id'), _dmy(today))
+    return assunto, html
+
+
+def run_alerts(today, to_override=None, cc_override=None):
+    """Dispara os alertas devidos em `today` ('YYYY-MM-DD') que ainda não
+    saíram. → {'initiatives', 'alerts', 'failed': [(id, motivo)]}. O status do
+    card é gravado aqui ('sent:N' / 'empty' / 'no_recipient' / o erro)."""
+    from apps.pages import routes as R
+    from apps.pages.features.projects.infra import alerts as A
+
+    def biz(a, b):
+        return R._anbima_biz_diff(datetime.strptime(a, '%Y-%m-%d'), datetime.strptime(b, '%Y-%m-%d'))
+
+    feitas = A.sent_keys(strict=True)
+    rec = A.load_recipients()
+    to_box = R._parse_emails(rec['to'] if to_override is None else to_override)
+    cc = R._parse_emails(rec['cc'] if cc_override is None else cc_override)
+    enviadas, n_ini, falhas, sem_dest = [], 0, [], False
+    for p in store.load().get('projects') or []:
+        devidos = [a for a in domain.alerts(p, today, biz) if a['key'] not in feitas]
+        if not devidos:
+            continue
+        envolvidos = domain.involved_sids(p)
+        emails = A.emails_of(envolvidos)
+        para = list(dict.fromkeys(to_box + [emails[s] for s in envolvidos if s in emails]))
+        assunto, html = _alert_email(p, devidos, today)
+        ok = A.send(assunto, html, para, [c for c in cc if c not in para])
+        if ok is not True:
+            if ok == 'no_recipient':
+                sem_dest = True
+            falhas.append((p.get('id'), ok))
+            continue
+        n_ini += 1
+        enviadas += [a['key'] for a in devidos]
+        detalhe = '%s · %s' % (p.get('name') or p.get('id'), '; '.join(alert_text(a) for a in devidos))
+        for sid in envolvidos:
+            try:
+                if R._user_wants(sid, 'initiative_alerts'):
+                    R._create_notification('SYSTEM', 'OTC Tracker', ALERT_ACTION, PAGE, detalhe,
+                                           target_sid=sid)
+            except Exception:                               # noqa: BLE001
+                log.warning('[initiative-alerts] sino de %s não saiu', sid, exc_info=True)
+    if enviadas:
+        A.mark_sent(enviadas)
+    if falhas and not n_ini:
+        A.write_status('no_recipient' if sem_dest and len(falhas) == 1 else
+                       'error: ' + '; '.join('%s %s' % f for f in falhas))
+    else:
+        A.write_status('sent:%d' % n_ini if n_ini else 'empty')
+    return {'initiatives': n_ini, 'alerts': len(enviadas), 'failed': falhas}
+
+
+def alerts_run_once(agora):
+    """O disparo automático: dia útil ANBIMA, a partir das 08:00 BRT, uma vez
+    por dia entre todas as instâncias (o claim)."""
+    from apps.pages import routes as R
+    from apps.pages.features.projects.infra import alerts as A
+    if agora.hour < ALERT_HOUR or not R._pcx_is_bizday(agora.date()):
+        return None
+    slot = 'initiative-alerts-%s' % agora.date().isoformat()
+    with R._app_context():
+        if not A.claim(slot):
+            return None
+        try:
+            return run_alerts(agora.date().isoformat())
+        except Exception:
+            A.release(slot)
+            raise
+
+
+def alerts_scheduler_loop():
+    from apps.pages import routes as R
+    while True:
+        time.sleep(300)
+        try:
+            res = alerts_run_once(R._br_now())
+            if res is not None:
+                log.warning('[initiative-alerts] disparo do dia: %s', res)
+        except Exception:                                   # noqa: BLE001
+            log.warning('[initiative-alerts] disparo falhou', exc_info=True)
+
+
+_alerts_started = False
+_alerts_lock = threading.Lock()
+
+
+def start_alerts_scheduler():
+    global _alerts_started
+    with _alerts_lock:
+        if _alerts_started:
+            return
+        _alerts_started = True
+    threading.Thread(target=alerts_scheduler_loop, name='initiative-alerts', daemon=True).start()

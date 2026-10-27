@@ -30,6 +30,14 @@
  *
  *   otcSwapSetAccounts(map) — as contas PRÓPRIAS do `b3-accounts` ({LE: conta}),
  *     que a busca da página devolve (`own_accounts`).
+ *
+ *   otcSwapFlags(e, t) — as marcas do card (Forward Start, Atualização de
+ *     Notional, Curva VCP, Prêmio): detectadas pelos campos, corrigíveis à
+ *     mão (`SwapFlags` no deal), §701.
+ *
+ *   otcSwapModalLayout(cells, t) — os campos do modal agrupados em blocos
+ *     (identificação, datas e valores, prêmio, atualização de notional, as
+ *     curvas lado a lado, VCP, observações; o resto em "Other"), §701.
  */
 (function () {
   'use strict';
@@ -106,6 +114,109 @@
      'MyNumber', 'MyNumberMirror', 'FlowMyNumber', 'FlowMyNumberMirror', 'PremiumMyNumber',
      'PremiumMyNumberMirror', 'Pair', 'Title'].forEach(function (k) { if (k in d) d[k] = ''; });
     return d;
+  };
+
+  // ── As MARCAS do card (§701) ───────────────────────────────────────────
+  // O que a equipe confere de relance num swap: Forward Start, Atualização de
+  // Notional, Curva VCP e Prêmio. Cada uma é DETECTADA pelos campos do deal e
+  // pode ser corrigida à mão quando a leitura errou — a correção vai no deal
+  // (`SwapFlags`, {chave: true|false}) e o card a destaca. O arquivo da B3
+  // continua saindo dos CAMPOS: a marca é a leitura da equipe, não um campo.
+  function iso10(v) {
+    v = String(v == null ? '' : v).trim();
+    var m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(v);
+    return m ? m[3] + '-' + m[2] + '-' + m[1] : v.slice(0, 10);
+  }
+  function up(v) { return String(v == null ? '' : v).trim().toUpperCase(); }
+  window.otcSwapHasPremium = function (e) {
+    var s = up(e && e.PremiumSchedule);
+    return !!(parseFloat(e && e.PremiumAmount) || s === 'SIM' || s === 'YES' || s === 'S' || s === 'Y');
+  };
+  var FLAGS = [
+    { k: 'fwd', key: 'nd-swb-flag-fwd', d: 'Forward Start',
+      det: function (e) { var a = iso10(e.StartDate), b = iso10(e.TradeDate); return !!(a && b && a !== b); } },
+    { k: 'notional', key: 'nd-swb-flag-notional', d: 'Notional Update',
+      det: function (e) { return !!(String(e.NotionalIndex || '').trim() && String(e.NotionalObsDate || '').trim()); } },
+    { k: 'vcp', key: 'nd-swb-flag-vcp', d: 'VCP Curve',
+      det: function (e) { return up(e.CurveACategory) === 'VCP' || up(e.CurveBCategory) === 'VCP'; } },
+    { k: 'premium', key: 'nd-swb-flag-premium', d: 'Premium',
+      det: function (e) { return window.otcSwapHasPremium(e); } }
+  ];
+  window.OTC_SWAP_FLAG_KEYS = FLAGS.map(function (f) { return f.k; });
+  // → [{k, label, detected, on, manual, title}]; `t` traduz (chave, padrão)
+  window.otcSwapFlags = function (e, t) {
+    e = e || {};
+    var ov = (e.SwapFlags && typeof e.SwapFlags === 'object') ? e.SwapFlags : {};
+    return FLAGS.map(function (f) {
+      var det = f.det(e);
+      var manual = typeof ov[f.k] === 'boolean' && ov[f.k] !== det;
+      var on = manual ? ov[f.k] : det;
+      var tip = manual
+        ? (t ? t('nd-swb-flag-manual', 'Marked by hand — the B3 file follows the deal fields; review them.') : 'Marked by hand')
+        : (t ? t('nd-swb-flag-auto', 'Detected from the deal fields — click to correct.') : 'Detected');
+      return { k: f.k, label: t ? t(f.key, f.d) : f.d, detected: det, on: on, manual: manual, title: tip };
+    });
+  };
+
+  // ── O modal em BLOCOS (§701) ───────────────────────────────────────────
+  // Os campos do Edit/Add agrupados pelo que a equipe procura: identificação,
+  // datas e valores, prêmio, atualização de notional, as duas curvas lado a
+  // lado, a VCP e as observações. Campo que nenhum bloco nomeia vai para
+  // "Other" — coluna nova aparece, nunca some. `cells` = {campo: HTML do
+  // campo (rótulo + input)}, na ordem da página.
+  var BLOCKS = [
+    { k: 'id', key: 'nd-swb-blk-id', d: 'Identification', icon: 'ti-id-badge-2',
+      f: ['TradeDate', 'LE', 'LOB', 'Deal', 'B3ID', 'Type', 'Client', 'ClientDT', 'SPN', 'ClientAccount',
+          'ClientTaxId', 'Adhesion', 'Functionality', 'Tranche', 'Block', 'Booking', 'Venue', 'Direction',
+          'MyNumber', 'Subject'] },
+    { k: 'terms', key: 'nd-swb-blk-terms', d: 'Dates & Notional', icon: 'ti-calendar-dollar',
+      f: ['StartDate', 'MaturityDate', 'Currency', 'Notional', 'NotionalUSD', 'FxRate', 'FXStart', 'NotionalFC',
+          'Reset', 'AmortizationType', 'Flows'] },
+    { k: 'premium', key: 'nd-swb-blk-premium', d: 'Premium', icon: 'ti-coin',
+      f: ['PremiumSchedule', 'PremiumDate', 'PremiumPayer', 'PremiumAmount'] },
+    { k: 'notional', key: 'nd-swb-blk-notional', d: 'Notional Update', icon: 'ti-refresh-dot',
+      f: ['NotionalIndex', 'NotionalObsDate', 'NotionalDescription'] },
+    { k: 'curveA', key: 'nd-swb-blk-curvea', d: 'Curve A', icon: 'ti-chart-line', half: true, prefix: 'CurveA' },
+    { k: 'curveB', key: 'nd-swb-blk-curveb', d: 'Curve B', icon: 'ti-chart-line', half: true, prefix: 'CurveB' },
+    { k: 'legs', key: 'nd-swb-blk-legs', d: 'Legs', icon: 'ti-arrows-exchange',
+      f: ['FixedRate', 'FixedPayer', 'WePay', 'WeRec', 'Accruals', 'Payments', 'FxFixing', 'FxSettlement'] },
+    { k: 'vcp', key: 'nd-swb-blk-vcp', d: 'VCP', icon: 'ti-chart-candle',
+      f: ['VcpHolder', 'VanillaHolder', 'VcpCurve', 'VcpCode', 'VcpCategory', 'VcpDescription', 'InitialPrice',
+          'InfoSource', 'QuoteDate', 'QuoteDateCode', 'Denomination1', 'Denomination2', 'Denomination3', 'VcpText'] },
+    { k: 'notes', key: 'nd-swb-blk-notes', d: 'Observations', icon: 'ti-notes', f: ['Observations'] }
+  ];
+  var WIDE = { VcpText: 'col-12', Observations: 'col-12', Subject: 'col-12', VcpDescription: 'col-md-6',
+               Denomination1: 'col-md-6', Denomination2: 'col-md-6', Denomination3: 'col-md-6',
+               NotionalDescription: 'col-md-6', Client: 'col-md-6', ClientDT: 'col-md-6' };
+  function escH(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  window.otcSwapModalLayout = function (cells, t) {
+    var usado = {};
+    function bloco(b, campos) {
+      if (!campos.length) return '';
+      var col = b.half ? 'col-12 col-lg-6' : 'col-12';
+      var w = b.half ? 'col-6 col-md-4' : 'col-6 col-md-4 col-xl-2';
+      return '<div class="' + col + '"><section class="otc-swap-blk" data-blk="' + b.k + '">' +
+        '<h6 class="otc-swap-blk__title"><i class="ti ' + b.icon + '"></i>' +
+        escH(t ? t(b.key, b.d) : b.d) + '</h6><div class="row g-2">' +
+        campos.map(function (f) {
+          var cw = WIDE[f] || w;
+          if (b.half && cw === 'col-md-6') cw = 'col-12 col-md-8';
+          return '<div class="' + cw + '">' + cells[f] + '</div>';
+        }).join('') + '</div></section></div>';
+    }
+    var html = BLOCKS.map(function (b) {
+      var campos = b.prefix
+        ? Object.keys(cells).filter(function (f) { return f.indexOf(b.prefix) === 0 && !usado[f]; })
+        : (b.f || []).filter(function (f) { return cells[f] != null && !usado[f]; });
+      campos.forEach(function (f) { usado[f] = 1; });
+      return bloco(b, campos);
+    }).join('');
+    var resto = Object.keys(cells).filter(function (f) { return !usado[f]; });
+    return html + bloco({ k: 'other', key: 'nd-swb-blk-other', d: 'Other', icon: 'ti-dots' }, resto);
   };
 
   // ── O modal ────────────────────────────────────────────────────────────

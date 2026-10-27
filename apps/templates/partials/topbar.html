@@ -235,6 +235,7 @@
                 'Ticket Updated':    { icon: 'life-buoy',    color: 'bg-info'    },
                 'Project Lead':      { icon: 'folder-kanban', color: 'bg-primary' },
                 'Initiative Lead':   { icon: 'folder-kanban', color: 'bg-primary' },
+                'Initiative Alert':  { icon: 'alarm-clock',   color: 'bg-warning' },
                 'Initiative Member': { icon: 'users',        color: 'bg-primary' },
                 'Task Assigned':     { icon: 'list-checks',  color: 'bg-primary' },
                 'Task Comment':      { icon: 'message-square', color: 'bg-info'  },
@@ -292,6 +293,7 @@
                 'Support':             '/tickets-list',
                 'Projects':            '/initiatives',
                 'Initiatives':         '/initiatives',
+                'Intraday Monitor':    '/intraday-monitor',
                 'User Home':           '/user-home',
                 'Other Products Summary': '/other-products-summary',
                 'NDF Summary':            '/ndf-summary',
@@ -383,13 +385,30 @@
 
             // Inner content (avatar + actor + action + detail + time) shared by the
             // bell item and the toast body.
+            // O aviso que o PRÓPRIO OTC Tracker manda (rotina agendada, alerta
+            // das iniciativas — ator `SYSTEM`/"OTC Tracker" ou sem ator) mostra o
+            // logo do sidenav, no ladrilho da cor do accent, e não uma foto.
+            var OTC_LOGO = '{{ config.ASSETS_ROOT }}/images/logo-sm.png';
+            function isSystemNotif(n) {
+                var sid = String(n.actor_sid || '').trim().toUpperCase();
+                return !sid || sid === 'SYSTEM' || String(n.actor_name || '').trim() === 'OTC Tracker';
+            }
+            window.otcIsSystemNotif = isSystemNotif;
+            function notifAvatarHtml(n, b) {
+                if (isSystemNotif(n)) {
+                    return '<span class="otc-brand__tile otc-notif-logo" style="width:40px;height:40px;">' +
+                             '<img alt="OTC Tracker" src="' + OTC_LOGO + '" style="filter: brightness(0) invert(1);" />' +
+                           '</span>';
+                }
+                return '<img alt="' + esc(n.actor_name || n.actor_sid) + '" class="avatar-md rounded-circle" src="' + b.imgSrc + '" ' +
+                         'onerror="this.onerror=null;this.style.display=\'none\';this.nextElementSibling.style.display=\'inline-flex\';" />' +
+                       '<span class="avatar-title bg-primary-subtle text-primary rounded-circle fw-bold fs-xs" ' +
+                         'style="display:none;width:40px;height:40px;">' + esc(b.initials) + '</span>';
+            }
             function notifBodyHtml(n, b) {
                 return '<span class="d-flex align-items-center gap-3">' +
                           '<span class="flex-shrink-0 position-relative">' +
-                            '<img alt="' + esc(n.actor_name || n.actor_sid) + '" class="avatar-md rounded-circle" src="' + b.imgSrc + '" ' +
-                              'onerror="this.onerror=null;this.style.display=\'none\';this.nextElementSibling.style.display=\'inline-flex\';" />' +
-                            '<span class="avatar-title bg-primary-subtle text-primary rounded-circle fw-bold fs-xs" ' +
-                              'style="display:none;width:40px;height:40px;">' + esc(b.initials) + '</span>' +
+                            notifAvatarHtml(n, b) +
                             '<span class="position-absolute rounded-pill ' + b.meta.color + ' notification-badge">' +
                               '<i data-lucide="' + b.badgeIcon + '"></i>' +
                             '</span>' +

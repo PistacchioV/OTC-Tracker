@@ -23,6 +23,9 @@
  *     onConfirm / onEdit / onDelete / onSend / onPreview: fn(chave),
  *     canB2B: fn(e), onB2B: fn(chave)   — opcional: o Create B2B (§698), um
  *       quinto botão depois do Send, só no deal contra cliente
+ *     flags: fn(e) → [{k, label, on, manual, title}]   — opcional: as
+ *       MARCAS do swap (§701, `otcSwapFlags`), caixas abaixo dos fatos;
+ *     onFlag: fn(chave, k, on)             — a marca `k` foi trocada
  *     onSelect: fn()                       // a seleção mudou
  *   });
  *   cards.render(lista);  cards.selectAll(true|false);  cards.sync();
@@ -82,9 +85,24 @@
           (o.status ? o.status(e) : '') +
         '</div>' +
         '<dl class="otc-deal-card__facts">' + facts + '</dl>' +
+        marcas(e) +
         '<div class="otc-deal-card__foot"><span class="otc-deal-card__meta">' + esc(o.meta ? o.meta(e) : '') + '</span>' +
           '<div class="otc-deal-card__actions">' + acoes + '</div></div>' +
       '</div>';
+    }
+
+    function marcas(e) {
+      var lst = o.flags ? (o.flags(e) || []) : [];
+      if (!lst.length) return '';
+      return '<div class="otc-deal-card__flags">' + lst.map(function (f) {
+        return '<label class="otc-deal-flag' + (f.on ? ' is-on' : '') + (f.manual ? ' is-manual' : '') +
+          '" title="' + esc(f.title || '') + '">' +
+          '<input class="form-check-input otc-deal-flag__cb" type="checkbox" data-flag="' + esc(f.k) + '"' +
+          (f.on ? ' checked' : '') + (o.onFlag ? '' : ' disabled') + '>' +
+          '<span>' + esc(f.label) + '</span>' +
+          (f.manual ? '<i class="ti ti-hand-finger otc-deal-flag__manual" aria-hidden="true"></i>' : '') +
+          '</label>';
+      }).join('') + '</div>';
     }
 
     function render(novos) {
@@ -117,6 +135,11 @@
     }
 
     el.addEventListener('change', function (ev) {
+      if (ev.target.classList.contains('otc-deal-flag__cb')) {
+        var kf = chaveDe(ev.target);
+        if (kf && o.onFlag) o.onFlag(kf, ev.target.getAttribute('data-flag'), ev.target.checked);
+        return;
+      }
       if (!ev.target.classList.contains('otc-deal-card__check')) return;
       var k = chaveDe(ev.target);
       if (!k) return;
@@ -140,10 +163,10 @@
     });
     // duplo clique = o preview (fora da caixa e dos botões); sem selecionar texto
     el.addEventListener('mousedown', function (ev) {
-      if (ev.detail > 1 && ev.target.closest('.otc-deal-card') && !ev.target.closest('input, a, button')) ev.preventDefault();
+      if (ev.detail > 1 && ev.target.closest('.otc-deal-card') && !ev.target.closest('input, a, button, label')) ev.preventDefault();
     });
     el.addEventListener('dblclick', function (ev) {
-      if (ev.target.closest('input, a, button')) return;
+      if (ev.target.closest('input, a, button, label')) return;
       var k = chaveDe(ev.target);
       if (k && o.onPreview) o.onPreview(k);
     });

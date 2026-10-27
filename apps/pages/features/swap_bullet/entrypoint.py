@@ -130,6 +130,22 @@ def api_swap_bullet_edit():
     return jsonify({'success': True, 'entry': d})
 
 
+@blueprint.route('/api/new-deals/swap-bullet/flags', methods=['POST'])
+def api_swap_bullet_flags():
+    """As marcas do card (§701): só o `SwapFlags`, sem mexer no status."""
+    err = _auth()
+    if err:
+        return err
+    payload = request.get_json(silent=True) or {}
+    deal_id = str(payload.get('deal_id') or '').strip()
+    if not deal_id or not isinstance(payload.get('flags'), dict):
+        return jsonify({'success': False, 'code': 'swb_bad_flags', 'message': 'Missing deal_id/flags'}), 400
+    d = commands.set_flags(deal_id, str(payload.get('trade_date') or ''), payload['flags'])
+    if d is None:
+        return jsonify({'success': False, 'code': 'swb_not_found', 'message': 'Entry not found'}), 404
+    return jsonify({'success': True, 'entry': d})
+
+
 @blueprint.route('/api/new-deals/swap-bullet/add', methods=['POST'])
 def api_swap_bullet_add():
     err = _auth()

@@ -15661,6 +15661,8 @@ from apps.pages.features.unwinds import entrypoint as _f_unwinds                
 _schedule_on_start('unwind-api', _f_unwinds.start_scheduler)
 from apps.pages.features.wht import entrypoint as _f_wht                      # noqa: E402,F401
 from apps.pages.features.projects import entrypoint as _f_projects            # noqa: E402,F401
+# os alertas das iniciativas, 08:00 BRT em dia útil (§701)
+_schedule_on_start('initiative-alerts', _f_projects.start_alerts_scheduler)
 
 
 # A User Home lê o trabalho dos projetos por AQUI — feature não importa feature

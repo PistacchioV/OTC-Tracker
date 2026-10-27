@@ -28,7 +28,8 @@ def day_path(ref):
 # O que o re-import PRESERVA da linha que já está no dia (a esteira e os
 # números que já podem ter ido à B3).
 KEEP_ON_REIMPORT = ('Status', 'Maker', 'Checker', 'MyNumber', 'MyNumberMirror',
-                    'PremiumMyNumber', 'PremiumMyNumberMirror', 'SentFiles', 'B3ID', 'Deal')
+                    'PremiumMyNumber', 'PremiumMyNumberMirror', 'SentFiles', 'B3ID', 'Deal',
+                    'SwapFlags')
 
 
 def key_of(e):

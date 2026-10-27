@@ -203,5 +203,93 @@ check('   a 1ª foi marcada e o Pending a acompanhou',
 check('   a 2ª ficou como estava', (M.find_row('P2')[M.SENT_COLUMN], pc_status('P2')),
       ('', 'Pending FepWeb'))
 
+print('\n== 5. a grade do Track tem as travas do Monitor (§701) ==')
+esteira('G1')
+como('MO')
+r = cl.post('/api/manual-confirmation/upsert', json={'row': {'Trade ID': 'G1', 'VALIDADO p/ MO': hoje}})
+check('MO antes do OTC pela grade: 409 stage_not_pending',
+      (r.status_code, (r.get_json() or {}).get('code')), (409, 'stage_not_pending'))
+check('   e nada gravado', M.find_row('G1')['VALIDADO p/ MO'], '')
+como('BO')
+r = cl.post('/api/manual-confirmation/upsert', json={'row': {'Trade ID': 'G1', 'Conferido OTC': hoje}})
+check('o OTC valida pela grade', r.status_code, 200)
+como('MO')
+r = cl.post('/api/manual-confirmation/upsert', json={'row': {'Trade ID': 'G1', 'VALIDADO p/ MO': hoje}})
+check('   e então o MO', (r.status_code, M.find_row('G1')['Pending']), (200, M.PENDING_FEPWEB))
+como('BO')
+r = cl.post('/api/manual-confirmation/upsert', json={'row': {'Trade ID': 'G1', 'Conferido OTC': ''}})
+check('desfazer só a do OTC com o MO validado: 409 mc_reopen_instead',
+      (r.status_code, (r.get_json() or {}).get('code')), (409, 'mc_reopen_instead'))
+r = cl.post('/api/manual-confirmation/upsert', json={'row': {'Trade ID': 'G1', M.SENT_COLUMN: hoje}})
+check('Enviado sem callback pela grade: 409 callback_required',
+      (r.status_code, (r.get_json() or {}).get('code')), (409, 'callback_required'))
+esteira('G2')
+r = cl.post('/api/manual-confirmation/upsert', json={'row': {
+    'Trade ID': 'G2', 'Data Callback': hoje, M.SENT_COLUMN: hoje}})
+check('Enviado com a esteira em Pending OTC: 409 mc_not_fepweb',
+      (r.status_code, (r.get_json() or {}).get('code')), (409, 'mc_not_fepweb'))
+como('MO')
+r = cl.post('/api/manual-confirmation/upsert', json={'row': {
+    'Trade ID': 'G1', 'Data Callback': hoje, M.SENT_COLUMN: hoje}})
+check('Enviado é do OTC: o MO leva 403', (r.status_code, (r.get_json() or {}).get('stage')),
+      (403, M.STAGE_OTC))
+como('BO')
+r = cl.post('/api/manual-confirmation/upsert', json={'row': {
+    'Trade ID': 'G1', 'Data Callback': hoje, M.SENT_COLUMN: hoje}})
+check('o OTC, com callback e as validações: grava Ok', (r.status_code, M.find_row('G1')['Pending']),
+      (200, M.STATUS_OK))
+tpl = io.open(os.path.join(ROOT, 'apps', 'templates', 'pages', 'manual-confirmation-track.html'),
+              encoding='utf-8').read()
+check('a tela traduz as recusas novas nas três línguas',
+      all(tpl.count('e_' + c + ':') == 3 for c in ('stage_not_pending', 'mc_reopen_instead',
+                                                   'mc_not_fepweb', 'callback_required')), True)
+
+print('\n== 6. o Pending Confirmation grava só o que mudou (§701) ==')
+pending('M1', 'Pending OTC', 'Digital')
+carregada = {k: ('' if v is None else str(v)) for k, v in PC._pc_find_row('M1').items()}
+# Depois da carga, outra pessoa conclui e preenche o FepWeb ID…
+PC._pc_upsert_rows([dict(carregada, **{'Pending Status': 'Concluded', 'FepWeb ID': 'F-9'})])
+# …e esta tela, com a linha velha, só mexeu nos Comments.
+editada = dict(carregada, Comments='ligar amanhã')
+r = cl.post('/api/pending-confirmation/upsert', json={'row': editada, 'orig': carregada})
+check('grava', r.status_code, 200)
+g = PC._pc_find_row('M1')
+check('   o Comments entrou e o que a outra pessoa gravou ficou',
+      (g['Comments'], g['Pending Status'], g['FepWeb ID']), ('ligar amanhã', 'Concluded', 'F-9'))
+r = cl.post('/api/pending-confirmation/upsert', json={'rows': [editada], 'origs': [carregada]})
+check('o lote (mass update) segue a mesma regra', PC._pc_find_row('M1')['Pending Status'], 'Concluded')
+r = cl.post('/api/pending-confirmation/upsert', json={'row': editada})
+check('sem orig (aba antiga / Add Row): a linha inteira, como antes',
+      PC._pc_find_row('M1')['Pending Status'], 'Pending OTC')
+PC._pc_delete_trade_number('M1')
+r = cl.post('/api/pending-confirmation/upsert', json={'row': editada, 'orig': carregada})
+check('linha apagada por outra pessoa: 409 pc_row_gone, sem recriar',
+      (r.status_code, (r.get_json() or {}).get('code'), PC._pc_find_row('M1')),
+      (409, 'pc_row_gone', None))
+_orig_w = PC._pc_write_exec
+
+
+def _ocupado_w(cat, ops, raise_errors=False):
+    if raise_errors:
+        raise IOError('banco ocupado')
+    return False
+
+
+pending('M2', 'Pending OTC')
+PC._pc_write_exec = _ocupado_w
+try:
+    r = cl.post('/api/pending-confirmation/delete', json={'trade_number': 'M2'})
+    check('Delete com o banco ocupado: NÃO responde success',
+          (r.get_json() or {}).get('success'), False)
+finally:
+    PC._pc_write_exec = _orig_w
+check('   e a linha continua', PC._pc_find_row('M2') is not None, True)
+tpl = io.open(os.path.join(ROOT, 'apps', 'templates', 'pages', 'pending-confirmation.html'),
+              encoding='utf-8').read()
+check('a tela manda o orig e tira a linha da grade só depois do servidor',
+      'orig: orig === undefined ? pcOrigOf(d) : orig' in tpl
+      and 'origs: ds.map(pcOrigOf)' in tpl
+      and 'pcDeleteRow(tn).then(function(ok)' in tpl, True)
+
 print(('\nFAIL: %d' % len(fails)) if fails else '\nTUDO OK')
 sys.exit(1 if fails else 0)

@@ -28,6 +28,7 @@ DEFAULT_SETTINGS = {
         'task_comment': True,
         'project_lead': True,
         'project_member': True,           # entrou no time de uma iniciativa (§639)
+        'initiative_alerts': True,        # os alertas da iniciativa em que ela está (§701)
         'due_dates': True,
         'focus_finished': True,
     },

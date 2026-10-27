@@ -1882,20 +1882,32 @@ $(document).ready(function() {
         }).then(function(result) {
             if (!result.isConfirmed) return;
 
-            checkedRows.forEach(function(row) {
-                var d = table.row(row).data();
-                if (d) pcDeleteRow(_pcStrip(d[10]));   // remove from the DB too
-                table.row(row).remove();
+            // Uma por vez, e a linha só sai da grade com o servidor confirmando:
+            // a que falhou fica, e o Swal diz por quê. Em série porque cada
+            // exclusão abre os três bancos em escrita.
+            var apagadas = 0;
+            checkedRows.reduce(function(p, row) {
+                return p.then(function(seguir) {
+                    if (!seguir) return false;
+                    var d = table.row(row).data();
+                    if (!d) return true;
+                    return pcDeleteRow(_pcStrip(d[10])).then(function(ok) {
+                        if (ok) { table.row(row).remove(); apagadas++; }
+                        return ok;
+                    });
+                });
+            }, Promise.resolve(true)).then(function() {
+                if (apagadas) pcNotify('Pending Bulk Delete', apagadas + ' row(s)');
+
+                // Resetar checkboxes
+                $('#selectAll').prop('checked', false).prop('indeterminate', false);
+
+                // Esconder botões condicionais
+                toggleActionButtons(false);
+
+                table.draw(false);
+                updateWidgets();
             });
-            pcNotify('Pending Bulk Delete', checkedRows.length + ' row(s)');
-
-            // Resetar checkboxes
-            $('#selectAll').prop('checked', false).prop('indeterminate', false);
-
-            // Esconder botões condicionais
-            toggleActionButtons(false);
-
-            table.draw(false);
         });
     });
 
@@ -2190,35 +2202,88 @@ $(document).ready(function() {
         SF_COLS.forEach(function(col) { row[col.label] = _pcStrip(d[col.dtCol]); });
         return row;
     }
+    // As linhas como a página as CARREGOU, por Trade Number, na mesma forma do
+    // `pcArrayToRow`. Vão como `orig` em toda gravação: o servidor aplica só o
+    // que mudou em relação a elas sobre a linha RELIDA (§696) — mandar a linha
+    // inteira desfazia o que outra pessoa gravou depois da carga.
+    var PC_ORIG = {};
+    function pcOrigOf(d) { return PC_ORIG[_pcStrip(d[10]).trim()] || null; }
+
+    // Avisos montados em JS: no idioma do app (o I18nManager só traduz no load).
+    var PC_TRANS = {
+        en: { saveFail: 'Could not save', delFail: 'Could not delete',
+              e_pc_row_gone: '{keys} is no longer in Pending Confirmation. Reload the page.',
+              e_database_busy: 'The database is busy (another user is saving). Try again in a few seconds.',
+              e_database_unreadable: 'The database could not be read. Tell support (details in the log).',
+              e_network: 'Network error — nothing was confirmed by the server.' },
+        br: { saveFail: 'Não foi possível gravar', delFail: 'Não foi possível excluir',
+              e_pc_row_gone: '{keys} não está mais no Pending Confirmation. Recarregue a página.',
+              e_database_busy: 'O banco está ocupado (outra pessoa está gravando). Tente de novo em alguns segundos.',
+              e_database_unreadable: 'O banco não pôde ser lido. Avise o suporte (detalhes no log).',
+              e_network: 'Erro de rede — o servidor não confirmou nada.' },
+        es: { saveFail: 'No se pudo guardar', delFail: 'No se pudo eliminar',
+              e_pc_row_gone: '{keys} ya no está en Pending Confirmation. Recargue la página.',
+              e_database_busy: 'La base está ocupada (otra persona está guardando). Intente de nuevo en unos segundos.',
+              e_database_unreadable: 'La base no pudo leerse. Avise al soporte (detalles en el log).',
+              e_network: 'Error de red — el servidor no confirmó nada.' }
+    };
+    function pcT(k, vars) {
+        var l = 'en';
+        try { l = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) {}
+        var s = (PC_TRANS[l] || PC_TRANS.en)[k] || PC_TRANS.en[k] || k;
+        if (vars) Object.keys(vars).forEach(function (v) { s = s.split('{' + v + '}').join(vars[v]); });
+        return s;
+    }
+    // A resposta do servidor → {ok, j}; a recusa vira o Swal traduzido. O
+    // código vem em `code` (recusa da rota) ou `error` (banco ocupado/ilegível,
+    // o tratador global); sem código, a frase do servidor é o fallback.
+    function pcResult(p, titleKey) {
+        return p.then(function (r) {
+            return r.json().catch(function () { return { success: false }; });
+        }, function () { return { success: false, error: 'network' }; }).then(function (j) {
+            if (j && j.success) return { ok: true, j: j };
+            var code = (j && (j.code || j.error)) || '';
+            var key = 'e_' + code;
+            var txt = code && pcT(key) !== key
+                ? pcT(key, { keys: ((j && j.keys) || []).join(', ') })
+                : ((j && (j.message || j.error)) || '');
+            if (typeof Swal !== 'undefined')
+                Swal.fire({ icon: 'error', title: pcT(titleKey), text: txt, confirmButtonColor: '#0066cc' });
+            return { ok: false, j: j };
+        });
+    }
+
     // Persist a row change to the DB, then reload so a row that moved DB (e.g.
-    // Concluded → ok, or past 12 months → backlog) relocates in the view.
-    function pcPersistRow(d, reload) {
-        var p = fetch('/api/pending-confirmation/upsert', {
+    // Concluded → ok, or past 12 months → backlog) relocates in the view. The
+    // reload also runs when the server REFUSED: the grid already shows the
+    // edit, and only the reload puts back what the database really has.
+    function pcPersistRow(d, reload, orig) {
+        var p = pcResult(fetch('/api/pending-confirmation/upsert', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ row: pcArrayToRow(d) })
-        }).then(function(r){ return r.json(); })
-          .catch(function(err){ console.error('pending upsert error', err); });
-        if (reload !== false) p = p.then(function(){ sfApply(); });   // reload unless caller batches
+            body: JSON.stringify({ row: pcArrayToRow(d),
+                                   orig: orig === undefined ? pcOrigOf(d) : orig })
+        }), 'saveFail');
+        if (reload !== false) p = p.then(function(res){ sfApply(); return res; });   // reload unless caller batches
         return p;
     }
     // O LOTE do mass update: um request com todas as linhas — por linha eram
     // N requests × 4 aberturas exclusivas de banco no share cada (o servidor
     // agora faz o lote inteiro em três aberturas).
     function pcPersistRows(ds) {
-        if (!ds.length) return Promise.resolve();
-        return fetch('/api/pending-confirmation/upsert', {
+        if (!ds.length) return Promise.resolve({ ok: true });
+        return pcResult(fetch('/api/pending-confirmation/upsert', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rows: ds.map(pcArrayToRow) })
-        }).then(function(r){ return r.json(); })
-          .catch(function(err){ console.error('pending bulk upsert error', err); });
+            body: JSON.stringify({ rows: ds.map(pcArrayToRow), origs: ds.map(pcOrigOf) })
+        }), 'saveFail');
     }
+    // Resolve `true` só com o servidor confirmando: quem chama tira a linha da
+    // grade DEPOIS (§430) — antes, ela sumia da tela e voltava no reload.
     function pcDeleteRow(tradeNumber) {
-        if (!tradeNumber) return Promise.resolve();
-        return fetch('/api/pending-confirmation/delete', {
+        if (!tradeNumber) return Promise.resolve(true);
+        return pcResult(fetch('/api/pending-confirmation/delete', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ trade_number: tradeNumber })
-        }).then(function(r){ return r.json(); })
-          .catch(function(err){ console.error('pending delete error', err); });
+        }), 'delFail').then(function (res) { return res.ok; });
     }
     // Emit a notification for a page action. The bell shows it to everyone with
     // access to this page; the toast is suppressed for whoever performed it
@@ -2255,7 +2320,13 @@ $(document).ready(function() {
         .then(function(res) {
             if (!res || !res.success) { console.warn('pending-confirmation search failed', res); return; }
             table.clear();
-            (res.rows || []).forEach(function(row) { table.row.add(pcRowToArray(row)); });
+            PC_ORIG = {};
+            (res.rows || []).forEach(function(row) {
+                var arr = pcRowToArray(row);
+                table.row.add(arr);
+                var o = pcArrayToRow(arr);
+                PC_ORIG[String(o['Trade Number'] || '').trim()] = o;
+            });
             table.draw(false);
         })
         .catch(function(err) { console.error('pending-confirmation search error', err); });
@@ -2443,6 +2514,7 @@ $(document).ready(function() {
 
     var LOB_OPTS = ['CEM', 'EDG', 'COMMODITY'];
     var arEditTr = null; // null = add mode; <tr> element = edit mode
+    var arEditOrig = null; // a linha como a página a carregou (o `orig` do Edit)
     var PENDING_STATUS_OPTS = [
         'Abonado via PDF','Client Treasury Allowance','Concluded',
         // 'Exception FepWeb' com esta grafia: é a que as regras gravam (prazo
@@ -2654,6 +2726,10 @@ $(document).ready(function() {
         ];
 
         var _wasEdit = !!arEditTr;
+        // Edit: o `orig` é a linha que o modal ABRIU (Trade Number trocado no
+        // Edit não casa com ele e grava inteira); Add Row não tem `orig`.
+        var _orig = _wasEdit ? arEditOrig : null;
+        arEditOrig = null;
         if (arEditTr) {
             // UPDATE MODE — replace data in existing row
             table.row(arEditTr).data(rowArray).draw(false);
@@ -2664,7 +2740,7 @@ $(document).ready(function() {
             // ADD MODE — append new row
             table.row.add(rowArray).draw(false);
         }
-        pcPersistRow(rowArray);   // persist to the DB (routes to pending/ok/backlog)
+        pcPersistRow(rowArray, true, _orig);   // persist to the DB (routes to pending/ok/backlog)
         pcNotify(_wasEdit ? 'Pending Updated' : 'Pending Added',
                  (tradeNo || '') + (client ? ' — ' + client : ''));
 
@@ -2676,6 +2752,7 @@ $(document).ready(function() {
     // Reset edit state when modal is dismissed
     document.getElementById('addRowModal').addEventListener('hidden.bs.modal', function() {
         arEditTr = null;
+        arEditOrig = null;
         document.getElementById('arSaveBtn').innerHTML = '<i class="ti ti-device-floppy"></i>';
         document.querySelector('#addRowModal .modal-title').innerHTML = '<i class="ti ti-circle-plus me-2"></i>Add New Record — Pending Confirmation';
         arClearErrors();
@@ -2698,10 +2775,12 @@ $(document).ready(function() {
             if (!result.isConfirmed) return;
             var d = table.row(tr).data();
             var tn = d ? _pcStrip(d[10]) : '';
-            table.row(tr).remove().draw(false);
-            updateWidgets();
-            pcDeleteRow(tn);   // remove from the DB too
-            pcNotify('Pending Deleted', tn + (d ? ' — ' + _pcStrip(d[5]) : ''));
+            pcDeleteRow(tn).then(function(ok) {    // the grid follows the server
+                if (!ok) return;
+                table.row(tr).remove().draw(false);
+                updateWidgets();
+                pcNotify('Pending Deleted', tn + (d ? ' — ' + _pcStrip(d[5]) : ''));
+            });
         });
     });
 
@@ -2711,6 +2790,7 @@ $(document).ready(function() {
         var d  = table.row(tr).data(); // d[0..21] — plain text values
         if (!d) return;
         arEditTr = tr;
+        arEditOrig = pcOrigOf(d);
 
         // Populate modal fields from row data — _pcStrip decodifica o HTML da
         // célula (sem ele o Status auto aparecia como "&lt; 10 dias..." e

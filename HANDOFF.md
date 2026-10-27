@@ -30054,3 +30054,138 @@ do Papel (SUPOSIÇÃO: a 4.2.8 não o diz).
 `check_swap_cashflow.py` §4 (as taxas do 0034, o exemplo da equipe), §9 (a
 Data de Cotação a termo) e §10 (22 = FX, Sinal/Juros da VCP, a Data de Cotação
 sem a coluna).
+
+## §701 — A esteira sem os três achados que perdiam dado; as marcas e o modal dos swaps; o Economic Affirmation pelas marcadas; owner/backup no Intraday Monitor; os alertas das iniciativas (2026-10-27)
+
+Duas frentes: os três achados do §696 que podiam PERDER dado, e os pedidos novos
+da equipe no mesmo dia.
+
+### Os três achados que perdiam dado
+
+**1. O Pending Confirmation gravava a linha inteira da grade velha.** O upsert da
+tela (`/api/pending-confirmation/upsert`, linha e lote) mandava todas as colunas
+da última carga, e o `_pc_upsert_rows` as gravava por cima: o Concluded que outra
+pessoa deu depois da carga, o FepWeb ID, ou o que a esteira espelhou pelo
+`_mc_pc_sync`, voltavam ao valor da carga. Agora a página guarda a linha como a
+CARREGOU (`PC_ORIG`, na forma do `pcArrayToRow`) e manda junto como `orig`
+(`origs` no lote); o servidor relê ESTRITO (`_pc_find_rows`) e aplica só a coluna
+que difere do `orig`. Linha apagada por outra pessoa depois da carga é 409
+`pc_row_gone` (gravar a recriaria). Sem `orig` (Add Row, Trade Number trocado no
+Edit, aba antiga) grava inteira, como antes. A gravação e a exclusão passam a
+esperar o servidor e dizer a recusa traduzida (`PC_TRANS`, os códigos
+`pc_row_gone`/`database_busy`/`database_unreadable`) — eram `catch(console.error)`.
+
+**2. A grade do Track não tinha as travas do Monitor.** Preencher a coluna de
+validação pela grade já era validar (mesa da etapa, justificativa fora do prazo),
+mas o MO/FO entrava ANTES do OTC — o `validation_blocker` só valia no
+`mark_validated`. Agora a grade pergunta a ele (com a coluna da etapa ainda vazia:
+preenchida, ele responde "nada a impedir") e recusa com 409 `stage_not_pending`.
+Desfazer só a do OTC com MO/FO validados é 409 `mc_reopen_instead` (reabrir é o
+`Pending OTC`). E o **Enviado p/ cliente pela grade é o Mark as sent**: ato do
+OTC (403 para as outras mesas, também para desfazer), só com a esteira em Pending
+FepWeb (409 `mc_not_fepweb`) e com a Data Callback (409 `callback_required`, menos
+MGT × cliente, §581). O Track traduz os quatro códigos nas três línguas.
+
+**3. A linha da Intrag duplicava quando a origem mudava de dia ou de chave.**
+Toda gravação da Intrag procura a linha SÓ no arquivo-dia de destino
+(`_intrag_day_persist`, `_save_intrag_opt_entry`). Editar o Trade Date de um NDF
+ou opção já mapeados (o Edit manda Success com B3 ID e regrava o espelho), o de um
+swap B2B (que muda de arquivo-dia, §656 — e o espelho nem acompanhava: `mapped`
+era falso), ou a Data da Recompra/o Deal ID de uma recompra do catálogo, deixava a
+linha velha no dia velho e criava outra. Agora quem muda o dia ou a chave a LEVA
+antes (`persistence._intrag_relocate`: destino primeiro, a esteira — status,
+maker, checker, Intrag ID — junto; o destino que já tem a chave fica com a dele):
+os quatro PATCH do New Deals (`_intrag_segue`, pelo `_intrag_follow_deal`), os três
+Edit de swap (`swap_new_deals.intrag_follow`, com `intrag_day`/`intrag_key` — a
+regra do `b3_mapped`; moveu, o `b3_mapped` regrava o conteúdo) e o Edit da recompra
+do catálogo (`product/commands._intrag_segue`). Falha é dita na tela (`mirrors`).
+
+**Delete que falhava calado** (o §696 listava): o `/api/pending-confirmation/delete`
+e o `manual_conf.delete_row` engoliam a falha do banco e respondiam `success`; o
+`_pc_delete_trade_number` lia TOLERANTE (ocupado = "não está lá"). Agora sobem, a
+tela só tira a linha com o servidor confirmando, e a recompra que apaga a esteira
+diz o que ficou (`mirrors.falhou(..., remocao=True)` — o `session-guard.js` tem a
+frase da remoção, "não saiu de", diferente da da cópia).
+
+Ainda NÃO mexidos (do §696): a recompra que vence no Pending no dia da liquidação,
+a manutenção das 11:30 sem trava entre instâncias, o Intrag ID de recompra nos
+mappings de NDF/Option, o Intraday Monitor sem contar o Success que não foi à
+Intrag, e o Delete das origens (New Deals, swaps) que não tira a linha da Intrag.
+
+### As marcas dos swaps e o modal em blocos
+
+- **Marcas no card** (Bullet e Cashflow): Forward Start (Start ≠ Trade), Atualização
+  de Notional (índice + data), Curva VCP (categoria de uma perna) e Prêmio —
+  `otcSwapFlags` no `swap-deal.js`, desenhadas pelo `deal-cards.js` (`flags`/
+  `onFlag`). A equipe corrige a leitura com um clique: só a CORREÇÃO é gravada
+  (`SwapFlags` no deal, `<api>/flags`, sem mexer no status; igual à detecção volta
+  a `null`), o card a mostra com contorno âmbar e o dedo, e o reimport a preserva
+  (`KEEP_ON_REIMPORT`). **A marca é a leitura da equipe, não um campo**: o arquivo
+  da B3 segue saindo dos campos do deal. A Cetes fica sem (estrutura fixa, sem
+  prêmio nem atualização de notional; `swap_flags` do catálogo).
+- **O modal do Edit/Add em BLOCOS** (`otcSwapModalLayout`): Identificação, Datas e
+  Valores, Prêmio, Atualização de Notional, Curva A e Curva B lado a lado, Pernas
+  (Cetes), VCP, Observações; o campo que nenhum bloco nomeia vai para "Other" —
+  coluna nova aparece, nunca some. Vale para Bullet, Cashflow e Cetes.
+
+### Economic Affirmation pelas operações marcadas
+
+Até aqui só a instituição financeira do dia recebia. Agora a operação MARCADA
+(a linha nas tabelas de NDF/Opção de Commodities, o card nos swaps) vai com
+`_selected` e entra também — não-IF e em qualquer data (o rascunho do swap leva a
+data das operações dele). Sem nenhuma marcada, só as IF, como antes (equipe,
+27/10/2026). A perna interna (Lawton/JPM/Atacama, B2B) nunca. **A Opt FXO NÃO tem
+a rota** (`/api/new-deals/opt-fxo/economic-affirmation` não existe e o botão dá
+404 desde antes): o e-mail de FXO está por desenhar.
+
+### Owner e backup no Intraday Monitor
+
+Por tarefa e, quando faz sentido, por LE (`ASSIGN_LES`: Todas/JPM/MGT/LAW) — "B3
+Registration da MGT: owner Augusto, backup Theodoro". O botão Owners da barra abre
+o modal; editar é do BO e do admin (a regra de quem move a tarefa), o resto vê. A
+lista é UM documento (`control-panel/intraday_assignments.json`, `domain.
+clean_assignments`: tarefa do catálogo, owner obrigatório, backup ≠ owner, SID do
+cadastro Active), o card mostra owner e backup, e quem é designado AGORA recebe o
+aviso no SEU sino (`target_sid`, `Task Assigned` na página nova `Intraday Monitor`
+dos três mapas).
+
+### Os alertas das iniciativas
+
+Card novo do Control Panel, seção Intraday (`initiativealerts`; 16 cards): às
+08:00 BRT de dia útil ANBIMA (claim diário entre instâncias, `initiative-alerts`),
+para a iniciativa `On going`, em quatro casos (`domain.alerts`): mais de 5 dias
+úteis sem atualização (o `updated_at`), 2 dias úteis ou menos para o prazo dela ou
+de uma tarefa aberta, e o dia do fim (até 7 dias depois, se o aviso não saiu). UM
+e-mail por iniciativa (`commands.run_alerts`), do `otc.tracker@`, TO = o box do card
+(padrão `brazil.otc.ops@`) + lead, time e responsáveis das tarefas, CC = o do card
+(padrão o e-mail do master no cadastro); o sino só para quem está na iniciativa,
+do ator SYSTEM, gated pela preferência nova da Settings (`initiative_alerts`).
+Cada alerta tem CHAVE (iniciativa, caso, data) e sai UMA vez; o e-mail que falha
+não marca nem toca o sino (o próximo disparo tenta de novo). O Run do card manda
+agora o que é devido hoje e ainda não saiu.
+
+### O resto
+
+- **Confirmations Monitor**: as cinco colunas descem até o pé da janela, com a
+  folga do sidenav (`--otc-inset`), medida pelo JS a partir do topo do CARD (a
+  `.row g-3` devolve o gutter como margem); a área de soltar em Ok flutua no pé
+  durante o arrasto.
+- **O Reference date do Pay/Rec ilegível no escuro**: a página carregava o
+  `daterangepicker.css` no FIM do corpo, depois do `otc.css`, e o branco do
+  plugin vencia o tema (painel branco, dias em texto claro). Foi para o
+  `extra_css`, como nas outras telas; o `check_theme_toggle.py` agora recusa
+  CSS de calendário carregado depois do tema.
+- **O toast e o sino com o logo**: aviso do próprio sistema (ator SYSTEM/"OTC
+  Tracker" ou sem ator) mostra o ladrilho do sidenav, na cor do accent, no lugar
+  da foto (`isSystemNotif` no `topbar.html`).
+
+Testes: `check_mc_pending_sync.py` §5-§6, `check_intrag_follow.py`,
+`check_swap_flags.py`, `check_intraday_owners.py`, `check_initiative_alerts.py`;
+ajustados `check_mirror_failed.py` (o quinto `falhou('intrag'`),
+`check_swap_cetes.py` (a ação `flags` só na página que a declara) e
+`check_control_panel_sections.py` (16 cards). O `check_mt300` falha no checkout
+da dev pelo dado local e passa sobre dado limpo, com e sem esta mudança; o
+`check_swap_advice` segue com as duas falhas de antes.
+
+**Na instância:** pull + restart + Ctrl+Shift+R (o `otc.css` mudou). Conferir o CC
+do card Initiatives — Alerts no Control Panel (o padrão é o e-mail do master).

@@ -503,6 +503,19 @@ def api_search_deal_cache():
 
     return jsonify({"success": True, "deals": matched})
 
+def _intrag_segue(family, antes, depois):
+    """A linha da Intrag acompanha o PATCH que mudou o Trade Date ou o Deal
+    (§701): a gravação da Intrag procura a linha só no dia de destino, e a do
+    dia antigo ficava — a operação duas vezes na Intrag. Melhor esforço: a
+    origem já gravou; a falha é DITA na tela (`mirrors`)."""
+    try:
+        _R()._intrag_engine()._intrag_follow_deal(family, antes, depois)
+    except Exception as exc:                                # noqa: BLE001
+        _R().log.warning('[ND PATCH] Intrag %s: a linha de %r não acompanhou:\n%s',
+                         family, (depois or {}).get('Deal', ''), traceback.format_exc())
+        _mirrors.falhou('intrag', (depois or {}).get('Deal', ''), exc)
+
+
 @blueprint.route('/api/new-deals/opt-commodities/cache/<deal_id>', methods=['PATCH'])
 def api_update_deal_cache(deal_id):
     if not session.get('authenticated'):
@@ -528,6 +541,7 @@ def api_update_deal_cache(deal_id):
         updates, _recusa = _nd_guard_updates(deals[idx], updates, session.get('user_sid', ''))
         if _recusa:
             return _nd_guard_response(_recusa)
+        antes = dict(deals[idx])
         deals[idx].update(updates)
         for _k in ('Maker', 'Checker'):
             if _k in deals[idx]:
@@ -539,6 +553,7 @@ def api_update_deal_cache(deal_id):
     # is Banco J.P. Morgan (intragroup). External clients instead become a fresh
     # outstanding confirmation → Pending Confirmation (the manual-mapping twin of
     # the return-file scan trigger; _pc_save_from_deal skips internal legs itself).
+    _intrag_segue('opt', antes, updated_deal)
     if str(updates.get('Status', '')) == 'Success':
         _R()._intrag_engine()._maybe_save_intrag_opt(updated_deal)
         _R()._pc_save_from_deal(updated_deal, 'OPTION COMM')     # → pending confirmation
@@ -696,6 +711,7 @@ def api_update_fxo_cache(deal_id):
         updates, _recusa = _nd_guard_updates(deals[idx], updates, session.get('user_sid', ''))
         if _recusa:
             return _nd_guard_response(_recusa)
+        antes = dict(deals[idx])
         deals[idx].update(updates)
         # Rewrite in table-column order (Maker/Checker last) — not alphabetical.
         deals[idx] = _R()._fxo_order_deal(deals[idx])
@@ -706,6 +722,7 @@ def api_update_fxo_cache(deal_id):
     # and the counterparty is Banco J.P. Morgan (intragroup). External clients
     # instead flow to Pending Confirmation (manual-mapping twin of the return-file
     # scan trigger; _pc_save_from_deal skips internal legs itself).
+    _intrag_segue('opt', antes, updated_deal)
     if str(updates.get('Status', '')) == 'Success':
         _R()._intrag_engine()._maybe_save_intrag_fxo(updated_deal)
         _R()._pc_save_from_deal(updated_deal, 'OPTION')          # → pending confirmation
@@ -1366,12 +1383,14 @@ def api_ndf_update_deal_cache(deal_id):
         updates, _recusa = _nd_guard_updates(deals[idx], updates, session.get('user_sid', ''))
         if _recusa:
             return _nd_guard_response(_recusa)
+        antes = dict(deals[idx])
         deals[idx].update(updates)
         _R().log.info("[NDF PATCH] Updated deal[%d] %r: Status %r→%r updates=%s",
                  idx, deal_id, prev_status, deals[idx].get('Status', '?'), updates)
         _R()._atomic_write_json(file_path, deals)
         updated_deal = deals[idx].copy()
 
+    _intrag_segue('ndf', antes, updated_deal)
     # Save to Intrag when Status→Success and client is BANCO JP MORGAN
     new_status = updated_deal.get('Status', '')
     cl_lower = (updated_deal.get('Client', '') or '').lower()
@@ -2325,10 +2344,13 @@ def api_generic_nd_update_cache(product, deal_id):
         updates, _recusa = _nd_guard_updates(deals[idx], updates, session.get('user_sid', ''), product)
         if _recusa:
             return _nd_guard_response(_recusa)
+        antes = dict(deals[idx])
         deals[idx].update(updates)
         _R()._atomic_write_json(file_path, deals)
         updated_deal = deals[idx].copy()
 
+    if product in ('vanilla', 'other-publishers'):
+        _intrag_segue('ndf', antes, updated_deal)
     # Vanilla / Other Publisher contra o Lawton alimentam a Intrag NDF no
     # layout "Instrucao NDF Moeda" quando o Status vira Success (FWD Start fora
     # — o strike só existe na strike set date, quando rebooka como vanilla).
