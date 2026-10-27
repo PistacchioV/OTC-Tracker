@@ -1566,7 +1566,10 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   §567, §631): as tarefas do dia em cima (catálogo `domain.TASKS`, agenda de dias e
   horário limite no card `intradaytasks` do Control Panel), o detalhe produto ×
   status embaixo. Recon conclui ao RODAR no dia, zona com ZERO em aberto (a
-  regra do aviso das 19h, `queries._fechados`). Quem diz que a recon rodou é o
+  regra do aviso das 19h, `queries._fechados`). **Zona sem nada importado no
+  dia não é tarefa** (equipe, 27/10/2026, §705): como a Branch Reversal, só
+  EXISTE com movimento (`due` e `conditional`) — ia para Completed com
+  "Nothing imported" e poluía o quadro. Quem diz que a recon rodou é o
   **registro de execuções** (`platform/task_runs.record`, chamado no `run` de
   cada recon): recon nova que vira tarefa grava lá, senão o cartão nunca fecha.
   **A Intrag conta desde o import** como `Awaiting B3 ID`
