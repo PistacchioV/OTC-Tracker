@@ -17151,6 +17151,81 @@ table td .btn.btn-act > i {
   color: var(--otc-text-3);
 }
 
+.otc-deal-card__flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.otc-deal-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  height: 26px;
+  padding: 0 10px 0 6px;
+  border-radius: var(--otc-r-pill);
+  font: 600 11.5px/1 var(--otc-font);
+  color: var(--otc-text-2);
+  background: var(--otc-fill-2);
+  box-shadow: inset 0 0 0 1px var(--otc-sep);
+  cursor: pointer;
+  -webkit-user-select: none;
+     -moz-user-select: none;
+          user-select: none;
+  transition: background-color var(--otc-dur-fast) var(--otc-ease), color var(--otc-dur-fast) var(--otc-ease), box-shadow var(--otc-dur-fast) var(--otc-ease);
+}
+.otc-deal-flag .otc-deal-flag__cb {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.otc-deal-flag.is-on {
+  color: var(--otc-text);
+  background: var(--otc-accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--otc-accent) 40%, transparent);
+}
+.otc-deal-flag.is-manual {
+  box-shadow: inset 0 0 0 1.5px var(--otc-orange);
+}
+.otc-deal-flag .otc-deal-flag__manual {
+  font-size: 13px;
+  color: var(--otc-orange);
+}
+
+.otc-swap-blk {
+  height: 100%;
+  padding: 12px 14px 14px;
+  border-radius: var(--otc-r-md);
+  background: var(--otc-fill);
+  box-shadow: inset 0 0 0 1px var(--otc-sep);
+}
+
+.otc-swap-blk__title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 10px;
+  font: 700 11.5px/1.2 var(--otc-font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--otc-text-2);
+}
+.otc-swap-blk__title i {
+  font-size: 15px;
+  color: var(--otc-accent-ink);
+}
+
+.otc-swap-blk[data-blk=curveA] .otc-swap-blk__title i {
+  color: var(--otc-blue);
+}
+
+.otc-swap-blk[data-blk=curveB] .otc-swap-blk__title i {
+  color: var(--otc-purple);
+}
+
 .otc-deal-card__foot {
   display: flex;
   align-items: center;

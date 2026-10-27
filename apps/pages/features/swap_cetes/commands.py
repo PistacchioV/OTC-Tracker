@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from apps.pages import data_store as _store
 from apps.pages.platform import authz as _authz
 from apps.pages.platform import swap_deal_ticket as _dtk
+from apps.pages.platform import swap_new_deals as _sw
 from apps.pages.features.swap_cetes import domain, queries
 from apps.pages.features.swap_cetes.infra import email_reader, persistence
 
@@ -319,6 +320,7 @@ def edit(deal_id, trade_date, changes, sid=''):
         if idx is None:
             return None, False
         d = lst[idx]
+        antes = dict(d)
         td_antes = d.get('TradeDate') or ''
         b3_antes = str(d.get('B3ID') or '').strip()
         _apply_fields(d, changes)
@@ -345,7 +347,10 @@ def edit(deal_id, trade_date, changes, sid=''):
             persistence.move_day(fp, lst, idx, datetime(td.year, td.month, td.day))
         else:
             persistence.write_day(fp, lst)
-    if mapped:
+    # A linha da Intrag Swap acompanha o Trade Date editado (§701), e regravada
+    # aqui ela ganha também o dia novo nas colunas.
+    moveu = _sw.intrag_follow(antes, d, tag='SWAP CETES')
+    if mapped or (moveu and b3_novo):
         b3_mapped(d)
     return d, mapped
 

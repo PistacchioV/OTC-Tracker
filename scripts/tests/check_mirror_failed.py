@@ -135,8 +135,8 @@ finally:
 print('\n== 4. os espelhos da Intrag do New Deals registram a falha ==')
 src = open(os.path.join(ROOT, 'apps', 'pages', 'features', 'new_deals', 'entrypoint.py'),
            encoding='utf-8').read()
-check('os quatro espelhos da Intrag do New Deals registram a falha',
-      src.count("_mirrors.falhou('intrag'") == 4, src.count("_mirrors.falhou('intrag'"))
+check('os quatro espelhos da Intrag do New Deals (e o que acompanha o PATCH) registram a falha',
+      src.count("_mirrors.falhou('intrag'") == 5, src.count("_mirrors.falhou('intrag'"))
 
 print('\n== 5. o session-guard.js mostra o aviso depois do Swal da página ==')
 node = shutil.which('node')

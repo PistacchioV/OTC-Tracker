@@ -350,6 +350,7 @@ def api_mc_upsert():
         # O prazo é medido no estado ANTERIOR: depois de escrever a data, a
         # própria `sla_state` responde `done` e o atraso desapareceria da conta.
         atrasado = {s: _mc.sla_breached(row, s) for s in etapas}
+        enviado_antes = str(row.get(_mc.SENT_COLUMN, '') or '').strip()
 
         for c in _mc.COLUMNS:
             if c in src and c not in _mc.DERIVED_COLUMNS:
@@ -399,6 +400,17 @@ def api_mc_upsert():
                     return jsonify({'success': False, 'stage_forbidden': True,
                                     'stage': stage, 'key': key,
                                     'message': _R()._mc_stage_denied(stage)}), 403
+                # MO e FO conferem o documento que o OTC validou: a MESMA trava
+                # do `mark_validated` (a grade aceitava o MO antes do OTC). A
+                # pergunta vai com a coluna da etapa ainda vazia — preenchida, o
+                # `validation_blocker` responderia "já validada, nada a impedir".
+                sonda = dict(row)
+                sonda[col_data] = ''
+                if isinstance(_mc.validation_blocker(sonda, stage), _mc.StageNotPending):
+                    return jsonify({'success': False, 'code': 'stage_not_pending',
+                                    'stage_not_pending': True, 'stage': stage, 'key': key,
+                                    'message': ('{}: the OTC validation must come before the {} '
+                                                'validation.'.format(key, stage))}), 409
                 comentario = str(row.get(_mc.STAGE_COMMENT_COLUMN.get(stage, ''), '') or '').strip()
                 if atrasado[stage] and not comentario:
                     # 409, não 400: o pedido está bem formado — o ESTADO é que
@@ -430,9 +442,43 @@ def api_mc_upsert():
                     return jsonify({'success': False, 'stage_forbidden': True,
                                     'stage': stage, 'key': key,
                                     'message': _R()._mc_stage_denied(stage)}), 403
+                # Desfazer só a do OTC com MO/FO validados deixaria a assinatura
+                # das mesas seguintes sobre um documento que voltou à fila do
+                # OTC; reabrir a esteira inteira é o `Pending OTC`.
+                if stage == _mc.STAGE_OTC and any(
+                        str(row.get(_mc.STAGE_COLUMNS[s][0], '') or '').strip()
+                        for s in (_mc.STAGE_MO, _mc.STAGE_FO)):
+                    return jsonify({'success': False, 'code': 'mc_reopen_instead', 'key': key,
+                                    'message': ('{}: MO/FO already validated — set Pending to '
+                                                '"Pending OTC" to reopen the trail.'.format(key))}), 409
                 # Desfez a validação: o carimbo não sobrevive a ela. Deixá-lo
                 # afirmaria que alguém assinou uma etapa que está pendente.
                 row[col_stamp] = ''
+
+        # ── Preencher o Enviado p/ cliente pela grade É o Mark as sent ───────
+        # As travas do botão do card Pending FepWeb (`/fepweb-sent`): é ato do
+        # OTC, só depois de todas as validações, e com o callback feito (menos
+        # MGT × cliente, §581). Pela grade a esteira fechava em Ok com a etapa do
+        # MO por fazer ou sem a conferência por telefone.
+        enviado = str(row.get(_mc.SENT_COLUMN, '') or '').strip()
+        if bool(enviado) != bool(enviado_antes):
+            if not _R()._mc_can_validate(_mc.STAGE_OTC):
+                return jsonify({'success': False, 'stage_forbidden': True,
+                                'stage': _mc.STAGE_OTC, 'key': key,
+                                'message': _R()._mc_stage_denied(_mc.STAGE_OTC)}), 403
+        if enviado and not enviado_antes:
+            sonda = dict(row)
+            sonda[_mc.SENT_COLUMN] = ''
+            if _mc.pending_stage(sonda) != _mc.PENDING_FEPWEB:
+                return jsonify({'success': False, 'code': 'mc_not_fepweb', 'key': key,
+                                'message': ('{}: the validations must be done before marking '
+                                            'as sent.'.format(key))}), 409
+            from apps.pages.platform import manual_confirmation as _pmc
+            if not _mc._filled(row, 'Data Callback') and not _pmc._mc_row_is_mgt(row):
+                return jsonify({'success': False, 'code': 'callback_required',
+                                'callback_required': True, 'key': key,
+                                'message': ('{}: fill the Callback Date before marking '
+                                            'as sent.'.format(key))}), 409
         pendentes.append((original, row))
 
     saved = []

@@ -1098,11 +1098,11 @@ def _write_exec(category, ops, raise_errors=False):
         return False
 
 
-def _delete_key(category, key):
+def _delete_key(category, key, raise_errors=False):
     if not key:
         return
     _write_exec(category, [('DELETE FROM {} WHERE trim("{}") = ?'.format(TABLE, KEY_COLUMN),
-                            [str(key).strip()])])
+                            [str(key).strip()])], raise_errors=raise_errors)
 
 
 def _insert_into(category, row):
@@ -1270,8 +1270,17 @@ def save_changes(antes, depois):
 
 
 def delete_row(key):
+    """Apaga a chave dos DOIS bancos. A falha SOBE (a primeira, depois de
+    tentar o outro banco): engolida, o Delete da tela respondia `success` com
+    a linha ainda no banco, e ela voltava no reload sem explicação."""
+    erro = None
     for cat in ('pending', 'ok'):
-        _delete_key(cat, key)
+        try:
+            _delete_key(cat, key, raise_errors=True)
+        except Exception as exc:                            # noqa: BLE001
+            erro = erro or exc
+    if erro is not None:
+        raise erro
 
 
 def row_untouched(key):

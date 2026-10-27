@@ -1643,10 +1643,13 @@ def _ndfc_settlement_email(items, contraparte, le_class, ref_date, cpd, headers,
 # ECONOMIC AFFIRMATION (D0 trade date, against Financial Institutions)
 # ──────────────────────────────────────────────────────────────────────────
 def build_economic_affirmation_emails(deals, asset_label='Termo de Mercadoria'):
-    """IF affirmation: TradeDate == today, against Financial Institutions only.
+    """IF affirmation: TradeDate == today, against Financial Institutions —
+    PLUS every operation the page MARKED (`_selected`, §701: a contraparte que
+    não é IF só recebe quando a equipe a escolhe, em qualquer data).
 
     Eligible counterparties are those that are NOT Lawton, NOT Banco JP Morgan, and
     whose CETIP account (RefData) is none of 73760.00-9 / 73760.10-2 / 00041.00-7.
+    Lawton / Banco JP Morgan never get one, marked or not (internal leg).
     """
     ref = _build_refdata_index()
     ref_spn = _build_refdata_spn_index()
@@ -1654,7 +1657,8 @@ def build_economic_affirmation_emails(deals, asset_label='Termo de Mercadoria'):
     drafts = []
 
     def _eligible(d):
-        if _date_br(d.get('TradeDate')) != today:
+        marcada = bool(d.get('_selected'))
+        if not marcada and _date_br(d.get('TradeDate')) != today:
             return False
         acronym = str(d.get('Acronym', '') or '').strip().upper()
         # Pelo SPN também: cadastro sem acronym deixava a conta B3 em branco, e
@@ -1664,9 +1668,11 @@ def build_economic_affirmation_emails(deals, asset_label='Termo de Mercadoria'):
         rec = _ref_for_deal(ref, ref_spn, d)
         b3 = str(rec.get('B3 ACCOUNT', '') or '').strip()
         name = str(rec.get('COUNTERPARTY', '') or d.get('Client', '') or '').upper()
-        if b3 in EXCLUDED_B3_AFFIRMATION:
-            return False
         if _is_lawton(name, acronym) or _is_jpmorgan(name):
+            return False
+        if marcada:
+            return True
+        if b3 in EXCLUDED_B3_AFFIRMATION:
             return False
         return True
 
@@ -1773,15 +1779,31 @@ def _swb_is_fi(deal):
     return True
 
 
+def _swb_is_internal(deal):
+    """Perna nossa (o B2B × Atacama/Lawton, ou a contraparte é o Banco/um
+    fundo): nunca recebe afirmação, marcada ou não."""
+    if str(deal.get('LE', '') or '').upper() in ('ATACAMA', 'LAWTON'):
+        return True
+    if any(f in str(deal.get('Pair', '') or '').upper() for f in ('ATACAMA', 'LAWTON')):
+        return True
+    name = str(deal.get('Client', '') or '').upper()
+    return _is_lawton(name) or _is_jpmorgan(name) or 'ATACAMA' in name
+
+
 def build_swap_bullet_affirmation_emails(deals, ref_date=None):
     """Um rascunho por contraparte IF com operação na data (`ref_date`,
-    default hoje, dd/mm/aaaa) — o Deal Ticket de cada operação no corpo."""
+    default hoje, dd/mm/aaaa) — o Deal Ticket de cada operação no corpo — e,
+    além delas, um por contraparte das operações MARCADAS no card
+    (`_selected`, §701), seja ou não IF e em qualquer data. A perna interna
+    nunca entra. Cada rascunho leva a data das operações dele."""
     today = ref_date or _today_br()
-    eligible = [d for d in deals if isinstance(d, dict) and _date_br(d.get('TradeDate')) == today and _swb_is_fi(d)]
+    eligible = [d for d in deals if isinstance(d, dict) and not _swb_is_internal(d)
+                and (d.get('_selected') or (_date_br(d.get('TradeDate')) == today and _swb_is_fi(d)))]
     groups = {}
     for d in eligible:
-        groups.setdefault((d.get('Client', ''), d.get('ClientAccount', '')), []).append(d)
-    return [_swap_bullet_affirmation_email(items, cli, acct, today) for (cli, acct), items in groups.items()]
+        dia = _date_br(d.get('TradeDate')) or today
+        groups.setdefault((d.get('Client', ''), d.get('ClientAccount', ''), dia), []).append(d)
+    return [_swap_bullet_affirmation_email(items, cli, acct, dia) for (cli, acct, dia), items in groups.items()]
 
 
 def _swb_row(cells):

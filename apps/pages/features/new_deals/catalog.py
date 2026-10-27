@@ -233,6 +233,9 @@ def _page(slug, group, product, columns, **kw):
         # add_label: o texto do botão de inclusão (as telas de swap dizem Add
         # Deal, §698); b2b: o Create B2B no card do deal contra cliente.
         'add_label': 'Add Row', 'b2b': False,
+        # swap_flags: as marcas do card (Forward Start, Atualização de Notional,
+        # Curva VCP, Prêmio — §701), gravadas por `<api>/flags`.
+        'swap_flags': False,
     }
     p.update(kw)
     return p
@@ -254,7 +257,7 @@ PAGES = dict((p['path'], p) for p in (
                     'CurveBPct': '100.00', 'CurveBSign': '+', 'CurveBRate': '0.0000'},
           preview_hint='Double-click a card to preview the B3 files.',
           send_text='The swap contract and cash flow files are written to Batch Conecta › New.',
-          cards=_CARDS_SWAP, add_label='Add Deal', b2b=True),
+          cards=_CARDS_SWAP, add_label='Add Deal', b2b=True, swap_flags=True),
     # O "cetip usd irs" do e-mail das Cetes (§650): Banco × Lawton, o registro
     # 0301 na versao 1 do layout, nas duas visoes; no Success, a Intrag Swap.
     _page('swap-cetes', 'Swap', 'Cetes', _CETES + _MAKER,

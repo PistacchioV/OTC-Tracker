@@ -31,7 +31,8 @@ def day_path(ref):
 # do 0034 (o cronograma), por visão.
 KEEP_ON_REIMPORT = ('Status', 'Maker', 'Checker', 'MyNumber', 'MyNumberMirror',
                     'PremiumMyNumber', 'PremiumMyNumberMirror', 'FlowMyNumber',
-                    'FlowMyNumberMirror', 'SentFiles', 'B3ID', 'Deal')
+                    'FlowMyNumberMirror', 'SentFiles', 'B3ID', 'Deal',
+                    'SwapFlags')
 
 
 def key_of(e):

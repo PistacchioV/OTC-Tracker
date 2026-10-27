@@ -71,6 +71,8 @@ _CONTROL_PANEL_CARDS = [
     # o token antigo segue valendo pelo mapa do `_read_user_authz`.
     {'id': 'intradaytasks', 'label': 'Intraday Monitor — Tasks & Pending Action'},
     {'id': 'confescalation', 'label': 'Confirmations Escalation'},
+    # Os alertas das iniciativas (§701): sem atualização, prazo chegando, fim.
+    {'id': 'initiativealerts', 'label': 'Initiatives — Alerts'},
     # Settlement Reporting
     {'id': 'daily',       'label': 'Save Daily Settlement Files'},
     {'id': 'forecast',    'label': 'Settlement Forecast'},
@@ -122,6 +124,8 @@ _CP_ENDPOINT_CARD = {
     '/api/control-panel/mt300/run': 'mt300',
     '/api/control-panel/app-version/recipients': 'appversion',
     '/api/control-panel/app-version/run': 'appversion',
+    '/api/control-panel/initiative-alerts/recipients': 'initiativealerts',
+    '/api/control-panel/initiative-alerts/run': 'initiativealerts',
 }
 
 

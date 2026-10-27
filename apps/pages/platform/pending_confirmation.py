@@ -522,10 +522,11 @@ def _pc_write_exec(category, ops, raise_errors=False):
         return False
 
 
-def _pc_delete_tn(category, tn):
+def _pc_delete_tn(category, tn, raise_errors=False):
     if not tn:
         return
-    _pc_write_exec(category, [('DELETE FROM {} WHERE "Trade Number" = ?'.format(_PC_TABLE), [tn])])
+    _pc_write_exec(category, [('DELETE FROM {} WHERE "Trade Number" = ?'.format(_PC_TABLE), [tn])],
+                   raise_errors=raise_errors)
 
 
 def _pc_delete_trade_number(tn):
@@ -538,15 +539,24 @@ def _pc_delete_trade_number(tn):
     if not tn:
         return 0
     achou = 0
+    erro = None
     for cat in ('backlog', 'pending', 'ok'):
         try:
+            # Leitura ESTRITA: a tolerante lia o banco ocupado como vazio, o
+            # Trade Number "não estava lá" e o Delete saía calado, com a linha
+            # no banco.
             if any(str(r.get('Trade Number', '') or '').strip() == tn
-                   for r in _pc_load_rows(cat)):
+                   for r in _pc_load_rows(cat, strict=True)):
                 achou += 1
-                _pc_delete_tn(cat, tn)
-        except Exception:                                   # noqa: BLE001
+                _pc_delete_tn(cat, tn, raise_errors=True)
+        except Exception as exc:                            # noqa: BLE001
             log.warning('[pending-confirmation] delete de %s em %s falhou:\n%s',
                         tn, cat, traceback.format_exc())
+            erro = erro or exc
+    # A falha SOBE depois de tentar os três: quem apaga a operação na origem
+    # precisa saber que a linha do Pending ficou (§696).
+    if erro is not None:
+        raise erro
     return achou
 
 

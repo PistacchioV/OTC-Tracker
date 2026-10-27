@@ -328,3 +328,38 @@ def api_project_milestone_delete(project_id, ms_id):
         return g
     me = _actor()
     return _run(lambda: _detail_json(commands.delete_milestone(me, project_id, ms_id)))
+
+
+# ── Os alertas das iniciativas no Control Panel (card `initiativealerts`, §701)
+# O card guarda o TO (o box) e o CC; quem está na iniciativa entra sozinho no
+# TO de cada e-mail. O acesso é o do card (`_CP_ENDPOINT_CARD`).
+start_alerts_scheduler = commands.start_alerts_scheduler
+
+
+@blueprint.route('/api/control-panel/initiative-alerts/recipients', methods=['GET', 'POST'])
+def api_cp_initiative_alerts_recipients():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    from apps.pages.features.projects.infra import alerts as A
+    if request.method == 'POST':
+        body = request.get_json(silent=True) or {}
+        A.save_recipients(body.get('to'), body.get('cc'))
+    rec = A.load_recipients()
+    return jsonify({'success': True, 'to': rec['to'], 'cc': rec['cc'], 'last': A.load_status(),
+                    'hour': '%02d:00' % commands.ALERT_HOUR})
+
+
+@blueprint.route('/api/control-panel/initiative-alerts/run', methods=['POST'])
+def api_cp_initiative_alerts_run():
+    """O Run do card: dispara AGORA o que é devido hoje e ainda não saiu (a
+    mesma regra do automático — o que já saiu não sai de novo)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    body = request.get_json(silent=True) or {}
+    hoje = _routes()._br_now().date().isoformat()
+    res = commands.run_alerts(hoje, to_override=body.get('to'), cc_override=body.get('cc'))
+    if res['failed'] and not res['initiatives']:
+        return jsonify({'success': False, 'code': 'initiative_alerts_failed', 'failed': res['failed'],
+                        'error': '; '.join('%s: %s' % f for f in res['failed'])}), 502
+    return jsonify({'success': True, 'sent': res['initiatives'], 'alerts': res['alerts'],
+                    'failed': res['failed']})

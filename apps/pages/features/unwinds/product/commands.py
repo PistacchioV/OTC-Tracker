@@ -313,6 +313,7 @@ def editar(page, row_id, date_str, fields, sid=''):
         if idx is None:
             return None
         linha = lst[idx]
+        antes = dict(linha)
         # Linha ja ENVIADA tambem se edita (mesa, 28/09/2026): corrigir o dado
         # depois do envio e legitimo, e a edicao a devolve a `Pending` — ela so
         # volta a B3 depois de outro usuario conferir.
@@ -338,9 +339,33 @@ def editar(page, row_id, date_str, fields, sid=''):
         linha['Checker'] = ''
         product_store.save(fp, lst)
         editada = dict(linha)
-    # A Intrag acompanha a edicao (o upsert preserva o status de la).
+    # A Intrag acompanha a edicao (o upsert preserva o status de la) — e,
+    # com a Data da Recompra ou o Deal ID mudados, a linha MUDA de dia ou de
+    # chave antes, senao o upsert criava outra (§701).
+    _intrag_segue(page, antes, editada)
     intrag(page, [editada])
     return editada
+
+
+def _intrag_segue(page, antes, depois):
+    """Leva a linha da Intrag › Unwind do dia/chave de `antes` para os de
+    `depois` (as regras do `intrag_da_recompra`: dia = Data da Recompra,
+    chave = o Deal ID do `para_o_termo`). A falha e DITA na tela."""
+    from apps.pages.features.unwinds import commands as fase1_cmd
+    try:
+        a, b = para_o_termo(page, antes), para_o_termo(page, depois)
+        pd, nd = fase1_cmd._dia_da_recompra(a), fase1_cmd._dia_da_recompra(b)
+        pk = str(a.get('AthenaID') or '').strip()
+        nk = str(b.get('AthenaID') or '').strip()
+        if pd == nd and pk == nk:
+            return False
+        return _R()._intrag_engine()._intrag_follow('unwind', pd, pk, nd, nk)
+    except Exception as exc:                                # noqa: BLE001
+        _R().log.warning('[UNWIND %s] Intrag: a linha nao acompanhou o Edit:\n%s',
+                         page['label'], traceback.format_exc())
+        from apps.pages.platform import mirrors
+        mirrors.falhou('intrag', str((depois or {}).get('Contract') or page['label']), exc)
+        return False
 
 
 def aprovar(page, row_id, date_str, sid=''):

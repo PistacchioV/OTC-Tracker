@@ -467,3 +467,67 @@ def calendar_events(projects):
                                 priority=t.get('priority', ''), assignee_name=t.get('assignee_name', '')))
     out.sort(key=lambda e: (e['date'], e['project_name'].lower(), e['kind']))
     return out
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# OS ALERTAS DAS INICIATIVAS (§701)
+# --------------------------------------------------------------------------
+# Um e-mail (box Brazil OTC Ops + quem está na iniciativa, Cc do card do
+# Control Panel) e o sino de cada envolvido, em três casos:
+#   · `stale`     — nenhuma atualização há MAIS de 5 dias úteis ANBIMA (o
+#                   `updated_at`, que toda gravação carimba — inclusive as que
+#                   não viram atividade);
+#   · `due_soon`  — faltam 2 dias úteis (ou menos) para o prazo da iniciativa;
+#   · `task_due`  — idem, para o prazo de uma tarefa ainda não Done;
+#   · `ends`      — o prazo da iniciativa é HOJE (ou passou há até 7 dias e o
+#                   aviso não saiu: o dia era feriado, o app estava parado).
+# Só a iniciativa `On going`: a que está On hold parou de propósito, e a
+# Concluded acabou. Cada alerta tem uma CHAVE (iniciativa, caso, data de
+# referência) e sai uma vez só — quem deduplica é quem envia; aqui é só a regra.
+ALERT_STALE_BIZDAYS = 5
+ALERT_WARN_BIZDAYS = 2
+ALERT_ENDS_GRACE_DAYS = 7
+
+
+def _iso(v):
+    v = str(v or '').strip()[:10]
+    return v if re.match(r'^\d{4}-\d{2}-\d{2}$', v) else ''
+
+
+def alerts(project, today, biz_between):
+    """Os alertas devidos de UMA iniciativa em `today` ('YYYY-MM-DD'):
+    [{key, kind, params}]. `biz_between(a, b)` = dias úteis ANBIMA em (a, b],
+    com `a`/`b` em 'YYYY-MM-DD' — injetado: o domain é puro."""
+    p = project or {}
+    if p.get('status') != DEFAULT_STATUS:
+        return []
+    pid = p.get('id') or ''
+    out = []
+    upd = _iso(p.get('updated_at')) or _iso(p.get('created_at'))
+    if upd and upd < today:
+        n = biz_between(upd, today)
+        if n > ALERT_STALE_BIZDAYS:
+            out.append({'key': '%s:stale:%s' % (pid, str(p.get('updated_at') or upd)),
+                        'kind': 'stale', 'params': {'since': upd, 'days': n}})
+    due = _iso(p.get('due_date'))
+    if due:
+        if due > today:
+            n = biz_between(today, due)
+            if 0 < n <= ALERT_WARN_BIZDAYS:
+                out.append({'key': '%s:due:%s' % (pid, due), 'kind': 'due_soon',
+                            'params': {'due': due, 'days': n}})
+        else:
+            atraso = (date.fromisoformat(today) - date.fromisoformat(due)).days
+            if atraso <= ALERT_ENDS_GRACE_DAYS:
+                out.append({'key': '%s:ends:%s' % (pid, due), 'kind': 'ends',
+                            'params': {'due': due, 'late': atraso}})
+    for tk in p.get('tasks') or []:
+        tdue = _iso(tk.get('due'))
+        if not tdue or tk.get('status') == DONE or tdue <= today:
+            continue
+        n = biz_between(today, tdue)
+        if 0 < n <= ALERT_WARN_BIZDAYS:
+            out.append({'key': '%s:%s:due:%s' % (pid, tk.get('id') or '', tdue), 'kind': 'task_due',
+                        'params': {'task': tk.get('title') or '', 'due': tdue, 'days': n,
+                                   'assignee': tk.get('assignee_name') or ''}})
+    return out

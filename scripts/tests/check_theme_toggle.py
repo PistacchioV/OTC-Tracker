@@ -101,5 +101,22 @@ check('o layout copia o ícone do item do menu para o título',
 check('e o faz logo depois do conteúdo, antes do rodapé',
       0 <= LAYOUT.find('endblock page_content') < LAYOUT.find('otc-page-product-icon') < LAYOUT.find("partials/footer.html"), True)
 
+# O CSS de PLUGIN (daterangepicker, flatpickr) vai no `extra_css`, ANTES do
+# otc.css: carregado no fim da página ele vence o tema, e o calendário saía
+# branco com o texto claro no escuro (o Reference date do Pay/Rec, §701).
+tardios = []
+for raiz, _d, arqs in os.walk(os.path.join(ROOT, 'apps', 'templates', 'pages')):
+    for a in arqs:
+        if not a.endswith('.html'):
+            continue
+        t = io.open(os.path.join(raiz, a), encoding='utf-8').read()
+        fim = t.find('{% endblock extra_css %}')
+        if fim < 0:
+            fim = t.find('{% block page_content %}')
+        for m in re.finditer(r'plugins/(daterangepicker|flatpickr)/[^"]+\.css', t):
+            if fim >= 0 and m.start() > fim:
+                tardios.append(a)
+check('CSS de calendário só no extra_css (antes do tema)', sorted(set(tardios)), [])
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

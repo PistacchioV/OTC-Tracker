@@ -82,6 +82,64 @@ def _intrag_day_persist(cache_dir, suffix, tag, entry, td):
     _R().log.info('[%s] Saved entry deal=%r → %s', tag, deal_id, file_path)
 
 
+def _intrag_day_file(cache_dir, suffix, ref):
+    ref = ref or datetime.now()
+    return os.path.join(cache_dir, ref.strftime('%Y'), ref.strftime('%m'),
+                        ref.strftime('%Y%m%d') + suffix)
+
+
+def _intrag_relocate(cache_dir, suffix, prev_td, prev_key, td, key):
+    """Leva a linha `prev_key` do arquivo-dia de `prev_td` para o de `td`,
+    com a chave `key` — a operação de origem mudou o dia (Trade Date, Data da
+    Recompra) ou a chave (Deal, Deal ID) depois de ter ido à Intrag.
+
+    Toda gravação da Intrag procura a linha SÓ no dia de destino: sem isto a
+    gravação seguinte criava uma linha nova no dia novo e a antiga ficava no
+    dia velho — a mesma operação duas vezes na Intrag, e duas no arquivo
+    enviado. A linha leva a esteira (status, maker, checker, Intrag ID); o
+    conteúdo se atualiza na gravação seguinte, que a acha no destino.
+
+    O DESTINO é gravado primeiro (pior caso: duplicata, nunca a linha perdida);
+    o destino que já tem a chave fica com a dele. Devolve True se moveu."""
+    prev_key = str(prev_key or '').strip()
+    key = str(key or '').strip() or prev_key
+    if not prev_td or not prev_key:
+        return False
+    src = _intrag_day_file(cache_dir, suffix, prev_td)
+    dst = _intrag_day_file(cache_dir, suffix, td)
+    if src == dst and prev_key == key:
+        return False
+
+    def _ler(fp):
+        if not _store.exists(fp):
+            return []
+        lst = _store.read(fp)
+        return lst if isinstance(lst, list) else []
+
+    with _R()._cache_lock:
+        origem = _ler(src)
+        idx = next((i for i, e in enumerate(origem)
+                    if str(e.get('_deal') or '').strip() == prev_key), None)
+        if idx is None:
+            return False
+        row = dict(origem.pop(idx))
+        row['_deal'] = key
+        if src == dst:
+            if not any(str(e.get('_deal') or '').strip() == key for e in origem):
+                origem.insert(idx, row)
+        else:
+            destino = _ler(dst)
+            if not any(str(e.get('_deal') or '').strip() == key for e in destino):
+                destino.append(row)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            _R()._atomic_write_json(dst, destino)
+            _R()._daycache_forget(dst)
+        _R()._atomic_write_json(src, origem)
+        _R()._daycache_forget(src)
+    _R().log.info('[INTRAG] linha %r movida %s → %s (chave %r)', prev_key, src, dst, key)
+    return True
+
+
 INTRAG_UNWIND_CACHE_DIR = os.path.normpath(os.path.join(
     _R().data_dir(), "cache", "new deals", "Intrag", "Unwind"
 ))

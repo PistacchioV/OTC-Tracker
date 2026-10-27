@@ -149,6 +149,22 @@ def api_swap_cashflow_edit():
     return jsonify({'success': True, 'entry': d})
 
 
+@blueprint.route(API + '/flags', methods=['POST'])
+def api_swap_cashflow_flags():
+    """As marcas do card (§701): só o `SwapFlags`, sem mexer no status."""
+    err = _auth()
+    if err:
+        return err
+    payload = request.get_json(silent=True) or {}
+    deal_id = str(payload.get('deal_id') or '').strip()
+    if not deal_id or not isinstance(payload.get('flags'), dict):
+        return _err('swc_bad_flags', 'Missing deal_id/flags', 400)
+    d = commands.set_flags(deal_id, str(payload.get('trade_date') or ''), payload['flags'])
+    if d is None:
+        return _err('swc_not_found', 'Entry not found', 404)
+    return jsonify({'success': True, 'entry': d})
+
+
 @blueprint.route(API + '/add', methods=['POST'])
 def api_swap_cashflow_add():
     err = _auth()
