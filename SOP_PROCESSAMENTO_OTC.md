@@ -143,7 +143,7 @@ Hub das rotinas operacionais diárias, dividido em **cinco seções** — e o qu
 
 | Seção | Rotinas |
 |---|---|
-| **Intraday Routines** | Save CETIP Files (pega os arquivos brutos da B3 na pasta `Batch Conecta › Return` — compactados, no nome `73760_<sistema>_<data>_SP_<arquivo>` —, guarda os originais na pasta de origem do dia, renomeia no padrão e salva nas pastas de liquidação, e tira da Return os que trouxe; o `INDEXADORESSWAP_VCP` e o `CADASTROCURVASMOEDASFEEDERDOMINIOS` também atualizam as bases de indexadores e de domínios, e o de domínios vai anexo no e-mail) · Intraday Monitor — Tasks & Pending Action · Confirmations Escalation (Save CETIP Files e Confirmations Escalation também são tarefas do Intraday Monitor) |
+| **Intraday Routines** | Save CETIP Files (pega os arquivos brutos da B3 na pasta `Batch Conecta › Return` — compactados, no nome `73760_<sistema>_<data>_SP_<arquivo>` —, guarda os originais na pasta de origem do dia, renomeia no padrão e salva nas pastas de liquidação, e tira da Return os que trouxe; o `INDEXADORESSWAP_VCP` e o `CADASTROCURVASMOEDASFEEDERDOMINIOS` também atualizam as bases de indexadores e de domínios, e o de domínios vai anexo no e-mail) · Intraday Monitor — Tasks & Pending Action · Confirmations Escalation (Save CETIP Files e Confirmations Escalation também são tarefas do Intraday Monitor) · Initiatives — Alerts (todo dia útil às 08:00: o e-mail e o aviso no sino da iniciativa em andamento parada há mais de 5 dias úteis, com prazo — dela ou de uma tarefa — a 2 dias úteis, ou que termina no dia) |
 | **Settlement Reporting** | Save Daily Settlement Files (dropzone que processa todos os arquivos do dia em JSON; o arquivo de Operações da B3 vira JPM ou MGT pelo *Participante* da célula A3, sem renomear) · Settlement Forecast (projeta as liquidações dos próximos dias úteis e envia por e-mail) |
 | **Pending Confirmation Routines** | Daily Metric — Outstanding Confirmation Brazil OTC · Pending Confirmations Spreadsheet Metrics · Pending Confirmation — Weekly Escalation (CEM/EDG; o CEM inclui a LOB COMMODITY) · Pending Signature Confirmations — Collection |
 | **Economic Affirmation Routines** | Manual Deals EA · BACC EA Metrics · MT300 |
@@ -267,6 +267,8 @@ Confere se a **confirmação das operações de NDF do dia anterior foi gerada n
 
 Fila das operações com confirmação pendente, para o operador acompanhar e tratar o que ainda não foi confirmado pela contraparte/câmara.
 
+A gravação da tela leva **só o que o operador alterou**: o que outra pessoa ou a esteira de confirmação gravou na mesma linha depois que a tela carregou é preservado, e a linha apagada nesse meio-tempo não é recriada (a tela pede para recarregar). A exclusão só sai da tabela com o servidor confirmando.
+
 ![Pending Confirmation](docs/sop-screenshots/pending-confirmation.png)
 
 #### Manual Confirmation — Confirmations Monitor
@@ -284,6 +286,8 @@ As duas pontas não são de validação: **Pending Legal** é hold manual (o car
 #### Manual Confirmation — Track Confirmations
 
 Base completa das confirmações manuais, com o filtro do cabeçalho (o funil de cada coluna, como no Excel), atualização em massa por coluna, inclusão manual de linha e exportação do que está na tela. Os cards do topo filtram por etapa da esteira, e a tabela abre ordenada pelo *Aging*, do menor para o maior.
+
+A grade segue as travas do Confirmations Monitor: preencher uma coluna de validação é validar (a mesa da etapa, justificativa fora do prazo), o MO e o FO só validam depois do OTC, e preencher o envio ao cliente é o *Mark as sent* — do OTC, com as validações feitas e a *Data Callback* preenchida (exceto MGT × cliente). Reabrir a esteira é pôr o *Pending* em `Pending OTC`.
 
 Os títulos das colunas seguem o idioma da aplicação (*Settlement Date*, *Trade Date*, *Underlying Asset*, *Notional/Qty*, *Counterparty*). A coluna **Notional Amount CCY** traz a moeda do notional junto com o valor e é preenchida sozinha no mapeamento — ela é diferente do *Underlying Asset* ao lado, que em mercadoria guarda a commodity. No funil de cada coluna, **(Vazias)** lista as linhas em que aquela coluna está vazia.
 

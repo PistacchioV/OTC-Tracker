@@ -230,7 +230,7 @@ O tempo focado soma no *Focused today* e no anel *Focus*. Enquanto você está e
 | Seção | O que tem |
 |---|---|
 | **Profile** | A sua foto (ou as suas iniciais, sem foto cadastrada), nome, e-mail, mesa e SID — vêm do cadastro (3.7) e não se editam aqui |
-| **Notifications** | Liga e desliga os avisos do sino que são **para você**: *Task assigned* (uma tarefa foi passada a você), *Comments* (comentaram numa tarefa sua), *Initiative lead* (você virou líder de uma iniciativa), *Initiative team* (você foi incluído no time de uma iniciativa), *Due dates* (às 08:00 do dia em que uma tarefa sua vence) e *Focus finished* (fim de uma sessão de foco) |
+| **Notifications** | Liga e desliga os avisos do sino que são **para você**: *Task assigned* (uma tarefa foi passada a você), *Comments* (comentaram numa tarefa sua), *Initiative lead* (você virou líder de uma iniciativa), *Initiative team* (você foi incluído no time de uma iniciativa), *Initiative alerts* (uma iniciativa em que você está ficou mais de 5 dias úteis sem atualização, tem prazo — dela ou de uma tarefa — a 2 dias úteis, ou termina hoje; 17.3), *Due dates* (às 08:00 do dia em que uma tarefa sua vence) e *Focus finished* (fim de uma sessão de foco) |
 | **Appearance** | **Theme** (*Light · Dark · Auto* — *Auto* segue o Windows), **Wallpaper** (as cores lisas da paleta do sistema — **Abyss, Midnight, Slate e Steel** no tema escuro, **Fog e Frost** no claro; a lista mostra só as do tema atual, e trocar de tema leva à cor equivalente do outro, voltando à sua ao retornar — e os papéis desenhados **Aurora, Smoke, Tide, Dusk, Fjord e Glacier**, que valem nos dois temas; cada miniatura mostra a parede no tema escolhido. Quem nunca escolheu começa com **Aurora**), **Accent** (a cor de destaque dos botões e seleções), **Glass** (*Clear*, o padrão, mostra mais o papel de parede; *Tinted* deixa o vidro mais fechado) e **Reduce transparency** (superfícies sólidas, sem vidro, e a troca de página sem as animações de entrada — o modo das máquinas sem placa de vídeo, onde elas pesam). O sistema liga *Reduce transparency* sozinho em máquina sem placa de vídeo ou com os **Efeitos de transparência** do Windows desligados; **desligar o botão vale sempre**, mesmo nesses casos |
 | **Focus** | A duração da **sessão**, da **pausa** e a **meta diária** de foco, com **−** e **+**. **Start** começa uma sessão agora |
 | **Data** | **Export my tasks as CSV** baixa as suas tarefas, uma por linha. **Reset to defaults** volta aparência, avisos e foco ao original |
@@ -518,6 +518,16 @@ A tela se atualiza sozinha a cada minuto.
 5. Para devolver a tarefa ao cálculo do sistema, clique em **Undo** no aviso ou em **↺ auto** no cartão: quem fez o ajuste desfaz o seu; o administrador desfaz o de qualquer um.
 6. Se a tarefa mudou desde que a tela carregou (outra pessoa a concluiu, a recon rodou), o sistema **recusa** o arrasto — *o quadro estava desatualizado* — e recarrega o quadro. Nada é gravado.
 
+**Passo a passo — owner e backup de cada tarefa:**
+
+1. Clique em **Owners**, na barra ao lado da Reference date.
+2. Cada linha diz uma tarefa, a **entidade** e as duas pessoas: o **Owner**, que responde pela tarefa, e o **Backup**, que a cobre na ausência dele. Em *Entity*, **All** é a tarefa inteira; escolha **JPM**, **MGT** ou **LAW** para dividir a tarefa por entidade — por exemplo, *B3 Registration* da **MGT** com o Augusto de owner e o Theodoro de backup, e *Confirmations* da **MGT** com os mesmos dois.
+3. **Add** inclui uma linha; a lixeira tira. O backup é opcional e não pode ser o próprio owner.
+4. Clique no botão verde para salvar. O cartão de cada tarefa passa a mostrar o owner (com a entidade, quando há) e, embaixo, o backup.
+5. Quem acabou de ser designado recebe um aviso no **sino** — só ele. Quem já estava designado não é avisado de novo.
+
+> **Quem designa:** o Back Office e os administradores. Os demais abrem a janela e veem quem responde por cada tarefa, sem editar.
+
 > **O ajuste manual vale também para o e-mail das 19h.** Tarefa marcada como concluída à mão sai da lista de pendências do aviso — use quando a tarefa foi resolvida por fora do sistema, e não para esconder o que ainda está em aberto. As contagens por produto, embaixo, continuam as do sistema.
 
 > **A Intrag conta desde o import.** A operação que vai virar linha na Intrag aparece na zona Intrag como **Awaiting B3 ID** assim que entra nas telas de New Deals, e sai quando chega ao **Success**.
@@ -671,7 +681,7 @@ Depois que a B3 devolve o arquivo de retorno:
 3. Abra o arquivo baixado: ele abre no seu Outlook, já preenchido, para você revisar e enviar.
 4. Se não houver prêmio a pagar hoje, o sistema avisa em vez de gerar arquivo vazio.
 
-**Econ. Affirmation** *(NDF Commodities, FXO e Options Commodities)* — gera o e-mail de afirmação econômica das operações com instituição financeira fechadas hoje. Mesmo passo a passo do Premium.
+**Econ. Affirmation** *(NDF Commodities, FXO, Options Commodities e as telas de Swap)* — gera o e-mail de afirmação econômica das operações com **instituição financeira** fechadas hoje. Para afirmar também uma operação com **outra contraparte** (um cliente, por exemplo), ou de outro dia, **marque a linha** (nas telas de swap, a caixa do card) antes de clicar: as marcadas entram junto com as instituições financeiras do dia. Sem nenhuma marcada, saem só as instituições financeiras, como sempre. A perna interna (Lawton, Atacama, o B2B) nunca recebe. Mesmo passo a passo do Premium. *Na tela de FXO o e-mail ainda está em desenvolvimento.*
 
 ### 5.9. Gerar a confirmação
 
@@ -745,6 +755,10 @@ Duas coisas para saber desde já:
 A tela de **Swap Bullet** e a de **Swap Cashflow** ganharam as informações que o *Deal Ticket* da CEM traz e o da EDG não trazia: **FX Início**, **Valor Base em moeda estrangeira**, **Cotação**, **DCC** e **Cupom Limpo** de cada curva, o bloco de **Atualização de Notional** e as **Observações**. No deal da EDG esses campos ficam em branco. No *Cashflow*, o **cronograma de fluxos** (data inicial, data de pagamento, amortização, dias úteis e corridos, data do fixing) é editado dentro do modal da operação; na grade aparece só a quantidade de fluxos.
 
 > **As telas de Swap mostram uma operação por card** (Bullet, Cashflow e Cetes), no lugar da tabela de dezenas de colunas. Cada card traz o status, a **LOB** (CEM/EDG), o **Deal** e o **B3 ID** (com "—" enquanto estão em branco), as datas, os valores e as curvas (no **Bullet**, quando há prêmio, o valor e a **data de pagamento do prêmio**), e os botões de sempre — **Confirm**, **Edit**, **Delete** e **Send**. No **Edit**, o **Trade Date** também se altera — a operação passa para o dia novo. A caixa no canto do card seleciona; **Select all** seleciona todos, e os botões **Send** e **Delete** da barra agem sobre os selecionados. O **duplo clique** no card abre o preview dos arquivos da B3. O **Export** continua o mesmo, com todas as colunas.
+
+> **As marcas do card** (Bullet e Cashflow): **Forward Start**, **Notional Update** (a Atualização de Notional), **VCP Curve** e **Premium**. O sistema as **marca sozinho** pelos campos da operação: Forward Start quando a data de início é diferente do Trade Date; Atualização de Notional quando há índice e data de observação; Curva VCP quando uma das pernas é VCP; Prêmio quando há valor ou agenda de prêmio. Se a leitura errou, **clique na marca** para corrigir: a correção fica gravada na operação, sobrevive a um novo import e aparece com o **contorno laranja e o dedo** — o sinal de que foi marcada à mão e de que os campos devem ser conferidos. A marca **não muda o arquivo da B3**, que continua saindo dos campos da operação: para mudar o arquivo, corrija o campo no **Edit**.
+
+> **O Edit dos swaps é dividido em blocos**: *Identification*, *Dates & Notional*, *Premium*, *Notional Update*, **Curve A** e **Curve B** lado a lado, *VCP* e *Observations* (na Cetes, *Legs* no lugar das curvas). Campo que não pertence a nenhum bloco aparece no fim, em *Other*.
 
 ### 5.12. Swap Cetes — o "cetip usd irs" das Cetes
 
@@ -1245,6 +1259,8 @@ Este bloco acompanha a confirmação depois que a operação já está registrad
 4. Quando o cliente devolver assinado, marque a linha e clique em **Mark Concluded** — ela sai da fila de pendências.
 5. **Add Row +** inclui à mão uma pendência que não veio automaticamente.
 
+> **A gravação leva só o que você mudou.** Se outra pessoa (ou a esteira de confirmação) gravou a mesma linha depois que a sua tela carregou, o que ela gravou fica — o seu Save aplica só os campos que você alterou. Se a linha foi **apagada** por outra pessoa nesse meio-tempo, o sistema avisa e não a recria: recarregue a tela. E o **Delete** só tira a linha da tabela depois que o servidor confirma; se o banco estiver ocupado, a janela diz e a linha continua.
+
 **A coluna *Pending Status*** diz o que está faltando, e ela é preenchida pelo sistema — não se digita à toa:
 
 | Valor | Significa |
@@ -1424,6 +1440,8 @@ Este bloco acompanha a confirmação depois que a operação já está registrad
 > **Preencher uma coluna de validação aqui É validar.** Escrever a data em *VALIDADO p/ MO* passa pelas mesmas três regras da tela de validação: carimba quem assinou, exige a mesa certa e pede justificativa se o prazo já venceu. Se você só quer ajustar um cadastro, não use as colunas de validação.
 >
 > **Apagar a data apaga o carimbo** — é assim que se desfaz uma validação feita por engano.
+>
+> **A grade tem as mesmas travas do Confirmations Monitor:** o MO e o FO só validam **depois do OTC**; com o MO ou o FO já validados, não se desfaz só a validação do OTC — para reabrir a esteira, ponha o *Pending* em `Pending OTC`; e preencher **Sent to Client** é o *Mark as sent*: é do OTC, só com todas as validações feitas e com a **data do callback** preenchida (menos nas confirmações MGT × cliente, que não têm callback). Fora disso a janela diz o que falta e nada é gravado.
 
 ---
 
@@ -1968,15 +1986,16 @@ Cada leiaute é um **template**, e a tabela mostra uma linha por campo: **SEQ ·
 
 **Para que serve:** é onde moram as rotinas que o sistema roda sozinho — salvar arquivos, mandar e-mails de cobrança, gerar planilhas de métrica. Cada rotina é um **cartão**, e cada cartão tem duas coisas: os **destinatários** e um botão para rodar **agora**, sem esperar o horário.
 
-Os cartões estão em **cinco seções**, e o que agrupa não é o que a rotina faz, e sim **quando** ela acontece:
+Os cartões estão em **seis seções**, e o que agrupa não é o que a rotina faz, e sim **quando** ela acontece:
 
 | Seção | Cartões |
 |---|---|
-| **Intraday Routines** (ao longo do pregão) | Save CETIP Files · Intraday Monitor — Tasks & Pending Action · Confirmations Escalation |
-| **Settlement Reporting** | Save Daily Settlement Files · Settlement Forecast |
+| **Intraday Routines** (ao longo do pregão) | Save CETIP Files · Intraday Monitor — Tasks & Pending Action · Confirmations Escalation · Initiatives — Alerts |
+| **Settlement Reporting** | Save Daily Settlement Files · Settlement Forecast · Branch Settlement Reverse Approval |
 | **Pending Confirmation Routines** | Daily Metric — Outstanding Confirmation Brazil OTC · Pending Confirmations Spreadsheet Metrics · Pending Confirmation — Weekly Escalation (CEM/EDG) · Pending Signature Confirmations — Collection |
 | **Economic Affirmation Routines** | Manual Deals EA · BACC EA Metrics · MT300 |
 | **Reference Data Routines** | Update Contacts |
+| **Application** | New Version Released |
 
 ### 14.1. Como usar um cartão
 
@@ -1994,6 +2013,7 @@ Os cartões estão em **cinco seções**, e o que agrupa não é o que a rotina 
 | **Save CETIP Files** | Salva os arquivos da CETIP na pasta do dia e manda o e-mail para o OTC. **Os arquivos chegam sozinhos na pasta `Batch Conecta › Return`** (compactados, com nome começando por `73760_`): a rotina pega os da data, guarda os originais na pasta de origem do dia, salva no destino os que o cadastro *CETIP Files* pede e tira todos eles da Return. Os retornos de registro do Batch Conecta, que ficam na mesma pasta, não são tocados. O resultado diz quantos vieram da Return e quantos ficaram só na origem por não estarem no cadastro. Dois deles não são posição e atualizam uma base: o `INDEXADORESSWAP_VCP` atualiza os indexadores de swap e o `CADASTROCURVASMOEDASFEEDERDOMINIOS` atualiza o cadastro de domínios — este último vai **anexo** no e-mail | Ao longo do pregão |
 | **Intraday Monitor — Tasks & Pending Action** | Define os dias e o horário limite de cada tarefa do Intraday Monitor (5.1) e manda o e-mail *Pending Action - Intraday Monitor* com as tarefas e os produtos em aberto. Recon nova aparece aqui sozinha | 19:00 e 19:30 (horário de Brasília) |
 | **Confirmations Escalation** | Cobra por e-mail o que está parado na esteira de confirmação — sete listas, uma por destinatário | Segundas e quintas; feriado **rola** para o próximo dia útil |
+| **Initiatives — Alerts** | Os alertas das iniciativas em andamento (17.3): um e-mail por iniciativa para o box do campo **TO** (padrão `brazil.otc.ops@jpmorgan.com`) mais o líder, o time e os responsáveis das tarefas, com o campo **CC** em cópia. **Run** manda agora o que é devido hoje e ainda não saiu | Todo dia útil, **08:00** |
 | **Save Daily Settlement Files** | Salva os arquivos de liquidação do dia. O arquivo de **Operações** da B3 é reconhecido pelo **Participante** da linha 3 (célula A3): `JPMORGANBM` entra como **Operações JPM** e `MORGANBC` como **Operações MGT** — não é preciso renomear o arquivo da MGT. O aviso do fim da rotina diz, em cada arquivo de operações, o Participante lido | Fim do dia |
 | **Settlement Forecast** | Monta e envia a projeção de liquidações | Diário |
 | **Daily Metric — Outstanding Confirmation Brazil OTC** | A métrica diária de confirmações em aberto | Diário |
@@ -2188,6 +2208,17 @@ Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de pa
 > **Quem está na iniciativa:** o líder, o **time** e quem já tem tarefa nela. É essa lista que aparece em *Overview*, e é dela que sai o **responsável** de cada tarefa (17.4). A iniciativa aparece na User Home (3.8) de todos eles.
 
 > **As pessoas aparecem com a foto.** Líder, pessoas, responsáveis das tarefas, comentários e atividade — nos cartões, na página da iniciativa, em Tasks e na User Home — mostram a foto de cada um, a mesma da barra superior. Quem ainda não tem foto cadastrada aparece com as iniciais.
+
+**Os alertas automáticos.** Todo dia útil, às 08:00, o sistema olha cada iniciativa **On going** (as *On hold* e *Concluded* ficam de fora) e avisa quando:
+
+| Alerta | Quando |
+|---|---|
+| **No update** | A iniciativa está há **mais de 5 dias úteis** sem nenhuma alteração (status, tarefa, comentário, marco, edição) |
+| **Initiative due** | Faltam **2 dias úteis** (ou 1) para a data-alvo da iniciativa |
+| **Task due** | Faltam **2 dias úteis** (ou 1) para o prazo de uma tarefa que ainda não está *Done* |
+| **Deadline** | A data-alvo da iniciativa é **hoje** (se o dia passou sem o aviso — feriado, sistema parado —, ele sai nos 7 dias seguintes) |
+
+Para cada iniciativa com alerta sai **um e-mail** — *Initiative alert — <nome> — <data>*, com o resumo e a lista dos alertas — para o box Brazil OTC Ops, o **líder**, o **time** e os **responsáveis das tarefas**, com a cópia configurada no Control Panel (14.2, *Initiatives — Alerts*). No **sino**, o aviso aparece só para quem está na iniciativa, com o logo do OTC Tracker. **Cada alerta sai uma vez só**: o mesmo prazo não é avisado de novo no dia seguinte, e uma iniciativa parada volta a ser avisada só depois de uma nova atualização seguida de mais 5 dias úteis sem nada. Quem não quiser o aviso no sino o desliga em Settings (3.9), em *Initiative alerts* — o e-mail continua.
 
 ### 17.4. Tasks
 
