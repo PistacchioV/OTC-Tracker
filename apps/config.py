@@ -157,7 +157,7 @@ class Config(object):
         os.path.join(DATABASE_DIR, 'pending-confirmation-ok.db'),
         os.path.join(DATABASE_DIR, 'manual_confirmations_pending.db'),
         os.path.join(DATABASE_DIR, 'manual_confirmations_ok.db'),
-        os.path.join(DATABASE_DIR, 'matching_comitentes.db'),
+        os.path.join(DATABASE_DIR, 'Comitentes_OTCTracker.db'),
         os.path.join(DATABASE_DIR, 'cgd_sharepoint.db'),
     )
 
