@@ -327,13 +327,17 @@ def _mc_conf_trade_keys(picked, product):
         if _k:
             out.append(_k)
             continue
-        # A família MGT junta Vanilla (chave = Deal) e FWD Start (chave = B3
-        # ID) no mesmo gerador: cada deal diz de que página veio.
+        # A regra da equipe (27/10/2026, §703), a mesma do Pending e do
+        # documento: FWD Start e swap pelo B3 ID; Vanilla, FXO, NDF e opção de
+        # commodities pelo Deal. As famílias MGT e do Banco juntam Vanilla e
+        # FWD Start no mesmo gerador: cada deal diz de que página veio.
         if product == 'ndf-mgt':
             field = 'B3_ID' if str((d or {}).get('_conf_src') or '') == 'fwd-start' else 'Deal'
+        elif product == 'ndf-fwdstart':
+            field = 'Deal' if str((d or {}).get('_conf_src') or '') == 'vanilla' else 'B3_ID'
         else:
             # O Swap Bullet também é chaveado pelo B3 ID (a linha nasce dele).
-            field = 'B3_ID' if product in ('ndf-fwdstart', 'swap-edg') else 'Deal'
+            field = 'B3_ID' if product == 'swap-edg' else 'Deal'
         k = str((d or {}).get(field, '') or '').strip()
         if k:
             out.append(k)
@@ -936,9 +940,10 @@ _MC_GENERATE_PRODUCTS = {
     'OPTION COMM':   (lambda ref: _conf_optcomm_groups(ref),  lambda: _CONF_OPT_FAMILY_TEMPLATES),
     'FXO':           (lambda ref: _conf_optfxo_groups(ref),   lambda: _CONF_FXO_FAMILY_TEMPLATES),
     'NDF FWD START': (lambda ref: _conf_fwdstart_groups(ref), lambda: _CONF_FWDSTART_FAMILY_TEMPLATES),
-    # Vanilla só gera documento quando é MGT contra cliente (§453); a linha da
-    # esteira só existe nesse caso, então o gerador é o da família MGT.
-    'NDF VANILLA':   (lambda ref: _conf_mgt_groups(ref),      lambda: _CONF_MGT_FAMILY_TEMPLATES),
+    # O Vanilla gera documento quando é MGT contra cliente (§453, o gerador
+    # MGT pelo `_MC_GENERATE_MGT` abaixo) ou do Banco asiático/BRL fixed (§703):
+    # este, o documento do termo de moeda do Banco, família `vanilla`.
+    'NDF VANILLA':   (lambda ref: _conf_fwdstart_groups(ref), lambda: _CONF_FWDSTART_FAMILY_TEMPLATES),
     # Swap Bullet (§481): SWAP é o com Opção de Arrependimento (tem documento);
     # SWAP CORPORATE cai na mesma segregação, mas a família dele ainda não tem
     # template — o Generate diz isso em vez de abrir a tela errada.

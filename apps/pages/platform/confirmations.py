@@ -1283,7 +1283,16 @@ def _conf_fxo_generation_page(family):
 _CONF_FWDSTART_FAMILY_TEMPLATES = {
     'strike-me': ('confirmations/ndf-fwdstart-strike-me.html',
                   '/confirmation/ndf-fwdstart/strike-me'),
+    # O NDF Vanilla do BANCO asiático ou BRL fixed (§703): o MESMO documento
+    # do termo de moeda — a janela de verificação (Data Inicial/Final) e o
+    # notional em reais ele já cobre —, com o ajuste do Vanilla nas colunas do
+    # forward start (`_conf_vanilla_rows`, o mesmo do documento MGT).
+    'vanilla':   ('confirmations/ndf-fwdstart-strike-me.html',
+                  '/confirmation/ndf-fwdstart/vanilla'),
 }
+_CONF_FWDSTART_FAMILY_LABEL = {'strike-me': 'NDF FWD Start', 'vanilla': 'NDF Vanilla'}
+# A pasta do Electronic Inventory (= o tipo da confirmação) por família.
+_CONF_FWDSTART_FAMILY_TYPE = {'strike-me': 'NDF FWD START', 'vanilla': 'NDF VANILLA'}
 
 # Parte A do documento — a entidade JPM da operação. Os dois textos são os que o
 # Word imprimia lado a lado com "OR" (o documento saía pedindo para riscar um à
@@ -1346,16 +1355,53 @@ def _conf_load_generic_nd(ref, product):
 
 
 def _conf_load_ndffwdstart(ref):
-    """Deals do day-file de NDF FWD Start da reference date — SEM os de MGT:
+    """Deals do documento do termo de moeda do BANCO, cada um carimbado com
+    `_conf_src` (é o que separa as famílias): os do FWD Start e, do Vanilla, só
+    os asiáticos e BRL fixed (§703, `_generic_nd_vanilla_conf`). SEM os de MGT:
     a confirmação da JPMORGAN CHASE contra cliente é outro documento (o
     template MGT, §453) e sai pela família `ndf-mgt`. Deixá-los aqui
     listaria a mesma operação em dois cards e geraria dois papéis."""
-    return [d for d in _conf_load_generic_nd(ref, 'fwd-start') if not _conf_is_mgt(d)]
+    from apps.pages import routes
+    out = []
+    for product in ('fwd-start', 'vanilla'):
+        for d in _conf_load_generic_nd(ref, product):
+            if _conf_is_mgt(d):
+                continue
+            if product == 'vanilla' and not routes._generic_nd_vanilla_conf(d):
+                continue
+            d = dict(d)
+            d['_conf_src'] = product
+            out.append(d)
+    return out
 
 
 def _conf_fwdstart_family(deal, subj):
-    """Uma família só: o documento do termo de moeda a termo é único."""
-    return 'strike-me'
+    """O FWD Start é `strike-me`; o Vanilla asiático/BRL fixed, `vanilla` —
+    nunca no mesmo documento (o Nº e as colunas do forward start diferem)."""
+    return 'vanilla' if str(deal.get('_conf_src') or '') == 'vanilla' else 'strike-me'
+
+
+def _conf_num_field(picked):
+    """O campo que numera a operação no documento e no XML, a regra da equipe
+    (27/10/2026, §703) — a MESMA chave do Pending e da esteira: FWD Start é o
+    `B3_ID`; Vanilla (do Banco ou de MGT) é o `Deal` (Athena ID)."""
+    fwd = any(str(d.get('_conf_src') or 'fwd-start') == 'fwd-start' for d, _s in (picked or []))
+    return 'B3_ID' if fwd else 'Deal'
+
+
+def _conf_vanilla_rows(picked, rows, warnings):
+    """O ajuste do Vanilla nas linhas do Anexo I do documento do termo de moeda
+    (Banco e MGT): a Taxa Forward é a taxa contratada (o `Rate`, cláusula
+    4.2.l.1) e não há Data de Verificação da Taxa Forward nem Pontos de Termo —
+    saem "Não Aplicável", declarados, não em branco."""
+    for (deal, _s), r in zip(picked, rows):
+        if str(deal.get('_conf_src') or '') == 'vanilla':
+            r['dtVerifFwd'] = 'Não Aplicável'
+            r['pontosTermo'] = 'Não Aplicável'
+            if not str(deal.get('Rate') or '').strip():
+                warnings.append('Operação {} sem taxa (Rate) — a Taxa Forward do Anexo I '
+                                'sai "Não Aplicável".'.format(r.get('num') or deal.get('Deal') or ''))
+    return rows
 
 
 def _conf_fwdstart_moeda(deal):
@@ -1434,9 +1480,9 @@ def _conf_pick_mgt(ref, acr, merc, family):
 
 def _conf_mgt_num_field(picked):
     """O campo que numera a operação no documento MGT e no XML dele: `B3_ID`
-    no FWD Start (como no do BANCO), `Deal` (Athena ID) no Vanilla."""
-    fwd = any(str(d.get('_conf_src') or '') == 'fwd-start' for d, _s in (picked or []))
-    return 'B3_ID' if fwd else 'Deal'
+    no FWD Start (como no do BANCO), `Deal` (Athena ID) no Vanilla. É o
+    `_conf_num_field` (os deals MGT sempre trazem o `_conf_src`)."""
+    return _conf_num_field(picked)
 
 
 def _conf_mgt_rows(picked, warnings):
@@ -1448,14 +1494,7 @@ def _conf_mgt_rows(picked, warnings):
     # (mesa, 23/09/2026 — o documento do BANCO já era assim); no Vanilla segue
     # o **Athena ID** (o `Deal`, §484). A família é uma só por grupo.
     rows = _conf_fwdstart_rows(picked, warnings, num_field=_conf_mgt_num_field(picked))
-    for (deal, _s), r in zip(picked, rows):
-        if str(deal.get('_conf_src') or '') == 'vanilla':
-            r['dtVerifFwd'] = 'Não Aplicável'
-            r['pontosTermo'] = 'Não Aplicável'
-            if not str(deal.get('Rate') or '').strip():
-                warnings.append('Operação {} sem taxa (Rate) — a Taxa Forward do Anexo I '
-                                'sai "Não Aplicável".'.format(r.get('num') or deal.get('Deal') or ''))
-    return rows
+    return _conf_vanilla_rows(picked, rows, warnings)
 
 
 def _conf_fwdstart_rows(picked, warnings, num_field='B3_ID'):

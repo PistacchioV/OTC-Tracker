@@ -141,18 +141,24 @@ _people_memo = {'at': 0.0, 'rows': None}
 _people_lock = threading.Lock()
 
 
+# Quem pode ser owner/backup: as tarefas do Monitor são do OTC Ops (equipe,
+# 27/10/2026, §703) — BO, ADMIN e o master, nunca MO/FO/HUB.
+_ASSIGN_ROLES = ('BO', 'ADMIN')
+
+
 def _assignable_people():
-    """Quem pode ser owner/backup: o cadastro com Status ACTIVE, em ordem
-    alfabética, com a foto (`user_photos`). Uma leitura a cada 5 min (o
-    snapshot do Monitor pede a cada minuto); falha devolve a última lista boa."""
-    from apps.pages.platform import user_photos
+    """Quem pode ser owner/backup: o cadastro com Status ACTIVE e papel BO ou
+    ADMIN, mais o master (por SID, `authz._MASTER_SIDS`), em ordem alfabética,
+    com a foto (`user_photos`). Uma leitura a cada 5 min (o snapshot do Monitor
+    pede a cada minuto); falha devolve a última lista boa."""
+    from apps.pages.platform import authz, user_photos
     with _people_lock:
         if _people_memo['rows'] is not None and time.time() - _people_memo['at'] < 300:
             return _people_memo['rows']
     try:
         conn = _R().get_db_connection(readonly=True)
         try:
-            linhas = conn.execute('SELECT SID, Name, Status FROM users').fetchall()
+            linhas = conn.execute('SELECT SID, Name, Status, Role FROM users').fetchall()
         finally:
             conn.close()
     except Exception:                                       # noqa: BLE001
@@ -161,8 +167,10 @@ def _assignable_people():
             return _people_memo['rows'] or []
     rows = sorted(({'sid': str(sid or '').strip().upper(), 'name': (nome or '').strip() or str(sid).upper(),
                     'photo': user_photos.url(str(sid or '').strip().upper())}
-                   for sid, nome, st in linhas
-                   if str(sid or '').strip() and str(st or '').strip().upper() == 'ACTIVE'),
+                   for sid, nome, st, papel in linhas
+                   if str(sid or '').strip() and str(st or '').strip().upper() == 'ACTIVE'
+                   and (str(papel or '').strip().upper() in _ASSIGN_ROLES
+                        or str(sid).strip().upper() in authz._MASTER_SIDS)),
                   key=lambda p: p['name'].lower())
     with _people_lock:
         _people_memo['at'], _people_memo['rows'] = time.time(), rows

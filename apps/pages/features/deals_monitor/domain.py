@@ -394,46 +394,87 @@ _HHMM = re.compile(r'^([01]\d|2[0-3]):([0-5]\d)$')
 
 # ── Owner e backup de cada tarefa (§701) ─────────────────────────────────────
 # Quem responde por uma tarefa do Monitor, e quem a cobre na ausência: por
-# tarefa e, quando a divisão é por entidade, por LE — "B3 Registration da
-# MGT: owner Augusto, backup Theodoro". LE em branco = a tarefa inteira. Uma
-# linha por (tarefa, LE); o backup é opcional e nunca o próprio owner.
+# tarefa e, quando a divisão é por PRODUTO ou por entidade, por produto × LE —
+# "B3 Registration de NDF Vanilla da MGT: owner Augusto, backup Theodoro". Os
+# owners mudam com o produto/LOB (equipe, 27/10/2026, §703): as três tarefas de
+# ZONA (B3 Registration, Confirmations, Intrag) se quebram pelos cards do
+# detalhe da zona; as outras são uma tarefa só. Produto e LE em branco = a
+# tarefa inteira. Uma linha por (tarefa, produto, LE); o backup é opcional e
+# nunca o próprio owner.
 ASSIGN_LES = ('', 'JPM', 'MGT', 'LAW')
+
+# Os produtos da zona Confirmations: os cards dela no detalhe
+# (`queries._ndm_monitor_snapshot`, a chave sem o `conf-`) — o
+# `check_intraday_owners.py` cobra que as duas listas sejam a mesma.
+ASSIGN_CONF_PRODUCTS = (
+    ('ndf-commodities', 'NDF Commodities'),
+    ('ndf-fwdstart', 'NDF FWD Start'),
+    ('ndf-vanilla', 'NDF Vanilla'),
+    ('ndf-mgt', 'NDF MGT x Client'),
+    ('opt-commodities', 'Commodities Options'),
+    ('opt-fxo', 'FX Options'),
+    ('unwind-termo', 'Termo de Resilição'),
+)
+
+
+def assign_products():
+    """{tarefa: ((produto, rótulo), …)} — as tarefas que se quebram por
+    produto e os produtos de cada uma, na ordem do detalhe. B3 Registration e
+    Intrag saem do catálogo de cards (`_NDM_CARDS`, separados pelo prefixo
+    `intrag-`, o teste de zona); Confirmations, dos cards dela."""
+    reg = tuple((c['key'], c['label']) for c in _NDM_CARDS if not c['key'].startswith('intrag-'))
+    intrag = tuple((c['key'], c['label']) for c in _NDM_CARDS if c['key'].startswith('intrag-'))
+    return {'registration': reg, 'confirmation': ASSIGN_CONF_PRODUCTS, 'intrag': intrag}
+
+
+def _assign_key(a):
+    return (a['task'], a.get('product', ''), a['le'])
 
 
 def clean_assignments(raw, sids=None):
-    """A lista gravável: [{task, le, owner, backup}], na ordem do catálogo e
-    das LEs. Tarefa fora do catálogo, LE fora de `ASSIGN_LES` ou linha sem
-    owner saem; (tarefa, LE) repetida vale a ÚLTIMA. `sids` (opcional) é quem
-    pode ser designado: SID fora dele não entra."""
+    """A lista gravável: [{task, product, le, owner, backup}], na ordem do
+    catálogo, dos produtos e das LEs. Tarefa fora do catálogo, produto que a
+    tarefa não tem, LE fora de `ASSIGN_LES` ou linha sem owner saem; (tarefa,
+    produto, LE) repetida vale a ÚLTIMA. `sids` (opcional) é quem pode ser
+    designado: SID fora dele não entra. A linha gravada antes do produto
+    (§701) é a tarefa inteira (`product` vazio)."""
     pos = {t: i for i, t in enumerate(TASK_IDS)}
+    prods = {t: [k for k, _l in lst] for t, lst in assign_products().items()}
     out = {}
     for a in raw if isinstance(raw, list) else []:
         if not isinstance(a, dict):
             continue
         task = str(a.get('task') or '').strip()
+        product = str(a.get('product') or '').strip().lower()
         le = str(a.get('le') or '').strip().upper()
         owner = str(a.get('owner') or '').strip().upper()
         backup = str(a.get('backup') or '').strip().upper()
         if task not in pos or le not in ASSIGN_LES or not owner:
             continue
+        if product and product not in prods.get(task, ()):
+            continue
         if sids is not None and owner not in sids:
             continue
         if backup == owner or (sids is not None and backup and backup not in sids):
             backup = ''
-        out[(task, le)] = {'task': task, 'le': le, 'owner': owner, 'backup': backup}
-    return sorted(out.values(), key=lambda a: (pos[a['task']], ASSIGN_LES.index(a['le'])))
+        linha = {'task': task, 'product': product, 'le': le, 'owner': owner, 'backup': backup}
+        out[_assign_key(linha)] = linha
+    ordem = {t: {k: i for i, k in enumerate(lst)} for t, lst in prods.items()}
+    return sorted(out.values(), key=lambda a: (pos[a['task']],
+                                               ordem.get(a['task'], {}).get(a['product'], -1),
+                                               ASSIGN_LES.index(a['le'])))
 
 
 def assignment_news(antes, depois):
-    """Quem passou a responder por quê: [(sid, papel, task, le)] — o owner ou
-    o backup que a linha não tinha antes (é a quem o sino avisa)."""
-    velho = {(a['task'], a['le']): a for a in antes or []}
+    """Quem passou a responder por quê: [(sid, papel, task, product, le)] — o
+    owner ou o backup que a linha não tinha antes (é a quem o sino avisa)."""
+    velho = {_assign_key(a): a for a in antes or []}
     out = []
     for a in depois or []:
-        v = velho.get((a['task'], a['le'])) or {}
+        v = velho.get(_assign_key(a)) or {}
         for papel in ('owner', 'backup'):
             if a.get(papel) and a[papel] != v.get(papel):
-                out.append((a[papel], papel, a['task'], a['le']))
+                out.append((a[papel], papel, a['task'], a.get('product', ''), a['le']))
     return out
 
 

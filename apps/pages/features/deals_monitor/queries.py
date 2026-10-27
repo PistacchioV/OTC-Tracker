@@ -182,6 +182,21 @@ def _ndm_monitor_snapshot(ref):
         'conf-ndf-fwdstart', 'NDF FWD Start', '/new_deals-ndf-fwdstart',
         (os.path.join(_R().NEW_DEALS_CACHE_ROOT, 'NDF', 'FwdStart'),),
         '_ndffwdstart.json', False))
+    # O NDF Vanilla do BANCO asiático ou BRL fixed (§703): o documento do termo
+    # de moeda do Banco, família `vanilla` — um grupo por contraparte × moeda.
+    # O resto do Vanilla do Banco não tem confirmação e não aparece aqui.
+    van_groups = [g for g in _R()._conf_fwdstart_groups(ref)[0] if g['family'] == 'vanilla']
+    van_state = _R()._conf_state_load(ref, 'ndf-fwdstart')
+    conf_cards.append({
+        'key': 'conf-ndf-vanilla', 'label': 'NDF Vanilla',
+        'url': '/new_deals-ndf-vanilla', 'soon': False,
+        'total': len(van_groups),
+        'statuses': _R()._conf_stage_counts(
+            van_groups, van_state,
+            lambda g: _R()._conf_key(g['acronym'], g['mercadoria'], g['family']), conf_stages),
+        'groups': [{'label': '{} · {}'.format(g['acronym'], g['mercadoria']),
+                    'family': g['family'], 'count': g['count']} for g in van_groups],
+    })
     # NDF da JPMORGAN CHASE (MGT) contra cliente — Vanilla e FWD Start no
     # documento MGT (§453): ciclo próprio, um grupo por contraparte × moeda ×
     # produto. Os deals de MGT saem do card do FWD Start do BANCO e entram aqui.
