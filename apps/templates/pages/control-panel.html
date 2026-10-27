@@ -430,6 +430,43 @@
             </div>
         </div>
 
+        <!-- Os alertas das iniciativas (§701) -->
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="intraday">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="initiativealerts">
+                    <div class="cp-card__icon otc-icon-tile"><i class="ti ti-alarm"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-ia-title">Initiatives — Alerts</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-ia-desc">
+                        E-mails each initiative in progress when it has had no update for more than 5
+                        business days, when 2 business days are left to its deadline or to the deadline
+                        of an open task, and on the day it ends. The lead, the team and the task owners
+                        receive it with the box below; the bell warns only the people in the initiative.
+                        Each alert goes out once.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-ia-to">TO — box (plus the people in the initiative)</label>
+                        <input type="text" id="cp-ia-to" class="form-control form-control-sm"
+                               placeholder="brazil.otc.ops@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-ia-cc">CC</label>
+                        <input type="text" id="cp-ia-cc" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div id="cp-ia-status" class="cp-card__meta d-none"
+                         style="display:block;margin-top:.35rem;line-height:1.5;"></div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-calendar-time"></i><span data-lang="cp-ia-meta">Business days 08:00 BRT</span>
+                        </span>
+                        <button type="button" class="cp-run-btn" data-ia-run>
+                            <i class="ti ti-player-play"></i><span data-lang="cp-run">Run</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <!-- ── Section: Settlement Reporting ──────────────────── -->
@@ -2097,6 +2134,71 @@ document.addEventListener('click', function (e) {
     }
     toEl.addEventListener('change', save);
     ccEl.addEventListener('change', save);
+})();
+
+// ── Alertas das iniciativas (§701): TO/CC, Run e o desfecho do disparo ──────
+(function () {
+    var toEl = document.getElementById('cp-ia-to');
+    var ccEl = document.getElementById('cp-ia-cc');
+    var stEl = document.getElementById('cp-ia-status');
+    var btn  = document.querySelector('[data-ia-run]');
+    if (!toEl || !ccEl) return;
+    var REC = '/api/control-panel/initiative-alerts/recipients';
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]; });
+    }
+    function pinta(d) {
+        if (!stEl || !d) return;
+        var last = d.last || {}, html;
+        var m = /^sent:(\d+)$/.exec(last.result || '');
+        if (m) html = '<span class="text-success"><i class="ti ti-mail-check me-1"></i>' + esc(last.at || '') +
+                      ' · ' + m[1] + ' ' + esc(t('cp-ia-sent', 'initiative(s) alerted')) + '</span>';
+        else if (last.result === 'empty') html = '<span class="text-muted"><i class="ti ti-mail-off me-1"></i>' +
+                      esc(last.at || '') + ' · ' + esc(t('cp-ia-empty', 'no alert due — nothing sent')) + '</span>';
+        else if (last.result === 'no_recipient') html = '<span class="text-warning"><i class="ti ti-user-off me-1"></i>' +
+                      esc(last.at || '') + ' · ' + esc(t('cp-ia-norec', 'no recipient — nothing was sent')) + '</span>';
+        else if (last.result) html = '<span class="text-danger"><i class="ti ti-alert-triangle me-1"></i>' +
+                      esc(last.at || '') + ' · ' + esc(String(last.result)) + '</span>';
+        else html = '<span class="text-muted">' + esc(t('cp-ia-never', 'no run recorded yet')) + '</span>';
+        stEl.innerHTML = html;
+        stEl.classList.remove('d-none');
+    }
+    function load() {
+        fetch(REC, { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (d) {
+            if (!d || !d.success) return;
+            toEl.value = d.to || ''; ccEl.value = d.cc || ''; pinta(d);
+        }).catch(function () {});
+    }
+    function save() {
+        return fetch(REC, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ to: toEl.value, cc: ccEl.value }) }).catch(function () {});
+    }
+    toEl.addEventListener('change', save);
+    ccEl.addEventListener('change', save);
+    if (btn) btn.addEventListener('click', function () {
+        var label = btn.querySelector('span'), orig = label ? label.textContent : '';
+        btn.disabled = true;
+        if (label) label.textContent = t('cp-running', 'Running…');
+        fetch('/api/control-panel/initiative-alerts/run', { method: 'POST', credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: toEl.value, cc: ccEl.value }) })
+            .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, b: b }; }); })
+            .then(function (res) {
+                if (res.b && res.b.success) {
+                    Swal.fire({ title: t('cp-done', 'Done'), icon: res.b.sent ? 'success' : 'info',
+                                html: res.b.sent ? esc(res.b.sent + ' ' + t('cp-ia-sent', 'initiative(s) alerted'))
+                                                 : esc(t('cp-ia-empty', 'no alert due — nothing sent')),
+                                confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#0066cc' });
+                } else {
+                    Swal.fire({ title: t('swal-err-title', 'Error'), html: esc((res.b && res.b.error) || 'Request failed.'),
+                                icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+                }
+            })
+            .catch(function (e) { Swal.fire({ title: t('swal-err-title', 'Error'), html: esc(e.message), icon: 'error',
+                                              confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' }); })
+            .finally(function () { btn.disabled = false; if (label) label.textContent = orig; load(); });
+    });
+    load();
 })();
 
 // ── MT300: TO/CC persistidos, Run e status do disparo ───────────────────────
