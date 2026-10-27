@@ -75,8 +75,12 @@ OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_<nome>.py
   a ponte (`_raiz_no_shared_drive`) aponta o `OTC_STRATOS_ROOT` para ele antes
   do `import apps`, e a chave da sessão vai junto. O porte para o Stratos NoSQL
   (MongoDB) ficou para depois da virada; a prod segue na instância da equipe
-  até o Stratos estar 100%, e os passos que faltam (a chegada do pacote sem
-  pisar nos bancos em uso, o backup de hora em hora) estão no §681. As travas
+  até o Stratos estar 100%, e o passo que falta (o backup de hora em hora)
+  está no §681. **A chegada dos bancos** (§708): `stratos/envia_dados.py` leva
+  o pacote do `exporta_dados.py` para `otc-tracker/pacotes/<nome>/` (em partes,
+  `envio.json` por último), e a página `/stratos/pacotes` (master) confere pelo
+  sha256 e grava o ponteiro `dados-ativos.txt`, que o restart seguinte lê
+  (`otc_stratos._dados_do_pacote` → `OTC_DATA_DIR`/`OTC_DATABASE_DIR`). As travas
   no EFS têm PROVA (§689, `stratos/src/prova_travas.py`, rota
   `/stratos/prova-travas`, só do master): o risco é o NFS emular o `flock` com
   trava POSIX, que é do PROCESSO — um segundo descritor no mesmo arquivo a
@@ -576,8 +580,12 @@ da subida e NÃO liga o farol; os caminhos do espelho são dinâmicos.
   (`_anbima_stamp`): feriado cadastrado vale no request seguinte. Calendário
   FIXADO à mão (teste com mtime `None`) nunca é recarregado.
 - **Não há ORM**: SQLAlchemy/Flask-Migrate saíram (08/10/2026, §627) — nada os usava.
-  O único SQLite que sobra é o banco de comitentes, pelo `sqlite_read`/
-  `sqlite_write` da `database_access`.
+  **Não há mais SQLite** (27/10/2026, §707): o banco de comitentes, o último,
+  é o DuckDB `Comitentes_OTCTracker.db`. O `matching_comitentes.db` de antes
+  é lido UMA vez, na primeira leitura/gravação (`recon_comitente._garante_migrado`,
+  pelo `sqlite_read`), e fica intacto como volta atrás; migração que falha SOBE
+  no Run (lida como vazio, o Run gravaria tudo `New` por cima).
+  `check_recon_comitente_duckdb.py`.
 
 > **`.wal.checkpoint`/`.wal.recovery` ao lado de um `.db` é o LIMBO de
 > checkpoint do DuckDB (§442)**: um checkpoint começou (o `.wal` bateu os
@@ -3697,7 +3705,7 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (222 scripts)
+### `scripts/tests/` (223 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

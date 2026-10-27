@@ -30361,3 +30361,73 @@ parada; a linha da tarefa inteira (produto em branco) fica se a zona se mexeu
 O modal Owners continua lendo a lista INTEIRA pelo `/api/intraday-monitor/
 assignments` — o filtro é só do card. `check_intraday_owners.py` §4 (a rota) e
 §6 (as duas funções, com o caso do print).
+
+## §707 — Recon Comitente: o último SQLite do app virou DuckDB (2026-10-27)
+
+**O pedido** (usuário, ao montar a chegada dos bancos no Stratos, §681 passo C):
+"tem que converter esse banco para duckdb". O `matching_comitentes.db` era o
+único SQLite que sobrava; o pacote do `exporta_dados.py` e a camada
+`database_access` carregavam um motor a mais só por ele.
+
+**O que mudou** (`apps/pages/recon_comitente.py`):
+- a tabela `comitentes` mora no DuckDB `Comitentes_OTCTracker.db`, pelo
+  `duckdb_read`/`duckdb_write`. Nome novo porque o SQLite segue no lugar: o
+  mesmo nome com outro formato faria o DuckDB abrir um arquivo SQLite;
+- `_garante_migrado` importa o SQLite UMA vez por processo, só enquanto o DuckDB
+  não existe, e o deixa intacto (volta atrás). No Run ela roda FORA do `try`
+  do `_compare_with_db`: a leitura que falha ali vira "banco vazio" de
+  propósito (primeira execução), e a migração OCUPADA lida assim marcaria tudo
+  `New` e gravaria o DuckDB por cima — o histórico do SQLite ficaria invisível
+  para sempre. Na tela (`load_from_db`) a falha só loga;
+- os tipos de coluna saem do que ela traz (`_tipo_da_coluna`: BIGINT, DOUBLE,
+  texto para misto ou só nulo), que é o round-trip que o SQLite sem tipo dava;
+  a gravação vai por DataFrame registrado (`INSERT … SELECT`), não
+  `executemany`, que no DuckDB é linha a linha sob a trava exclusiva; a leitura
+  da comparação vai pelo cursor, não pelo `.df()` (BIGINT com nulo voltaria
+  float, e o `str()` da comparação marcaria `Check`);
+- a rota troca o `verify_sqlite_integrity` pelo `recon_comitente.verify_integrity`
+  (o banco abre e a tabela se lê); o `DATABASE_ACCESS_PATHS` aponta o nome novo.
+
+O `sqlite_read`/`sqlite_write` da `database_access` ficam (a migração usa o
+primeiro; o `check_unlocked_gate.py` os prova). `check_recon_comitente_duckdb.py`.
+
+## §708 — Stratos: a chegada dos bancos (o passo C do §681) (2026-10-27)
+
+**O pedido** (usuário): "monte" a etapa que faltava entre o `exporta_dados.py`
+(o pacote dos bancos, já pronto) e o Stratos, que até aqui subia com os bancos
+vazios. Mora só na branch `OTC-Tracker-Stratos` (pasta `stratos/`).
+
+**As três peças:**
+- **`stratos/envia_dados.py`** (máquina do JPM, Python do DevShell, o mesmo
+  `DriveHttp`/`DriveLocal` da `ponte_share.py`): recusa pacote INCOMPLETO e
+  `.zip`; envia cada arquivo do manifest para `otc-tracker/pacotes/<nome>/`, os
+  maiores que `--parte-mb` (64) em `<arquivo>.parte-NNNN` — o limite por arquivo
+  do cliente HTTP não está documentado —, e por último o `manifest.json` e o
+  `envio.json` (a lista das partes), que é o sinal de envio completo. A
+  retomada é pelo `<pacote>\.envio-<env>.json` local.
+- **`stratos/src/pacotes_dados.py`** (contêiner, puro): `confere` junta as
+  partes (`.parcial` + rename), confere bytes e sha256 de cada arquivo contra o
+  manifest, recusa formato desconhecido, pacote INCOMPLETO e duckdb do pacote
+  MAIS NOVO que o do contêiner (§651: o banco não abriria), e grava
+  `conferencia.json`. `ativa` só aceita o conferido e grava o ponteiro
+  `<raiz>/dados-ativos.txt` (tmp + replace); `desativa` o apaga.
+- **`otc_stratos`**: `_dados_do_pacote`, no fim do `_raiz_no_shared_drive`
+  (antes do `import apps`), aponta `OTC_DATA_DIR`/`OTC_DATABASE_DIR` para o
+  `data/` do pacote do ponteiro — só os DADOS: o `share/` da ponte, o manifesto
+  dela e a chave da sessão continuam na raiz. Variável do ambiente vence;
+  ponteiro para pacote não conferido é ignorado avisando. E a rota
+  `/stratos/pacotes` (só o master, fora do blueprint como a prova das travas):
+  a lista em HTML ou `?format=json`, POST `acao=conferir|ativar|desativar`; a
+  conferência lê gigabytes e roda numa thread, com a página se recarregando.
+
+**Por que o ponteiro e não copiar por cima:** um `.db` trocado por baixo de quem
+o tem aberto (outro worker, o contêiner velho no deploy) é banco corrompido.
+O ponteiro só vale no restart, e a pasta anterior fica como estava — a volta
+atrás é o Deactivate ou ativar o pacote anterior. Depois de ativado o pacote É
+o banco em uso (o sha256 deixa de valer no primeiro Save), e por isso conferir
+o ativo é recusado.
+
+`stratos/tests/check_pacotes_dados.py` (envio em partes, retomada, conferência
+e as recusas, o ponteiro na subida, a rota), chamado pelo `check_stratos.py`,
+que passou a copiar o `pacotes_dados.py` para o `src` de mentira. O sync leva
+todo `*.py` de `stratos\src`, então o `.bat` não muda.
