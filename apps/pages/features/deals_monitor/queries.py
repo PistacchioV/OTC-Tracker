@@ -538,6 +538,11 @@ def _intraday_snapshot(ref):
             item.update({'total': total, 'closed': fechado, 'open': total - fechado,
                          'progress': 100 if not total else int(round(100.0 * fechado / total))})
             est = domain.avalia(c, dia, agora, feriado, feito, fechado > 0)
+            # Zona sem nada importado no dia não é tarefa (equipe, 27/10/2026):
+            # ia para Completed com "Nothing imported" e poluía o quadro. Como a
+            # Branch Reversal, só EXISTE no dia com movimento (`conditional`).
+            est['due'] = est['due'] and total > 0
+            item['conditional'] = True
         else:
             janela = (domain.janela_mensal(t['month'], dia, feriados)
                       if t.get('month') else None)
