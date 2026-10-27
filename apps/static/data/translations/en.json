@@ -3229,5 +3229,12 @@
   "cp-ia-sent": "initiative(s) alerted",
   "cp-ia-empty": "no alert due — nothing sent",
   "cp-ia-norec": "no recipient — nothing was sent",
-  "cp-ia-never": "no run recorded yet"
+  "cp-ia-never": "no run recorded yet",
+  "wht-actions": "Actions",
+  "wht-edit-title": "Edit row — WHT",
+  "wht-edit-sub": "The correction is kept apart from the imported data and survives a new import. The row turns Pending until another user confirms it.",
+  "wht-mass-sel": "selected",
+  "wht-mass-apply": "Apply",
+  "wht-mass-delete": "Delete",
+  "wht-btn-add": "Add Row"
 }

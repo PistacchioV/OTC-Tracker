@@ -2809,7 +2809,22 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   equipe (`domain.hub_file_lines`, 60/233/84/85) — o `check_wht.py` prende o
   exemplo byte a byte. Coluna nova no Trade Level que o WHT precise lê-se no
   adaptador (`queries.ndf_rows`/`ops_rows`), nunca numa segunda leitura dos
-  arquivos.
+  arquivos. **Edit, Confirm, Delete, o lote e o Add Row** (§702): a linha da
+  tabela é montada na LEITURA e a coleta seguinte substitui a fatia do dia, então
+  a correção NÃO se grava na linha — vai no documento do mês (`edits`), por linha
+  de ORIGEM (`otc_key` = o id da operação, `hub_key` = `HUB|<hub_key>`), e é
+  aplicada antes do batimento (`queries.otc_lines`/`hub_rows_of`, a leitura
+  ÚNICA do `build` e do HUB File); o que se apaga vai para `deleted` e a operação
+  incluída à mão para `manual`. Tudo nasce `Pending` e outro usuário confirma
+  (`authz.is_own_change`); o HUB File recusa linha pendente. As colunas
+  editáveis, o lado e o tipo são `domain.EDIT_COLS` (a tela as recebe do
+  servidor); a LE é JPM ou MGT. **OTC_TD é o Trade Date** (só do OTC, o
+  `_trade_date` das linhas do Trade Level e o `trade_date` do NDF Summary) e
+  **OTC_ET/HUB_ET a data do evento**, a que o batimento compara; o IR do
+  swap no Add Row é a regressiva pelo prazo do Trade Date (`queries.derive`, a
+  `_ops_swap_ir_rate`). A recompra é sempre `UNWIND` (`domain.event_of`, também
+  na leitura). O status sai em caixa alta pelo `data-case="upper"` da pílula
+  (o `otc.js` pula o Proper nela, no funil e no export).
 
 ### Esteira de confirmação manual
 
@@ -3656,7 +3671,7 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (219 scripts)
+### `scripts/tests/` (220 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

@@ -55,6 +55,7 @@ var PAGE_URL = {
     'Projects': '/initiatives',
     'Initiatives': '/initiatives',
     'Intraday Monitor': '/intraday-monitor',
+    'WHT': '/regulatory/wht',
     'User Home': '/user-home',
     'Other Products Summary': '/other-products-summary',
     'NDF Summary': '/ndf-summary',

@@ -14,8 +14,9 @@
     {'name': 'LOB', 'kind': 'text'},
     {'name': 'Event', 'kind': 'text'},
     {'name': 'OTC_TD', 'kind': 'text'},
-    {'name': 'HUB_TD', 'kind': 'text'},
-    {'name': 'Check_TD', 'kind': 'check'},
+    {'name': 'OTC_ET', 'kind': 'text'},
+    {'name': 'HUB_ET', 'kind': 'text'},
+    {'name': 'Check_ET', 'kind': 'check'},
     {'name': 'OTC_GV', 'kind': 'num'},
     {'name': 'HUB_GV', 'kind': 'num'},
     {'name': 'Check_GV', 'kind': 'check'},
@@ -81,6 +82,12 @@
 #wht-table td.wht-ell { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
 #wht-page .wht-cols-menu { max-height: 320px; overflow-y: auto; min-width: 14rem; font-size: .78rem; }
 #wht-page .wht-src { font-size: .7rem; color: var(--otc-text-2); }
+/* A edição (§702): a pílula da revisão ao lado do status, e o lote */
+#wht-table .wht-review { margin-left: 4px; }
+#wht-page .wht-mass { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+#wht-page .wht-mass select, #wht-page .wht-mass input { width: auto; min-width: 150px; }
+#whtEditModal .wht-blk { padding: 12px 14px; border-radius: var(--otc-r-md); background: var(--otc-fill); box-shadow: inset 0 0 0 1px var(--otc-sep); height: 100%; }
+#whtEditModal .wht-blk h6 { font: 700 .72rem/1.2 var(--otc-font); letter-spacing: .06em; text-transform: uppercase; color: var(--otc-text-2); margin: 0 0 10px; }
 </style>
 {% endblock extra_css %}
 
@@ -103,14 +110,6 @@
 
     <div class="wht-panel mb-3">
         <div class="d-flex flex-wrap gap-2 align-items-center">
-            <div class="d-flex align-items-center gap-2">
-                <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="wht-lbl-date">Reference date:</label>
-                <div class="date-wrap">
-                    <input type="text" id="wht-date" class="form-control form-control-sm otc-datefield" placeholder="dd/mm/aaaa" autocomplete="off" value="{{ ref_date }}">
-                </div>
-            </div>
-            <span class="wht-dec" id="wht-dec"></span>
-
             <button class="btn btn-sm btn-success bg-gradient btn-toolbar-all" id="wht-import-st">
                 <i class="ti ti-refresh me-1"></i><span data-lang="wht-btn-import-st">Import Settlements</span>
             </button>
@@ -120,44 +119,6 @@
             <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="wht-hub-file">
                 <i class="ti ti-file-export me-1"></i><span data-lang="wht-btn-hub-file">HUB File</span>
             </button>
-
-            <div class="dropdown">
-                <button class="btn btn-sm btn-soft-primary btn-toolbar-all dropdown-toggle" type="button"
-                        data-bs-toggle="dropdown" data-bs-auto-close="outside">
-                    <i class="ti ti-columns me-1"></i><span data-lang="wht-btn-columns">Columns</span>
-                </button>
-                <div class="dropdown-menu p-2 wht-cols-menu" id="wht-cols-menu"></div>
-            </div>
-
-            <div class="dropdown">
-                <button class="btn btn-sm btn-info bg-gradient btn-toolbar-all dropdown-toggle"
-                        type="button" data-bs-toggle="dropdown">
-                    <i class="ti ti-download me-1"></i><span data-lang="wht-btn-export">Export</span>
-                </button>
-                <ul class="dropdown-menu" id="wht-export-menu">
-                    <li><a class="dropdown-item" href="#" data-exp="copy">Copy</a></li>
-                    <li><a class="dropdown-item" href="#" data-exp="csv">CSV</a></li>
-                    <li><a class="dropdown-item" href="#" data-exp="excel">Excel</a></li>
-                    <li><a class="dropdown-item" href="#" data-exp="print">Print</a></li>
-                    <li><a class="dropdown-item" href="#" data-exp="pdf">PDF</a></li>
-                </ul>
-            </div>
-
-            <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="wht-clear">
-                <i class="ti ti-filter-off me-1"></i><span data-lang="wht-btn-clear">Clear Filters</span>
-            </button>
-
-            <div class="ms-auto d-flex align-items-center gap-2">
-                <span style="font-size:.72rem;" data-lang="wht-show">Show</span>
-                <select id="wht-len" class="form-select form-select-sm"
-                        style="width:auto;font-size:.75rem;height:31px;">
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                    <option value="200">200</option>
-                    <option value="-1">All</option>
-                </select>
-                <span style="font-size:.72rem;" data-lang="wht-entries">entries</span>
-            </div>
         </div>
 
         {# O relatório do HUB: um ou mais arquivos (o 5557 num, o 5273 noutro, ou
@@ -232,6 +193,75 @@
     </div>
 
     <div class="wht-panel">
+        {# A barra da TABELA (equipe, 27/10/2026): a data de referência (o dia,
+           que diz o decêndio), Columns, Export, Clear Filters e o Show entries
+           moram no card dela; os imports ficam lá em cima, com o dropzone. #}
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+            <div class="d-flex align-items-center gap-2">
+                <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="wht-lbl-date">Reference date:</label>
+                <div class="date-wrap">
+                    <input type="text" id="wht-date" class="form-control form-control-sm otc-datefield" placeholder="dd/mm/aaaa" autocomplete="off" value="{{ ref_date }}">
+                </div>
+            </div>
+            <span class="wht-dec" id="wht-dec"></span>
+
+            <div class="dropdown">
+                <button class="btn btn-sm btn-soft-primary btn-toolbar-all dropdown-toggle" type="button"
+                        data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                    <i class="ti ti-columns me-1"></i><span data-lang="wht-btn-columns">Columns</span>
+                </button>
+                <div class="dropdown-menu p-2 wht-cols-menu" id="wht-cols-menu"></div>
+            </div>
+
+            <div class="dropdown">
+                <button class="btn btn-sm btn-info bg-gradient btn-toolbar-all dropdown-toggle"
+                        type="button" data-bs-toggle="dropdown">
+                    <i class="ti ti-download me-1"></i><span data-lang="wht-btn-export">Export</span>
+                </button>
+                <ul class="dropdown-menu" id="wht-export-menu">
+                    <li><a class="dropdown-item" href="#" data-exp="copy">Copy</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="csv">CSV</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="excel">Excel</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="print">Print</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="pdf">PDF</a></li>
+                </ul>
+            </div>
+
+            <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="wht-clear">
+                <i class="ti ti-filter-off me-1"></i><span data-lang="wht-btn-clear">Clear Filters</span>
+            </button>
+
+            <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="wht-add">
+                <i class="ti ti-plus me-1"></i><span data-lang="wht-btn-add">Add Row</span>
+            </button>
+
+            {# A edição e a exclusão EM LOTE (§702): só com linha marcada. O campo
+               do valor muda de forma com a coluna escolhida (lista, data, número,
+               texto) — o molde do Track Confirmations. #}
+            <div class="wht-mass d-none" id="wht-mass">
+                <span class="fs-xs text-muted"><b id="wht-mass-n">0</b> <span data-lang="wht-mass-sel">selected</span></span>
+                <select id="wht-mass-col" class="form-select form-select-sm"></select>
+                <span id="wht-mass-val"></span>
+                <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="wht-mass-apply" disabled>
+                    <i class="ti ti-pencil-check me-1"></i><span data-lang="wht-mass-apply">Apply</span>
+                </button>
+                <button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all" id="wht-mass-delete">
+                    <i class="ti ti-trash me-1"></i><span data-lang="wht-mass-delete">Delete</span>
+                </button>
+            </div>
+
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <span style="font-size:.72rem;" data-lang="wht-show">Show</span>
+                <select id="wht-len" class="form-select form-select-sm"
+                        style="width:auto;font-size:.75rem;height:31px;">
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                    <option value="-1">All</option>
+                </select>
+                <span style="font-size:.72rem;" data-lang="wht-entries">entries</span>
+            </div>
+        </div>
         <div id="wht-job"></div>
         <div id="wht-warnings"></div>
         <div class="table-responsive">
@@ -239,6 +269,7 @@
                 <thead>
                     <tr>
                         <th class="wht-noexp"><input type="checkbox" id="whtAll" class="form-check-input"></th>
+                        <th class="wht-noexp" data-lang="wht-actions">Actions</th>
                         {% for c in WHT_COLS %}
                         <th>{{ c.name }}</th>
                         {% endfor %}
@@ -248,6 +279,25 @@
             </table>
         </div>
     </div>
+</div>
+<!-- O Edit da linha (§702): os campos do lado OTC e do lado HUB; vai só o que mudou -->
+<div class="modal fade" id="whtEditModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content liquid-glass">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6"><i class="ti ti-edit me-1"></i><span data-lang="wht-edit-title">Edit row — WHT</span> <span id="whtEditRef" class="text-muted"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="fs-xs text-muted mb-3" id="whtEditSub" data-lang="wht-edit-sub">The correction is kept apart from the imported data and survives a new import. The row turns Pending until another user confirms it.</p>
+        <div class="row g-3" id="whtEditGrid"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-danger btn-icon rounded-circle" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-success btn-icon rounded-circle" id="whtEditSave" title="Save"><i class="ti ti-device-floppy"></i></button>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock page_content %}
 
@@ -304,7 +354,23 @@
               e_hub_empty: 'No operation row found in the HUB file(s): {files}.',
               e_hub_file_empty: 'No operation for the HUB file in this decendio (only Unmatched OTC rows, or the rows you select, go into it).',
               e_no_company: 'Legal entity without a company in the WHT — Company mapping: {les}.',
-              e_no_file: 'No file was sent.' },
+              e_no_file: 'No file was sent.',
+              editTip: 'Edit', confirmTip: 'Confirm the edit', deleteTip: 'Delete', cancel: 'Cancel',
+              editDone: 'Row(s) edited — pending confirmation', approveDone: 'Edit confirmed', delDone: 'Row(s) deleted',
+              delTitle: 'Delete {n} row(s)?', delText: 'The row leaves the WHT and a new import does not bring it back.', delOk: 'Delete',
+              massCol: 'Select column to apply', massTitle: 'Apply to {n} row(s)?', massText: 'The column {col} of the selected rows becomes {v}. Each row turns Pending.',
+              massOk: 'Apply', massSkip: '{n} selected row(s) do not have this side and stay as they are.', massNoSide: 'None of the selected rows has the side of {col}.',
+              e_edit_bad_number: '{col}: "{value}" is not a number.', e_edit_bad_date: '{col}: "{value}" is not a date.',
+              e_edit_other_month: '{col}: the date must be in the month of the decendio.', e_edit_bad_option: '{col}: "{value}" is not one of the options.',
+              e_edit_bad_column: 'The column {col} cannot be edited.', e_edit_no_side: '{col}: the row has no {side} side.',
+              e_edit_row_gone: 'The row {key} is no longer in the WHT — reload the page.',
+              e_approve_own: 'Whoever edited cannot confirm their own edit — another user confirms.',
+              e_approve_none: 'No pending edit in the chosen rows.',
+              e_hub_file_pending: 'Row(s) with an edit not yet confirmed: {ids}. Confirm them before the HUB file.',
+              editTitle: 'Edit row — WHT', addTitle: 'Add row — WHT', addSub: 'An operation the settlement screens did not bring. The ID, tributo and IR fill in from the product, the counterparty and the value (the swap also needs the Trade Date). The row is Pending until another user confirms it.', addDone: 'Row added — pending confirmation',
+              tdSwap: 'required for swap (regressive IR)', noCodeHint: 'No line in the WHT — Tax Codes mapping for this product/event: the ID and tributo stay blank.',
+              e_add_missing: 'Fill in: {cols}.', e_add_swap_trade_date: 'Swap IR is regressive: fill in the Trade Date (OTC_TD) and the event date.',
+              e_add_swap_rate: 'No IR rate for this swap (counterparty or term) — fill in the IR (Devido).' },
         br: { importProgress: '{done} de {total} dia(s)', importBackground: 'Pode fechar esta janela: o import continua e a tela se atualiza no fim.', close: 'Fechar', netOf: 'Net de:', total: 'Total', only_hub: 'Só no HUB', only_otc: 'Só no OTC', partial: 'Parcial', matched: 'Batido',
               decendio: 'decêndio', d1: '1º', d2: '2º', d3: '3º', payment: 'recolhimento',
               empty: 'Nada neste decêndio ainda — clique em Import Settlements e solte o relatório do HUB.',
@@ -327,7 +393,23 @@
               e_hub_empty: 'Nenhuma linha de operação no(s) arquivo(s) do HUB: {files}.',
               e_hub_file_empty: 'Nenhuma operação para o arquivo do HUB neste decêndio (entram só as linhas Só no OTC, ou as que você marcar).',
               e_no_company: 'Entidade sem empresa no cadastro WHT — Company: {les}.',
-              e_no_file: 'Nenhum arquivo foi enviado.' },
+              e_no_file: 'Nenhum arquivo foi enviado.',
+              editTip: 'Editar', confirmTip: 'Confirmar a edição', deleteTip: 'Excluir', cancel: 'Cancelar',
+              editDone: 'Linha(s) editada(s) — aguardando confirmação', approveDone: 'Edição confirmada', delDone: 'Linha(s) excluída(s)',
+              delTitle: 'Excluir {n} linha(s)?', delText: 'A linha sai do WHT e um novo import não a traz de volta.', delOk: 'Excluir',
+              massCol: 'Selecione a coluna', massTitle: 'Aplicar em {n} linha(s)?', massText: 'A coluna {col} das linhas marcadas passa a {v}. Cada linha fica Pending.',
+              massOk: 'Aplicar', massSkip: '{n} linha(s) marcada(s) não têm este lado e ficam como estão.', massNoSide: 'Nenhuma linha marcada tem o lado de {col}.',
+              e_edit_bad_number: '{col}: "{value}" não é um número.', e_edit_bad_date: '{col}: "{value}" não é uma data.',
+              e_edit_other_month: '{col}: a data tem de ser do mês do decêndio.', e_edit_bad_option: '{col}: "{value}" não é uma das opções.',
+              e_edit_bad_column: 'A coluna {col} não se edita.', e_edit_no_side: '{col}: a linha não tem o lado {side}.',
+              e_edit_row_gone: 'A linha {key} não está mais no WHT — recarregue a tela.',
+              e_approve_own: 'Quem editou não confirma a própria edição — outro usuário confirma.',
+              e_approve_none: 'Nenhuma edição pendente nas linhas escolhidas.',
+              e_hub_file_pending: 'Linha(s) com edição ainda não confirmada: {ids}. Confirme antes do arquivo do HUB.',
+              editTitle: 'Editar linha — WHT', addTitle: 'Incluir linha — WHT', addSub: 'Uma operação que as telas de liquidação não trouxeram. O ID, o tributo e o IR se preenchem pelo produto, pela contraparte e pelo valor (no swap, também pelo Trade Date). A linha fica Pending até outro usuário confirmar.', addDone: 'Linha incluída — aguardando confirmação',
+              tdSwap: 'obrigatório no swap (IR regressivo)', noCodeHint: 'Sem linha no cadastro WHT — Tax Codes para este produto/evento: o ID e o tributo ficam em branco.',
+              e_add_missing: 'Preencha: {cols}.', e_add_swap_trade_date: 'O IR do swap é regressivo: preencha o Trade Date (OTC_TD) e a data do evento.',
+              e_add_swap_rate: 'Sem alíquota de IR para este swap (contraparte ou prazo) — preencha o IR (Devido).' },
         es: { importProgress: '{done} de {total} día(s)', importBackground: 'Puede cerrar esta ventana: la importación sigue y la pantalla se actualiza al terminar.', close: 'Cerrar', netOf: 'Neto de:', total: 'Total', only_hub: 'Solo en HUB', only_otc: 'Solo en OTC', partial: 'Parcial', matched: 'Conciliado',
               decendio: 'decenio', d1: '1º', d2: '2º', d3: '3º', payment: 'pago',
               empty: 'Nada en este decenio todavía — haga clic en Import Settlements y suelte el informe del HUB.',
@@ -350,7 +432,23 @@
               e_hub_empty: 'Ninguna línea de operación en el/los archivo(s) del HUB: {files}.',
               e_hub_file_empty: 'Ninguna operación para el archivo del HUB en este decenio (entran solo las líneas Solo en OTC, o las que usted marque).',
               e_no_company: 'Entidad sin empresa en el registro WHT — Company: {les}.',
-              e_no_file: 'No se envió ningún archivo.' }
+              e_no_file: 'No se envió ningún archivo.',
+              editTip: 'Editar', confirmTip: 'Confirmar la edición', deleteTip: 'Eliminar', cancel: 'Cancelar',
+              editDone: 'Fila(s) editada(s) — pendiente de confirmación', approveDone: 'Edición confirmada', delDone: 'Fila(s) eliminada(s)',
+              delTitle: '¿Eliminar {n} fila(s)?', delText: 'La fila sale del WHT y una nueva importación no la trae de vuelta.', delOk: 'Eliminar',
+              massCol: 'Seleccione la columna', massTitle: '¿Aplicar en {n} fila(s)?', massText: 'La columna {col} de las filas marcadas pasa a {v}. Cada fila queda Pending.',
+              massOk: 'Aplicar', massSkip: '{n} fila(s) marcada(s) no tienen este lado y quedan como están.', massNoSide: 'Ninguna fila marcada tiene el lado de {col}.',
+              e_edit_bad_number: '{col}: "{value}" no es un número.', e_edit_bad_date: '{col}: "{value}" no es una fecha.',
+              e_edit_other_month: '{col}: la fecha debe ser del mes del decenio.', e_edit_bad_option: '{col}: "{value}" no es una de las opciones.',
+              e_edit_bad_column: 'La columna {col} no se edita.', e_edit_no_side: '{col}: la fila no tiene el lado {side}.',
+              e_edit_row_gone: 'La fila {key} ya no está en el WHT — recargue la página.',
+              e_approve_own: 'Quien editó no confirma su propia edición — otro usuario confirma.',
+              e_approve_none: 'Ninguna edición pendiente en las filas elegidas.',
+              e_hub_file_pending: 'Fila(s) con edición aún no confirmada: {ids}. Confírmelas antes del archivo del HUB.',
+              editTitle: 'Editar fila — WHT', addTitle: 'Agregar fila — WHT', addSub: 'Una operación que las pantallas de liquidación no trajeron. El ID, el tributo y el IR se completan por el producto, la contraparte y el valor (en el swap, también por el Trade Date). La fila queda Pending hasta que otro usuario la confirme.', addDone: 'Fila agregada — pendiente de confirmación',
+              tdSwap: 'obligatorio en swap (IR regresivo)', noCodeHint: 'Sin línea en el registro WHT — Tax Codes para este producto/evento: el ID y el tributo quedan en blanco.',
+              e_add_missing: 'Complete: {cols}.', e_add_swap_trade_date: 'El IR del swap es regresivo: complete el Trade Date (OTC_TD) y la fecha del evento.',
+              e_add_swap_rate: 'Sin alícuota de IR para este swap (contraparte o plazo) — complete el IR (Devido).' }
     };
     function lang() {
         try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) { return 'en'; }
@@ -404,7 +502,7 @@
     function badge(r) {
         var m = STATUS[r.status] || {};
         return '<span class="badge otc-status rounded-pill bg-gradient ' + (m.badge || 'text-bg-secondary') +
-               '">' + esc(r.Status) + '</span>';
+               '" data-case="upper">' + esc(r.Status) + '</span>';
     }
     // O check é a célula da planilha da equipe: TRUE/FALSE, verde/vermelho.
     // Não é status (a pílula do Proper o leria "True"): badge suave, sem a marca.
@@ -426,8 +524,16 @@
                     if (type === 'display') { return check(b); }
                     return b === true ? 'TRUE' : (b === false ? 'FALSE' : '');
                 }
+                if (c.kind === 'status' && type !== 'display') { return String(v) + (r.review ? ' ' + r.review : ''); }
                 if (type !== 'display') { return v; }
-                if (c.kind === 'status') { return badge(r); }
+                if (c.kind === 'status') {
+                    // a correção da tela: Pending até outro usuário confirmar
+                    var rv = r.review ? ' <span data-case="upper" class="badge otc-status rounded-pill bg-gradient wht-review ' +
+                        (r.review === 'Pending' ? 'text-bg-warning' : 'text-bg-info') + '" title="' +
+                        esc((r.review_by || '') + ' ' + (r.review_at || '') + (r.edited && r.edited.length ? ' · ' + r.edited.join(', ') : '')) +
+                        '">' + esc(r.review) + '</span>' : '';
+                    return badge(r) + rv;
+                }
                 if (c.kind === 'ell') { return '<span title="' + esc(v) + '">' + esc(v) + '</span>'; }
                 // O prêmio de opção é UMA linha com o net do dia: o selo diz de quantas.
                 if (c.kind === 'id' && r.OTC_net_of) {
@@ -450,6 +556,20 @@
                     ? '<input type="checkbox" class="form-check-input wht-pick" value="' + esc(r.key) + '"' +
                       (picked[r.key] ? ' checked' : '') + '>' : '';
             }
+        }, {
+            // As ações da linha (§702): Confirm no lugar do Edit enquanto a
+            // correção espera outro usuário; o Delete sempre.
+            data: null, orderable: false, searchable: false, className: 'wht-noexp',
+            render: function (d, type, r) {
+                if (type !== 'display') { return ''; }
+                var pend = r.review === 'Pending';
+                return '<div class="d-flex justify-content-center gap-1">' +
+                    (pend
+                        ? '<button type="button" class="btn btn-success btn-sm rounded-circle btn-act btn-row-confirm" title="' + esc(t('confirmTip')) + '"><i class="ti ti-check"></i></button>'
+                        : '<button type="button" class="btn btn-info btn-sm rounded-circle btn-act btn-row-edit" title="' + esc(t('editTip')) + '"><i class="ti ti-edit"></i></button>') +
+                    '<button type="button" class="btn btn-danger btn-sm rounded-circle btn-act btn-row-delete" title="' + esc(t('deleteTip')) + '"><i class="ti ti-trash"></i></button>' +
+                    '</div>';
+            }
         }].concat(COLS.map(dataCol));
         table = $('#wht-table').DataTable({
             data: rows, columns: columns,
@@ -471,9 +591,11 @@
                 if (on) { picked[k] = true; } else { delete picked[k]; }
             });
             $('#wht-table .wht-pick').prop('checked', on);
+            massa();
         });
         botoes();
         menuColunas();
+        massa();
     }
 
     function botoes() {
@@ -510,12 +632,254 @@
         var n = $(this).data('colname');
         if (this.checked) { delete hidden[n]; } else { hidden[n] = true; }
         var i = -1;
-        COLS.forEach(function (c, k) { if (c.name === n) { i = k + 1; } });
+        COLS.forEach(function (c, k) { if (c.name === n) { i = k + 2; } });
         if (table && i > 0) { table.column(i).visible(this.checked); table.columns.adjust(); }
     });
     $(document).on('change', '#wht-table .wht-pick', function () {
         if (this.checked) { picked[this.value] = true; } else { delete picked[this.value]; }
+        massa();
     });
+
+    /* ══ Edit, Confirm e Delete (§702) ═══════════════════════════════════
+       A correção vai ao servidor por linha de ORIGEM (`otc_key`/`hub_key`);
+       a tela manda só o que mudou e se redesenha com a página que volta. As
+       colunas editáveis e as opções saem do servidor (`domain.EDIT_COLS`). */
+    var EDIT = {{ edit_cols | tojson }}, SELECTS = {{ edit_selects | tojson }}, HUB_ONLY = {{ hub_only_cols | tojson }};
+    function alvoDe(col, r) {
+        if (!r.otc_key && HUB_ONLY[col]) { return HUB_ONLY[col]; }
+        var a = EDIT[col];
+        if (!a) { return null; }
+        return (a[0] === 'otc' ? r.otc_key : r.hub_key) ? a : null;
+    }
+    function linhaPor(k) { return dados.filter(function (r) { return r.key === k; })[0]; }
+    function isoDe(dmy) {
+        var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(dmy || ''));
+        return m ? m[3] + '-' + m[2] + '-' + m[1] : String(dmy || '');
+    }
+    function valorDe(r, col, kind) {
+        var v = r[col];
+        if (v == null) { return ''; }
+        if (kind === 'date') { return isoDe(v); }
+        if (kind === 'num') { return (typeof v === 'number') ? v.toFixed(2) : String(v); }
+        return String(v);
+    }
+    // O campo de um valor no FORMATO da coluna: lista, data, número ou texto
+    function campo(col, kind, valor, id, vazio, ro) {
+        var a = ' id="' + id + '" data-col="' + esc(col) + '" data-kind="' + kind + '" data-orig="' + esc(valor) + '"' +
+                (ro ? ' readonly tabindex="-1"' : '');
+        if (kind === 'select') {
+            var ops = (SELECTS[col] || []).slice();
+            if (valor && ops.indexOf(valor) < 0) { ops.unshift(valor); }
+            return '<select class="form-select form-select-sm"' + a + '>' + (vazio ? '<option value="">—</option>' : '') +
+                ops.map(function (o) {
+                return '<option' + (o === valor ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select>';
+        }
+        if (kind === 'num') {
+            return '<input type="text" inputmode="decimal" class="form-control form-control-sm text-end" placeholder="0.00"' + a + ' value="' + esc(valor) + '">';
+        }
+        var dt = kind === 'date' || kind === 'tdate';
+        return '<input type="text" class="form-control form-control-sm' + (dt ? ' wht-date-f' : '') + '"' + a +
+               (dt ? ' placeholder="dd/mm/aaaa" autocomplete="off"' : '') + ' value="' + esc(valor) + '">';
+    }
+    function liga(box) {
+        if (window.otcDateField) {
+            box.querySelectorAll('input.wht-date-f').forEach(function (el) { otcDateField(el); });
+        }
+    }
+    function lido(el) {
+        var k = el.getAttribute('data-kind');
+        if ((k === 'date' || k === 'tdate') && el._flatpickr && el._flatpickr.selectedDates[0]) {
+            var d = el._flatpickr.selectedDates[0];
+            return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        }
+        return String(el.value || '').trim();
+    }
+    function envia(url, items, okMsg) {
+        return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ date: dataAtual(), items: items }) })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (!j || !j.success) { falha('WHT', esc(errText(j))); return false; }
+                pinta(j);
+                if (window.otcToast) { otcToast(okMsg + ' · ' + (j.count || 0)); }
+                return true;
+            })
+            .catch(function (e) { falha('WHT', esc(String(e && e.message || e))); return false; });
+    }
+
+    // ── Edit da linha: o modal com os dois lados ──
+    var editKey = null, modo = 'edit';
+    function abreEdit(r) {
+        editKey = r.key;
+        modo = 'edit';
+        $('#whtEditModal .modal-title [data-lang]').text(t('editTitle'));
+        if (!$('#whtEditSub').data('edit')) { $('#whtEditSub').data('edit', $('#whtEditSub').text()); }
+        $('#whtEditSub').text($('#whtEditSub').data('edit'));
+        var blocos = { otc: [], hub: [] };
+        Object.keys(EDIT).concat(Object.keys(HUB_ONLY)).forEach(function (col) {
+            if (HUB_ONLY[col] && r.otc_key) { return; }
+            var a = alvoDe(col, r);
+            if (!a || blocos[a[0]].some(function (x) { return x.col === col; })) { return; }
+            blocos[a[0]].push({ col: col, kind: a[2] });
+        });
+        var i = 0;
+        function bloco(lado, titulo) {
+            if (!blocos[lado].length) { return ''; }
+            return '<div class="col-12 col-lg-6"><div class="wht-blk"><h6>' + esc(titulo) + '</h6><div class="row g-2">' +
+                blocos[lado].map(function (f) {
+                    var id = 'wht-e-' + (i++);
+                    return '<div class="col-6 col-md-4"><label class="form-label fs-xs text-muted mb-1" for="' + id + '">' + esc(f.col) + '</label>' +
+                           campo(f.col, f.kind, valorDe(r, f.col, f.kind), id) + '</div>';
+                }).join('') + '</div></div></div>';
+        }
+        var grid = document.getElementById('whtEditGrid');
+        grid.innerHTML = bloco('otc', 'OTC') + bloco('hub', 'HUB');
+        liga(grid);
+        document.getElementById('whtEditRef').textContent = '· ' + (r['Internal ID'] || r.key);
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('whtEditModal')).show();
+    }
+    $('#whtEditSave').on('click', function () {
+        if (modo === 'add') { salvaAdd(); return; }
+        var r = linhaPor(editKey);
+        if (!r) { return; }
+        var ch = {};
+        document.querySelectorAll('#whtEditGrid [data-col]').forEach(function (el) {
+            var v = lido(el);
+            if (v !== (el.getAttribute('data-orig') || '')) { ch[el.getAttribute('data-col')] = v; }
+        });
+        if (!Object.keys(ch).length) { bootstrap.Modal.getInstance(document.getElementById('whtEditModal')).hide(); return; }
+        envia('/api/wht/edit', [{ otc_key: r.otc_key, hub_key: r.hub_key, changes: ch }], t('editDone')).then(function (ok) {
+            if (ok) { bootstrap.Modal.getInstance(document.getElementById('whtEditModal')).hide(); }
+        });
+    });
+    // ── Add Row: a operação incluída à mão (o lado OTC) ──
+    // As opções fechadas (produto, LOB, evento, LE) são listas; o código, o
+    // tributo e o IR (`Devido`) se preenchem pelo servidor (`/api/wht/derive`)
+    // a cada mudança — no swap só com o Trade Date (o IR é regressivo). O IR
+    // digitado à mão vence o calculado.
+    var ADD = [['Internal ID', 'text'], ['B3 Id', 'text'], ['Product', 'select'], ['LOB', 'select'],
+               ['Event', 'select'], ['OTC_LE', 'select'], ['OTC_TD', 'tdate'], ['OTC_ET', 'date'],
+               ['OTC_GV', 'num'], ['OTC_cntpy', 'text'], ['OTC_taxid', 'text'], ['Devido', 'num'],
+               ['OTC_id', 'auto'], ['OTC_tributo', 'auto']];
+    var ADD_REQ = { 'Product': 1, 'LOB': 1, 'Event': 1, 'OTC_LE': 1, 'OTC_ET': 1, 'OTC_GV': 1, 'OTC_cntpy': 1 };
+    var derivaT = null, irManual = false;
+    function abreAdd() {
+        modo = 'add'; editKey = null; irManual = false;
+        $('#whtEditModal .modal-title [data-lang]').text(t('addTitle'));
+        if (!$('#whtEditSub').data('edit')) { $('#whtEditSub').data('edit', $('#whtEditSub').text()); }
+        $('#whtEditSub').text(t('addSub'));
+        document.getElementById('whtEditRef').textContent = '';
+        var grid = document.getElementById('whtEditGrid');
+        grid.innerHTML = '<div class="col-12"><div class="wht-blk"><h6>OTC</h6><div class="row g-2">' +
+            ADD.map(function (f, i) {
+                var id = 'wht-a-' + i, auto = f[1] === 'auto';
+                var lbl = esc(f[0]) + (ADD_REQ[f[0]] ? ' *' : '') + (f[0] === 'OTC_TD' ? ' <span class="text-muted" id="wht-a-tdhint"></span>' : '');
+                return '<div class="col-6 col-md-3"><label class="form-label fs-xs text-muted mb-1" for="' + id + '">' + lbl + '</label>' +
+                       campo(f[0], auto ? 'text' : f[1], f[0] === 'OTC_ET' ? dataAtual() : '', id, true, auto) + '</div>';
+            }).join('') +
+            '<div class="col-12 fs-xs" id="wht-a-msg"></div></div></div></div>';
+        liga(grid);
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('whtEditModal')).show();
+    }
+    function camposAdd() {
+        var f = {};
+        document.querySelectorAll('#whtEditGrid [data-col]').forEach(function (el) { f[el.getAttribute('data-col')] = lido(el); });
+        return f;
+    }
+    function deriva() {
+        var f = camposAdd(), msg = document.getElementById('wht-a-msg');
+        $('#wht-a-tdhint').text(f.Product === 'SWAP' ? '* ' + t('tdSwap') : '');
+        if (!f.Product || !f.OTC_GV || !f.OTC_cntpy) { return; }
+        fetch('/api/wht/derive', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                                   body: JSON.stringify({ fields: f }) })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (!msg) { return; }
+                if (!j || !j.success) { msg.innerHTML = '<span class="text-warning">' + esc(errText(j)) + '</span>'; return; }
+                msg.innerHTML = j.no_code ? '<span class="text-warning">' + esc(t('noCodeHint')) + '</span>' : '';
+                $('#whtEditGrid [data-col="OTC_id"]').val(j.code || '');
+                $('#whtEditGrid [data-col="OTC_tributo"]').val(j.tributo || '');
+                if (!irManual) { $('#whtEditGrid [data-col="Devido"]').val((j.devido || 0).toFixed(2)); }
+            }).catch(function () {});
+    }
+    $(document).on('input change', '#whtEditGrid [data-col]', function () {
+        if (modo !== 'add') { return; }
+        if (this.getAttribute('data-col') === 'Devido') { irManual = !!String(this.value || '').trim(); return; }
+        clearTimeout(derivaT); derivaT = setTimeout(deriva, 350);
+    });
+    function salvaAdd() {
+        var f = camposAdd();
+        var falta = Object.keys(ADD_REQ).filter(function (c) { return !String(f[c] || '').trim(); });
+        if (f.Product === 'SWAP' && !String(f.OTC_TD || '').trim()) { falta.push('OTC_TD'); }
+        if (falta.length) { falha('WHT', esc(fill(t('e_add_missing'), { cols: falta.join(', ') }))); return; }
+        delete f.OTC_id; delete f.OTC_tributo;
+        if (!irManual) { delete f.Devido; }
+        envia('/api/wht/add', [{ fields: f }], t('addDone')).then(function (ok) {
+            if (ok) { bootstrap.Modal.getInstance(document.getElementById('whtEditModal')).hide(); }
+        });
+    }
+    $('#wht-add').on('click', abreAdd);
+
+    function linhaDoBotao(btn) {
+        var tr = $(btn).closest('tr')[0];
+        return table && tr ? table.row(tr).data() : null;
+    }
+    $(document).on('click', '#wht-table .btn-row-edit', function (e) {
+        e.preventDefault(); var r = linhaDoBotao(this); if (r) { abreEdit(r); }
+    });
+    $(document).on('click', '#wht-table .btn-row-confirm', function (e) {
+        e.preventDefault(); var r = linhaDoBotao(this);
+        if (r) { envia('/api/wht/approve', [{ otc_key: r.otc_key, hub_key: r.hub_key }], t('approveDone')); }
+    });
+    function apaga(linhas) {
+        if (!linhas.length || !window.Swal) { return; }
+        Swal.fire({ icon: 'warning', title: fill(t('delTitle'), { n: linhas.length }), text: t('delText'),
+                    showCancelButton: true, confirmButtonText: t('delOk'), cancelButtonText: t('cancel'),
+                    confirmButtonColor: '#dc3545' }).then(function (res) {
+            if (!res.isConfirmed) { return; }
+            envia('/api/wht/delete', linhas.map(function (r) { return { otc_key: r.otc_key, hub_key: r.hub_key }; }), t('delDone'));
+        });
+    }
+    $(document).on('click', '#wht-table .btn-row-delete', function (e) {
+        e.preventDefault(); var r = linhaDoBotao(this); if (r) { apaga([r]); }
+    });
+
+    // ── O lote: a coluna, o valor no formato dela, Apply e Delete ──
+    function marcadas() { return dados.filter(function (r) { return picked[r.key]; }); }
+    function massa() {
+        var n = marcadas().length;
+        $('#wht-mass').toggleClass('d-none', !n);
+        $('#wht-mass-n').text(n);
+        var sel = document.getElementById('wht-mass-col');
+        if (sel && !sel.options.length) {
+            sel.innerHTML = '<option value="">' + esc(t('massCol')) + '</option>' +
+                Object.keys(EDIT).map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('');
+        }
+    }
+    $(document).on('change', '#wht-mass-col', function () {
+        var col = this.value, box = document.getElementById('wht-mass-val');
+        box.innerHTML = col ? campo(col, EDIT[col][2], '', 'wht-mass-input') : '';
+        liga(box);
+        $('#wht-mass-apply').prop('disabled', !col);
+    });
+    $('#wht-mass-apply').on('click', function () {
+        var col = $('#wht-mass-col').val(), el = document.getElementById('wht-mass-input');
+        if (!col || !el) { return; }
+        var v = lido(el), alvo = marcadas().filter(function (r) { return alvoDe(col, r); });
+        var fora = marcadas().length - alvo.length;
+        if (!alvo.length) { falha('WHT', esc(fill(t('massNoSide'), { col: col }))); return; }
+        Swal.fire({ icon: 'question', title: fill(t('massTitle'), { n: alvo.length }),
+                    html: esc(fill(t('massText'), { col: col, v: v || '—' })) + (fora ? '<br><span class="text-muted fs-xs">' +
+                          esc(fill(t('massSkip'), { n: fora })) + '</span>' : ''),
+                    showCancelButton: true, confirmButtonText: t('massOk'), cancelButtonText: t('cancel'),
+                    confirmButtonColor: '#0066cc' }).then(function (res) {
+            if (!res.isConfirmed) { return; }
+            var ch = {}; ch[col] = v;
+            envia('/api/wht/edit', alvo.map(function (r) { return { otc_key: r.otc_key, hub_key: r.hub_key, changes: ch }; }),
+                  t('editDone'));
+        });
+    });
+    $('#wht-mass-delete').on('click', function () { apaga(marcadas()); });
 
     function kpis(c) {
         c = c || {};
