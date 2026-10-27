@@ -763,11 +763,73 @@ def _nd_amend_is_economic(field, old, new, stored, incoming, product=''):
     return True
 
 
+# Os campos que cada tela MOSTRA (o `COL_TO_JSON_FIELD` do template, sem os do
+# fluxo da página). O deal da API traz mais do que isso — datas de verificação,
+# moedas de liquidação, ids internos —, e a Athena os reescreve a cada pull sem a
+# operação ter mudado: comparados como qualquer outro, eles jogavam a linha para
+# `Amend` sem NENHUMA célula destacada, e a equipe reconferia uma operação em que
+# não via diferença (equipe, 27/10/2026). Campo fora daqui é ATUALIZADO calado:
+# a linha segue com o dado de hoje, sem Amend, sem `AmendChanged`. Produto sem
+# lista (chave desconhecida) compara tudo, como antes. Coluna nova numa dessas
+# telas entra aqui também — `check_nd_amend_table_fields.py` compara com os
+# templates.
+_ND_TABLE_FIELDS_NDF = (
+    'LE', 'Deal', 'TradeDate', 'Month', 'SettlementDate', 'SPN', 'Acronym', 'Client',
+    'TaxID', 'FirstFixingDate', 'LastFixingDate', 'Instrument', 'TradeType', 'Direction',
+    'FXPair', 'QuantityCurrency', 'OtherQuantityCurrency', 'Publisher', 'Notional', 'Rate',
+    'IsBRRFixed', 'TradingBook', 'OtherBook', 'SettlementLocation')
+_ND_TABLE_FIELDS = {
+    'vanilla': frozenset(_ND_TABLE_FIELDS_NDF),
+    'other-publishers': frozenset(_ND_TABLE_FIELDS_NDF),
+    'fwd-start': frozenset(_ND_TABLE_FIELDS_NDF + ('StrikeSetDate', 'StrikeSetOffset', 'Strike')),
+    'fxo': frozenset((
+        'Deal', 'TradeDate', 'Month', 'SettlementDate', 'SPN', 'Acronym', 'Client', 'TaxID',
+        'TradeType', 'UnderlyingAsset', 'FXHolidaySchedule', 'TotalNotional', 'Instrument',
+        'Strike', 'StrikeCurrency', 'Direction', 'Premium', 'PremiumPerUnit', 'PremiumCCY',
+        'SpotDate', 'FixingStartDate', 'FixingEndDate', 'TradingBook', 'OtherBook')),
+}
+
+
+def _nd_api_amend_full(stored, incoming, product=''):
+    """O `_nd_api_amend` com as duas respostas: (campos DA TABELA que mudaram —
+    os que fazem Amend —, campos fora da tabela atualizados calados)."""
+    if str(stored.get('Status', '') or '').strip() == 'Canceled':
+        return [], []
+    registrado = str(stored.get('Status', '') or '').strip() in _ND_AMEND_KEEP_STATUS
+    da_tabela = _ND_TABLE_FIELDS.get(product)
+    # Foto do deal ANTES de qualquer escrita: o loop já gravou os campos
+    # anteriores em `stored`, então perguntar a ele "a LE mudou?" no meio do
+    # caminho responderia sempre que não.
+    before = dict(stored)
+    changed, calados, economic = [], [], False
+    for k, v in incoming.items():
+        if k in _ND_AMEND_SKIP:
+            continue
+        old = str(stored.get(k, '') or '').strip()
+        new = str(v or '').strip()
+        if old != new:
+            stored[k] = v
+            if da_tabela is not None and k not in da_tabela:
+                calados.append(k)
+                continue
+            changed.append(k)
+            if _nd_amend_is_economic(k, old, new, before, incoming, product):
+                economic = True
+    if changed:
+        if economic or not registrado:
+            stored['Status'] = 'Amend'
+        prev = stored.get('AmendChanged') or []
+        stored['AmendChanged'] = sorted(set(prev) | set(changed))
+    return changed, calados
+
+
 def _nd_api_amend(stored, incoming, product=''):
     """Bate um deal já importado com a versão atual da API. Campo de dado
-    diferente → aplica o valor novo e registra o nome do campo em AmendChanged
-    (o front destaca as células). Deal já Canceled não é reaberto. Retorna a
-    lista de campos alterados.
+    diferente → aplica o valor novo; se o campo é COLUNA da tela
+    (`_ND_TABLE_FIELDS`), registra o nome dele em AmendChanged (o front destaca
+    as células) e o deal vira Amend — campo que a tela não mostra é atualizado
+    sem Amend. Deal já Canceled não é reaberto. Retorna a lista de campos da
+    tabela alterados.
 
     Status: a mudança normalmente joga o deal para 'Amend'. A exceção é quem já
     saiu da mesa — **Sent** e **Success** (`_ND_AMEND_KEEP_STATUS`) —, que só cai
@@ -777,30 +839,7 @@ def _nd_api_amend(stored, incoming, product=''):
     dentro da mesma entidade, destaca a célula e mantém o status: são detalhes de
     booking, e devolver para a fila uma operação já enviada à B3 gera retrabalho
     à toa."""
-    if str(stored.get('Status', '') or '').strip() == 'Canceled':
-        return []
-    registrado = str(stored.get('Status', '') or '').strip() in _ND_AMEND_KEEP_STATUS
-    # Foto do deal ANTES de qualquer escrita: o loop já gravou os campos
-    # anteriores em `stored`, então perguntar a ele "a LE mudou?" no meio do
-    # caminho responderia sempre que não.
-    before = dict(stored)
-    changed, economic = [], False
-    for k, v in incoming.items():
-        if k in _ND_AMEND_SKIP:
-            continue
-        old = str(stored.get(k, '') or '').strip()
-        new = str(v or '').strip()
-        if old != new:
-            stored[k] = v
-            changed.append(k)
-            if _nd_amend_is_economic(k, old, new, before, incoming, product):
-                economic = True
-    if changed:
-        if economic or not registrado:
-            stored['Status'] = 'Amend'
-        prev = stored.get('AmendChanged') or []
-        stored['AmendChanged'] = sorted(set(prev) | set(changed))
-    return changed
+    return _nd_api_amend_full(stored, incoming, product)[0]
 
 
 def _nd_amend_index(existing):
@@ -920,8 +959,10 @@ def _fxo_persist_new_deals(deals):
             st = seen_files[fpath]
             row = _nd_amend_find(st, d)
             if row is not None:
-                if _nd_api_amend(row, d):
+                mudou, calados = _nd_api_amend_full(row, d, 'fxo')
+                if mudou:
                     amended.append(d.get('Deal') or '')
+                if mudou or calados:
                     st['dirty'] = True
                 continue
             _nd_amend_register(st, d)           # dedup within the same pull too
