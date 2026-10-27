@@ -1400,7 +1400,12 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   (`_asian_verification_dates`, §549): as linhas tipo 2 e o campo 59 contam
   as MESMAS datas; sem `FXHolidaySchedule` (a API não manda) vale o ANBIMA, e
   calendário ilegível LEVANTA. Eram dois calendários, e o 07/09 foi à B3.
-- **Só `isCancelled` é cancelado** na Athena; `isDead` importa normalmente.
+- **Só `isCancelled` é cancelado** na Athena; `isDead` importa normalmente —
+  MENOS quando o mesmo DEAL NAME tem versão VIVA (`_api_live_records`, nos
+  pulls de NDF e FXO; equipe, 27/10/2026): a operação corrigida volta com a
+  versão antiga `isDead`, e as duas faziam Amend na mesma linha — vindo a antiga
+  por último, a tela ficava com o acronym/SPN errado com a API certa.
+  `check_api_live_version.py`.
 - **O import do dropzone não decide sozinho se a operação é nova** (§625):
   a grade só tem o que a busca carregou. Linha que ela não acha vai num POST
   com `_import`, e o SERVIDOR procura (`_nd_import_upsert`: Deal + Acronym,
