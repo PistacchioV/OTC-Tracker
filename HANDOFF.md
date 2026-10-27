@@ -30239,3 +30239,55 @@ função. **O Check_IR já tinha a tolerância de 1 centavo** (`TOL = 0.01`); o 
 agora a prova (0,30 × 0,29 bate, 0,30 × 0,28 não).
 
 O sino ganhou o rótulo `WHT` nos três mapas. `check_wht_edit.py`.
+
+## §703 — O ID de cada confirmação (o FepWeb ID do FWD Start que se perdia); o NDF Vanilla asiático/BRL fixed na esteira; owners por produto no Intraday Monitor (2026-10-27)
+
+**A regra do ID** (equipe, 27/10/2026), a MESMA no Pending Confirmation (Trade
+Number), na esteira (Trade ID), no Nº do Anexo I e no `numeroContrato` do XML:
+**FWD Start e swaps pelo B3 ID; Vanilla, FXO, NDF e opção de commodities pelo
+Deal** (Athena ID). Conferida produto a produto, ela já valia nas três primeiras —
+e quebrava na quarta: **o Save da confirmação gravava o FepWeb ID no Pending
+procurando pelo `Deal` para todo mundo**, e a linha do FWD Start (do Banco e de
+MGT) é chaveada pelo B3 ID. O `UPDATE … WHERE "Trade Number" IN (…)` não achava
+nada e não acusava nada; o FepWeb ID ficava vazio no Pending e, por cópia, na
+"Nome fep" da esteira (`_mc_sync_fepweb_ids`, que lê do Pending). O Vanilla de MGT,
+pelo Deal, saía certo, e o swap já mandava o B3 ID. Os seis Saves agora mandam as
+chaves pelo `_mc_conf_trade_keys(picked, <produto>)` — a função que já carimbava a
+esteira certo —, e ela passou a decidir por DEAL (`_conf_src`) também no gerador do
+Banco. **O que já foi gerado:** `scripts/fill_fepweb_ids_fwdstart.py [--gravar]`
+lê o `numeroContrato` do XML ao lado do PDF que a esteira aponta (`Confirmation
+Link`) e preenche só o FepWeb ID vazio; a "Nome fep" se refaz na carga do Track.
+
+**O NDF Vanilla do BANCO asiático ou BRL fixed vai à esteira** (equipe): antes só
+o Vanilla de MGT tinha documento. A regra é `_generic_nd_vanilla_conf` (asiático =
+First e Last Fixing preenchidas e diferentes, o `asian_fix` do TER; BRL fixed =
+`IsBRRFixed = YES`), e com ela o `_generic_nd_mc_source` dá `NDF VANILLA` e o
+Pending nasce `Pending OTC`. O documento é o do termo de moeda do Banco
+(`ndf-fwdstart-strike-me.html`), família nova **`vanilla`**
+(`/confirmation/ndf-fwdstart/vanilla`): ele já tem a janela de verificação
+(Data Inicial/Final) e o `_conf_fx_legs` divide pela taxa o notional em reais. O
+ajuste do Vanilla nas colunas do forward start (Data de Verificação da Taxa
+Forward e Pontos de Termo "Não Aplicável", a Taxa Forward = o `Rate`) virou
+`_conf_vanilla_rows`, o mesmo do documento MGT. O Nº é o Deal
+(`_conf_num_field`, a regra única; o `_conf_mgt_num_field` delega a ela), a pasta
+é `NDF VANILLA`, e o XML segue a do Vanilla de MGT (§682: prefixo `NDF`, o acronym
+no contrato de várias operações, o valor da maior). O Generate do Monitor manda o
+`NDF VANILLA` do Banco para esse editor e o de MGT segue no MGT. Na zona
+Confirmations do Intraday Monitor o card novo é `conf-ndf-vanilla`. **Ponto a
+conferir com a equipe:** no BRL fixed o Valor Base do Anexo I sai o notional como
+o deal o traz (em reais), como no FWD Start do Banco com notional em BRL. Vanilla
+de antes entra na esteira pelo `backfill_manual_confirmations.py` (a família
+decide por deal). `check_ndf_vanilla_conf.py`; o guarda do `check_fwdstart_conf`
+passou a ler o prefixo e o número pela condição da família.
+
+**Owners do Intraday Monitor por PRODUTO** (equipe: "os owners mudam de acordo com
+o produto/LOB"): a linha é (tarefa, produto, LE). Só as três tarefas de ZONA se
+quebram por produto — B3 Registration e Intrag pelos cards do `_NDM_CARDS`
+(separados pelo prefixo `intrag-`), Confirmations pelos cards dela
+(`ASSIGN_CONF_PRODUCTS`, que o teste confere contra o `queries`); produto em
+branco (All) é a tarefa inteira, e a linha gravada antes (§701) vale assim. O card
+mostra a etiqueta do produto, e o sino diz `Owner · B3 Registration · NDF Vanilla
+(MGT)`. **Owner e backup só BO, ADMIN e o master** ativos
+(`persistence._ASSIGN_ROLES` + `authz._MASTER_SIDS`). Cancel, Save e o Remove do
+modal são o squircle (32×32, canto de 10px) — a geometria com `!important`, porque
+o `.btn-icon` do tema dava 40px de altura. `check_intraday_owners.py` §1/§5.
