@@ -41,6 +41,13 @@ FORMATOS = (1,)                     # o `FORMATO` do exporta_dados.py que este l
 _NOME = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$')
 
 
+def _bytes(item):
+    """O tamanho que o manifest declara; -1 sem ele. Nunca `or -1`: o arquivo
+    VAZIO (o `.gitkeep` das pastas) declara 0, e o 0 virava -1."""
+    v = item.get('bytes')
+    return -1 if v is None else int(v)
+
+
 class PacoteInvalido(ValueError):
     """O pedido não se aplica a este pacote (`code` diz por quê, para a tela)."""
 
@@ -142,7 +149,7 @@ def _junta(pacote, item):
     alvo = _dentro(pacote, item['caminho'])
     faltam = [p for p in partes if not os.path.isfile(_dentro(pacote, p))]
     if faltam:
-        if os.path.isfile(alvo) and os.path.getsize(alvo) == int(item.get('bytes') or -1):
+        if os.path.isfile(alvo) and os.path.getsize(alvo) == _bytes(item):
             return                       # já juntado numa conferência anterior
         raise PacoteInvalido('missing_part', 'A part of %s did not arrive.' % item['caminho'],
                              caminho=item['caminho'], parte=faltam[0])
@@ -202,7 +209,7 @@ def confere(raiz, nome, duckdb_aqui=None, progresso=None):
             erros.append('%s fora de data/' % a['caminho'])
         elif not os.path.isfile(caminho):
             erros.append('%s não chegou' % a['caminho'])
-        elif os.path.getsize(caminho) != int(a.get('bytes') or -1):
+        elif os.path.getsize(caminho) != _bytes(a):
             erros.append('%s com %d bytes (o manifest diz %s)'
                          % (a['caminho'], os.path.getsize(caminho), a.get('bytes')))
         elif _sha256(caminho) != a.get('sha256'):

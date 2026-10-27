@@ -66,9 +66,14 @@ def pacote_falso(base, nome, completo=True, versao=None):
     os.makedirs(os.path.dirname(anexo))
     with open(anexo, 'wb') as fh:
         fh.write(b'\x89PNG' + os.urandom(3000))
+    # Arquivo VAZIO, como o `.gitkeep` das pastas do cache: o manifest diz 0, e
+    # o `or -1` lia o 0 como "sem tamanho" e recusava o pacote inteiro.
+    vazio = os.path.join(pac, 'data', 'cache', 'B3 Files', '.gitkeep')
+    os.makedirs(os.path.dirname(vazio))
+    open(vazio, 'wb').close()
     arquivos = [{'caminho': 'data/' + os.path.relpath(p, os.path.join(pac, 'data')).replace(os.sep, '/'),
                  'tipo': t, 'bytes': os.path.getsize(p), 'sha256': _sha(p)}
-                for p, t in ((db, 'duckdb'), (anexo, 'arquivo'))]
+                for p, t in ((db, 'duckdb'), (anexo, 'arquivo'), (vazio, 'arquivo'))]
     man = {'formato': 1, 'criado_em': '2026-10-27T18:00:00', 'duckdb': versao or duckdb.__version__,
            'completo': completo, 'arquivos': arquivos, 'pulados': [] if completo else
            [{'caminho': 'db/x.db', 'motivo': 'EM USO'}], 'erros': [], 'fora': []}

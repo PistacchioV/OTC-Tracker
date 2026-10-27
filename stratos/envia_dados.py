@@ -46,6 +46,13 @@ PARTE_MB = 64
 TENTATIVAS = 4
 
 
+def _bytes(item):
+    """O tamanho que o manifest declara; -1 sem ele. Nunca `or -1`: o arquivo
+    VAZIO (o `.gitkeep` das pastas) declara 0, e o 0 virava -1."""
+    v = item.get('bytes')
+    return -1 if v is None else int(v)
+
+
 def _padrao():
     base = os.environ.get('LOCALAPPDATA') or os.path.expanduser('~')
     pasta = os.path.join(base, 'OTC-Tracker', 'exporta-stratos')
@@ -67,7 +74,7 @@ def plano(pacote, parte_bytes):
         rel = a['caminho']
         local = os.path.join(pacote, *rel.split('/'))
         tam = os.path.getsize(local)
-        if tam != int(a.get('bytes') or -1):
+        if tam != _bytes(a):
             raise RuntimeError('%s tem %d bytes e o manifest diz %s: o pacote mudou depois do '
                                'export' % (rel, tam, a.get('bytes')))
         if parte_bytes and tam > parte_bytes:
