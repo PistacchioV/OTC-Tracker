@@ -124,5 +124,15 @@ try:
 finally:
     R._fxo_refdata_by_spn = _ref
 
+print('\n== 4. a tela relê a grade quando o pull corrigiu uma linha ==')
+# O caso real (D5WM-PLNXR, Suzano, 27/10/2026): o servidor gravava o Amend
+# certo, e a tela — que só redesenha as linhas NOVAS do `deals` — dizia "No new
+# deals" e seguia com a contraparte antiga até alguém pesquisar de novo.
+for pg in ('opt-fxo', 'ndf-vanilla', 'ndf-fwdstart', 'ndf-otherpublisher'):
+    txt = open(os.path.join(ROOT, 'apps', 'templates', 'pages', 'new_deals-%s.html' % pg), encoding='utf-8').read()
+    check('function apiAmended(res)' in txt and 'if (apiMudou && apiRefIsToday()) sfApply();' in txt
+          and "t('swal-api-amended'" in txt,
+          '%s: Amend/remoção no pull relê a grade e entra no resumo' % pg)
+
 print(('\nFAIL: %d' % len(fails)) if fails else '\nTUDO OK')
 sys.exit(1 if fails else 0)

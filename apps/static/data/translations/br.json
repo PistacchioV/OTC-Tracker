@@ -1294,6 +1294,8 @@
   "swal-fxo-api-title": "Importar da API Athena",
   "swal-api-fetched": "na API",
   "swal-api-dead": "cancelados na API",
+  "swal-api-amended": "alteradas (Amend)",
+  "swal-api-updated": "Nenhuma operação nova — linhas que já estavam na tabela foram atualizadas pela API.",
   "swal-api-removed": "linha(s) removida(s) (cancelada na API)",
   "swal-api-canceled": "mantidos como Canceled (já na B3)",
   "swal-api-interbook": "interbook",

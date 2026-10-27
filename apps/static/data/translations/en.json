@@ -1294,6 +1294,8 @@
   "swal-fxo-api-title": "Import from Athena API",
   "swal-api-fetched": "fetched",
   "swal-api-dead": "cancelled on the API",
+  "swal-api-amended": "amended (row updated)",
+  "swal-api-updated": "No new deals — rows already in the table were updated from the API.",
   "swal-api-removed": "rows removed (cancelled)",
   "swal-api-canceled": "kept as Canceled (already at B3)",
   "swal-api-interbook": "interbook",
