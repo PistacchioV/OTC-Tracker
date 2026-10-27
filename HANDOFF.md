@@ -30291,3 +30291,40 @@ mostra a etiqueta do produto, e o sino diz `Owner · B3 Registration · NDF Vani
 (`persistence._ASSIGN_ROLES` + `authz._MASTER_SIDS`). Cancel, Save e o Remove do
 modal são o squircle (32×32, canto de 10px) — a geometria com `!important`, porque
 o `.btn-icon` do tema dava 40px de altura. `check_intraday_owners.py` §1/§5.
+
+## §704 — Pay/Rec: o Pending Payment / Pending Receivement voltou a passar para os dias seguintes (2026-10-27)
+
+**O sintoma** (equipe): a linha marcada como Pending Payment ou Pending
+Receivement no Edit — a liquidação que não aconteceu — não aparecia no dia
+seguinte, e a pendência de dias anteriores se perdia de vista até alguém lembrar.
+
+**A causa:** o carry-forward (`_apply_carry_forward`) acha o dia anterior pelo
+`_prev_finalized`, que enumerava o histórico do End process com `glob.glob` no
+DISCO (`cache/payrec/AAAA/MM/DD/payrec_status_*.json`). Desde o §434 o histórico
+só existe no BANCO — o `finalize_history` grava pelo funil e nenhum JSON nasce no
+disco. O `glob` não via nenhum dia finalizado depois de 09/09/2026 e achava, no
+lugar, o último JSON legado que sobrou no disco (na dev, o de 06/07/2026): ou nada
+era trazido, ou vinham as pendências de julho. Os testes do Pay/Rec trocavam o
+`_prev_finalized` por um stub, e nada acusava.
+
+**O que mudou:**
+- `_prev_finalized` enumera pelo ARMAZÉM (`_store.day_files` no histórico,
+  `_store.listdir` no cache de trabalho) e vale o dia mais recente ANTES da data
+  com resultado: o histórico do End process e, sem ele, o resultado do Run. O dia
+  rodado e não finalizado também conta — ele já tem as pendências que trouxe dos
+  anteriores e as marcadas nele; antes, um dia sem End process partia a corrente.
+  No mesmo dia o histórico vence. A leitura que falha SOBE (banco ocupado): lida
+  como "não há dia anterior", o Run gravaria o dia sem as pendências e elas se
+  perderiam para sempre.
+- **Marcar depois do End process grava no histórico** (`_justify_locked`): a tela
+  mostra o histórico do dia finalizado (`load_last`) e é dele que o dia seguinte
+  lê; o Justify só regravava o cache de trabalho, e a marca sumia no reload e no
+  dia seguinte. O índice é o da tabela da tela (a do histórico); o cache de
+  trabalho acompanha quando a linha do índice é a mesma (`_same_row`).
+
+A regra de quem passa não mudou: só `Pending Payment`/`Pending Receivement`
+(o `Pending` simples e o `Justified` ficam no dia), e sai quando liquida (valor
+no Settled do dia ou par do outro lado dentro da tolerância). **Para recuperar
+o que já se perdeu:** rode de novo a recon dos dias a partir do primeiro com
+pendência marcada, em ordem — cada Run traz do anterior. `check_payrec_carry.py`
+usa o armazém de verdade (sem stub).
