@@ -1380,6 +1380,14 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   (`_ND_AMEND_COSMETIC_BY_PRODUCT`, por produto — produto vazio = econômico).
   A varredura do box não tem a proteção de propósito (paridade com
   `otc-fileupload.js`).
+- **O Amend da API conta só as COLUNAS da tela** (equipe, 27/10/2026):
+  `_ND_TABLE_FIELDS` por produto (Vanilla, FWD Start, Other Publisher, FXO);
+  campo do deal que a tela não mostra é atualizado calado, sem Amend nem
+  `AmendChanged` — a Athena os reescreve a cada pull, e a linha virava Amend
+  sem célula destacada. Coluna nova numa dessas telas entra na lista
+  (`check_nd_amend_table_fields.py` compara com o `COL_TO_JSON_FIELD`). A célula
+  com amend é a classe `otc-amend-cell` do tema (o `#ffe0e0` fixo sumia no
+  escuro).
 - **O Confirm da linha leva New E Amend direto para `Approved`** (§540, mesa
   23/09/2026); **`Pending` é só do Save do modal de Edit**. Nas seis páginas de
   NDF/Opção a regra é o `directToApproved` do JS (com as travas de contraparte

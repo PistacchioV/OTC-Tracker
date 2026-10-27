@@ -2708,6 +2708,15 @@ table.dataTable > tbody > tr > td {
   font-size: .8rem;
   white-space: nowrap;
 }
+// Célula com AMEND (o campo que a API ou o recap mudou, `AmendChanged`): era um
+// `#ffe0e0` fixo no JS de cada tela, e no escuro o texto claro do tema sobre o
+// rosa claro ficava ilegível. Aqui o tom sai do `--otc-danger` do tema e o texto
+// é o do tema. Sem `!important`: o pisca verde do Ctrl+C (table-std.js) é inline.
+table.dataTable > tbody > tr > td.otc-amend-cell {
+  background-color: color-mix(in srgb, var(--otc-danger) 15%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--otc-danger) 45%, transparent);
+  color: var(--otc-text);
+}
 :is(.dt-scroll-head, .dt-scroll-headInner, .dataTables_scrollHeadInner) thead th {
   text-align: center !important;
   vertical-align: middle !important;
