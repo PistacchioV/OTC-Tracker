@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """envia_dados.py — leva o pacote dos bancos para o Shared Drive do Stratos.
 
-    python stratos\\envia_dados.py --env dev [PACOTE] [--parte-mb 64]
+    python OTC-Tracker-Stratos\\stratos\\envia_dados.py --env dev [PACOTE] [--parte-mb 64]
                                    [--solution-id 76521] [--dry-run]
                                    [--drive-local PASTA]
 

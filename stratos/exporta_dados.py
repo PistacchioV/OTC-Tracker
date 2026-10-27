@@ -3,7 +3,7 @@
 """exporta_dados.py — tira do share uma cópia CONSISTENTE dos dados do OTC
 Tracker, no formato que o Stratos recebe.
 
-    python stratos/exporta_dados.py [--origem PASTA] [--destino PASTA_LOCAL]
+    python OTC-Tracker-Stratos\\stratos\\exporta_dados.py [--origem PASTA] [--destino PASTA_LOCAL]
                                     [--medir] [--com-json-legado] [--zip]
                                     [--sem-emagrecer] [--lock-seconds 30]
                                     [--insistir SEGUNDOS]

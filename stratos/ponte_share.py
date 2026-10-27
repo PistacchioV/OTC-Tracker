@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """ponte_share.py — mantém as pastas do share iguais no Shared Drive do Stratos.
 
-    python stratos\\ponte_share.py --env dev|prod [--solution-id 76521]
+    python OTC-Tracker-Stratos\\stratos\\ponte_share.py --env dev|prod [--solution-id 76521]
                                   [--modo espelho|virada] [--alinhar]
                                   [--loop 20] [--so slug,slug] [--dry-run]
                                   [--permitir-apagar] [--medir] [--workers 8]

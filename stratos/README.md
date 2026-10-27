@@ -24,6 +24,48 @@ que está listado abaixo existe apenas nesta branch.
 Dockerfile, terraform, Jenkinsfile, jules, `tests/` e o `favicon.ico` são do
 template e ninguém aqui os toca.
 
+## A sequência completa (máquina do JPM)
+
+No `cmd`, da pasta que CONTÉM o `OTC-Tracker-Stratos` (os caminhos começam por
+ele: `OTC-Tracker-Stratos\stratos\...`). Os scripts acham o resto do código pela
+própria pasta, então a pasta atual só decide esse prefixo.
+
+```
+REM ── 0. variáveis (uma vez por janela do cmd) ──────────────────────────
+set PYDS=%USERPROFILE%\ds\tools\python3.13\latest\python.exe
+set PYAPP=%LOCALAPPDATA%\OTC-Tracker\python313\python.exe
+set SOL=%USERPROFILE%\ds\python-solutions\stratos\76521\singing-moose-flask
+
+REM ── 1. o código novo no Stratos ────────────────────────────────────────
+OTC-Tracker-Stratos\stratos-sync.bat
+OTC-Tracker-Stratos\stratos-sync.bat apply
+pushd "%SOL%"
+stratos status
+stratos push "OTC Tracker: entrega"
+popd
+
+REM ── 2. os bancos (com as instâncias da equipe FECHADAS) ───────────────
+"%PYAPP%" OTC-Tracker-Stratos\stratos\exporta_dados.py --medir
+"%PYAPP%" OTC-Tracker-Stratos\stratos\exporta_dados.py --zip --insistir 60
+"%PYDS%" OTC-Tracker-Stratos\stratos\envia_dados.py --env dev --dry-run
+"%PYDS%" OTC-Tracker-Stratos\stratos\envia_dados.py --env dev
+REM    no navegador, no Stratos: /stratos/pacotes -> Check -> Activate
+REM    e o restart da solução
+
+REM ── 3. a ponte do share (fica rodando nesta janela) ───────────────────
+"%PYDS%" OTC-Tracker-Stratos\stratos\ponte_share.py --medir
+"%PYDS%" OTC-Tracker-Stratos\stratos\ponte_share.py --env dev --dry-run
+stratos file --listfiles --local-path "" --server-path "otc-tracker/ponte/manifesto" --env dev
+"%PYDS%" OTC-Tracker-Stratos\stratos\ponte_share.py --env dev --loop 20
+```
+
+- `PYAPP` é o Python do `start-otc-tracker.bat` (a versão do duckdb que escreveu
+  os bancos); na máquina que ainda sobe pelo 3.12 é o `python312`. `PYDS` é o do
+  DevShell, o que tem o `stratosblocks` (ponte e envio).
+- `--env dev` é o ambiente em que a solução está publicada; na produção, `prod`.
+- O passo 1 vem antes dos outros: a página `/stratos/pacotes` e os manifestos da
+  ponte são do código novo.
+
 ## Levar para o Stratos (máquina do JPM)
 
 Uma vez, de dentro do clone do OTC Tracker:
@@ -32,11 +74,11 @@ Uma vez, de dentro do clone do OTC Tracker:
 git worktree add ..\OTC-Tracker-Stratos OTC-Tracker-Stratos
 ```
 
-Depois, a cada entrega, da pasta `..\OTC-Tracker-Stratos`:
+Depois, a cada entrega, da pasta que contém o `OTC-Tracker-Stratos`:
 
 ```
-stratos-sync           (lista o que vai mudar)
-stratos-sync apply     (copia; em src\apps também remove o que saiu da branch)
+OTC-Tracker-Stratos\stratos-sync.bat           (lista o que vai mudar)
+OTC-Tracker-Stratos\stratos-sync.bat apply     (copia; em src\apps também remove o que saiu da branch)
 ```
 
 e, no `singing-moose-flask`, `stratos status` e `stratos push "mensagem"`. O
@@ -97,8 +139,8 @@ monta o arquivo é o `exporta_dados.py`, na máquina do JPM, com o MESMO python
 do `start-otc-tracker.bat`: é a versão de duckdb que escreveu os WALs.
 
 ```
-python stratos\exporta_dados.py --medir        (quantos bancos, quantos MB)
-python stratos\exporta_dados.py --zip          (monta o pacote)
+"%PYAPP%" OTC-Tracker-Stratos\stratos\exporta_dados.py --medir     (quantos bancos, quantos MB)
+"%PYAPP%" OTC-Tracker-Stratos\stratos\exporta_dados.py --zip     (monta o pacote)
 ```
 
 Banco a banco, ele toma a trava de leitura da camada, copia o `.db` com os WALs
@@ -129,9 +171,9 @@ O pacote chega ao drive **nunca por cima dos bancos em uso** (§681 passo C,
 §708). Na mesma máquina, com o Python do DevShell (o da ponte):
 
 ```
-%PY% stratos\envia_dados.py --env dev               (o pacote mais recente)
-%PY% stratos\envia_dados.py --env dev <pasta>       (um pacote escolhido)
-%PY% stratos\envia_dados.py --env dev --dry-run     (o que enviaria)
+"%PYDS%" OTC-Tracker-Stratos\stratos\envia_dados.py --env dev               (o pacote mais recente)
+"%PYDS%" OTC-Tracker-Stratos\stratos\envia_dados.py --env dev <pasta>       (um pacote escolhido)
+"%PYDS%" OTC-Tracker-Stratos\stratos\envia_dados.py --env dev --dry-run     (o que enviaria)
 ```
 
 Ele recusa pacote INCOMPLETO, manda a PASTA (não o `.zip`) para
@@ -211,10 +253,10 @@ A tarefa agendada do Stratos também roda na nuvem, então essa metade só pode
 morar numa máquina da rede.
 
 ```
-set PY=C:\Users\e930179\ds\tools\python3.13\latest\python.exe
-%PY% stratos\ponte_share.py --medir                         (arquivos e MB por pasta)
-%PY% stratos\ponte_share.py --env dev --dry-run    (o que faria)
-%PY% stratos\ponte_share.py --env dev --loop 20    (espelho, em laço)
+set PYDS=%USERPROFILE%\ds\tools\python3.13\latest\python.exe
+"%PYDS%" OTC-Tracker-Stratos\stratos\ponte_share.py --medir                         (arquivos e MB por pasta)
+"%PYDS%" OTC-Tracker-Stratos\stratos\ponte_share.py --env dev --dry-run    (o que faria)
+"%PYDS%" OTC-Tracker-Stratos\stratos\ponte_share.py --env dev --loop 20    (espelho, em laço)
 ```
 
 O solution id é o **76521**, o mesmo do endereço da solução e do
