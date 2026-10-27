@@ -1237,12 +1237,12 @@ var OTCFileUpload = (function () {
                 existingRowApi.data(newRow);
                 tableInstance.draw(false);
 
-                // Apply light-red background to changed cells on the fresh DOM node
+                // Destaca as células alteradas (otc-amend-cell: a cor é do tema, §7)
                 var freshNode = existingRowApi.node();
                 if (freshNode && changedCols.length) {
                     changedCols.forEach(function (col) {
                         var cellNode = tableInstance.cell(freshNode, col).node();
-                        if (cellNode) cellNode.style.backgroundColor = '#ffe0e0';
+                        if (cellNode) cellNode.classList.add('otc-amend-cell');
                     });
                 }
 

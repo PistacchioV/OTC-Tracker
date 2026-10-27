@@ -939,7 +939,7 @@ $(document).ready(function() {
                     if (!node) return;
                     window._OTC_AMEND_CHANGED_COLS[rid].forEach(function(col) {
                         var cn = api.cell(node, col).node();
-                        if (cn) cn.style.backgroundColor = '#ffe0e0';
+                        if (cn) cn.classList.add('otc-amend-cell');
                     });
                 });
             }
