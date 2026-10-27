@@ -133,15 +133,20 @@ check('payload ruim: 400', r.status_code, 400)
 print('\n== 4. o snapshot, a página e os mapas ==')
 from apps.pages.features.deals_monitor import queries as Q      # noqa: E402
 _orig = Q._intraday_snapshot
-Q._intraday_snapshot = lambda ref: {'tasks': [], 'kpis': {}}
+# só o NDF Vanilla (JPM e MGT) se mexeu: Confirmations sem movimento
+Q._intraday_snapshot = lambda ref: {'tasks': [], 'kpis': {}, 'conf_cards': [], 'cards': [
+    {'key': 'ndf-vanilla', 'total': 3, 'les': [{'le': 'JPM', 'count': 1}, {'le': 'MGT', 'count': 2}]}]}
 Q_prev = Q._prev_items
 Q._prev_items = lambda ref: {'items': []}
 try:
     j = cl.get('/api/intraday-monitor').get_json()
     check('o snapshot leva assignments, people, can_assign e o rótulo dos produtos',
-          (j.get('assignments') == GRAVADO['v'], sorted(j.get('people') or {}), j['me'].get('can_assign'),
+          (bool(j.get('assignments')), sorted(j.get('people') or {}), j['me'].get('can_assign'),
            (j.get('assign_products') or {}).get('intrag-ndf')),
           (True, ['A111111', 'T222222'], True, 'Intrag NDF'))
+    check('   só os owners das tarefas e produtos com movimento no dia',
+          [(a['task'], a['product'], a['le']) for a in j.get('assignments') or []],
+          [(a['task'], a['product'], a['le']) for a in GRAVADO['v'] if a['task'] == 'registration'])
 finally:
     Q._intraday_snapshot, Q._prev_items = _orig, Q_prev
 
@@ -198,6 +203,29 @@ check('Cancel e Save sem rounded-circle, e o squircle no CSS do modal',
       (False, True))
 check('a coluna Produto no modal e no card', ('data-lang="im-asg-product"' in tpl, 'IM_PRODUCTS[a.product]' in tpl),
       (True, True))
+
+print('\n== 6. o card só mostra quem tem o que fazer no dia ==')
+mov = D.moving_products(
+    [{'key': 'ndf-commodities', 'total': 6, 'les': [{'le': 'JPM', 'count': 4}, {'le': 'LAW', 'count': 2}]},
+     {'key': 'ndf-vanilla', 'total': 16, 'les': [{'le': 'JPM', 'count': 16}, {'le': 'MGT', 'count': 0}]},
+     {'key': 'opt-fxo', 'total': 2, 'les': []},
+     {'key': 'ndf-fwdstart', 'total': 0, 'les': [{'le': 'JPM', 'count': 0}]},
+     {'key': 'intrag-ndf', 'total': 0}],
+    [{'key': 'conf-ndf-vanilla', 'total': 2}, {'key': 'conf-opt-fxo', 'total': 0}])
+check('moving_products: por tarefa, o produto e as LEs que se mexeram',
+      mov, {'registration': {'ndf-commodities': {'JPM', 'LAW'}, 'ndf-vanilla': {'JPM'}, 'opt-fxo': None},
+            'confirmation': {'ndf-vanilla': None}, 'intrag': {}})
+A = lambda task, product='', le='': {'task': task, 'product': product, 'le': le, 'owner': 'A111111', 'backup': ''}
+lista = [A('registration', 'ndf-commodities'), A('registration', 'ndf-fwdstart'),
+         A('registration', 'ndf-vanilla', 'JPM'), A('registration', 'ndf-vanilla', 'MGT'),
+         A('registration', 'opt-fxo', 'MGT'), A('registration', '', 'LAW'), A('registration', '', 'MGT'),
+         A('confirmation', 'ndf-vanilla', 'MGT'), A('confirmation', 'opt-fxo'),
+         A('intrag'), A('intrag', 'intrag-ndf'), A('payrec')]
+check('assignments_of_day: produto parado e LE parada saem; tarefa inteira fica se a zona se mexeu',
+      [(a['task'], a['product'], a['le']) for a in D.assignments_of_day(lista, mov)],
+      [('registration', 'ndf-commodities', ''), ('registration', 'ndf-vanilla', 'JPM'),
+       ('registration', 'opt-fxo', 'MGT'), ('registration', '', 'LAW'), ('registration', '', 'MGT'),
+       ('confirmation', 'ndf-vanilla', 'MGT'), ('payrec', '', '')])
 
 print(('\nFAIL: %d' % len(fails)) if fails else '\nTUDO OK')
 sys.exit(1 if fails else 0)

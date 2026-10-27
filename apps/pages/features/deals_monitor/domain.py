@@ -465,6 +465,52 @@ def clean_assignments(raw, sids=None):
                                                ASSIGN_LES.index(a['le'])))
 
 
+def moving_products(cards, conf_cards):
+    """{tarefa de zona: {produto: LEs com movimento ou None}} — os produtos com
+    alguma operação no dia, pelos cards do detalhe. `None` = o card não se
+    quebra por LE (as confirmações), e aí a LE não filtra. A chave é a do
+    `assign_products`: a confirmação sem o `conf-`."""
+    zona_task = {t['zone']: t['id'] for t in TASKS if t['kind'] == 'zone'}
+    out = {tid: {} for tid in zona_task.values()}
+    for zone, group in (('Registration', cards), ('Confirmation', conf_cards)):
+        for card in group or ():
+            key = str(card.get('key') or '')
+            if int(card.get('total') or 0) <= 0:
+                continue
+            tid = zona_task.get('Intrag' if key.startswith('intrag-') else zone)
+            if tid is None:
+                continue
+            les = card.get('les') or []
+            out[tid][key[5:] if key.startswith('conf-') else key] = (
+                {e.get('le') for e in les if int(e.get('count') or 0) > 0} if les else None)
+    return out
+
+
+def assignments_of_day(assignments, moving):
+    """Os owners que o card da tarefa mostra no dia (equipe, 27/10/2026): nas
+    tarefas de ZONA, só os dos produtos com movimento — a lista inteira
+    poluía o card com quem não tem nada a fazer hoje. A linha da tarefa
+    inteira (produto em branco) fica se a zona se mexeu; com LE, se alguma
+    LE dela se mexeu. As outras tarefas não mudam."""
+    out = []
+    for a in assignments or []:
+        prods = (moving or {}).get(a.get('task'))
+        if prods is None:
+            out.append(a)
+            continue
+        le = a.get('le') or ''
+        if a.get('product'):
+            if a['product'] not in prods:
+                continue
+            les = prods[a['product']]
+            if le and les is not None and le not in les:
+                continue
+        elif not prods or (le and not any(les is None or le in les for les in prods.values())):
+            continue
+        out.append(a)
+    return out
+
+
 def assignment_news(antes, depois):
     """Quem passou a responder por quê: [(sid, papel, task, product, le)] — o
     owner ou o backup que a linha não tinha antes (é a quem o sino avisa)."""
