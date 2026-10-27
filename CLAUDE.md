@@ -1122,6 +1122,10 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 
 ### Layout e vidro
 
+- **CSS de PLUGIN (daterangepicker, flatpickr) vai no `{% block extra_css %}`**,
+  antes do `otc.css` (§701): carregado no fim da página ele vence o tema, e o
+  calendário sai branco com o texto claro no escuro (era o Pay/Rec).
+  `check_theme_toggle.py` recusa.
 - **O `<style>` da página carrega ANTES do `otc.css`** — é a regra que explica
   quase todo "minha regra não pegou". Regra da tela precisa de peso de id ou
   de classe (`#ops-page .x`) para vencer componente do tema; e o tema, ao
@@ -3652,7 +3656,7 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (215 scripts)
+### `scripts/tests/` (219 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
