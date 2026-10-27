@@ -148,48 +148,74 @@
   .conf { font-weight: 700; letter-spacing: .06em; text-transform: uppercase; font-size: 11.5px; }
 
 
-  /* ── página 2: o fluxo end to end ──────────────────────── */
+  /* ── página 2: o fluxograma end to end ─────────────────── */
   .sheet + .sheet { margin-top: 18px; }
   .hero--flow { grid-template-columns: 1fr auto; align-items: center; }
   .hero--flow h1 { font-size: 28px; }
-  .legend { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; justify-content: flex-end; align-items: center; }
   .legend__item { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-2); white-space: nowrap; }
   .legend__swatch { width: 26px; height: 16px; border-radius: 5px; flex: none; }
   .legend__swatch--in { background: linear-gradient(135deg, var(--navy), var(--blue)); }
   .legend__swatch--out { border: 1.5px dashed rgba(40, 40, 70, .35); background: var(--card); }
-  .e2e-card { margin-top: 10px; }
-  .e2e-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-  .e2e-count { font-size: 13.5px; color: var(--text-2); }
-  .e2e-count b { color: var(--blue); font-size: 18px; font-weight: 750; font-variant-numeric: tabular-nums; }
-  .rail { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; margin-top: 4px; }
-  .node {
-    position: relative; border-radius: var(--r-md); padding: 10px 10px 11px; min-height: 128px;
-    display: flex; flex-direction: column; gap: 6px;
+  .legend__count { font-size: 13.5px; color: var(--text-2); }
+  .legend__count b { color: var(--blue); font-size: 18px; font-weight: 750; font-variant-numeric: tabular-nums; }
+  .chart { margin-top: 10px; padding: 18px 22px 20px; }
+  .chart { --g: 30px; }
+  .lane { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--g); }
+  .fnode {
+    position: relative; border-radius: var(--r-md); padding: 12px 14px 13px;
+    display: flex; flex-direction: column; gap: 7px;
   }
-  .node:not(:last-child)::after {
-    content: ""; position: absolute; right: -11px; top: 50%; width: 8px; height: 8px; margin-top: -4px;
-    border-top: 2px solid var(--text-3); border-right: 2px solid var(--text-3); transform: rotate(45deg); opacity: .7;
+  .fnode::after {                                   /* a seta para o próximo passo */
+    content: ""; position: absolute; top: 34px; right: calc(-1 * var(--g) + 4px); width: calc(var(--g) - 8px);
+    height: 2px; background: rgba(22, 24, 38, .38);
   }
-  .node__top { display: flex; align-items: center; justify-content: space-between; }
-  .node__n { font-size: 11.5px; font-weight: 700; letter-spacing: .04em; }
-  .node__icon { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; }
-  .node__icon svg { width: 15px; height: 15px; }
-  .node__name { font-size: 14px; font-weight: 700; line-height: 1.2; }
-  .node__sub { font-size: 12px; line-height: 1.35; margin-top: auto; }
-  .node--in { background: linear-gradient(160deg, var(--navy), #1d5fb0 55%, var(--blue)); color: #fff; box-shadow: 0 6px 16px rgba(20, 71, 120, .22); }
-  .node--in .node__n { color: rgba(255, 255, 255, .7); }
-  .node--in .node__icon { background: rgba(255, 255, 255, .18); }
-  .node--in .node__sub { color: rgba(255, 255, 255, .85); font-weight: 600; }
-  .node--out { background: var(--card); border: 1.5px dashed rgba(40, 40, 70, .28); color: var(--text-3); }
-  .node--out .node__icon { background: var(--fill); color: var(--text-3); }
-  .node--out .node__name { color: var(--text-2); }
-  .e2e-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px; }
-  .e2e-step { background: var(--card); border-radius: var(--r-lg); box-shadow: var(--shadow); padding: 12px 16px 13px; position: relative; overflow: hidden; }
-  .e2e-step::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--hue, var(--blue)); }
-  .e2e-step .h2 { font-size: 15px; margin-bottom: 8px; }
-  .e2e-step .h2 small { display: block; font-size: 11.5px; font-weight: 700; color: var(--text-3); letter-spacing: .04em; }
-  .e2e-step ul.list li { font-size: 13.5px; }
-  .e2e-note { margin: 8px 2px 0; font-size: 12.5px; color: var(--text-3); }
+  .fnode::before {
+    content: ""; position: absolute; top: 30px; right: calc(-1 * var(--g) + 3px); width: 8px; height: 8px;
+    border-top: 2px solid rgba(22, 24, 38, .38); border-right: 2px solid rgba(22, 24, 38, .38); transform: rotate(45deg);
+  }
+  .lane > .fnode:last-child::after, .lane > .fnode:last-child::before { display: none; }
+  .fnode__top { display: flex; align-items: center; gap: 10px; }
+  .fnode__icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: none; }
+  .fnode__icon svg { width: 18px; height: 18px; }
+  .fnode__n { font-size: 11.5px; font-weight: 700; letter-spacing: .05em; }
+  .fnode__name { font-size: 15.5px; font-weight: 750; line-height: 1.2; letter-spacing: -.005em; }
+  .fnode__what { font-size: 13px; line-height: 1.4; }
+  .fnode__list { margin: 2px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+  .fnode__list li { position: relative; padding-left: 17px; font-size: 12.8px; line-height: 1.35; }
+  .fnode__list li::before {
+    content: ""; position: absolute; left: 1px; top: .32em; width: 8px; height: 4px;
+    border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); opacity: .85;
+  }
+  .fnode__tag {
+    margin-top: auto; align-self: flex-start; font-size: 11px; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+  }
+  .fnode--in { background: linear-gradient(165deg, var(--navy), #1d5fb0 60%, var(--blue)); color: #fff; box-shadow: 0 8px 20px rgba(20, 71, 120, .22); }
+  .fnode--in .fnode__n { color: rgba(255, 255, 255, .7); }
+  .fnode--in .fnode__icon { background: rgba(255, 255, 255, .18); }
+  .fnode--in .fnode__what { color: rgba(255, 255, 255, .78); }
+  .fnode--in .fnode__list li { color: #fff; }
+  .fnode--in .fnode__tag { background: rgba(255, 255, 255, .18); color: #fff; }
+  .fnode--out { background: var(--card); border: 1.5px dashed rgba(40, 40, 70, .3); color: var(--text-2); }
+  .fnode--out .fnode__n { color: var(--text-3); }
+  .fnode--out .fnode__icon { background: var(--fill); color: var(--text-3); }
+  .fnode--out .fnode__name { color: var(--text-2); }
+  .fnode--out .fnode__what { color: var(--text-3); }
+  .fnode--out .fnode__tag { background: var(--fill); color: var(--text-3); }
+  /* o cotovelo do passo 6 para o 7: desce do centro da última coluna, cruza e
+     desce no centro da primeira (o centro de uma coluna é metade da largura dela) */
+  .turn { position: relative; height: 40px; --c: calc((100% - 5 * var(--g)) / 12); }
+  .turn__a { position: absolute; top: 0; height: 50%; left: var(--c); right: var(--c);
+             border-right: 2px solid rgba(22, 24, 38, .38); border-bottom: 2px solid rgba(22, 24, 38, .38);
+             border-bottom-right-radius: 12px; }
+  .turn__b { position: absolute; top: calc(50% - 2px); bottom: 6px; left: var(--c); width: 12px;
+             border-left: 2px solid rgba(22, 24, 38, .38); border-top: 2px solid rgba(22, 24, 38, .38);
+             border-top-left-radius: 12px; }
+  .turn__b::after { content: ""; position: absolute; left: -6px; bottom: -3px; width: 8px; height: 8px;
+                    border-right: 2px solid rgba(22, 24, 38, .38); border-bottom: 2px solid rgba(22, 24, 38, .38);
+                    transform: rotate(45deg); }
+  .chart-note { margin: 8px 2px 0; font-size: 12.5px; color: var(--text-3); }
 
   /* ── telas menores ─────────────────────────────────────── */
   @media screen and (max-width: 1080px) {
@@ -198,9 +224,10 @@
     .step:nth-child(3n)::after { display: none; }
     .grid3 { grid-template-columns: 1fr 1fr; }
     .grid3 > :last-child { grid-column: 1 / -1; }
-    .rail { grid-template-columns: repeat(6, 1fr); }
-    .node:nth-child(6n)::after { display: none; }
-    .e2e-grid { grid-template-columns: 1fr 1fr; }
+    .lane { grid-template-columns: repeat(3, 1fr); row-gap: 14px; }
+    .lane > .fnode:nth-child(3n)::after, .lane > .fnode:nth-child(3n)::before { display: none; }
+    .turn { display: none; }
+    .lane + .turn + .lane { margin-top: 14px; }
   }
   @media screen and (max-width: 720px) {
     .sheet { padding: 16px; }
@@ -218,10 +245,8 @@
     .chip { white-space: normal; }
     .hero--flow { grid-template-columns: 1fr; }
     .legend { justify-content: flex-start; }
-    .rail { grid-template-columns: 1fr 1fr; }
-    .node { min-height: 0; }
-    .node::after { display: none; }
-    .e2e-grid { grid-template-columns: 1fr; }
+    .lane { grid-template-columns: 1fr; }
+    .fnode::after, .fnode::before { display: none; }
   }
 
   /* ── impressão: uma folha A4 deitada ───────────────────── */
@@ -251,8 +276,10 @@
     .ask { box-shadow: none; }
     /* duas folhas: a do fluxo começa numa página nova */
     .sheet + .sheet { break-before: page; margin-top: 0; }
-    .e2e-step { box-shadow: 0 0 0 1px var(--sep); }
-    .node--in { box-shadow: none; }
+    /* a folha do fluxo é mais baixa: layout mais estreito e zoom maior dão a
+       MESMA largura no papel (1700 × .61 = 1300 × .80) e enchem a página */
+    .sheet + .sheet { width: 1300px !important; zoom: .8 !important; }
+    .fnode--in { box-shadow: none; }
   }
 </style>
 </head>
@@ -427,134 +454,128 @@
   </footer>
 </main>
 
-<!-- Página 2: o fluxo end to end de uma operação -->
+<!-- Página 2: o fluxograma end to end de uma operação -->
 <section class="sheet" aria-label="End to end">
   <header class="hero hero--flow">
     <div>
       <div class="eyebrow"><span lang="pt">OTC Tracker · Fluxo end to end</span><span lang="en">OTC Tracker · End-to-end flow</span></div>
       <h1><span lang="pt">Onde o OTC Tracker entra na vida de uma operação</span><span lang="en">Where OTC Tracker fits in a trade's lifecycle</span></h1>
-      <p class="lede"><span lang="pt">Os passos de uma operação de derivativo de balcão, da negociação à conta nostro.</span><span lang="en">The steps of an OTC derivative trade, from negotiation to the nostro account.</span></p>
+      <p class="lede"><span lang="pt">Os passos de uma operação de derivativo de balcão, da negociação com o cliente à conta nostro.</span><span lang="en">The steps of an OTC derivative trade, from client negotiation to the nostro account.</span></p>
     </div>
     <div class="legend">
-      <span class="legend__item"><span class="legend__swatch legend__swatch--in"></span><span lang="pt">Passa pelo OTC Tracker</span><span lang="en">Runs through OTC Tracker</span></span>
+      <span class="legend__count"><b>8</b> <span lang="pt">de 12 passos no OTC Tracker</span><span lang="en">of 12 steps in OTC Tracker</span></span>
+      <span class="legend__item"><span class="legend__swatch legend__swatch--in"></span><span lang="pt">No OTC Tracker</span><span lang="en">In OTC Tracker</span></span>
       <span class="legend__item"><span class="legend__swatch legend__swatch--out"></span><span lang="pt">Fora do OTC Tracker</span><span lang="en">Outside OTC Tracker</span></span>
     </div>
   </header>
 
-  <section class="card e2e-card">
-    <div class="e2e-head">
-      <h2 class="h2"><span class="tile" style="--hue:var(--blue)"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></span>
-        <span lang="pt">Fluxo end to end</span><span lang="en">End-to-end flow</span></h2>
-      <div class="e2e-count"><b>8</b> <span lang="pt">de 12 passos passam pelo OTC Tracker</span><span lang="en">of 12 steps run through OTC Tracker</span></div>
+  <section class="card chart" aria-label="Fluxograma">
+    <div class="lane">
+        <div class="fnode fnode--out">
+          <div class="fnode__top"><span class="fnode__icon"><svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span><div><div class="fnode__n">01</div><div class="fnode__name"><span lang="pt">Negociação com o cliente</span><span lang="en">Client Negotiation</span></div></div></div>
+          <div class="fnode__what"><span lang="pt">Sales e Trading fecham a operação com o cliente.</span><span lang="en">Sales &amp; Trading agree the trade with the client.</span></div>
+          <span class="fnode__tag"><span lang="pt">Fora do OTC Tracker</span><span lang="en">Outside OTC Tracker</span></span>
+        </div>
+        <div class="fnode fnode--out">
+          <div class="fnode__top"><span class="fnode__icon"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg></span><div><div class="fnode__n">02</div><div class="fnode__name"><span lang="pt">Booking no RMS</span><span lang="en">RMS Booking</span></div></div></div>
+          <div class="fnode__what"><span lang="pt">O Front Office registra a operação no Athena.</span><span lang="en">Front Office books the trade in Athena.</span></div>
+          <span class="fnode__tag"><span lang="pt">Fora do OTC Tracker</span><span lang="en">Outside OTC Tracker</span></span>
+        </div>
+        <div class="fnode fnode--in">
+          <div class="fnode__top"><span class="fnode__icon"><svg viewBox="0 0 24 24"><path d="M4 13h4l2 3h4l2-3h4"/><path d="M4 13l2.5-7h11l2.5 7v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg></span><div><div class="fnode__n">03</div><div class="fnode__name"><span lang="pt">Captura da operação</span><span lang="en">Trade Capture</span></div></div></div>
+          <div class="fnode__what"><span lang="pt">A operação entra no OTC Tracker.</span><span lang="en">The trade enters OTC Tracker.</span></div>
+          <ul class="fnode__list">
+            <li><span lang="pt">Importação da API Athena</span><span lang="en">Import from the Athena API</span></li>
+            <li><span lang="pt">Deal Tickets e e-mails de recap</span><span lang="en">Deal tickets and recap e-mails</span></li>
+            <li><span lang="pt">Contraparte pelo Reference Data</span><span lang="en">Counterparty from Reference Data</span></li>
+            <li><span lang="pt">Maker-checker antes do envio</span><span lang="en">Maker-checker before sending</span></li>
+          </ul>
+          <span class="fnode__tag"><span lang="pt">No OTC Tracker</span><span lang="en">In OTC Tracker</span></span>
+        </div>
+        <div class="fnode fnode--in">
+          <div class="fnode__top"><span class="fnode__icon"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V10M19 21V10M9.5 21V10M14.5 21V10"/><path d="M3 10l9-6 9 6z"/></svg></span><div><div class="fnode__n">04</div><div class="fnode__name"><span lang="pt">Registro na Clearing</span><span lang="en">Clearing Registration</span></div></div></div>
+          <div class="fnode__what"><span lang="pt">Registro da operação na B3/CETIP.</span><span lang="en">The trade is registered at B3/CETIP.</span></div>
+          <ul class="fnode__list">
+            <li><span lang="pt">Arquivos nos 38 leiautes da B3</span><span lang="en">Files in 38 B3 layouts</span></li>
+            <li><span lang="pt">Envio pelo Batch Conecta</span><span lang="en">Delivered via Batch Conecta</span></li>
+            <li><span lang="pt">Retorno da B3 ligado ao B3 ID</span><span lang="en">B3 return linked to the B3 ID</span></li>
+          </ul>
+          <span class="fnode__tag"><span lang="pt">No OTC Tracker</span><span lang="en">In OTC Tracker</span></span>
+        </div>
+        <div class="fnode fnode--in">
+          <div class="fnode__top"><span class="fnode__icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span><div><div class="fnode__n">05</div><div class="fnode__name"><span lang="pt">Economic Affirmation</span><span lang="en">Economic Affirmation</span></div></div></div>
+          <div class="fnode__what"><span lang="pt">Os termos econômicos são afirmados com a contraparte.</span><span lang="en">Economic terms are affirmed with the counterparty.</span></div>
+          <ul class="fnode__list">
+            <li><span lang="pt">E-mail de affirmation à contraparte</span><span lang="en">Affirmation e-mail to the counterparty</span></li>
+            <li><span lang="pt">Validação com IFs e fundos, com o arquivo da B3</span><span lang="en">Validation with banks and funds, B3 file attached</span></li>
+          </ul>
+          <span class="fnode__tag"><span lang="pt">No OTC Tracker</span><span lang="en">In OTC Tracker</span></span>
+        </div>
+        <div class="fnode fnode--in">
+          <div class="fnode__top"><span class="fnode__icon"><svg viewBox="0 0 24 24"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 14l2 2 4-4"/></svg></span><div><div class="fnode__n">06</div><div class="fnode__name"><span lang="pt">Minuta de confirmação</span><span lang="en">Draft Confirmation</span></div></div></div>
+          <div class="fnode__what"><span lang="pt">O documento da operação é gerado e validado.</span><span lang="en">The trade document is generated and validated.</span></div>
+          <ul class="fnode__list">
+            <li><span lang="pt">Word, PDF e XML do FepWeb</span><span lang="en">Word, PDF and FepWeb XML</span></li>
+            <li><span lang="pt">Validação OTC → MO e FO com SLA</span><span lang="en">OTC → MO and FO validation with SLAs</span></li>
+            <li><span lang="pt">Confirmations Monitor e Pending Confirmation</span><span lang="en">Confirmations Monitor and Pending Confirmation</span></li>
+          </ul>
+          <span class="fnode__tag"><span lang="pt">No OTC Tracker</span><span lang="en">In OTC Tracker</span></span>
+        </div>
     </div>
-    <div class="rail">
-      <div class="node node--out"><div class="node__top"><span class="node__n">01</span><span class="node__icon"><svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span></div>
-        <div class="node__name"><span lang="pt">Negociação com o cliente</span><span lang="en">Client Negotiation</span></div>
-        <div class="node__sub"><span lang="pt">Vendas e Trading com o cliente</span><span lang="en">Sales &amp; Trading with the client</span></div></div>
-      <div class="node node--out"><div class="node__top"><span class="node__n">02</span><span class="node__icon"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg></span></div>
-        <div class="node__name"><span lang="pt">Booking no RMS</span><span lang="en">RMS Booking</span></div>
-        <div class="node__sub"><span lang="pt">Front Office registra no Athena</span><span lang="en">Front Office books in Athena</span></div></div>
-      <div class="node node--in"><div class="node__top"><span class="node__n">03</span><span class="node__icon"><svg viewBox="0 0 24 24"><path d="M4 13h4l2 3h4l2-3h4"/><path d="M4 13l2.5-7h11l2.5 7v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg></span></div>
-        <div class="node__name"><span lang="pt">Captura da operação</span><span lang="en">Trade Capture</span></div>
-        <div class="node__sub"><span lang="pt">OTC Tracker</span><span lang="en">OTC Tracker</span></div></div>
-      <div class="node node--in"><div class="node__top"><span class="node__n">04</span><span class="node__icon"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V10M19 21V10M9.5 21V10M14.5 21V10"/><path d="M3 10l9-6 9 6z"/></svg></span></div>
-        <div class="node__name"><span lang="pt">Registro na Clearing</span><span lang="en">Clearing Registration</span></div>
-        <div class="node__sub"><span lang="pt">OTC Tracker</span><span lang="en">OTC Tracker</span></div></div>
-      <div class="node node--in"><div class="node__top"><span class="node__n">05</span><span class="node__icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span></div>
-        <div class="node__name"><span lang="pt">Economic Affirmation</span><span lang="en">Economic Affirmation</span></div>
-        <div class="node__sub"><span lang="pt">OTC Tracker</span><span lang="en">OTC Tracker</span></div></div>
-      <div class="node node--in"><div class="node__top"><span class="node__n">06</span><span class="node__icon"><svg viewBox="0 0 24 24"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 14l2 2 4-4"/></svg></span></div>
-        <div class="node__name"><span lang="pt">Minuta de confirmação</span><span lang="en">Draft Confirmation</span></div>
-        <div class="node__sub"><span lang="pt">OTC Tracker</span><span lang="en">OTC Tracker</span></div></div>
-      <div class="node node--in"><div class="node__top"><span class="node__n">07</span><span class="node__icon"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2"/></svg></span></div>
-        <div class="node__name"><span lang="pt">Instrução Intrag</span><span lang="en">Intrag Instruction</span></div>
-        <div class="node__sub"><span lang="pt">OTC Tracker</span><span lang="en">OTC Tracker</span></div></div>
-      <div class="node node--in"><div class="node__top"><span class="node__n">08</span><span class="node__icon"><svg viewBox="0 0 24 24"><path d="M7 7h12l-3-3"/><path d="M17 17H5l3 3"/></svg></span></div>
-        <div class="node__name"><span lang="pt">Reconciliação</span><span lang="en">Reconciliation</span></div>
-        <div class="node__sub"><span lang="pt">OTC Tracker</span><span lang="en">OTC Tracker</span></div></div>
-      <div class="node node--in"><div class="node__top"><span class="node__n">09</span><span class="node__icon"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 9.5v.01M17.5 14.5v.01"/></svg></span></div>
-        <div class="node__name"><span lang="pt">Liquidação</span><span lang="en">Settlement</span></div>
-        <div class="node__sub"><span lang="pt">OTC Tracker</span><span lang="en">OTC Tracker</span></div></div>
-      <div class="node node--out"><div class="node__top"><span class="node__n">10</span><span class="node__icon"><svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span></div>
-        <div class="node__name"><span lang="pt">Liquidação</span><span lang="en">Settlement</span></div>
-        <div class="node__sub"><span lang="pt">Pagamento nos sistemas de pagamento</span><span lang="en">Payment in the payment systems</span></div></div>
-      <div class="node node--in"><div class="node__top"><span class="node__n">11</span><span class="node__icon"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span></div>
-        <div class="node__name"><span lang="pt">Regulatório</span><span lang="en">Regulatory</span></div>
-        <div class="node__sub"><span lang="pt">OTC Tracker</span><span lang="en">OTC Tracker</span></div></div>
-      <div class="node node--out"><div class="node__top"><span class="node__n">12</span><span class="node__icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span></div>
-        <div class="node__name"><span lang="pt">Nostro</span><span lang="en">Nostro</span></div>
-        <div class="node__sub"><span lang="pt">Conciliação das contas nostro</span><span lang="en">Nostro account reconciliation</span></div></div>
+    <div class="turn" aria-hidden="true"><span class="turn__a"></span><span class="turn__b"></span></div>
+    <div class="lane">
+        <div class="fnode fnode--in">
+          <div class="fnode__top"><span class="fnode__icon"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2"/></svg></span><div><div class="fnode__n">07</div><div class="fnode__name"><span lang="pt">Instrução Intrag</span><span lang="en">Intrag Instruction</span></div></div></div>
+          <div class="fnode__what"><span lang="pt">As operações com os fundos são instruídas à Intrag.</span><span lang="en">Trades with the funds are instructed to Intrag.</span></div>
+          <ul class="fnode__list">
+            <li><span lang="pt">Instrução para Lawton e Atacama</span><span lang="en">Instruction for Lawton and Atacama</span></li>
+            <li><span lang="pt">Retorno ligado pelo Intrag ID</span><span lang="en">Return linked through the Intrag ID</span></li>
+          </ul>
+          <span class="fnode__tag"><span lang="pt">No OTC Tracker</span><span lang="en">In OTC Tracker</span></span>
+        </div>
+        <div class="fnode fnode--in">
+          <div class="fnode__top"><span class="fnode__icon"><svg viewBox="0 0 24 24"><path d="M7 7h12l-3-3"/><path d="M17 17H5l3 3"/></svg></span><div><div class="fnode__n">08</div><div class="fnode__name"><span lang="pt">Reconciliação</span><span lang="en">Reconciliation</span></div></div></div>
+          <div class="fnode__what"><span lang="pt">O que foi registrado é conferido com as fontes.</span><span lang="en">What was registered is checked against the sources.</span></div>
+          <ul class="fnode__list">
+            <li><span lang="pt">Pay/Rec, FXO, CGD e Comitente</span><span lang="en">Pay/Rec, FXO, CGD and custodian</span></li>
+            <li><span lang="pt">FepWeb × Athena</span><span lang="en">FepWeb vs. Athena</span></li>
+            <li><span lang="pt">Pendência segue até casar ou ser justificada</span><span lang="en">Open items carry forward until matched or justified</span></li>
+          </ul>
+          <span class="fnode__tag"><span lang="pt">No OTC Tracker</span><span lang="en">In OTC Tracker</span></span>
+        </div>
+        <div class="fnode fnode--in">
+          <div class="fnode__top"><span class="fnode__icon"><svg viewBox="0 0 24 24"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 13h6M9 17h4"/></svg></span><div><div class="fnode__n">09</div><div class="fnode__name"><span lang="pt">Aviso de liquidação</span><span lang="en">Settlement Advice</span></div></div></div>
+          <div class="fnode__what"><span lang="pt">O cliente recebe o aviso do que vai liquidar.</span><span lang="en">The client is told what will settle.</span></div>
+          <ul class="fnode__list">
+            <li><span lang="pt">Aviso de liquidação ao cliente</span><span lang="en">Settlement advice to the client</span></li>
+            <li><span lang="pt">IR na fonte calculado</span><span lang="en">Withholding tax calculated</span></li>
+            <li><span lang="pt">Resumo diário B3 × interno</span><span lang="en">Daily B3 vs. internal summary</span></li>
+            <li><span lang="pt">E-mail de liberação de TED</span><span lang="en">Payment release e-mail</span></li>
+          </ul>
+          <span class="fnode__tag"><span lang="pt">No OTC Tracker</span><span lang="en">In OTC Tracker</span></span>
+        </div>
+        <div class="fnode fnode--out">
+          <div class="fnode__top"><span class="fnode__icon"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 9.5v.01M17.5 14.5v.01"/></svg></span><div><div class="fnode__n">10</div><div class="fnode__name"><span lang="pt">Liquidação</span><span lang="en">Settlement</span></div></div></div>
+          <div class="fnode__what"><span lang="pt">O pagamento é executado nos sistemas de pagamento.</span><span lang="en">The payment is executed in the payment systems.</span></div>
+          <span class="fnode__tag"><span lang="pt">Fora do OTC Tracker</span><span lang="en">Outside OTC Tracker</span></span>
+        </div>
+        <div class="fnode fnode--in">
+          <div class="fnode__top"><span class="fnode__icon"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span><div><div class="fnode__n">11</div><div class="fnode__name"><span lang="pt">Regulatório</span><span lang="en">Regulatory</span></div></div></div>
+          <div class="fnode__what"><span lang="pt">Os reportes obrigatórios do período.</span><span lang="en">The period's mandatory reporting.</span></div>
+          <ul class="fnode__list">
+            <li><span lang="pt">Accrual e MtM de fim de mês</span><span lang="en">Month-end Accrual and MtM</span></li>
+            <li><span lang="pt">WHT: IR por decêndio × HUB</span><span lang="en">WHT: tax per ten-day period vs. HUB</span></li>
+            <li><span lang="pt">e-Financeira em desenvolvimento</span><span lang="en">e-Financeira in development</span></li>
+          </ul>
+          <span class="fnode__tag"><span lang="pt">No OTC Tracker</span><span lang="en">In OTC Tracker</span></span>
+        </div>
+        <div class="fnode fnode--out">
+          <div class="fnode__top"><span class="fnode__icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span><div><div class="fnode__n">12</div><div class="fnode__name"><span lang="pt">Nostro</span><span lang="en">Nostro</span></div></div></div>
+          <div class="fnode__what"><span lang="pt">As contas nostro são conciliadas.</span><span lang="en">The nostro accounts are reconciled.</span></div>
+          <span class="fnode__tag"><span lang="pt">Fora do OTC Tracker</span><span lang="en">Outside OTC Tracker</span></span>
+        </div>
     </div>
   </section>
-
-  <div class="e2e-grid">
-    <section class="e2e-step" style="--hue:var(--blue)">
-      <h2 class="h2"><span class="tile" style="--hue:var(--blue)"><svg viewBox="0 0 24 24"><path d="M4 13h4l2 3h4l2-3h4"/><path d="M4 13l2.5-7h11l2.5 7v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg></span>
-        <span><small>03</small><span lang="pt">Captura da operação</span><span lang="en">Trade Capture</span></span></h2>
-      <ul class="list">
-        <li><span lang="pt"><strong>Importação automática</strong> da API Athena, de Deal Tickets e dos e-mails de recap.</span><span lang="en"><strong>Automatic import</strong> from the Athena API, deal tickets and recap e-mails.</span></li>
-        <li><span lang="pt"><strong>Contraparte e cadastros</strong> completados pelo Reference Data, sem digitação.</span><span lang="en"><strong>Counterparty and static data</strong> filled from Reference Data, with no retyping.</span></li>
-        <li><span lang="pt"><strong>Maker-checker</strong> antes de qualquer envio.</span><span lang="en"><strong>Maker-checker</strong> before anything is sent.</span></li>
-      </ul>
-    </section>
-    <section class="e2e-step" style="--hue:var(--navy)">
-      <h2 class="h2"><span class="tile" style="--hue:var(--navy)"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V10M19 21V10M9.5 21V10M14.5 21V10"/><path d="M3 10l9-6 9 6z"/></svg></span>
-        <span><small>04</small><span lang="pt">Registro na Clearing</span><span lang="en">Clearing Registration</span></span></h2>
-      <ul class="list">
-        <li><span lang="pt"><strong>Arquivos nos 38 leiautes da B3/CETIP,</strong> entregues pelo Batch Conecta.</span><span lang="en"><strong>Files in 38 B3/CETIP layouts,</strong> delivered through Batch Conecta.</span></li>
-        <li><span lang="pt"><strong>Retorno da B3 lido sozinho</strong> e ligado ao B3 ID de cada operação.</span><span lang="en"><strong>B3 returns read automatically</strong> and linked to each trade's B3 ID.</span></li>
-      </ul>
-    </section>
-    <section class="e2e-step" style="--hue:var(--teal)">
-      <h2 class="h2"><span class="tile" style="--hue:var(--teal)"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span>
-        <span><small>05</small><span lang="pt">Economic Affirmation</span><span lang="en">Economic Affirmation</span></span></h2>
-      <ul class="list">
-        <li><span lang="pt"><strong>E-mails de affirmation</strong> às contrapartes, montados a partir da operação.</span><span lang="en"><strong>Affirmation e-mails</strong> to counterparties, built from the trade itself.</span></li>
-        <li><span lang="pt"><strong>Validação por e-mail</strong> com instituições financeiras e fundos, com o arquivo da B3 anexo.</span><span lang="en"><strong>E-mail validation</strong> with financial institutions and funds, with the B3 file attached.</span></li>
-      </ul>
-    </section>
-    <section class="e2e-step" style="--hue:var(--indigo)">
-      <h2 class="h2"><span class="tile" style="--hue:var(--indigo)"><svg viewBox="0 0 24 24"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 14l2 2 4-4"/></svg></span>
-        <span><small>06</small><span lang="pt">Minuta de confirmação</span><span lang="en">Draft Confirmation</span></span></h2>
-      <ul class="list">
-        <li><span lang="pt"><strong>Word, PDF e XML do FepWeb</strong> gerados a partir da operação.</span><span lang="en"><strong>Word, PDF and FepWeb XML</strong> generated from the trade.</span></li>
-        <li><span lang="pt"><strong>Validação OTC → MO e FO com SLA</strong> no Confirmations Monitor; pendências no Pending Confirmation.</span><span lang="en"><strong>OTC → MO and FO validation with SLAs</strong> on the Confirmations Monitor; open items on Pending Confirmation.</span></li>
-      </ul>
-    </section>
-    <section class="e2e-step" style="--hue:var(--green)">
-      <h2 class="h2"><span class="tile" style="--hue:var(--green)"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2"/></svg></span>
-        <span><small>07</small><span lang="pt">Instrução Intrag</span><span lang="en">Intrag Instruction</span></span></h2>
-      <ul class="list">
-        <li><span lang="pt"><strong>Instrução da Intrag</strong> para as operações com os fundos Lawton e Atacama, gerada a partir da operação registrada.</span><span lang="en"><strong>Intrag instruction</strong> for trades with the Lawton and Atacama funds, generated from the registered trade.</span></li>
-        <li><span lang="pt"><strong>Retorno da Intrag</strong> ligado de volta pelo Intrag ID.</span><span lang="en"><strong>Intrag returns</strong> linked back through the Intrag ID.</span></li>
-      </ul>
-    </section>
-    <section class="e2e-step" style="--hue:var(--purple)">
-      <h2 class="h2"><span class="tile" style="--hue:var(--purple)"><svg viewBox="0 0 24 24"><path d="M7 7h12l-3-3"/><path d="M17 17H5l3 3"/></svg></span>
-        <span><small>08</small><span lang="pt">Reconciliação</span><span lang="en">Reconciliation</span></span></h2>
-      <ul class="list">
-        <li><span lang="pt"><strong>Pay/Rec, FXO, CGD, Comitente e FepWeb × Athena,</strong> com o resultado de cada dia gravado.</span><span lang="en"><strong>Pay/Rec, FXO, CGD, custodian and FepWeb vs. Athena,</strong> with each day's result stored.</span></li>
-        <li><span lang="pt"><strong>Pendência segue nos dias seguintes</strong> até casar ou ser justificada.</span><span lang="en"><strong>Open items carry forward</strong> until they are matched or justified.</span></li>
-      </ul>
-    </section>
-    <section class="e2e-step" style="--hue:var(--orange)">
-      <h2 class="h2"><span class="tile" style="--hue:var(--orange)"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 9.5v.01M17.5 14.5v.01"/></svg></span>
-        <span><small>09</small><span lang="pt">Liquidação</span><span lang="en">Settlement</span></span></h2>
-      <ul class="list">
-        <li><span lang="pt"><strong>Avisos de liquidação</strong> aos clientes e IR na fonte calculado.</span><span lang="en"><strong>Settlement advices</strong> to clients and withholding tax calculated.</span></li>
-        <li><span lang="pt"><strong>Resumo diário B3 × interno</strong> e e-mail de liberação de TED.</span><span lang="en"><strong>Daily B3 vs. internal summary</strong> and payment release e-mail.</span></li>
-      </ul>
-    </section>
-    <section class="e2e-step" style="--hue:var(--amber)">
-      <h2 class="h2"><span class="tile" style="--hue:var(--amber)"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span>
-        <span><small>11</small><span lang="pt">Regulatório</span><span lang="en">Regulatory</span></span></h2>
-      <ul class="list">
-        <li><span lang="pt"><strong>Accrual e MtM de fim de mês:</strong> arquivos B3/CETIP gerados e conciliados com o retorno.</span><span lang="en"><strong>Month-end Accrual and MtM:</strong> B3/CETIP files generated and reconciled with the returns.</span></li>
-        <li><span lang="pt"><strong>WHT:</strong> IR por decêndio × relatório do HUB. e-Financeira em desenvolvimento.</span><span lang="en"><strong>WHT:</strong> withholding tax per ten-day period vs. the HUB report. e-Financeira in development.</span></li>
-      </ul>
-    </section>
-  </div>
-  <p class="e2e-note"><span lang="pt">Os números dos cartões são os passos do fluxo acima. Antes e depois deles, a negociação, o booking, o pagamento e as contas nostro ficam com outras equipes e sistemas.</span><span lang="en">Card numbers match the steps in the flow above. Negotiation, booking, payment and the nostro accounts sit with other teams and systems.</span></p>
 
   <footer class="foot">
     <div><span class="conf"><span lang="pt">Confidencial — uso interno</span><span lang="en">Confidential — internal use</span></span></div>
