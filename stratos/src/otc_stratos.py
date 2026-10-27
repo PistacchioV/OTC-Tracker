@@ -183,6 +183,7 @@ def _monta(app, stratos_auth, base):
     app.after_request_funcs.setdefault(None, []).insert(0, _prefixa_resposta(base))
     _ponte_manifestos(app)
     _rota_prova_travas(app, stratos_auth)
+    _rota_pacotes(app, stratos_auth)
 
 
 # ── O portão: o que responde enquanto o OTC sobe ────────────────────────────
@@ -304,7 +305,30 @@ def _raiz_no_shared_drive():
     os.environ['OTC_STRATOS_ROOT'] = raiz
     os.environ.setdefault('OTC_SECRET_KEY_FILE', os.path.join(raiz, 'secret_key.txt'))
     log.warning('[stratos] dados em %s (%s)', raiz, origem)
+    _dados_do_pacote(raiz)
     return raiz
+
+
+def _dados_do_pacote(raiz):
+    """O pacote ATIVO (HANDOFF §708): com o ponteiro `<raiz>/dados-ativos.txt`
+    apontando um pacote conferido, os DADOS e os bancos passam a ser os dele
+    (`OTC_DATA_DIR`/`OTC_DATABASE_DIR`, que o bloco ENV:STRATOS lê no import do
+    `config.py`). O resto — o `share/` da ponte, a chave da sessão — fica na
+    raiz. A variável definida no ambiente vence; ponteiro para pacote que não
+    está conferido não vale, e a subida fica em `<raiz>/data` avisando."""
+    if (os.getenv('OTC_DATA_DIR') or '').strip() or (os.getenv('OTC_DATABASE_DIR') or '').strip():
+        return None
+    import pacotes_dados as PD
+    data, motivo = PD.dados_ativos(raiz)
+    if motivo:
+        log.warning('[stratos] ponteiro de dados IGNORADO (%s): dados em %s', motivo,
+                    os.path.join(raiz, 'data'))
+    if not data:
+        return None
+    os.environ['OTC_DATA_DIR'] = data
+    os.environ['OTC_DATABASE_DIR'] = os.path.join(data, 'db')
+    log.warning('[stratos] dados do pacote %s: %s', PD.ativo(raiz), data)
+    return data
 
 
 def _ponte_manifestos(app):
@@ -398,6 +422,144 @@ def _rota_prova_travas(app, stratos_auth):
 
     app.add_url_rule('/stratos/prova-travas', 'otc_stratos_prova_travas',
                      otc_stratos_prova_travas)
+
+
+_CONFERINDO = {}                    # nome → progresso da conferência em curso
+_CONFERINDO_LOCK = threading.Lock()
+
+_PAGINA_PACOTES = '''<!doctype html><meta charset="utf-8"><title>OTC Tracker data packages</title>
+%(refresh)s<body style="font-family:system-ui,sans-serif;margin:2rem;max-width:1100px">
+<h3>Data packages</h3>
+<p>Data now: <code>%(dados)s</code>%(nota)s</p>%(msg)s
+<table cellpadding="6" style="border-collapse:collapse;font-size:.9rem">
+<tr style="text-align:left;border-bottom:1px solid #999"><th>Package</th><th>State</th><th>Files</th>
+<th>MB</th><th>duckdb</th><th>Sent</th><th>Checked</th><th></th></tr>%(linhas)s</table>
+<p style="color:#666;font-size:.85rem">Check joins the parts and verifies every file against the
+manifest (sha256). Activate takes effect on the NEXT restart; the current data stays as it is.</p>'''
+
+
+def _rota_pacotes(app, stratos_auth):
+    """`/stratos/pacotes`, só do master: a chegada dos bancos (HANDOFF §681
+    passo C, §708; a regra é do `pacotes_dados.py`). GET lista (`?format=json`
+    devolve JSON); POST com `acao` = `conferir` | `ativar` | `desativar` e
+    `nome`. A conferência lê gigabytes e roda numa thread; a página se
+    recarrega enquanto ela anda."""
+    from apps.pages import routes
+    import pacotes_dados as PD
+
+    def _raiz():
+        return (os.getenv('OTC_STRATOS_ROOT') or '').strip()
+
+    def _confere_em_fundo(raiz, nome):
+        import duckdb
+
+        def progresso(i, n, caminho):
+            with _CONFERINDO_LOCK:
+                _CONFERINDO[nome] = {'i': i, 'n': n, 'arquivo': caminho}
+        try:
+            conf = PD.confere(raiz, nome, duckdb_aqui=duckdb.__version__, progresso=progresso)
+            log.warning('[stratos] pacote %s conferido: ok=%s erros=%d', nome, conf['ok'], len(conf['erros']))
+        except Exception:                                   # noqa: BLE001
+            log.exception('[stratos] a conferência do pacote %s quebrou', nome)
+        finally:
+            with _CONFERINDO_LOCK:
+                _CONFERINDO.pop(nome, None)
+
+    def _pagina(raiz, msg=''):
+        pacotes = PD.lista(raiz)
+        with _CONFERINDO_LOCK:
+            andando = dict(_CONFERINDO)
+        esc = html.escape
+        linhas = []
+        for p in pacotes:
+            nome = p['nome']
+            if nome in andando:
+                a = andando[nome]
+                est = 'checking %d/%d' % (a['i'] + 1, a['n'])
+            else:
+                est = p['estado'] + (' · ACTIVE' if p['ativo'] else '')
+            botoes = ''
+            if nome not in andando and not p['ativo'] and p['estado'] in ('recebido', 'recusado', 'conferido'):
+                botoes += ('<button name="acao" value="conferir">Check</button> ')
+            if nome not in andando and not p['ativo'] and p['estado'] == 'conferido':
+                botoes += ('<button name="acao" value="ativar">Activate</button>')
+            if p['ativo']:
+                botoes += ('<button name="acao" value="desativar">Deactivate</button>')
+            detalhe = ''.join('<div style="color:#b00">%s</div>' % esc(e) for e in p['erros'][:20])
+            detalhe += ''.join('<div style="color:#a60">%s</div>' % esc(e) for e in p['avisos'])
+            linhas.append(
+                '<tr style="border-bottom:1px solid #ddd;vertical-align:top"><td><code>%s</code>%s</td>'
+                '<td>%s</td><td>%d</td><td>%.0f</td><td>%s</td><td>%s</td><td>%s</td>'
+                '<td><form method="post" action="/stratos/pacotes"><input type="hidden" name="nome" '
+                'value="%s">%s</form></td></tr>'
+                % (esc(nome), detalhe, esc(est), p['arquivos'], p['bytes'] / 1048576.0, esc(p['duckdb'] or ''),
+                   esc(p['enviado_em'] or ''), esc(p['conferido_em'] or ''), esc(nome), botoes))
+        if not linhas:
+            linhas.append('<tr><td colspan="8">No package under <code>%s</code>. Send one with '
+                          '<code>stratos\\envia_dados.py</code>.</td></tr>' % esc(os.path.join(raiz, PD.PASTA)))
+        ativo = PD.ativo(raiz)
+        nota = ''
+        if ativo and os.path.normpath(app.config.get('DATA_DIR') or '') != os.path.normpath(
+                os.path.join(raiz, PD.PASTA, ativo, 'data')):
+            nota = ' — <b>restart to switch to %s</b>' % esc(ativo)
+        elif not ativo and os.path.normpath(app.config.get('DATA_DIR') or '') != os.path.normpath(
+                os.path.join(raiz, 'data')) and (app.config.get('DATA_DIR') or '').startswith(raiz):
+            nota = ' — <b>restart to go back to %s</b>' % esc(os.path.join(raiz, 'data'))
+        return _PAGINA_PACOTES % {
+            'refresh': '<meta http-equiv="refresh" content="5">' if andando else '',
+            'dados': esc(app.config.get('DATA_DIR') or ''), 'nota': nota,
+            'msg': ('<p style="padding:.5rem;background:#eef">%s</p>' % esc(msg)) if msg else '',
+            'linhas': ''.join(linhas)}
+
+    def otc_stratos_pacotes():
+        sid, _ = _identidade(stratos_auth, routes)
+        if sid not in routes._MASTER_SIDS:
+            return jsonify({'success': False, 'code': 'master_only', 'params': {},
+                            'text': 'Only the master can manage the data packages.'}), 403
+        raiz = _raiz()
+        if not raiz:
+            return jsonify({'success': False, 'code': 'no_shared_drive', 'params': {},
+                            'text': 'OTC_STRATOS_ROOT is not set: there is no drive.'}), 409
+        if request.method == 'GET':
+            if request.args.get('format') == 'json':
+                with _CONFERINDO_LOCK:
+                    andando = dict(_CONFERINDO)
+                return jsonify({'success': True, 'ativo': PD.ativo(raiz), 'checking': andando,
+                                'data_dir': app.config.get('DATA_DIR'), 'pacotes': PD.lista(raiz)})
+            return _pagina(raiz)
+        acao = (request.form.get('acao') or request.args.get('acao') or '').strip()
+        nome = (request.form.get('nome') or request.args.get('nome') or '').strip()
+        log.warning('[stratos] pacotes: acao=%s nome=%s SID=%s', acao, nome, sid)
+        try:
+            if acao == 'conferir':
+                PD.estado(raiz, nome)                       # nome válido
+                if PD.ativo(raiz) == nome:
+                    raise PD.PacoteInvalido('package_active', 'The active package cannot be checked again.')
+                with _CONFERINDO_LOCK:
+                    if nome in _CONFERINDO:
+                        raise PD.PacoteInvalido('already_checking', 'This package is already being checked.')
+                    _CONFERINDO[nome] = {'i': 0, 'n': 0, 'arquivo': ''}
+                threading.Thread(target=_confere_em_fundo, args=(raiz, nome), daemon=True,
+                                 name='pacote-confere').start()
+                msg = 'Checking %s.' % nome
+            elif acao == 'ativar':
+                PD.ativa(raiz, nome)
+                msg = '%s is the active package: restart the solution to use it.' % nome
+            elif acao == 'desativar':
+                PD.desativa(raiz)
+                msg = 'No active package: after the restart the data is %s.' % os.path.join(raiz, 'data')
+            else:
+                raise PD.PacoteInvalido('bad_action', 'acao must be conferir, ativar or desativar.')
+        except PD.PacoteInvalido as e:
+            if request.args.get('format') == 'json':
+                return jsonify({'success': False, 'code': e.code, 'params': e.params, 'text': e.text}), 409
+            return _pagina(raiz, e.text), 409
+        if request.args.get('format') == 'json':
+            return jsonify({'success': True, 'text': msg})
+        return _pagina(raiz, msg)
+
+    app.add_url_rule('/stratos/pacotes', 'otc_stratos_pacotes', otc_stratos_pacotes,
+                     methods=['GET', 'POST'])
 
 
 def _chave_de_sessao(otc, app):

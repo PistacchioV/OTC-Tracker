@@ -27,7 +27,7 @@ src/apps/ — e sobe o `solution.py` com um Stratos de MENTIRA (o stratos-blocks
      `check_exporta_dados.py` — ele usa por dentro o `recover_duckdb_wal.py` da
      dev, e um helper renomeado lá quebra a exportação sem quebrar a dev;
   6. a ponte do share (`ponte_share.py` + `src/ponte_comum.py`), pelo
-     `check_ponte.py`;
+     `check_ponte.py`; a chegada dos bancos, `check_pacotes_dados.py`;
   7. a prova das travas no Shared Drive (`src/prova_travas.py`): a rota só do
      master, aqui, e o resto pelo `check_prova_travas.py`;
   8. o e-mail pelo Email block (`src/email_stratos.py`): o código de
@@ -314,7 +314,8 @@ def _stubs(com_phonebook=True):
 def confere_subida(tmp, sem_awmpy):
     src = os.path.join(tmp, 'src')
     os.makedirs(src)
-    for nome in ('solution.py', 'run.py', 'otc_stratos.py', 'prova_travas.py', 'email_stratos.py'):
+    for nome in ('solution.py', 'run.py', 'otc_stratos.py', 'prova_travas.py', 'email_stratos.py',
+                 'pacotes_dados.py'):
         shutil.copy(os.path.join(STRATOS, 'src', nome), src)
     os.symlink(os.path.join(RAIZ, 'apps'), os.path.join(src, 'apps'))
     # Com phonebook a raiz sai do Shared Drive (o `get_shared_drive` está no
@@ -773,6 +774,12 @@ def main():
         if linha.startswith('FAIL'):
             print('      exporta: ' + linha)
     ok(r.returncode == 0, 'exporta_dados: o pacote dos bancos para o Stratos')
+    r = subprocess.run([sys.executable, os.path.join(AQUI, 'check_pacotes_dados.py')],
+                       capture_output=True, text=True)
+    for linha in r.stdout.splitlines():
+        if linha.startswith('FAIL'):
+            print('      pacotes: ' + linha)
+    ok(r.returncode == 0, 'chegada dos bancos: envio em partes, conferência, ponteiro e a rota')
     r = subprocess.run([sys.executable, os.path.join(AQUI, 'check_ponte.py')],
                        capture_output=True, text=True)
     for linha in r.stdout.splitlines():

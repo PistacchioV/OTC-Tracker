@@ -16,6 +16,8 @@ que está listado abaixo existe apenas nesta branch.
 | `apps/config.py` (bloco `ENV:STRATOS`) | — | caminhos de dados no contêiner |
 | `stratos-sync.bat` | — | copia o que mudou para o repositório do Stratos |
 | `stratos/exporta_dados.py` | — | tira do share a cópia dos bancos que vai para o Stratos |
+| `stratos/envia_dados.py` | — | leva essa cópia para o Shared Drive (`pacotes/`), em partes |
+| `stratos/src/pacotes_dados.py` | `src/pacotes_dados.py` | a chegada no contêiner: conferência, ponteiro, `/stratos/pacotes` |
 | `stratos/sonda_codex.py` | — | confere, na máquina do JPM, se o Codex responde pelos ativos da seed do `quotes-equity`, para saber se ele pode tomar o lugar do Yahoo na Quotes do Stratos (§679) |
 | `stratos/build_requirements.py`, `stratos/tests/` | — | gerador e verificação |
 
@@ -123,11 +125,29 @@ com o mesmo DuckDB da prod, sem porte. A chave da sessão fica lá também
 (`secret_key.txt`), e por isso a sessão sobrevive ao deploy. O Stratos NoSQL
 (MongoDB) ficou para depois da virada.
 
-O pacote chega ao drive pelo `stratos file --save` (ou pelo cliente
-`SharedDrive`, por HTTP) e **nunca por cima dos bancos em uso**: ele vai para uma
-pasta própria, é conferido pelo sha256 do `manifest.json` e só então passa a
-valer como raiz (os passos do §681). Ainda não está pronto, e enquanto isso o
-Stratos começa com os bancos vazios, só com o que a semeadura traz.
+O pacote chega ao drive **nunca por cima dos bancos em uso** (§681 passo C,
+§708). Na mesma máquina, com o Python do DevShell (o da ponte):
+
+```
+%PY% stratos\envia_dados.py --env dev               (o pacote mais recente)
+%PY% stratos\envia_dados.py --env dev <pasta>       (um pacote escolhido)
+%PY% stratos\envia_dados.py --env dev --dry-run     (o que enviaria)
+```
+
+Ele recusa pacote INCOMPLETO, manda a PASTA (não o `.zip`) para
+`otc-tracker/pacotes/<nome>/` pelo cliente `SharedDrive`, com os arquivos
+maiores que `--parte-mb` (64) em partes, e o `envio.json` por último. Parou no
+meio, rode de novo: o que já subiu é pulado.
+
+No Stratos, a página **`/stratos/pacotes`** (só o master) lista os pacotes:
+**Check** junta as partes e confere cada arquivo pelo sha256 do manifest (e
+recusa banco de um duckdb mais novo que o do contêiner, §651); **Activate**
+grava o ponteiro `otc-tracker/dados-ativos.txt`; o **restart** seguinte sobe
+com os dados do pacote (`OTC_DATA_DIR`/`OTC_DATABASE_DIR`; o `share/` da ponte e
+a chave da sessão ficam na raiz). A pasta anterior fica como estava:
+**Deactivate**, ou ativar o pacote anterior, é a volta atrás. Depois de ativado o
+pacote é o banco em uso, e não se confere de novo. Sem ponteiro, os dados são os
+de `otc-tracker/data`, com os bancos vazios e só o que a semeadura traz.
 
 **Backup:** o drive tem uma foto por noite, guardada 35 dias, sem versão por
 arquivo. Na pior hora se perde até um dia; uma cópia de hora em hora para o File
