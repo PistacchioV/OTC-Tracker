@@ -521,9 +521,9 @@ A tela se atualiza sozinha a cada minuto.
 **Passo a passo — owner e backup de cada tarefa:**
 
 1. Clique em **Owners**, na barra ao lado da Reference date.
-2. Cada linha diz uma tarefa, a **entidade** e as duas pessoas: o **Owner**, que responde pela tarefa, e o **Backup**, que a cobre na ausência dele. Em *Entity*, **All** é a tarefa inteira; escolha **JPM**, **MGT** ou **LAW** para dividir a tarefa por entidade — por exemplo, *B3 Registration* da **MGT** com o Augusto de owner e o Theodoro de backup, e *Confirmations* da **MGT** com os mesmos dois.
-3. **Add** inclui uma linha; a lixeira tira. O backup é opcional e não pode ser o próprio owner.
-4. Clique no botão verde para salvar. O cartão de cada tarefa passa a mostrar o owner (com a entidade, quando há) e, embaixo, o backup.
+2. Cada linha diz uma tarefa, o **produto**, a **entidade** e as duas pessoas: o **Owner**, que responde pela tarefa, e o **Backup**, que a cobre na ausência dele. **B3 Registration**, **Confirmations** e **Intrag** se dividem por **produto** (os mesmos produtos do detalhe da zona — *NDF Vanilla*, *NDF Commodities*, *Intrag NDF*…), porque quem responde muda com o produto e a LOB; as demais tarefas são uma só e o campo fica em **All**. Em *Entity*, **All** é a tarefa inteira; escolha **JPM**, **MGT** ou **LAW** para dividir também por entidade — por exemplo, *B3 Registration* de *NDF Vanilla* da **MGT** com o Augusto de owner e o Theodoro de backup, e *B3 Registration* de *NDF Commodities* com outra dupla.
+3. **Add** inclui uma linha; a lixeira tira. O backup é opcional e não pode ser o próprio owner. Só aparecem como opção as pessoas do **OTC Ops (BO)**, os administradores e o master.
+4. Clique no botão verde para salvar. O cartão de cada tarefa passa a mostrar o owner (com o produto e a entidade, quando há) e, embaixo, o backup.
 5. Quem acabou de ser designado recebe um aviso no **sino** — só ele. Quem já estava designado não é avisado de novo.
 
 > **Quem designa:** o Back Office e os administradores. Os demais abrem a janela e veem quem responde por cada tarefa, sem editar.
@@ -1322,6 +1322,8 @@ Este bloco acompanha a confirmação depois que a operação já está registrad
 | *(fim)* | `Ok` — a confirmação saiu da fila | — |
 
 > **MO e FO correm em paralelo**, não em fila: os dois contam o prazo a partir da mesma data da operação.
+
+**Que operações entram na esteira, e com que número.** Geram confirmação: NDF FWD Start, NDF Commodities, opções de commodities e de câmbio (FXO), os swaps contra cliente, as recompras contra cliente (Termo de Resilição) e o **NDF Vanilla** — o de **MGT** contra cliente e, do **Banco**, só o **asiático** (janela de fixing com mais de um dia) e o **BRL fixed** (notional em reais); o Vanilla comum do Banco fica só no Pending Confirmation. O número da operação é o mesmo no Pending Confirmation, na esteira, no documento e no XML do FepWeb: **FWD Start e swaps pelo B3 ID; Vanilla, FXO, NDF e opção de commodities pelo Deal (Athena ID)**. Ao salvar o documento, o *numeroContrato* do XML vai para a coluna **FepWeb ID** do Pending Confirmation (e dali para a do Track Confirmations).
 
 **O que cada item mostra:** o cliente, o produto, quantas operações o documento cobre, os chips dos PDFs e do e-mail de recap encontrados na pasta, e as marcas de prazo:
 
