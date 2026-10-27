@@ -984,7 +984,7 @@ def _fxo_deals_from_api_records(records, sid):
     refmap = routes._fxo_refdata_by_spn()
     refmap_acr = _fxo_refdata_by_accronym(refmap)
     deals, cancelled = [], []
-    for rec in records or []:
+    for rec in _api_live_records(records):
         if not isinstance(rec, dict):
             continue
         norm = {}
@@ -1140,6 +1140,53 @@ def _api_rec_is_cancelled(norm):
         if v is True or str(v).strip().lower() == 'true':
             return True
     return False
+
+
+def _api_rec_is_dead(norm):
+    for k in ('ISDEAD', 'IS DEAD'):
+        v = norm.get(k)
+        if v is True or str(v).strip().lower() == 'true':
+            return True
+    return False
+
+
+def _api_live_records(records):
+    """Os registros da API sem as versões MORTAS de um trade que tem versão viva.
+
+    Operação corrigida na Athena (rebookada no acronym/SPN certo) volta no
+    getTrades DUAS vezes com o mesmo DEAL NAME: a versão antiga, `isDead = true`
+    — "deixou de ser a versão viva do trade" (§173) —, e a nova. Desde o §173 o
+    `isDead` é importado, e o laço de gravação fazia o Amend das duas sobre a
+    MESMA linha: vindo a antiga depois, ela devolvia o acronym, o SPN e o
+    cliente errados, e a linha nem era procurada de novo — o índice ainda a acha
+    pelo Client antigo (equipe, 27/10/2026). Também a versão antiga marcada
+    `isCancelled` sai: com uma versão viva, a operação existe, e o cancelamento
+    tiraria a linha do dia.
+
+    Por DEAL NAME: com ao menos um registro vivo (nem morto nem cancelado), só
+    os vivos ficam. Trade que só tem versão morta continua sendo puxado (o
+    §173), e o só cancelado continua cancelando. A ordem é preservada."""
+    def norm(rec):
+        return {re.sub(r'[\s_]+', ' ', str(k or '').strip().upper()): v for k, v in rec.items()}
+
+    def nome(n):
+        return str(n.get('DEAL NAME') or '').strip().replace('_', '-')
+
+    lidos = [(rec, norm(rec) if isinstance(rec, dict) else None) for rec in records or []]
+    com_vivo = {nome(n) for _r, n in lidos
+                if n is not None and nome(n)
+                and not _api_rec_is_dead(n) and not _api_rec_is_cancelled(n)}
+    out, mortos = [], 0
+    for rec, n in lidos:
+        if (n is not None and nome(n) in com_vivo
+                and (_api_rec_is_dead(n) or _api_rec_is_cancelled(n))):
+            mortos += 1
+            continue
+        out.append(rec)
+    if mortos:
+        log.info('[athena-api] %d versão(ões) antiga(s) (isDead/isCancelled) de trade com '
+                 'versão viva ignorada(s)', mortos)
+    return out
 
 
 def _ndf_flat(s):
@@ -1765,7 +1812,7 @@ def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
     routed = {'fwd-start': [], 'other-publishers': [], 'vanilla': []}
     fixing_today = []           # FWD Start que fixam hoje: índice do re-booking
     skipped_interbook, cancelled = 0, []
-    for rec in records:
+    for rec in _api_live_records(records):
         if not isinstance(rec, dict):
             continue
         target, deal = _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn)
