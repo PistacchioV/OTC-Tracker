@@ -2406,7 +2406,7 @@ table.MsoTableGrid
      PAINEL DE EDIÇÃO
 ═══════════════════════════════════════════════════════════ -->
 <div id="editor-panel">
-  <h1>⚙ Editor — {{ conf.acronym }} · {{ conf.mercadoria }}</h1>
+  <h1>⚙ Editor — {{ conf.acronym }} · {{ conf.mercadoria }} · {{ 'NDF Vanilla' if conf.family == 'vanilla' else 'NDF FWD Start' }}</h1>
   <p class="subtitle">Campos pré-preenchidos pelas operações de {{ conf.data_neg }}. Revise, ajuste se preciso e imprima/salve o PDF.</p>
   {% if conf.warnings %}
   <div style="background:#4a3a1a;border:1px solid #aa8833;color:#ffd54f;border-radius:4px;padding:8px;font-size:8.5pt;margin-bottom:12px;">
@@ -3786,7 +3786,7 @@ function saveToInventory(btn) {
   fetch('/api/confirmation/ndf-fwdstart/save', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      family: 'strike-me',
+      family: (__CONF__ && __CONF__.family) || 'strike-me',
       date: (__CONF__ && __CONF__.ref_date) || '',
       acronym: (__CONF__ && __CONF__.acronym) || '',
       mercadoria: (__CONF__ && __CONF__.mercadoria) || '',

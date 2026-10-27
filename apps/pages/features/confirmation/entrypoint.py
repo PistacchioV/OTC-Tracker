@@ -146,7 +146,7 @@ def api_conf_ndfcomm_save():
                 fh.write(xml_str)
             xml_files.append(xml_path)
             # numeroContrato → coluna FepWeb ID das operações no Pending Confirmation
-            fep_updated = _R()._conf_pc_set_fepweb([d.get('Deal') for d, _s in picked],
+            fep_updated = _R()._conf_pc_set_fepweb(_R()._mc_conf_trade_keys(picked, 'ndf-comm'),
                                               numero_contrato)
         else:
             xml_warns = ['XML não gerado: nenhuma operação com status Success no grupo.']
@@ -389,7 +389,7 @@ def api_conf_optcomm_save():
             with open(_R()._ei_long_path(xml_path), 'w', encoding='utf-8') as fh:
                 fh.write(xml_str)
             xml_files.append(xml_path)
-            fep_updated = _R()._conf_pc_set_fepweb([d.get('Deal') for d, _s in picked],
+            fep_updated = _R()._conf_pc_set_fepweb(_R()._mc_conf_trade_keys(picked, 'opt-comm'),
                                               numero_contrato)
         else:
             xml_warns = ['XML não gerado: nenhuma operação com status Success no grupo.']
@@ -624,7 +624,7 @@ def api_conf_optfxo_save():
             with open(_R()._ei_long_path(xml_path), 'w', encoding='utf-8') as fh:
                 fh.write(xml_str)
             xml_files.append(xml_path)
-            fep_updated = _R()._conf_pc_set_fepweb([d.get('Deal') for d, _s in picked],
+            fep_updated = _R()._conf_pc_set_fepweb(_R()._mc_conf_trade_keys(picked, 'opt-fxo'),
                                               numero_contrato)
         else:
             xml_warns = ['XML não gerado: nenhuma operação com status Success no grupo.']
@@ -740,13 +740,15 @@ def api_conf_optfxo_validate():
     # acompanhado; o que saiu foi só a linha no sino.
     return jsonify({'success': True, 'status': 'Success'})
 
-@blueprint.route('/confirmation/ndf-fwdstart/strike-me')
-def confirmation_fwdstart_strike_me():
-    """Confirmação de NDF FWD Start pré-preenchida para um grupo
-    contraparte × moeda base da reference date."""
+@blueprint.route('/confirmation/ndf-fwdstart/strike-me', defaults={'family': 'strike-me'})
+@blueprint.route('/confirmation/ndf-fwdstart/vanilla', defaults={'family': 'vanilla'})
+def confirmation_fwdstart_strike_me(family='strike-me'):
+    """Confirmação do termo de moeda do BANCO pré-preenchida para um grupo
+    contraparte × moeda base da reference date: o NDF FWD Start (`strike-me`)
+    ou o NDF Vanilla asiático/BRL fixed (`vanilla`, §703) — o mesmo
+    documento, com o Nº pela regra do `_conf_num_field` (B3 ID × Deal)."""
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
-    family = 'strike-me'
     ds = (request.args.get('date') or '').strip()
     acr = (request.args.get('acronym') or '').strip()
     merc = (request.args.get('mercadoria') or '').strip().upper()
@@ -762,7 +764,9 @@ def confirmation_fwdstart_strike_me():
 
     first = picked[0][0]
     warnings = []
-    rows = _R()._conf_fwdstart_rows(picked, warnings)
+    rows = _R()._conf_vanilla_rows(
+        picked, _R()._conf_fwdstart_rows(picked, warnings, num_field=_R()._conf_num_field(picked)),
+        warnings)
 
     cgd_txt = _R()._conf_cgd_lookup(first)
     if not cgd_txt:
@@ -786,6 +790,7 @@ def confirmation_fwdstart_strike_me():
         'data_extenso': _R()._conf_date_extenso(trade_date),
         'mercadoria':   merc,
         'acronym':      acr,
+        'family':       family,
         'rows':         rows,
         'warnings':     warnings,
     }
@@ -856,7 +861,8 @@ def api_conf_fwdstart_save():
     client_dir = _R()._ei_resolve_client_dir(conf['parteb_nome'] or acr, create=True)
     dir_path = os.path.join(client_dir, 'Confirmations',
                             ref.strftime('%Y'), _R()._ei_month_folder(ref.strftime('%m')),
-                            ref.strftime('%d'), _R()._mc_mod.TYPE_FOLDER['NDF FWD START'])
+                            ref.strftime('%d'),
+                            _R()._mc_mod.TYPE_FOLDER[_R()._CONF_FWDSTART_FAMILY_TYPE[family]])
     if len(rows) == 1 and str(rows[0].get('num') or '').strip():
         base = '{} - {} - CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS nº {}'.format(
             acr, merc, str(rows[0]['num']).strip())
@@ -891,13 +897,22 @@ def api_conf_fwdstart_save():
             # do outro lado. As outras três confirmações que geram XML já usam o
             # nome do produto: NDF Commodities manda `NDF` e as duas de opção,
             # `Option`.
+            # O Vanilla do Banco (§703) segue a regra do XML do Vanilla de MGT
+            # (§682): prefixo `NDF`, o acronym no numeroContrato de várias
+            # operações e o valor da MAIOR em BRL. A perna é a do Banco
+            # (`_conf_fx_legs`, que divide pela taxa o notional em reais — o
+            # BRL fixed).
+            vanilla = family == 'vanilla'
             numero_contrato, xml_str, xml_warns = _R()._conf_ndf_xml(
-                picked, merc, ref, tipo='NDF', prefixo='NDF_FwdStart',
+                picked, merc, ref, tipo='NDF',
+                prefixo='NDF' if vanilla else 'NDF_FwdStart',
                 ccy_field='QuantityCurrency', warn_no_spot=False,
                 legs_fn=_R()._conf_fx_legs, ccy=merc,
-                # O contrato é o B3 ID, como o Nº do Anexo I deste documento —
-                # o Athena ID não é número que a contraparte encontre.
-                num_field='B3_ID')
+                # O contrato é o número do Nº do Anexo I deste documento: B3 ID
+                # no FWD Start, Athena ID (Deal) no Vanilla (§703).
+                num_field=_R()._conf_num_field(picked),
+                acronym=acr if vanilla and acr != 'CONFIRMATION' else '',
+                valor_do_maior=vanilla)
             xcand, xn = candidate, 0
             while _store.exists(_R()._ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
                 xn += 1
@@ -906,7 +921,7 @@ def api_conf_fwdstart_save():
             with open(_R()._ei_long_path(xml_path), 'w', encoding='utf-8') as fh:
                 fh.write(xml_str)
             xml_files.append(xml_path)
-            fep_updated = _R()._conf_pc_set_fepweb([d.get('Deal') for d, _s in picked],
+            fep_updated = _R()._conf_pc_set_fepweb(_R()._mc_conf_trade_keys(picked, 'ndf-fwdstart'),
                                               numero_contrato)
         else:
             xml_warns = ['XML não gerado: nenhuma operação com status Success no grupo.']
@@ -926,7 +941,7 @@ def api_conf_fwdstart_save():
         _R()._conf_state_save(ref_state, state, 'ndf-fwdstart')
 
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Confirmation Saved', 'NDF FWD Start',
+                         'Confirmation Saved', _R()._CONF_FWDSTART_FAMILY_LABEL.get(family, 'NDF FWD Start'),
                          '{} · {} ({} op{})'.format(acr, merc, len(rows),
                                                     '' if len(rows) == 1 else 's'))
     validate_url = ('/confirmation/ndf-fwdstart/validate?date=' + ref_state.strftime('%Y-%m-%d')
@@ -1209,7 +1224,7 @@ def api_conf_mgt_save():
             with open(_R()._ei_long_path(xml_path), 'w', encoding='utf-8') as fh:
                 fh.write(xml_str)
             xml_files.append(xml_path)
-            fep_updated = _R()._conf_pc_set_fepweb([d.get('Deal') for d, _s in picked],
+            fep_updated = _R()._conf_pc_set_fepweb(_R()._mc_conf_trade_keys(picked, 'ndf-mgt'),
                                               numero_contrato)
         else:
             xml_warns = ['XML não gerado: nenhuma operação com status Success no grupo.']
@@ -1452,7 +1467,8 @@ def api_conf_swap_save():
             with open(_R()._ei_long_path(xml_path), 'w', encoding='utf-8') as fh:
                 fh.write(xml_str)
             xml_files.append(xml_path)
-            fep_updated = _R()._conf_pc_set_fepweb([d.get('B3_ID') for d, _s in picked], numero_contrato)
+            fep_updated = _R()._conf_pc_set_fepweb(_R()._mc_conf_trade_keys(picked, 'swap-edg'),
+                                                   numero_contrato)
         else:
             xml_warns = ['XML não gerado: a operação {} não está mapeada (Success) no dia.'.format(num)]
     except Exception as exc:
