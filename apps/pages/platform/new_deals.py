@@ -1186,6 +1186,66 @@ def _api_live_records(records):
     if mortos:
         log.info('[athena-api] %d versão(ões) antiga(s) (isDead/isCancelled) de trade com '
                  'versão viva ignorada(s)', mortos)
+    return _api_latest_versions(out, norm, nome)
+
+
+def _api_entry_time(n):
+    """O `Entry Time` da Athena ('Tue Oct 27 18:23:21 2026') como datetime, ou None."""
+    txt = re.sub(r'\s+', ' ', str(n.get('ENTRY TIME') or '').strip())
+    for fmt in ('%a %b %d %H:%M:%S %Y', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S'):
+        try:
+            return datetime.strptime(txt, fmt)
+        except ValueError:
+            pass
+    return None
+
+
+def _api_latest_versions(records, norm, nome):
+    """Duas VERSÕES vivas do mesmo trade: fica só a mais recente.
+
+    A Athena pode devolver a operação rebookada com a versão antiga SEM a marca
+    `isDead` — mesmo DEAL NAME, mesmo `Orig Entry Time` (o booking original) e
+    `Entry Time` diferentes (cada correção grava um). As duas eram gravadas na
+    mesma linha, e a última da lista vencia: a correção manual do SPN voltava ao
+    errado no pull seguinte (D5WM-PLNXR, Suzano, 27/10/2026).
+
+    Só age com a prova de que são versões: o MESMO `Orig Entry Time` e
+    `Entry Time` legíveis e DIFERENTES. Pernas do mesmo Deal bookadas juntas têm
+    o mesmo `Entry Time` e ficam todas. O que sobra ambíguo — o mesmo Deal vivo
+    mais de uma vez com contrapartes diferentes — vai para o log em WARNING (o
+    log da instância só mostra a partir dele), e o
+    `scripts/diag_athena_deal.py` mostra os registros inteiros."""
+    lidos = [(rec, norm(rec) if isinstance(rec, dict) else None) for rec in records]
+    grupos = {}
+    for rec, n in lidos:
+        if n is not None and nome(n):
+            grupos.setdefault((nome(n), str(n.get('ORIG ENTRY TIME') or '').strip()), []).append(n)
+    superados = set()
+    for (deal, orig), ns in grupos.items():
+        if len(ns) < 2 or not orig:
+            continue
+        tempos = [_api_entry_time(n) for n in ns]
+        if None in tempos or len(set(tempos)) < 2:
+            continue
+        ultimo = max(tempos)
+        for n, t in zip(ns, tempos):
+            if t != ultimo:
+                superados.add(id(n))
+        log.warning('[athena-api] %s veio em %d versões vivas (Orig Entry Time %s): fica a de '
+                    '%s (%s)', deal, len(ns), orig, ultimo,
+                    str(ns[tempos.index(ultimo)].get('END COUNTERPARTY') or '').strip())
+    out = [rec for rec, n in lidos if n is None or id(n) not in superados]
+    vivos = {}
+    for rec, n in lidos:
+        if n is not None and id(n) not in superados and nome(n):
+            vivos.setdefault(nome(n), []).append(
+                '%s/SPN %s (entry %s)' % (str(n.get('END COUNTERPARTY') or '').strip(),
+                                          str(n.get('SPN') or '').strip(),
+                                          str(n.get('ENTRY TIME') or '').strip()))
+    for d, lista in vivos.items():
+        if len(set(x.split(' (')[0] for x in lista)) > 1:
+            log.warning('[athena-api] %s veio VIVO %d vezes com contrapartes diferentes: %s — '
+                        'fica a última', d, len(lista), ' · '.join(lista))
     return out
 
 

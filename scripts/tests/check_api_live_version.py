@@ -124,6 +124,40 @@ try:
 finally:
     R._fxo_refdata_by_spn = _ref
 
+print('\n== 3b. duas versões VIVAS do mesmo trade: fica a mais recente ==')
+# O caso real (D5WM-PLNXR): a Athena devolveu a versão antiga SEM `isDead`,
+# mesmo `Orig Entry Time`, `Entry Time` anterior. As duas vivas, a última da
+# lista vencia, e a correção manual do SPN voltava ao errado no pull seguinte.
+ORIG = 'Tue Oct 27 14:05:17 2026'
+
+
+def versao(acr, spn, entry, orig=ORIG):
+    r = rec('FX9', acr, spn)
+    r['Orig Entry Time'], r['Entry Time'] = orig, entry
+    return r
+
+
+NOVA = versao('NOVO', '2', 'Tue Oct 27 18:23:21 2026')
+VELHA = versao('VELHO', '1', ORIG)
+for nome_o, ordem in (('nova primeiro', [NOVA, VELHA]), ('velha primeiro', [VELHA, NOVA])):
+    r = ND._api_live_records(ordem)
+    check([x['End Counterparty'] for x in r] == ['NOVO'], '%s: fica só a versão de 18:23' % nome_o)
+pernas = [versao('PERNA-A', '1', ORIG), versao('PERNA-B', '2', ORIG)]
+check(len(ND._api_live_records(pernas)) == 2, 'pernas com o MESMO Entry Time ficam as duas')
+outro = [versao('A', '1', 'Tue Oct 27 18:23:21 2026', orig='Tue Oct 27 09:00:00 2026'), VELHA]
+check(len(ND._api_live_records(outro)) == 2, 'Orig Entry Time diferente: não são versões, ficam as duas')
+sem = [dict(NOVA, **{'Entry Time': ''}), VELHA]
+check(len(ND._api_live_records(sem)) == 2, 'Entry Time ilegível: não decide, ficam as duas')
+with app.app_context():
+    R._fxo_refdata_by_spn = lambda: dict(REF)
+    try:
+        linhas = simula([dict(NOVA, **{'Deal Name': 'FX1'}), dict(VELHA, **{'Deal Name': 'FX1'})])
+    finally:
+        R._fxo_refdata_by_spn = _ref
+check(linhas[0]['Acronym'] == 'NOVO' and linhas[0]['Client'] == 'CLIENTE CERTO SA',
+      'de ponta a ponta: a versão antiga viva por último não desfaz mais a correção (%s)'
+      % linhas[0].get('Acronym'))
+
 print('\n== 4. a tela relê a grade quando o pull corrigiu uma linha ==')
 # O caso real (D5WM-PLNXR, Suzano, 27/10/2026): o servidor gravava o Amend
 # certo, e a tela — que só redesenha as linhas NOVAS do `deals` — dizia "No new
