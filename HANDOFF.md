@@ -30189,3 +30189,53 @@ da dev pelo dado local e passa sobre dado limpo, com e sem esta mudança; o
 
 **Na instância:** pull + restart + Ctrl+Shift+R (o `otc.css` mudou). Conferir o CC
 do card Initiatives — Alerts no Control Panel (o padrão é o e-mail do master).
+
+## §702 — WHT: a barra no card da tabela; Edit, Confirm, Delete, o lote e o Add Row; Trade Date × Event Date (2026-10-27)
+
+**A barra da tabela no card dela** (equipe): Reference date (com o decêndio),
+Columns, Export, Clear Filters e o Show entries moram no card da tabela; Import
+Settlements, Import HUB e HUB File ficam em cima, com o dropzone.
+
+**Edit, Confirm e Delete, e o lote.** A linha da tabela é montada na LEITURA (as
+liquidações coletadas × o relatório do HUB), e a coleta seguinte SUBSTITUI a
+fatia do dia — gravada na linha, a correção sumiria no próximo Import. Então ela
+vai no documento do mês (`edits`), por linha de ORIGEM (a operação OTC pelo `id`,
+a linha do HUB por `HUB|<hub_key>`; a linha da tabela leva as duas como
+`otc_key`/`hub_key`), e é aplicada antes do batimento: casamento, checks, resumo
+e HUB File já saem com o valor corrigido (`queries.otc_lines`/`hub_rows_of`, a
+leitura única do `build` e do `hub_file`). O `code`/`tributo` corrigidos entram
+DEPOIS do `enrich_otc` (que os recalcularia) e o `ir` depois do `allocate`. A
+correção nasce `Pending` (maker = quem editou) e o Edit da linha vira **Confirm**,
+que é de OUTRO usuário (`authz.is_own_change`, §553 — na dev o 4-olhos é
+desligado); o HUB File recusa linha pendente (`hub_file_pending`). O Delete põe
+as duas origens em `deleted`, e a reimportação não as traz de volta. O lote: a
+coluna, o valor no formato dela (lista, data, número, texto — `domain.EDIT_COLS`
+diz o lado e o tipo; a tela os recebe do servidor) e Apply/Delete das marcadas.
+Validação no servidor pelo tipo: número, data do EVENTO no mês do decêndio (noutro
+mês a linha sairia da leitura deste e não entraria na do outro), opção (a LE é JPM
+ou MGT, equipe 27/10/2026).
+
+**Add Row** (`manual`): a operação que as telas de liquidação não trouxeram. As
+opções fechadas são listas (produto, LOB, evento, LE); o ID (código) e o tributo
+saem do `wht-codes` e o IR (`Devido`) do produto e do valor, pelo servidor
+(`/api/wht/derive` → `queries.derive`, as regras das linhas coletadas: 0,005% no
+termo e no prêmio de opção, isento pelo `ndfc-ir-exempt`; no swap a REGRESSIVA
+pelo prazo do Trade Date à data do evento, a `_ops_swap_ir_rate` — sem Trade Date é
+`add_swap_trade_date`). O IR digitado vence o calculado; a linha nasce Pending.
+
+**Trade Date × Event Date** (equipe): OTC_TD/HUB_TD eram a data do EVENTO e viraram
+**OTC_ET/HUB_ET** (o Check_TD é o Check_ET; o Partial diz *Event Date*), e a nova
+**OTC_TD** é o Trade Date da operação — só do OTC: o HUB não o tem. Ele vem do
+`trade_date` do NDF Summary e de um `_trade_date` novo nas linhas do Trade Level
+(`settlement.py`: o `op_dt` do prazo do IR no swap, a data da recompra, a coluna de
+início da operação no termo e na opção). Mês já coletado fica sem ele até o
+próximo Import Settlements.
+
+**A recompra é UNWIND** (`domain.event_of`): vinha também juntada a outro tipo da
+B3 (`UNWIND · CASHFLOW`) ou só pela marca `unwind`; vale na coleta e na leitura.
+**O status em caixa alta** (UNMATCHED OTC): a pílula leva `data-case="upper"` e o
+`otc.js` pula o Proper nela — no funil e no export também, que passam pela mesma
+função. **O Check_IR já tinha a tolerância de 1 centavo** (`TOL = 0.01`); o teste
+agora a prova (0,30 × 0,29 bate, 0,30 × 0,28 não).
+
+O sino ganhou o rótulo `WHT` nos três mapas. `check_wht_edit.py`.

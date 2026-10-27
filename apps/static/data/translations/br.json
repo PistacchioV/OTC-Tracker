@@ -3229,5 +3229,12 @@
   "cp-ia-sent": "iniciativa(s) alertada(s)",
   "cp-ia-empty": "nenhum alerta devido — nada enviado",
   "cp-ia-norec": "sem destinatário — nada foi enviado",
-  "cp-ia-never": "nenhum disparo registrado ainda"
+  "cp-ia-never": "nenhum disparo registrado ainda",
+  "wht-actions": "Ações",
+  "wht-edit-title": "Editar linha — WHT",
+  "wht-edit-sub": "A correção fica guardada à parte do dado importado e sobrevive a um novo import. A linha fica Pending até outro usuário confirmar.",
+  "wht-mass-sel": "marcada(s)",
+  "wht-mass-apply": "Aplicar",
+  "wht-mass-delete": "Excluir",
+  "wht-btn-add": "Incluir linha"
 }

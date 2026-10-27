@@ -3229,5 +3229,12 @@
   "cp-ia-sent": "iniciativa(s) alertada(s)",
   "cp-ia-empty": "ningún alerta pendiente — nada enviado",
   "cp-ia-norec": "sin destinatario — nada fue enviado",
-  "cp-ia-never": "ningún envío registrado aún"
+  "cp-ia-never": "ningún envío registrado aún",
+  "wht-actions": "Acciones",
+  "wht-edit-title": "Editar fila — WHT",
+  "wht-edit-sub": "La corrección se guarda aparte del dato importado y sobrevive a una nueva importación. La fila queda Pending hasta que otro usuario la confirme.",
+  "wht-mass-sel": "marcada(s)",
+  "wht-mass-apply": "Aplicar",
+  "wht-mass-delete": "Eliminar",
+  "wht-btn-add": "Agregar fila"
 }
