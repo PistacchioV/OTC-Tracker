@@ -1404,7 +1404,11 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   MENOS quando o mesmo DEAL NAME tem versão VIVA (`_api_live_records`, nos
   pulls de NDF e FXO; equipe, 27/10/2026, §711): a operação corrigida volta com a
   versão antiga `isDead`, e as duas faziam Amend na mesma linha — vindo a antiga
-  por último, desfazia a correção. `check_api_live_version.py`.
+  por último, desfazia a correção. E a versão antiga VIVA também sai
+  (`_api_latest_versions`): mesmo DEAL NAME e `Orig Entry Time`, `Entry Time`
+  diferentes → fica a mais recente; pernas com o mesmo `Entry Time` ficam.
+  `check_api_live_version.py`; uma operação na instância se investiga com o
+  `scripts/diag_athena_deal.py`.
 - **O pull da API devolve em `deals` só as operações NOVAS** (§711): a que ele
   corrigiu numa linha que já estava na grade vem só na contagem `amended`. As
   quatro telas (Opt FXO e os três NDF) releem a grade (`sfApply`) quando houve
@@ -3724,6 +3728,7 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 | `fix_asian_dates_xlsx.py <xlsx> [--dry-run] [--feriados CAL=arq] [--calendario IPE]` | conserta as datas da Média Asiática de um Excel do Live Position Option numa aba NOVA (§537): mesmo mês → reordena; dois meses → o mês com MAIS datas inteiro, dia útil a dia útil no calendário do Holidays **do ATIVO da linha** (`Ativo subjacente / Moeda base`: `CO1-2` → IPE, `USD` → ANBIMA, §595; ativo fora da lista NÃO é ajustado e vai para o log; planilha sem a coluna usa o `--calendario`); empate fica e vai para o log; data em fim de semana ou feriado do calendário do ativo é REMOVIDA antes de decidir (a mesa, 29/09/2026), e o ano de toda data precisa ter feriado no calendário. Calendário sem feriado no ano PARA — sem feriado, dia útil vira dia de semana |
 | `diag_ndfsum_account.py [AAAA-MM-DD]` | DIAGNÓSTICO da coluna Account do Settlement Summary: nome da linha → SPN no Reference Data → registro do Counterparty Details → defaults → conta, dizendo onde a cadeia quebra (§436) |
 | `diag_pending_confirmation_db.py [--db backlog\|pending\|ok\|todos] [--db-dir] [--out] [--csv] [--so-resumo]` | DESPEJA o conteúdo dos três bancos do Pending Confirmation (uma aba por banco) e, na tela, o RESUMO que costuma responder a pergunta: linhas, a Trade Date mais velha e a mais nova, o histograma por ano e **quantas linhas têm data ILEGÍVEL**, com amostra do texto cru. "A busca não traz nada antes de tal dia" tem duas causas que se parecem e se consertam ao contrário — não há nada mais velho, ou há e a data está num formato que o app não lê (serial do Excel, `26/8/25`), e aí a linha some de todo filtro por data sem erro nenhum. Só LÊ, roda com o app de pé (abre pelo `duckdb_read`), e banco em uso ou ilegível **para com o motivo** em vez de imprimir zero linha. O `.xlsx` sai com toda célula como TEXTO (o contrato `26E04610365` vira `#NULL!` numa célula numérica, §477) |
+| `diag_athena_deal.py <FXO\|NDF> <data> <DEAL> [--json arq]` | DIAGNÓSTICO de uma operação no pull da Athena (§711): busca o que o pull busca (endereço do `api-links`, sessão Kerberos) e imprime cada registro com aquele DEAL NAME (End Counterparty, SPN, Entry Time, isDead/isCancelled), o que sobra dos filtros de versão, como o FXO o resolve no Reference Data e o que o arquivo-dia tem. Só LÊ; roda na instância |
 | `diag_boot_imports.py` | DIAGNÓSTICO da SUBIDA (§522/§524): `python -X importtime` num subprocesso, com o farol do app passando direto para a tela e um pulso a cada 5 s (segundos · módulos · último módulo) — saída que demora tem de dizer que está viva, senão doze minutos de subida são indistinguíveis de um travamento. Rodá-lo de um clone LOCAL é o CONTROLE do experimento, não erro de uso: mesmos dados no share, só o código em disco local — caiu de minutos para segundos, o custo é ler o código pelo SMB; não caiu, é o que o import EXECUTA. Vale rodar os dois |
 
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
