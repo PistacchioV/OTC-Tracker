@@ -30529,3 +30529,27 @@ saem); trade só com versão morta segue importado, e o só cancelado segue
 cancelando. `check_api_live_version.py` (o filtro, o FXO de ponta a ponta nas
 duas ordens, o defeito com o filtro desligado e, no §4, as quatro telas
 relendo a grade).
+
+**Segunda rodada, no mesmo dia: a correção manual voltava ao errado.** Com as
+duas mudanças acima, o usuário corrigiu o SPN da linha à mão e o pull seguinte
+o devolveu à filial — então é o SERVIDOR gravando o errado, e pelo código isso
+só acontece se o registro que o app recebe diz `SUZANOPEL33BRA` (com `SUZANOSA`
+a busca nem chega àquele cadastro). O que explica o sintoma: o `getTrades`
+devolve a operação DUAS vezes vivas — a versão antiga sem `isDead` (o mesmo
+`Orig Entry Time`, o `Entry Time` do booking original) e a nova —, e a última
+da lista vence a cada pull. `_api_latest_versions` (no fim do
+`_api_live_records`): no mesmo DEAL NAME com o mesmo `Orig Entry Time` e
+`Entry Time` legíveis e diferentes, fica só a versão mais recente. Pernas do
+mesmo Deal bookadas juntas (mesmo `Entry Time`) e `Orig Entry Time` diferentes
+não são tocadas, e o caso que sobra ambíguo — o mesmo Deal vivo mais de uma vez
+com contrapartes diferentes — vai para o log em WARNING
+(`[athena-api] … veio VIVO n vezes …`).
+
+**Ainda não visto no dado real.** Para provar: `scripts/diag_athena_deal.py
+FXO 2026-10-27 D5WM-PLNXR [--json saida.json]` na instância busca o que o pull
+busca (o endereço do `api-links`, a sessão Kerberos) e imprime cada registro da
+operação, o que sobra depois dos filtros, como cada um se resolve no Reference
+Data (acronym, SPN, cliente, Tax ID e o caminho) e o que o arquivo-dia tem.
+Se vier UM registro só, já com `SUZANOPEL33BRA`, o problema é do endpoint que o
+app chama (o cadastro de API Links), não do app.
+
