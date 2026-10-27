@@ -692,7 +692,7 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   sem o card (`_CP_ENDPOINT_CARD`). **O `id` é o token gravado**: renomear
   revoga em silêncio. A seção do card é o DOM (`data-cp-hdr` + `.row.cp-cards`),
   nunca um mapa no JS. Seis seções: Intraday, Settlement Reporting, Pending
-  Confirmation, Economic Affirmation, Reference Data, Application; quinze cards
+  Confirmation, Economic Affirmation, Reference Data, Application; dezesseis cards
   (o `check_control_panel_sections.py` conta — card novo mexe nele). O card *New
   Version Released* lê a versão do `link.txt` ao lado do
   `start-otc-tracker.bat`; sem versão o envio é recusado; destinatário é quem
@@ -1504,6 +1504,9 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   ANTIGAS ficam invisíveis para sempre no Confirmations Monitor, sem erro
   nenhum — foi o que aconteceu com o `NDF VANILLA` de MGT. Mercadoria e FXO são
   sempre JPM (`_MC_JPM_SOURCES`); razão social do `le-spn`.
+- **As colunas do Confirmations Monitor descem até o pé da janela** (§701), com
+  a folga do sidenav (`--otc-inset`), medida pelo JS (`fitCards`) a partir do
+  topo do CARD — medida na `.row g-3`, sobrava o gutter.
 - **O Monitor é uma TABELA por zona, não uma parede de cartões** (mesa,
   22/09/2026). Eram 34 cartões, um por produto, quase todos zerados: a frase
   "No operations imported for this date." repetida 28 vezes e 2.900px de
@@ -1577,7 +1580,10 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   aponta cada pendência com a data no link (`static/js/deep-link.js`:
   `?tradedate=`/`?date=`) — página que vira destino lê `otcLinkDmy()`/
   `otcLinkIso()`. Teste não grava no registro (`task_runs._em_teste`).
-  `check_intraday_monitor.py`.
+  **Owner e backup por tarefa e LE** (§701, botão Owners; edita o BO e o admin):
+  `control-panel/intraday_assignments.json` pelo `domain.clean_assignments`, e
+  quem é designado agora é avisado no SEU sino (página `Intraday Monitor`).
+  `check_intraday_monitor.py`, `check_intraday_owners.py`.
 - **O Monitor não recebe lista de produto: ele VARRE o `cache/new deals/`**
   e agrupa pelos dois primeiros níveis não numéricos do caminho (§454). Quem
   diz que um produto EXISTE é o `_NDM_CARDS` (`deals_monitor/domain.py`); o
@@ -1743,7 +1749,15 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   "CDI + 3.00%") e o Type sai no idioma da tela (`otcSwapTypeLabel`). **O modal dos swaps formata** (`otcSwapModalPrep`, §700):
   valores `#,##0.00`, FX Start com 8 casas, CNPJ mascarado e os holders pela
   CONTA B3 (só leitura — o texto do DT segue gravado, o e-mail o lê); o Save
-  devolve o dado cru, e o que só mudou de formato volta como estava.
+  devolve o dado cru, e o que só mudou de formato volta como estava. E **em
+  BLOCOS** (`otcSwapModalLayout`, §701): campo que nenhum bloco nomeia vai para
+  "Other", nunca some. **O card tem as MARCAS** (Bullet e Cashflow, §701):
+  Forward Start, Atualização de Notional, Curva VCP e Prêmio, detectadas pelos
+  campos (`otcSwapFlags`) e corrigíveis com um clique — só a correção é gravada
+  (`SwapFlags`, `<api>/flags`, sem mexer no status, preservada no reimport), e
+  ela NÃO muda o arquivo da B3. **O Economic Affirmation leva também a operação
+  MARCADA** (a linha ou o card, `_selected`), não-IF e em qualquer data; sem
+  marcada, só as IF do dia. A Opt FXO não tem a rota do Economic Affirmation.
 - **O swap da CEM chega no CORPO do "Internal Trade Recap", não em planilha**
   (mesa, 24/09/2026, §555). O corpo é PARÁGRAFO do Outlook (`<p
   class=MsoNormal>`), não tabela — a única `<table>` é a do AFR, e era ela que
@@ -2829,6 +2843,16 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   linha vem da última carga da página, e mandá-la inteira apagava a validação
   que outra mesa deu depois. E desfazer uma validação pela grade é da mesa da
   ETAPA (403 para as outras); o OTC reabre a esteira inteira pelo `Pending OTC`.
+  **A grade tem as travas do Monitor** (§701): MO/FO antes do OTC é 409
+  `stage_not_pending` (pelo `validation_blocker`), desfazer só a do OTC com MO/FO
+  validados é `mc_reopen_instead`, e o Enviado p/ cliente pela grade é o Mark as
+  sent — do OTC, só em Pending FepWeb (`mc_not_fepweb`) e com callback
+  (`callback_required`, menos MGT).
+- **A tela do Pending Confirmation grava só o que MUDOU** (§701): manda a linha
+  como a CARREGOU (`orig`/`origs`) e o upsert aplica a diferença sobre a linha
+  relida estrita; apagada por outra pessoa é 409 `pc_row_gone`; sem `orig`
+  (Add Row) grava inteira. O Delete do Pending e da esteira LEVANTA na falha, e a
+  grade só tira a linha com o servidor confirmando.
 - **SLA em dias ÚTEIS ANBIMA a partir do TRADE DATE**: OTC D+3, MO D+4, FO D+6
   em paralelo (`manual-conf-sla`, branco = histórico). `sla_state()`: ok/warn/
   late/**done**. Passado o prazo a validação exige justificativa (409
@@ -2955,6 +2979,12 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   Edit clicado antes disso guardava o `state.p` vazio — o modal abria em
   branco, sem o que foi preenchido na criação. O clique espera a carga; o
   `openProjectModal` em modo edição sem iniciativa não abre.
+- **Os ALERTAS** (§701, card `initiativealerts` do Control Panel): 08:00 BRT de
+  dia útil, só `On going` — mais de 5 dias úteis sem atualização, 2 dias úteis
+  para o prazo dela ou de uma tarefa aberta, o dia do fim (`domain.alerts`). UM
+  e-mail por iniciativa (o box do card + quem está nela, CC do card) e o sino só
+  dos envolvidos (preferência `initiative_alerts`); cada alerta sai UMA vez pela
+  chave, e o e-mail que falha não marca. `check_initiative_alerts.py`.
 - Toda escrita devolve o PROJETO inteiro; a tela se redesenha dele. Atividade
   e erro saem ESTRUTURADOS (`kind`/`code` + params), traduzidos no
   `projects-common.js`. Chave de tradução das telas é `pj-*`/`tsk-*` — `tk-*`
@@ -3393,7 +3423,17 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   `after_request` põe no `X-OTC-Mirror-Failed` de `/api/*` e o
   `session-guard.js` avisa depois do Swal da página. `_pc_save_from_deal` e
   `_mc_save_from_deal` devolvem o veredito (True/None/False). Tela não afirma
-  cópia que não conferiu ("sent to Intrag" saiu).
+  cópia que não conferiu ("sent to Intrag" saiu). A remoção que não saiu (a
+  recompra apagada) é `falhou(..., remocao=True)`, com frase própria.
+- **A linha da Intrag acompanha a origem que muda de dia ou de chave** (§701):
+  a gravação da Intrag procura só no dia de destino, então quem muda o Trade
+  Date/Data da Recompra ou o Deal LEVA a linha antes
+  (`persistence._intrag_relocate`, pelos `_intrag_follow*`; nos swaps
+  `swap_new_deals.intrag_follow`). Edit novo que muda o dia de uma origem com
+  espelho na Intrag chama o mesmo, senão a operação aparece duas vezes.
+- **Aviso do PRÓPRIO sistema mostra o logo** (ator `SYSTEM`/"OTC Tracker"): no
+  sino e no toast o ladrilho do sidenav, na cor do accent (`isSystemNotif`,
+  `topbar.html`). Rotina nova que avisa no sino usa esse ator.
 - **Notificação nova exige o rótulo `page` nos TRÊS mapas** (`_NOTIF_PAGE_URL`,
   `PAGE_URL` do `topbar.html` e do `sw-push.js`); sem ele o clique não vai a
   lugar nenhum. `check_notif_page_url.py` varre por AST.
