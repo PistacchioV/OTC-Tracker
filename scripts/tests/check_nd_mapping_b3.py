@@ -193,7 +193,10 @@ _store.read = _read_original
 
 print('\n== 5. os quatro endpoints usam o funil, e nenhum engole a gravação ==')
 FONTE = io.open('apps/pages/features/new_deals/entrypoint.py', encoding='utf-8').read()
-check('há QUATRO rotas de mapping-b3', FONTE.count("/mapping-b3'"), 4)
+check('há QUATRO rotas de mapping-b3', len(re.findall(r"@blueprint\.route\('[^']*/mapping-b3'", FONTE)), 4)
+# A DCE FXO (§721) reusa a view do Opt FXO, com a variante do request — não é
+# um quinto endpoint com a regra copiada.
+check('   e a DCE FXO reusa a do Opt FXO', "('/mapping-b3', api_fxo_mapping_b3, 'POST')" in FONTE, True)
 check('e QUATRO chamadas ao funil', FONTE.count('_grava_mapeamento('), 5)  # 1 def + 4 usos
 # O padrão antigo não pode voltar: gravar o arquivo-dia do mapping dentro de um
 # `try` cujo `except` é um `pass` é exatamente o defeito que este guarda existe
@@ -211,9 +214,10 @@ check('o sino conta pelos gravados',
 check('   e nenhuma notificação conta pelo len(results)',
       "str(len(results)) + ' deal'" in FONTE, False)
 
-print('\n== 6. as SEIS telas contam por `saved`, e não pintam o que não gravou ==')
+print('\n== 6. as SETE telas contam por `saved`, e não pintam o que não gravou ==')
 PAGS = ['new_deals-ndf-commodities', 'new_deals-opt-commodities', 'new_deals-opt-fxo',
-        'new_deals-ndf-fwdstart', 'new_deals-ndf-otherpublisher', 'new_deals-ndf-vanilla']
+        'new_deals-ndf-fwdstart', 'new_deals-ndf-otherpublisher', 'new_deals-ndf-vanilla',
+        'new_deals-dce-fxo']
 for nome in PAGS:
     html = io.open('apps/templates/pages/%s.html' % nome, encoding='utf-8').read()
     # `saved === false` tem de vir ANTES do teste de 'Success': a linha que o

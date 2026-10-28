@@ -616,6 +616,12 @@ CACHE_BASE_DIR = os.path.normpath(os.path.join(
 OPT_FXO_CACHE_DIR = os.path.normpath(os.path.join(
     data_dir(), "cache", "new deals", "Option", "FXO"
 ))
+# A opção de câmbio OFFSHORE (New Deals › DCE › FXO, §721): a mesma tela do
+# Opt FXO, com o cache próprio — e o card próprio no Intraday Monitor. Ainda
+# sem a API da Athena: entra pelo xlsx e pelo Add Row.
+DCE_FXO_CACHE_DIR = os.path.normpath(os.path.join(
+    data_dir(), "cache", "new deals", "DCE", "FXO"
+))
 # A infraestrutura de e-mail mora em `platform/mail.py` — aliases.
 from apps.pages.platform import mail as _pf_mail  # noqa: E402
 
@@ -9770,6 +9776,10 @@ _nd_cancel_in_file = _pf_nd._nd_cancel_in_file
 _fxo_persist_new_deals = _pf_nd._fxo_persist_new_deals
 _fxo_deals_from_api_records = _pf_nd._fxo_deals_from_api_records
 _fxo_api_pull = _pf_nd._fxo_api_pull
+_fxo_variant = _pf_nd._fxo_variant
+_fxo_cfg = _pf_nd._fxo_cfg
+_fxo_cache_dir = _pf_nd._fxo_cache_dir
+_fxo_page_label = _pf_nd._fxo_page_label
 _FXO_API_POLL_MIN = _pf_nd._FXO_API_POLL_MIN
 _fxo_api_scheduler_started = _pf_nd._fxo_api_scheduler_started
 _fxo_api_scheduler_lock = _pf_nd._fxo_api_scheduler_lock
@@ -12030,6 +12040,13 @@ _MAP_INTERBOOK_FIELDS = [
     'COUNTERPARTY', 'PUBLISHER', 'INSTRUMENT TYPE', 'INSTRUMENT',
     'QUANTITY CURRENCY', 'OTHER QUANTITY UNITS', 'TYPE', 'DEAL NAME',
 ]
+# Os mesmos pares, na API getTrades de FXO (o `interbook-fxo`): a opção não tem
+# Publisher nem Other Quantity, e traz o tipo da opção e a moeda do prêmio.
+_MAP_INTERBOOK_FXO_FIELDS = [
+    'OTHER BOOK', 'TRADING BOOK', 'SETTLEMENT LOCATION', 'END COUNTERPARTY',
+    'END COUNTERPARTY DESCRIPTION', 'COUNTERPARTY', 'SPN', 'INSTRUMENT TYPE',
+    'OPTION TYPE', 'QUANTITY CURRENCY', 'PREMIUM CCY', 'TYPE', 'DEAL NAME',
+]
 
 
 # O Term SOFR vai à B3 como VCP (equipe, 26/10/2026, §697): C00 com o
@@ -12717,6 +12734,21 @@ _MAPPING_DEFS = {
             [{'FIELD A': 'END COUNTERPARTY', 'VALUE A': 'DERIV NDF BJPM FXC',
               'FIELD B': 'TRADING BOOK', 'VALUE B': 'GN NDF BJPM', 'BOTH WAYS': 'YES'}]
         ),
+    },
+    # O mesmo filtro no import da API de FXO (New Deals › Opt FXO), cadastro
+    # PRÓPRIO: os books da opção não são os do termo, e uma regra do NDF valendo
+    # aqui descartaria opção de cliente sem ninguém ter decidido isso. Nasce
+    # VAZIO — quem diz o que é perna interna é a equipe, pela tela.
+    'interbook-fxo': {
+        'label': 'Interbook API (FXO)',
+        'columns': [
+            {'key': 'FIELD A', 'label': 'Field A', 'type': 'select', 'options': _MAP_INTERBOOK_FXO_FIELDS},
+            {'key': 'VALUE A', 'label': 'Value A'},
+            {'key': 'FIELD B', 'label': 'Field B', 'type': 'select', 'options': _MAP_INTERBOOK_FXO_FIELDS},
+            {'key': 'VALUE B', 'label': 'Value B'},
+            {'key': 'BOTH WAYS', 'label': 'Both Ways', 'type': 'select', 'options': ['', 'YES']},
+        ],
+        'seed': [],
     },
     # Market da Athena → Código do Ativo Subjacente B3 (commodities).
     #

@@ -16,7 +16,7 @@ self.addEventListener('activate', function (event) {
 // land on the same page.
 var PAGE_URL = {
     'NDF Comm': '/new_deals-ndf-commodities', 'Opt Comm': '/new_deals-opt-commodities',
-    'Opt FXO': '/new_deals-opt-fxo', 'NDF FWD Start': '/new_deals-ndf-fwdstart',
+    'Opt FXO': '/new_deals-opt-fxo', 'DCE FXO': '/new_deals-dce-fxo', 'NDF FWD Start': '/new_deals-ndf-fwdstart',
     'NDF Other Publisher': '/new_deals-ndf-otherpublisher',
     // Daily Settlement › NDF › Other Publisher — outra pagina, outro rotulo.
     'NDF Other Publisher (Settlement)': '/ndf-other-publisher',

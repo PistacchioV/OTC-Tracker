@@ -54,7 +54,7 @@ _NOTIF_DS_OTHERPUB = 'NDF Other Publisher (Settlement)'
 # diferentes conforme onde foi clicado — `check_notif_page_url.py` prova isso.
 _NOTIF_PAGE_URL = {
     'NDF Comm': '/new_deals-ndf-commodities', 'Opt Comm': '/new_deals-opt-commodities',
-    'Opt FXO': '/new_deals-opt-fxo', 'NDF FWD Start': '/new_deals-ndf-fwdstart',
+    'Opt FXO': '/new_deals-opt-fxo', 'DCE FXO': '/new_deals-dce-fxo', 'NDF FWD Start': '/new_deals-ndf-fwdstart',
     'NDF Other Publisher': '/new_deals-ndf-otherpublisher', 'NDF Vanilla': '/new_deals-ndf-vanilla',
     _NOTIF_DS_OTHERPUB: '/ndf-other-publisher',
     'Index B3': '/index-b3',
