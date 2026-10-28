@@ -1078,7 +1078,32 @@ def confirmation_deal(linha, ref=None):
         # o Athena ID (é o que o documento e o XML leem), mas ele é o `Deal` do
         # contrato ORIGINAL — quem casa a recompra lá é esta.
         '_mc_key':        domain.chave_esteira(linha),
+        **pending_da_recompra(linha, ref),
     }
+
+
+def pending_da_recompra(linha, ref):
+    """Como a recompra entra no Pending Confirmation (equipe, 28/10/2026, §717):
+
+      * TOTAL (o saldo zera, `domain.recompra_total`) — o contrato acabou: a
+        Maturity Date é a data da RECOMPRA e o Pending Status é `Exception
+        Digital Fep Web` (o Status vira `Ok` pela regra do próprio Pending);
+      * PARCIAL — o contrato segue aberto: a Maturity Date é o vencimento da
+        operação ORIGINAL (`MaturityDate`, da posição) e o Pending Status sai do
+        TIPO DE ASSINATURA da contraparte no Reference Data (`Pending Digital
+        Signature` / `Pending Original`).
+
+    Saldo que não se sabe (`None`) é tratado como parcial: fechar como `Ok` uma
+    recompra que talvez não encerre o contrato tiraria da fila uma confirmação
+    devida. Sem o vencimento original, fica a liquidação da recompra (o de
+    antes). São chaves `_pc_*` do deal: só o Pending Confirmation as lê."""
+    R = _R()
+    dia = ref.strftime('%Y-%m-%d') if hasattr(ref, 'strftime') else str(ref or '')
+    if domain.recompra_total(linha):
+        return {'_pc_maturity': dia, '_pc_pending_status': R._PC_INTERNAL_EXCEPTION}
+    return {'_pc_maturity': str(linha.get('MaturityDate') or '').strip()
+            or str(linha.get('SettlementDate') or ''),
+            '_pc_por_assinatura': True}
 
 
 def confirmation_deals(ref_dt):

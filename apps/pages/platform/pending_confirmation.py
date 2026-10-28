@@ -918,7 +918,11 @@ def _pc_row_from_deal(deal, product_type, pending_status=None, trade_number=None
     if _pc_is_internal_counterparty(client, deal.get('SPN', '')):
         return None
     td = routes._parse_date_any(deal.get('TradeDate', ''))
-    md = routes._parse_date_any(deal.get('SettlementDate', ''))
+    # `_pc_maturity`: o deal diz a Maturity Date do Pending Confirmation quando
+    # ela não é a liquidação dele — a recompra (§717): na parcial é o
+    # vencimento do contrato ORIGINAL, na total a data da recompra.
+    venc = deal.get('_pc_maturity') or deal.get('SettlementDate', '')
+    md = routes._parse_date_any(venc)
     aging = (datetime.now().date() - td).days if td else None
     row = {c: '' for c in _PC_COLUMNS}
     row['Status'] = _pc_aging_band_label(aging)
@@ -929,11 +933,17 @@ def _pc_row_from_deal(deal, product_type, pending_status=None, trade_number=None
     row['Aging'] = str(aging) if aging is not None else ''
     row['Product Type'] = product_type
     row['Trade Date'] = td.strftime('%d/%m/%Y') if td else str(deal.get('TradeDate', '') or '')
-    row['Maturity Date'] = md.strftime('%d/%m/%Y') if md else str(deal.get('SettlementDate', '') or '')
+    row['Maturity Date'] = md.strftime('%d/%m/%Y') if md else str(venc or '')
     row['Trade Number'] = str(trade_number or deal.get('Deal', '') or '')
-    row['Pending Status'] = pending_status or 'Pending OTC'
+    row['Pending Status'] = pending_status or deal.get('_pc_pending_status') or 'Pending OTC'
     row['Owner'] = _pc_banker_for_spn(deal.get('SPN', ''))
     _pc_refdata_enrich(row)      # Economic Group / Signature Type do RefData
+    if deal.get('_pc_por_assinatura') and not (pending_status or deal.get('_pc_pending_status')):
+        # O Pending Status pelo TIPO DE ASSINATURA da contraparte (a recompra
+        # parcial, §717): a regra de sempre, sem a do prazo — o Signature Type
+        # acabou de vir do Reference Data pelo `_pc_refdata_enrich`.
+        row['Pending Status'] = _pc_signature_pending_status(
+            {'SIGNATURE TYPE': row.get('Signature Type', '')}, None, None)
     return row
 
 
