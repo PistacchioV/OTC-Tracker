@@ -1129,19 +1129,34 @@ _CONF_FXO_FAMILY_TEMPLATES = {
 
 
 def _conf_load_optfxo(ref):
-    """Deals do day-file de Opção de Câmbio (FXO) da reference date."""
+    """Deals do day-file de Opção de Câmbio (FXO) da reference date — das DUAS
+    páginas (§721): o Opt FXO (onshore) e o DCE FXO (offshore) são o mesmo
+    documento e a mesma esteira. O mesmo Deal nas duas (cadastros de interbook
+    ainda sem a separação) entra UMA vez, a do onshore."""
     from apps.pages import routes
     fname = ref.strftime('%Y%m%d') + '_optfxo.json'
-    fp = os.path.join(routes.OPT_FXO_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'), fname)
-    if not _store.isfile(fp):
-        return []
-    try:
-        from apps.pages import duck_read
-        data = duck_read.day_records(fp)
-        return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
-    except Exception:
-        log.warning('[conf] cannot read %s', fp)
-        return []
+    out, vistos = [], set()
+    for base in (routes.OPT_FXO_CACHE_DIR, getattr(routes, 'DCE_FXO_CACHE_DIR', None)):
+        if not base:
+            continue
+        fp = os.path.join(base, ref.strftime('%Y'), ref.strftime('%m'), fname)
+        if not _store.isfile(fp):
+            continue
+        try:
+            from apps.pages import duck_read
+            data = duck_read.day_records(fp)
+        except Exception:
+            log.warning('[conf] cannot read %s', fp)
+            continue
+        for d in (data if isinstance(data, list) else []):
+            if not isinstance(d, dict):
+                continue
+            chave = (str(d.get('Deal') or '').strip(), str(d.get('Client') or '').strip())
+            if chave[0] and chave in vistos:
+                continue
+            vistos.add(chave)
+            out.append(d)
+    return out
 
 
 def _conf_fxo_family(deal, subj):

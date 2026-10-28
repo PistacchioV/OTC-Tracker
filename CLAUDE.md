@@ -769,7 +769,7 @@ escolhido, os outros dois se preenchem). **`file`** aponta para um JSON já
 existente (o `swap-index` edita o mesmo `SwapIndex.json` do Index Results —
 declare as colunas extras, senão o POST as derruba).
 
-São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currency-base`, `interbook-ndf`, `commodities-b3`,
+São **53**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currency-base`, `interbook-ndf`, `interbook-fxo`, `commodities-b3`,
 `publisher-ndf`, `le-accronym`, `le-spn`, `bank-name`, `fxo-conv-rate`,
 `ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`,
 `manual-conf-validation`, `manual-conf-sla`, `fxo-internal-cpty`,
@@ -1456,6 +1456,23 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   duas vezes — Client reenriquecido ou Trade Date corrigida — ou era
   substituída como `New`, perdendo o B3 ID. POST de cache novo que recebe
   import passa pelo `_import_resposta`.
+- **O pull da API de FXO tem filtro de interbook PRÓPRIO** (`interbook-fxo`,
+  §720): os mesmos pares campo × valor do `interbook-ndf`, com os campos da API
+  de FXO, cadastro separado (os books da opção não são os do termo) e nascido
+  VAZIO. O par cadastrado não vira deal e volta como `skipped_interbook`.
+- **New Deals › DCE › FXO é a MESMA tela do Option › FXO, para o offshore**
+  (§721): as rotas `/api/new-deals/dce-fxo/*` chamam as MESMAS views com a
+  variante `dce` no request (`g.nd_fxo_variant`, `platform.new_deals.FXO_VARIANTS`),
+  que dá o cache (`DCE_FXO_CACHE_DIR`, `cache/new deals/DCE/FXO`), o rótulo
+  do sino (`DCE FXO`, nos três mapas) e o nome do arquivo da B3
+  (`FXO_DCE_<visão>`; o layout é o `opcoes-flexiveis-vcp` do Opt FXO). Código
+  do Opt FXO que lê o cache ou avisa no sino passa por `_fxo_cache_dir()` /
+  `_fxo_page_label()`, nunca pelo `OPT_FXO_CACHE_DIR` ou `'Opt FXO'` direto —
+  senão a DCE grava no cache do onshore. As confirmações leem os DOIS caches
+  (mesmo documento e esteira, `_conf_load_optfxo`), o Monitor tem o card
+  `dce-fxo` e o backfill a família `DCE FXO`. **Ainda sem a API da Athena**
+  (equipe, 28/10/2026): entra pelo xlsx e pelo Add Row; o `import-api` dela é
+  501 e o pull automático é só do onshore. `check_dce_fxo.py`.
 - **O Mapping B3 ID do New Deals entra em QUALQUER status** (mesa, 02/10/2026,
   §626): a trava de só `Sent`/`Error` saiu dos três JS (NDF Comm, Opt Comm, Opt
   FXO) e do `_generic_nd_mapping_candidates` (FWD Start, Other Publisher; o
@@ -3322,7 +3339,11 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   com o extrato da MGT** (§566, `_reversal_leg`): a TED contra a conta
   `/OTC DERIVATIVES PRODUCTS` do Banco no RLDOCREC (ou o interbancário da MGT),
   no sentido OPOSTO, dita na visão do Banco — nunca com o LTR do JPM, que é do
-  B2B, nem com perna de cliente; a conta do Banco nunca é par de cliente. As contas são
+  B2B, nem com perna de cliente; a conta do Banco nunca é par de cliente. **Com a MGT pagando o
+  Banco** (reversão Receive, §719) o par é a TED de derivativos da MGT SEM
+  cliente (`Derivativos`), e o recebimento sem remetente no extrato do Banco é
+  o MESMO dinheiro: consumido junto (`_reversal_leg` devolve par e espelho),
+  fora do resumo; sozinho, ele mesmo é o par. As contas são
   do `b3-accounts` por LE × TIPO (`commands.branch_accounts`), nunca número no
   código. **O B2B é o net de TODA liquidação Banco × MGT**
   (73760.00-9 × 04880.00-6 **mais** 73760.20-5 × 04880.00-6, visão do Banco;
@@ -3782,7 +3803,7 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (229 scripts)
+### `scripts/tests/` (231 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

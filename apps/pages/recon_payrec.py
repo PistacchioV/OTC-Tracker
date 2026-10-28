@@ -1380,31 +1380,62 @@ def _is_house_leg(c):
     return str(c.get('client') or '').strip().upper() == _HOUSE_DERIV_ACCOUNT
 
 
+def _sem_cliente(c, outra):
+    """A perna não nomeia cliente nenhum — é a transferência entre as duas
+    entidades da casa. A TED de derivativos sai com a descrição `Derivativos`
+    (sem o `-<CONTRAPARTE>` de quando liquida um cliente) e o recebimento chega
+    sem remetente, ou com o nome da OUTRA entidade (`outra`: 'JPM' ou 'MGT')."""
+    nome = c.get('client')
+    n = _norm(nome)
+    for palavra in ('operacaode', 'derivativos'):
+        n = n.replace(palavra, '')
+    return n == '' or _entity_side(nome) == outra
+
+
 def _reversal_leg(j, client, matched):
-    """A ponta que liquida a reversão da Branch Settlement.
+    """As pontas que liquidam a reversão da Branch Settlement: `(par, espelho)`.
 
     A reversão (20-5 × 00-6 × −1, visão do Banco) é dinheiro DENTRO de casa, e
     o extrato que a mostra é o da MGT, no sentido OPOSTO ao da linha: a TED
     contra a conta de derivativos do Banco (`/OTC DERIVATIVES PRODUCTS`, no
-    RLDOCREC) ou o interbancário da MGT. O LTR do Histórico de Mensagens JPM é
-    do B2B (o net de toda liquidação Banco × MGT), não daqui. Casa pelo valor
-    ABSOLUTO; o mais próximo vence."""
+    RLDOCREC), o interbancário da MGT ou a TED de derivativos da MGT que não
+    nomeia cliente (§719: a MGT pagando o Banco). O LTR do Histórico de
+    Mensagens JPM é do B2B (o net de toda liquidação Banco × MGT), não daqui.
+
+    O mesmo dinheiro pode aparecer TAMBÉM no extrato do Banco, no sentido da
+    linha e sem cliente (o recebimento da TED da MGT, §719). Ele é o `espelho`:
+    consumido junto, senão sobrava como uma pendência de cliente com o valor da
+    reversão. Sem a ponta da MGT, ele mesmo é o par. Casa pelo valor ABSOLUTO;
+    o mais próximo vence."""
     alvo = abs(j['value'])
     oposto = 'Receive' if j['pay_receive'] == 'Pay' else 'Pay'
-    best, best_d = None, None
-    for c in client:
-        if id(c) in matched or c.get('pay_receive') != oposto or (c.get('le') or 'JPM') != 'MGT':
-            continue
-        if not (c.get('bank') or _is_house_leg(c)):
-            continue
+
+    def perto(c):
         d = abs(abs(c['value']) - alvo)
-        if not ((d <= c['tol']) if c.get('tol') else (d < _TOL_SETTLED)):
-            continue
-        if best_d is None or d < best_d:
-            best, best_d = c, d
-    if best is not None:
-        matched.add(id(best))
-    return best
+        return d if ((d <= c['tol']) if c.get('tol') else (d < _TOL_SETTLED)) else None
+
+    def melhor(aceita):
+        best, best_d = None, None
+        for c in client:
+            if id(c) in matched or not aceita(c):
+                continue
+            d = perto(c)
+            if d is not None and (best_d is None or d < best_d):
+                best, best_d = c, d
+        return best
+
+    mgt = melhor(lambda c: c.get('pay_receive') == oposto and (c.get('le') or 'JPM') == 'MGT'
+                 and (c.get('bank') or _is_house_leg(c) or _sem_cliente(c, 'JPM')))
+    if mgt is not None:
+        matched.add(id(mgt))
+    banco = melhor(lambda c: c.get('pay_receive') == j['pay_receive']
+                   and (c.get('le') or 'JPM') == 'JPM' and not c.get('bank')
+                   and _sem_cliente(c, 'MGT'))
+    if banco is not None:
+        matched.add(id(banco))
+    if mgt is None:
+        return banco, None
+    return mgt, banco
 
 
 # ── Reconciliation ────────────────────────────────────────────────────────────
@@ -1480,8 +1511,10 @@ def _reconcile(jpm, client):
     mirrored_as = {}            # … e dita na visão do Banco, que é a que conta
     for j in jpm:
         if j.get('branch') == 'reversal':
-            leg = _reversal_leg(j, client, matched)
-            if leg is not None:
+            leg, espelho = _reversal_leg(j, client, matched)
+            if espelho is not None:
+                mirrored.add(id(espelho))      # o mesmo dinheiro, no extrato do Banco
+            if leg is not None and (leg.get('le') or 'JPM') == 'MGT':
                 mirrored.add(id(leg))
                 # A ponta da MGT dita na visão do Banco (a da linha): sinal virado.
                 leg = dict(leg, value=-leg['value'], pay_receive=j['pay_receive'],

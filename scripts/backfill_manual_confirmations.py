@@ -109,6 +109,9 @@ FAMILIES = {
     'NDF Commodities':    {'dir': ('NDF', 'Commodities'),    'source': 'NDF COMM',      'key': 'deal'},
     'Option Commodities': {'dir': ('Option', 'Commodities'), 'source': 'OPTION COMM',   'key': 'deal'},
     'Option FXO':         {'dir': ('Option', 'FXO'),         'source': 'OPTION',        'key': 'deal'},
+    # A réplica do Option FXO para o offshore (New Deals › DCE › FXO, §721):
+    # mesmo documento e mesma esteira, cache próprio.
+    'DCE FXO':            {'dir': ('DCE', 'FXO'),            'source': 'OPTION',        'key': 'deal'},
     'NDF FWD Start':      {'generic': 'fwd-start',           'source': 'NDF FWD START', 'key': 'b3id'},
     'NDF Vanilla':        {'generic': 'vanilla',             'source': 'NDF VANILLA',   'key': 'deal'},
     # Swap Bullet (§481): a MESMA pasta responde por dois sources, decididos
