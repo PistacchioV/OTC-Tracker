@@ -96,6 +96,7 @@ def _send(assunto, html, to, cc):
     return RESP['v']
 
 
+SEND_REAL = A.send
 A.send = _send
 R._user_wants = lambda sid, key: True
 R._create_notification = lambda *a, **k: SINO.append((a, k))
@@ -112,6 +113,40 @@ check('o corpo tem as três frases', all(x in html for x in ('No update for 6 bu
                                         ) or all(x in html for x in ('No update for 6 business days',
                                                                      'Initiative due in 2 business day(s)',
                                                                      'Task "Tarefa" due')), True)
+check('o timbre é o do OTC Tracker, não o do JPMorgan',
+      ('cid:otctrackerlogo' in html, 'alt="OTC Tracker"' in html, 'cid:jpmwordmark' in html),
+      (True, True, False))
+
+
+class _SmtpFalso(object):
+    MSGS = []
+
+    def __init__(self, *a, **k):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def sendmail(self, de, para, msg):
+        _SmtpFalso.MSGS.append(msg)
+
+
+_smtp = A.smtplib.SMTP
+A.smtplib.SMTP = _SmtpFalso
+try:
+    with app.app_context():
+        SEND_REAL(assunto, html, to, cc)
+finally:
+    A.smtplib.SMTP = _smtp
+import email as _email                                           # noqa: E402
+_partes = [p for p in _email.message_from_string(_SmtpFalso.MSGS[0]).walk()
+           if p.get_content_maintype() == 'image']
+check('o envio anexa o logo do OTC inline (Content-ID e arquivo)',
+      [(p['Content-ID'], p.get_filename(), len(p.get_payload(decode=True)) > 1000) for p in _partes],
+      [('<otctrackerlogo>', 'logo-black-email.png', True)])
 check('o sino: só os três envolvidos, ator SYSTEM, página Initiatives',
       sorted((a[0], a[1], a[2], a[3], k['target_sid']) for a, k in SINO),
       sorted(('SYSTEM', 'OTC Tracker', 'Initiative Alert', 'Initiatives', s)

@@ -354,7 +354,7 @@ def _alert_email(project, lista, today):
     corpo = (resumo + '<div style="height:16px;line-height:16px;font-size:0;">&nbsp;</div>' +
              tabela + '<div style="height:12px;line-height:12px;font-size:0;">&nbsp;</div>' + rodape)
     html = E._email_shell('Initiative alert', _dmy(today), intro, corpo,
-                          footer_extra='JPMC Internal Use Only')
+                          footer_extra='JPMC Internal Use Only', logo='otc')
     assunto = 'Initiative alert — %s — %s' % (project.get('name') or project.get('id'), _dmy(today))
     return assunto, html
 
