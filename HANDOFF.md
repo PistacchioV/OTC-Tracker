@@ -30742,3 +30742,83 @@ página cria o helper no `drawCallback`, antes ou depois do funil). O
 `refreshRow`: no Status o badge sozinho (ele substitui a célula), nas colunas
 de contraparte o texto + o badge. O dado continua sem o badge. Outro badge só
 de DOM que precise do funil usa o mesmo gancho. `check_missing_cp_filter.py`.
+
+## §719 — Pay/Rec: a reversão da Branch com a MGT pagando o Banco (2026-10-28)
+
+Relato da equipe: o valor da reversão (R$ 4.759.314,62) apareceu duas vezes —
+Pending Payment, LE MGT, cliente `Derivativos`, −4.759.314,62; e Pending
+Receivement, LE JPM, sem cliente, +4.759.314,62 — e a linha `Branch Reversal`
+(Receive, o Banco recebendo da MGT) ficou sem par.
+
+Causa: o `_reversal_leg` (§566) só aceitava como par a ponta da MGT
+interbancária ou o recebimento da MGT contra a conta `/OTC DERIVATIVES
+PRODUCTS` — o sentido em que o BANCO paga a MGT. No sentido inverso o dinheiro
+sai da MGT pela TED de derivativos SEM cliente (a descrição é só `Derivativos`,
+sem o `-<CONTRAPARTE>`) e chega ao Banco sem remetente; nenhuma das duas
+cabia na regra, e as duas sobravam como pendência de cliente.
+
+Correção: `_sem_cliente(c, outra)` — a perna que não nomeia cliente (só
+`Operação de Derivativos`, vazia, ou o nome da OUTRA entidade). O
+`_reversal_leg` devolve `(par, espelho)`: o par é a ponta da MGT no sentido
+oposto (agora também a TED sem cliente), dita na visão do Banco como antes; o
+espelho é o recebimento/pagamento do Banco no sentido da linha e sem cliente,
+consumido junto e fora do resumo (o mesmo dinheiro contaria duas vezes). Sem a
+ponta da MGT, o do Banco é o par. TED da MGT que nomeia um cliente e
+recebimento com remetente cliente seguem fora. O dia já rodado só muda no Run
+seguinte. `check_payrec_branch.py` §3.
+
+## §720 — New Deals › Opt FXO: filtro de interbook no pull da API (2026-10-28)
+
+Pedido da equipe: um cadastro de interbook para a API de FXO, como o
+`interbook-ndf` do NDF. O pull de FXO (`_fxo_deals_from_api_records`) não tinha
+filtro nenhum — a tela já lia `skipped_interbook` no resumo do import, mas o
+servidor nunca o mandava.
+
+O cadastro é o `interbook-fxo` (/mapping › Interbook API (FXO)): as mesmas
+colunas do NDF (Field A/Value A, Field B/Value B, Both Ways), com os campos da
+API de FXO (`_MAP_INTERBOOK_FXO_FIELDS`: Other/Trading Book, Settlement
+Location, End Counterparty (+ Description), SPN, Option Type, Premium CCY…).
+SEPARADO do NDF de propósito — os books da opção não são os do termo, e uma
+regra do NDF valendo aqui descartaria opção de cliente sem ninguém decidir — e
+nascido VAZIO (nenhum de-para no código; a equipe cadastra). A regra é uma só
+para os dois (`_interbook_rules(key)` + `_interbook_hit`); o par cadastrado não
+vira deal, entra na contagem e volta como `skipped_interbook`.
+`check_fxo_interbook.py`.
+
+## §721 — New Deals › DCE › FXO: a réplica do Option › FXO (2026-10-28)
+
+Pedido da equipe: replicar a página de New Deals FXO para New Deals › DCE ›
+FXO (o offshore), réplica completa — **mas sem ligar a API da Athena nem criar
+o cadastro de interbook offshore por enquanto** (a equipe mudou o escopo no
+meio: "deixe só a página pronta").
+
+Desenho: a MESMA tela e o MESMO backend, por VARIANTE, em vez de copiar ~1.500
+linhas de endpoints. `platform.new_deals.FXO_VARIANTS` diz, por variante
+(`onshore`, `dce`), o cache, o cadastro de interbook (`None` na DCE), o rótulo
+do sino e o prefixo do arquivo da B3; `_fxo_variant()` lê o explícito, senão o
+`g.nd_fxo_variant` do request, senão o onshore. As rotas
+`/api/new-deals/dce-fxo/*` (`_DCE_FXO_ROTAS`, `add_url_rule`) embrulham as views
+do Opt FXO marcando a variante (`_na_dce`). Os pontos que mudaram de literal
+para a variante: o cache (`_fxo_cache_dir()` no Add Row, busca, finder,
+gravação do pull e do xlsx, cancelamento), o rótulo do sino
+(`_fxo_page_label()`) e o nome do arquivo (`FXO_DCE_<visão>`, o
+`_conecta_file_name` põe a conta na frente). O layout da B3 e o preview do File
+Interpreter são os do Opt FXO (`/new_deals-opt-fxo`): o arquivo é o mesmo.
+
+Fora da página: as confirmações (`_conf_load_optfxo`) leem os DOIS caches — o
+documento e a esteira são os mesmos —, e o mesmo Deal nos dois entra uma vez;
+o Intraday Monitor tem o card `dce-fxo` (Options, B3 Registration); o backfill
+da esteira, a família `DCE FXO`; o sino, `DCE FXO` nos três mapas; o menu,
+New Deals › DCE › FXO como página PRÓPRIA (os outros quatro itens dali seguem
+atalhos da Intrag). O que vai para a Intrag e o Pending Confirmation no
+Success é o mesmo do Opt FXO.
+
+Sem API: o Import com o dropzone vazio diz que a página ainda não está ligada à
+Athena e pede o blotter; o `import-api` dela responde 501
+`dce_api_not_connected`; o pull automático (`_fxo_api_pull`) é só do onshore,
+mesmo chamado de dentro de um request da DCE. Para ligar depois: o cadastro de
+interbook da DCE em `FXO_VARIANTS`, a rota `import-api` apontando para o pull
+com `variant='dce'`, o laço do scheduler aplicando os mesmos registros às duas
+variantes (`_fxo_api_fetch` + `_fxo_api_apply`, já separados) e o dropzone do
+template de volta ao pull. Os guardas que contam telas (o `check_nd_mapping_b3`)
+passaram a incluir a sétima. `check_dce_fxo.py`.

@@ -78,11 +78,70 @@ def _nd_file_list(base, suffix):
     return lista
 
 
+# ── As duas páginas de opção de câmbio (§721) ────────────────────────────────
+# New Deals › Option › FXO (o ONSHORE, de sempre) e New Deals › DCE › FXO (o
+# OFFSHORE) são a MESMA tela e o mesmo backend, cada uma com o seu cache e o seu
+# rótulo no sino. A variante do request é posta pelas rotas da DCE
+# (`g.nd_fxo_variant`); fora de request quem chama a passa. A DCE ainda NÃO
+# está ligada à API da Athena (equipe, 28/10/2026): entra pelo xlsx e pelo Add
+# Row, e por isso não tem cadastro de interbook (`interbook: None`) nem pull.
+FXO_VARIANTS = {
+    'onshore': {'dir': 'OPT_FXO_CACHE_DIR', 'interbook': 'interbook-fxo',
+                'label': 'Opt FXO', 'page': '/new_deals-opt-fxo', 'file': 'FXO'},
+    'dce':     {'dir': 'DCE_FXO_CACHE_DIR', 'interbook': None,
+                'label': 'DCE FXO', 'page': '/new_deals-dce-fxo', 'file': 'FXO_DCE'},
+}
+
+
+def _fxo_variant(variant=None):
+    """'onshore' ou 'dce': o explícito, senão o do request, senão o onshore."""
+    if variant in FXO_VARIANTS:
+        return variant
+    try:
+        from flask import g, has_request_context
+        if has_request_context():
+            v = g.get('nd_fxo_variant')
+            if v in FXO_VARIANTS:
+                return v
+    except Exception:                                   # noqa: BLE001
+        pass
+    return 'onshore'
+
+
+def _fxo_cfg(variant=None):
+    return FXO_VARIANTS[_fxo_variant(variant)]
+
+
+def _fxo_cache_dir(variant=None):
+    """O cache da variante, lido do `routes` na HORA (os testes o trocam)."""
+    from apps.pages import routes
+    return getattr(routes, _fxo_cfg(variant)['dir'])
+
+
+def _fxo_page_label(variant=None):
+    """O rótulo da página no sino ('Opt FXO' / 'DCE FXO' — os três mapas)."""
+    return _fxo_cfg(variant)['label']
+
+
+def _fxo_files_in(cache_dir):
+    from apps.pages import routes
+    return [(fp, mt, sz) for fp, _fn, mt, sz in routes._day_files(cache_dir, '_optfxo.json')]
+
+
 @once_per_request
 def _optfxo_file_list():
     from apps.pages import routes
-    return [(fp, mt, sz) for fp, _fn, mt, sz in
-            routes._day_files(routes.OPT_FXO_CACHE_DIR, '_optfxo.json')]
+    return _fxo_files_in(routes.OPT_FXO_CACHE_DIR)
+
+
+@once_per_request
+def _dcefxo_file_list():
+    from apps.pages import routes
+    return _fxo_files_in(routes.DCE_FXO_CACHE_DIR)
+
+
+def _fxo_file_list(variant=None):
+    return _dcefxo_file_list() if _fxo_variant(variant) == 'dce' else _optfxo_file_list()
 
 def _ndf_ter_path(ref, max_back=10, exact=False):
     """Newest existing DPOSICAO-TER (path, dref) walking back from `ref` (D-1 ANBIMA).
@@ -369,7 +428,7 @@ def _find_fxo(deal_name, client_name=None):
     razão) do `_find_deal_in_cache` acima: listagem uma vez por request,
     leitura pelo memo do daycache."""
     from apps.pages import routes
-    for fpath, mtime, size in reversed(_optfxo_file_list()):   # newest first
+    for fpath, mtime, size in reversed(_fxo_file_list()):   # newest first (da variante)
         try:
             deals = routes._day_json(fpath, mtime, size, strict=True)
             for i, deal in enumerate(deals):
@@ -592,16 +651,18 @@ def _fxo_deal_from_row(get, sid, refmap, refmap_acr=None):
     }
 
 
-def _fxo_persist_deals(deals):
-    """Upsert FXO deals into per-TradeDate _optfxo.json by Deal+Client. Returns count."""
+def _fxo_persist_deals(deals, variant=None):
+    """Upsert FXO deals into per-TradeDate _optfxo.json by Deal+Client. Returns count.
+    O cache é o da variante (§721)."""
     from apps.pages import routes
+    cache_dir = _fxo_cache_dir(variant)
     by_file = {}
     for d in deals:
         try:
             ref_date = datetime.strptime(d.get('TradeDate', ''), '%d/%m/%Y')
         except (ValueError, TypeError):
             ref_date = datetime.now()
-        dir_path = os.path.join(routes.OPT_FXO_CACHE_DIR, ref_date.strftime('%Y'), ref_date.strftime('%m'))
+        dir_path = os.path.join(cache_dir, ref_date.strftime('%Y'), ref_date.strftime('%m'))
         fpath = os.path.join(dir_path, ref_date.strftime('%Y%m%d') + '_optfxo.json')
         by_file.setdefault(fpath, (dir_path, []))[1].append(d)
 
@@ -927,11 +988,13 @@ def _nd_cancel_in_file(fpath, deal_name):
         return removed, marked
 
 
-def _fxo_persist_new_deals(deals):
+def _fxo_persist_new_deals(deals, variant=None):
     """Insert deals whose Deal+Client is new; existing ones are compared with
     the incoming API data — any difference applies the new values, flips the
-    Status to Amend and records AmendChanged. Returns (inserted, amended_names)."""
+    Status to Amend and records AmendChanged. Returns (inserted, amended_names).
+    O cache é o da variante (§721)."""
     from apps.pages import routes
+    cache_dir = _fxo_cache_dir(variant)
     fresh, amended, seen_files = [], [], {}
     with routes._cache_lock:
         for d in deals:
@@ -939,7 +1002,7 @@ def _fxo_persist_new_deals(deals):
                 ref_date = datetime.strptime(d.get('TradeDate', ''), '%d/%m/%Y')
             except (ValueError, TypeError):
                 ref_date = datetime.now()
-            fpath = os.path.join(routes.OPT_FXO_CACHE_DIR, ref_date.strftime('%Y'), ref_date.strftime('%m'),
+            fpath = os.path.join(cache_dir, ref_date.strftime('%Y'), ref_date.strftime('%m'),
                                  ref_date.strftime('%Y%m%d') + '_optfxo.json')
             if fpath not in seen_files:
                 existing = []
@@ -971,19 +1034,25 @@ def _fxo_persist_new_deals(deals):
             if st['dirty']:
                 routes._atomic_write_json(fpath, st['existing'])
     if fresh:
-        _fxo_persist_deals(fresh)
+        _fxo_persist_deals(fresh, variant)
     return fresh, amended
 
 
-def _fxo_deals_from_api_records(records, sid):
+def _fxo_deals_from_api_records(records, sid, contagem=None, variant=None):
     """Athena getTrades records → (deal dicts, cancelados). Cancelados são os
     registros com isCancelled = true: (Deal, TradeDate dd/mm/yyyy) para marcar
     Status='Canceled' no cache quando o deal já tiver sido importado. isDead não
-    conta como cancelamento — ver `_api_rec_is_cancelled` (§173)."""
+    conta como cancelamento — ver `_api_rec_is_cancelled` (§173).
+
+    A perna interbook cadastrada no `interbook-fxo` (§720) não vira deal: é a
+    equipe contra a equipe, sem registro na B3.
+    `contagem` (dict), quando vem, recebe `interbook` = quantas saíram por ele."""
     from apps.pages import routes
     refmap = routes._fxo_refdata_by_spn()
     refmap_acr = _fxo_refdata_by_accronym(refmap)
-    deals, cancelled = [], []
+    _ib = _fxo_cfg(variant)['interbook']
+    interbook = _interbook_rules(_ib) if _ib else []
+    deals, cancelled, n_interbook = [], [], 0
     for rec in _api_live_records(records):
         if not isinstance(rec, dict):
             continue
@@ -997,16 +1066,19 @@ def _fxo_deals_from_api_records(records, sid):
             if nm:
                 cancelled.append((nm, _fxo_date_dmy(norm.get('TRADE DATE'))))
             continue
+        if interbook and _interbook_hit(norm, interbook):
+            n_interbook += 1
+            continue
         deal = _fxo_deal_from_row(norm.get, sid, refmap, refmap_acr)
         if deal:
             deals.append(deal)
+    if contagem is not None:
+        contagem['interbook'] = n_interbook
     return deals, cancelled
 
-def _fxo_api_pull(sid='API', actor_name='Athena API', ref_date=None):
-    """Fetch the reference date's FXO trades from the Athena API and insert the
-    new ones. Shared by the manual Import button (which sends the Reference Date
-    field, default today) and the hourly scheduler (always today). Raises on
-    network/SSO errors — callers decide how loud to be about it."""
+def _fxo_api_fetch(ref_date=None):
+    """(data de referência, 'AAAAMMDD', registros) da API de FXO da Athena.
+    Levanta no erro de rede/SSO."""
     from apps.pages import routes
     from apps.pages import athena_api
     if not athena_api.is_available():
@@ -1015,9 +1087,29 @@ def _fxo_api_pull(sid='API', actor_name='Athena API', ref_date=None):
     ref_dt = routes._api_ref_date(ref_date)
     date = ref_dt.strftime('%Y%m%d')
     payload = athena_api.fetch_fxo_trades(date)
-    records = athena_api.extract_records(payload)
-    deals, cancelled = _fxo_deals_from_api_records(records, sid)
-    inserted, amended = _fxo_persist_new_deals(deals)
+    return ref_dt, date, athena_api.extract_records(payload)
+
+
+def _fxo_api_pull(sid='API', actor_name='Athena API', ref_date=None):
+    """Fetch the reference date's FXO trades from the Athena API and insert the
+    new ones. Shared by the manual Import button (which sends the Reference Date
+    field, default today) and the hourly scheduler (always today). Raises on
+    network/SSO errors — callers decide how loud to be about it. Só o Opt FXO
+    (onshore): a DCE não está ligada à API (§721)."""
+    ref_dt, date, records = _fxo_api_fetch(ref_date)
+    return _fxo_api_apply(records, ref_dt, date, sid, actor_name, 'onshore')
+
+
+def _fxo_api_apply(records, ref_dt, date, sid='API', actor_name='Athena API', variant=None):
+    """Os registros já buscados → a página da variante: filtro de interbook
+    dela, amend/insert no cache dela, cancelamentos, sino com o rótulo dela."""
+    from apps.pages import routes
+    variant = _fxo_variant(variant)
+    cache_dir = _fxo_cache_dir(variant)
+    contagem = {}
+    deals, cancelled = _fxo_deals_from_api_records(records, sid, contagem, variant)
+    skipped_interbook = contagem.get('interbook', 0)
+    inserted, amended = _fxo_persist_new_deals(deals, variant)
     # isCancelled na API → a linha SAI do arquivo do dia (a operação não existe
     # mais). Só quem já foi registrado na B3 fica, como 'Canceled'.
     removed = canceled = 0
@@ -1027,7 +1119,7 @@ def _fxo_api_pull(sid='API', actor_name='Athena API', ref_date=None):
         except ValueError:
             rd = ref_dt
         r, c = _nd_cancel_in_file(
-            os.path.join(routes.OPT_FXO_CACHE_DIR, rd.strftime('%Y'), rd.strftime('%m'),
+            os.path.join(cache_dir, rd.strftime('%Y'), rd.strftime('%m'),
                          rd.strftime('%Y%m%d') + '_optfxo.json'), nm)
         removed += r
         canceled += c
@@ -1041,19 +1133,20 @@ def _fxo_api_pull(sid='API', actor_name='Athena API', ref_date=None):
             bits.append('{} removed (cancelled)'.format(removed))
         if canceled:
             bits.append('{} canceled'.format(canceled))
-        routes._create_notification(sid, actor_name, 'New Deals', 'Opt FXO',
+        routes._create_notification(sid, actor_name, 'New Deals', _fxo_page_label(variant),
                              'Athena API{}: {} deal(s)'.format(routes._api_ref_suffix(ref_dt),
                                                               ', '.join(bits)))
     # Mesma prestação de contas do pull de NDF: "veio 0" tem de dizer se a API
     # devolveu nada ou se os registros foram descartados, e por quê.
-    log.info('[opt-fxo] pull ref=%s: %d fetched · %d parseados · importados=%d '
+    log.info('[opt-fxo] pull %s ref=%s: %d fetched · %d parseados · importados=%d '
              'amendados=%d · cancelados na API=%d (linhas removidas=%d, '
-             'marcadas Canceled por já terem B3 ID=%d)',
-             date, len(records), len(deals), len(inserted), len(amended),
-             len(cancelled), removed, canceled)
+             'marcadas Canceled por já terem B3 ID=%d) · interbook=%d',
+             variant, date, len(records), len(deals), len(inserted), len(amended),
+             len(cancelled), removed, canceled, skipped_interbook)
     return {'success': True, 'date': date, 'fetched': len(records),
             'parsed': len(deals), 'imported': len(inserted),
             'amended': len(amended), 'canceled': canceled, 'removed': removed,
+            'skipped_interbook': skipped_interbook,
             # chave 'dead' mantida: é o que as 4 telas leem para o resumo do
             # import. O conteúdo é só isCancelled desde §173.
             'dead': len(cancelled), 'deals': inserted}
@@ -1466,9 +1559,18 @@ def _ndf_interbook_rules():
     """Regras do filtro interbook como (campo A, valor A, campo B, valor B), com
     valores já achatados por _ndf_flat. BOTH WAYS = YES gera também a linha com
     os valores trocados entre os dois campos."""
+    return _interbook_rules('interbook-ndf')
+
+
+def _fxo_interbook_rules():
+    """As regras do `interbook-fxo` (o import da API de FXO), na forma do NDF."""
+    return _interbook_rules('interbook-fxo')
+
+
+def _interbook_rules(key):
     from apps.pages import routes
     out = []
-    for r in routes._mapping_rows('interbook-ndf'):
+    for r in routes._mapping_rows(key):
         fa, fb = _ndf_api_key(r.get('FIELD A')), _ndf_api_key(r.get('FIELD B'))
         va, vb = _ndf_flat(r.get('VALUE A')), _ndf_flat(r.get('VALUE B'))
         if not (fa and fb and va and vb):
@@ -1482,7 +1584,12 @@ def _ndf_is_interbook(norm):
     """True quando o registro da API é uma perna interbook — pares cadastrados na
     tela Mapping (aba Interbook API). Predicado compartilhado: o mapeamento usa
     para descartar e o pull para contar, sem duplicar a regra."""
-    for fa, va, fb, vb in _ndf_interbook_rules():
+    return _interbook_hit(norm, _ndf_interbook_rules())
+
+
+def _interbook_hit(norm, regras):
+    """O registro normalizado da API casa com algum par cadastrado?"""
+    for fa, va, fb, vb in regras:
         if _ndf_flat(norm.get(fa)) == va and _ndf_flat(norm.get(fb)) == vb:
             return True
     return False

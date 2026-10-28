@@ -11,10 +11,11 @@ import io
 import json
 import os
 import re
+import functools
 import traceback
 from datetime import datetime
 
-from flask import jsonify, request, session
+from flask import g, jsonify, request, session
 
 from apps.pages import blueprint
 from apps.pages import data_store as _store  # noqa: E402
@@ -637,7 +638,7 @@ def api_save_fxo_cache():
     except (ValueError, TypeError):
         ref_date = datetime.now()
 
-    dir_path = os.path.join(_R().OPT_FXO_CACHE_DIR, ref_date.strftime('%Y'), ref_date.strftime('%m'))
+    dir_path = os.path.join(_R()._fxo_cache_dir(), ref_date.strftime('%Y'), ref_date.strftime('%m'))
     os.makedirs(dir_path, exist_ok=True)
     file_path = os.path.join(dir_path, ref_date.strftime('%Y%m%d') + '_optfxo.json')
 
@@ -677,7 +678,7 @@ def api_search_fxo_cache():
     # tamanho) e memo por arquivo, então a segunda busca não reabre o que não
     # mudou. A busca não tem intervalo de datas, então não há o que podar.
     matched = []
-    _dias = list(_R()._day_files(_R().OPT_FXO_CACHE_DIR, '_optfxo.json', strict=True))
+    _dias = list(_R()._day_files(_R()._fxo_cache_dir(), '_optfxo.json', strict=True))
     # UMA abertura de banco para todos os dias enumerados, em vez de
     # uma por dia: eles são tabelas do MESMO banco do produto (§4).
     _R()._day_prefetch(_dias)
@@ -733,13 +734,13 @@ def api_update_fxo_cache(deal_id):
             if str(_fields.get('Status', '')) != 'Sent':
                 _R()._create_notification(
                     session.get('user_sid', ''), session.get('user_name', ''),
-                    'Status Updated', 'Opt FXO',
+                    'Status Updated', _R()._fxo_page_label(),
                     deal_id + ' → ' + str(_fields.get('Status', '')) + _R()._nd_token(updated_deal.get('TradeDate'))
                 )
         else:
             _R()._create_notification(
                 session.get('user_sid', ''), session.get('user_name', ''),
-                'Deal Updated', 'Opt FXO',
+                'Deal Updated', _R()._fxo_page_label(),
                 deal_id + ' (' + ', '.join(_fields.keys()) + ')' + _R()._nd_token(updated_deal.get('TradeDate'))
             )
     return jsonify({"success": True, "status": updated_deal.get('Status', ''),
@@ -766,7 +767,7 @@ def api_delete_fxo_cache(deal_id):
 
     _R()._create_notification(
         session.get('user_sid', ''), session.get('user_name', ''),
-        'Deal Deleted', 'Opt FXO', deal_id + _R()._nd_token((removed or {}).get('TradeDate'))
+        'Deal Deleted', _R()._fxo_page_label(), deal_id + _R()._nd_token((removed or {}).get('TradeDate'))
     )
     return jsonify({"success": True})
 
@@ -777,7 +778,7 @@ def api_bulk_delete_fxo_cache():
     pairs = (request.get_json(silent=True) or {}).get('pairs', [])
     if not pairs:
         return jsonify({"success": False, "message": "No pairs provided"}), 400
-    return _nd_bulk_delete(_R()._find_fxo, pairs, 'Opt FXO')
+    return _nd_bulk_delete(_R()._find_fxo, pairs, _R()._fxo_page_label())
 
 @blueprint.route('/api/new-deals/opt-fxo/cache/bulk-patch', methods=['POST'])
 def api_fxo_bulk_patch_deal_cache():
@@ -786,7 +787,7 @@ def api_fxo_bulk_patch_deal_cache():
     patches = (request.get_json(silent=True) or {}).get('patches', [])
     if not patches:
         return jsonify({"success": False, "message": "No patches provided"}), 400
-    return _nd_bulk_patch(_R()._find_fxo, patches, 'Opt FXO',
+    return _nd_bulk_patch(_R()._find_fxo, patches, _R()._fxo_page_label(),
                           ajusta=lambda d: _R()._fxo_order_deal(d))
 
 @blueprint.route('/api/new-deals/opt-fxo/import-api', methods=['POST'])
@@ -832,7 +833,7 @@ def api_fxo_cache_batch():
     saved = _R()._fxo_persist_deals(deals)
     if saved:
         _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                             'New Deals', 'Opt FXO',
+                             'New Deals', _R()._fxo_page_label(),
                              '{} deal{} imported from XLSX'.format(saved, '' if saved == 1 else 's'))
     return jsonify({'success': True, 'imported': saved})
 
@@ -896,7 +897,7 @@ def api_fxo_import_xlsx():
         saved = _R()._fxo_persist_deals(deals)
         if saved:
             _R()._create_notification(sid, session.get('user_name', ''),
-                                 'New Deals', 'Opt FXO',
+                                 'New Deals', _R()._fxo_page_label(),
                                  '{} deal{} imported from XLSX'.format(saved, '' if saved == 1 else 's'))
     return jsonify({'success': True, 'imported': saved, 'deals': deals, 'errors': errors})
 
@@ -1094,7 +1095,7 @@ def api_fxo_send_conecta():
         le_pair = _R()._opc_le_pair(client)
         view = _R()._b3_view_le(le_pair)
         fname = (_R()._fi_variant_file_name('opcoes-flexiveis-vcp', '/new_deals-opt-fxo', le_pair)
-                 or _opc_default_name('FXO', view))
+                 or _opc_default_name(_R()._fxo_cfg()['file'], view))
         dest = out_files.setdefault((view, fname), [])
 
         deal_count += 1
@@ -1123,7 +1124,7 @@ def api_fxo_send_conecta():
     header = _R()._fi_build_line('opcoes-flexiveis-vcp', 'header', {'4': today},
                             page_url='/new_deals-opt-fxo')
     if not out_files:
-        out_files[('JPM', 'FXO_Banco.txt')] = []   # lote só de cancelados: header, como sempre
+        out_files[('JPM', _opc_default_name(_R()._fxo_cfg()['file'], 'JPM'))] = []   # lote só de cancelados: header, como sempre
 
     try:
         if download:
@@ -1143,7 +1144,7 @@ def api_fxo_send_conecta():
             generated.append(os.path.basename(filepath))
         if deal_count > 0:
             _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                                 'Sent to B3', 'Opt FXO',
+                                 'Sent to B3', _R()._fxo_page_label(),
                                  str(deal_count) + ' deal' + ('' if deal_count == 1 else 's') + ' sent')
         # o arquivo JÁ está na pasta: o `Sent` vai no mesmo pedido (§685)
         _marcados, _falhas = _nd_marcar_enviados(_R()._find_fxo, deals, session.get('user_sid', ''))
@@ -1248,7 +1249,7 @@ def api_fxo_mapping_b3():
 
     # Deal da outra página de opção (o OPC é dos dois) ou de outro dia fica
     # sem dono aqui, e o retorno fica para quem o absorve (_nd_apaga_retornos)
-    _nd_apaga_retornos(linhas_por_arquivo, gravou, 'Opt FXO')
+    _nd_apaga_retornos(linhas_por_arquivo, gravou, _R()._fxo_page_label())
 
     # O sino conta o que FICOU GRAVADO, não o que se tentou: escrito
     # `len(results)`, ele anunciava para a mesa inteira um número que
@@ -1256,9 +1257,56 @@ def api_fxo_mapping_b3():
     _n_gravados = sum(1 for r in results if r.get('saved'))
     if _n_gravados:
         _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                             'B3 Mapped', 'Opt FXO',
+                             'B3 Mapped', _R()._fxo_page_label(),
                              str(_n_gravados) + ' deal' + ('' if _n_gravados == 1 else 's') + ' mapped')
     return jsonify({'ok': True, 'results': results})
+
+# ── New Deals › DCE › FXO (§721) ─────────────────────────────────────────────
+# A mesma tela do Opt FXO para a opção de câmbio OFFSHORE: as MESMAS funções
+# acima, com a variante `dce` no request — o cache (`DCE_FXO_CACHE_DIR`), o
+# rótulo do sino (`DCE FXO`) e o nome do arquivo da B3 (`FXO_DCE_<visão>`)
+# saem dela (`platform.new_deals.FXO_VARIANTS`). O layout da B3 é o mesmo
+# (`opcoes-flexiveis-vcp`, cadastro do /new_deals-opt-fxo). Sem `import-api`:
+# a DCE ainda não está ligada à API da Athena (equipe, 28/10/2026).
+_DCE_FXO_API = '/api/new-deals/dce-fxo'
+_DCE_FXO_ROTAS = (
+    ('/cache', api_save_fxo_cache, 'POST'),
+    ('/cache/search', api_search_fxo_cache, 'POST'),
+    ('/cache/<deal_id>', api_update_fxo_cache, 'PATCH'),
+    ('/cache/<deal_id>', api_delete_fxo_cache, 'DELETE'),
+    ('/cache/bulk-delete', api_bulk_delete_fxo_cache, 'POST'),
+    ('/cache/bulk-patch', api_fxo_bulk_patch_deal_cache, 'POST'),
+    ('/cache/batch', api_fxo_cache_batch, 'POST'),
+    ('/import-xlsx', api_fxo_import_xlsx, 'POST'),
+    ('/send-conecta', api_fxo_send_conecta, 'POST'),
+    ('/mapping-b3', api_fxo_mapping_b3, 'POST'),
+)
+
+
+def _na_dce(view):
+    """A view do Opt FXO respondendo pela página DCE FXO."""
+    @functools.wraps(view)
+    def _dce(*args, **kwargs):
+        g.nd_fxo_variant = 'dce'
+        return view(*args, **kwargs)
+    return _dce
+
+
+for _suf, _view, _met in _DCE_FXO_ROTAS:
+    blueprint.add_url_rule(_DCE_FXO_API + _suf, endpoint='dce_' + _view.__name__,
+                           view_func=_na_dce(_view), methods=[_met])
+
+
+@blueprint.route('/api/new-deals/dce-fxo/import-api', methods=['POST'])
+def api_dce_fxo_import_api():
+    """O Import com o dropzone vazio: a DCE não puxa a API (ainda) — diz isso,
+    em vez de 404."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    return jsonify({'success': False, 'code': 'dce_api_not_connected',
+                    'message': 'The DCE FXO page is not connected to the Athena API yet — '
+                               'import the XLSX blotter instead.'}), 501
+
 
 @blueprint.route('/api/new-deals/ndf-commodities/cache', methods=['POST'])
 def api_ndf_save_deal_cache():
@@ -2035,6 +2083,10 @@ def api_fxo_premium_email():
     if not drafts:
         return jsonify({'ok': True, 'count': 0})
     return _R()._email_drafts_response(drafts)
+
+
+blueprint.add_url_rule(_DCE_FXO_API + '/premium-email', endpoint='dce_api_fxo_premium_email',
+                       view_func=_na_dce(api_fxo_premium_email), methods=['POST'])
 
 @blueprint.route('/api/new-deals/opt-commodities/economic-affirmation', methods=['POST'])
 def api_opt_economic_affirmation_email():

@@ -31,6 +31,9 @@ _NDM_CARDS = [
     {'key': 'ndf-vanilla',        'label': 'NDF Vanilla',         'url': '/new_deals-ndf-vanilla',        'dirs': ('NDF/Vanilla',),                              'les': ('JPM', 'MGT', 'LAW')},
     {'key': 'opt-commodities',    'label': 'Commodities Options', 'url': '/new_deals-opt-commodities',    'dirs': ('Option/Commodities',),                       'les': ('JPM', 'LAW')},
     {'key': 'opt-fxo',            'label': 'FX Options',          'url': '/new_deals-opt-fxo',            'dirs': ('Option/FXO',),                               'les': ('JPM', 'LAW')},
+    # A réplica do FX Options para o OFFSHORE (New Deals › DCE › FXO, §721): o
+    # mesmo arquivo-dia `_optfxo.json`, no cache PRÓPRIO `DCE/FXO`.
+    {'key': 'dce-fxo',            'label': 'DCE FX Options',      'url': '/new_deals-dce-fxo',            'dirs': ('DCE/FXO',),                                  'les': ('JPM', 'LAW')},
     {'key': 'opt-equity',         'label': 'Equity Options',      'url': None, 'soon': True,              'dirs': ('Option/Equity', 'Option/Equities'),          'les': ('JPM', 'ATA')},
     # Swap: DOIS cards, e quem decide em qual a operação cai é a coluna LOB da
     # linha (`EDG` → Swap Equities, `CEM` → Swap CEM), não a PÁGINA em que ela
@@ -176,6 +179,7 @@ _NDM_TAXONOMY = {
     'ndf-vanilla':        ('NDF', 'Vanilla'),
     'opt-commodities':    ('Option', 'Commodities'),
     'opt-fxo':            ('Option', 'FX'),
+    'dce-fxo':            ('Option', 'DCE FX'),
     'opt-equity':         ('Option', 'Equity'),
     'swap-equities':      ('Swap', 'Equities'),
     'swap-cem':           ('Swap', 'CEM'),
