@@ -1385,8 +1385,8 @@ São **53**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   (`_ndf_le_refdata`) → senão o SPN da API → nada (badge *Missing
   Counterparty*, que é a falha desejada). Amend recheca; linha achada por
   `(Deal, Client)`, e só pelo Deal se ele for único no arquivo-dia.
-- **Toda gravação das seis telas espera o servidor e pinta o que ELE gravou**
-  (§685, `static/js/nd-write.js`): Edit, Confirm, Send, Apply Column e Delete.
+- **Toda gravação das sete telas (as seis de NDF/Opção e a DCE FXO, §721) espera o
+  servidor e pinta o que ELE gravou** (§685, `static/js/nd-write.js`): Edit, Confirm, Send, Apply Column e Delete.
   O bulk responde par a par (`done`/`not_found`/`refused`); o PATCH devolve o
   `status` gravado (Edit numa linha Sent/Success segue a régua do Amend:
   econômico → `Amend`, cosmético → fica); o **send-conecta confere status e
@@ -1490,7 +1490,7 @@ São **53**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   confundi-los manda a mesa procurar no arquivo de retorno um problema que está
   do lado de cá), as duas saídas logam `[MAPPING-B3]` com deal e cliente, o que
   não gravou não vira espelho em Intrag nem Pending Confirmation, e o sino conta
-  os GRAVADOS. Nas seis telas o `saved` é testado ANTES do `Success`.
+  os GRAVADOS. Nas sete telas (com a DCE FXO) o `saved` é testado ANTES do `Success`.
   `check_nd_mapping_b3.py`.
 - **O notional do NDF é SEMPRE o da moeda que não é BRL nem USD** (§485,
   `_ndf_notional_leg`): com BRL no par, a outra perna (USD/BRL → USD, CNH/BRL
