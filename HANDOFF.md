@@ -30553,3 +30553,106 @@ Data (acronym, SPN, cliente, Tax ID e o caminho) e o que o arquivo-dia tem.
 Se vier UM registro só, já com `SUZANOPEL33BRA`, o problema é do endpoint que o
 app chama (o cadastro de API Links), não do app.
 
+## §712 — Snowflake: o plano da migração dos bancos (2026-10-28)
+
+Pedido da equipe: começar a estrutura para trocar os DuckDB pelo Snowflake. O
+acesso ainda não existe; o plano está em [`Docs/MIGRACAO_SNOWFLAKE.md`](Docs/MIGRACAO_SNOWFLAKE.md),
+com o que depende do ambiente marcado [A CONFIRMAR].
+
+O que a leitura do código decidiu:
+
+- **A costura já existe.** O app fala em caminhos de `.json` e só o armazém
+  (`data_store` + `json_to_duckdb.target_of`) sabe que há banco; fora dele, sete
+  módulos têm SQL próprio (usuários, sino, Pending, esteira, Onboarding,
+  comitentes, Database Explorer). As duas camadas viram backends escolhidos por
+  `OTC_DB_BACKEND`, e a dev fica em DuckDB.
+- **No Snowflake o armazém é chave → documento** (`STORE_MANIFEST`,
+  `STORE_DOC`, `STORE_ROWS`), não 188 bancos com uma tabela por dia: essa forma
+  só existe pelo catálogo do DuckDB (§437), e o app já reconstrói tudo do `_raw`.
+- **O "mudou?" deixa de ser o `stat` do `.db`**: uma `version` no manifest e
+  um laço de fundo que invalida o memo; o request não vai ao Snowflake para
+  saber se algo mudou. O preço é a edição de outra instância aparecer em até N
+  segundos, e o N sai da medição da Fase 0.
+- **Trava de arquivo vira transação + versão otimista**; os claims diários dos
+  schedulers viram linha numa tabela.
+
+As fases (0 acesso e medição → 7 desligar o que só existia pelo arquivo) têm
+critério de saída e volta atrás pela flag. Próximo passo: o material da página
+do Snowflake do JPM, para fechar os [A CONFIRMAR] e montar o projeto.
+
+**Revisão com a página do Stratos sobre o Snowflake (mesmo dia).** A conexão
+é a do `stratosblocks`: token OAuth do **FID da solução**
+(`solution_fid.token_retrieval`), o conector pelo proxy do `get_proxies`
+(`proxy_host`/`proxy_port` explícitos — ele não é cliente HTTP do
+stratosblocks, e sem isso falha de forma intermitente) e liberação de rede por
+ticket em go/stratossupport com todos os hosts (conta, OCSP, stages). Três
+consequências no plano: o FID no lugar do par de chaves (os schedulers rodam
+sem usuário, e quem filtra acesso é o próprio app); a receita mora no overlay
+(`stratos/src/snowflake_stratos.py`) e a ponte injeta a fábrica de conexão no
+app, como o `proxy_interno`; e a instância Windows não alcança o Snowflake —
+ele entra pelo Stratos, depois da virada com o DuckDB no EFS, uma mudança por
+vez.
+
+## §713 — Stratos: o Dashboard e o New Deals vazios — a caixa das pastas (2026-10-28)
+
+**Sintoma.** No Stratos, com o pacote dos bancos ativo, o Dashboard e as telas
+de New Deals não traziam nada, em data nenhuma; as outras telas traziam.
+
+**Causa.** O app nasceu num sistema de arquivos que não diferencia maiúscula
+de minúscula. No share, as pastas `db/cache/B3 Files` e `db/cache/New Deals`
+foram criadas pela importação a partir do disco, e o código pede
+`cache/b3 files` e `cache/new deals` (`routes.B3_JSON_ROOT`,
+`NEW_DEALS_CACHE_ROOT`); dentro dos bancos, o `_manifest` tem as duas grafias
+(`cache/New Deals/…` da importação, `cache/new deals/…` do que o app gravou
+depois), e arquivos como `dce option.db`/`unwind.db`/`cashflow.db` contra
+`DCE Option`/`Unwind`/`Cashflow` no código. No Windows tudo isso casa. No EFS
+(Linux) são pastas e chaves diferentes: o `.db` "não existe", a leitura cai em
+"ausente" e a tela abre vazia, sem erro. As outras pastas do `db/cache`
+(`daily settlement`, `payrec`, `unwinds`…) já estavam em minúsculas — por isso
+só essas duas telas. Confirmado pelo `dir` e pelo `min(path)` dos manifests do
+pacote de 27/10.
+
+**Correção** (no armazém, `data_store.py`): num sistema que diferencia caixa
+ele passa a se comportar como o Windows — `_db_abs` resolve o `.db` pela
+grafia que existe, `_achar` acha a chave do manifest em outra grafia e entrega
+ao núcleo a grafia GRAVADA, a listagem compara sem caixa e devolve a grafia
+pedida, o `remove` tira todas. A detecção é a pasta `db/` com a caixa trocada;
+no Windows e no Mac nada muda. Não precisa de pacote novo: o Stratos lê o que
+já está lá depois do deploy do código.
+
+**O export parcial** (só `B3 Files` e `New Deals`), pedido no meio da
+investigação, não existe e não serviria: o Activate troca a pasta de dados
+INTEIRA pela do pacote.
+
+## §714 — Stratos: a Athena com o token do IDA no lugar do Kerberos (2026-10-28)
+
+No desktop a única coisa do app que usa Kerberos é a sessão da Athena
+(`athena_api.build_session` → `HttpNegotiateAuth` → ADFS `/adfs/oauth2/authorize/wia`);
+no Linux do Stratos não há ticket nem `requests-negotiate-sspi`, e a rota pelo
+proxy (§709) chegava ao ADFS sem ter com o que autenticar. O resto que aparece
+numa busca por "Kerberos" é a fila do proxy de internet do Windows
+(`precificador/rede.py`), que no Stratos não roda.
+
+O Stratos emite um token do IDAnywhere de duas formas (páginas *User
+Authentication* e *FID Authentication*): do USUÁRIO
+(`UserAuthentication().get_resource_token`, com os recursos registrados no
+`StratosAuth(app, resources=[…])`) ou de um FID (`fid.get_stratos_fid_token`,
+o FID compartilhado do Stratos; `solution_fid.token_retrieval`, o FID próprio
+da solução). Ficou o **FID**: os laços de fundo da Athena rodam sem ninguém
+logado, e a linha do `StratosAuth` está no bloco DO NOT DELETE do
+`solution.py`, que o pipeline confere com o template.
+
+Só na branch do Stratos: `stratos/src/ida_token.py` embrulha a sessão POR FORA
+do desvio do proxy (vê o host da Athena, põe o `Authorization: Bearer`; o proxy
+troca a URL depois; cada salto de redirecionamento passa de novo), com o token
+em cache por 45 min e um 401 pedindo outro uma vez. Configuração por variável
+de ambiente da solução (`OTC_STRATOS_IDA_RECURSOS` = `host=recurso`,
+`OTC_STRATOS_FID_APP_ID`, `OTC_STRATOS_IDA_AMBIENTE`, `OTC_STRATOS_IDA_TTL_MIN`);
+sem recurso, nada muda. `/stratos/ida` (master) diz se o token sai, nunca o
+mostra, e devolve o erro cru. `stratos/tests/check_ida_token.py`, chamado pelo
+`check_stratos.py`. Os passos para conseguir o acesso estão no
+`stratos/README.md`.
+
+A CONFIRMAR: o recurso do IDA da Athena (time da Athena) e se a API aceita o
+bearer no lugar do ADFS.
+
