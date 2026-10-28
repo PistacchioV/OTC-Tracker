@@ -149,7 +149,7 @@ def emails_of(sids):
 
 def send(subject, html, to_list, cc_list):
     """Envia pelo relay da casa, do SHARED_MAILBOX, com o timbre (cid) que o
-    `_email_shell` pede. → True ou o motivo (texto)."""
+    `_email_shell` pede (o do OTC Tracker, `logo='otc'`). → True ou o motivo (texto)."""
     from apps.pages import otc_emails
     R = _routes()
     if not to_list:
@@ -164,11 +164,10 @@ def send(subject, html, to_list, cc_list):
     alt.attach(MIMEText(subject, 'plain', 'utf-8'))
     alt.attach(MIMEText(html, 'html', 'utf-8'))
     msg.attach(alt)
-    logo = otc_emails._logo_bytes()
-    if logo:
-        img = MIMEImage(logo)
-        img.add_header('Content-ID', '<' + otc_emails._E_LOGO_CID + '>')
-        img.add_header('Content-Disposition', 'inline', filename=os.path.basename(otc_emails._E_LOGO_FILE))
+    for cid, nome, dado in otc_emails.logo_parts(html):
+        img = MIMEImage(dado)
+        img.add_header('Content-ID', '<' + cid + '>')
+        img.add_header('Content-Disposition', 'inline', filename=nome)
         msg.attach(img)
     try:
         with smtplib.SMTP(R.SMTP_HOST, R.SMTP_PORT, timeout=30) as server:

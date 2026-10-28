@@ -74,6 +74,18 @@ _E_LOGO_CID  = 'jpmwordmark'
 _E_LOGO_FILE = os.path.normpath(os.path.join(
     os.path.dirname(__file__), '..', 'static', 'images', 'LogoJPMorgan-email.png'))
 _E_LOGO_W, _E_LOGO_H = 140, 29
+# O timbre do OTC Tracker, para os e-mails do PRÓPRIO app (o alerta das
+# iniciativas): derivado de images/logo-black.png (o fundo do cabeçalho é
+# branco), com a margem transparente cortada e 3x o tamanho exibido.
+_E_OTC_LOGO_CID = 'otctrackerlogo'
+_E_OTC_LOGO_FILE = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), '..', 'static', 'images', 'logo-black-email.png'))
+_E_OTC_LOGO_W, _E_OTC_LOGO_H = 77, 44
+# timbre → (cid, arquivo, alt, largura, altura)
+_E_LOGOS = {
+    'jpm': (_E_LOGO_CID, _E_LOGO_FILE, 'J.P.Morgan', _E_LOGO_W, _E_LOGO_H),
+    'otc': (_E_OTC_LOGO_CID, _E_OTC_LOGO_FILE, 'OTC Tracker', _E_OTC_LOGO_W, _E_OTC_LOGO_H),
+}
 
 _E_BLUE  = '#0066cc'
 _E_NAVY  = '#243b53'
@@ -188,10 +200,13 @@ def _email_notice(html):
             '<span style="font-weight:700;">Importante:</span> ' + html + '</td></tr></table>')
 
 
-def _email_shell(title, ref_date, intro_html, body_html, footer_extra='', width=640):
+def _email_shell(title, ref_date, intro_html, body_html, footer_extra='', width=640, logo='jpm'):
     """Corporate card: J.P. Morgan wordmark, Action-Blue accent, title, body, footer.
     `footer_extra`: linha adicional no fim da assinatura (ex.: a classificação
-    "JPMC Internal Use Only" dos e-mails internos de mensageria)."""
+    "JPMC Internal Use Only" dos e-mails internos de mensageria). `logo='otc'`
+    troca o timbre pelo do OTC Tracker (cid `_E_OTC_LOGO_CID`): quem envia
+    anexa a imagem pelo `logo_parts(html)`."""
+    cid, _arq, alt, lw, lh = _E_LOGOS[logo]
     return (
         # bgcolor ATTRIBUTES alongside the inline styles: Outlook (Word engine and
         # outlook.com) drops style backgrounds on body/table in some render paths,
@@ -223,10 +238,10 @@ def _email_shell(title, ref_date, intro_html, body_html, footer_extra='', width=
         '<tr><td style="padding:24px 34px 0;">'
         '<table role="presentation" width="100%"><tr>'
         '<td style="font-size:16px;font-weight:700;letter-spacing:.16em;color:#1d1d1f;">'
-        '<img src="cid:' + _E_LOGO_CID + '" alt="J.P.Morgan" '
-        'width="' + str(_E_LOGO_W) + '" height="' + str(_E_LOGO_H) + '" '
+        '<img src="cid:' + cid + '" alt="' + alt + '" '
+        'width="' + str(lw) + '" height="' + str(lh) + '" '
         'style="display:block;border:0;outline:none;text-decoration:none;'
-        'width:' + str(_E_LOGO_W) + 'px;height:' + str(_E_LOGO_H) + 'px;"></td>'
+        'width:' + str(lw) + 'px;height:' + str(lh) + 'px;"></td>'
         '<td align="right" style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:' +
         _E_MUTED + ';">' + _esc(ref_date) + '</td>'
         '</tr></table></td></tr>'
@@ -2003,6 +2018,25 @@ def _logo_bytes():
         except Exception:
             _LOGO_CACHE['data'] = None
     return _LOGO_CACHE['data']
+
+
+def logo_parts(html):
+    """[(cid, nome do arquivo, bytes)] dos timbres que o `html` pede: o envio
+    anexa cada um como parte inline. Arquivo ausente fica de fora (o e-mail sai
+    sem a imagem, não deixa de sair)."""
+    out = []
+    for cid, arq, _alt, _w, _h in _E_LOGOS.values():
+        if ('cid:' + cid) not in html:
+            continue
+        if arq not in _LOGO_CACHE:
+            try:
+                with open(arq, 'rb') as fh:
+                    _LOGO_CACHE[arq] = fh.read()
+            except Exception:
+                _LOGO_CACHE[arq] = None
+        if _LOGO_CACHE[arq]:
+            out.append((cid, os.path.basename(arq), _LOGO_CACHE[arq]))
+    return out
 
 
 def _safe_filename(s):
