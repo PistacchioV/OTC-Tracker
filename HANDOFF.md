@@ -30695,3 +30695,33 @@ seguem certos. `check_page_access_prefix.py`.
 **Depois do deploy:** quem foi salvo no Stratos antes da correção ficou com `[]`
 no banco de lá — abrir o /page-access e salvar de novo (Full access ou a lista).
 
+## §717 — Recompra no Pending Confirmation: vencimento e status por Total × Parcial (2026-10-28)
+
+Pedido da equipe. A recompra entrava no Pending Confirmation como qualquer
+produto da esteira: Maturity Date = a liquidação da recompra, Pending Status =
+`Pending OTC`. Agora:
+
+- **Parcial** (o contrato segue aberto): Maturity Date = o vencimento da
+  operação ORIGINAL (`MaturityDate`, da posição) e Pending Status pelo tipo de
+  assinatura da contraparte no Reference Data — `Pending Digital Signature`
+  (Digital) ou `Pending Original` (Manual / sem cadastro); Internal sai
+  `Exception Digital Fep Web`, a regra de sempre. A do prazo (≤ 60 dias) não
+  entra.
+- **Total** (o saldo zera): Maturity Date = a data da recompra e
+  `Exception Digital Fep Web` — o Status vira `Ok` pela regra do próprio Pending.
+
+Total × Parcial é a MESMA pergunta do Termo (`domain.recompra_total`); saldo que
+não se sabe conta como parcial (fechar como Ok o que talvez não encerre o
+contrato tiraria da fila uma confirmação devida). Sem o vencimento original
+fica a liquidação. A regra mora em `unwinds.commands.pending_da_recompra`, que
+o `confirmation_deal` da Fase 1 põe no deal como chaves `_pc_*`; o catálogo
+(NDF/Opção de Commodities, Swap EDG) passa pelo mesmo `confirmation_deal`. A
+platform (`_pc_row_from_deal`) lê `_pc_maturity`, `_pc_pending_status` e
+`_pc_por_assinatura` (este depois do `_pc_refdata_enrich`, que traz o
+Signature Type). A esteira segue igual: o Termo de Resilição continua sendo
+cobrado lá, e o `_mc_pc_sync` não reescreve um Pending Status que não é etapa.
+
+**Só a linha NOVA.** Na que já existe o Pending Status é da equipe (o merge só
+atualiza as `_PC_DEAL_COLUMNS` — a Maturity Date se acerta no reimport, o status
+não). `check_unwind_pending.py`.
+
