@@ -188,6 +188,41 @@ try:
           (['Pending'], ['/OTC DERIVATIVES PRODUCTS']))
     check('a conta do Banco nunca e par de perna de cliente',
           RP._match_allowed({'cpty': 'CLIENTE X', 'pay_receive': 'Receive'}, receb), False)
+
+    # §719: a MGT pagando o Banco (reversão Receive). O dinheiro aparece nos DOIS
+    # extratos: a TED de derivativos da MGT sem cliente (`Derivativos`) e o
+    # recebimento do Banco sem remetente. Os dois são a reversão, e nada sobra.
+    rev_rec = [ob('26E001', '73760.20-5', '04880.00-6', '-30000,00')]   # reversão +30000
+    ted_mgt = {'value': -30000.0, 'client': 'Derivativos', 'sistema': 'SPB - MGT',
+               'snumconta': '', 'product': 'NDF', 'pay_receive': 'Pay', 'le': 'MGT'}
+    rec_banco = {'value': 30000.0, 'client': '', 'sistema': 'SDConta - conta externa',
+                 'snumconta': '', 'product': 'NDF', 'pay_receive': 'Receive', 'le': 'JPM'}
+
+    def rev_rec_de(out):
+        return [r for r in out['pending_receivement'] + out['settled'] if r.get('branch') == 'reversal']
+
+    def soltas(out):
+        return [(r['le'], r['client_value']) for r in out['pending_payment'] + out['pending_receivement']
+                if not r.get('branch')]
+
+    dois = run(rev_rec, [dict(ted_mgt), dict(rec_banco)], ndf=[])
+    check('MGT paga o Banco: a TED "Derivativos" e o recebimento do Banco fecham a reversao',
+          [(r['status'], r['client_value']) for r in rev_rec_de(dois)], [('Settled', 30000.0)])
+    check('   e nenhuma das duas sobra pendente', soltas(dois), [])
+    check('   o resumo do Receive fecha (o mesmo dinheiro conta uma vez)',
+          [x['check_value'] for x in dois['summary'] if x['pay_receive'] == 'Receive'], ['OK'])
+    check('so a TED da MGT tambem fecha',
+          [r['status'] for r in rev_rec_de(run(rev_rec, [dict(ted_mgt)], ndf=[]))], ['Settled'])
+    check('so o recebimento do Banco tambem fecha',
+          [r['status'] for r in rev_rec_de(run(rev_rec, [dict(rec_banco)], ndf=[]))], ['Settled'])
+    nomeada = dict(ted_mgt, client='CLIENTE Z')
+    check('TED da MGT que nomeia um cliente NAO e a reversao',
+          ([r['status'] for r in rev_rec_de(run(rev_rec, [dict(nomeada)], ndf=[]))],
+           soltas(run(rev_rec, [dict(nomeada)], ndf=[]))),
+          (['Pending'], [('MGT', -30000.0)]))
+    check('recebimento do Banco com remetente cliente NAO e a reversao',
+          [r['status'] for r in rev_rec_de(run(rev_rec, [dict(rec_banco, client='CLIENTE Z')], ndf=[]))],
+          ['Pending'])
 finally:
     (RP._gather_sources, RP._persist, RP._load_net_type_map, RP._apply_carry_forward,
      RP._net_type_for, RP._settlement_exception_for, RP._is_bank_cpty) = _stubs
