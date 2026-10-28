@@ -3156,6 +3156,14 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   (`_PC_ESTEIRA_STATUSES`, FWD Start incluído mesmo com prazo curto); a regra
   do VENCIDO é universal (`_pc_apply_auto_rules`: Maturity ≤ hoje e não
   resolvido → `Exception FepWeb` + `Ok`).
+  **A recompra é exceção na entrada** (equipe, 28/10/2026, §717;
+  `unwinds.commands.pending_da_recompra`, que o catálogo usa pelo mesmo
+  `confirmation_deal`): PARCIAL entra com a Maturity Date do contrato ORIGINAL e
+  o Pending Status pelo tipo de assinatura (`_pc_por_assinatura`); TOTAL
+  (`domain.recompra_total`) entra com a Maturity Date = a data da recompra e
+  `Exception Digital Fep Web` (Status `Ok`). Saldo desconhecido conta como
+  parcial. Só vale para a linha NOVA: na existente o Pending Status é da equipe
+  (o merge só atualiza as `_PC_DEAL_COLUMNS`, onde está a Maturity Date).
 - **A manutenção das 11:30 ABORTA quando uma leitura falha**
   (`_pc_load_rows(strict=True)`) — a leitura tolerante lê falha como banco
   vazio e o backlog não volta (§406). O chip `Status = Pending` esconde o
