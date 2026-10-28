@@ -896,7 +896,9 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   já filtrada, SOMA em vez de trocar), OK/Cancelar. A lista de cada coluna sai
   das linhas que passam nos filtros das OUTRAS. O valor comparado é o que a
   célula DESENHA (`render('display')`, sem HTML) — nunca `data()[col]`, que
-  numa tabela de objetos é `undefined`. **Data `dd/mm/aaaa` ordena como DATA**
+  numa tabela de objetos é `undefined`. O que a página desenha SÓ no DOM (o badge "Missing
+  Counterparty", §718) entra pelo gancho `otcCellText(linha, coluna, texto)`
+  que a tabela publica no próprio nó. **Data `dd/mm/aaaa` ordena como DATA**
   (02/10/2026, §618): o helper registra o tipo `otc-dmy` na FRENTE dos nativos (com
   hora e dentro de badge também) — o `date` do DataTables lê `05/09` como 9 de
   maio e a coluna caía em texto, ordenando pelo DIA no clique, no A→Z e na
@@ -3780,7 +3782,7 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (228 scripts)
+### `scripts/tests/` (229 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

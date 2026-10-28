@@ -51,6 +51,11 @@ window.MissingCounterparty = (function () {
         this.leAcrSet = null;      // acronyms de perna interna (mapping le-accronym)
         this.built  = false;
         var self = this;
+        // O funil de Excel (`excel-filter.js`) lê o que o DataTables desenha, e
+        // o badge é só DOM: sem este gancho "Missing Counterparty" não aparecia
+        // na lista de valores de nenhuma coluna.
+        var tnode = this.cfg.table && this.cfg.table.table && this.cfg.table.table().node();
+        if (tnode) tnode.otcCellText = function (rowIdx, col, txt) { return self.filterText(rowIdx, col, txt); };
         // Carrega o mapping já na criação: quando ele chega, redesenha os badges
         // (o RefData costuma chegar antes, então sem este refresh as linhas de
         // book interno ficariam marcadas até o próximo draw).
@@ -149,6 +154,20 @@ window.MissingCounterparty = (function () {
     Inst.prototype.badgeCols = function () {
         var c = this.cfg.cols || {};
         return [c.status].concat(c.info || []);
+    };
+
+    // O texto da célula como o refreshRow a deixa: no Status o badge SOZINHO
+    // (ele substitui o conteúdo), nas colunas de contraparte o texto + o badge.
+    Inst.prototype.filterText = function (rowIdx, col, txt) {
+        if (this.badgeCols().indexOf(col) === -1) return txt;
+        var rd = this.cfg.table.row(rowIdx).data();
+        if (!rd) return txt;
+        var v = this.rowVals(rd);
+        if (!this.isMissing(v.spn, v.acr)) return txt;
+        var label = this.t('badge-missing-cp', 'Missing Counterparty');
+        if (col === this.cfg.cols.status) return label;
+        txt = String(txt == null ? '' : txt).trim();
+        return txt ? txt + ' ' + label : label;
     };
 
     Inst.prototype.installSearch = function () {

@@ -85,10 +85,21 @@
     // sem HTML) — nunca `data()[col]`: tabela montada com objetos
     // (`columns: [{data: 'campo'}]`) não tem posição, e `row[3]` saía
     // `undefined` em toda linha, a lista inteira virando "(Vazias)" ou nada.
+    //
+    // O que a página desenha SÓ no DOM (o badge "Missing Counterparty" do
+    // `missing-counterparty.js`, que não troca o dado da célula) o render não
+    // conhece: a tabela publica no próprio nó um `otcCellText(linha, coluna,
+    // texto)` que devolve o texto como a célula aparece. Lido na hora (não no
+    // attach), porque a página pode ligá-lo antes ou depois deste arquivo.
     function cellKey(dt, rowIdx, col) {
         var v;
         try { v = dt.cell(rowIdx, col).render('display'); } catch (e) { v = ''; }
-        return keyOf(cellText(v));
+        var txt = cellText(v);
+        var hook = dt.settings()[0].nTable.otcCellText;
+        if (typeof hook === 'function') {
+            try { txt = hook(rowIdx, col, txt); } catch (e) { /* fica o render */ }
+        }
+        return keyOf(txt);
     }
 
     // ── data `dd/mm/aaaa` ordena como DATA ─────────────────────────────────
