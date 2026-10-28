@@ -192,6 +192,13 @@
   var PA_BOOT = {};
   try { PA_BOOT = JSON.parse(document.getElementById('pa-bootstrap').textContent || '{}'); } catch (e) {}
   var ALWAYS = { '/users-profile': 1, '/page-access': 1 };   // dashboards are grantable
+  // No Stratos o app mora sob um prefixo (`window.__OTC_BASE__`, do shim) e o
+  // HTML sai com ele em todo href: `/dashboard` vira `/<solução>/dashboard`. O
+  // acesso gravado é sem prefixo — compare SEM ele, senão nada casa (§716).
+  var OTC_BASE = window.__OTC_BASE__ || '';
+  function appPath(h) {
+    return (OTC_BASE && h && h.indexOf(OTC_BASE + '/') === 0) ? h.slice(OTC_BASE.length) : h;
+  }
   var PA_ASSETS = PA_BOOT.assets || '';   // user photos: <ASSETS>/images/users/<sid>.jpg
   var PA_IS_MASTER = !!PA_BOOT.isMaster;  // master can restrict admins
   // Control Panel routine cards — granted individually, grouped under "Apps › Control Panel".
@@ -242,7 +249,7 @@
     nodes.sort(function (a, b) { var p = a.compareDocumentPosition(b); return (p & 4) ? -1 : (p & 2) ? 1 : 0; });
     nodes.forEach(function (el) {
       if (el.classList.contains('side-nav-title')) { section = (el.textContent || '').trim() || section; return; }
-      var href = el.getAttribute('href');
+      var href = appPath(el.getAttribute('href'));
       if (!href || ALWAYS[href] || seen[href]) return;
       // Control Panel is exploded into its routine cards, in place — grouped as a
       // sub-section of wherever the link sits in the menu (e.g. "Apps › Control Panel").
