@@ -3049,7 +3049,9 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   para o prazo dela ou de uma tarefa aberta, o dia do fim (`domain.alerts`). UM
   e-mail por iniciativa (o box do card + quem está nela, CC do card) e o sino só
   dos envolvidos (preferência `initiative_alerts`); cada alerta sai UMA vez pela
-  chave, e o e-mail que falha não marca. `check_initiative_alerts.py`.
+  chave, e o e-mail que falha não marca. O timbre do e-mail é o do OTC Tracker
+  (`_email_shell(..., logo='otc')`, `images/logo-black-email.png`; o envio anexa
+  pelo `otc_emails.logo_parts(html)`), não o do JPMorgan. `check_initiative_alerts.py`.
 - Toda escrita devolve o PROJETO inteiro; a tela se redesenha dele. Atividade
   e erro saem ESTRUTURADOS (`kind`/`code` + params), traduzidos no
   `projects-common.js`. Chave de tradução das telas é `pj-*`/`tsk-*` — `tk-*`
