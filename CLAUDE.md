@@ -95,7 +95,16 @@ OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_<nome>.py
   gigabytes que o app não usa. Até a virada a ponte é ESPELHO (só do share
   para o Stratos) e nunca escreve no share. Caminho do share passa pelo
   `ponte_comum.longo` (`\\?\UNC\…`): o Electronic Inventory tem pasta acima
-  do limite de 248 caracteres do Windows.
+  do limite de 248 caracteres do Windows. **As fotos dos usuários**
+  (`static/images/users/<SID>.jpg`) ficam FORA do git — são dos colegas, e o
+  repositório fica no GitHub — e o `stratos-sync` recusa o checkout com elas em
+  `apps\`: no Stratos elas moram no Shared Drive (`images/users/`), sobem pelo
+  `stratos/envia_fotos.py` (DevShell) e o `fotos_stratos.py` as serve ignorando
+  a caixa (§715). **O EFS diferencia maiúsculas** e o share não: o armazém se
+  ajusta sozinho (§713), mas caminho novo montado à mão com a grafia trocada
+  quebra só lá. **A migração dos bancos para o Snowflake** está planejada em
+  `Docs/MIGRACAO_SNOWFLAKE.md` (§712): pelo Stratos (token do FID, conector pelo
+  proxy), a instância Windows fica em DuckDB até a virada.
 - **O bloco DEV BYPASS (`/dev-login`) do `routes.py` nunca vai para o
   repositório.** É removido antes de cada commit e restaurado depois.
 - **Nunca fixe um de-para novo no código.** Tudo que é mapeável se cadastra
@@ -3624,7 +3633,11 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   `get_proxied_url` do Stratos só os hosts do JPM (`stratos/src/proxy_interno.py`,
   só na branch, §709) — por isso todo chamador lê `athena_api.build_session`
   pelo atributo do módulo, nunca `from athena_api import build_session`. O
-  Kerberos segue sem existir no Linux.
+  Kerberos não existe no Linux: lá a sessão leva o token do IDAnywhere de um
+  FID (`Authorization: Bearer`, `stratos/src/ida_token.py`, §714), por FORA do
+  desvio do proxy, configurado por `OTC_STRATOS_IDA_RECURSOS`/
+  `OTC_STRATOS_FID_APP_ID` e conferido em `/stratos/ida`; sem recurso
+  configurado nada muda. O login do app no Stratos já é o SSO dele (IDA).
 - **BCB/Yahoo (Quotes)**: mesma sessão, proxy volta como FILA (`QUOTES_PROXY`,
   a 9443 → proxy do sistema COPIADO → direto), primeira que responde fica. A
   porta antiga do desktop saiu da fila e não se escreve nem em comentário
@@ -3767,7 +3780,7 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (223 scripts)
+### `scripts/tests/` (228 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
