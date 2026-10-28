@@ -1097,6 +1097,13 @@
 // users and admins see everything.
 (function () {
   var ALWAYS = { '/users-profile': 1, '/page-access': 1 };   // dashboards are grantable
+  // No Stratos o app mora sob um prefixo (`window.__OTC_BASE__`, do shim) e o
+  // HTML sai com ele em todo href: `/dashboard` vira `/<solução>/dashboard`. O
+  // acesso gravado é sem prefixo — compare SEM ele, senão nada casa (§716).
+  var OTC_BASE = window.__OTC_BASE__ || '';
+  function appPath(h) {
+    return (OTC_BASE && h && h.indexOf(OTC_BASE + '/') === 0) ? h.slice(OTC_BASE.length) : h;
+  }
   (window.otcMeAccess ? window.otcMeAccess() : fetch('/api/me/access', { credentials: 'same-origin' }).then(function (r) { return r.json(); }))
     .then(function (d) {
       if (!d || !d.success) return;
@@ -1117,7 +1124,7 @@
       // "hide item / collapse empty submenu" pass left those (and their ancestors) up.
       var keep = new Set();
       nav.querySelectorAll('a.side-nav-link[href^="/"]').forEach(function (a) {
-        var href = a.getAttribute('href');
+        var href = appPath(a.getAttribute('href'));
         if (!(ALWAYS[href] || allowed[href])) return;
         var el = a;
         while (el && el !== nav) {

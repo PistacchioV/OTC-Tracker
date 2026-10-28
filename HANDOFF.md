@@ -30673,3 +30673,25 @@ muda) e responde `/static/images/users/<arquivo>` do drive ignorando a caixa,
 relistando a pasta no máximo uma vez por minuto. O que não está no drive segue
 para o estático. `stratos/tests/check_fotos_stratos.py`, pelo `check_stratos.py`.
 
+## §716 — Stratos: o Page Access gravava "nenhuma página" (2026-10-28)
+
+**Sintoma.** No Stratos, o /page-access mostrava todos os usuários sem acesso;
+marcar Full access e salvar voltava a "sem acesso" ao recarregar.
+
+**Causa.** A tela monta as caixas pelos links do MENU da própria página
+(`a.side-nav-link`, `getAttribute('href')`), e no Stratos a ponte reescreve o
+HTML com o prefixo da solução: `/dashboard` sai `/76521/<solução>/dashboard`.
+Nenhuma caixa casava com o acesso gravado (sem prefixo), o `/control-panel`
+não se abria nos cards, e o Save mandava os endereços com prefixo — o servidor
+só aceita página do `_NAV_URLS` e gravava `[]`, que é NENHUMA página. O mesmo
+`href` com prefixo fazia o menu de quem tem acesso restrito esconder tudo.
+
+**Correção** (dev, vale em qualquer lugar): os dois scripts comparam pelo
+`appPath(href)`, que tira o `window.__OTC_BASE__` publicado pelo shim; sem
+prefixo (dev, instância) o href passa como está. As strings dentro dos
+`<script>` não são reescritas pela ponte, então `ALWAYS` e `/control-panel`
+seguem certos. `check_page_access_prefix.py`.
+
+**Depois do deploy:** quem foi salvo no Stratos antes da correção ficou com `[]`
+no banco de lá — abrir o /page-access e salvar de novo (Full access ou a lista).
+

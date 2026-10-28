@@ -1173,6 +1173,14 @@ São **52**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   num script síncrono logo depois do conteúdo — no `otc.js` o título já teria
   sido pintado e pularia. Tela nova não escreve nada; tela que desenha o
   próprio (`-product-icon`, `<i class="ti">` no h4) fica com o dela.
+- **`href` lido do DOM tem o prefixo do Stratos** (§716): lá a ponte reescreve
+  todo `href="/x"` para `/76521/<solução>/x`, e o shim publica o prefixo em
+  `window.__OTC_BASE__`. JS que compara o `href` de um link com caminho gravado
+  no servidor (acesso, favorito) tira o prefixo antes (`appPath`, no
+  `page-access.html` e no `sidenav.html`) — sem isso o /page-access mostrava
+  todo mundo sem acesso, o Save gravava `[]` e o menu de quem tem acesso
+  restrito ficava vazio. Strings dentro de `<script>` NÃO são reescritas.
+  `check_page_access_prefix.py`.
 - **A mesma página em DOIS lugares do menu: um DONO, o resto é atalho com
   `data-nav-alias`** (mesa, 21/10/2026, §654). O menu (`otc.js`,
   `findActive`) acendia a PRIMEIRA folha com o endereço — Intrag › DCE ›
