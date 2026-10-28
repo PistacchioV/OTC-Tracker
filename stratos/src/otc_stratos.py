@@ -29,7 +29,8 @@ app valem nesse drive, a rota `/stratos/prova-travas` responde
 não responde do contêiner, e o `smtplib.SMTP` que os 23 senders do app usam
 vira o Email block do stratos-blocks (`email_stratos.py`).
 E a Athena: host interno do JPM, que da AWS só se alcança pelo proxy do
-Stratos (`get_proxied_url`, `proxy_interno.py`).
+Stratos (`get_proxied_url`, `proxy_interno.py`), e que no desktop autentica por
+Kerberos — aqui, pelo token do IDA do FID (`ida_token.py`, rota `/stratos/ida`).
 
 Este arquivo, o `solution.py` e o `run.py` existem SÓ na branch
 OTC-Tracker-Stratos; o código do app continua nascendo na dev.
@@ -137,6 +138,8 @@ def _monta(app, stratos_auth, base):
     import apps as otc
     import proxy_interno
     proxy_interno.instala()   # a Athena (host interno do JPM) pelo get_proxied_url do Stratos
+    import ida_token
+    ida_token.instala()       # e com o token do IDA no lugar do Kerberos (por FORA do proxy)
     from apps.config import config_dict
     from apps.pages.database_access import (
         configure_database_access, validate_database_paths,
@@ -188,6 +191,7 @@ def _monta(app, stratos_auth, base):
     _ponte_manifestos(app)
     _rota_prova_travas(app, stratos_auth)
     _rota_pacotes(app, stratos_auth)
+    _rota_ida(app, stratos_auth)
 
 
 # ── O portão: o que responde enquanto o OTC sobe ────────────────────────────
@@ -440,6 +444,29 @@ _PAGINA_PACOTES = '''<!doctype html><meta charset="utf-8"><title>OTC Tracker dat
 <th>MB</th><th>duckdb</th><th>Sent</th><th>Checked</th><th></th></tr>%(linhas)s</table>
 <p style="color:#666;font-size:.85rem">Check joins the parts and verifies every file against the
 manifest (sha256). Activate takes effect on the NEXT restart; the current data stays as it is.</p>'''
+
+
+def _rota_ida(app, stratos_auth):
+    """`/stratos/ida`, só do master: para cada recurso do
+    `OTC_STRATOS_IDA_RECURSOS`, se o token do IDA sai (o tamanho, nunca o
+    token) e, se não, o erro CRU do stratosblocks — é o que o suporte do
+    Stratos pede para rastrear (§714)."""
+    from apps.pages import routes
+
+    def otc_stratos_ida():
+        sid, _ = _identidade(stratos_auth, routes)
+        if sid not in routes._MASTER_SIDS:
+            return jsonify({'success': False, 'code': 'master_only', 'params': {},
+                            'text': 'Only the master can test the IDA tokens.'}), 403
+        import ida_token
+        out = ida_token.diagnostico()
+        log.warning('[stratos] diagnóstico do IDA: SID=%s %s', sid,
+                    ', '.join('%s=%s' % (r['host'], 'ok' if r['ok'] else 'ERRO') for r in out['recursos'])
+                    or 'sem recurso configurado')
+        out['success'] = True
+        return jsonify(out)
+
+    app.add_url_rule('/stratos/ida', 'otc_stratos_ida', otc_stratos_ida)
 
 
 def _rota_pacotes(app, stratos_auth):

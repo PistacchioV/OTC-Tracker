@@ -36,6 +36,8 @@ src/apps/ — e sobe o `solution.py` com um Stratos de MENTIRA (o stratos-blocks
   9. a Athena pelo proxy do Stratos (`src/proxy_interno.py`): o
      `athena_api.build_session` embrulhado na subida, aqui, e o desvio por host
      pelo `check_proxy_interno.py`.
+ 10. o token do IDA no lugar do Kerberos (`src/ida_token.py`): pelo
+     `check_ida_token.py`.
 
     OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python stratos/tests/check_stratos.py
 """
@@ -320,7 +322,7 @@ def confere_subida(tmp, sem_awmpy):
     src = os.path.join(tmp, 'src')
     os.makedirs(src)
     for nome in ('solution.py', 'run.py', 'otc_stratos.py', 'prova_travas.py', 'email_stratos.py',
-                 'pacotes_dados.py', 'proxy_interno.py'):
+                 'pacotes_dados.py', 'proxy_interno.py', 'ida_token.py'):
         shutil.copy(os.path.join(STRATOS, 'src', nome), src)
     os.symlink(os.path.join(RAIZ, 'apps'), os.path.join(src, 'apps'))
     # Com phonebook a raiz sai do Shared Drive (o `get_shared_drive` está no
@@ -807,6 +809,12 @@ def main():
         if linha.startswith('FAIL'):
             print('      proxy: ' + linha)
     ok(r.returncode == 0, 'Athena pelo proxy do Stratos: desvio por host, redirecionamentos e cookies')
+    r = subprocess.run([sys.executable, os.path.join(AQUI, 'check_ida_token.py')],
+                       capture_output=True, text=True)
+    for linha in r.stdout.splitlines():
+        if linha.startswith('FAIL'):
+            print('      ida: ' + linha)
+    ok(r.returncode == 0, 'Athena com o token do IDA: cabeçalho, cache, 401 e a ordem com o proxy')
     r = subprocess.run([sys.executable, os.path.join(AQUI, 'check_prova_travas.py')],
                        capture_output=True, text=True)
     for linha in r.stdout.splitlines():

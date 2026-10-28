@@ -12,6 +12,8 @@ que está listado abaixo existe apenas nesta branch.
 | `stratos/src/otc_stratos.py` | `src/otc_stratos.py` | a ponte: monta o OTC no `app` do template, SSO, prefixo de URL |
 | `stratos/src/email_stratos.py` | `src/email_stratos.py` | o `smtplib.SMTP` do app vira o Email block do stratos-blocks (§691) |
 | `stratos/src/prova_travas.py` | `src/prova_travas.py` | a prova de que as travas do app valem no Shared Drive (`/stratos/prova-travas`, §689) |
+| `stratos/src/proxy_interno.py` | `src/proxy_interno.py` | a Athena (host interno do JPM) pelo `get_proxied_url` do Stratos (§709) |
+| `stratos/src/ida_token.py` | `src/ida_token.py` | o token do IDA (FID) no lugar do Kerberos para a Athena (`/stratos/ida`, §714) |
 | `stratos/requirements.txt` | `requirements.txt` | o bloco do template + o que o OTC precisa (gerado) |
 | `apps/config.py` (bloco `ENV:STRATOS`) | — | caminhos de dados no contêiner |
 | `stratos-sync.bat` | — | copia o que mudou para o repositório do Stratos |
@@ -368,9 +370,39 @@ CETIP e Electronic Inventory chegam e saem pela ponte (acima). Não há Outlook 
 leitura de e-mail). A Athena é host INTERNO do JPM: da AWS ela só se alcança pelo
 proxy do Stratos (`get_proxied_url`), e a ponte desvia por ele a sessão do
 `athena_api.build_session` — só os hosts do JPM; BCB e Yahoo seguem pelo proxy de
-saída (`src/proxy_interno.py`; `OTC_STRATOS_PROXY_INTERNO=0` desliga). O que o proxy
-não resolve é a AUTENTICAÇÃO: a Athena pede Kerberos, que no Linux não existe. Se o
+saída (`src/proxy_interno.py`; `OTC_STRATOS_PROXY_INTERNO=0` desliga). Se o
 proxy recusar o host, é ticket em go/stratossupport com o host e o ambiente.
+
+**A autenticação da Athena é o token do IDA, não o Kerberos** (§714,
+`src/ida_token.py`). No desktop a sessão negocia Kerberos com o ADFS; aqui ela
+leva `Authorization: Bearer <token>` emitido pelo Stratos para um FID — a
+identidade da APLICAÇÃO, porque os laços de fundo (pull de New Deals, recompra,
+Cockpit) rodam sem ninguém logado. O token do USUÁRIO
+(`UserAuthentication().get_resource_token`) exigiria registrar os recursos no
+`StratosAuth(app, resources=[…])`, que está no bloco DO NOT DELETE do
+`solution.py`. Para ligar:
+
+1. com o time da Athena, o **recurso** do IDA de cada host (`JPMC:URI:RS-…-PROD`
+   e o de UAT);
+2. o **FID** com acesso a esse recurso, por um pedido no MyTechHub: o FID
+   PRÓPRIO da solução (página *Solution Specific FID*, que dá o `app_id`) — o
+   recomendado, porque o acesso fica só desta solução — ou o FID compartilhado
+   do Stratos (UAT K036872, PROD K036749), só se o dono do dado aceitar TODOS os
+   usuários do Stratos; depois, avisar o Stratos Support;
+3. registrar o recurso na solução: `stratos update --register-resource
+   "JPMC:URI:RS-…-PROD"` (de dentro do `singing-moose-flask`);
+4. as variáveis de ambiente da solução: `OTC_STRATOS_IDA_RECURSOS`
+   (`athena-app.jpmchase.net=JPMC:URI:RS-…-PROD`, por vírgula para mais hosts),
+   `OTC_STRATOS_FID_APP_ID` (vazio = FID do Stratos), e, se preciso,
+   `OTC_STRATOS_IDA_AMBIENTE` (`prod`/`uat`; o padrão é o sufixo do recurso) e
+   `OTC_STRATOS_IDA_TTL_MIN` (45);
+5. conferir em `/stratos/ida` (só o master): por recurso, se o token sai — o
+   tamanho, nunca o token — ou o erro cru do stratosblocks.
+
+Sem `OTC_STRATOS_IDA_RECURSOS` nada muda, e o log da subida diz que a Athena vai
+sem token. **[A CONFIRMAR]** que a API da Athena aceita o token do IDA no lugar
+do ADFS; se ela ainda redirecionar para o `/adfs/`, o resultado do pull mostra
+uma página HTML e é com o time da Athena.
 E o SMTP da rede (`mailhost.jpmchase.net`) provavelmente não responde do
 contêiner: sem ele não saem os e-mails do app nem o código do login próprio
 (`OTC_STRATOS_SSO=0`). Cada uma dessas faltas pede uma solução própria antes de
