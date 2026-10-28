@@ -30656,3 +30656,20 @@ mostra, e devolve o erro cru. `stratos/tests/check_ida_token.py`, chamado pelo
 A CONFIRMAR: o recurso do IDA da Athena (time da Athena) e se a API aceita o
 bearer no lugar do ADFS.
 
+## §715 — Stratos: as fotos dos usuários pelo Shared Drive (2026-10-28)
+
+O `stratos-sync apply` recusou o checkout: alguém pôs as ~45 fotos da
+instância (`apps/static/images/users/<SID>.jpg`) na worktree do Stratos, e o
+sync exige `apps\` sem nada fora do git. Elas estão fora do git de propósito —
+são fotos dos colegas, e o repositório fica no GitHub — e não deveriam entrar.
+E mesmo levadas, não apareceriam: a tela pede `<sid minúsculo>.jpg` e os
+arquivos são `D566328.jpg`, o que no Linux não casa (o §713 de novo).
+
+Só na branch do Stratos: `stratos/envia_fotos.py` (DevShell, como o
+`envia_dados.py`) sobe as fotos de uma pasta para `otc-tracker/images/users/`
+do drive, em minúsculas; `stratos/src/fotos_stratos.py` soma os nomes do drive
+ao `platform/user_photos._names` (o embrulho pelo atributo do módulo, a dev não
+muda) e responde `/static/images/users/<arquivo>` do drive ignorando a caixa,
+relistando a pasta no máximo uma vez por minuto. O que não está no drive segue
+para o estático. `stratos/tests/check_fotos_stratos.py`, pelo `check_stratos.py`.
+
