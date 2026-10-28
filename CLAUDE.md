@@ -436,6 +436,21 @@ nomes que o app conhecia (`day_records`, `dataset_rows`, `refdata_rows`,
   JSONs que têm diferença com o disco (ausentes ou mais velhos que o carimbo
   do banco); `--dry-run`, `--force`, `--only <subárvore>`. Reverter o commit
   e rodá-lo é o caminho de volta.
+- **Num sistema de arquivos que DIFERENCIA caixa o armazém ignora a caixa**
+  (§713): o share guarda `db/cache/B3 Files` e `db/cache/New Deals` e, nos
+  `_manifest`, as duas grafias (`cache/New Deals/…` da importação,
+  `cache/new deals/…` do app), e o código pede tudo em minúsculas. No Windows e
+  no Mac isso nunca apareceu; no EFS do Stratos o banco "não existia" e o
+  Dashboard e o New Deals abriam vazios. O `_db_abs` resolve o `.db` segmento a
+  segmento pela grafia que existe (gravação nova cai na pasta que já existe,
+  nunca numa gêmea), o `_achar` acha a chave do manifest em outra grafia (a
+  exata vence; entre as outras, a mais nova) e passa a grafia GRAVADA ao núcleo
+  (que procura `WHERE path = ?`), o `_entries_under` lista sem caixa devolvendo
+  a grafia PEDIDA, e o `remove` tira todas. Liga sozinho pela pasta `db/` com a
+  caixa trocada (`_fs_diferencia_caixa`; `OTC_STORE_CASE_FOLD`/`CASE_FOLD`
+  forçam); onde a caixa não importa, nada muda. Leitor novo do manifest usa o
+  `_achar`, nunca `_manifest(db).get(rel)`. `check_store_case_fold.py` monta um
+  volume APFS que diferencia caixa no Mac.
 - **Ler em LOTE continua valendo** (§428): quem vai ler a árvore inteira
   chama `_day_prefetch(dias)` antes do laço; `data_store.prefetch` agrupa por
   banco e lê o manifest e as tabelas numa abertura. `check_daycache.py` §8

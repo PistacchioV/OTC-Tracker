@@ -260,3 +260,4 @@ terceira cópia da regra, que é justamente o que o teste deveria pegar.
 No Windows da equipe o `check_boxparse.py` e o `check_export_advanced.py` não rodam; o `check_quote_type.py` e o
 `check_pc_widgets.py` rodam, apenas pulando a seção de paridade/contagem (ambos avisam na
 saída). Os demais rodam inteiros.
+| `check_store_case_fold.py` | `data_store`: num sistema de arquivos que diferencia caixa (o EFS do Stratos), banco e caminho se acham ignorando a caixa (§713); monta um volume APFS case-sensitive no Mac |

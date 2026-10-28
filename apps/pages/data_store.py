@@ -279,7 +279,138 @@ def _alvos(rel):
 
 
 def _db_abs(db_rel, raiz=None):
-    return os.path.join(db_root(raiz), *db_rel.split('/'))
+    base = db_root(raiz)
+    caminho = os.path.join(base, *db_rel.split('/'))
+    if not _fs_diferencia_caixa() or os.path.exists(caminho):
+        return caminho
+    return _resolve_caixa(base, db_rel.split('/'))
+
+
+# ── caixa de letra (§713) ────────────────────────────────────────────────────
+# O app nasceu num sistema de arquivos que NÃO diferencia maiúscula de
+# minúscula (o share Windows da instância; o Mac da dev também não), e o share
+# guarda as duas grafias: as pastas `db/cache/B3 Files` e `db/cache/New Deals`
+# foram criadas pela importação a partir do disco, e o código pede
+# `cache/b3 files` e `cache/new deals`; dentro dos bancos, o `_manifest` tem
+# `cache/B3 Files/…` (da importação) ao lado de `cache/b3 files/…` (do que o
+# app gravou depois). No Windows isso nunca apareceu. No Linux do Stratos são
+# pastas e chaves DIFERENTES: o banco "não existe" e a tela abre vazia, sem
+# erro nenhum (era o Dashboard e o New Deals). Num sistema que diferencia caixa
+# o armazém passa a se comportar como o Windows: o `.db` e a chave do manifest
+# se acham ignorando a caixa. Num sistema que não diferencia, NADA muda.
+CASE_FOLD = None            # None = detectar; os testes forçam True/False
+_caixa_memo = {}
+_dlock = threading.Lock()
+_dcache = {}                # pasta -> (mtime_ns, {nome.casefold(): nome})
+_mfold = {}                 # banco -> (manifest, {rel.casefold(): rel})
+
+
+def _fs_diferencia_caixa():
+    """O sistema de arquivos dos bancos diferencia caixa? `OTC_STORE_CASE_FOLD`
+    (`1`/`0`) e o `CASE_FOLD` do módulo vencem; senão, a pasta `db/` com a
+    caixa trocada existe ou não. Pasta ainda inexistente não decide (e não
+    memoiza)."""
+    if CASE_FOLD is not None:
+        return bool(CASE_FOLD)
+    env = (os.getenv('OTC_STORE_CASE_FOLD') or '').strip()
+    if env in ('0', '1'):
+        return env == '1'
+    raiz = db_root()
+    if raiz in _caixa_memo:
+        return _caixa_memo[raiz]
+    base, nome = os.path.split(raiz.rstrip('/\\'))
+    if not nome or nome.swapcase() == nome or not os.path.isdir(raiz):
+        return False
+    val = not os.path.exists(os.path.join(base, nome.swapcase()))
+    _caixa_memo[raiz] = val
+    if val:
+        log.warning('[data-store] o sistema de arquivos de %s diferencia maiúsculas: '
+                    'bancos e caminhos se acham ignorando a caixa, como no Windows', raiz)
+    return val
+
+
+def _nomes_da_pasta(pasta):
+    """`{nome.casefold(): nome}` da pasta, em cache pelo mtime dela. Nomes que
+    só diferem na caixa: vale o primeiro em ordem (determinístico)."""
+    try:
+        mt = os.stat(pasta).st_mtime_ns
+    except OSError:
+        return None
+    with _dlock:
+        ent = _dcache.get(pasta)
+        if ent and ent[0] == mt:
+            return ent[1]
+    try:
+        nomes = sorted(os.listdir(pasta))
+    except OSError:
+        return None
+    idx = {}
+    for n in nomes:
+        idx.setdefault(n.casefold(), n)
+    with _dlock:
+        _dcache[pasta] = (mt, idx)
+    return idx
+
+
+def _resolve_caixa(base, partes):
+    """O caminho `base/partes…` com cada segmento na grafia que EXISTE no
+    disco; do primeiro que não existe em grafia nenhuma em diante, fica a
+    grafia pedida (é onde uma gravação nova cria, dentro da pasta que já
+    existe — nunca uma pasta gêmea)."""
+    atual = base
+    for i, p in enumerate(partes):
+        cand = os.path.join(atual, p)
+        if os.path.exists(cand):
+            atual = cand
+            continue
+        idx = _nomes_da_pasta(atual)
+        nome = idx.get(p.casefold()) if idx else None
+        if nome is None:
+            return os.path.join(atual, *partes[i:])
+        atual = os.path.join(atual, nome)
+    return atual
+
+
+def _indice_caixa(db, man):
+    """`{rel.casefold(): rel}` do manifest, em cache enquanto o manifest é o
+    mesmo objeto. Duas grafias do mesmo caminho: vale a gravada por último."""
+    with _mlock:
+        ent = _mfold.get(db)
+        if ent and ent[0] is man:
+            return ent[1]
+    idx = {}
+    for r, v in man.items():
+        k = r.casefold()
+        atual = idx.get(k)
+        if atual is None or v[0] > man[atual][0]:
+            idx[k] = r
+    with _mlock:
+        _mfold[db] = (man, idx)
+    return idx
+
+
+def _achar(db, rel, strict=False):
+    """`(rel como está gravado, entrada)` do caminho no manifest do banco, ou
+    `(None, None)`. A grafia exata vence; num sistema que diferencia caixa, a
+    outra grafia responde (a mais nova)."""
+    man = _manifest(db, strict=strict)
+    ent = man.get(rel)
+    if ent is not None:
+        return rel, ent
+    if not _fs_diferencia_caixa() or not man:
+        return None, None
+    guardado = _indice_caixa(db, man).get(rel.casefold())
+    return (guardado, man[guardado]) if guardado else (None, None)
+
+
+def _variantes(db, rel):
+    """Todas as grafias de `rel` gravadas no banco (só a exata, num sistema que
+    não diferencia caixa) — quem APAGA tira todas."""
+    man = _manifest(db)
+    if not _fs_diferencia_caixa():
+        return [rel] if rel in man else []
+    k = rel.casefold()
+    return sorted(r for r in man if r.casefold() == k)
 
 
 # ── os memos ─────────────────────────────────────────────────────────────────
@@ -608,13 +739,13 @@ def _dbs_under(rel_dir):
     raiz, também os bancos de primeiro nível (RefData, calendários, datasets
     de raiz)."""
     base = db_root()
-    pasta = os.path.join(base, *rel_dir.split('/')) if rel_dir else base
+    partes = rel_dir.split('/') if rel_dir else []
+    pasta = _db_abs('/'.join(partes)) if partes else base
     out = []
     # o banco de um ANCESTRAL guarda os caminhos das subpastas (o `.db` do
     # produto tem os dias de `AAAA/MM`), então cada prefixo do caminho conta
-    partes = rel_dir.split('/') if rel_dir else []
     for i in range(1, len(partes) + 1):
-        cand = os.path.join(base, *partes[:i]) + '.db'
+        cand = _db_abs('/'.join(partes[:i]) + '.db')
         if os.path.isfile(cand):
             out.append(cand)
     if os.path.isdir(pasta):
@@ -642,10 +773,27 @@ def _entries_under(rel_dir, strict=False):
     tabela sem erro nenhum."""
     prefixo = (rel_dir + '/') if rel_dir else ''
     out = {}
+    if not _fs_diferencia_caixa():
+        for db in _dbs_under(rel_dir):
+            for rel, (mt, fs, _tg) in _manifest(db, strict=strict).items():
+                if rel.startswith(prefixo):
+                    out[rel] = (mt, fs)
+        return out
+    # §713: compara sem caixa e devolve o caminho na grafia PEDIDA (o prefixo
+    # de quem lista + o resto como gravado), uma vez por caminho — a leitura
+    # seguinte acha a grafia gravada pelo `_achar`.
+    pk, n = prefixo.casefold(), len(prefixo)
+    por_chave = {}
     for db in _dbs_under(rel_dir):
         for rel, (mt, fs, _tg) in _manifest(db, strict=strict).items():
-            if rel.startswith(prefixo):
-                out[rel] = (mt, fs)
+            if rel.casefold().startswith(pk):
+                nome = prefixo + rel[n:]
+                k = nome.casefold()
+                atual = por_chave.get(k)
+                if atual is None or mt > atual[1][0]:
+                    por_chave[k] = (nome, (mt, fs))
+    for nome, ent in por_chave.values():
+        out[nome] = ent
     return out
 
 
@@ -740,7 +888,7 @@ def _read_target(rel, alvo, default=AUSENTE):
     db_rel, schema, tabela, kind = alvo
     db = _db_abs(db_rel)
     try:
-        ent = _manifest(db, strict=True).get(rel)
+        guardado, ent = _achar(db, rel, strict=True)
     except BancoOcupado:
         ultimo = _pmemo_last(rel)
         if ultimo is _MISS:
@@ -751,11 +899,14 @@ def _read_target(rel, alvo, default=AUSENTE):
             raise FileNotFoundError(rel)
         return default
     mtime, fsize, _targets = ent
+    if guardado != rel:
+        # §713: gravado em outra grafia — a tabela é a que o alvo DELE diz
+        _db, schema, tabela, kind = target(guardado) or alvo
     chave = (rel, mtime, fsize)
     crus = _pmemo_get(chave)
     if crus is _MISS:
         try:
-            crus = _com_leitura(db, lambda con: core.ler_crus(con, rel, kind, tabela, schema))
+            crus = _com_leitura(db, lambda con: core.ler_crus(con, guardado, kind, tabela, schema))
         except BancoOcupado:
             ultimo = _pmemo_last(rel)
             if ultimo is _MISS:
@@ -928,10 +1079,12 @@ def write(path, payload, stamp=None, so_se_ausente=False):
     # sai de lá: duas cópias responderiam por versões diferentes.
     for outro in _alvos(rel)[1:]:
         odb = _db_abs(outro[0])
-        if rel in _manifest(odb):
+        velhas = _variantes(odb, rel)
+        if velhas:
             try:
                 with duckdb_write(odb) as con:
-                    core.apagar_payload(con, rel, outro[3])
+                    for v in velhas:
+                        core.apagar_payload(con, v, outro[3])
                 _after_write(odb, path, rel)
             except Exception:                               # noqa: BLE001
                 log.debug('[data-store] não apaguei %s do alvo alternativo', rel, exc_info=True)
@@ -952,10 +1105,12 @@ def remove(path):
     achou = False
     for db_rel, _schema, _tabela, kind in _alvos(rel):
         db = _db_abs(db_rel)
-        if rel not in _manifest(db):
+        velhas = _variantes(db, rel)
+        if not velhas:
             continue
         with duckdb_write(db) as con:
-            core.apagar_payload(con, rel, kind)
+            for v in velhas:
+                core.apagar_payload(con, v, kind)
         _after_write(db, path, rel)
         achou = True
     if not achou:
@@ -995,7 +1150,7 @@ def stat(path):
     rel = rel_of(path)
     for alvo in _alvos(rel):
         try:
-            ent = _manifest(_db_abs(alvo[0]), strict=True).get(rel)
+            _g, ent = _achar(_db_abs(alvo[0]), rel, strict=True)
         except BancoOcupado:
             # A mesma resposta do `read`: a última cópia boa em memória diz
             # que o caminho existe, com o carimbo dela (a chave do memo).
@@ -1032,10 +1187,11 @@ def _canal_no_banco(path):
         if not os.path.isfile(db):
             continue
         try:
-            if rel not in _manifest(db, strict=True):
+            guardado, _ent = _achar(db, rel, strict=True)
+            if guardado is None:
                 continue
             return bool(_com_leitura(db, lambda con: core.reconstruivel(
-                con, core.manifest_key_of(rel, kind))))
+                con, core.manifest_key_of(guardado, kind))))
         except BancoOcupado:
             return None
     return None
@@ -1216,26 +1372,27 @@ def prefetch(paths):
         grupos.setdefault(_db_abs(alvo[0]), []).append((p, rel, alvo))
     prontos = {}
     for db, itens in grupos.items():
-        man = _manifest(db)
         pend = []
         for p, rel, alvo in itens:
-            ent = man.get(rel)
+            guardado, ent = _achar(db, rel)
             if ent is None:
                 continue
+            if guardado != rel:                     # §713: o alvo da grafia gravada
+                alvo = target(guardado) or alvo
             chave = (rel, ent[0], ent[1])
             crus = _pmemo_get(chave)
             if crus is not _MISS:
                 prontos[p] = core.parsear_crus(crus)
             else:
-                pend.append((p, rel, alvo, chave))
+                pend.append((p, guardado, alvo, chave))
         if not pend:
             continue
 
         def _lote(con, pend=pend):
             out = {}
-            for p, rel, alvo, chave in pend:
+            for p, guardado, alvo, chave in pend:
                 try:
-                    crus = core.ler_crus(con, rel, alvo[3], alvo[2], alvo[1])
+                    crus = core.ler_crus(con, guardado, alvo[3], alvo[2], alvo[1])
                 except Exception:                           # noqa: BLE001
                     continue
                 if crus is AUSENTE or crus is None:
