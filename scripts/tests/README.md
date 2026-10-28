@@ -263,3 +263,4 @@ saída). Os demais rodam inteiros.
 | `check_store_case_fold.py` | `data_store`: num sistema de arquivos que diferencia caixa (o EFS do Stratos), banco e caminho se acham ignorando a caixa (§713); monta um volume APFS case-sensitive no Mac |
 | `check_page_access_prefix.py` | `page-access.html` + `sidenav.html`: o `href` do menu é comparado SEM o prefixo do Stratos (`window.__OTC_BASE__`, §716); executa o `appPath` no node |
 | `check_unwind_pending.py` | a recompra no Pending Confirmation: parcial = vencimento original + status pela assinatura; total = data da recompra + `Exception Digital Fep Web` (§717), na Fase 1 e no catálogo |
+| `check_missing_cp_filter.py` | o badge "Missing Counterparty" (só DOM) entra na lista do funil de Excel das seis telas de New Deals pelo gancho `otcCellText` do nó da tabela (§718); executa o `missing-counterparty.js` no node |

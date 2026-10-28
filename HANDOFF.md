@@ -30725,3 +30725,20 @@ cobrado lá, e o `_mc_pc_sync` não reescreve um Pending Status que não é etap
 atualiza as `_PC_DEAL_COLUMNS` — a Maturity Date se acerta no reimport, o status
 não). `check_unwind_pending.py`.
 
+
+## §718 — New Deals: "Missing Counterparty" fora do funil de Excel (2026-10-28)
+
+O funil (`excel-filter.js`, §591) lista o que o DataTables DESENHA na célula
+(`render('display')`). O badge "Missing Counterparty" do
+`missing-counterparty.js` é só DOM de propósito — o dado da célula fica intacto
+(o Confirm/Send leem o status pelo dado, §685) —, então ele nunca entrava na
+lista: nas seis telas de NDF/Opção não havia como filtrar as linhas sem
+contraparte. O "Missing Index B3" aparecia porque esse troca o dado.
+
+Correção: o funil passa o texto de cada célula por um gancho que a TABELA
+publica no próprio nó, `otcCellText(linha, coluna, texto)`, lido na hora (a
+página cria o helper no `drawCallback`, antes ou depois do funil). O
+`missing-counterparty.js` o publica no `init` com a MESMA regra do
+`refreshRow`: no Status o badge sozinho (ele substitui a célula), nas colunas
+de contraparte o texto + o badge. O dado continua sem o badge. Outro badge só
+de DOM que precise do funil usa o mesmo gancho. `check_missing_cp_filter.py`.
