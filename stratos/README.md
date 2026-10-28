@@ -14,6 +14,8 @@ que está listado abaixo existe apenas nesta branch.
 | `stratos/src/prova_travas.py` | `src/prova_travas.py` | a prova de que as travas do app valem no Shared Drive (`/stratos/prova-travas`, §689) |
 | `stratos/src/proxy_interno.py` | `src/proxy_interno.py` | a Athena (host interno do JPM) pelo `get_proxied_url` do Stratos (§709) |
 | `stratos/src/ida_token.py` | `src/ida_token.py` | o token do IDA (FID) no lugar do Kerberos para a Athena (`/stratos/ida`, §714) |
+| `stratos/src/fotos_stratos.py` | `src/fotos_stratos.py` | as fotos dos usuários servidas do Shared Drive, sem caixa (§715) |
+| `stratos/envia_fotos.py` | — | leva as fotos dos usuários para o Shared Drive (`images/users/`) |
 | `stratos/requirements.txt` | `requirements.txt` | o bloco do template + o que o OTC precisa (gerado) |
 | `apps/config.py` (bloco `ENV:STRATOS`) | — | caminhos de dados no contêiner |
 | `stratos-sync.bat` | — | copia o que mudou para o repositório do Stratos |
@@ -192,6 +194,20 @@ a chave da sessão ficam na raiz). A pasta anterior fica como estava:
 **Deactivate**, ou ativar o pacote anterior, é a volta atrás. Depois de ativado o
 pacote é o banco em uso, e não se confere de novo. Sem ponteiro, os dados são os
 de `otc-tracker/data`, com os bancos vazios e só o que a semeadura traz.
+
+**As fotos dos usuários** (`<SID>.jpg`, §715) não vão pelo `stratos-sync`:
+estão fora do git de propósito (são dos colegas, e o repositório fica no
+GitHub), e o `stratos-sync` recusa o checkout com elas em `apps\`. Elas vão para o
+Shared Drive, de onde o Stratos as serve (`src/fotos_stratos.py`, ignorando a
+caixa — a tela pede `<sid minúsculo>.jpg`):
+
+```
+"%PYDS%" OTC-Tracker-Stratos\stratos\envia_fotos.py --env dev <pasta com as fotos> --dry-run
+"%PYDS%" OTC-Tracker-Stratos\stratos\envia_fotos.py --env dev <pasta com as fotos>
+```
+
+Aparecem em até um minuto, sem restart. A pasta de origem fica FORA do
+`OTC-Tracker-Stratos\apps\`.
 
 **Backup:** o drive tem uma foto por noite, guardada 35 dias, sem versão por
 arquivo. Na pior hora se perde até um dia; uma cópia de hora em hora para o File

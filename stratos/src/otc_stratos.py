@@ -31,6 +31,8 @@ vira o Email block do stratos-blocks (`email_stratos.py`).
 E a Athena: host interno do JPM, que da AWS só se alcança pelo proxy do
 Stratos (`get_proxied_url`, `proxy_interno.py`), e que no desktop autentica por
 Kerberos — aqui, pelo token do IDA do FID (`ida_token.py`, rota `/stratos/ida`).
+As fotos dos usuários não vêm no código (estão fora do git): moram no Shared
+Drive e são servidas de lá, ignorando a caixa (`fotos_stratos.py`).
 
 Este arquivo, o `solution.py` e o `run.py` existem SÓ na branch
 OTC-Tracker-Stratos; o código do app continua nascendo na dev.
@@ -192,6 +194,8 @@ def _monta(app, stratos_auth, base):
     _rota_prova_travas(app, stratos_auth)
     _rota_pacotes(app, stratos_auth)
     _rota_ida(app, stratos_auth)
+    import fotos_stratos
+    fotos_stratos.instala(app, (os.getenv('OTC_STRATOS_ROOT') or '').strip())   # as fotos do drive (§715)
 
 
 # ── O portão: o que responde enquanto o OTC sobe ────────────────────────────
