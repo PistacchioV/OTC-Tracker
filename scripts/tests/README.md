@@ -261,3 +261,4 @@ No Windows da equipe o `check_boxparse.py` e o `check_export_advanced.py` não r
 `check_pc_widgets.py` rodam, apenas pulando a seção de paridade/contagem (ambos avisam na
 saída). Os demais rodam inteiros.
 | `check_store_case_fold.py` | `data_store`: num sistema de arquivos que diferencia caixa (o EFS do Stratos), banco e caminho se acham ignorando a caixa (§713); monta um volume APFS case-sensitive no Mac |
+| `check_page_access_prefix.py` | `page-access.html` + `sidenav.html`: o `href` do menu é comparado SEM o prefixo do Stratos (`window.__OTC_BASE__`, §716); executa o `appPath` no node |
