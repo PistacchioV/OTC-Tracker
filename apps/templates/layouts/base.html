@@ -101,8 +101,10 @@
             - extra_css vem ANTES do head-css para permitir sobrescrita
             - Ou pode vir DEPOIS se quiser que sobrescreva os estilos base
           ========================================================================= #}
+       {# Até onde a primeira pintura espera o HTML (o layout com menu o usa, §726). #}
+       {% block render_expect %}{% endblock render_expect %}
        {% block css %}
-   
+
            {# CSS adicional específico de cada página #}
            {% block extra_css %}{% endblock extra_css %}
    

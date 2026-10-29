@@ -851,6 +851,7 @@ $(document).ready(function() {
             "<'columnToggleWrapper me-2'>" +
             "<'addRowBtn me-2'>" +
             "B" +
+            "<'refDateWrap ms-2 d-flex align-items-center'>" +
             "<'importBtn ms-2 me-2'>" +
             "<'refreshBtn me-2'>" +
             "<'clearFiltersBtn me-2'>" +
@@ -1122,6 +1123,44 @@ $(document).ready(function() {
                 });
             }
             // ==============================================================
+            // REFERENCE DATE (equipe, 29/10/2026, §727) — o mesmo campo do
+            // FXO e do FWD Start. Aqui não há API: o Import lê a caixa do
+            // Outlook inteira. A data é o dia que o Mapping B3 ID mapeia (as
+            // operações gravadas nele, além das da grade) e, trocada, leva a
+            // tela para aquele dia.
+            // ==============================================================
+            var refDateWrap = document.querySelector('.refDateWrap');
+            if (refDateWrap && !document.getElementById('apiRefDate')) {
+                var _rdToday = new Date();
+                var _rdDmy = String(_rdToday.getDate()).padStart(2, '0') + '/' +
+                    String(_rdToday.getMonth() + 1).padStart(2, '0') + '/' +
+                    _rdToday.getFullYear();
+                refDateWrap.innerHTML =
+                    '<label for="apiRefDate" class="form-label fs-xs text-muted mb-0 me-1 text-nowrap" ' +
+                        'data-lang="nd-ref-date">Reference Date</label>' +
+                    '<input type="text" id="apiRefDate" class="form-control form-control-sm" ' +
+                        'style="width: 8.5rem;" value="' + _rdDmy + '" placeholder="dd/mm/yyyy" ' +
+                        'data-bs-toggle="tooltip" data-bs-placement="bottom" ' +
+                        'data-bs-title="Day the Mapping B3 ID maps; changing it takes the table to that day" ' +
+                        'data-bs-custom-class="tooltip-teal">';
+                var _rdEl = document.getElementById('apiRefDate');
+                if (_rdEl && typeof flatpickr !== 'undefined') {
+                    flatpickr(_rdEl, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
+                }
+                if (_rdEl) {
+                    _rdEl.addEventListener('change', function () { sfSetTradeDate(this.value); });
+                }
+            }
+
+            /* Reference Date em ISO para o POST (o campo mostra dd/mm/yyyy) */
+            function apiRefDate() {
+                var el = document.getElementById('apiRefDate');
+                var v = (el && el.value) || '';
+                var m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                return m ? (m[3] + '-' + m[2] + '-' + m[1]) : v;
+            }
+
+            // ==============================================================
             // IMPORT BUTTON
             // ==============================================================
             var importBtnContainer = document.querySelector('.importBtn');
@@ -1188,7 +1227,7 @@ $(document).ready(function() {
                         }
                     });
 
-                    if (!sentDeals.length) {
+                    if (!sentDeals.length && !apiRefDate()) {
                         Swal.fire({
                             title: t('swal-mapping-b3-title', 'Mapping B3 ID'),
                             text: t('swal-mapping-none', 'No operations to map.'),
@@ -1206,7 +1245,7 @@ $(document).ready(function() {
                     fetch('/api/new-deals/opt-commodities/mapping-b3', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ deals: sentDeals })
+                        body: JSON.stringify({ deals: sentDeals, ref_date: apiRefDate() })
                     })
                     .then(function(r) { return r.json(); })
                     .then(function(res) {
@@ -1925,6 +1964,19 @@ $(document).ready(function() {
     });
 
     sfWrapper.addEventListener('click', function() { sfInput.focus(); });
+
+    /* A Reference Date trocada leva a tela para aquele dia (o filtro padrão
+       é Trade Date = hoje, que esconderia o que se quer ver) — §727 */
+    function sfSetTradeDate(dmy) {
+        if (!/^\d{2}\/\d{2}\/\d{4}$/.test(String(dmy || ''))) return;
+        var col = SF_COLS.filter(function(c) { return c.label === 'Trade Date'; })[0];
+        if (!col) return;
+        var key = sfFilterKey(col, 'exact');
+        sfActive = sfActive.filter(function(f) { return f.key !== key; });
+        sfActive.push({ col: col, value: dmy, mode: 'exact', key: key });
+        sfRenderChips();
+        sfApply();
+    }
 
     // Default filter: Trade Date = ?tradedate= (deep-link from a bell notification)
     // else today (dd/mm/yyyy) — auto-search on page load

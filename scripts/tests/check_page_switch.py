@@ -136,8 +136,9 @@ check('  entrada do modo opaco e um esmaecer sem cascata (scss)', ':root.is-soli
 check('  ... e o otc.css compilado tem a regra', ':root.is-solid .otc-enter' in CSS, True)
 JS = ler('apps', 'static', 'js', 'otc.js')
 check('  refracao exige GPU', "!/Firefox\\//.test(ua) && !weakGpu();" in JS, True)
-check('  refracao no tempo ocioso, em fatias', 'lgIdle(lgScan);' in JS and 'function lgRun(dl)' in JS, True)
-check('  titulo parado no modo opaco', "if (REDUCED_MOTION || root.classList.contains('is-solid')) return;" in JS, True)
+check('  refracao: guardada na aba e aplicada antes do 1o quadro, o resto em fatias (§726)',
+      "LG_CACHE_KEY = '__OTC_LG_MAPS__'" in JS and 'lgScan(true);' in JS and 'function lgRun(dl)' in JS, True)
+check('  titulo entra parado, em qualquer modo (§726)', 'function splitTitle' not in JS, True)
 check('  placa ja na tela nao entra de novo (so as que entram rolando, §723)',
       "if (top < vh || !io) return;" in JS, True)
 check('  traducoes: a PROMESSA fica no cache', "this._cache[l] = fetch(this.langPath + l + '.json')" in JS, True)

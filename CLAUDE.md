@@ -1391,6 +1391,19 @@ São **53**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   `excel-filter.js`, teto de 1,2 s). Estado visual que o JS só aplica no fim
   da página é piscada a cada clique — resolva no paint, não depois.
   `check_page_transition.py` confere no `interactive`, antes do otc.js.
+- **Com o vidro (Mac, GPU) a troca é a View Transition SEM NOME nenhum**
+  (§726): grupo com `view-transition-name` é desenhado POR CIMA da raiz e
+  fotografado sem o fundo — o papel de parede nomeado cobria o conteúdo novo e
+  o vidro do menu clareava. A raiz troca sem `plus-lighter`, a antiga esmaece
+  por cima da nova, e a transição segura a antiga até a nova estar montada
+  (sem ela aparece a página crua). O conteúdo NÃO tem animação de entrada
+  (esmaecer do 0 é um quadro vazio), o título entra parado, a refração do
+  vidro sai do cache da aba antes do primeiro quadro, e a primeira pintura
+  espera o `#otc-content-end` (`rel=expect`). Não dê nome de transição a nada
+  nem ponha entrada animada na casca.
+- **Swal que fecha sozinho dura no mínimo 3 s** e para com o mouse em cima
+  (`initSwalTiming`, otc.js, §726): a tela segue escrevendo o `timer` que
+  quiser; o embrulho do `Swal.fire` garante o mínimo.
 - Cor só de tema claro precisa do par `[data-bs-theme=dark]`.
 - **Caminho em `url()` no `otc.scss` é RELATIVO ao CSS** (`../images/auth.jpg`,
   `../fonts/…`): no Stratos o `otc_stratos.py` põe o prefixo da solução no
@@ -1502,6 +1515,10 @@ São **53**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   `dce-fxo` e o backfill a família `DCE FXO`. **Ainda sem a API da Athena**
   (equipe, 28/10/2026): entra pelo xlsx e pelo Add Row; o `import-api` dela é
   501 e o pull automático é só do onshore. `check_dce_fxo.py`.
+- **NDF e Options Commodities têm o Reference Date na barra** (§727): sem API
+  (o Import lê a caixa inteira), ele leva a grade ao dia e o Mapping B3 ID
+  mapeia as operações GRAVADAS no dia dele além das da grade
+  (`_mapping_com_o_dia`); sem data é a grade, como antes.
 - **O Mapping B3 ID do New Deals entra em QUALQUER status** (mesa, 02/10/2026,
   §626): a trava de só `Sent`/`Error` saiu dos três JS (NDF Comm, Opt Comm, Opt
   FXO) e do `_generic_nd_mapping_candidates` (FWD Start, Other Publisher; o

@@ -262,6 +262,33 @@ for pag in ('new_deals-ndf-commodities', 'new_deals-opt-commodities', 'new_deals
     check(pag + ': sem o filtro Sent/Error',
           "(status === 'Sent' || status === 'Error') &&" in src, False)
 
+print('\n== 9. NDF Comm e Opt Comm: o Mapping leva o dia da Reference Date (§727) ==')
+from apps.pages import routes as _RT                             # noqa: E402
+_cand0 = _RT._generic_nd_mapping_candidates
+_pedidos = []
+def _cand(cfg, prod, ref):
+    _pedidos.append((cfg['suffix'], ref))
+    return [{'Deal': 'A', 'Client': 'C', 'Status': 'Sent'}, {'Deal': 'N', 'Client': 'C', 'Status': 'Approved'}]
+_RT._generic_nd_mapping_candidates = _cand
+try:
+    got = E._mapping_com_o_dia([{'Deal': 'A', 'Client': 'C'}, {'Deal': 'G', 'Client': 'C'}],
+                               '/tmp/x', '_ndfcomm.json', '2026-10-15')
+    check('a grade MAIS o dia, sem repetir o par (Deal, Client)', [d['Deal'] for d in got], ['A', 'G', 'N'])
+    check('   o dia lido é o do arquivo da página', _pedidos[-1], ('_ndfcomm.json', '2026-10-15'))
+    n = len(_pedidos)
+    got = E._mapping_com_o_dia([{'Deal': 'G', 'Client': 'C'}], '/tmp/x', '_optcomm.json', '')
+    check('sem Reference Date é a grade, como antes', ([d['Deal'] for d in got], len(_pedidos) == n), (['G'], True))
+finally:
+    _RT._generic_nd_mapping_candidates = _cand0
+ENT = io.open(os.path.join(ROOT, 'apps/pages/features/new_deals/entrypoint.py'), encoding='utf-8').read()
+check('os dois endpoints passam pelo `_mapping_com_o_dia`',
+      ("'_ndfcomm.json', data.get('ref_date'))" in ENT, "'_optcomm.json', data.get('ref_date'))" in ENT), (True, True))
+for pag in ('new_deals-ndf-commodities', 'new_deals-opt-commodities'):
+    src = io.open(os.path.join(ROOT, 'apps/templates/pages/%s.html' % pag), encoding='utf-8').read()
+    check(pag + ': o campo Reference Date na barra e no POST do Mapping',
+          ("<'refDateWrap ms-2 d-flex align-items-center'>" in src, 'ref_date: apiRefDate()' in src,
+           'function sfSetTradeDate(dmy)' in src), (True, True, True))
+
 print()
 if falhas:
     for f in falhas:
