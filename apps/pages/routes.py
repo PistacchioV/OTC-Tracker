@@ -2970,6 +2970,12 @@ _CETIP_FILES_SEED = [
     {'TYPE': 'Domain Registry (CADASTROCURVASMOEDASFEEDERDOMINIOS)',
      'SOURCE': 'CETIP_YYMMDD_CADASTROCURVASMOEDASFEEDERDOMINIOS',
      'DEST': 'CETIP_YYMMDD_CADASTROCURVASMOEDASFEEDERDOMINIOS.txt', 'EXTRA DEST': ''},
+    # DCE (Derivativos Realizados no Exterior, §729): a posição de custódia dos
+    # contratos do módulo novo. Vira o JSON de `cache/b3 files/DCE`, que é o que a
+    # tela Live Position › DCE lê.
+    {'TYPE': 'DCE Contract Position (DPOSICAOCONTRATODCE)',
+     'SOURCE': 'CETIP21_YYMMDD_DPOSICAOCONTRATODCE',
+     'DEST': '73760_YYMMDD_DPOSICAOCONTRATODCE.CETIP21', 'EXTRA DEST': ''},
     # CGD: salvo na rotina e nada mais — não vira JSON e não vai para área nenhuma.
     {'TYPE': 'CGD (NET)',
      'SOURCE': 'CETIP21_YYMMDD_DPOSICAO-NET',
@@ -3063,6 +3069,27 @@ _B3_SWAP_HEADERS_RAW = {
         "Data da Operacao Original/Data Operacao Original da Antecipacao;PU Op Original;"
         "Qtd Op Original;ISPB Liq. Contraparte;Nu Op Msg;Num Ctrl Operacao;Programa de Emissao"
     ),
+    # 73760_*_DPOSICAOCONTRATODCE.CETIP21 — os 57 campos de dado do layout da B3
+    # (Manual "Receber Arquivos", Derivativos Realizados no Exterior, pp. 422-424),
+    # na ordem do arquivo. Vale quando o arquivo chega SEM cabeçalho (o
+    # `has_header: 'auto'` decide); com cabeçalho, a tela lê pela POSIÇÃO e estes
+    # nomes continuam sendo os da coluna (§729).
+    'dce_contract_position': (
+        "Data de Registro;Data de Início;Código IF;Tipo de DCE;Tipo de Mercado;Meu Número;"
+        "Tipo de Derivativo;Data de Vencimento;Conta Registradora;Conta Parte;Código da Parte;"
+        "CPF/CNPJ da Parte;Nome/Razão Social da Parte;Valor Base do Contrato;Quantidade;"
+        "Multiplicador;Categoria do Ativo Subjacente;Ativo Subjacente da Parte;Funcionalidade;"
+        "Moeda Cotada;Moeda de Liquidação;Entrega Física;Garantias;Liquidação em CCP;Código ISIN;"
+        "Dados Complementares;Bolsa Negociada;País de Origem da Bolsa Negociada;Mês de Referência;"
+        "Ano de Referência;Contraparte Identificada;Código da Contraparte;CPF/CNPJ da Contraparte;"
+        "Nome/Razão Social da Contraparte;País de Origem da Contraparte;"
+        "Contraparte Relacionada (Coligada);Posição da Parte - Futuro;Preço - Futuro;"
+        "Posição da Parte - Termo;Termo Asiático;Preço - Termo;Posição da Parte - Opção;"
+        "Tipo de Opção;Strike;Tipo de Verificação;Opção Asiática;"
+        "Categoria do Ativo Subjacente da Contraparte;Ativo Subjacente da Contraparte;Tipo de Swap;"
+        "Swap Asiático;Nº de Fluxos;Posição da Parte - CDS;Tipo de Origem;Origem;"
+        "Posição da Parte - Nota Estruturada;Posição da Parte - CFD;Posição da Parte - Swaption"
+    ),
 }
 _B3_SWAP_HEADERS = {k: [h.strip() for h in v.split(';')]
                     for k, v in _B3_SWAP_HEADERS_RAW.items()}
@@ -3145,7 +3172,13 @@ def _b3_export_json(src_path, json_cfg, dest_name, dref, skip_existing=False):
         if not lines:
             return None
 
-        if json_cfg.get('has_header'):
+        has_header = json_cfg.get('has_header')
+        if has_header == 'auto':
+            # o layout não diz se o arquivo traz cabeçalho (§729): linha de DADO
+            # começa pela data (AAAAMMDD); qualquer outra coisa é cabeçalho
+            first = lines[0].split(';')[0].strip()
+            has_header = not (len(first) == 8 and first.isdigit())
+        if has_header:
             header = [h.strip() for h in lines[0].split(';')]
             data_lines = lines[1:]
         else:
@@ -4453,7 +4486,7 @@ _SWAPCHAR_BOOL_COLS = {'Reset', 'Amortiza sem Troca de Diferencial', 'Agenda de 
 _SWAPCHAR_CPTY_NAME_COLS = {'CPF/CNPJ Cliente Contraparte'}
 
 
-def _swap_day_path(ref, file_tpl, max_back=10, exact=False):
+def _swap_day_path(ref, file_tpl, max_back=10, exact=False, category='Swap'):
     """Newest existing Swap day file (path, dref) walking back from `ref` —
     mesmo contrato do `_opt_dposicao_path`: as telas de posição andam até dez
     dias úteis para trás quando falta arquivo (é o que as mantém populadas), e
@@ -4461,7 +4494,7 @@ def _swap_day_path(ref, file_tpl, max_back=10, exact=False):
     cur = ref
     for _ in range(1 if exact else max_back):
         dref = cur.strftime('%y%m%d')
-        p = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref), file_tpl.format(dref))
+        p = os.path.join(B3_JSON_ROOT, category, _b3_date_subpath(dref), file_tpl.format(dref))
         if _store.isfile(p):
             return p, dref
         cur = _prev_anbima_bizday(cur)
@@ -14114,6 +14147,54 @@ _MAPPING_DEFS = {
             {'key': 'DOMAIN', 'label': 'Domain', 'lang': 'map-col-dce-domain'},
         ],
         'seed': [],
+    },
+    # ── DCE: os códigos da posição (Live Position › DCE, §729) ──────────────
+    # O arquivo DPOSICAOCONTRATODCE traz NÚMEROS nos campos de tipo. O que o
+    # layout da B3 escreve no próprio manual (Receber Arquivos, pp. 422-424)
+    # nasce aqui; o que ele manda para o arquivo público `Dominios_DCE` tem
+    # cadastro próprio (`dce-*`) — menos Moeda, Bolsa e Origem, que entram AQUI
+    # pela tela (o campo já está na lista). Código casa sem o zero à esquerda.
+    'dce-position-codes': {
+        'label': 'DCE — Position Codes',
+        'columns': [
+            {'key': 'FIELD', 'label': 'Field', 'type': 'select',
+             'options': ['Tipo de DCE', 'Tipo de Mercado', 'Sim/N\u00e3o', 'Posi\u00e7\u00e3o',
+                         'Posi\u00e7\u00e3o Op\u00e7\u00e3o', 'Tipo de Op\u00e7\u00e3o', 'Posi\u00e7\u00e3o CDS',
+                         'Tipo de Origem', 'M\u00eas de Refer\u00eancia', 'Moeda', 'Bolsa Negociada', 'Origem']},
+            {'key': 'CODE', 'label': 'B3 Code'},
+            {'key': 'LABEL', 'label': 'Text'},
+        ],
+        'seed': [
+            {'FIELD': 'Tipo de DCE', 'CODE': '01', 'LABEL': 'RESOLUCAO 3.824'},
+            {'FIELD': 'Tipo de DCE', 'CODE': '02', 'LABEL': 'RESOLUCAO 3.312'},
+            {'FIELD': 'Tipo de Mercado', 'CODE': '01', 'LABEL': 'BOLSA'},
+            {'FIELD': 'Tipo de Mercado', 'CODE': '02', 'LABEL': 'BALCAO'},
+            {'FIELD': 'Sim/Não', 'CODE': '01', 'LABEL': 'SIM'},
+            {'FIELD': 'Sim/Não', 'CODE': '02', 'LABEL': 'NAO'},
+            {'FIELD': 'Posição', 'CODE': '07', 'LABEL': 'COMPRADOR'},
+            {'FIELD': 'Posição', 'CODE': '08', 'LABEL': 'VENDEDOR'},
+            {'FIELD': 'Posição Opção', 'CODE': '11', 'LABEL': 'TITULAR'},
+            {'FIELD': 'Posição Opção', 'CODE': '12', 'LABEL': 'LANCADOR'},
+            {'FIELD': 'Tipo de Opção', 'CODE': '01', 'LABEL': 'COMPRA'},
+            {'FIELD': 'Tipo de Opção', 'CODE': '02', 'LABEL': 'VENDA'},
+            {'FIELD': 'Posição CDS', 'CODE': '07', 'LABEL': 'COMPRADOR DE PROTECAO'},
+            {'FIELD': 'Posição CDS', 'CODE': '08', 'LABEL': 'VENDEDOR DE PROTECAO'},
+            {'FIELD': 'Tipo de Origem', 'CODE': '01', 'LABEL': 'DIVIDA SOBERANA'},
+            {'FIELD': 'Tipo de Origem', 'CODE': '02', 'LABEL': 'DIVIDA CORPORATE'},
+            {'FIELD': 'Mês de Referência', 'CODE': '01', 'LABEL': 'JANEIRO'},
+            {'FIELD': 'Mês de Referência', 'CODE': '02', 'LABEL': 'FEVEREIRO'},
+            {'FIELD': 'Mês de Referência', 'CODE': '03', 'LABEL': 'MARCO'},
+            {'FIELD': 'Mês de Referência', 'CODE': '04', 'LABEL': 'ABRIL'},
+            {'FIELD': 'Mês de Referência', 'CODE': '05', 'LABEL': 'MAIO'},
+            {'FIELD': 'Mês de Referência', 'CODE': '06', 'LABEL': 'JUNHO'},
+            {'FIELD': 'Mês de Referência', 'CODE': '07', 'LABEL': 'JULHO'},
+            {'FIELD': 'Mês de Referência', 'CODE': '08', 'LABEL': 'AGOSTO'},
+            {'FIELD': 'Mês de Referência', 'CODE': '09', 'LABEL': 'SETEMBRO'},
+            {'FIELD': 'Mês de Referência', 'CODE': '10', 'LABEL': 'OUTUBRO'},
+            {'FIELD': 'Mês de Referência', 'CODE': '11', 'LABEL': 'NOVEMBRO'},
+            {'FIELD': 'Mês de Referência', 'CODE': '12', 'LABEL': 'DEZEMBRO'},
+            {'FIELD': 'Mês de Referência', 'CODE': '13', 'LABEL': 'N.A.'},
+        ],
     },
     # ── Onboarding e Reconciliação de CGD ───────────────────────────────────
     #

@@ -75,6 +75,8 @@ esperado = {
     'NDF Position (DPOSICAO-TER)':   ('NDF', '73760_{}_DPOSICAO-TER.json'.format(DREF)),
     'Option Position (OPC DPOSICAO)': ('Option', '73760_{}_DPOSICAO.json'.format(DREF)),
     'SWAP Flow (DFLUXO_SWAP)':       ('Swap', '73760_{}_DFLUXO.json'.format(DREF)),
+    # Live Position › DCE (§729): `live_positions.queries.DCE_FILE`
+    'DCE Contract Position (DPOSICAOCONTRATODCE)': ('DCE', '73760_{}_DPOSICAOCONTRATODCE.json'.format(DREF)),
 }
 with app.app_context():
     from apps.pages.features.cetip import queries as CQ

@@ -655,6 +655,11 @@ html.otc-vt-nav::view-transition-new(root) { mix-blend-mode: normal; }
 // Enquanto a página nova monta (§728, `segura()` do head-css.html) a entrada
 // fica PAUSADA no zero — o que se vê é a página antiga, inteira — e, solta, a
 // página PRONTA entra de uma vez.
+// O GRUPO da raiz não anima (§728): por padrão o navegador o leva do tamanho
+// da página antiga ao da nova, e com a barra de rolagem aparecendo numa e não
+// na outra (ou alturas diferentes) a página INTEIRA encolhia e crescia de
+// volta na troca — a pílula do menu "subia e voltava" junto.
+html.otc-vt-nav::view-transition-group(root) { animation: none; }
 html.otc-vt-nav::view-transition-old(root) { animation: none; }
 html.otc-vt-nav::view-transition-new(root) { animation: otc-vt-in 200ms var(--otc-ease-out, ease-out) both; }
 html.otc-vt-hold::view-transition-new(root) { animation-play-state: paused; }
