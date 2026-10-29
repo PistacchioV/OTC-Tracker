@@ -724,7 +724,7 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   sem o card (`_CP_ENDPOINT_CARD`). **O `id` é o token gravado**: renomear
   revoga em silêncio. A seção do card é o DOM (`data-cp-hdr` + `.row.cp-cards`),
   nunca um mapa no JS. Seis seções: Intraday, Settlement Reporting, Pending
-  Confirmation, Economic Affirmation, Reference Data, Application; dezesseis cards
+  Confirmation, Economic Affirmation, Reference Data, Application; dezessete cards
   (o `check_control_panel_sections.py` conta — card novo mexe nele). O card *New
   Version Released* lê a versão do `link.txt` ao lado do
   `start-otc-tracker.bat`; sem versão o envio é recusado; destinatário é quem
@@ -740,6 +740,17 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   NOVO que manda e-mail entra no `CARDS`, chama o `ligado()` e ganha o
   `data-cp-auto` no card — o `check_cp_auto_send.py` cobra os três. A rota
   `/api/control-panel/auto-send` confere o acesso ao card pelo corpo.
+- **RED Clients - Rapid Exposure** (§730, card `redclients`, tarefa diária
+  `red-clients`): a planilha diária marca `RED: 'Y'` no registro do Reference
+  Data pelo ECI (coluna K da aba "JPM Entities-Open Settlements") e leva
+  ACTIVE a `RED`; PENDING/INACTIVE ficam com a marca, e a APROVAÇÃO
+  (`index_b3`, refdata) devolve RED em vez de ACTIVE. Fora da lista, a marca
+  sai e o RED volta a ACTIVE. Quem é RED é `platform/red_clients` (a marca, não
+  o arquivo); nas telas de liquidação a pílula é só DOM (`red-clients.js`,
+  texto no `::before` — o nome da célula é relido para gerar o aviso), e todo
+  endpoint NOVO de aviso de liquidação chama `_red_clients.anota_avisos(drafts)`
+  (o `X-Red-Clients` que abre o aviso de crédito). Planilha errada RECUSA sem
+  gravar. Leitor do STATUS do Reference Data trata `RED` como ativo.
 - **Card escondido por AMBIENTE é `CP_HIDDEN_CARDS`** no `app.config` (§724):
   vazia na dev e na prod; a ponte do Stratos esconde o `appversion` (o New
   Version Released — lá não há `.bat` nem instância). O card sai do Control
@@ -3858,7 +3869,7 @@ São **54**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (234 scripts)
+### `scripts/tests/` (235 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
