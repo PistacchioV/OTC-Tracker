@@ -638,8 +638,8 @@ html.otc-theme-switching *::after { transition: none !important; }
 // Troca de PÁGINA (§632/§726): a navegação entre telas é uma View Transition
 // entre documentos. Ela segura a página antiga na tela até a nova estar MONTADA
 // (sem ela aparecia a página crua, antes dos scripts: campo de arquivo sem
-// estilo, ícones vazios, e tudo pulava quando o JS rodava) e esmaece a antiga
-// por cima da nova. NENHUMA parte tem nome próprio: grupo com nome é desenhado
+// estilo, ícones vazios, e tudo pulava quando o JS rodava) e a nova entra
+// esmaecendo por cima dela (abaixo). NENHUMA parte tem nome próprio: grupo com nome é desenhado
 // POR CIMA da raiz (a foto do papel de parede cobria o conteúdo novo pelos
 // ~260 ms da troca — o miolo sumia e voltava) e é fotografado SEM o que está
 // atrás (o vidro do menu saía mais claro na foto). Menu, barra e papel de
@@ -650,9 +650,15 @@ html.otc-theme-switching *::after { transition: none !important; }
 @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
 html.otc-vt-nav::view-transition-old(root),
 html.otc-vt-nav::view-transition-new(root) { mix-blend-mode: normal; }
-html.otc-vt-nav::view-transition-old(root) { animation: otc-vt-out 170ms var(--otc-ease-in, ease-in) both; }
-html.otc-vt-nav::view-transition-new(root) { animation: none; }
-@keyframes otc-vt-out { to { opacity: 0; } }
+// A foto NOVA é desenhada POR CIMA da antiga (a ordem do par de imagens): a
+// antiga fica parada e opaca por baixo, e a nova entra esmaecendo sobre ela.
+// Enquanto a página nova monta (§728, `segura()` do head-css.html) a entrada
+// fica PAUSADA no zero — o que se vê é a página antiga, inteira — e, solta, a
+// página PRONTA entra de uma vez.
+html.otc-vt-nav::view-transition-old(root) { animation: none; }
+html.otc-vt-nav::view-transition-new(root) { animation: otc-vt-in 200ms var(--otc-ease-out, ease-out) both; }
+html.otc-vt-hold::view-transition-new(root) { animation-play-state: paused; }
+@keyframes otc-vt-in { from { opacity: 0; } }
 
 // ── 4. Vidro e movimento ────────────────────────────────────────────────────
 // O MATERIAL. Uma placa de vidro: tinta + desfoque + profundidade; a borda de

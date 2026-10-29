@@ -13887,15 +13887,19 @@ html.otc-vt-nav::view-transition-new(root) {
 }
 
 html.otc-vt-nav::view-transition-old(root) {
-  animation: otc-vt-out 170ms var(--otc-ease-in, ease-in) both;
-}
-
-html.otc-vt-nav::view-transition-new(root) {
   animation: none;
 }
 
-@keyframes otc-vt-out {
-  to {
+html.otc-vt-nav::view-transition-new(root) {
+  animation: otc-vt-in 200ms var(--otc-ease-out, ease-out) both;
+}
+
+html.otc-vt-hold::view-transition-new(root) {
+  animation-play-state: paused;
+}
+
+@keyframes otc-vt-in {
+  from {
     opacity: 0;
   }
 }

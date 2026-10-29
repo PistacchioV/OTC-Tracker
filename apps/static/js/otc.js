@@ -441,7 +441,10 @@
         // e a página seguinte acende ESTE item, não um gêmeo de outro menu
         a.addEventListener('click', function (e) {
           try { sessionStorage.setItem(NAV_PICK, keyOf(node)); } catch (er) {}
-          moveLensTo(ul, a);
+          // CURTA e sem mola (§728): a troca de página fotografa a página
+          // antiga, e a mola de 720 ms ficava na foto no meio do caminho — a
+          // pílula "subia e descia" quando a página nova entrava
+          moveLensTo(ul, a, true);
           // ctrl/cmd/clique do meio abre OUTRA aba: o menu desta não muda de página
           if (!(e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1)) saveNavSnap(node.href);
         });
@@ -611,12 +614,22 @@
     if (animate && l.dataset.w) animateLens(l, { x: +l.dataset.x, y: +l.dataset.y, w: +l.dataset.w, h: +l.dataset.h }, b);
     else setLensBox(l, b);
   }
-  function moveLensTo(ul, a) {
+  function moveLensTo(ul, a, curta) {
     var l = ul.querySelector(':scope > .otc-lens');
     $$(':scope > li > a.active', ul).forEach(function (x) { x.classList.remove('active'); });
     a.classList.add('active');
     if (!l || !l.dataset.w) { placeLens(ul, false); return; }
-    animateLens(l, { x: +l.dataset.x, y: +l.dataset.y, w: +l.dataset.w, h: +l.dataset.h }, rectIn(ul, a));
+    var from = { x: +l.dataset.x, y: +l.dataset.y, w: +l.dataset.w, h: +l.dataset.h }, to = rectIn(ul, a);
+    if (curta && l.animate && !REDUCED_MOTION) {
+      l.style.width = to.w + 'px';
+      l.style.height = to.h + 'px';
+      l.animate([{ transform: 'translate(' + from.x + 'px,' + from.y + 'px)' },
+                 { transform: 'translate(' + to.x + 'px,' + to.y + 'px)' }],
+                { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' });
+      setLensBox(l, to);
+      return;
+    }
+    animateLens(l, from, to);
   }
 
   // ── Acesso por usuário: o menu mostra só o que a pessoa alcança ──────────
