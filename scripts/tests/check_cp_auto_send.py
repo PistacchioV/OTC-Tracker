@@ -4,7 +4,8 @@
   1. `platform/auto_send`: sem arquivo os seis estão LIGADOS; desligar e ligar
      gravam; a leitura que falha LEVANTA (nunca "ligado" nem "desligado"
      chutado);
-  2. o disparo automático dos seis cards: DESLIGADO reserva o horário, grava o
+  2. o disparo automático dos sete cards (seis de e-mail e a planilha do
+     Pending, que GRAVA no share): DESLIGADO reserva o horário, grava o
      desfecho `disabled` e NÃO envia; LIGADO envia; leitura que falha levanta
      ANTES de reservar (o laço tenta de novo, o horário não se perde);
   3. a rota `/api/control-panel/auto-send`: GET com os cards da pessoa, POST
@@ -56,7 +57,7 @@ def ler(*p):
 
 
 print('== 1. o interruptor ==')
-check('sem arquivo, os seis ligados', {c: v['enabled'] for c, v in AS.estado().items()},
+check('sem arquivo, todos ligados', {c: v['enabled'] for c, v in AS.estado().items()},
       {c: True for c in AS.CARDS})
 AS.definir('baccea', False, 'T000001', 'Teste')
 check('desligar grava', (AS.ligado('baccea'), AS.ligado('mt300')), (False, True))
@@ -84,7 +85,7 @@ except S.BancoOcupado:
 finally:
     S.read = _read0
 
-print('\n== 2. o disparo automático dos seis ==')
+print('\n== 2. o disparo automático dos sete ==')
 from apps.pages.features.bacc import commands as BACC              # noqa: E402
 from apps.pages.features.bacc.infra import persistence as BACCP    # noqa: E402
 from apps.pages.features.mt300 import commands as MT               # noqa: E402
@@ -97,6 +98,8 @@ from apps.pages.features.deals_monitor import commands as DM       # noqa: E402
 from apps.pages.features.deals_monitor.infra import persistence as DMP    # noqa: E402
 from apps.pages.features.projects import commands as PJ            # noqa: E402
 from apps.pages.features.projects.infra import alerts as PJA       # noqa: E402
+from apps.pages.features.pcx import commands as PCX                # noqa: E402
+from apps.pages.features.pcx.infra import persistence as PCXP      # noqa: E402
 
 AGORA = datetime(2026, 10, 29, 19, 0)
 _biz0 = R._pcx_is_bizday
@@ -166,6 +169,9 @@ caso('Intraday Monitor', 'intradaytasks', DMP, '_ndm_pending_claim_slot', DMP, '
 DMP._load_ndm_pending_recipients = _rec0
 caso('Initiatives Alerts', 'initiativealerts', PJA, 'claim', PJA, 'write_status', PJ, 'run_alerts',
      {'initiatives': 1}, lambda: PJ.alerts_run_once(datetime(2026, 10, 29, 9, 0)))
+# o sétimo não manda e-mail: GRAVA a planilha do Pending (o "envio" é o save)
+caso('Pending Spreadsheet', 'pendingspreadsheet', PCXP, 'claim_slot', PCXP, 'write_status', PCX, 'save',
+     (1, 'x.xlsx'), lambda: PCX.fire_slot('2026-10-29 10:45', AGORA))
 R._pcx_is_bizday = _biz0
 for c in AS.CARDS:
     AS.definir(c, True)
@@ -187,27 +193,27 @@ try:
     check('card sem acesso: 403', (r.status_code, AS.ligado('confescalation')), (403, True))
     R._get_page_access = lambda sid: (False, set())
     d = cl.get('/api/control-panel/auto-send').get_json() or {}
-    check('acesso não configurado: os seis', sorted((d.get('cards') or {}).keys()), sorted(AS.CARDS))
+    check('acesso não configurado: todos', sorted((d.get('cards') or {}).keys()), sorted(AS.CARDS))
 finally:
     R._get_page_access = _acc0
     AS.definir('mt300', True)
 
 print('\n== 4. a tela e os laços ==')
 html = ler('apps', 'templates', 'pages', 'control-panel.html')
-check('um interruptor por card, os mesmos seis',
+check('um interruptor por card, os mesmos da lista',
       sorted(re.findall(r'data-cp-auto="([a-z0-9]+)" hidden', html)), sorted(AS.CARDS))
 for c in AS.CARDS:
     bloco = html[html.index('<div class="cp-card" data-cp-card="%s">' % c):]
     check('   o de %s mora no card dele' % c, bloco.index('data-cp-auto="%s"' % c) < bloco.index('cp-card__title'))
-check('o desfecho `disabled` desenhado nos seis cards (cpAutoSkipped)', html.count('cpAutoSkipped(') - 1, 6)
+check('o desfecho `disabled` desenhado nos sete cards (cpAutoSkipped)', html.count('cpAutoSkipped(') - 1, len(AS.CARDS))
 for lang in ('en', 'br', 'es'):
     tr = json.loads(ler('apps', 'static', 'data', 'translations', lang + '.json'))
     check('textos em %s' % lang, all(tr.get(k) for k in (
         'cp-auto-on', 'cp-auto-off', 'cp-auto-skipped', 'cp-auto-toast-on', 'cp-auto-toast-off', 'cp-auto-fail')))
 ids = {c['id'] for c in AZ._CONTROL_PANEL_CARDS}
-check('os seis são cards do Control Panel', set(AS.CARDS) <= ids)
+check('todos são cards do Control Panel', set(AS.CARDS) <= ids)
 LACOS = {'baccea': 'bacc', 'mt300': 'mt300', 'manualdealsea': 'mdea', 'confescalation': 'conf_escalation',
-         'intradaytasks': 'deals_monitor', 'initiativealerts': 'projects'}
+         'intradaytasks': 'deals_monitor', 'initiativealerts': 'projects', 'pendingspreadsheet': 'pcx'}
 check('um laço por card', sorted(LACOS), sorted(AS.CARDS))
 for card, feat in LACOS.items():
     fonte = ler('apps', 'pages', 'features', feat, 'commands.py')
