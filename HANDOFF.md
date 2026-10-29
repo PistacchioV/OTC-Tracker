@@ -31201,3 +31201,33 @@ status `Pending` → comentário → ✓, como antes.
 
 `check_payrec_carry.py` §5 (o JS não volta ao `'Pending'` fixo) e §6 (D+1 a
 D+4 pelo `run_payrec`, com o ✓ na linha trazida e o End process em cada dia).
+
+
+## §733 — Pending Confirmation: o chip Pending e a planilha diária leem SÓ o banco pending (2026-10-29)
+
+**Relato da equipe:** a página mostrava 174 operações acima de 30 dias (funil
+do Status nas três faixas ≥ 30) e a planilha `PENDING - Outstanding
+Confirmation OTC.xlsx` gravada na pasta, 491. Pedido: as duas olham SÓ o banco
+`pending`, não os três.
+
+**Como era:** o chip `Status = Pending` (`/api/pending-confirmation/search`) e
+a planilha (`features/pcx/queries.rows`) liam os TRÊS bancos e ficavam com o
+que a categoria recalculada (`_pc_target_category`) dizia pending — a linha
+do backlog ou do ok que hoje se lê como pendente entrava. As duas tinham o
+MESMO código, copiado nos dois lugares (na dev, 40 = 40 com os mesmos dados):
+a diferença de 174 × 491 não sai daqui, e sim do MOMENTO de cada leitura (a
+planilha é a das 10:45, a página é o banco agora — um Pending Update no meio
+do dia muda o Pending Status de muitas de uma vez). Fica dito porque a
+mudança abaixo não a explica: conferir o mesmo Trade Number nos dois lados,
+ou rodar o Run do card e contar de novo.
+
+**Agora:** uma função só, `_pc_pending_rows` (platform, alias no `routes`),
+para o chip e para a planilha: SÓ o banco `pending`; a categoria recalculada
+ainda TIRA a linha que já se resolveu e espera o re-route das 11:30 (senão um
+Ok apareceria como pendência); dedupe por Trade Number. Os chips Ok e Backlog
+seguem lendo os três (a linha que virou Ok mora no pending até as 11:30, e
+sem isso ela sumiria das duas visões). O que é pendente e mora no backlog/ok
+volta ao pending na manutenção das 11:30 e passa a aparecer dali.
+
+`check_pcx_api.py` §2: linha só no backlog e só no ok fica FORA, o chip da
+página devolve a MESMA lista da planilha, e os outros chips seguem filtrando.

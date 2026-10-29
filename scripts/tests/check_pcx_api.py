@@ -5,8 +5,9 @@ O layout da planilha e CONTRATO com o time global (OLEDB, Confirmation_Latam):
 aba CONFIRMATIONS, cabecalho na linha 1, as 31 colunas na ordem pedida —
 inclusive as VAZIAS, que mantem a posicao das demais. O que ele prende:
 
-  1. **as linhas sao as do chip Pending recomputado** (`_pc_target_category`),
-     dedupe por Trade Number atraves dos tres DBs;
+  1. **as linhas sao SO as do banco `pending`** (equipe, 29/10/2026) que
+     seguem pendentes pela categoria recomputada, dedupe por Trade Number — e
+     o chip Status = Pending da pagina devolve a MESMA lista (`_pc_pending_rows`);
   2. **data vira DATA de verdade** (DD/MM/YYYY) e Aging vira numero — texto
      deixaria o Excel do consumidor sem ordenar;
   3. **data anterior le o SNAPSHOT sem recategorizar** (a foto ja e o balde
@@ -71,13 +72,17 @@ c, anon = cliente(), cliente(auth=False)
 
 LINHAS = {
     'backlog': [{'Trade Number': 'T-1', 'Client': 'ACME', 'Aging': '45', 'LOB': 'CEM',
-                 'Trade Date': '01/07/2026', 'Status': 'Pending'}],
+                 'Trade Date': '01/07/2026', 'Status': 'Pending'},
+                # so no backlog: fica FORA, mesmo com a categoria dizendo pending
+                {'Trade Number': 'T-9', 'Client': 'SO-BACKLOG', 'Aging': '80',
+                 'Trade Date': '10/08/2026', 'Status': 'Pending'}],
     'pending': [{'Trade Number': 'T-2', 'Client': 'BETA', 'Aging': '10', 'LOB': 'EDG',
                  'Trade Date': '10/08/2026', 'Status': 'Pending'},
                 {'Trade Number': 'T-1', 'Client': 'ACME', 'Aging': '45', 'LOB': 'CEM',
                  'Trade Date': '01/07/2026', 'Status': 'Pending'},     # duplicada: dedupe
                 {'Trade Number': 'T-3', 'Client': 'JA-OK', 'Status': 'Ok'}],
-    'ok': [],
+    'ok': [{'Trade Number': 'T-8', 'Client': 'SO-OK', 'Aging': '70',
+            'Trade Date': '20/08/2026', 'Status': 'Pending'}],      # so no ok: fora
 }
 R._pc_load_rows = lambda cat: [dict(r) for r in LINHAS.get(cat, [])]
 R._pc_target_category = lambda r: 'ok' if r.get('Status') == 'Ok' else 'pending'
@@ -88,10 +93,19 @@ print('== 1. sem sessao ==')
 check('run -> 401', anon.post('/api/control-panel/pending-spreadsheet/run').status_code, 401)
 check('status -> 401', anon.get('/api/control-panel/pending-spreadsheet/status').status_code, 401)
 
-print('\n== 2. as linhas: pending recomputado, dedupe por Trade Number ==')
+print('\n== 2. as linhas: SO o banco pending, recomputado, dedupe por Trade Number ==')
 rows = PCX_rows()
-check('T-1 uma vez, T-2, e a Ok fica fora',
+check('T-1 uma vez, T-2; a Ok, a so-do-backlog e a so-do-ok ficam fora',
       sorted(r['Trade Number'] for r in rows), ['T-1', 'T-2'])
+r = c.post('/api/pending-confirmation/search',
+           json={'filters': [{'field': 'Status', 'type': 'text', 'value': 'Pending', 'mode': 'text'}]})
+check('   o chip Status = Pending da pagina devolve a MESMA lista',
+      sorted(x['Trade Number'] for x in r.get_json()['rows']), ['T-1', 'T-2'])
+r = c.post('/api/pending-confirmation/search',
+           json={'filters': [{'field': 'Status', 'type': 'text', 'value': 'Pending', 'mode': 'text'},
+                             {'field': 'Client', 'type': 'text', 'value': 'BETA', 'mode': 'text'}]})
+check('   e os outros chips seguem filtrando',
+      [x['Trade Number'] for x in r.get_json()['rows']], ['T-2'])
 
 print('\n== 3. o layout da planilha e contrato ==')
 ws = PCX_xlsx(rows).active

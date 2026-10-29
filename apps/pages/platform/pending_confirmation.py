@@ -502,6 +502,32 @@ def _pc_target_category(row):
     return 'pending'
 
 
+def _pc_pending_rows():
+    """As linhas do chip `Status = Pending` da página E da planilha diária
+    (`PENDING - Outstanding Confirmation OTC.xlsx`) — UMA função para as duas,
+    senão elas divergem.
+
+    A fonte é SÓ o banco `pending` (equipe, 29/10/2026): o que mora no backlog
+    e no ok não entra, mesmo que a categoria recalculada hoje diga pending — a
+    manutenção das 11:30 é quem leva a linha de um banco para o outro. A
+    categoria recalculada ainda TIRA a linha do pending que já se resolveu e
+    espera o re-route (senão um Ok apareceria como pendência). Dedupe por
+    Trade Number. Lido pelo `routes` (os testes trocam o `_pc_load_rows` e o
+    `_pc_target_category` lá)."""
+    from apps.pages import routes
+    seen, rows = set(), []
+    for r in routes._pc_load_rows('pending'):
+        if routes._pc_target_category(r) != 'pending':
+            continue
+        tn = str(r.get('Trade Number', '') or '')
+        key = tn or ('#%d' % len(rows))
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append(r)
+    return rows
+
+
 def _pc_write_exec(category, ops, raise_errors=False):
     """Run (sql, params) operations in one shared exclusive transaction.
     `raise_errors`: a falha SOBE (depois do WARNING) em vez de virar `False`."""
