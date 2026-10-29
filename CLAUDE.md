@@ -3812,7 +3812,10 @@ São **54**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   argumento lista, `hotfix apply` copia) e, como o `stratos-sync.bat`, **puxa
   do GitHub antes** (§688): `git pull --ff-only` em bloco com auto-chamada,
   branch conferida e `apps\` sem nada fora do git — pull que falha ou checkout
-  sujo só lista, o `apply` recusa. A correção nasce no repositório (dev → prod
+  sujo só lista, o `apply` recusa. Leva também o `requirements.txt` e o `run.py`, que
+  moram na RAIZ do repositório e não em `apps\` (§731) — o
+  `start-otc-tracker.bat` compara o requirements com o retrato da última
+  instalação, então o pip roda sozinho na subida seguinte. A correção nasce no repositório (dev → prod
   pelo merge), nunca editada no checkout da máquina.
 - **Parêntese dentro de bloco `( … )` do `.bat` vai escapado** (`^(`/`^)`) —
   erro de PARSE. `check_bat_blocks.py`.
