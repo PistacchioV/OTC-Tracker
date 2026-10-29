@@ -31137,3 +31137,54 @@ não passam por aqui.
 
 `check_red_clients.py`; `check_control_panel_sections.py` (17 cards) e
 `check_intraday_monitor.py` (a tarefa) atualizados.
+
+
+## §731 — O hotfix.bat leva o requirements.txt (e o run.py) (2026-10-29)
+
+**Pedido da equipe:** incluir o `requirements.txt` no que o `hotfix.bat` copia
+para a pasta da versão no ar.
+
+**O que estava errado:** o hotfix compara com a pasta da versão a partir de
+`apps\` (`SOURCE_ROOT=%~dp0apps`), e o `requirements.txt` e o `run.py` moram
+na RAIZ do repositório — na pasta da versão é que os dois ficam ao lado do
+`config.py`. O `requirements.txt` estava fora de propósito (a nota dizia que o
+retrato de instalação era por VERSÃO e só um deploy dispararia o pip), e o
+aviso de "requirements mudou" olhava `apps\requirements.txt`, que não existe:
+nunca aparecia. O `run.py` estava listado no `DEPLOY_FILES`, mas pelo mesmo
+motivo nunca era comparado nem copiado, calado.
+
+**A nota antiga também não valia:** o `start-otc-tracker.bat` compara o
+`requirements.txt` da versão com o retrato da última instalação (`fc /b`), não
+só o nome da versão — requirements diferente na mesma versão dispara o
+`pip install` na subida seguinte, sozinho.
+
+**Agora:** `ROOT_FILES=requirements.txt run.py`, numa passada própria a
+partir da raiz do repositório (lista, apply e backup do original como os
+outros); a conferência de checkout sujo olha os dois; o `fc` do requirements é
+feito ANTES da cópia e o aviso diz que a próxima subida instala as
+dependências e demora mais. `check_bat_blocks.py`, `check_bat_files.py`.
+
+
+## §732 — Pay/Rec: a pendência trazida some no D+2 pelo ✓ da linha (2026-10-29)
+
+**Relato da equipe:** o Pending Payment / Pending Receivement tem de aparecer
+em D+1, D+2, D+n até ser resolvido, e aparecia só em D+1.
+
+**O que estava errado:** o carry-forward (§704) estava certo — simulado pelo
+`run_payrec` com Run e End process por quatro dias seguidos, a pendência segue
+em todos. Quem a tirava era a TELA. No modo Justify do End process cada
+linha pendente tem Edit e ✓ (Confirm); o status só vira seletor depois do
+Edit, e o ✓ sem o Edit mandava `'Pending'` FIXO. A linha nova do dia não tem
+comentário, e aí o ✓ recusa ("comentário obrigatório"); a linha TRAZIDA chega
+com o comentário automático ("Pagamento pendente de dd/mm/aaaa"), passa nessa
+regra e o servidor a grava como **Justified** — que não é levado ao dia
+seguinte. Confirmar a linha trazida no D+1 (para "manter") a justificava
+calada, e ela sumia no D+2.
+
+**Agora:** sem o seletor, o ✓ manda o status da PRÓPRIA linha
+(`rowStatus`): a trazida segue Pending Payment/Receivement; a nova do dia
+continua `Pending` e exige o comentário. Justificar a trazida é o Edit →
+status `Pending` → comentário → ✓, como antes.
+
+`check_payrec_carry.py` §5 (o JS não volta ao `'Pending'` fixo) e §6 (D+1 a
+D+4 pelo `run_payrec`, com o ✓ na linha trazida e o End process em cada dia).

@@ -3326,8 +3326,10 @@ São **54**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   histórico do End process e, sem ele, o do Run — nunca `glob` no disco, que
   desde o §434 não tem o histórico e achava o JSON legado de julho. Marcar
   depois do End process grava no HISTÓRICO (é dele que a tela e o dia seguinte
-  leem). `check_payrec_carry.py` (armazém de verdade; os outros testes stubam o
-  `_prev_finalized`).
+  leem). **O ✓ da linha sem o Edit manda o status DELA** (§732): com
+  `'Pending'` fixo, a linha trazida — que já chega com o comentário automático
+  — virava Justified e sumia no D+2. `check_payrec_carry.py` (armazém de
+  verdade; os outros testes stubam o `_prev_finalized`).
 - **Pay/Rec: o SWAP casa e liquida até R$20** (`_TOL_SWAP`, 21/10/2026, §665):
   o lado interno sai líquido do IR regressivo do cadastro, e o pago difere em
   alguns reais. A janela larga é uma passada PRÓPRIA no fim do `_reconcile`
@@ -3812,7 +3814,10 @@ São **54**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   argumento lista, `hotfix apply` copia) e, como o `stratos-sync.bat`, **puxa
   do GitHub antes** (§688): `git pull --ff-only` em bloco com auto-chamada,
   branch conferida e `apps\` sem nada fora do git — pull que falha ou checkout
-  sujo só lista, o `apply` recusa. A correção nasce no repositório (dev → prod
+  sujo só lista, o `apply` recusa. Leva também o `requirements.txt` e o `run.py`, que
+  moram na RAIZ do repositório e não em `apps\` (§731) — o
+  `start-otc-tracker.bat` compara o requirements com o retrato da última
+  instalação, então o pip roda sozinho na subida seguinte. A correção nasce no repositório (dev → prod
   pelo merge), nunca editada no checkout da máquina.
 - **Parêntese dentro de bloco `( … )` do `.bat` vai escapado** (`^(`/`^)`) —
   erro de PARSE. `check_bat_blocks.py`.
