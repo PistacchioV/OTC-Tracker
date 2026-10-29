@@ -729,6 +729,17 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   Version Released* lê a versão do `link.txt` ao lado do
   `start-otc-tracker.bat`; sem versão o envio é recusado; destinatário é quem
   está `Active`.
+- **Card com envio AUTOMÁTICO de e-mail tem o liga/desliga** (§722,
+  `platform/auto_send`, `control-panel/auto_send.json`): os seis do
+  `auto_send.CARDS` (Intraday Monitor, Confirmations Escalation, Initiatives
+  Alerts, Manual Deals EA, BACC EA, MT300). LIGADO é o padrão; desligado, o
+  laço do card reserva o horário, grava o desfecho `disabled` e não envia — o
+  Run manual segue valendo, e religar não manda o horário que passou. O laço
+  pergunta `auto_send.ligado('<card>')` ANTES de reservar, e a leitura é
+  estrita: banco ocupado levanta e o laço tenta de novo (nunca chuta). Laço
+  NOVO que manda e-mail entra no `CARDS`, chama o `ligado()` e ganha o
+  `data-cp-auto` no card — o `check_cp_auto_send.py` cobra os três. A rota
+  `/api/control-panel/auto-send` confere o acesso ao card pelo corpo.
 - **`refresh_session_role`** (`before_request` próprio): o papel do cadastro
   alcança quem já está logado em até 30 s, pela mesma leitura da allowlist —
   e o CARGO também (`Position` → `user_position`, o que o rodapé do sidenav
@@ -3803,7 +3814,7 @@ São **53**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (231 scripts)
+### `scripts/tests/` (232 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

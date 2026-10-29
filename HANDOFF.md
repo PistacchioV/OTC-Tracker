@@ -30822,3 +30822,33 @@ com `variant='dce'`, o laço do scheduler aplicando os mesmos registros às duas
 variantes (`_fxo_api_fetch` + `_fxo_api_apply`, já separados) e o dropzone do
 template de volta ao pull. Os guardas que contam telas (o `check_nd_mapping_b3`)
 passaram a incluir a sétima. `check_dce_fxo.py`.
+
+## §722 — Control Panel: liga/desliga do envio automático por card (2026-10-29)
+
+Pedido da equipe: um interruptor nos cards que mandam e-mail sozinhos, LIGADO
+por padrão; desligado, o envio automático para até ser ligado de novo.
+
+São seis (os laços com e-mail): Intraday Monitor (o aviso das 19h),
+Confirmations Escalation, Initiatives — Alerts, Manual Deals EA, BACC EA
+Metrics e MT300. O Pending Confirmations Spreadsheet Metrics também roda
+sozinho, mas só GRAVA a planilha, e ficou de fora; os outros cards só agem no
+clique.
+
+O estado é um documento só (`control-panel/auto_send.json`, `platform/
+auto_send.py`): `{card: {enabled, by, sid, at}}`, ausente = ligado. Cada laço
+pergunta `auto_send.ligado('<card>')` ANTES de reservar o horário, com leitura
+ESTRITA: banco ocupado levanta, o laço tenta na volta seguinte e o horário não
+se perde — lido como "ligado", o e-mail de um card desligado sairia; como
+"desligado", o de um card ligado se perderia. Desligado, o horário é RESERVADO
+e o desfecho `disabled` gravado no status do card (cinza, "automatic sending
+off — not sent"): religar à tarde não dispara o e-mail da manhã — o envio volta
+no próximo horário. O Run manual de cada card continua mandando: quem clica
+decidiu.
+
+Na tela: o interruptor no canto do card (o `.form-switch` do tema), nascendo
+escondido até a leitura voltar — pintar "ligado" antes de ler seria afirmar um
+estado não conferido —, a pílula do `otcToast` ao mudar e o Swal com o motivo
+quando o servidor recusa (a tela volta ao estado do servidor). A rota
+`/api/control-panel/auto-send` confere o acesso ao card pelo corpo (a mesma
+regra do `enforce_control_panel_cards`) e loga `[auto-send]` em WARNING.
+`check_cp_auto_send.py`.
