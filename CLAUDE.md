@@ -740,6 +740,11 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   NOVO que manda e-mail entra no `CARDS`, chama o `ligado()` e ganha o
   `data-cp-auto` no card — o `check_cp_auto_send.py` cobra os três. A rota
   `/api/control-panel/auto-send` confere o acesso ao card pelo corpo.
+- **Card escondido por AMBIENTE é `CP_HIDDEN_CARDS`** no `app.config` (§724):
+  vazia na dev e na prod; a ponte do Stratos esconde o `appversion` (o New
+  Version Released — lá não há `.bat` nem instância). O card sai do Control
+  Panel (a seção Application inteira, que só o tem) e das caixas do
+  /page-access.
 - **`refresh_session_role`** (`before_request` próprio): o papel do cadastro
   alcança quem já está logado em até 30 s, pela mesma leitura da allowlist —
   e o CARGO também (`Position` → `user_position`, o que o rodapé do sidenav
@@ -1373,6 +1378,19 @@ São **53**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   o `pagereveal`: teste a transição com `channel='chrome'`. O menu pré-busca
   o HTML da tela no hover (Speculation Rules) — link de AÇÃO (logout, lock,
   download, API) fica fora da lista.
+- **Nas máquinas do JPM (modo opaco, movimento reduzido) NÃO há View
+  Transition** — o que segura a troca de página é a primeira pintura já certa
+  (§723): o clique na folha guarda o drill-down (`saveNavSnap`, otc.js) e o
+  script SÍNCRONO no fim da árvore do `sidenav.html` o pinta antes do paint
+  (uma vez, só para o endereço clicado); o filtro de acesso do menu se aplica
+  na hora pela última resposta do `/api/me/access` guardada na aba
+  (`__OTC_ME_ACCESS__<SID>`); o menu desafixado vai para o `<body>` no
+  `base.html`; o conteúdo entra pelo `.content-page` no CSS (a placa já na
+  tela não ganha o `.otc-enter`, cujo `backwards` a fazia piscar); e a
+  DataTable nasce transparente até as larguras assentarem (`oxf-settling`, no
+  `excel-filter.js`, teto de 1,2 s). Estado visual que o JS só aplica no fim
+  da página é piscada a cada clique — resolva no paint, não depois.
+  `check_page_transition.py` confere no `interactive`, antes do otc.js.
 - Cor só de tema claro precisa do par `[data-bs-theme=dark]`.
 - **Caminho em `url()` no `otc.scss` é RELATIVO ao CSS** (`../images/auth.jpg`,
   `../fonts/…`): no Stratos o `otc_stratos.py` põe o prefixo da solução no
@@ -3814,7 +3832,7 @@ São **53**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (232 scripts)
+### `scripts/tests/` (233 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

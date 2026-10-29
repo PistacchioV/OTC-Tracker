@@ -733,6 +733,49 @@
             if (w.console) console.warn('[excel-filter]', e);
         }
     }
+    // ── A tabela aparece uma vez, já no tamanho final (§723) ───────────────
+    // Entre a init do DataTables e as larguras assentarem há até três remedidas
+    // (o desenho inicial, o funil alargando/centrando os títulos aqui, o
+    // `columns.adjust` atrasado das páginas e o redesenho com os dados): cada
+    // uma aparecia na tela, e a tabela "pulava" duas, três vezes. O contêiner
+    // fica TRANSPARENTE (o layout segue medindo — nada de display/visibility)
+    // até ficar QUIETO: sem draw nem remedida por 160 ms (500 ms enquanto está
+    // vazia — os dados costumam chegar logo depois da init). Teto de 1,2 s.
+    var SETTLE_QUIET = 160, SETTLE_EMPTY = 500, SETTLE_MAX = 1200;
+    function settleEnd(box) {
+        var st = box.__oxfSettle;
+        if (!st || st.done) return;
+        st.done = true;
+        clearTimeout(st.timer);
+        box.classList.remove('oxf-settling');
+    }
+    function settlePoke(settings) {
+        var box = settings && settings.nTableWrapper;
+        var st = box && box.__oxfSettle;
+        if (!st || st.done) return;
+        clearTimeout(st.timer);
+        var vazia = !(settings.aiDisplay && settings.aiDisplay.length);
+        var resta = SETTLE_MAX - (Date.now() - st.t0);
+        st.timer = setTimeout(function () { settleEnd(box); },
+                              Math.max(0, Math.min(vazia ? SETTLE_EMPTY : SETTLE_QUIET, resta)));
+    }
+    function settleStart(settings) {
+        var box = settings && settings.nTableWrapper;
+        if (!box || box.__oxfSettle) return;
+        box.__oxfSettle = { t0: Date.now(), timer: null, done: false };
+        box.classList.add('oxf-settling');
+        settlePoke(settings);
+    }
+    $(document).on('preInit.dt.oxfs', function (e, settings) { if (e.namespace === 'dt') settleStart(settings); });
+    $(document).on('init.dt.oxfs', function (e, settings) {
+        if (e.namespace !== 'dt') return;
+        settleStart(settings);              // versão sem preInit: começa aqui
+        settlePoke(settings);
+    });
+    $(document).on('draw.dt.oxfs column-sizing.dt.oxfs', function (e, settings) {
+        if (e.namespace === 'dt') settlePoke(settings);
+    });
+
     $(document).on('init.dt.oxf', function (e, settings) {
         if (e.namespace !== 'dt') return;
         var node = settings && settings.nTable;
@@ -780,6 +823,9 @@
 
     // ── estilo (uma vez) — menu pende do <body>: fundo SÓLIDO (§7) ──────────
     var css =
+        // a tabela assentando (§723): transparente, mas medindo
+        '.dt-container.oxf-settling{opacity:0!important}' +
+        '.dt-container{transition:opacity 140ms ease}' +
         // Com scrollX o DataTables deixa uma CÓPIA do cabeçalho dentro do corpo
         // (altura zero, só para medir as larguras): o funil dela some da vista
         // mas OCUPA o espaço (visibility, não display), para a medida bater.

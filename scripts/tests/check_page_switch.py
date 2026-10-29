@@ -128,7 +128,8 @@ check('  sem token segue revalidando', 'immutable' not in cc, True)
 print('=== 3. Modo opaco leve; refracao so com GPU; traducoes uma vez ===')
 HEAD = ler('apps', 'templates', 'partials', 'head-css.html')
 check('  View Transition pulada no modo opaco (saida e entrada)',
-      HEAD.count("if (r.classList.contains('is-solid')) { e.viewTransition.skipTransition(); return; }"), 2)
+      HEAD.count("if (r.classList.contains('is-solid')) { pula(e.viewTransition); return; }"), 2)
+check('  ... e a rejeicao do `ready` tratada (§723)', 'vt.ready.catch(function () {})' in HEAD, True)
 SCSS = ler('apps', 'static', 'scss', 'otc.scss')
 CSS = ler('apps', 'static', 'css', 'otc.css')
 check('  entrada do modo opaco e um esmaecer sem cascata (scss)', ':root.is-solid .otc-enter {' in SCSS, True)
@@ -137,7 +138,8 @@ JS = ler('apps', 'static', 'js', 'otc.js')
 check('  refracao exige GPU', "!/Firefox\\//.test(ua) && !weakGpu();" in JS, True)
 check('  refracao no tempo ocioso, em fatias', 'lgIdle(lgScan);' in JS and 'function lgRun(dl)' in JS, True)
 check('  titulo parado no modo opaco', "if (REDUCED_MOTION || root.classList.contains('is-solid')) return;" in JS, True)
-check('  cascata das placas em ate 6 degraus', "Math.min(i++, 6)" in JS, True)
+check('  placa ja na tela nao entra de novo (so as que entram rolando, §723)',
+      "if (top < vh || !io) return;" in JS, True)
 check('  traducoes: a PROMESSA fica no cache', "this._cache[l] = fetch(this.langPath + l + '.json')" in JS, True)
 
 # ── 4. Initiatives ──────────────────────────────────────────────────────────
