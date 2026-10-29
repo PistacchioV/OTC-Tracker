@@ -30852,3 +30852,61 @@ quando o servidor recusa (a tela volta ao estado do servidor). A rota
 `/api/control-panel/auto-send` confere o acesso ao card pelo corpo (a mesma
 regra do `enforce_control_panel_cards`) e loga `[auto-send]` em WARNING.
 `check_cp_auto_send.py`.
+
+## §723 — A troca de página sem piscar (2026-10-29)
+
+Relato da equipe: ao mudar de página ela "pisca", o menu lateral volta ao
+original e depois vai para o item clicado, e as tabelas se redimensionam duas,
+três vezes. A referência é o Pane: o menu fica parado e só os cards mudam.
+
+O app é multipágina, e a View Transition entre documentos (§632) que segurava
+menu e barra no lugar é DESLIGADA justamente nas máquinas do JPM (modo opaco e
+movimento reduzido, §636/§647). Lá cada clique é uma página nova pintada do
+zero, e tudo que o JS só acerta no fim do carregamento aparece mudando:
+
+- **o menu, três desenhos por clique**: a 1ª pintura era o menu de ORIGEM (o do
+  Bootstrap, no nível raiz); o drill-down só vinha no `DOMContentLoaded`; e,
+  para acesso restrito, era montado de novo quando o `/api/me/access`
+  voltava (e a seção Pinned aparecia empurrando tudo). Agora o clique numa
+  folha guarda o drill-down como a página nova o mostra (`saveNavSnap`: o
+  painel, a lente no item clicado, os Pinned, a rolagem) e um script SÍNCRONO
+  no fim da árvore do `sidenav.html` o pinta antes do primeiro paint — uma vez,
+  só para o endereço clicado, mesmo SID e idioma; o `buildNav` do load o refaz
+  idêntico. O filtro de acesso do menu se aplica na hora pela última resposta
+  guardada na aba (`__OTC_ME_ACCESS__<SID>`), e a nova, se mudou, refaz;
+- **o menu desafixado**: só o `initDrawer` aplicava a classe, então o menu
+  nascia fixo e recolhia com animação a cada página, arrastando o conteúdo (o
+  `padding-left` tem transição). Vai para o `<body>` no `base.html`, síncrono;
+- **o conteúdo "piscando"** (com GPU): a entrada das placas do `otc.js`
+  começava DEPOIS de a placa estar pintada, e o `backwards` a devolvia ao
+  primeiro quadro — aparecia, sumia e entrava. A placa já na tela não entra
+  mais pelo JS; o `.content-page` entra pelo CSS desde o primeiro paint (sem
+  `fill`, para não virar contexto de empilhamento; no opaco, sem animação). As
+  que aparecem rolando seguem com a entrada;
+- **as tabelas pulando**: desenho inicial, o funil alargando e centrando os
+  títulos, o `columns.adjust` atrasado das páginas e o redesenho com os dados.
+  O contêiner da DataTable nasce transparente (`oxf-settling`, `excel-filter.js`
+  — o layout segue medindo) e aparece quando fica quieto: 160 ms sem draw nem
+  remedida (500 ms enquanto vazia), teto de 1,2 s.
+
+De brinde: o `skipTransition()` do modo opaco rejeitava a promessa `ready` sem
+tratamento — um "Transition was skipped" no console a cada troca no JPM.
+`check_page_transition.py` (Chromium, servidor num thread, estado no
+`interactive`); o `check_page_switch.py` passou a cobrar a entrada nova.
+
+Não é a navegação do Pane (uma página só, trocando o conteúdo): no app são
+~150 telas com scripts próprios que assumem documento novo (`$(document).on`
+somaria handlers a cada troca), e isso seria uma reescrita. O efeito
+perceptível — menu e barra parados, só o conteúdo mudando — sai da primeira
+pintura certa.
+
+## §724 — Stratos: sem o card New Version Released (2026-10-29)
+
+Pedido da equipe: no Control Panel do Stratos, tirar o New Version Released —
+ele avisa a equipe da versão nova da INSTÂNCIA (o `link.txt` ao lado do
+`start-otc-tracker.bat`), e lá não há `.bat` nem instância. Sem mexer no bloco
+de ambiente: a dev lê uma lista de cards escondidos do `app.config`
+(`CP_HIDDEN_CARDS`, vazia na dev e na prod) e a ponte do Stratos
+(`otc_stratos._monta`) põe o `appversion` nela. O card sai do Control Panel
+(com a seção Application, que só o tem) e das caixas do /page-access; as rotas
+dele seguem existindo. `check_cp_auto_send.py` §5 e `check_stratos.py`.

@@ -439,9 +439,11 @@
         if (node === Nav.active) a.classList.add('active');
         // a lente desliza até o item clicado enquanto a página seguinte carrega;
         // e a página seguinte acende ESTE item, não um gêmeo de outro menu
-        a.addEventListener('click', function () {
-          try { sessionStorage.setItem(NAV_PICK, keyOf(node)); } catch (e) {}
+        a.addEventListener('click', function (e) {
+          try { sessionStorage.setItem(NAV_PICK, keyOf(node)); } catch (er) {}
           moveLensTo(ul, a);
+          // ctrl/cmd/clique do meio abre OUTRA aba: o menu desta não muda de página
+          if (!(e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1)) saveNavSnap(node.href);
         });
       }
       ul.appendChild(li);
@@ -509,6 +511,35 @@
     if (window.otcI18n) window.otcI18n.applyTranslations();
   }
   function drill(node) { Nav.open.push(node); slide(1); }
+
+  // ── O menu ATRAVESSA a troca de página (§723) ─────────────────────────────
+  // A página nova pintava o menu de ORIGEM (o do Bootstrap, no nível raiz), o
+  // drill-down só chegava no fim do carregamento e, para quem tem acesso
+  // restrito, era remontado de novo quando o /api/me/access voltava: três
+  // desenhos por clique, e a seção Pinned empurrando o menu ao aparecer. O
+  // clique na folha guarda o menu JÁ no estado em que a página nova o mostra
+  // (o painel, a lente no item clicado, os Pinned, a rolagem); o script
+  // síncrono do sidenav.html o pinta ANTES do primeiro paint, e o buildNav do
+  // load o refaz idêntico. Vale só para o endereço clicado, nesta aba, com o
+  // mesmo usuário e idioma — o resto segue o caminho de sempre.
+  var NAV_SNAP = '__OTC_NAV_SNAP__';
+  function saveNavSnap(href) {
+    try {
+      var host = doc.querySelector('.sidenav-menu .dd-nav');
+      var scroller = doc.querySelector('.sidenav-menu .otc-side__scroll');
+      var pin = doc.querySelector('.sidenav-menu .otc-pinned');
+      var pinLbl = doc.querySelector('.sidenav-menu [data-otc-pinned-label]');
+      if (!host) return;
+      sessionStorage.setItem(NAV_SNAP, JSON.stringify({
+        path: href, lang: lang(),
+        sid: pin ? (pin.getAttribute('data-sid') || '') : '',
+        nav: host.innerHTML,
+        pinned: pin && pin.style.display !== 'none' ? pin.innerHTML : null,
+        pinnedLabel: !!(pinLbl && pinLbl.style.display !== 'none'),
+        scroll: scroller ? scroller.scrollTop : 0
+      }));
+    } catch (e) {}
+  }
   function goTo(i) { Nav.open = i < 0 ? [] : Nav.open.slice(0, i + 1); slide(-1); }
 
   // ── A LENTE de gel ────────────────────────────────────────────────────────
@@ -1805,7 +1836,7 @@
       el.__otcSurface = true;
       return true;
     });
-    var vh = window.innerHeight, i = 0;
+    var vh = window.innerHeight;
     var io = 'IntersectionObserver' in window ? new IntersectionObserver(function (ents) {
       var k = 0;
       ents.forEach(function (en) {
@@ -1817,12 +1848,13 @@
     }, { rootMargin: '0px 0px -6% 0px' }) : null;
     all.forEach(function (el) {
       var top = el.getBoundingClientRect().top;
-      if (top < vh || !io) {
-        // até 6 degraus: com 12 a placa de baixo ficava recortada 0,7 s antes
-        // de começar a entrar — tempo em que a página parece não ter chegado
-        el.style.setProperty('--otc-i', Math.min(i++, 6));
-        el.classList.add('otc-enter');
-      } else io.observe(el);
+      // A placa já na tela NÃO entra de novo (§723): ela foi pintada antes deste
+      // script (que roda no fim da página), e o `backwards` da animação a
+      // devolvia ao primeiro quadro — aparecia, sumia e entrava: a página
+      // "piscava" a cada clique. A entrada dela é a do `.content-page` no CSS,
+      // desde o primeiro paint; aqui ficam só as que aparecem ao rolar.
+      if (top < vh || !io) return;
+      io.observe(el);
       el.addEventListener('animationend', function done(ev) {
         if (ev.target !== el) return;
         el.classList.remove('otc-enter');

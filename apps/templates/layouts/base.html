@@ -148,6 +148,11 @@
         - id: Identificador único
       ============================================================================= #}
    <body {% block body_attribute %}{% endblock body_attribute %}>
+   {# Menu DESAFIXADO antes do primeiro paint (§723): aplicado só pelo otc.js, no
+      fim da página, o menu nascia fixo e recolhia com animação a cada troca,
+      arrastando o conteúdo (`padding-left` tem transição). A chave é a do
+      `initDrawer` (otc.js, `PIN_NAV_KEY`). #}
+   <script>try { if (localStorage.getItem('otc_nav_pinned') === '0') document.body.classList.add('otc-nav-unpinned'); } catch (e) {}</script>
    {% include 'partials/wallpaper.html' %}
    
        {# =========================================================================

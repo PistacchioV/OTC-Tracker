@@ -11549,7 +11549,11 @@ def page_access():
         return redirect('/dashboard')
     return render_template('pages/page-access.html', segment='page-access',
                            users=get_all_users(), is_master=_session_is_master(),
-                           cp_cards=_CONTROL_PANEL_CARDS)
+                           # card escondido neste ambiente (`CP_HIDDEN_CARDS`,
+                           # §724: o New Version Released no Stratos) não vira
+                           # caixa de acesso a uma rotina que a tela não mostra
+                           cp_cards=[c for c in _CONTROL_PANEL_CARDS
+                                     if c['id'] not in (current_app.config.get('CP_HIDDEN_CARDS') or ())])
 
 
 @blueprint.route('/api/me/access', methods=['GET'])

@@ -12,7 +12,9 @@
   4. a tela: um interruptor por card (os mesmos seis), nascendo escondido; o
      desfecho `disabled` desenhado nos seis cards; textos nas três línguas; os
      seis ids existem no `_CONTROL_PANEL_CARDS`; e cada laço pergunta ao
-     interruptor do SEU card.
+     interruptor do SEU card;
+  5. o card escondido por ambiente (`CP_HIDDEN_CARDS`, §724 — o New Version
+     Released no Stratos): sai do Control Panel e das caixas do /page-access.
 
     OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_cp_auto_send.py
 """
@@ -211,6 +213,24 @@ for card, feat in LACOS.items():
     fonte = ler('apps', 'pages', 'features', feat, 'commands.py')
     check('o laço de %s pergunta ao interruptor DELE' % card,
           re.findall(r"auto_send\.ligado\('([a-z0-9]+)'\)", fonte), [card])
+
+print('\n== 5. card escondido por ambiente (CP_HIDDEN_CARDS, §724) ==')
+with cl.session_transaction() as s:
+    s.update(authenticated=True, user_sid='E930179', user_name='Master', user_role='MASTER', session_ip='127.0.0.1')
+html = cl.get('/control-panel').get_data(as_text=True)
+check('sem a configuração: o New Version Released aparece', 'data-cp-card="appversion"' in html)
+pa = cl.get('/page-access').get_data(as_text=True)
+check('   e é caixa no /page-access', '"appversion"' in pa)
+app.config['CP_HIDDEN_CARDS'] = ('appversion',)
+try:
+    html = cl.get('/control-panel').get_data(as_text=True)
+    check('escondido: o card e a seção Application saem',
+          ('data-cp-card="appversion"' in html, 'data-cp-hdr="application"' in html), (False, False))
+    check('   os outros cards ficam', 'data-cp-card="mt300"' in html)
+    pa = cl.get('/page-access').get_data(as_text=True)
+    check('   e sai das caixas do /page-access', ('"appversion"' in pa, '"mt300"' in pa), (False, True))
+finally:
+    app.config.pop('CP_HIDDEN_CARDS', None)
 
 print(('\nFALHAS (%d): %s' % (len(fails), fails)) if fails else '\nTUDO OK')
 sys.exit(1 if fails else 0)

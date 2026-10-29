@@ -1028,6 +1028,10 @@
     </div>
 
 
+    {# A seção (só o New Version Released) some onde o card é escondido pela
+       configuração (`CP_HIDDEN_CARDS`, §724): no Stratos não há `link.txt` nem
+       instância a avisar. Vazia na dev e na prod. #}
+    {% if 'appversion' not in (config.get('CP_HIDDEN_CARDS') or ()) %}
     <!-- ── Section: Application ──────────────────────────────── -->
     <div class="cp-reveal mb-2" data-cp-hdr="application">
         <div class="cp-sec-label" data-lang="cp-sec-app-label">Deployment</div>
@@ -1075,6 +1079,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
     <!-- Off-screen stage: the Settlement Forecast Chart.js canvases are rendered
          here and exported to PNG for the e-mail, without showing on the page. -->
