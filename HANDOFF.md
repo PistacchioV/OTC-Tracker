@@ -31163,3 +31163,28 @@ partir da raiz do repositório (lista, apply e backup do original como os
 outros); a conferência de checkout sujo olha os dois; o `fc` do requirements é
 feito ANTES da cópia e o aviso diz que a próxima subida instala as
 dependências e demora mais. `check_bat_blocks.py`, `check_bat_files.py`.
+
+
+## §732 — Pay/Rec: a pendência trazida some no D+2 pelo ✓ da linha (2026-10-29)
+
+**Relato da equipe:** o Pending Payment / Pending Receivement tem de aparecer
+em D+1, D+2, D+n até ser resolvido, e aparecia só em D+1.
+
+**O que estava errado:** o carry-forward (§704) estava certo — simulado pelo
+`run_payrec` com Run e End process por quatro dias seguidos, a pendência segue
+em todos. Quem a tirava era a TELA. No modo Justify do End process cada
+linha pendente tem Edit e ✓ (Confirm); o status só vira seletor depois do
+Edit, e o ✓ sem o Edit mandava `'Pending'` FIXO. A linha nova do dia não tem
+comentário, e aí o ✓ recusa ("comentário obrigatório"); a linha TRAZIDA chega
+com o comentário automático ("Pagamento pendente de dd/mm/aaaa"), passa nessa
+regra e o servidor a grava como **Justified** — que não é levado ao dia
+seguinte. Confirmar a linha trazida no D+1 (para "manter") a justificava
+calada, e ela sumia no D+2.
+
+**Agora:** sem o seletor, o ✓ manda o status da PRÓPRIA linha
+(`rowStatus`): a trazida segue Pending Payment/Receivement; a nova do dia
+continua `Pending` e exige o comentário. Justificar a trazida é o Edit →
+status `Pending` → comentário → ✓, como antes.
+
+`check_payrec_carry.py` §5 (o JS não volta ao `'Pending'` fixo) e §6 (D+1 a
+D+4 pelo `run_payrec`, com o ✓ na linha trazida e o End process em cada dia).

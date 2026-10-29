@@ -563,8 +563,14 @@
         //  • Status "Pending Payment/Receivement" → keep it as a carry-forward
         //    item (comment optional); it will reappear in the next days' recon
         //    until it settles (OK) or is justified.
+        //  • Confirm SEM o Edit (sem o seletor) mantém o status da LINHA: a linha
+        //    trazida de um dia anterior já vem com o comentário automático
+        //    ("Pagamento pendente de …"), e com 'Pending' fixo aqui o ✓ a
+        //    justificava calado — ela sumia no dia seguinte (§732).
         var statusSel = statusCell ? statusCell.querySelector('select') : null;
-        var chosenStatus = statusSel ? statusSel.value : 'Pending';
+        var arrC = table === 'pay' ? (_lastData.pending_payment || []) : (_lastData.pending_receivement || []);
+        var rowStatus = (arrC[index] && arrC[index].status) || 'Pending';
+        var chosenStatus = statusSel ? statusSel.value : rowStatus;
         var isCarry = /^pending (payment|receivement)$/i.test(chosenStatus);
         var input = cell.querySelector('input');
         var comment = (input ? input.value : cell.textContent).trim();

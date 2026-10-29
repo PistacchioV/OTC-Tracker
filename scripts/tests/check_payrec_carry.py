@@ -16,7 +16,10 @@ apagada no fim):
   3. ponta a ponta: marcar → End process → o dia seguinte traz a pendência;
      o dia depois (rodado, não finalizado) continua trazendo; Justified não vai;
   4. marcar DEPOIS do End process grava no histórico (a tela e o dia seguinte
-     leem dele).
+     leem dele);
+  5. o ✓ (Confirm sem o Edit) manda o status da LINHA, nunca 'Pending' fixo —
+     a linha trazida já tem comentário e virava Justified (§732);
+  6. D+N pelo `run_payrec`: Run → ✓ → End process por quatro dias seguidos.
 """
 import os
 import sys
@@ -127,6 +130,46 @@ try:
         check(RP._load_flat(D1)['pending_payment'][0]['status'] == 'Pending Payment',
               'o cache de trabalho acompanha (mesma linha)')
         check(RP.justify_row(D1, 'pay', 5, '', 'Pending Payment') is None, 'índice fora: None')
+
+    print('\n== 5. o ✓ da linha trazida não a justifica (§732) ==')
+    # A linha trazida chega com o comentário automático ("Pagamento pendente
+    # de …"), e o Confirm sem o Edit mandava 'Pending' fixo: com comentário,
+    # virava Justified, e a pendência sumia no D+2. Sem o seletor, o status
+    # mandado é o da LINHA.
+    import re
+    js = open(os.path.join(ROOT, 'apps', 'static', 'js', 'pages', 'reconciliation-payrec.js'),
+              encoding='utf-8').read()
+    check(not re.search(r"chosenStatus\s*=\s*statusSel\s*\?\s*statusSel\.value\s*:\s*'Pending'", js),
+          "o Confirm não manda 'Pending' fixo")
+    check(re.search(r"chosenStatus\s*=\s*statusSel\s*\?\s*statusSel\.value\s*:\s*rowStatus", js) is not None,
+          'sem o seletor, vale o status da linha')
+
+    print('\n== 6. D+N pelo Run de verdade: Run → ✓ → End process, dia após dia ==')
+    with app.app_context():
+        _limpa()
+        RP._gather_sources = lambda f, m: [('unknown', [], [])]
+        RP.branch_settlement = lambda *a, **k: {'accounts_missing': [], 'legacy': []}
+        RP._branch_breaks = lambda b: []
+        RP._load_net_type_map = lambda: {}
+        HOJE = {}
+        RP._reconcile = lambda j, c: (list(HOJE['d']), [{'x': 1}])
+        HOJE['d'] = [dict(_pend('ACME', -100.0), pay_receive='Pay')]
+        RP.run_payrec('2031-05-05')
+        RP.justify_row('2031-05-05', 'pay', 0, '', 'Pending Payment')
+        RP.finalize_history('2031-05-05')
+        for n, dia in enumerate(('2031-05-06', '2031-05-07', '2031-05-08', '2031-05-09'), 1):
+            HOJE['d'] = [dict(_pend('NOVA%d' % n, -float(n)), pay_receive='Pay')]
+            res = RP.run_payrec(dia)
+            acme = [r for r in res['pending_payment'] if r['jpm_cpty'] == 'ACME']
+            check(len(acme) == 1 and acme[0]['status'] == 'Pending Payment'
+                  and acme[0]['carry_origin'] == '2031-05-05',
+                  'D+%d: a pendência de D segue, com a origem' % n)
+            i = res['pending_payment'].index(acme[0])
+            # o ✓ sem o Edit manda o status da linha (§732)
+            RP.justify_row(dia, 'pay', i, acme[0]['comment'], acme[0]['status'])
+            RP.justify_row(dia, 'pay', 0, 'resolvido', 'Pending')     # a NOVA do dia → Justified
+            RP.finalize_history(dia)
+        _limpa()
 finally:
     with app.app_context():
         _limpa()
