@@ -42,10 +42,12 @@ REM                   versao. Sem esta passada propria, texto novo de tela
 REM                   chegava com o hotfix e aparecia em ingles/sem traducao.
 REM    __pycache__  - bytecode velho ao lado de fonte novo e ruido. O Python
 REM                   recompila o modulo alterado sozinho na primeira subida.
-REM    requirements.txt - dependencia nova nao e correcao
-REM                   pontual: o snapshot de instalacao do start-otc-tracker.bat
-REM                   e por VERSAO, entao so uma versao nova dispara o pip. O
-REM                   script avisa quando o requirements mudou.
+REM
+REM  O requirements.txt VAI (29/10/2026): ele e o run.py moram na RAIZ do
+REM  repositorio, nao em apps\, e tem passada propria (ROOT_FILES). O
+REM  start-otc-tracker.bat compara o requirements.txt da versao com o retrato
+REM  da ultima instalacao (fc /b), entao o requirements que chega pelo hotfix
+REM  dispara o pip install na PROXIMA subida, sozinho - o script avisa.
 REM
 REM  O destino sai do link.txt, nunca de um nome escrito aqui: quando a proxima
 REM  versao subir, o comando continua certo sem ninguem lembrar de nada.
@@ -58,9 +60,12 @@ if defined OTC_HOTFIX_BRANCH set "BRANCH=%OTC_HOTFIX_BRANCH%"
 set "REPO=%~dp0"
 if "%REPO:~-1%"=="\" set "REPO=%REPO:~0,-1%"
 
-REM Mesma lista branca do deploy, menos o requirements e o __pycache__.
+REM Mesma lista branca do deploy, menos o __pycache__. Os arquivos de apps\ e
+REM os da RAIZ do repositorio vao separados: na pasta da versao todos ficam lado
+REM a lado, mas aqui o requirements.txt e o run.py nao moram em apps\.
 set "DEPLOY_DIRS=pages static templates"
-set "DEPLOY_FILES=__init__.py config.py run.py"
+set "DEPLOY_FILES=__init__.py config.py"
+set "ROOT_FILES=requirements.txt run.py"
 set "EXCLUDE_DIR=%SOURCE_ROOT%\static\data"
 
 REM A i18n vai para o DATA_DIR da instancia, que e onde o app a procura primeiro
@@ -114,7 +119,7 @@ if defined OTC_HOTFIX_PULL_FALHOU (
 )
 
 set "SUJO=0"
-for /f "delims=" %%L in ('git -C "%REPO%" status --porcelain --ignored -- apps ^| findstr /v /i /l "__pycache__ .pyc"') do call :sujo "%%L"
+for /f "delims=" %%L in ('git -C "%REPO%" status --porcelain --ignored -- apps %ROOT_FILES% ^| findstr /v /i /l "__pycache__ .pyc"') do call :sujo "%%L"
 if "%SUJO%"=="1" if "%APPLY%"=="1" (
     echo Limpe o checkout antes do apply - git status, git clean -ndX.
     pause
@@ -151,8 +156,10 @@ if not exist "%TARGET%\" (
 set "BACKUP=%LOCALAPPDATA%\OTC-Tracker\hotfix-backup\%VERSION%"
 set "LIST=%TEMP%\otc-hotfix-list.txt"
 set "TLIST=%TEMP%\otc-hotfix-translations.txt"
+set "RLIST=%TEMP%\otc-hotfix-root.txt"
 type nul > "%LIST%"
 type nul > "%TLIST%"
+type nul > "%RLIST%"
 
 echo.
 echo Versao no ar : %VERSION%
@@ -163,6 +170,9 @@ echo.
 REM --- Arquivos da raiz: sem /S e sem /E, robocopy pega so os nomeados. -------
 robocopy "%SOURCE_ROOT%" "%TARGET%" %DEPLOY_FILES% /L /FP /NS /NC /NDL /NJH /NJS /NP >> "%LIST%"
 
+REM --- Arquivos da raiz do repositorio: requirements.txt e run.py. -------------
+robocopy "%REPO%" "%TARGET%" %ROOT_FILES% /L /FP /NS /NC /NDL /NJH /NJS /NP >> "%RLIST%"
+
 REM --- Pastas: recursivo, sem o dado vivo e sem bytecode. ---------------------
 for %%D in (%DEPLOY_DIRS%) do if exist "%SOURCE_ROOT%\%%D\" robocopy "%SOURCE_ROOT%\%%D" "%TARGET%\%%D" /E /L /FP /NS /NC /NDL /NJH /NJS /NP /XD "%EXCLUDE_DIR%" "__pycache__" >> "%LIST%"
 
@@ -172,23 +182,28 @@ if exist "%TRANS_SRC%\" robocopy "%TRANS_SRC%" "%TRANS_DST%" *.json /L /FP /NS /
 set /a COUNT=0
 set "FAIL="
 
+REM Conferido ANTES da copia: depois do apply os dois ficam iguais.
+set "REQ_MUDOU="
+if exist "%REPO%\requirements.txt" (
+    fc /b "%REPO%\requirements.txt" "%TARGET%\requirements.txt" >nul 2>&1
+    if errorlevel 1 set "REQ_MUDOU=1"
+)
+
 for /f "usebackq tokens=* delims=" %%F in ("%LIST%") do call :considera "%%F" "%SOURCE_ROOT%" "%TARGET%" "%BACKUP%" ""
+for /f "usebackq tokens=* delims=" %%F in ("%RLIST%") do call :considera "%%F" "%REPO%" "%TARGET%" "%BACKUP%" ""
 for /f "usebackq tokens=* delims=" %%F in ("%TLIST%") do call :considera "%%F" "%TRANS_SRC%" "%TRANS_DST%" "%BACKUP%\_data-translations" "static\data\translations\"
 
 echo.
 if %COUNT%==0 (
     echo Nada a copiar - a versao no ar ja esta igual a este checkout.
-    del "%LIST%" "%TLIST%" >nul 2>&1
+    del "%LIST%" "%TLIST%" "%RLIST%" >nul 2>&1
     pause
     exit /b 0
 )
 
-if exist "%SOURCE_ROOT%\requirements.txt" if exist "%TARGET%\requirements.txt" (
-    fc /b "%SOURCE_ROOT%\requirements.txt" "%TARGET%\requirements.txt" >nul 2>&1
-    if errorlevel 1 (
-        echo AVISO: requirements.txt mudou - o hotfix NAO instala dependencias.
-        echo        Suba uma versao nova com o new-otc-deploy.bat.
-    )
+if defined REQ_MUDOU (
+    echo AVISO: o requirements.txt mudou - a proxima subida do start-otc-tracker.bat
+    echo        roda o pip install sozinha, e por isso demora mais.
 )
 
 if "%APPLY%"=="0" (
@@ -203,7 +218,7 @@ if "%APPLY%"=="0" (
     )
 )
 
-del "%LIST%" "%TLIST%" >nul 2>&1
+del "%LIST%" "%TLIST%" "%RLIST%" >nul 2>&1
 echo.
 pause
 exit /b 0
