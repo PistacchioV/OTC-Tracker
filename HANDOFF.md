@@ -31076,3 +31076,64 @@ código, nunca vazio. Números sem separador valem com as casas do layout
 
 `check_live_position_dce.py`; o `check_cetip_json_export.py` §1 tem o leitor
 novo.
+
+## §730 — RED Clients - Rapid Exposure (2026-10-29)
+
+Pedido da equipe: um card no Control Panel que recebe a planilha diária de
+Rapid Exposure (xlsx/xls) e marca como **RED** as contrapartes do Reference
+Data cujo ECI está na coluna K da aba "JPM Entities-Open Settlements"; a
+contraparte RED ganha a pílula vermelha ao lado do nome nas telas de
+liquidação, e gerar aviso de liquidação para ela abre o aviso "Cliente X na
+lista de RED Clientes, favor solicitar aprovação de Crédito antes de efetuar o
+pagamento". Fora da lista na rodada seguinte, volta a Active. É tarefa diária
+do Intraday Monitor.
+
+**A marca e o status são duas coisas** (`features/red_clients/domain.aplicar`):
+o registro do Reference Data ganha o campo `RED: 'Y'` (o banco do armazém
+guarda o registro cru, sem migração), e o STATUS vira `RED` só se estava
+ACTIVE. PENDING (esperando aprovação) e INACTIVE ficam como estão, COM a
+marca — e a APROVAÇÃO (`index_b3/entrypoint`, `approve`, só no refdata) lê a
+marca e devolve RED em vez de ACTIVE (a pasta do Electronic Inventory é
+criada nos dois). Fora da lista, a marca sai e o RED volta a ACTIVE. A
+edição de um RED o leva a PENDING como qualquer outra, e a aprovação o traz
+de volta a RED. O ECI casa por dígitos sem zero à esquerda (o xls lido pelo
+xlrd entrega `220349472.0`).
+
+**A rodada** (`commands.run`, `POST /api/control-panel/red-clients/run`, card
+`redclients` na seção Reference Data): a aba é achada pelo NOME (sem caixa,
+espaço ou pontuação; xlsx pelo openpyxl, xls pelo xlrd, o formato pelo
+conteúdo); aba ausente, aba sem nenhum ECI e arquivo que não é Excel RECUSAM
+com código (`e_red_*`, traduzido) e NADA é gravado — uma planilha errada não
+tira todo mundo do RED. O Reference Data é lido e gravado num ciclo só sob o
+`_cache_lock`. Grava o status da rodada (`red_clients_status.json`, a linha
+"Last run" do card), toca o sino (`RED Clients Updated`, página Control
+Panel) e registra a tarefa `red-clients` (rotina diária, seg-sex) no
+`task_runs`. O `cpRunUpload` do Control Panel ganhou duas coisas que valem
+para todo card de upload: erro com `code` sai traduzido (`e_<code>`), e o card
+pode montar a própria frase de sucesso (`data-done-fn`).
+
+**Quem é RED** é horizontal (`platform/red_clients`): a lista sai do
+Reference Data (a marca, inclusive de quem está PENDING — o crédito tem de
+ser consultado do mesmo jeito), não do arquivo da última rodada.
+`GET /api/red-clients` a entrega às telas.
+
+**A pílula nas telas de liquidação** (`static/js/red-clients.js`, nas quinze
+do grupo Daily Settlement): acha a coluna da contraparte pelo TÍTULO em toda
+DataTable e põe a pílula no DOM a cada desenho. Só no DOM de propósito: os
+dois Summaries releem o nome da célula para gerar o aviso
+(`decodeHtml(d[3])`), e o texto "RED" mora no `::before` da `.otc-red-pill`
+(otc.scss), fora do `textContent` que o Export copia. O nome casa sem acento,
+pontuação e sufixo societário (`name_key`, a mesma regra no servidor e no
+JS — o teste a executa no node).
+
+**O aviso**: os cinco endpoints de aviso de liquidação (NDF Summary, Other
+Products Summary e os três Settlement Advice) chamam
+`_red_clients.anota_avisos(drafts)`, que põe o cabeçalho `X-Red-Clients`
+(base64 de uma lista JSON de nomes) na resposta — JSON dos ≤2 avisos ou zip,
+pelo `after_this_request` — com os clientes RED entre os avisos que DE FATO
+saíram. O `red-clients.js` embrulha o `fetch`: com o cabeçalho, um aviso por
+cliente ANTES de a tela receber o resultado. Os avisos de prêmio do New Deals
+não passam por aqui.
+
+`check_red_clients.py`; `check_control_panel_sections.py` (17 cards) e
+`check_intraday_monitor.py` (a tarefa) atualizados.
