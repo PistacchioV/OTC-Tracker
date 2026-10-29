@@ -38,7 +38,11 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ['OTC_DISABLE_SCHEDULERS'] = '1'
-os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', ROOT)
+# Fora do Windows a raiz do share é obrigatória (§9) e a dev não tem share. NO
+# Windows NÃO se define: a variável venceria o caminho de rede do `config.py` da
+# prod, e a planilha seria procurada dentro do checkout.
+if os.name != 'nt':
+    os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', ROOT)
 
 import diag_pending_confirmation_db as D                      # noqa: E402
 
@@ -149,6 +153,10 @@ def main():
 
     caminho = args.planilha or _planilha_padrao()
     print('planilha: %s' % caminho)
+    if not os.path.isfile(caminho):
+        print('  NÃO ENCONTRADA. Passe o caminho da planilha:\n'
+              '    python scripts\\diag_pending_missing.py "<pasta>\\%s"' % PLANILHA)
+        return 1
     print('  modificada em %s' % datetime.fromtimestamp(
         os.path.getmtime(caminho)).strftime('%d/%m/%Y %H:%M'))
     planilha = ler_planilha(caminho)
