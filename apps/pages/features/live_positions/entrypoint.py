@@ -171,3 +171,29 @@ def api_lpopt_data():
 @blueprint.route('/api/live-position-option/edit', methods=['POST'])
 def api_lpopt_edit():
     return _lp_edit('option')
+
+# ── DCE (Derivativos Realizados no Exterior, §729) ──────────────────────────
+# A posição do DPOSICAOCONTRATODCE que o Save CETIP Files grava; os códigos de
+# tipo saem traduzidos pelos cadastros do /mapping (`queries.dce_collect`).
+from apps.pages.features.live_positions import queries as _lp_queries   # noqa: E402
+
+
+@blueprint.route('/live-position-dce')
+def live_position_dce():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    ref_date = _R()._prev_anbima_bizday(datetime.now()).strftime('%Y-%m-%d')
+    return render_template('pages/live-position-dce.html', segment='live-position-dce', ref_date=ref_date)
+
+
+@blueprint.route('/api/live-position-dce/data')
+def api_lpdce_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ref = _R()._swap_simple_ref(request.args)
+    # `exact=1` (Advanced Export): o dia pedido ou nada, sem andar para trás
+    exact = str(request.args.get('exact', '')).strip() in ('1', 'true', 'yes')
+    payload = _lp_queries.dce_collect(ref, exact=exact)
+    payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
+                    'ref_date_fmt': ref.strftime('%d/%m/%Y')})
+    return jsonify(payload)
