@@ -43,11 +43,16 @@ REM                   chegava com o hotfix e aparecia em ingles/sem traducao.
 REM    __pycache__  - bytecode velho ao lado de fonte novo e ruido. O Python
 REM                   recompila o modulo alterado sozinho na primeira subida.
 REM
-REM  O requirements.txt VAI (29/10/2026): ele e o run.py moram na RAIZ do
-REM  repositorio, nao em apps\, e tem passada propria (ROOT_FILES). O
+REM  O requirements.txt VAI (29/10/2026): ele mora na RAIZ do repositorio,
+REM  nao em apps\, e tem passada propria (ROOT_FILES). O
 REM  start-otc-tracker.bat compara o requirements.txt da versao com o retrato
 REM  da ultima instalacao (fc /b), entao o requirements que chega pelo hotfix
 REM  dispara o pip install na PROXIMA subida, sozinho - o script avisa.
+REM
+REM  O run.py NUNCA vai: o da pasta da versao e PROPRIO da instancia (mora ao
+REM  lado do __init__.py e do config.py, sem o pacote apps) e o do repositorio
+REM  faz "from apps.config import" - copiado por cima, a instancia nao sobe
+REM  para ninguem (ModuleNotFoundError: No module named 'apps', 29/10/2026).
 REM
 REM  O destino sai do link.txt, nunca de um nome escrito aqui: quando a proxima
 REM  versao subir, o comando continua certo sem ninguem lembrar de nada.
@@ -62,10 +67,11 @@ if "%REPO:~-1%"=="\" set "REPO=%REPO:~0,-1%"
 
 REM Mesma lista branca do deploy, menos o __pycache__. Os arquivos de apps\ e
 REM os da RAIZ do repositorio vao separados: na pasta da versao todos ficam lado
-REM a lado, mas aqui o requirements.txt e o run.py nao moram em apps\.
+REM a lado, mas aqui o requirements.txt nao mora em apps\. O run.py fica de
+REM FORA: o da versao e outro arquivo (ver o cabecalho).
 set "DEPLOY_DIRS=pages static templates"
 set "DEPLOY_FILES=__init__.py config.py"
-set "ROOT_FILES=requirements.txt run.py"
+set "ROOT_FILES=requirements.txt"
 set "EXCLUDE_DIR=%SOURCE_ROOT%\static\data"
 
 REM A i18n vai para o DATA_DIR da instancia, que e onde o app a procura primeiro
@@ -170,7 +176,7 @@ echo.
 REM --- Arquivos da raiz: sem /S e sem /E, robocopy pega so os nomeados. -------
 robocopy "%SOURCE_ROOT%" "%TARGET%" %DEPLOY_FILES% /L /FP /NS /NC /NDL /NJH /NJS /NP >> "%LIST%"
 
-REM --- Arquivos da raiz do repositorio: requirements.txt e run.py. -------------
+REM --- Arquivo da raiz do repositorio: o requirements.txt. --------------------
 robocopy "%REPO%" "%TARGET%" %ROOT_FILES% /L /FP /NS /NC /NDL /NJH /NJS /NP >> "%RLIST%"
 
 REM --- Pastas: recursivo, sem o dado vivo e sem bytecode. ---------------------
