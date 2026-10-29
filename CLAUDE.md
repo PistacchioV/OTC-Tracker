@@ -1394,9 +1394,12 @@ São **53**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 - **Com o vidro (Mac, GPU) a troca é a View Transition SEM NOME nenhum**
   (§726): grupo com `view-transition-name` é desenhado POR CIMA da raiz e
   fotografado sem o fundo — o papel de parede nomeado cobria o conteúdo novo e
-  o vidro do menu clareava. A raiz troca sem `plus-lighter`, a antiga esmaece
-  por cima da nova, e a transição segura a antiga até a nova estar montada
-  (sem ela aparece a página crua). O conteúdo NÃO tem animação de entrada
+  o vidro do menu clareava. A raiz troca sem `plus-lighter`. A foto NOVA é
+  desenhada por cima da antiga: a antiga fica parada e a nova entra esmaecendo,
+  com a entrada PAUSADA (`otc-vt-hold`, `segura()` do `head-css.html`) até a
+  página montar — sem requisição em voo e sem tabela assentando, teto de 1,6 s
+  (§728). O `pageswap` termina as animações do menu antes da foto, e o clique na
+  folha move a pílula curta, sem mola. O conteúdo NÃO tem animação de entrada
   (esmaecer do 0 é um quadro vazio), o título entra parado, a refração do
   vidro sai do cache da aba antes do primeiro quadro, e a primeira pintura
   espera o `#otc-content-end` (`rel=expect`). Não dê nome de transição a nada

@@ -30981,3 +30981,39 @@ dele além das da grade (`entrypoint._mapping_com_o_dia`, pelo mesmo
 `_generic_nd_mapping_candidates` do FWD Start): a grade sozinha é a última
 busca e deixava de fora operação do dia que ninguém filtrou. Sem a data, é a
 grade, como antes — nunca mapeia menos. `check_nd_mapping_b3.py` §9.
+
+## §728 — A página antiga fica até a nova MONTAR; a pílula do menu parada (2026-10-29)
+
+Depois do §726 a equipe ainda via "engasgadas": a placa aparecia, mudava de
+tamanho quando entravam a barra e a tabela vazia, e de novo quando chegavam os
+dados — e a pílula do menu "subia e descia" na troca.
+
+Duas descobertas, medidas quadro a quadro no Chrome:
+
+1. **A foto NOVA da View Transition é desenhada POR CIMA da antiga** (a ordem
+   do par de imagens). O §726 deixava a nova sem animação e esmaecia a antiga —
+   que, por baixo de uma imagem opaca, nunca aparecia: a página nova surgia na
+   hora, crua, e montava à vista. Agora a antiga fica parada e opaca
+   (`animation: none`) e a NOVA entra esmaecendo sobre ela (`otc-vt-in`, 200 ms).
+   E a entrada fica PAUSADA no zero (`otc-vt-hold`) enquanto a página nova monta
+   por baixo: o `segura()` do `head-css.html` conta as requisições (`fetch` e
+   XHR, embrulhados ali, antes de qualquer script) e solta quando a página está
+   `complete`, sem requisição em voo há 150 ms e sem tabela assentando
+   (`oxf-settling`), ou no teto de 1,6 s. O que se vê: a página antiga inteira,
+   e então a nova PRONTA, num esmaecer só. O rastro fica em
+   `window.__otcVtHold` (`ms`, `motivo`: `pronta`/`teto`).
+2. **A pílula** deslizava até o item clicado com a mola de 720 ms, e a foto da
+   página que sai era tirada no meio do movimento — ficava ali parada (agora
+   pela retenção, ainda mais tempo) e a nova a mostrava no lugar final. O
+   clique na folha move a pílula CURTA (180 ms, sem mola), e o `pageswap` — que
+   dispara logo antes da foto — TERMINA toda animação do menu (a pílula e a cor
+   do texto do item). Na troca medida, o menu não muda um pixel quando a página
+   nova entra.
+
+Durante a retenção a página não aceita clique (é a transição): é o teto que a
+limita. No modo opaco (máquinas do JPM) não há transição — a retenção não vale
+lá, e a página nova segue montando à vista; o que segura a primeira pintura
+ali é o §723/§726.
+
+`check_page_transition.py` §6 e §7 (este com o Chrome de verdade: o Chromium
+do Playwright não dispara o `pagereveal`).
