@@ -785,7 +785,7 @@ escolhido, os outros dois se preenchem). **`file`** aponta para um JSON já
 existente (o `swap-index` edita o mesmo `SwapIndex.json` do Index Results —
 declare as colunas extras, senão o POST as derruba).
 
-São **53**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currency-base`, `interbook-ndf`, `interbook-fxo`, `commodities-b3`,
+São **54**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currency-base`, `interbook-ndf`, `interbook-fxo`, `commodities-b3`,
 `publisher-ndf`, `le-accronym`, `le-spn`, `bank-name`, `fxo-conv-rate`,
 `ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`,
 `manual-conf-validation`, `manual-conf-sla`, `fxo-internal-cpty`,
@@ -794,7 +794,7 @@ São **53**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 `ndfc-advice-split`, `tools-swap-index`, `opb3-msg-asset`,
 `swap-funcionalidade`, `swap-amortizacao`, `swap-code-labels`,
 `quotes-equity`, `quotes-commodity`, `mt300`, `settlement-exception`,
-`gdt-codes`, `equity-leg-prefix`, os sete `dce-*`, os quatro `cgd-*` e os três `wht-*`
+`gdt-codes`, `equity-leg-prefix`, os sete `dce-*` e o `dce-position-codes`, os quatro `cgd-*` e os três `wht-*`
 (`wht-codes`, `wht-company`, `wht-non-resident`).
 
 ### Regras fáceis de quebrar pela tela
@@ -2707,6 +2707,12 @@ São **53**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   `_vcp_position_map` é fallback da DPOSICAO-SWAP pelo `Contrato` (§431).
 - **O Latam é reemitido no dia**: `_latam_pick_source` = mtime mais recente;
   preteridos ficam em disco e voltam em `ignored`.
+- **DCE** (`/live-position-dce`, §729): o DPOSICAOCONTRATODCE que o Save
+  CETIP Files grava em `cache/b3 files/DCE` (layout da B3, 57 campos, lido pela
+  POSIÇÃO; cabeçalho `auto`). Os campos de TIPO chegam como número e o texto
+  sai SÓ de cadastro: `dce-position-codes` (o que o manual escreve no layout) e
+  os `dce-*` (o Dominios_DCE; o ativo pelo par categoria × código). Em código,
+  só qual tabela responde a cada coluna (`live_positions/domain.KIND`).
 - **Swap › Strategy** (`/live-position-swap-strategy`, `features/swap_strategy`,
   §602): os dois relatórios do MID de Swap da B3 (ConsultaEstrategiaContratos =
   a lista, ConsultaDadosEstrategia = os dados de UMA estratégia) entram pelo
@@ -3852,7 +3858,7 @@ São **53**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (233 scripts)
+### `scripts/tests/` (234 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

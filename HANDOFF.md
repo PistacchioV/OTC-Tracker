@@ -31017,3 +31017,62 @@ ali é o §723/§726.
 
 `check_page_transition.py` §6 e §7 (este com o Chrome de verdade: o Chromium
 do Playwright não dispara o `pagereveal`).
+
+**Adendo (mesmo dia):** a equipe viu a página INTEIRA "diminuir e voltar" na
+troca, e a pílula ir ao topo e voltar. Por padrão o navegador anima o GRUPO da
+raiz do tamanho da página antiga ao da nova; com tamanhos diferentes (barra de
+rolagem clássica numa e não na outra), a foto da página toda é redimensionada
+durante a transição. `html.otc-vt-nav::view-transition-group(root) { animation:
+none; }` — a troca fica só no esmaecer. Não reproduziu aqui (barra sobreposta
+no Mac de dev, mesmo tamanho nas duas páginas); a confirmação é da equipe.
+
+## §729 — Live Position › DCE e o DPOSICAOCONTRATODCE no Save CETIP Files (2026-10-29)
+
+Pedido da equipe: uma tela Live Position para a posição de DCE (Derivativos
+Realizados no Exterior) e o arquivo da B3 no Save CETIP Files, com os campos
+de tipo — que vêm como NÚMERO — mostrados como texto, por cadastro.
+
+**O layout** é o do Manual de Operações "Receber Arquivos" da B3, pp. 422-424
+(o PDF está guardado na memória do assistente, `b3-manual-receber-arquivos`):
+57 campos de dado separados por `;`. Os nomes estão em
+`_B3_SWAP_HEADERS_RAW['dce_contract_position']`, na ordem do arquivo.
+
+**Save CETIP Files.** Linha nova no cadastro `cetip-files` (seed; quem já tem o
+cadastro a ganha pelo `_cetip_files_upgrade`): `DCE Contract Position
+(DPOSICAOCONTRATODCE)`, origem `CETIP21_YYMMDD_DPOSICAOCONTRATODCE` (casa também
+o envelope da Return, `73760_CETIP21_…_SP_DPOSICAOCONTRATODCE…`), salvo como
+`73760_YYMMDD_DPOSICAOCONTRATODCE.CETIP21` — o nome que a equipe passou. O
+nome de ORIGEM foi deduzido do padrão dos outros arquivos do CETIP21 e não
+confirmado com um arquivo real: se a B3 entregar com outro prefixo, corrige-se
+na tela /mapping (o casamento olha o tamanho do prefixo e o final do nome). O
+comportamento é só gerar o JSON (`cache/b3 files/DCE/…`), sem anexo nem
+filtro de conta. **Cabeçalho**: o layout não diz se o arquivo traz um, e não
+havia exemplo — a exportação ganhou `has_header: 'auto'` (linha de DADO começa
+pela data AAAAMMDD; outra coisa é cabeçalho), e a tela lê pela POSIÇÃO.
+
+**A tela** (`/live-position-dce`, Live Position › DCE) é o molde da Swap
+Cashflow: o JS `live-position-swap-characteristics.js` por `data-api`, e o
+coletor em `features/live_positions/queries.dce_collect` (lê o dia, anda até
+dez dias úteis para trás, `exact=1` para o Advanced Export) com a regra pura em
+`features/live_positions/domain.py`. O `_swap_day_path` ganhou `category`.
+
+**Códigos → texto, SEMPRE por cadastro.** Em código fica só QUAL tabela
+responde a cada coluna (`domain.KIND`, que é o layout). Os valores:
+- o que o manual escreve no próprio layout (Tipo de DCE, Tipo de Mercado,
+  SIM/NAO, COMPRADOR/VENDEDOR, TITULAR/LANCADOR, Tipo de Opção, CDS, Tipo de
+  Origem, Mês de Referência) nasce no cadastro NOVO **`dce-position-codes`**
+  (DCE — Position Codes: Field × B3 Code × Text);
+- o que ele manda para o arquivo público `Dominios_DCE` vem dos sete `dce-*`
+  que já existiam e ninguém lia (tipo de derivativo, categoria e ativo
+  subjacente, funcionalidade, país, tipo de swap, tipo de verificação). O
+  ATIVO casa pelo par (texto da categoria, código) — o código repete entre
+  categorias (o 220 de TAXAS DE CAMBIO é o dólar);
+- Moeda, Bolsa Negociada e Origem não têm cadastro na B3 que tenhamos: o campo
+  já está na lista do `dce-position-codes`, e até alguém cadastrar a tela
+  mostra o código.
+Código casa sem o zero à esquerda (`07` = `7`); sem texto, a célula mostra o
+código, nunca vazio. Números sem separador valem com as casas do layout
+(`9(14,05)`); com vírgula decimal, como vierem.
+
+`check_live_position_dce.py`; o `check_cetip_json_export.py` §1 tem o leitor
+novo.
