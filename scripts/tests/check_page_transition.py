@@ -22,7 +22,11 @@ handlers do `otc.js` (que roda no `DOMContentLoaded`):
      o fim do conteúdo (rel=expect), e a placa já na tela não ganha a entrada
      do otc.js; o Swal que fecha sozinho dura no mínimo 3 s (§726);
   6. a View Transition não dá NOME a nada (grupo com nome é desenhado por cima
-     da raiz e cobria o conteúdo novo) e troca sem plus-lighter.
+     da raiz e cobria o conteúdo novo) e troca sem plus-lighter; a foto nova
+     entra sobre a antiga parada, o pageswap termina as animações do menu e o
+     clique move a pílula curta;
+  7. no Chrome de verdade (o Chromium do Playwright não dispara o pagereveal):
+     a página antiga fica até a nova montar, e solta dentro do teto (§728).
 
     OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_page_transition.py
 """
@@ -171,6 +175,38 @@ with sync_playwright() as p:
     scss = open(os.path.join(ROOT, 'apps', 'static', 'scss', 'otc.scss'), encoding='utf-8').read()
     check('nenhum view-transition-name (papel de parede, menu, barra)', 'view-transition-name' not in scss, True)
     check('   a raiz troca sem plus-lighter', 'mix-blend-mode: normal' in scss, True)
+
+    check('   a foto NOVA entra esmaecendo sobre a antiga parada', (
+        'html.otc-vt-nav::view-transition-old(root) { animation: none; }' in scss,
+        'html.otc-vt-hold::view-transition-new(root) { animation-play-state: paused; }' in scss), (True, True))
+    head = open(os.path.join(ROOT, 'apps', 'templates', 'partials', 'head-css.html'), encoding='utf-8').read()
+    check('   o pageswap termina o que o menu anima antes da foto (§728)',
+          "side.getAnimations({ subtree: true }).forEach" in head, True)
+    js = open(os.path.join(ROOT, 'apps', 'static', 'js', 'otc.js'), encoding='utf-8').read()
+    check('   o clique na folha move a pílula CURTA, sem mola', 'moveLensTo(ul, a, true);' in js, True)
+
+    print('\n== 7. a página antiga fica até a nova MONTAR (Chrome de verdade, §728) ==')
+    try:
+        bc = p.chromium.launch(channel='chrome')
+    except Exception as exc:          # sem o Chrome instalado: o Chromium não dispara o pagereveal
+        bc = None
+        print('  skip: sem o Chrome (%s)' % str(exc).splitlines()[0][:80])
+    if bc:
+        cc = bc.new_context(viewport={'width': 1600, 'height': 1000})
+        cc.add_cookies([dict(c, domain='127.0.0.1') for c in cookie('A111111', 'Ana Lima')])
+        pc = cc.new_page()
+        pc.goto(BASE + '/new_deals-opt-fxo', wait_until='networkidle')
+        pc.evaluate("localStorage.setItem('__OTC_TRACKER_FX__', 'full')")
+        pc.goto(BASE + '/new_deals-opt-fxo', wait_until='networkidle')
+        pc.wait_for_timeout(800)
+        with pc.expect_navigation():
+            pc.click('.dd-panel.dd-current a.dd-leaf[href="/new_deals-opt-commodities"]')
+        pc.wait_for_timeout(2500)
+        hold = pc.evaluate('window.__otcVtHold') or {}
+        check('a transição segurou a página antiga e soltou', hold.get('motivo') in ('pronta', 'teto'), True)
+        check('   dentro do teto de 1,6 s', (hold.get('ms') or 9999) <= 1700, True)
+        check('   e nada ficou preso (classe solta)', pc.evaluate("document.documentElement.classList.contains('otc-vt-hold')"), False)
+        bc.close()
 
     print('\n== 2. o menu desafixado antes do primeiro paint ==')
     pg.evaluate("localStorage.setItem('otc_nav_pinned', '0')")
