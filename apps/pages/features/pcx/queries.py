@@ -13,23 +13,10 @@ def _routes():
 
 
 def rows():
-    """As linhas cuja situação ATUAL é Pending — a mesma resposta do chip
-    Status = Pending da página: os três DBs são lidos e a categoria vem
-    recomputada (`_pc_target_category`), porque uma linha que virou Ok pode
-    ainda morar fisicamente no DB de pending até o re-route diário."""
-    R = _routes()
-    seen, rows = set(), []
-    for cat in ('backlog', 'pending', 'ok'):
-        for r in R._pc_load_rows(cat):
-            if R._pc_target_category(r) != 'pending':
-                continue
-            tn = str(r.get('Trade Number', '') or '')
-            key = tn or ('#%d' % len(rows))
-            if key in seen:
-                continue
-            seen.add(key)
-            rows.append(r)
-    return rows
+    """As linhas do banco `pending` que seguem pendentes — a MESMA resposta do
+    chip Status = Pending da página (`_pc_pending_rows`, uma função para as
+    duas). Backlog e ok não entram (equipe, 29/10/2026)."""
+    return _routes()._pc_pending_rows()
 
 
 def rows_at(ref):

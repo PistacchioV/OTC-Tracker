@@ -151,14 +151,17 @@ def api_pending_confirmation_search():
     body = request.get_json(silent=True) or {}
     filters = body.get('filters', []) or []
     has_status = any(_R()._pc_norm(f.get('field', '')) == 'status' for f in filters)
-    if has_status:
-        # A Status chip means "rows whose CURRENT status is X". Because status is
-        # recomputed at read time (e.g. a now-Exception*/OK row may still physically
-        # sit in the pending DB until the daily re-route), we can't trust the DB a
-        # row lives in — load all three and keep only rows whose recomputed target
-        # category matches the requested one. Prevents e.g. Ok rows leaking into a
-        # Pending filter.
-        want = _R()._pc_category_from_filters(filters)
+    want = _R()._pc_category_from_filters(filters) if has_status else None
+    if want == 'pending':
+        # Status = Pending: SÓ o banco pending (equipe, 29/10/2026), pela MESMA
+        # função da planilha diária (`_pc_pending_rows`) — a linha do pending
+        # que já se resolveu sai pela categoria recalculada.
+        rows = _R()._pc_pending_rows()
+        cats = [want]
+    elif has_status:
+        # Ok / Backlog: "rows whose CURRENT status is X". A row that just turned
+        # Ok may still physically sit in the pending DB until the daily re-route,
+        # so all three are loaded and the recomputed category decides.
         seen, rows = set(), []
         for cat in ('backlog', 'pending', 'ok'):
             for r in _R()._pc_load_rows(cat):
