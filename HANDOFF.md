@@ -31231,3 +31231,13 @@ volta ao pending na manutenção das 11:30 e passa a aparecer dali.
 
 `check_pcx_api.py` §2: linha só no backlog e só no ok fica FORA, o chip da
 página devolve a MESMA lista da planilha, e os outros chips seguem filtrando.
+
+**Depois (mesmo dia):** a equipe cruzou a planilha da rotina com o Export da
+tela por XLOOKUP: 383 operações da planilha não estão na tela — `Pending
+Digital Signature`, Trade Date de junho, aging ~127. Nenhum código resolve
+esse status sozinho, e nada apaga em massa (a manutenção das 11:30 reescreve os
+três bancos com o que leu; a tela e o Pending Update são upsert). Sem os dados
+da instância não dá para dizer se elas mudaram de status ou foram apagadas:
+`scripts/diag_pending_missing.py` responde isso por Trade Number (NA FILA /
+RESOLVIDA com o status de agora / BACKLOG / FORA DO LUGAR / AUSENTE, e se
+estava na foto das 11:30).
