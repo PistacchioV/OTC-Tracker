@@ -31164,6 +31164,19 @@ outros); a conferência de checkout sujo olha os dois; o `fc` do requirements é
 feito ANTES da cópia e o aviso diz que a próxima subida instala as
 dependências e demora mais. `check_bat_blocks.py`, `check_bat_files.py`.
 
+**Adendo (mesmo dia) — o `run.py` NÃO vai, e levá-lo derrubou a instância.**
+O primeiro `hotfix apply` com esta mudança copiou o `run.py` do repositório
+por cima do da v15, e a subida morreu para todos em `from apps.config import
+config_dict` → `ModuleNotFoundError: No module named 'apps'`. O `run.py` da
+pasta da versão é PRÓPRIO da instância (já dito perto do §627: "o `run.py` da
+INSTÂNCIA não é o do repositório"): ele mora ao lado do `__init__.py` e do
+`config.py`, sem o pacote `apps`. Ele estar no `DEPLOY_FILES` do hotfix e
+nunca ser copiado não era defeito — era o que o mantinha intacto. Agora
+`ROOT_FILES=requirements.txt` e o cabeçalho diz por que o `run.py` fica de
+fora. **A volta**: o original ficou no backup do próprio hotfix, na máquina de
+quem rodou o `apply` — `%LOCALAPPDATA%\OTC-Tracker\hotfix-backup\v15\run.py`
+→ `…\Application\otc-source\v15\run.py`.
+
 
 ## §732 — Pay/Rec: a pendência trazida some no D+2 pelo ✓ da linha (2026-10-29)
 
