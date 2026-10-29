@@ -424,6 +424,10 @@ $(document).ready(function () {
     function statusBadge(val) {
         var st  = (val || 'PENDING').toUpperCase();
         var cls, lbl;
+        // RED (§730): a contraparte na lista de Rapid Exposure do Control Panel —
+        // vermelha, texto branco e em MAIÚSCULAS (`data-case`, o otc.js não a
+        // reescreve em Proper)
+        if (st === 'RED') return '<span class="badge otc-status rounded-pill pill-badge text-bg-danger" data-case="upper">RED</span>';
         if      (st === 'ACTIVE')           { cls = 'text-bg-success';   lbl = 'Active'; }
         else if (st === 'INACTIVE')         { cls = 'text-bg-secondary'; lbl = 'Inactive'; }
         else if (st === 'PENDING INACTIVE') { cls = 'text-bg-danger';    lbl = 'Pend. Inactive'; }
@@ -828,7 +832,7 @@ $(document).ready(function () {
             var d = this.data(); if (!d) return;
             var key  = _spnKey(_txt(d[9]));
             var real = _REAL_STATUS[key] || 'PENDING';
-            var want = String(real).toUpperCase() === 'ACTIVE' && cpHasPending(key);
+            var want = /^(ACTIVE|RED)$/.test(String(real).toUpperCase()) && cpHasPending(key);
             var badge = want ? detailsPendingBadge() : statusBadge(real);
             var changed = applyCpdCells(d);
             if (d[2] !== badge) { d[2] = badge; changed = true; }
@@ -846,7 +850,7 @@ $(document).ready(function () {
             var d = this.data(); if (!d) return;
             if (_spnKey(_txt(d[9])) !== key) return;
             var real = _REAL_STATUS[key] || 'PENDING';
-            var want = String(real).toUpperCase() === 'ACTIVE' && cpHasPending(key);
+            var want = /^(ACTIVE|RED)$/.test(String(real).toUpperCase()) && cpHasPending(key);
             var badge = want ? detailsPendingBadge() : statusBadge(real);
             var changed = applyCpdCells(d);
             if (d[2] !== badge) { d[2] = badge; changed = true; }
@@ -1838,7 +1842,7 @@ $(document).ready(function () {
             var chk = tr.find('.row-rd-check');
             if (!chk.prop('checked')) return;
             var badgeText = tr.find('td:eq(2) .badge').text().trim().toUpperCase();
-            if (badgeText === 'ACTIVE' || badgeText === 'INACTIVE') return;
+            if (badgeText === 'ACTIVE' || badgeText === 'INACTIVE' || badgeText === 'RED') return;
             var confirmBtn = tr.find('.btn-rd-confirm');
             candidates.push({
                 tr:    tr,

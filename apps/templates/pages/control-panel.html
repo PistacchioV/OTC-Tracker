@@ -1025,6 +1025,47 @@
                 </div>
             </div>
         </div>
+
+        {# RED Clients — Rapid Exposure (§730): a planilha diária de exposição.
+           Contraparte do Reference Data com o ECI na coluna K da aba "JPM
+           Entities-Open Settlements" vira RED; fora da lista, volta a Active.
+           É tarefa diária do Intraday Monitor (`red-clients`). #}
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="refdata">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="redclients">
+                    <div class="cp-card__icon otc-icon-tile"><i class="ti ti-alert-octagon"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-red-title">RED Clients - Rapid Exposure</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-red-desc">
+                        Reads the ECI codes in column K of the "JPM Entities-Open Settlements" tab and marks the
+                        matching Reference Data counterparties as RED. A counterparty that leaves the list goes
+                        back to Active; one pending approval stays Pending and returns as RED when approved.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-red-file">Spreadsheet (.xlsx, .xls)</label>
+                        <div class="cp-dropzone" id="cpRedDrop" tabindex="0">
+                            <input type="file" id="cp-red-file" accept=".xlsx,.xls" hidden>
+                            <div class="cp-dz-hint">
+                                <i class="ti ti-cloud-upload"></i>
+                                <span data-lang="cp-red-dz">Drop the Rapid Exposure spreadsheet here or click to browse</span>
+                            </div>
+                            <ul class="cp-dz-list" id="cp-red-list"></ul>
+                        </div>
+                    </div>
+                    <div id="cp-red-status" class="cp-card__meta d-none" style="display:block;margin-top:.35rem;line-height:1.5;"></div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-calendar-repeat"></i><span data-lang="cp-red-meta">Daily · Spreadsheet → Reference Data</span>
+                        </span>
+                        <button type="button" class="cp-run-btn" id="cp-red-run"
+                                data-upload-endpoint="/api/control-panel/red-clients/run"
+                                data-file-input="cp-red-file" data-done-fn="cpRedDone">
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-run">Run</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
 
@@ -1351,6 +1392,54 @@ function cpWireDropzone(dropId, inputId, listId) {
 }
 
 cpWireDropzone('cpContactsDrop', 'cp-contacts-file', 'cp-contacts-list');
+cpWireDropzone('cpRedDrop', 'cp-red-file', 'cp-red-list');
+
+// ── RED Clients (§730): a frase do resultado e a linha da última rodada ─────
+function cpRedEsc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+}
+function cpRedFmt(tpl, p) {
+    return Object.keys(p).reduce(function (s, k) { return s.split('{' + k + '}').join(p[k]); }, tpl);
+}
+window.cpRedDone = function (body) {
+    var r = (body && body.summary) || {};
+    var html = cpRedEsc(cpRedFmt(t('cp-red-done', '{red} RED client(s) · {in} entered · {out} left · {miss} ECI(s) without a Reference Data match'),
+                        { red: (r.red || []).length, 'in': (r.entered || []).length,
+                          out: (r.left || []).length, miss: r.eci_unmatched || 0 }));
+    var pend = r.flagged_not_red || [];
+    if (pend.length) {
+        html += '<br><small class="text-muted">' + cpRedEsc(cpRedFmt(t('cp-red-pending',
+            '{n} flagged counterparty(ies) pending approval — they turn RED once approved'), { n: pend.length })) + '</small>';
+    }
+    if ((r.red || []).length) {
+        html += '<div class="text-start mt-2" style="max-height:180px;overflow:auto;font-size:.8rem">' +
+            r.red.map(function (n) { return '<span class="otc-red-pill" data-tag="RED"></span> ' + cpRedEsc(n); }).join('<br>') + '</div>';
+    }
+    return html;
+};
+(function () {
+    var box = document.getElementById('cp-red-status');
+    if (!box) return;
+    function pinta(d) {
+        box.textContent = d ? cpRedFmt(t('cp-red-last', 'Last run {at} by {by}: {red} RED · {in} in · {out} out'),
+            { at: d.at || '—', by: d.by || '—', red: (d.red || []).length,
+              'in': (d.entered || []).length, out: (d.left || []).length })
+            : t('cp-red-never', 'No run recorded yet.');
+        box.classList.remove('d-none');
+    }
+    function load() {
+        fetch('/api/control-panel/red-clients/status', { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (j) { if (j && j.success) pinta(j.last); })
+            .catch(function () {});
+    }
+    load();
+    var run = document.getElementById('cp-red-run');
+    if (run) run.addEventListener('cp:upload-done', load);
+})();
+
 
 // ── Upload routine runner ────────────────────────────────────────────────────
 // Cards with data-upload-endpoint POST a file (multipart) from data-file-input.
@@ -1377,17 +1466,27 @@ function cpRunUpload(btn) {
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
         .then(function (res) {
             if (res.ok && res.body && res.body.success !== false) {
+                // o card pode montar a própria frase (`data-done-fn`, no idioma
+                // da tela) a partir do resumo que o servidor manda (§730)
+                var doneFn = window[btn.getAttribute('data-done-fn') || ''];
                 Swal.fire({ icon: 'success', title: t('cp-done-title', 'Routine completed'),
-                            html: res.body.message || t('cp-done-msg', 'Done.'),
+                            html: (typeof doneFn === 'function' && doneFn(res.body)) ||
+                                  res.body.message || t('cp-done-msg', 'Done.'),
                             confirmButtonColor: '#0066cc' });
                 fi.value = '';
                 // `value = ''` NÃO dispara `change`: sem este aviso, o dropzone
                 // continuaria mostrando o arquivo que já foi enviado.
                 fi.dispatchEvent(new Event('change'));
             } else {
+                // erro com código sai no idioma da tela (`e_<código>`); o texto do
+                // servidor é só o plano B (§730)
+                var b = res.body || {}, msg = b.error || t('cp-err-msg', 'An error occurred while running the routine.');
+                if (b.code) {
+                    msg = t('e_' + b.code, msg);
+                    Object.keys(b.params || {}).forEach(function (k) { msg = msg.split('{' + k + '}').join(cpRedEsc(b.params[k])); });
+                }
                 Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
-                            html: (res.body && res.body.error) || t('cp-err-msg', 'An error occurred while running the routine.'),
-                            confirmButtonColor: '#0066cc' });
+                            html: msg, confirmButtonColor: '#0066cc' });
             }
         })
         .catch(function () {
@@ -1398,6 +1497,7 @@ function cpRunUpload(btn) {
             btn.disabled = false;
             if (label) label.textContent = orig;
             if (icon) icon.className = 'ti ti-player-play';
+            btn.dispatchEvent(new CustomEvent('cp:upload-done', { bubbles: true }));
         });
 }
 

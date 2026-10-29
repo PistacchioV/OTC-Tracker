@@ -16748,6 +16748,28 @@ table td .btn.btn-act > i {
   background-color: #0e8fa8 !important;
 }
 
+.otc-red-pill {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-left: 5.6px;
+  margin-left: 0.35rem;
+  padding: 0.18em 0.55em;
+  border-radius: 999px;
+  font-size: 9.92px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  color: #fff;
+  background-color: rgb(217, 45, 58);
+  background-image: linear-gradient(rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.otc-red-pill::before {
+  content: attr(data-tag);
+}
+
 .text-primary {
   color: var(--otc-accent-ink) !important;
 }

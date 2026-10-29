@@ -108,6 +108,11 @@ def api_b3_update():
             return jsonify({'ok': True, 'new_status': 'DELETED', 'removed': True})
         rec['CHECKER'] = user
         new_status = 'INACTIVE' if rec.get('STATUS') == 'PENDING INACTIVE' else 'ACTIVE'
+        # RED Clients (§730): a contraparte que a última lista de Rapid Exposure
+        # marcou (`RED`) volta da aprovação como RED, não como ACTIVE — a
+        # marca é do Control Panel e sobrevive à edição.
+        if table == 'refdata' and new_status == 'ACTIVE' and rec.get('RED'):
+            new_status = 'RED'
         rec['STATUS']  = new_status
     elif action == 'request_delete':
         # Pedido de exclusão: nada sai do arquivo agora. O registro fica
@@ -135,7 +140,7 @@ def api_b3_update():
     # its Electronic Inventory folder tree exists. This touches a network share
     # (listdir + makedirs) and can be slow, so run it OFF the request path — the
     # response (and the on-screen status update + notification) must not wait.
-    if table == 'refdata' and action == 'approve' and new_status == 'ACTIVE':
+    if table == 'refdata' and action == 'approve' and new_status in ('ACTIVE', 'RED'):
         try:
             _R().threading.Thread(target=_R()._ensure_counterparty_folders,
                              args=(rec.get('COUNTERPARTY', ''),), daemon=True).start()

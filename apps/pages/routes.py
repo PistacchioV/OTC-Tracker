@@ -15790,6 +15790,7 @@ _schedule_on_start('deals-monitor', _f_deals_monitor.start_scheduler)
 from apps.pages.features.cetip import entrypoint as _f_cetip                     # noqa: E402,F401
 from apps.pages.features.intrag import entrypoint as _f_intrag                   # noqa: E402,F401
 from apps.pages.features.counterparty_details import entrypoint as _f_cpd        # noqa: E402,F401
+from apps.pages.features.red_clients import entrypoint as _f_red_clients    # noqa: E402,F401
 from apps.pages.features.electronic_inventory import entrypoint as _f_ei         # noqa: E402,F401
 from apps.pages.features.manual_confirmation import entrypoint as _f_mc          # noqa: E402,F401
 from apps.pages.features.mtm import entrypoint as _f_mtm                         # noqa: E402,F401

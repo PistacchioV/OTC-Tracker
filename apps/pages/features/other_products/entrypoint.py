@@ -14,6 +14,7 @@ from flask import (g, jsonify, redirect, render_template, request,
 
 from apps.pages import blueprint
 from apps.pages.features.other_products import commands, queries
+from apps.pages.platform import red_clients as _red_clients
 
 
 def _R():
@@ -264,6 +265,8 @@ def api_ops_summary_print_advice():
             falhas.append(erro)
         bloqueadas.extend(bloq)
         drafts.extend(parte)
+    # Cliente RED nos avisos (§730): o cabeçalho X-Red-Clients sai na resposta
+    _red_clients.anota_avisos(drafts)
     # Todas as famílias falharam: aí sim é erro, e não "nada a gerar".
     if falhas and not drafts and len(falhas) == len(familias):
         return jsonify({'ok': False, 'error': 'Falha lendo as fontes do dia ({})'
@@ -570,6 +573,7 @@ def api_swap_settlement_advice_emails():
     drafts = otc_emails.build_swap_settlement_emails(
         rows, _R()._swadv_email_headers(False), _R()._swadv_email_headers(True),
         ref.strftime('%d/%m/%Y'))
+    _red_clients.anota_avisos(drafts)          # cliente RED: X-Red-Clients (§730)
     if not drafts:
         return jsonify({'ok': True, 'count': 0, 'blocked': blocked})
     cp_count = len({d.get('counterparty', '') for d in drafts})
@@ -630,6 +634,7 @@ def api_ndf_settlement_advice_emails():
     drafts = otc_emails.build_ndfc_settlement_emails(
         rows, _R()._ndfadv_email_headers(), ref.strftime('%d/%m/%Y'),
         split_commodity=_R()._ndfc_split_by_commodity)
+    _red_clients.anota_avisos(drafts)          # cliente RED: X-Red-Clients (§730)
     if not drafts:
         return jsonify({'ok': True, 'count': 0, 'blocked': blocked})
     cp_count = len({d.get('counterparty', '') for d in drafts})
@@ -845,6 +850,7 @@ def api_option_settlement_advice_emails():
     drafts = otc_emails.build_ndfc_settlement_emails(
         rows, _R()._optadv_email_headers(), ref.strftime('%d/%m/%Y'),
         split_commodity=_R()._ndfc_split_by_commodity, product_label='Opção')
+    _red_clients.anota_avisos(drafts)          # cliente RED: X-Red-Clients (§730)
     if not drafts:
         return jsonify({'ok': True, 'count': 0, 'blocked': blocked})
     cp_count = len({d.get('counterparty', '') for d in drafts})
