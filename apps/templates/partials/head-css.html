@@ -51,15 +51,66 @@
     // Pular REJEITA a promessa `ready` da transição: sem o `catch`, cada troca de
     // página no modo opaco deixava um "Transition was skipped" no console (§723).
     function pula(vt) { if (vt.ready) vt.ready.catch(function () {}); vt.skipTransition(); }
+    // A página nova MONTA em degraus depois da primeira pintura: a placa, a
+    // barra e a tabela vazia, os dados (por fetch), e a cada degrau a placa muda
+    // de tamanho (§728). Durante a transição a FOTO da página antiga fica parada
+    // por cima (`otc-vt-hold` pausa o esmaecer dela) enquanto a nova termina de
+    // montar por baixo; quando assenta — nenhuma requisição em voo há 150 ms e
+    // nenhuma tabela assentando — ou no teto de 1,6 s, a antiga esmaece de uma
+    // vez sobre a página pronta. As requisições se contam aqui, antes de
+    // qualquer script da página.
+    var voo = 0, mexeu = Date.now();
+    function conta(d) { voo += d; mexeu = Date.now(); }
+    if (window.fetch) {
+        var f0 = window.fetch;
+        window.fetch = function () {
+            conta(1);
+            var p = f0.apply(this, arguments);
+            p.then(function () { conta(-1); }, function () { conta(-1); });
+            return p;
+        };
+    }
+    if (window.XMLHttpRequest) {
+        var s0 = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.send = function () {
+            conta(1);
+            this.addEventListener('loadend', function () { conta(-1); }, { once: true });
+            return s0.apply(this, arguments);
+        };
+    }
+    function segura(vt) {
+        r.classList.add('otc-vt-hold');
+        var t0 = Date.now();
+        (function olha() {
+            var pronta = document.readyState === 'complete' && voo <= 0 && Date.now() - mexeu >= 150 &&
+                !document.querySelector('.dt-container.oxf-settling');
+            if (pronta || Date.now() - t0 >= 1600) {
+                // o rastro fica na página (o check_page_transition o lê)
+                window.__otcVtHold = { ms: Date.now() - t0, em: Math.round(performance.now()), motivo: pronta ? 'pronta' : 'teto', voo: voo };
+                r.classList.remove('otc-vt-hold');
+                return;
+            }
+            requestAnimationFrame(olha);
+        })();
+        vt.finished.finally(function () { r.classList.remove('otc-vt-hold'); });
+    }
     addEventListener('pageswap', function (e) {
         if (!e.viewTransition) return;
         if (r.classList.contains('is-solid')) { pula(e.viewTransition); return; }
         r.classList.add('otc-vt-nav');
+        // a foto da página que sai é tirada logo depois deste evento: a pílula
+        // do menu ainda deslizando até o item clicado sairia no meio do caminho
+        // (§728), e a cor do texto do item também — termina tudo do menu AGORA
+        var side = document.querySelector('.sidenav-menu');
+        if (side && side.getAnimations) side.getAnimations({ subtree: true }).forEach(function (a) {
+            try { a.finish(); } catch (er) { /* animação infinita (spinner): fica */ }
+        });
     });
     addEventListener('pagereveal', function (e) {
         if (!e.viewTransition) return;
         if (r.classList.contains('is-solid')) { pula(e.viewTransition); return; }
         r.classList.add('otc-vt-nav');
+        segura(e.viewTransition);
         e.viewTransition.finished.finally(function () { r.classList.remove('otc-vt-nav'); });
     });
 })();
