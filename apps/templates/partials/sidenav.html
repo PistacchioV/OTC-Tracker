@@ -1069,6 +1069,38 @@
                     </li>
         
                 </ul>
+
+        {# O menu ATRAVESSA a troca de página (§723): o clique numa folha guarda o
+           drill-down como a página nova o mostra (`saveNavSnap`, otc.js), e aqui,
+           SÍNCRONO e antes do primeiro paint, ele é pintado no lugar do menu de
+           origem — com os Pinned e a rolagem. O buildNav do load o refaz igual.
+           Só para o endereço clicado, nesta aba, mesmo usuário e idioma. #}
+        <script>
+        (function () {
+            var snap = null;
+            // vale UMA vez: a próxima visita a esta página por outro caminho segue o de sempre
+            try { snap = JSON.parse(sessionStorage.getItem('__OTC_NAV_SNAP__') || 'null');
+                  sessionStorage.removeItem('__OTC_NAV_SNAP__'); } catch (e) {}
+            if (!snap || !snap.nav) return;
+            var aqui = (location.pathname || '/').replace(/\/+$/, '') || '/';
+            var lang = 'en';
+            try { lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) {}
+            var pin = document.querySelector('.sidenav-menu .otc-pinned');
+            if (snap.path !== aqui || snap.lang !== lang || (pin && snap.sid !== (pin.getAttribute('data-sid') || ''))) return;
+            var src = document.querySelector('.sidenav-menu .side-nav:not(.dd-panel)');
+            if (!src) return;
+            var host = document.createElement('div');
+            host.className = 'dd-nav';
+            host.innerHTML = snap.nav;
+            src.parentNode.insertBefore(host, src.nextSibling);
+            src.classList.add('dd-source-hidden');
+            if (pin && snap.pinned != null) { pin.innerHTML = snap.pinned; pin.style.display = ''; }
+            var lbl = document.querySelector('.sidenav-menu [data-otc-pinned-label]');
+            if (lbl && snap.pinnedLabel) lbl.style.display = '';
+            var sc = document.querySelector('.sidenav-menu .otc-side__scroll');
+            if (sc && snap.scroll) sc.scrollTop = snap.scroll;
+        })();
+        </script>
     </div>
 
     <div class="dropdown">
@@ -1110,8 +1142,31 @@
   function appPath(h) {
     return (OTC_BASE && h && h.indexOf(OTC_BASE + '/') === 0) ? h.slice(OTC_BASE.length) : h;
   }
+  // A resposta do /api/me/access chega DEPOIS do primeiro paint: o menu nascia
+  // inteiro e encolhia quando ela voltava (§723). A última resposta fica na
+  // aba (por SID) e é aplicada já, SÍNCRONA; a nova, quando chega, refaz do
+  // zero (acesso que mudou volta a aparecer ou some).
+  var pinBox = document.querySelector('.sidenav-menu .otc-pinned');
+  var CACHE = '__OTC_ME_ACCESS__' + (pinBox ? (pinBox.getAttribute('data-sid') || '') : '');
+  function reset() {
+    var nav = document.querySelector('.side-nav');
+    if (!nav) return;
+    nav.querySelectorAll('.side-nav-item[hidden], .side-nav-title[hidden]').forEach(function (el) { el.hidden = false; });
+  }
+  var cached = null;
+  try { cached = JSON.parse(sessionStorage.getItem(CACHE) || 'null'); } catch (e) {}
+  if (cached) apply(cached);
   (window.otcMeAccess ? window.otcMeAccess() : fetch('/api/me/access', { credentials: 'same-origin' }).then(function (r) { return r.json(); }))
     .then(function (d) {
+      if (!d || !d.success) return;
+      var novo = JSON.stringify({ success: true, is_admin: !!d.is_admin, configured: !!d.configured, pages: d.pages || [] });
+      try { sessionStorage.setItem(CACHE, novo); } catch (e) {}
+      if (cached && JSON.stringify(cached) === novo) return;      // já aplicado
+      reset();
+      apply(d);
+    })
+    .catch(function () {});
+  function apply(d) {
       if (!d || !d.success) return;
       if (d.is_admin) return;                          // admin: Page Access link is rendered server-side; nothing to hide
       if (!d.configured) return;                       // full access — nothing to hide
@@ -1150,7 +1205,6 @@
         }
         if (!anyVisible) title.hidden = true;
       });
-    })
-    .catch(function () {});
+  }
 })();
 </script>

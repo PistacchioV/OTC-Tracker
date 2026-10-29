@@ -14118,6 +14118,14 @@ html.otc-vt-nav::view-transition-new(root) {
   padding-right: 0;
 }
 
+.content-page {
+  animation: otc-fade-in var(--otc-dur-base) var(--otc-ease-out);
+}
+
+:root.is-solid .content-page {
+  animation: none;
+}
+
 .content-page:not(:has(.page-title-head)) {
   padding-top: 88px;
 }

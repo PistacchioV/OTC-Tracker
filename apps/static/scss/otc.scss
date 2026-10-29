@@ -851,6 +851,14 @@ html.otc-vt-nav::view-transition-new(root) { animation: none; }
 }
 .content-page > .container-fluid,
 .content-page > [data-content] { padding-left: 0; padding-right: 0; }
+// A troca de página (§723): o conteúdo ENTRA numa vez só, desde o primeiro
+// paint — menu e barra do topo ficam parados. A entrada placa a placa do
+// otc.js começava DEPOIS de a placa estar pintada (o `backwards` a devolvia ao
+// primeiro quadro) e a página piscava. Sem `fill`: terminada, a animação sai
+// (com ela em efeito o `.content-page` viraria contexto de empilhamento e
+// prenderia os menus abaixo da barra do topo). No modo opaco, sem animação.
+.content-page { animation: otc-fade-in var(--otc-dur-base) var(--otc-ease-out); }
+:root.is-solid .content-page { animation: none; }
 // sem cabeçalho de página, o conteúdo começa ABAIXO da barra do topo
 .content-page:not(:has(.page-title-head)) { padding-top: 88px; }
 

@@ -48,14 +48,17 @@
     // No modo opaco (máquina sem GPU, as do JPM) a transição é PULADA: ela
     // fotografa a página que sai e a que entra, e por software isso é parte do
     // segundo que a troca de página levava lá (medido com a CPU 6× mais lenta).
+    // Pular REJEITA a promessa `ready` da transição: sem o `catch`, cada troca de
+    // página no modo opaco deixava um "Transition was skipped" no console (§723).
+    function pula(vt) { if (vt.ready) vt.ready.catch(function () {}); vt.skipTransition(); }
     addEventListener('pageswap', function (e) {
         if (!e.viewTransition) return;
-        if (r.classList.contains('is-solid')) { e.viewTransition.skipTransition(); return; }
+        if (r.classList.contains('is-solid')) { pula(e.viewTransition); return; }
         r.classList.add('otc-vt-nav');
     });
     addEventListener('pagereveal', function (e) {
         if (!e.viewTransition) return;
-        if (r.classList.contains('is-solid')) { e.viewTransition.skipTransition(); return; }
+        if (r.classList.contains('is-solid')) { pula(e.viewTransition); return; }
         r.classList.add('otc-vt-nav');
         e.viewTransition.finished.finally(function () { r.classList.remove('otc-vt-nav'); });
     });
