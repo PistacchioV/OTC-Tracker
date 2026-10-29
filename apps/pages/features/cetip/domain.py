@@ -155,6 +155,12 @@ _CETIP_BEHAVIOUR = {
     # não passar calado (§269). Sem a linha, o CGD acenderia esse aviso todo dia
     # por estar certo, e um aviso que sempre aparece deixa de ser lido.
     'CGD (NET)': {},
+    # DCE (§729): a posição dos contratos de Derivativos Realizados no Exterior
+    # vira o JSON que a tela Live Position › DCE lê. Sem filtro de conta: o
+    # arquivo já é só o que está sob a custódia das contas do Banco. O layout
+    # não diz se ele traz cabeçalho — `auto` decide pela primeira linha.
+    'DCE Contract Position (DPOSICAOCONTRATODCE)': {
+        'json': {'category': 'DCE', 'has_header': 'auto', 'header_key': 'dce_contract_position'}},
 }
 
 
