@@ -1371,10 +1371,10 @@ São **53**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   largura) só o encostava nela. **O rodapé é ABSOLUTO no pé da casca**
   (`.content-page` com 100vh no mínimo): fim da janela na tela curta, depois do
   conteúdo na longa — o espaço dele é o `padding-bottom` da casca.
-- **Troca de página é View Transition entre documentos** (§632): os nomes da
-  barra lateral, do topo e do papel de parede só existem durante a navegação
-  (`otc-vt-nav`, posta pelo `pageswap`/`pagereveal` do `head-css.html`, que
-  tem de ouvir antes do primeiro paint). O Chromium do Playwright não dispara
+- **Troca de página é View Transition entre documentos** (§632, revista no
+  §726 — ver abaixo: sem nome nenhum): a classe `otc-vt-nav` (posta pelo
+  `pageswap`/`pagereveal` do `head-css.html`, que tem de ouvir antes do
+  primeiro paint) só existe durante a navegação. O Chromium do Playwright não dispara
   o `pagereveal`: teste a transição com `channel='chrome'`. O menu pré-busca
   o HTML da tela no hover (Speculation Rules) — link de AÇÃO (logout, lock,
   download, API) fica fora da lista.
@@ -1385,7 +1385,7 @@ São **53**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   (uma vez, só para o endereço clicado); o filtro de acesso do menu se aplica
   na hora pela última resposta do `/api/me/access` guardada na aba
   (`__OTC_ME_ACCESS__<SID>`); o menu desafixado vai para o `<body>` no
-  `base.html`; o conteúdo entra pelo `.content-page` no CSS (a placa já na
+  `base.html`; o conteúdo NÃO tem entrada animada (§726; a placa já na
   tela não ganha o `.otc-enter`, cujo `backwards` a fazia piscar); e a
   DataTable nasce transparente até as larguras assentarem (`oxf-settling`, no
   `excel-filter.js`, teto de 1,2 s). Estado visual que o JS só aplica no fim
