@@ -10,6 +10,7 @@ import time
 import traceback
 from datetime import timedelta
 
+from apps.pages.platform import auto_send
 from apps.pages.features.bacc import domain
 from apps.pages.features.bacc.infra import mail, persistence
 
@@ -74,8 +75,13 @@ def fire_slot(slot, fired):
     R = _routes()
     if not R._pcx_is_bizday(fired):
         return False
+    ligado = auto_send.ligado('baccea')     # §722; levanta → o laço tenta de novo
     if not persistence.claim_slot(slot):
         return False
+    if not ligado:
+        R.log.info('[bacc-ea] %s: envio automático desligado no card — pulado', slot)
+        persistence.write_status(slot, auto_send.DESLIGADO, fired)
+        return True
     out = run(fired)
     if out['sent']:
         result = 'sent:{}'.format(out['rows'])

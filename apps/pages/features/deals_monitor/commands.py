@@ -14,6 +14,7 @@ from email.mime.text import MIMEText
 
 from flask import render_template
 
+from apps.pages.platform import auto_send
 from apps.pages.features.deals_monitor import domain, queries
 from apps.pages.features.deals_monitor.infra import persistence
 
@@ -91,8 +92,13 @@ def _ndm_pending_disparar(slot, fired):
     aviso não saiu, e queimar o horário faria o problema desaparecer da fila em
     vez de ser tentado de novo. 'empty' (nada pendente) é desfecho legítimo e
     mantém a reserva — não há o que reenviar."""
+    ligado = auto_send.ligado('intradaytasks')   # §722; levanta → o laço tenta de novo
     if not persistence._ndm_pending_claim_slot(slot):
         return False
+    if not ligado:
+        _R().log.info('[deals-monitor] aviso de %s: envio automático desligado no card — pulado', slot)
+        persistence._ndm_pending_status_write(slot, auto_send.DESLIGADO, fired)
+        return True
     rec = persistence._load_ndm_pending_recipients()
     to_list, cc_list = _R()._parse_emails(rec['to']), _R()._parse_emails(rec['cc'])
     if not (to_list or cc_list):

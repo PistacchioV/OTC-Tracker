@@ -417,8 +417,14 @@ def alerts_run_once(agora):
         return None
     slot = 'initiative-alerts-%s' % agora.date().isoformat()
     with R._app_context():
+        from apps.pages.platform import auto_send
+        ligado = auto_send.ligado('initiativealerts')   # §722; levanta → tenta de novo
         if not A.claim(slot):
             return None
+        if not ligado:
+            # o dia fica consumido: religar mais tarde não dispara os de hoje
+            A.write_status(auto_send.DESLIGADO)
+            return {'disabled': True}
         try:
             return run_alerts(agora.date().isoformat())
         except Exception:

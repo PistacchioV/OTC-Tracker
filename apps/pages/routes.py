@@ -604,6 +604,44 @@ def enforce_control_panel_cards():
         return jsonify({'success': False, 'message': 'Access denied for this routine.'}), 403
 
 
+# O liga/desliga do envio AUTOMÁTICO dos cards (§722, `platform/auto_send`).
+# O card vem no corpo, então a conferência de acesso é aqui, pela mesma regra
+# do `enforce_control_panel_cards`: quem não tem o card não o liga nem desliga.
+from apps.pages.platform import auto_send as _pf_auto_send  # noqa: E402
+
+
+def _cp_cards_da_sessao():
+    if _session_is_master():
+        return None                                     # todos
+    configured, allowed = _get_page_access(session.get('user_sid', ''))
+    if not configured:
+        return None
+    return {c for c in _pf_auto_send.CARDS if _cp_card_allowed(allowed, c)}
+
+
+@blueprint.route('/api/control-panel/auto-send', methods=['GET', 'POST'])
+def api_cp_auto_send():
+    """GET: {card: {enabled, by, at}} dos cards que a pessoa vê. POST {card,
+    enabled}: liga/desliga. Leitura ESTRITA — banco ocupado é 503 (o tratador
+    global), nunca "tudo ligado" pintado na tela."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    vistos = _cp_cards_da_sessao()
+    if request.method == 'GET':
+        est = _pf_auto_send.estado()
+        return jsonify({'success': True, 'cards': {c: v for c, v in est.items()
+                                                   if vistos is None or c in vistos}})
+    body = request.get_json(silent=True) or {}
+    card = str(body.get('card') or '')
+    if card not in _pf_auto_send.CARDS or not isinstance(body.get('enabled'), bool):
+        return jsonify({'success': False, 'code': 'bad_payload'}), 400
+    if vistos is not None and card not in vistos:
+        return jsonify({'success': False, 'message': 'Access denied for this routine.'}), 403
+    e = _pf_auto_send.definir(card, body['enabled'], session.get('user_sid', ''),
+                              session.get('user_name', ''))
+    return jsonify({'success': True, 'card': card, **e})
+
+
 # ==============================================================================
 # CONFIGURAÇÕES
 # ==============================================================================

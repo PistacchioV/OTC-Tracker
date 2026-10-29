@@ -10,6 +10,7 @@ import time
 import traceback
 from datetime import timedelta
 
+from apps.pages.platform import auto_send
 from apps.pages.features.mdea import domain, queries
 from apps.pages.features.mdea.infra import mail, persistence
 
@@ -80,8 +81,13 @@ def fire_slot(kind, slot, fired):
     R = _routes()
     if not R._pcx_is_bizday(fired):
         return False
+    ligado = auto_send.ligado('manualdealsea')   # §722; levanta → o laço tenta de novo
     if not persistence.claim_slot(slot):
         return False
+    if not ligado:
+        R.log.info('[manual-deals-ea] %s de %s: envio automático desligado no card — pulado', kind, slot)
+        persistence.write_status(kind, auto_send.DESLIGADO, fired)
+        return True
     out = run(kind, fired)
     if out['sent']:
         result = 'sent:{}'.format(out['rows'])

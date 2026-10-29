@@ -9,6 +9,7 @@ import time
 import traceback
 from datetime import timedelta
 
+from apps.pages.platform import auto_send
 from apps.pages.features.conf_escalation import domain, queries
 from apps.pages.features.conf_escalation.infra import mail, persistence
 from apps.pages.platform import task_runs
@@ -128,8 +129,13 @@ def fire_slot(mode, slot, fired):
     há o que reenviar, e sem destinatário o e-mail não sairia na retentativa
     também — quem resolve isso é o card, não o scheduler."""
     R = _routes()
+    ligado = auto_send.ligado('confescalation')  # §722; levanta → o laço tenta de novo
     if not persistence.claim_slot(slot):
         return False
+    if not ligado:
+        R.log.info('[conf-escalation] %s de %s: envio automático desligado no card — pulado', mode, slot)
+        persistence.write_status(mode, slot, auto_send.DESLIGADO, fired)
+        return True
     out = run(mode, fired)
     _registra(mode, out, name='Automatic')
     if out['errors']:

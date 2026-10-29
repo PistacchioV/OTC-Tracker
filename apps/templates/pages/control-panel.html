@@ -120,6 +120,20 @@
    (a coluna empilhada é `flex-column` e os `.cp-reveal` repartem a SOBRA) ── */
 .cp-cards .cp-reveal { flex: 1; display: flex; }
 .cp-cards .cp-reveal > .cp-card { width: 100%; }
+
+/* ── Liga/desliga do envio automático (§722): no canto, na altura do ladrilho.
+   `.cp-card > .cp-auto` (0,2,0) vence o `.cp-card > * { position: relative }`
+   do tema, que carrega depois. ── */
+.cp-card > .cp-auto { position: absolute; top: var(--otc-pad); right: var(--otc-pad); z-index: 1;
+    display: inline-flex; align-items: center; gap: .55rem; margin: 0; cursor: pointer;
+    font-size: .72rem; font-weight: 600; color: var(--otc-text-3); }
+.cp-card > .cp-auto[hidden] { display: none; }
+/* (0,3,0): o `.form-switch .form-check-input` do tema (margem negativa) carrega depois */
+.cp-card > .cp-auto .form-check-input { margin: 0; float: none; cursor: pointer; }
+.cp-auto .cp-auto__off { display: none; color: var(--otc-orange); }
+.cp-auto.is-off .cp-auto__on { display: none; }
+.cp-auto.is-off .cp-auto__off { display: inline; }
+.cp-auto.is-busy { opacity: .6; pointer-events: none; }
 </style>
 {% endblock extra_css %}
 
@@ -230,6 +244,13 @@
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="intradaytasks">
                     <div class="cp-card__icon otc-icon-tile"><i class="ti ti-calendar-check"></i></div>
+                    <!-- Liga/desliga do envio AUTOMÁTICO (§722): desligado, o horário do card
+                         é pulado até ser ligado de novo; o Run manual segue valendo. -->
+                    <label class="cp-auto" data-cp-auto="intradaytasks" hidden>
+                        <span class="cp-auto__on" data-lang="cp-auto-on">Auto-send on</span>
+                        <span class="cp-auto__off" data-lang="cp-auto-off">Auto-send off</span>
+                        <span class="form-check form-switch m-0 p-0"><input class="form-check-input" type="checkbox" role="switch" checked></span>
+                    </label>
                     <h3 class="cp-card__title" data-lang="cp-r-it-title">Intraday Monitor — Tasks &amp; Pending Action</h3>
                     <p class="cp-card__desc" data-lang="cp-r-it-desc">
                         The days of the week each task is due on the Intraday Monitor and the time by which
@@ -291,6 +312,13 @@
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="confescalation">
                     <div class="cp-card__icon otc-icon-tile"><i class="ti ti-mail-forward"></i></div>
+                    <!-- Liga/desliga do envio AUTOMÁTICO (§722): desligado, o horário do card
+                         é pulado até ser ligado de novo; o Run manual segue valendo. -->
+                    <label class="cp-auto" data-cp-auto="confescalation" hidden>
+                        <span class="cp-auto__on" data-lang="cp-auto-on">Auto-send on</span>
+                        <span class="cp-auto__off" data-lang="cp-auto-off">Auto-send off</span>
+                        <span class="form-check form-switch m-0 p-0"><input class="form-check-input" type="checkbox" role="switch" checked></span>
+                    </label>
                     <h3 class="cp-card__title" data-lang="cp-r-ce-title">Confirmations Escalation</h3>
                     <p class="cp-card__desc" data-lang="cp-r-ce-desc">
                         E-mails the confirmations still pending validation on the Confirmations
@@ -435,6 +463,13 @@
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="initiativealerts">
                     <div class="cp-card__icon otc-icon-tile"><i class="ti ti-alarm"></i></div>
+                    <!-- Liga/desliga do envio AUTOMÁTICO (§722): desligado, o horário do card
+                         é pulado até ser ligado de novo; o Run manual segue valendo. -->
+                    <label class="cp-auto" data-cp-auto="initiativealerts" hidden>
+                        <span class="cp-auto__on" data-lang="cp-auto-on">Auto-send on</span>
+                        <span class="cp-auto__off" data-lang="cp-auto-off">Auto-send off</span>
+                        <span class="form-check form-switch m-0 p-0"><input class="form-check-input" type="checkbox" role="switch" checked></span>
+                    </label>
                     <h3 class="cp-card__title" data-lang="cp-r-ia-title">Initiatives — Alerts</h3>
                     <p class="cp-card__desc" data-lang="cp-r-ia-desc">
                         E-mails each initiative in progress when it has had no update for more than 5
@@ -801,6 +836,13 @@
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="manualdealsea">
                     <div class="cp-card__icon otc-icon-tile"><i class="ti ti-hand-stop"></i></div>
+                    <!-- Liga/desliga do envio AUTOMÁTICO (§722): desligado, o horário do card
+                         é pulado até ser ligado de novo; o Run manual segue valendo. -->
+                    <label class="cp-auto" data-cp-auto="manualdealsea" hidden>
+                        <span class="cp-auto__on" data-lang="cp-auto-on">Auto-send on</span>
+                        <span class="cp-auto__off" data-lang="cp-auto-off">Auto-send off</span>
+                        <span class="form-check form-switch m-0 p-0"><input class="form-check-input" type="checkbox" role="switch" checked></span>
+                    </label>
                     <h3 class="cp-card__title" data-lang="cp-r-mdea-title">Manual Deals EA</h3>
                     <p class="cp-card__desc" data-lang="cp-r-mdea-desc">
                         E-mails the deals closed manually so the automatic EA does not consider
@@ -849,6 +891,13 @@
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="baccea">
                     <div class="cp-card__icon otc-icon-tile"><i class="ti ti-chart-histogram"></i></div>
+                    <!-- Liga/desliga do envio AUTOMÁTICO (§722): desligado, o horário do card
+                         é pulado até ser ligado de novo; o Run manual segue valendo. -->
+                    <label class="cp-auto" data-cp-auto="baccea" hidden>
+                        <span class="cp-auto__on" data-lang="cp-auto-on">Auto-send on</span>
+                        <span class="cp-auto__off" data-lang="cp-auto-off">Auto-send off</span>
+                        <span class="form-check form-switch m-0 p-0"><input class="form-check-input" type="checkbox" role="switch" checked></span>
+                    </label>
                     <h3 class="cp-card__title" data-lang="cp-r-bacc-title">BACC EA Metrics</h3>
                     <p class="cp-card__desc" data-lang="cp-r-bacc-desc">
                         E-mails the manual operations of the Track Confirmations page as an .xlsx
@@ -889,6 +938,13 @@
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="mt300">
                     <div class="cp-card__icon otc-icon-tile"><i class="ti ti-message-2"></i></div>
+                    <!-- Liga/desliga do envio AUTOMÁTICO (§722): desligado, o horário do card
+                         é pulado até ser ligado de novo; o Run manual segue valendo. -->
+                    <label class="cp-auto" data-cp-auto="mt300" hidden>
+                        <span class="cp-auto__on" data-lang="cp-auto-on">Auto-send on</span>
+                        <span class="cp-auto__off" data-lang="cp-auto-off">Auto-send off</span>
+                        <span class="form-check form-switch m-0 p-0"><input class="form-check-input" type="checkbox" role="switch" checked></span>
+                    </label>
                     <h3 class="cp-card__title" data-lang="cp-r-mt300-title">MT300</h3>
                     <p class="cp-card__desc" data-lang="cp-r-mt300-desc">
                         E-mails the day's NDF Vanilla trades whose counterparty is registered in
@@ -1048,6 +1104,61 @@ var _TRANS_CACHE = {};
         .catch(function () {});
 })();
 function t(key, fallback) { return _TRANS_CACHE[key] || fallback || key; }
+
+// ── Liga/desliga do envio AUTOMÁTICO (§722) ─────────────────────────────────
+// O desfecho `disabled` (o horário caiu com o card desligado) é o mesmo nos
+// seis cards: cinza, sem cara de erro. `prefixo` já vem escapado.
+function cpAutoSkipped(prefixo) {
+    return '<span class="text-muted"><i class="ti ti-player-pause me-1"></i>' + prefixo + ' \u00b7 ' +
+           t('cp-auto-skipped', 'automatic sending off \u2014 not sent') + '</span>';
+}
+(function () {
+    var URL = '/api/control-panel/auto-send';
+    var els = Array.prototype.slice.call(document.querySelectorAll('[data-cp-auto]'));
+    if (!els.length) return;
+    function pinta(el, c) {
+        var on = !!(c && c.enabled);
+        el.querySelector('input').checked = on;
+        el.classList.toggle('is-off', !on);
+        el.title = (c && c.by) ? (c.by + ' \u00b7 ' + (c.at || '')) : '';
+    }
+    // Nasce ESCONDIDO e só aparece com a resposta: pintar "ligado" antes de ler
+    // seria afirmar um estado que a tela não conferiu.
+    fetch(URL, { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (d) {
+        if (!d || !d.success) return;
+        els.forEach(function (el) {
+            var c = (d.cards || {})[el.getAttribute('data-cp-auto')];
+            if (!c) return;
+            pinta(el, c);
+            el.hidden = false;
+        });
+    }).catch(function () {});
+    els.forEach(function (el) {
+        var input = el.querySelector('input');
+        input.addEventListener('change', function () {
+            var card = el.getAttribute('data-cp-auto'), quer = input.checked;
+            el.classList.add('is-busy');
+            fetch(URL, { method: 'POST', credentials: 'same-origin',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify({ card: card, enabled: quer }) })
+                .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+                .then(function (res) {
+                    el.classList.remove('is-busy');
+                    if (!res.ok || !res.d || !res.d.success) throw new Error((res.d && (res.d.message || res.d.error)) || '');
+                    pinta(el, res.d);
+                    if (window.otcToast) window.otcToast(quer ? t('cp-auto-toast-on', 'Automatic sending turned on')
+                                                               : t('cp-auto-toast-off', 'Automatic sending turned off'));
+                })
+                .catch(function (e) {
+                    el.classList.remove('is-busy');
+                    input.checked = !quer;                      // a tela volta ao que o servidor tem
+                    el.classList.toggle('is-off', quer);
+                    if (window.Swal) Swal.fire({ icon: 'error', title: t('cp-auto-fail', 'Could not change automatic sending'),
+                                                 text: (e && e.message) || '' });
+                });
+        });
+    });
+})();
 
 // ── Daily Settlement result message (built client-side so it follows the UI
 //    language via t(); backend only returns structured counts). ───────────────
@@ -1735,7 +1846,9 @@ document.addEventListener('click', function (e) {
         if (!stEl) return;
         var last = d.last || {};
         var bits = [];
-        if (last.result) {
+        if (last.result === 'disabled') {
+            bits.push(cpAutoSkipped(esc(last.slot || '')));
+        } else if (last.result) {
             var ok = last.result === 'enviado';
             var empty = last.result === 'empty';
             var cls = ok ? 'text-success' : (empty ? 'text-info' : 'text-danger');
@@ -1895,6 +2008,8 @@ document.addEventListener('click', function (e) {
                 bits.push('<span class="text-success"><i class="ti ti-mail-check me-1"></i>' +
                           esc(last.at || last.slot || '') + ' · ' + m[1] + ' ' +
                           esc(t('cp-bacc-rows-sent', 'operation(s) sent')) + '</span>');
+            } else if (last.result === 'disabled') {
+                bits.push(cpAutoSkipped(esc(last.at || last.slot || '')));
             } else if (last.result === 'no_recipient') {
                 // Desfecho DIFERENTE de erro e de vazio: a rotina rodou e não
                 // tinha para quem mandar. Sem esta linha o card fica calado
@@ -2019,6 +2134,8 @@ document.addEventListener('click', function (e) {
                 out = '<span class="text-muted"><i class="ti ti-mail-off me-1"></i>' +
                       nome + ' · ' + quando + ' · ' +
                       esc(t('cp-mdea-empty', 'no deal to report — e-mail not sent')) + '</span>';
+            } else if (last.result === 'disabled') {
+                out = cpAutoSkipped(nome + ' \u00b7 ' + quando);
             } else if (last.result === 'no_recipient') {
                 // Diferente de vazio: aqui HAVIA o que mandar e não havia para
                 // quem. Sem esta linha o card fica calado no único caso em que
@@ -2156,6 +2273,7 @@ document.addEventListener('click', function (e) {
                       ' · ' + m[1] + ' ' + esc(t('cp-ia-sent', 'initiative(s) alerted')) + '</span>';
         else if (last.result === 'empty') html = '<span class="text-muted"><i class="ti ti-mail-off me-1"></i>' +
                       esc(last.at || '') + ' · ' + esc(t('cp-ia-empty', 'no alert due — nothing sent')) + '</span>';
+        else if (last.result === 'disabled') html = cpAutoSkipped(esc(last.at || ''));
         else if (last.result === 'no_recipient') html = '<span class="text-warning"><i class="ti ti-user-off me-1"></i>' +
                       esc(last.at || '') + ' · ' + esc(t('cp-ia-norec', 'no recipient — nothing was sent')) + '</span>';
         else if (last.result) html = '<span class="text-danger"><i class="ti ti-alert-triangle me-1"></i>' +
@@ -2231,6 +2349,8 @@ document.addEventListener('click', function (e) {
                 bits.push('<span class="text-muted"><i class="ti ti-mail-off me-1"></i>' +
                           esc(last.at || '') + ' · ' +
                           esc(t('cp-mt300-empty', 'no trade to report — e-mail not sent')) + '</span>');
+            } else if (last.result === 'disabled') {
+                bits.push(cpAutoSkipped(esc(last.at || '')));
             } else if (last.result === 'no_recipient') {
                 // Diferente de vazio: HAVIA o que mandar e não havia para quem.
                 bits.push('<span class="text-warning"><i class="ti ti-user-off me-1"></i>' +
@@ -2505,6 +2625,7 @@ document.addEventListener('click', function (e) {
             var l = last[pair[0]];
             if (!l || !l.result) return;
             var r = String(l.result);
+            if (r === 'disabled') { bits.push(cpAutoSkipped(esc(pair[1]) + ' \u00b7 ' + esc(l.slot || ''))); return; }
             var ok = r.indexOf('sent:') === 0, empty = r === 'empty',
                 norec = r === 'no_recipient';
             var cls = ok ? 'text-success' : (empty ? 'text-info'
