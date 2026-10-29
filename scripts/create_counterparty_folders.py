@@ -137,7 +137,8 @@ def load_counterparties(active_only):
         name = (rec.get('COUNTERPARTY') or '').strip()
         if not name:
             continue
-        if active_only and (rec.get('STATUS') or '').upper() != 'ACTIVE':
+        # RED (§730) é ativa: só está na lista de Rapid Exposure
+        if active_only and (rec.get('STATUS') or '').upper() not in ('ACTIVE', 'RED'):
             continue
         key = norm_key(name)
         if not key or key in seen:
@@ -166,7 +167,7 @@ def main():
     ap.add_argument('--root', default=DEFAULT_ROOT,
                     help='Electronic Inventory root (default: $ELECTRONIC_INVENTORY_ROOT or the routes.py default).')
     ap.add_argument('--active-only', action='store_true',
-                    help='Only counterparties with STATUS == ACTIVE.')
+                    help='Only counterparties with STATUS ACTIVE (or RED).')
     ap.add_argument('--dry-run', action='store_true',
                     help='List what would be created without touching the disk.')
     args = ap.parse_args()

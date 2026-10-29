@@ -14,6 +14,7 @@ from flask import (g, jsonify, redirect, render_template, request,
                    session, url_for)
 
 from apps.pages import blueprint
+from apps.pages.platform import red_clients as _red_clients
 
 
 def _R():
@@ -147,6 +148,7 @@ def api_ndf_summary_settlement_emails():
         wanted = {_R()._fcst_norm(str(x)) for x in sel if str(x).strip()}
         trades = [t for t in trades if _R()._fcst_norm(str(t.get('counterparty', ''))) in wanted]
     drafts = otc_emails.build_ndf_settlement_emails(trades, ref.strftime('%d/%m/%Y'))
+    _red_clients.anota_avisos(drafts)          # cliente RED: X-Red-Clients (§730)
     if not drafts:
         return jsonify({'ok': True, 'count': 0})
     cp_count = len({d.get('counterparty', '') for d in drafts})

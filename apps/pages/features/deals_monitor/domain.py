@@ -385,6 +385,9 @@ TASKS = (
      'icon': 'ti-file-download', 'url': '/control-panel', 'days': DIAS_UTEIS},
     {'id': 'conf-escalation', 'kind': 'routine', 'label': 'Confirmations Escalation',
      'icon': 'ti-mail-exclamation', 'url': '/control-panel', 'days': (0, 3)},
+    # A lista diária de RED Clients (§730): o Run do card no Control Panel.
+    {'id': 'red-clients', 'kind': 'routine', 'label': 'RED Clients - Rapid Exposure',
+     'icon': 'ti-alert-octagon', 'url': '/control-panel', 'days': DIAS_UTEIS},
     # Rodar é a recon contra o retorno da B3 (50%); conclui no End process.
     {'id': 'swap-accrual', 'kind': 'routine', 'label': 'Swap Accrual', 'done_on': 'end',
      'month': ('last', 1), 'icon': 'ti-calendar-dollar', 'url': '/accrual-swap', 'days': DIAS_UTEIS},

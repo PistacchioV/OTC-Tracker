@@ -88,6 +88,8 @@ _CONTROL_PANEL_CARDS = [
     {'id': 'mt300',       'label': 'MT300'},
     # Reference Data Routines
     {'id': 'contacts',    'label': 'Update Contacts'},
+    # A lista de Rapid Exposure (§730): marca as contrapartes RED do Reference Data.
+    {'id': 'redclients',  'label': 'RED Clients - Rapid Exposure'},
     # Application
     {'id': 'appversion',  'label': 'New Version Released'},
 ]
@@ -101,6 +103,8 @@ _CP_ENDPOINT_CARD = {
     '/api/control-panel/settlement-forecast/email': 'forecast',
     '/api/control-panel/settlement-forecast/recipients': 'forecast',
     '/api/control-panel/import-contacts': 'contacts',
+    '/api/control-panel/red-clients/run': 'redclients',
+    '/api/control-panel/red-clients/status': 'redclients',
     '/api/control-panel/branch-settlement/recipients': 'branchsettlement',
     '/api/control-panel/daily-metric/recipients': 'dailymetric',
     '/api/control-panel/daily-metric/run': 'dailymetric',

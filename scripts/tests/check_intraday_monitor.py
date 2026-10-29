@@ -66,6 +66,7 @@ check('Conf. Matching: diária', cfg['recon-conf-matching']['days'], [0, 1, 2, 3
 # cobrança das confirmações é de segunda e quinta — o mesmo dia do pacote dela.
 check('Save CETIP Files: diária', cfg['save-cetip']['days'], [0, 1, 2, 3, 4])
 check('Confirmations Escalation: segunda e quinta', cfg['conf-escalation']['days'], [0, 3])
+check('RED Clients: diária (§730)', cfg['red-clients']['days'], [0, 1, 2, 3, 4])
 check('Branch Reversal: seg-sex (só existe com liquidação da Branch)',
       cfg['branch-reversal']['days'], [0, 1, 2, 3, 4])
 check('Pay/Rec: diária (seg-sex) até 20:00', cfg['recon-payrec'], {'days': [0, 1, 2, 3, 4], 'deadline': '20:00'})
@@ -268,7 +269,8 @@ for r in runs:
 
 import io as _io                                               # noqa: E402
 for _arq, _tid in (('apps/pages/features/cetip/entrypoint.py', 'save-cetip'),
-                   ('apps/pages/features/conf_escalation/commands.py', 'conf-escalation')):
+                   ('apps/pages/features/conf_escalation/commands.py', 'conf-escalation'),
+                   ('apps/pages/features/red_clients/commands.py', 'red-clients')):
     _src = _io.open(os.path.join(ROOT, _arq), encoding='utf-8').read()
     check('a rotina %s grava task_runs.record' % _tid, "task_runs.record('%s'" % _tid in _src, True)
 
