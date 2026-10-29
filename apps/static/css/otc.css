@@ -13886,6 +13886,10 @@ html.otc-vt-nav::view-transition-new(root) {
   mix-blend-mode: normal;
 }
 
+html.otc-vt-nav::view-transition-group(root) {
+  animation: none;
+}
+
 html.otc-vt-nav::view-transition-old(root) {
   animation: none;
 }
