@@ -635,31 +635,28 @@ html.otc-theme-switching *::before,
 html.otc-theme-switching *::after { transition: none !important; }
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 250ms; }
 
-// Troca de PÁGINA (§632): a navegação entre telas é uma View Transition entre
-// documentos — no Pane (uma página só) a casca nunca recarrega, e aqui o clique
-// trocava o documento inteiro: a barra lateral e o topo piscavam e a tela
-// ficava parada até a nova chegar. Agora a casca e o papel de parede ficam
-// NO LUGAR (nomes dados pela `otc-vt-nav` do head-css.html só durante a troca),
-// o conteúdo velho sai como a gota do Pane ao contrário (~160ms) e o novo entra
-// pela própria entrada da página (as gotas do §9 do otc.js), sem cross-fade.
+// Troca de PÁGINA (§632/§726): a navegação entre telas é uma View Transition
+// entre documentos. Ela segura a página antiga na tela até a nova estar MONTADA
+// (sem ela aparecia a página crua, antes dos scripts: campo de arquivo sem
+// estilo, ícones vazios, e tudo pulava quando o JS rodava) e esmaece a antiga
+// por cima da nova. NENHUMA parte tem nome próprio: grupo com nome é desenhado
+// POR CIMA da raiz (a foto do papel de parede cobria o conteúdo novo pelos
+// ~260 ms da troca — o miolo sumia e voltava) e é fotografado SEM o que está
+// atrás (o vidro do menu saía mais claro na foto). Menu, barra e papel de
+// parede são iguais nas duas páginas: no esmaecer da página inteira eles não
+// mudam um pixel. E a troca é SEM `plus-lighter` (o padrão do navegador SOMA a
+// imagem que sai à que entra, e o quadro clareava no meio).
 @view-transition { navigation: auto; }
 @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
-html.otc-vt-nav {
-  .sidenav-menu { view-transition-name: otc-side; }
-  .otc-toolbar { view-transition-name: otc-bar; }
-  .otc-wall { view-transition-name: otc-wall; }
-}
-::view-transition-group(otc-side), ::view-transition-group(otc-bar), ::view-transition-group(otc-wall) { animation-duration: 0s; }
-::view-transition-old(otc-side), ::view-transition-old(otc-bar), ::view-transition-old(otc-wall) { display: none; }
-::view-transition-new(otc-side), ::view-transition-new(otc-bar), ::view-transition-new(otc-wall) { animation: none; }
+html.otc-vt-nav::view-transition-old(root),
+html.otc-vt-nav::view-transition-new(root) { mix-blend-mode: normal; }
 html.otc-vt-nav::view-transition-old(root) { animation: otc-vt-out 170ms var(--otc-ease-in, ease-in) both; }
 html.otc-vt-nav::view-transition-new(root) { animation: none; }
-@keyframes otc-vt-out { to { opacity: 0; scale: .99; translate: 0 -4px; } }
+@keyframes otc-vt-out { to { opacity: 0; } }
 
 // ── 4. Vidro e movimento ────────────────────────────────────────────────────
 // O MATERIAL. Uma placa de vidro: tinta + desfoque + profundidade; a borda de
-// luz (::before) e o brilho que segue o ponteiro (::after, `--mx`/`--my`
-// escritos pelo otc.js) vêm por pseudo-elemento para não disputarem o
+// luz (::before) e o brilho do topo (::after) vêm por pseudo-elemento para não disputarem o
 // `background` que a página porventura ponha na placa.
 @mixin otc-glass($tint: var(--otc-glass), $blur: var(--otc-blur), $radius: var(--otc-r-xl), $depth: var(--otc-depth)) {
   position: relative;
@@ -704,9 +701,8 @@ html.otc-vt-nav::view-transition-new(root) { animation: none; }
     z-index: -1;
     border-radius: inherit;
     pointer-events: none;
-    background:
-      radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%),
-      linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
+    // só o brilho fixo do topo: o círculo que seguia o ponteiro saiu (§725)
+    background: linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
   }
 }
 @mixin otc-slab($tint: var(--otc-glass), $blur: var(--otc-blur), $radius: var(--otc-r-xl)) {
@@ -851,14 +847,11 @@ html.otc-vt-nav::view-transition-new(root) { animation: none; }
 }
 .content-page > .container-fluid,
 .content-page > [data-content] { padding-left: 0; padding-right: 0; }
-// A troca de página (§723): o conteúdo ENTRA numa vez só, desde o primeiro
-// paint — menu e barra do topo ficam parados. A entrada placa a placa do
-// otc.js começava DEPOIS de a placa estar pintada (o `backwards` a devolvia ao
-// primeiro quadro) e a página piscava. Sem `fill`: terminada, a animação sai
-// (com ela em efeito o `.content-page` viraria contexto de empilhamento e
-// prenderia os menus abaixo da barra do topo). No modo opaco, sem animação.
-.content-page { animation: otc-fade-in var(--otc-dur-base) var(--otc-ease-out); }
-:root.is-solid .content-page { animation: none; }
+// A troca de página (§723/§726): o conteúdo NÃO tem animação de entrada. Um
+// esmaecer a partir de opacidade 0 é, por definição, um quadro com o conteúdo
+// sumido — somado aos ~300 ms em que os scripts seguram a primeira pintura,
+// era a "piscada". A página nova só pinta com o conteúdo já no HTML (o
+// `rel=expect` do vertical.html) e a View Transition esmaece a ANTIGA por cima.
 // sem cabeçalho de página, o conteúdo começa ABAIXO da barra do topo
 .content-page:not(:has(.page-title-head)) { padding-top: 88px; }
 

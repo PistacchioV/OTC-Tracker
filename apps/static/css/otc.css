@@ -13881,26 +13881,9 @@ html.otc-theme-switching *::after {
     navigation: none;
   }
 }
-html.otc-vt-nav .sidenav-menu {
-  view-transition-name: otc-side;
-}
-html.otc-vt-nav .otc-toolbar {
-  view-transition-name: otc-bar;
-}
-html.otc-vt-nav .otc-wall {
-  view-transition-name: otc-wall;
-}
-
-::view-transition-group(otc-side), ::view-transition-group(otc-bar), ::view-transition-group(otc-wall) {
-  animation-duration: 0s;
-}
-
-::view-transition-old(otc-side), ::view-transition-old(otc-bar), ::view-transition-old(otc-wall) {
-  display: none;
-}
-
-::view-transition-new(otc-side), ::view-transition-new(otc-bar), ::view-transition-new(otc-wall) {
-  animation: none;
+html.otc-vt-nav::view-transition-old(root),
+html.otc-vt-nav::view-transition-new(root) {
+  mix-blend-mode: normal;
 }
 
 html.otc-vt-nav::view-transition-old(root) {
@@ -13914,8 +13897,6 @@ html.otc-vt-nav::view-transition-new(root) {
 @keyframes otc-vt-out {
   to {
     opacity: 0;
-    scale: 0.99;
-    translate: 0 -4px;
   }
 }
 @keyframes otc-drop-in {
@@ -14118,14 +14099,6 @@ html.otc-vt-nav::view-transition-new(root) {
   padding-right: 0;
 }
 
-.content-page {
-  animation: otc-fade-in var(--otc-dur-base) var(--otc-ease-out);
-}
-
-:root.is-solid .content-page {
-  animation: none;
-}
-
 .content-page:not(:has(.page-title-head)) {
   padding-top: 88px;
 }
@@ -14172,7 +14145,7 @@ html.otc-vt-nav::view-transition-new(root) {
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
+  background: linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .sidenav-menu > * {
   position: relative;
@@ -14626,7 +14599,7 @@ body.otc-nav-unpinned .otc-menu-btn {
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
+  background: linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .otc-toolbar > * {
   position: relative;
@@ -14840,7 +14813,7 @@ body.otc-nav-unpinned .otc-menu-btn {
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
+  background: linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .otc-menu-btn svg {
   position: relative;
@@ -15228,7 +15201,7 @@ body.otc-nav-unpinned .otc-menu-btn {
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
+  background: linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 
 .offcanvas.offcanvas-end {
@@ -15444,7 +15417,7 @@ body.otc-nav-unpinned .otc-menu-btn {
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
+  background: linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .otc-palette .otc-palette__bar > * {
   position: relative;
@@ -15500,7 +15473,7 @@ body.otc-nav-unpinned .otc-menu-btn {
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
+  background: linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .otc-palette .otc-palette__list > * {
   position: relative;
@@ -16972,7 +16945,7 @@ table td .btn.btn-act > i {
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
+  background: linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .card > * {
   position: relative;
@@ -18390,7 +18363,7 @@ body.otc-has-island .otc-toast {
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
+  background: linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .modal-content.liquid-glass > * {
   position: relative;
@@ -20054,7 +20027,7 @@ table.dataTable.dtr-inline.collapsed > tbody > tr > td.dtr-control::before {
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
+  background: linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .swal2-popup > * {
   position: relative;
@@ -21768,7 +21741,7 @@ html .fc .fc-list-empty {
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
+  background: linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .tl-page .tl-card > * {
   position: relative;
@@ -22232,7 +22205,7 @@ html .fc .fc-list-empty {
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--otc-sheen), transparent 70%), linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
+  background: linear-gradient(172deg, var(--otc-sheen-top) 0%, transparent 34%);
 }
 .cp-card > * {
   position: relative;

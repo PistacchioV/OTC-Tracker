@@ -30910,3 +30910,74 @@ de ambiente: a dev lê uma lista de cards escondidos do `app.config`
 (`otc_stratos._monta`) põe o `appversion` nela. O card sai do Control Panel
 (com a seção Application, que só o tem) e das caixas do /page-access; as rotas
 dele seguem existindo. `check_cp_auto_send.py` §5 e `check_stratos.py`.
+
+## §725 — Sem o círculo de luz que seguia o mouse (2026-10-29)
+
+Pedido da equipe: tirar o "light ring" do ponteiro. Era o brilho do vidro que
+seguia o mouse sobre as placas (cards, menu, toolbar, modais, Swal): o
+`otc.js` §8 escrevia `--mx`/`--my` em toda placa sob o ponteiro a cada
+`pointermove`, e o `::after` do `otc-sheen` pintava um `radial-gradient` de
+260px ali. Saíram os dois — o laço do JS e o círculo do gradiente; o `::after`
+fica só com o brilho FIXO do topo da placa (`--otc-sheen-top`), que não
+acompanha nada. No modo opaco (máquinas do JPM) ele já não aparecia. Placa
+nova não escreve nada. `check_dropdown_layers.py` (o brilho segue em
+`z-index: -1`, abaixo do conteúdo) e `check_theme_toggle.py` passam.
+
+## §726 — A troca de página sem piscar, de verdade; e o Swal que fechava rápido (2026-10-29)
+
+A equipe seguia vendo "uma piscada" e "umas engasgadas" ao trocar de página,
+mesmo depois do §723. Gravado quadro a quadro no Chrome (trace com as
+capturas alinhadas ao clique), com o vidro ligado como no Mac:
+
+- a página nova estava MONTADA aos 69 ms, mas a primeira pintura saía aos
+  386 ms e mostrava SÓ o menu e a barra do topo — o miolo vazio — até os
+  ~650 ms, quando o conteúdo voltava de uma vez. O vão era a View Transition:
+  o papel de parede tinha `view-transition-name`, e grupo com nome é desenhado
+  POR CIMA da raiz; a foto dele cobria o conteúdo novo pelos ~260 ms da troca.
+  O menu e a barra, que também tinham nome, apareciam — e eram fotografados SEM
+  o que está atrás, então o vidro do menu clareava no meio da troca. E a raiz
+  trocava com o `plus-lighter` padrão (a imagem que sai SOMADA à que entra).
+  Agora nada tem nome, a raiz troca com `mix-blend-mode: normal`, e a antiga
+  esmaece por cima da nova (170 ms). Menu, barra e papel de parede são iguais
+  nas duas páginas: no esmaecer da página inteira não mudam um pixel. A
+  transição FICA: sem ela a página aparece crua, antes dos scripts (campo de
+  arquivo sem estilo, ícones vazios, e tudo pula quando o JS roda) — é ela que
+  segura a antiga até a nova estar montada.
+- o `.content-page` entrava num esmaecer a partir de 0 (§723): por definição,
+  um quadro sem conteúdo. Saiu.
+- o título entrava letra a letra a cada página. Saiu (`splitTitle`).
+- a REFRAÇÃO do vidro (`otc.js` 3c) era calculada no tempo ocioso, placa a
+  placa, depois de a página aparecer: o vidro de cada placa — o do menu
+  inclusive — mudava de cara um instante depois. Os mapas agora ficam na aba
+  (`sessionStorage.__OTC_LG_MAPS__`, por tamanho, até 40), e na carga o que já
+  está guardado (o menu e a barra têm o mesmo tamanho em toda página) e as
+  placas à vista são aplicados antes do primeiro quadro (teto de ~60 ms); o
+  resto segue no tempo ocioso.
+- a primeira pintura espera o fim do conteúdo (`<link rel="expect"
+  href="#otc-content-end" blocking="render">` no `vertical.html`): sem a
+  transição (modo opaco), o navegador pintava assim que o menu e a barra
+  estavam no HTML.
+
+No modo opaco (máquinas do JPM) não há transição, como antes; ali a troca já
+era contínua.
+
+**Swal que fecha sozinho** (pedido da equipe: "abre e já fecha"): as telas
+pediam `timer` de 1,2 a 1,8 s, e a entrada e a saída animadas comem parte
+disso. Uma regra para todas, no `otc.js` (`initSwalTiming`, que embrulha o
+`Swal.fire` — o SweetAlert2 é da página, carregado depois): timer abaixo de
+3 s vira 3 s, e o relógio PARA com o mouse em cima. Tela nova não escreve
+nada.
+
+`check_page_transition.py` (§5 e §6 novos) e `check_page_switch.py`.
+
+## §727 — Reference Date nas telas de NDF e Options Commodities (2026-10-29)
+
+Pedido da equipe: o campo Reference Date da barra (o do FWD Start e do FXO) nas
+duas telas de commodities. Lá ele é o dia que o Import pede à API; aqui não há
+API — o Import lê a caixa do Outlook inteira —, então ele faz o resto do que
+faz lá: trocado, leva a grade para aquele dia (`sfSetTradeDate`, o chip de
+Trade Date), e o **Mapping B3 ID** passa a levar as operações GRAVADAS no dia
+dele além das da grade (`entrypoint._mapping_com_o_dia`, pelo mesmo
+`_generic_nd_mapping_candidates` do FWD Start): a grade sozinha é a última
+busca e deixava de fora operação do dia que ninguém filtrou. Sem a data, é a
+grade, como antes — nunca mapeia menos. `check_nd_mapping_b3.py` §9.

@@ -891,7 +891,23 @@
     var ua = navigator.userAgent || '';
     return /Chrome\//.test(ua) && !/Firefox\//.test(ua) && !weakGpu();
   }
-  function lgMap(w, h, r, pad, bezel) {
+  // Os mapas ficam guardados na ABA, pelo tamanho (§726): o menu e a barra do
+  // topo têm o mesmo tamanho em toda página, e recalculá-los a cada troca era
+  // o vidro mudando de cara um instante depois de a página aparecer.
+  var LG_CACHE = {}, LG_CACHE_KEY = '__OTC_LG_MAPS__', LG_CACHE_MAX = 40;
+  try { LG_CACHE = JSON.parse(sessionStorage.getItem(LG_CACHE_KEY) || '{}') || {}; } catch (e) { LG_CACHE = {}; }
+  function lgMapKey(w, h, r, pad, bezel) { return [w, h, Math.round(r), pad, Math.round(bezel)].join(':'); }
+  function lgMapCached(w, h, r, pad, bezel) {
+    var k = lgMapKey(w, h, r, pad, bezel);
+    if (LG_CACHE[k]) return LG_CACHE[k];
+    var url = lgMapDraw(w, h, r, pad, bezel);
+    LG_CACHE[k] = url;
+    var keys = Object.keys(LG_CACHE);
+    if (keys.length > LG_CACHE_MAX) delete LG_CACHE[keys[0]];
+    try { sessionStorage.setItem(LG_CACHE_KEY, JSON.stringify(LG_CACHE)); } catch (e) { /* aba sem espaço: fica só em memória */ }
+    return url;
+  }
+  function lgMapDraw(w, h, r, pad, bezel) {
     var W = w + 2 * pad, H = h + 2 * pad;
     var k = Math.min(1, 320 / Math.max(W, H));          // o feImage estica o mapa: meia resolução basta
     var cw = Math.max(8, Math.round(W * k)), ch = Math.max(8, Math.round(H * k));
@@ -936,7 +952,7 @@
     var rad = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 24;
     var id = el.__lgId || (el.__lgId = 'otc-lg-' + (++LG.n));
     var pad = 24, bezel = Math.max(10, Math.min(28, Math.min(w, h) / 4));
-    var url = lgMap(w, h, rad, pad, bezel);
+    var url = lgMapCached(w, h, rad, pad, bezel);
     var f = doc.getElementById(id);
     if (!f) {
       f = doc.createElementNS('http://www.w3.org/2000/svg', 'filter');
@@ -956,6 +972,12 @@
     el.style.setProperty('backdrop-filter', 'url(#' + id + ')');
     if (LG.ro) LG.ro.observe(el);
   }
+  function lgIsCached(el) {
+    var r = el.getBoundingClientRect();
+    var w = Math.round(r.width), h = Math.round(r.height);
+    var rad = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 24;
+    return !!LG_CACHE[lgMapKey(w, h, rad, 24, Math.max(10, Math.min(28, Math.min(w, h) / 4)))];
+  }
   function lgClear() {
     $$('[style*="backdrop-filter"]').forEach(function (el) {
       if (!el.__lgId) return;
@@ -964,7 +986,7 @@
       el.__lgKey = null;
     });
   }
-  function lgScan() {
+  function lgScan(eager) {
     if (!LG.on || root.classList.contains('is-solid')) { lgClear(); return; }
     var els = $$(LG_SEL).filter(function (el) {
       return el.getClientRects().length > 0 && !el.closest('.modal, .offcanvas, .dropdown-menu');   // fixed: offsetParent é nulo
@@ -978,7 +1000,21 @@
     // monta a tabela (~0,3 s por troca com a CPU 6× mais lenta). O vidro
     // comum já está na placa; a refração chega logo depois.
     LG.queue = els.slice(0, LG_MAX);
-    if (!LG.busy) { LG.busy = true; lgIdle(lgRun); }
+    // Na CARGA (§726), antes do primeiro quadro: o que já está guardado (o menu,
+    // a barra) e as placas à vista entram já com a refração — a troca de
+    // página segura a pintura até aqui, e aplicada depois ela era a placa
+    // mudando de cara com a página já na tela. Teto de ~60 ms; o resto vai no
+    // tempo ocioso, como antes.
+    if (eager === true) {
+      var t0 = Date.now(), vh = window.innerHeight, rest = [];
+      LG.queue.forEach(function (el) {
+        var hit = lgIsCached(el);
+        if (!hit && Date.now() - t0 < 60) hit = el.getBoundingClientRect().top < vh;
+        if (hit) lgApply(el); else rest.push(el);
+      });
+      LG.queue = rest;
+    }
+    if (LG.queue.length && !LG.busy) { LG.busy = true; lgIdle(lgRun); }
   }
   function lgIdle(fn) {
     if (window.requestIdleCallback) window.requestIdleCallback(fn, { timeout: 1000 });
@@ -1010,7 +1046,38 @@
     var page = doc.querySelector('.content-page');
     if (page && window.MutationObserver) new MutationObserver(again).observe(page, { childList: true, subtree: true });
     new MutationObserver(again).observe(root, { attributes: true, attributeFilter: ['class'] });
-    lgIdle(lgScan);
+    lgScan(true);
+  }
+
+  // ==========================================================================
+  // 3c-bis. O aviso que fecha SOZINHO (Swal com `timer`) fica o bastante para
+  // ser lido (§726): as telas pediam 1,2 a 1,8 s, e a entrada e a saída
+  // animadas comem parte disso — "Saved" abria e já fechava. Uma regra para
+  // todas: no mínimo 3 s, e o relógio PARA com o mouse em cima. Embrulha o
+  // `Swal.fire` (o SweetAlert2 é carregado pela página, depois deste arquivo).
+  // ==========================================================================
+  var SWAL_MIN_TIMER = 3000;
+  function initSwalTiming() {
+    var S = window.Swal;
+    if (!S || !S.fire || S.fire.__otcTiming) return;
+    var orig = S.fire;
+    var wrapped = function (opts) {
+      if (arguments.length === 1 && opts && typeof opts === 'object' && !(opts instanceof Node) && opts.timer) {
+        var o = {};
+        for (var k in opts) o[k] = opts[k];
+        if (o.timer > 0 && o.timer < SWAL_MIN_TIMER) o.timer = SWAL_MIN_TIMER;
+        var didOpen = o.didOpen;
+        o.didOpen = function (popup) {
+          popup.addEventListener('mouseenter', function () { if (S.isTimerRunning && S.isTimerRunning()) S.stopTimer(); });
+          popup.addEventListener('mouseleave', function () { if (S.getTimerLeft && S.getTimerLeft() != null) S.resumeTimer(); });
+          if (typeof didOpen === 'function') return didOpen.apply(this, arguments);
+        };
+        return orig.call(this, o);
+      }
+      return orig.apply(this, arguments);
+    };
+    wrapped.__otcTiming = true;
+    S.fire = wrapped;
   }
 
   // ==========================================================================
@@ -1800,28 +1867,12 @@
   window.addEventListener('blur', release);
 
   // ==========================================================================
-  // 8. Brilho que segue o ponteiro nas placas de vidro (`--mx`/`--my`)
+  // 8. (sem brilho que segue o ponteiro — a equipe pediu para tirar o círculo
+  //    de luz em volta do mouse, 29/10/2026, §725)
   // ==========================================================================
-  var SHEEN_SEL = '.card, .sidenav-menu, .otc-toolbar, .modal-content.liquid-glass, .tl-card, .cp-card, .swal2-popup, .offcanvas, .otc-menu-btn';
-  var sheenEl = null, sheenPt = null, sheenRaf = 0;
-  doc.addEventListener('pointermove', function (e) {
-    if (root.classList.contains('is-solid') || e.pointerType === 'touch') return;
-    sheenPt = { x: e.clientX, y: e.clientY, t: e.target };
-    if (sheenRaf) return;
-    sheenRaf = requestAnimationFrame(function () {
-      sheenRaf = 0;
-      var el = sheenPt.t && sheenPt.t.closest ? sheenPt.t.closest(SHEEN_SEL) : null;
-      if (sheenEl && sheenEl !== el) { sheenEl.style.removeProperty('--mx'); sheenEl.style.removeProperty('--my'); }
-      sheenEl = el;
-      if (!el) return;
-      var r = el.getBoundingClientRect();
-      el.style.setProperty('--mx', (sheenPt.x - r.left) + 'px');
-      el.style.setProperty('--my', (sheenPt.y - r.top) + 'px');
-    });
-  }, { passive: true });
 
   // ==========================================================================
-  // 9. Entrada da página: gotas em sequência, título letra a letra
+  // 9. Entrada da página: gotas em sequência (o título entra PARADO, §726)
   // ==========================================================================
   var SURFACE_SEL = '.card, .tl-card, .cp-card, .otc-stat, .acc-stat, .ob-stat, div[class*="-widget"]:not([class*="__"]):not(.row), div[class*="-panel"]:not([class*="__"]):not(.row):not(.tab-pane), .page-title-head + .row > [class*="col"] > :not(.card):not(.row)';
   function initEntrance() {
@@ -1862,30 +1913,6 @@
       });
     });
   }
-  function splitTitle() {
-    // no modo opaco (sem GPU) o título entra parado: a cascata letra a letra
-    // era parte do segundo que a troca de página levava nas máquinas do JPM
-    if (REDUCED_MOTION || root.classList.contains('is-solid')) return;
-    var h = doc.querySelector('.content-page .page-title-head h4, .content-page .page-title-head h5');
-    if (!h || h.children.length || h.__otcSplit) return;
-    var txt = h.textContent;
-    if (!txt || txt.length > 60) return;
-    h.__otcSplit = true;
-    // o texto continua o MESMO (o Advanced Export lê este título como nome
-    // de arquivo): só ganha spans, um por letra
-    var words = txt.trim().split(/(\s+)/);
-    var c = 0;
-    h.innerHTML = words.map(function (w) {
-      if (/^\s+$/.test(w)) return w;
-      return '<span class="otc-title-clip">' + w.split('').map(function (ch) {
-        return '<span class="otc-title-char" style="--otc-c:' + (c++) + '">' + esc(ch) + '</span>';
-      }).join('') + '</span>';
-    }).join('');
-    // a cascata cabe em ~0,3 s qualquer que seja o título: a 28 ms por letra,
-    // "Confirmations Monitor" levava 1,1 s para assentar
-    h.style.setProperty('--otc-cstep', Math.min(28, Math.round(320 / Math.max(c, 1))) + 'ms');
-  }
-
   // ==========================================================================
   // 9b. Cards de contagem: o valor CONTA até o novo (do zero na primeira vez)
   // e, quando muda, o card pisca no destaque por 1s — o "flash" do Pane. Vale
@@ -2258,6 +2285,8 @@
       if (window.otcI18n) window.otcI18n.applyTranslations();
     });
 
+    initSwalTiming();
+    window.addEventListener('load', initSwalTiming);   // Swal carregado tarde
     initSegments();
     initSelectMenus();
     initFocusIsland();
@@ -2269,7 +2298,6 @@
     window.otcI18n = new I18nManager();
     window.applyTranslations = function () { return window.otcI18n.applyTranslations(); };
     window.otcI18n.init().then(function () {
-      splitTitle();
       // a lente mede o item já traduzido (o texto muda de largura)
       var cur = Nav.stage && Nav.stage.querySelector('.dd-panel.dd-current');
       if (cur) placeLens(cur, false);
