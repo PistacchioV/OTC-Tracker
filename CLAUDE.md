@@ -1723,7 +1723,9 @@ São **54**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   sem registro — instância de outra pessoa com código velho — fecha pelo aviso
   `CETIP Files Saved` do dia no sino, `_cetip_saved_notif`) e
   Confirmations Escalation (segunda e quinta, grava quando o PACOTE da rotina
-  sai sem erro, pelo Run do card ou pelo automático como `Automatic`). **Swap Accrual e Swap MtM são tarefas
+  sai sem erro, pelo Run do card ou pelo automático como `Automatic`) e RED
+  Clients - Rapid Exposure (diária, grava quando a planilha é aplicada ao
+  Reference Data, §730). **Swap Accrual e Swap MtM são tarefas
   MENSAIS** (`month` no catálogo, `domain.janela_mensal`, mesa 30/09/2026):
   Accrual no último dia útil ANBIMA, MtM ATÉ o 4º (uma vez; prazo no fim da janela);
   rodar a recon é 50%, conclui no End process (`task_runs` `event='end'`), que
