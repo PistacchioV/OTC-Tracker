@@ -3264,6 +3264,11 @@ São **54**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   (`_pc_load_rows(strict=True)`) — a leitura tolerante lê falha como banco
   vazio e o backlog não volta (§406). O chip `Status = Pending` esconde o
   backlog.
+- **O chip `Status = Pending` e a planilha diária são UMA função**
+  (`_pc_pending_rows`, §733): SÓ o banco `pending` (equipe, 29/10/2026), com a
+  categoria recalculada tirando o que já se resolveu e espera o re-route das
+  11:30. Ok e Backlog seguem lendo os três. Leitor novo da "fila pendente" usa
+  a função, nunca um laço próprio nos bancos. `check_pcx_api.py` §2.
 - **Planilha de data anterior sobrescreve o arquivo de sempre** (o time global
   lê um caminho só); snapshot não é refiltrado; ausente é 404; o `ref` do
   status diz que foto está no share.

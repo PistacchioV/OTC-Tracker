@@ -3408,6 +3408,7 @@ _pc_cutoff_date = _pf_pc._pc_cutoff_date
 _pc_apply_auto_rules = _pf_pc._pc_apply_auto_rules
 _pc_refresh_aging_status = _pf_pc._pc_refresh_aging_status
 _pc_target_category = _pf_pc._pc_target_category
+_pc_pending_rows = _pf_pc._pc_pending_rows
 _pc_write_exec = _pf_pc._pc_write_exec
 _pc_delete_tn = _pf_pc._pc_delete_tn
 _pc_delete_trade_number = _pf_pc._pc_delete_trade_number
