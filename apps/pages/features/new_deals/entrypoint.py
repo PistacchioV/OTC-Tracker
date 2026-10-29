@@ -1597,13 +1597,33 @@ def api_ndf_send_conecta():
     except Exception as exc:
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
+
+def _mapping_com_o_dia(sent_deals, cache_dir, suffix, ref_date):
+    """O que o Mapping B3 ID das commodities mapeia (§727): as linhas que a
+    grade mandou MAIS as gravadas no dia da Reference Date (o mesmo
+    `_generic_nd_mapping_candidates` do FWD Start). A grade sozinha é a última
+    busca, e sem a data a resposta é a de antes — nunca mapeia MENOS."""
+    sent = [d for d in (sent_deals or []) if isinstance(d, dict)]
+    if not ref_date:
+        return sent
+    do_dia = _R()._generic_nd_mapping_candidates({'dir': cache_dir, 'suffix': suffix}, None, ref_date)
+    vistos = {(str(d.get('Deal', '')).strip(), str(d.get('Client', '')).strip()) for d in sent}
+    for d in do_dia:
+        k = (d['Deal'], d['Client'])
+        if k not in vistos:
+            vistos.add(k)
+            sent.append(d)
+    return sent
+
+
 @blueprint.route('/api/new-deals/ndf-commodities/mapping-b3', methods=['POST'])
 def api_ndf_mapping_b3():
     if not session.get('authenticated'):
         return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
 
     data = request.get_json(silent=True) or {}
-    sent_deals = data.get('deals', [])
+    sent_deals = _mapping_com_o_dia(data.get('deals', []), _R().NDF_COMM_CACHE_DIR,
+                                    '_ndfcomm.json', data.get('ref_date'))
     if not sent_deals:
         return jsonify({'ok': True, 'results': []})
 
@@ -1962,7 +1982,8 @@ def api_mapping_b3():
         return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
 
     data = request.get_json(silent=True) or {}
-    sent_deals = data.get('deals', [])   # [{id, Deal}]
+    sent_deals = _mapping_com_o_dia(data.get('deals', []), _R().CACHE_BASE_DIR,   # [{Deal, Client}]
+                                    '_optcomm.json', data.get('ref_date'))
     if not sent_deals:
         return jsonify({'ok': True, 'results': []})
 
