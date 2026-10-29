@@ -371,6 +371,8 @@ def confere_subida(tmp, sem_awmpy):
     if not sem_awmpy:
         ok(DRIVE['pedidos'] == ['otc-tracker'], 'a raiz pedida ao get_shared_drive uma vez')
     ok(app.config['FOUR_EYES'] is True, 'maker/checker ligado no Stratos')
+    ok(tuple(app.config.get('CP_HIDDEN_CARDS') or ()) == ('appversion',),
+       'New Version Released escondido no Stratos (CP_HIDDEN_CARDS)')
     ok(app.root_path == os.path.join(src, 'apps'), 'root_path do app = src/apps')
     from apps.pages import quotes
     ok(quotes.QUOTES_PROXY == '', 'Cotacoes sem o proxy corporativo do desktop')
@@ -431,6 +433,11 @@ def confere_subida(tmp, sem_awmpy):
     if 'speculationrules' in html:
         ok('"href_matches": "%s/logout"' % BASE in html,
            'Speculation Rules: logout continua fora da pre-busca')
+
+    r = c.get(BASE + '/control-panel', headers=MASTER)
+    html = r.get_data(as_text=True)
+    ok(r.status_code == 200 and 'data-cp-card="mt300"' in html and 'data-cp-card="appversion"' not in html,
+       'Control Panel sem o New Version Released (%s)' % r.status_code)
 
     r = c.get(BASE + '/static/js/otc.js')
     ok(r.status_code == 200 and len(r.data) > 1000, 'estatico do OTC servido de src/apps/static')

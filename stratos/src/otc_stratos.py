@@ -169,6 +169,10 @@ def _monta(app, stratos_auth, base):
         TEMPLATES_AUTO_RELOAD=False,
         OTC_STRATOS=True,
         OTC_CONTEXT_ROOT=base,
+        # O New Version Released avisa a equipe da versão nova da INSTÂNCIA (o
+        # link.txt ao lado do .bat): aqui não há .bat nem instância — o card sai
+        # do Control Panel e do /page-access (§724).
+        CP_HIDDEN_CARDS=('appversion',),
     )
 
     otc._require_config_names(app.config)
