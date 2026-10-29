@@ -10,6 +10,13 @@
 
 {% block preloader %}{% endblock preloader %}
 
+{# A troca de página (§726): o navegador pintava a página nova assim que o menu
+   e a barra do topo estavam no HTML — o conteúdo ainda não — e em seguida
+   ficava ~300 ms executando os scripts sem pintar de novo: a página antiga
+   sumia e o miolo ficava VAZIO até lá. Com o `expect`, a primeira pintura
+   espera o marcador do fim do conteúdo; até ele, fica a página antiga. #}
+{% block render_expect %}<link rel="expect" href="#otc-content-end" blocking="render">{% endblock render_expect %}
+
 {% block content %}
 
 <div class="wrapper">
@@ -28,6 +35,7 @@
   "eagerness": "moderate"}]}
 </script>
 {% block page_content %}{% endblock page_content %}
+<div id="otc-content-end" hidden></div>
 
         {# O ladrilho de ícone do título é o MESMO ícone da tela no menu
            lateral (o item de submenu sem ícone herda o do grupo). Fica aqui,

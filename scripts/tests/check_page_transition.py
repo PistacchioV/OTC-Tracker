@@ -18,8 +18,11 @@ handlers do `otc.js` (que roda no `DOMContentLoaded`):
      na aba);
   4. as TABELAS: o contêiner nasce transparente e aparece uma vez, quando as
      larguras assentam (nada fica transparente para sempre);
-  5. o CONTEÚDO: a entrada é a do `.content-page` no CSS (no modo opaco, sem
-     animação) e a placa já na tela não ganha a entrada do otc.js.
+  5. o CONTEÚDO: sem animação de entrada, título parado, a 1a pintura espera
+     o fim do conteúdo (rel=expect), e a placa já na tela não ganha a entrada
+     do otc.js; o Swal que fecha sozinho dura no mínimo 3 s (§726);
+  6. a View Transition não dá NOME a nada (grupo com nome é desenhado por cima
+     da raiz e cobria o conteúdo novo) e troca sem plus-lighter.
 
     OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_page_transition.py
 """
@@ -148,13 +151,26 @@ with sync_playwright() as p:
     # o modo é forçado (o Chromium do teste não tem GPU e cairia sozinho no opaco)
     pg.evaluate("localStorage.setItem('__OTC_TRACKER_FX__', 'full')")
     pg.goto(BASE + '/new_deals-opt-fxo', wait_until='networkidle')
-    check('o .content-page entra pelo CSS', pg.evaluate("getComputedStyle(document.querySelector('.content-page')).animationName"),
-          'otc-fade-in')
-    pg.evaluate("localStorage.setItem('__OTC_TRACKER_FX__', 'reduced')")
-    pg.goto(BASE + '/new_deals-opt-fxo', wait_until='networkidle')
-    check('   no modo opaco, sem animação', pg.evaluate("getComputedStyle(document.querySelector('.content-page')).animationName"),
-          'none')
+    check('o .content-page NÃO tem entrada (§726: esmaecer do 0 é um quadro sem conteúdo)',
+          pg.evaluate("getComputedStyle(document.querySelector('.content-page')).animationName"), 'none')
+    check('   o título entra parado (sem letra a letra)',
+          pg.evaluate("document.querySelectorAll('.otc-title-char').length"), 0)
+    check('   a 1a pintura espera o fim do conteúdo (rel=expect)',
+          pg.evaluate("!!document.querySelector('link[rel=expect][href=\"#otc-content-end\"]') && !!document.getElementById('otc-content-end')"), True)
+    # o aviso que fecha sozinho dura o bastante para ser lido
+    # (numa função que não devolve nada: o evaluate esperaria a promessa do Swal)
+    pg.evaluate("() => { Swal.fire({ title: 'Saved', icon: 'success', timer: 1200, showConfirmButton: false }); }")
+    pg.wait_for_timeout(2000)
+    check('Swal com timer curto segue aberto aos 2 s (mínimo de 3 s)', pg.evaluate("Swal.isVisible()"), True)
+    pg.hover('.swal2-popup')
+    check('   e o relógio PARA com o mouse em cima', pg.evaluate("Swal.isTimerRunning()"), False)
+    pg.evaluate("Swal.close()")
     pg.evaluate("localStorage.removeItem('__OTC_TRACKER_FX__')")
+
+    print('\n== 6. a View Transition ==')
+    scss = open(os.path.join(ROOT, 'apps', 'static', 'scss', 'otc.scss'), encoding='utf-8').read()
+    check('nenhum view-transition-name (papel de parede, menu, barra)', 'view-transition-name' not in scss, True)
+    check('   a raiz troca sem plus-lighter', 'mix-blend-mode: normal' in scss, True)
 
     print('\n== 2. o menu desafixado antes do primeiro paint ==')
     pg.evaluate("localStorage.setItem('otc_nav_pinned', '0')")
