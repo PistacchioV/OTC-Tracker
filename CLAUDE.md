@@ -730,9 +730,11 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   `start-otc-tracker.bat`; sem versão o envio é recusado; destinatário é quem
   está `Active`.
 - **Card com envio AUTOMÁTICO de e-mail tem o liga/desliga** (§722,
-  `platform/auto_send`, `control-panel/auto_send.json`): os seis do
+  `platform/auto_send`, `control-panel/auto_send.json`): os sete do
   `auto_send.CARDS` (Intraday Monitor, Confirmations Escalation, Initiatives
-  Alerts, Manual Deals EA, BACC EA, MT300). LIGADO é o padrão; desligado, o
+  Alerts, Manual Deals EA, BACC EA, MT300 e a planilha do Pending — o
+  `pendingspreadsheet`, que não manda e-mail e sim GRAVA no share às 10:45;
+  desligado, o arquivo do share fica como está). LIGADO é o padrão; desligado, o
   laço do card reserva o horário, grava o desfecho `disabled` e não envia — o
   Run manual segue valendo, e religar não manda o horário que passou. O laço
   pergunta `auto_send.ligado('<card>')` ANTES de reservar, e a leitura é
