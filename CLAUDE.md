@@ -3034,8 +3034,11 @@ São **55**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   `JPMORGANBM`); contraparte que é declarante (`efin-declarant`) é intragrupo e
   sai; LE fora do cadastro também. O **Valor Interno × Valor B3** de cada
   operação usa a tolerância da tela de origem (5,00 NDF Summary, 20,00 Trade
-  Level). A data do CGD (`conta_dtabertu`) é a do Tracking Docs (Signature Date,
-  senão Emissão; o CGD mais antigo do CNPJ). Correção em `edits` (4-olhos, o
+  Level). A data do CGD (`conta_dtabertu`) é a do **Reference Data** — o 1º
+  CGD *Active* com data do Counterparty Details, por SPN (a regra do
+  `_conf_cgd_lookup` das confirmações), chegando pelo CNPJ e, sem ele, pelo
+  nome — e só sem ela a do Tracking Docs (Signature Date, senão Emissão; o
+  mais antigo do CNPJ); a célula diz a fonte (`cgd_src`, §738). Correção em `edits` (4-olhos, o
   desenho do WHT §702); o arquivo RECUSA linha pendente ou incompleta (LE, B3
   ID, Tax ID, CGD Date). `check_efinanceira.py`.
 

@@ -283,6 +283,7 @@
               fileDone: 'File generated', fileFail: 'File not generated', fileSummary: '{n} account(s) in {name}, saved to {path}',
               lastFile: 'Last file:', noFile: 'No file generated for this month yet.', days: 'Days imported:',
               month: 'Month', incomplete: 'Incomplete', missingTip: 'Missing for the file: {fields}',
+              cgdSrc_refdata: 'From the Reference Data (the counterparty\'s active CGD)', cgdSrc_trackdocs: 'From Onboarding › Track Docs (no CGD in the Reference Data)', cgdSrc_edit: 'Typed on this page',
               editTip: 'Edit', confirmTip: 'Confirm the edit', deleteTip: 'Delete', cancel: 'Cancel',
               editDone: 'Row(s) edited — pending confirmation', approveDone: 'Edit confirmed', delDone: 'Row(s) deleted',
               delTitle: 'Delete {n} row(s)?', delText: 'The account leaves the month and a new import does not bring it back.', delOk: 'Delete',
@@ -317,6 +318,7 @@
               fileDone: 'Arquivo gerado', fileFail: 'Arquivo não gerado', fileSummary: '{n} conta(s) em {name}, gravado em {path}',
               lastFile: 'Último arquivo:', noFile: 'Nenhum arquivo gerado neste mês ainda.', days: 'Dias importados:',
               month: 'Mês', incomplete: 'Incompleta', missingTip: 'Falta para o arquivo: {fields}',
+              cgdSrc_refdata: 'Do Reference Data (o CGD ativo da contraparte)', cgdSrc_trackdocs: 'Do Onboarding › Track Docs (sem CGD no Reference Data)', cgdSrc_edit: 'Digitada nesta tela',
               editTip: 'Editar', confirmTip: 'Confirmar a edição', deleteTip: 'Excluir', cancel: 'Cancelar',
               editDone: 'Linha(s) editada(s) — aguardando confirmação', approveDone: 'Edição confirmada', delDone: 'Linha(s) excluída(s)',
               delTitle: 'Excluir {n} linha(s)?', delText: 'A conta sai do mês e um novo import não a traz de volta.', delOk: 'Excluir',
@@ -351,6 +353,7 @@
               fileDone: 'Archivo generado', fileFail: 'Archivo no generado', fileSummary: '{n} cuenta(s) en {name}, guardado en {path}',
               lastFile: 'Último archivo:', noFile: 'Ningún archivo generado en este mes todavía.', days: 'Días importados:',
               month: 'Mes', incomplete: 'Incompleta', missingTip: 'Falta para el archivo: {fields}',
+              cgdSrc_refdata: 'Del Reference Data (el CGD activo de la contraparte)', cgdSrc_trackdocs: 'De Onboarding › Track Docs (sin CGD en el Reference Data)', cgdSrc_edit: 'Escrita en esta pantalla',
               editTip: 'Editar', confirmTip: 'Confirmar la edición', deleteTip: 'Eliminar', cancel: 'Cancelar',
               editDone: 'Fila(s) editada(s) — pendiente de confirmación', approveDone: 'Edición confirmada', delDone: 'Fila(s) eliminada(s)',
               delTitle: '¿Eliminar {n} fila(s)?', delText: 'La cuenta sale del mes y una nueva importación no la trae de vuelta.', delOk: 'Eliminar',
@@ -465,6 +468,10 @@
                     return statusPill(r);
                 }
                 if (type !== 'display') { return v; }
+                // a data do CGD diz de onde veio (Reference Data, Track Docs, digitada)
+                if (c.name === 'CGD Date' && v && r.cgd_src) {
+                    return '<span title="' + esc(t('cgdSrc_' + r.cgd_src)) + '">' + esc(v) + '</span>';
+                }
                 if (c.kind === 'ell') { return '<span title="' + esc(v) + '">' + esc(v) + '</span>'; }
                 return esc(v);
             }
