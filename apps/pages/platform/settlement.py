@@ -622,6 +622,7 @@ def _ops_swap_unwind_rows(settle_ref):
             'bruto': bruto, 'rate': rate, 'ir': ir, 'liquido': liq,
             'fundo': fundo or _ops_is_internal_cpty(cliente),
             'taxid': str(u.get('TaxID') or ''),
+            'party_account': str(u.get('PartyAccount') or '').strip(),
         })
     return out
 
@@ -645,6 +646,9 @@ def _ops_swap_unwind_trade_row(u, by_titulo):
         '_no_advice': u['fundo'],
         # a data da operação, de onde sai o prazo do IR regressivo (o WHT a mostra)
         '_trade_date': u.get('trade_date'),
+        # a conta da PARTE e o CNPJ: a E-Financeira tira a entidade da conta
+        '_party_account': u.get('party_account', ''),
+        '_taxid': u.get('taxid', ''),
     }
 
 
@@ -853,6 +857,11 @@ def _ops_swap_trade_rows(settle_ref):
             '_trade_date': op_dt,
             # o vencimento na posição (a E-Financeira declara o encerramento)
             '_maturity': venc,
+            # a conta da PARTE no Operations B3 — a E-Financeira tira dela a
+            # entidade (o `_legal` do Athena vem como "BCO J.P. MORGAN S.A.
+            # 2768 - GEM BR - RATES", e o swap sem linha no Athena vem sem ele)
+            '_party_account': str(rec.get('Conta', '') or '').strip(),
+            '_cpty_account': str(rec.get('Conta Contraparte', '') or '').strip(),
         })
     out.extend(_ops_swap_unwind_trade_row(u, by_titulo) for u in unw)
     return out

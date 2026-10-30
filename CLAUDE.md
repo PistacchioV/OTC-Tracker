@@ -3035,8 +3035,12 @@ São **55**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   POSIÇÃO (chaves aditivas nas linhas do `_optadv_collect`/`_ndfadv_collect`, que
   o Trade Level passa como `_premium`/`_premium_side`/`_maturity`/`_party_account`).
   A LE sai da CONTA da parte quando há (o nome na posição de opção é apelido,
-  `JPMORGANBM`); contraparte que é declarante (`efin-declarant`) é intragrupo e
-  sai; LE fora do cadastro também. O **Valor Interno × Valor B3** de cada
+  `JPMORGANBM`; o swap leva a do Operations B3, `_party_account`/
+  `_cpty_account`, §743); pelo nome, `BANCO JP…`/`BCO JP…` e os códigos da
+  coluna ALIASES do `efin-declarant` (o Owner Legal Entity do Athena: "BCO J.P.
+  MORGAN S.A. 2768 - GEM BR - RATES", o 0228 — código numérico casa como
+  palavra inteira). Contraparte que é declarante é intragrupo e sai; LE fora do
+  cadastro também. O **Valor Interno × Valor B3** de cada
   operação usa a tolerância da tela de origem (5,00 NDF Summary, 20,00 Trade
   Level). A data do CGD (`conta_dtabertu`) é a do **Reference Data** — o 1º
   CGD *Active* com data do Counterparty Details, por SPN (a regra do

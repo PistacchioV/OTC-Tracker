@@ -162,6 +162,17 @@ def secao_dominio():
     check('dd/mm, dd-mm, dd.mm, ISO, série do Excel, data no texto, ano de 2 dígitos; texto sem data é None',
           cg == [date(2015, 6, 3)] * 8 + [None] * 4, cg)
 
+    print('== 3c. a entidade pelo código no texto (ALIASES) ==')
+    al = D.aliases_of('2768; 0228')
+    check('o alias numérico casa como palavra inteira; o texto, como trecho',
+          [D.alias_hit(x, al) for x in ('BCO J.P. MORGAN S.A. 2768 - GEM BR - RATES', '0228 - GEM BR', 'ENT 102280',
+                                        'BOOK 0228/RATES')] + [D.alias_hit('J.P. Morgan Brasil Rates', ['JP MORGAN BRASIL'])]
+          == [True, True, False, True, True])
+    up = D.declarant_upgrade([{'LE': 'JPM', 'ENTE': '39'}, {'LE': 'MGT', 'ENTE': '1315'},
+                              {'LE': 'JPM', 'ALIASES': ''}])
+    check('o upgrade põe os códigos da JPM em quem não tem a coluna, e não mexe em quem a tem vazia',
+          [r['ALIASES'] for r in up] == ['2768; 0228', '', ''], up)
+
     print('== 4. o arquivo ==')
     exemplo_hdr = ('num_ente_declarante;cnpjdeclarante;num_ente_declarado;declarado_ni;anomescaixa;conta_tp;'
                    'conta_subtp;conta_tpnum;conta_agencia;conta_num;conta_reportpais;conta_notitulares;'
@@ -248,6 +259,15 @@ def secao_api():
         _op('SWAP', 'CEM', 'Cashflow', 'K-1', '26S0000001', 'CLIENTE K SA', -1000.0,
             _maturity=date(2028, 1, 1), _taxid='66.666.666/0001-66'),
         _op('SWAP', '', 'Cashflow', 'K-2', '26S0000002', 'CLIENTE K SA', 20.0, _taxid='66.666.666/0001-66'),
+        # o Owner Legal Entity do Athena ABREVIADO, e o swap sem nome nenhum
+        # (sem linha no Athena): a entidade sai da CONTA da parte
+        _op('SWAP', 'CEM', 'Cashflow', 'K-3', '26S0000004', 'CLIENTE K SA', -10.0,
+            legal='BCO J.P. MORGAN S.A. 2768 - GEM BR - RATES', _taxid='66.666.666/0001-66'),
+        _op('SWAP', 'CEM', 'Cashflow', 'K-4', '26S0000005', 'CLIENTE K SA', -11.0, legal='',
+            _party_account='73760.00-9', _cpty_account='12345.00-9', _taxid='66.666.666/0001-66'),
+        # swap Banco × MGT: o intragrupo pela CONTA da contraparte, sem nome
+        _op('SWAP', 'CEM', 'Cashflow', 'K-5', '26S0000006', 'XPTO NOME QUALQUER', -12.0, legal='',
+            _party_account='73760.00-9', _cpty_account='04880.00-6'),
         # a visão do fundo (o Lawton do nosso lado) não é declarante
         _op('NDF COMMODITIES', 'COMMODITIES', 'Maturity', 'L-1', '26T0LAWTON1', 'CLIENTE L SA', -5.0,
             legal='LAWTON MULTIMERCADO EXCLUSIVO'),
@@ -335,6 +355,11 @@ def secao_api():
                                    '40.404.040/0001-40', '99.999.999/0001-99', '')])
     check('sem CNPJ, mas o NOME no Reference Data: acha pelo nome', porque('', 'Cliente U SA')[:2]
           == ('2017-08-09', 'refdata'))
+    with app.test_request_context('/'):
+        les = [Q.le_token(x) for x in ('BCO J.P. MORGAN S.A. 0228 - XYZ', '0228 - GEM BR - RATES',
+                                       'LIVRO 2768', 'ENTIDADE 102280', 'JPMORGAN CHASE BANK, N.A.')]
+    check('a LE pelo código cadastrado (0228, 2768) em qualquer formato; 102280 não é 0228',
+          les == ['JPM', 'JPM', 'JPM', 'ENTIDADE 102280', 'MGT'], les)
     idx = Q.cgd_index()
     check('CGD: a assinatura, senão a emissão; o mais antigo; cancelado e CSA de fora',
           (Q.cgd_of(idx, 'MGT', '33435231000187'), Q.cgd_of(idx, 'JPM', '22.222.222/0001-22'),
@@ -430,7 +455,15 @@ def secao_api():
                                                                                      '77.777.777/0001-77', 'YES'), o6)
 
     r, kp = pagina('kapital')
-    check('KAPITAL: os swaps CEM/CEMHYB e o sem LOB', sorted(kp) == ['26S0000001', '26S0000002', '26S0000003'], sorted(kp))
+    check('KAPITAL: os swaps CEM/CEMHYB e o sem LOB', sorted(kp) == ['26S0000001', '26S0000002', '26S0000003',
+                                                                    '26S0000004', '26S0000005'], sorted(kp))
+    check('a LE do "BCO J.P. MORGAN S.A. 2768 - GEM BR - RATES" é JPM, e a do swap sem nome sai da conta',
+          (kp['26S0000004']['LE'], kp['26S0000005']['LE']) == ('JPM', 'JPM'),
+          (kp['26S0000004']['LE'], kp['26S0000005']['LE']))
+    check('o swap Banco × MGT sai como intragrupo pela conta da contraparte (sem nome)',
+          '26S0000006' not in kp and any(w['code'] == 'intragroup' for w in r['warnings']), r['warnings'])
+    check('nenhuma operação de swap ficou como "entidade fora do cadastro"',
+          not any(w['code'] == 'not_declarant' for w in r['warnings']), r['warnings'])
     check('fluxo no meio da vida: pagamento sem encerramento', (kp['26S0000001']['Accumulated Payment'],
                                                                 kp['26S0000001']['Closing Date']) == (1000.0, ''))
     check('fluxo do vencimento encerra', kp['26S0000003']['Closing Date'] == '30/09/2026')
@@ -528,6 +561,15 @@ def secao_api():
           and m.get('PAG_TP') == 'FATCA504' and m.get('Event') == 'Manual' and m.get('missing') == [], m)
     doc = store.load('202609')
     check('o armazém do mês guarda as três fontes por dia', set(doc['days']['2026-09-16']) == {'ndf', 'ops', 'exp'})
+    # o cadastro que a instância já gravou ANTES da coluna ALIASES: o upgrade a põe na leitura
+    with app.test_request_context('/'):
+        R._atomic_write_json(R._mapping_path('efin-declarant'), [
+            {'LE': 'JPM', 'ENTE': '39', 'CNPJ': '33172537000198', 'NAME': 'Banco J.P. Morgan S.A.'},
+            {'LE': 'MGT', 'ENTE': '1315', 'CNPJ': '46518205000164', 'NAME': 'JPMorgan Chase Bank'}])
+        R._mapping_cache.clear()
+        dec = Q.declarants()
+    check('cadastro antigo, sem ALIASES: o upgrade dá à JPM o 2768 e o 0228',
+          (dec['JPM']['aliases'], dec['MGT']['aliases']) == (['2768', '0228'], []), dec)
 
 
 def secao_tela():
