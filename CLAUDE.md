@@ -1011,6 +1011,10 @@ São **55**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   coluna oculta) e manda ao servidor só o que MUDOU. As três recompras
   (catálogo, NDF FX, Intrag Unwind) editavam na linha. `check_edit_modal.py`
   reprova página com Edit sem modal e o par `btn-row-save`/`btn-row-cancel`.
+  **O botão de ícone do rodapé do modal (Cancel `ti-x` danger · Save
+  `ti-device-floppy` success) é o MESMO squircle** (equipe, 30/10/2026, §741):
+  `btn btn-sm btn-<cor> btn-act`, pela regra `.modal-footer .btn.btn-act` do
+  tema — nunca `btn-icon rounded-circle`. `check_row_action_buttons.py` §8.
 - **Toolbar** `mb-3` (o DataTables come a margem do irmão), `.btn-toolbar-all`;
   cores por função: Columns soft-primary, Add Row primary, Export info
   (**Copy · CSV · Excel · Print · PDF**, DataTables Buttons; CSV `;` + BOM;

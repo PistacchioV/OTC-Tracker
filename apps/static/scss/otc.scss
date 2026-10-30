@@ -1686,6 +1686,20 @@ table td .btn.ops-row-act > i,
 table td .btn.sc-row-act > i,
 table td .btn.btn-act > i { font-size: 1rem !important; line-height: 1; }
 
+// O botão de ÍCONE do rodapé de modal (Cancel ti-x/danger · Save
+// ti-device-floppy/success) é o MESMO squircle das ações de linha, pela mesma
+// classe `btn-act` (equipe, 30/10/2026: "quadrado arredondado, não círculo").
+// A regra acima só alcança `table td`: o `btn-act` do rodapé saía pílula.
+.modal-footer .btn.btn-act {
+    width: 32px !important; height: 32px !important;
+    min-width: 32px !important; max-width: 32px !important;
+    min-height: 32px !important; max-height: 32px !important;
+    padding: 0 !important; box-sizing: border-box !important;
+    border-radius: 10px !important; line-height: 1 !important;
+    display: inline-flex; align-items: center; justify-content: center;
+    > i { font-size: 1rem !important; line-height: 1; }
+}
+
 // as mesmas famílias fora da regra de tabela (cards, listas)
 .btn-row-edit, .btn-row-delete, .btn-row-confirm, .btn-row-send, .btn-row-approve, .btn-row-b2b,
 .acc-act-edit, .acc-act-send, .acc-act-del, .ops-row-del,
