@@ -903,8 +903,14 @@ def api_fxo_import_xlsx():
 
 def _opc_default_name(prefix, view):
     """O nome padrão do arquivo OPC de uma visão — `FXO_Banco.txt`,
-    `FXO_Lawton.txt` — quando a variante do cadastro não dá um."""
+    `OPC_Lawton.txt` — quando a variante do cadastro não dá um."""
     return '{}_{}.txt'.format(prefix, 'Banco' if view == 'JPM' else view.title())
+
+
+# A visão do arquivo do Opt FXO é a de quem o GERA: o Participante do header,
+# Fixed `JPMORGANBM` no template base e nas variantes — o Banco. É a conta dela
+# que abre o nome na New (§646).
+_OPC_FXO_FILE_VIEW = 'JPM'
 
 
 @blueprint.route('/api/new-deals/opt-fxo/send-conecta', methods=['POST'])
@@ -1089,14 +1095,14 @@ def api_fxo_send_conecta():
 
         # Par de pernas → variante do template (Fixed das contas por par);
         # sem variante, o base — byte a byte o de sempre.
-        # O arquivo é UM por visão (a perna da esquerda do par): com a conta da
-        # visão no nome do arquivo (§646), a linha do Lawton não divide mais o
-        # FXO_Banco.txt com as do Banco.
+        # O arquivo é UM para o lote (equipe, 30/10/2026, §745): o header do OPC
+        # é um só, e as linhas do Lawton vão no FXO_Banco.txt junto com as do
+        # Banco — o §646 as tinha separado por visão. Só um `file_name` dado à
+        # variante no cadastro abre outro arquivo, sempre na visão do header.
         le_pair = _R()._opc_le_pair(client)
-        view = _R()._b3_view_le(le_pair)
         fname = (_R()._fi_variant_file_name('opcoes-flexiveis-vcp', '/new_deals-opt-fxo', le_pair)
-                 or _opc_default_name(_R()._fxo_cfg()['file'], view))
-        dest = out_files.setdefault((view, fname), [])
+                 or _opc_default_name(_R()._fxo_cfg()['file'], _OPC_FXO_FILE_VIEW))
+        dest = out_files.setdefault((_OPC_FXO_FILE_VIEW, fname), [])
 
         deal_count += 1
         dest.append(_R()._fi_build_line('opcoes-flexiveis-vcp', 'registro', vals,
@@ -1124,7 +1130,7 @@ def api_fxo_send_conecta():
     header = _R()._fi_build_line('opcoes-flexiveis-vcp', 'header', {'4': today},
                             page_url='/new_deals-opt-fxo')
     if not out_files:
-        out_files[('JPM', _opc_default_name(_R()._fxo_cfg()['file'], 'JPM'))] = []   # lote só de cancelados: header, como sempre
+        out_files[(_OPC_FXO_FILE_VIEW, _opc_default_name(_R()._fxo_cfg()['file'], _OPC_FXO_FILE_VIEW))] = []   # lote só de cancelados: header, como sempre
 
     try:
         if download:
@@ -1914,7 +1920,8 @@ def api_send_conecta():
 
         # Par de pernas → variante do template (Fixed das contas por par);
         # sem variante, o base — byte a byte o de sempre.
-        # Um arquivo por visão, como no FXO (§646).
+        # Um arquivo por visão (§646): o OPC_Lawton.txt sai à parte. (O Opt
+        # FXO voltou a um arquivo só, §745.)
         le_pair = _R()._opc_le_pair(client)
         view = _R()._b3_view_le(le_pair)
         fname = (_R()._fi_variant_file_name('opcoes-flexiveis-vcp',
