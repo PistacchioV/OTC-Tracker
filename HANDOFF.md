@@ -31250,3 +31250,29 @@ bancos — e já não estavam na foto das 11:30, então saíram entre as 10:45 e
 a fila de AGORA, e a equipe deu baixa nas assinaturas digitais depois da
 gravação da planilha. Pedido seguinte da equipe: o card da planilha ganhou o
 liga/desliga do §722 (`pendingspreadsheet` no `auto_send.CARDS`).
+
+## §734 — O hotfix.bat leva o Guia do Usuário para a pasta otc-source (2026-10-30)
+
+**Pedido da equipe:** o `GUIA_DO_USUARIO_OTC_TRACKER.docx` mora na pasta
+`Application\otc-source` do share, ao lado das pastas de versão (`v1`…`v15`), e
+era copiado à mão a cada revisão. O `hotfix.bat` passa a levá-lo quando ele
+muda.
+
+- **Origem e destino:** o `.docx` versionado na RAIZ do repositório →
+  `%SHARE_ROOT%\otc-source\` (`GUIDE`/`GUIDE_DST`). Não vai para dentro da pasta
+  da versão: a equipe o procura na `otc-source`, e a versão seguinte do
+  `new-otc-deploy.bat` não o carregaria de um lugar para o outro.
+- **"Mudou" é pelo CONTEÚDO** (`fc /b`), não pela data como o resto do hotfix
+  (robocopy). A data do arquivo no checkout é a do `git pull`/clone que o
+  escreveu, não a da revisão: por data, um clone novo ou um checkout de outra
+  branch copiaria o mesmo guia de novo. O `fc` responde 1 (difere) ou 2 (o do
+  share não existe) — os dois copiam.
+- Passa pelo mesmo `:considera`: aparece na lista como `otc-source\GUIA_…`, o
+  original vai para o backup (`%LOCALAPPDATA%\…\hotfix-backup\<versão>\_otc-source`)
+  e o erro de cópia é dito (o guia ABERTO no Word de alguém trava o arquivo —
+  é o `ERRO ao copiar` mais provável aqui; feche e rode o `apply` de novo).
+- A conferência de "fora do git" também olha o guia (`git status -- … %GUIDE%`).
+  O `~$…docx` que o Word deixa ao lado com o guia aberto não é o arquivo e não
+  entra (o robocopy/fc pegam o nome exato).
+
+`check_bat_blocks.py` OK (sem parêntese cru no bloco novo).

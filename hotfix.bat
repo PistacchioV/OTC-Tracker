@@ -49,6 +49,12 @@ REM  start-otc-tracker.bat compara o requirements.txt da versao com o retrato
 REM  da ultima instalacao (fc /b), entao o requirements que chega pelo hotfix
 REM  dispara o pip install na PROXIMA subida, sozinho - o script avisa.
 REM
+REM  O GUIA_DO_USUARIO_OTC_TRACKER.docx VAI (30/10/2026), tambem da RAIZ do
+REM  repositorio, mas para a pasta otc-source - ao lado das pastas de versao,
+REM  onde a equipe o abre -, e nao para dentro da versao. A comparacao e pelo
+REM  CONTEUDO (fc /b), nao pela data: o git pull e o clone novo mudam a data do
+REM  arquivo sem mudar o guia, e ele seria copiado a cada vez.
+REM
 REM  O run.py NUNCA vai: o da pasta da versao e PROPRIO da instancia (mora ao
 REM  lado do __init__.py e do config.py, sem o pacote apps) e o do repositorio
 REM  faz "from apps.config import" - copiado por cima, a instancia nao sobe
@@ -73,6 +79,10 @@ set "DEPLOY_DIRS=pages static templates"
 set "DEPLOY_FILES=__init__.py config.py"
 set "ROOT_FILES=requirements.txt"
 set "EXCLUDE_DIR=%SOURCE_ROOT%\static\data"
+
+REM O guia do usuario: da raiz do repositorio para a pasta otc-source do share.
+set "GUIDE=GUIA_DO_USUARIO_OTC_TRACKER.docx"
+set "GUIDE_DST=%SHARE_ROOT%\otc-source"
 
 REM A i18n vai para o DATA_DIR da instancia, que e onde o app a procura primeiro
 REM (static_data_file: data_dir() antes da copia empacotada).
@@ -125,7 +135,7 @@ if defined OTC_HOTFIX_PULL_FALHOU (
 )
 
 set "SUJO=0"
-for /f "delims=" %%L in ('git -C "%REPO%" status --porcelain --ignored -- apps %ROOT_FILES% ^| findstr /v /i /l "__pycache__ .pyc"') do call :sujo "%%L"
+for /f "delims=" %%L in ('git -C "%REPO%" status --porcelain --ignored -- apps %ROOT_FILES% %GUIDE% ^| findstr /v /i /l "__pycache__ .pyc"') do call :sujo "%%L"
 if "%SUJO%"=="1" if "%APPLY%"=="1" (
     echo Limpe o checkout antes do apply - git status, git clean -ndX.
     pause
@@ -198,6 +208,13 @@ if exist "%REPO%\requirements.txt" (
 for /f "usebackq tokens=* delims=" %%F in ("%LIST%") do call :considera "%%F" "%SOURCE_ROOT%" "%TARGET%" "%BACKUP%" ""
 for /f "usebackq tokens=* delims=" %%F in ("%RLIST%") do call :considera "%%F" "%REPO%" "%TARGET%" "%BACKUP%" ""
 for /f "usebackq tokens=* delims=" %%F in ("%TLIST%") do call :considera "%%F" "%TRANS_SRC%" "%TRANS_DST%" "%BACKUP%\_data-translations" "static\data\translations\"
+
+REM --- O guia do usuario: pelo CONTEUDO, para a pasta otc-source. -----------
+REM fc /b devolve 1 se difere e 2 se o do share nao existe - os dois copiam.
+if exist "%REPO%\%GUIDE%" (
+    fc /b "%REPO%\%GUIDE%" "%GUIDE_DST%\%GUIDE%" >nul 2>&1
+    if errorlevel 1 call :considera "%REPO%\%GUIDE%" "%REPO%" "%GUIDE_DST%" "%BACKUP%\_otc-source" "otc-source\"
+)
 
 echo.
 if %COUNT%==0 (
