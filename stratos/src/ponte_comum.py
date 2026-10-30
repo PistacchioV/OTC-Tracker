@@ -81,6 +81,9 @@ PASTAS = (
     Pasta('cetip-destino', _OTC + 'CETIP Files/Position Files', SAIDA, 60, 31),
     Pasta('mtm', _OTC + 'Regulatory/MTM', AMBOS, 60, 31),
     Pasta('accrual', _OTC + 'Regulatory/Accrual', AMBOS, 60, 31),
+    # o arquivo mensal da E-Financeira (§736): o app grava e nunca lê; a pasta
+    # é por MÊS (`AAAA\MM. Month`), sem dia — a janela por dia não se aplica
+    Pasta('efinanceira', _OTC + 'Regulatory/E-Financeira', DESCE, 120, None),
     Pasta('comitente', _OTC + 'Reconciliations/Comitente', SAIDA, 120, 31),
     Pasta('cgd-input', 'Confirmation/Derivativos/Alteryx/Batimento CGD/Input', ENTRADA, 120, None),
     Pasta('pending-confirmation', 'Confirmation/Derivativos/Movimento/Pending Confirmation',
