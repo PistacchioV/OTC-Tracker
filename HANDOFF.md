@@ -31276,3 +31276,43 @@ muda.
   entra (o robocopy/fc pegam o nome exato).
 
 `check_bat_blocks.py` OK (sem parêntese cru no bloco novo).
+
+## §735 — Database Explorer: as tabelas DENTRO do JSON abrem como tabela (2026-10-30)
+
+**Relato da equipe:** "só tenho visão dos dbs como raw — preciso ver o que tem
+nos dbs de maneira tabulada". O print era o `payrec_status.db`, tabela
+`d_20261015__raw`: uma linha só, com `summary`, `settled`… como texto de JSON
+nas células.
+
+**Causa:** a visão expandida do §673 abre bem duas formas — objeto de objetos
+(o ledger: uma linha por chave) e lista de registros (uma linha por item). O
+payload-OBJETO de uma rotina é a terceira forma: UM registro com campos soltos
+(`success`, `recon_date`) e várias TABELAS dentro (`summary`, `settled`,
+`pending_payment`, `pending_receivement`). O `_records` o tratava como um
+registro só e o `_flat` serializava cada lista em JSON numa célula — ilegível,
+sem filtro, sem soma.
+
+**O que mudou** (`features/db_explorer`):
+- `domain.sections(rows, idx)`: as SEÇÕES do JSON — toda chave cujo valor é
+  lista de registros (vazia inclusive: `pending_payment` sem pendência é seção
+  com 0 linhas) ou objeto de objetos, num objeto que NÃO é ele mesmo objeto de
+  objetos (esse já abre em linhas e não tem seção). Contagem somada entre as
+  linhas da tabela, na ordem em que aparecem.
+- `domain.expand(..., section=)`: com seção, os registros DELA viram as
+  linhas (as colunas pelos campos, a família pelos valores — número soma no
+  rodapé, data ISO vira data e liga o seletor Day); sem seção, a VISÃO GERAL:
+  o objeto com cada seção trocada pela contagem (`domain.Rows`, um `int`
+  marcado), que o `_expandida` declara como família `section`.
+- A API recebe `section` e devolve `sections`/`section`; seção desconhecida
+  volta à visão geral.
+- A tela: seletor **Section** ao lado do View ("overview (fields)" e
+  "settled — 10 rows"), e a contagem na visão geral é um LINK que abre a
+  seção. O banner diz qual seção está aberta, ou que o JSON tem N tabelas
+  dentro. Textos nos três idiomas.
+- De carona: número decimal na tela com até 8 casas (era 10, e o ruído do
+  float aparecia: `230,927.6600000002`); o Export segue com o valor cru.
+
+Campo aninhado DENTRO de um registro da seção (o `manual_rows` do `settled`)
+segue como JSON na célula: abri-lo seria uma terceira camada de seleção, e o
+que a equipe procura são as linhas das seções. `check_db_explorer.py` §1c e
+§5 (seções no domínio e pela API) e §6 (a barra e os textos).
