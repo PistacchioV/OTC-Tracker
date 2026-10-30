@@ -31316,3 +31316,45 @@ Campo aninhado DENTRO de um registro da seção (o `manual_rows` do `settled`)
 segue como JSON na célula: abri-lo seria uma terceira camada de seleção, e o
 que a equipe procura são as linhas das seções. `check_db_explorer.py` §1c e
 §5 (seções no domínio e pela API) e §6 (a barra e os textos).
+
+### §735, segunda rodada — TODOS os bancos tabelados (2026-10-30)
+
+**Pedido:** "são para todos os dbs, tem que ter a visualização tabelada". A
+primeira rodada resolveu o objeto com tabelas dentro (o Pay/Rec); uma
+varredura de TODAS as 716 tabelas dos 224 bancos da dev, pela mesma
+`queries.rows` da tela, achou mais cinco formas que ainda mostravam JSON cru:
+
+1. **Dataset tipado do armazém** (Reference Data, mappings, VCP, SwapIndex…):
+   a coluna `_raw` é a linha inteira repetida em JSON, ao lado das colunas
+   tipadas. Ela e o `_seq` nascem ESCONDIDAS (`hidden` no meta,
+   `domain.STORE_BOOKKEEPING`); o Columns as mostra e o View segue
+   oferecendo abrir o `_raw`.
+2. **JSON DENTRO de célula de tabela tipada** (CONTACTS/BANKING do
+   Counterparty Details, `tasks`/`milestones`/`activity` das iniciativas,
+   `attendees` da User Home, `fields` dos templates do File Interpreter,
+   `targets` do `_manifest`, `Warnings` da recompra, `manual_rows` do
+   Pay/Rec): a célula NUNCA desenha o texto cru. Lista de valores soltos →
+   o texto separado por vírgula; vazio → "empty"; lista de registros →
+   "N rows ›"; objeto → "N fields ›". O link abre a janela `dbxJsonModal` com
+   a tabela (registros em colunas, objeto em campo/valor achatado, objeto de
+   objetos com a chave na frente), e o JSON de dentro abre POR CIMA, com
+   Back. É no navegador (`asJson`/`jsonCell`, memo do parse): vale para
+   qualquer coluna de qualquer banco sem o servidor precisar saber qual é
+   JSON. O funil e a ordenação usam o mesmo rótulo; o Export leva o cru.
+3. **`__meta` com valores misturados** (`version: 3` ao lado de objetos): o
+   `json_columns` exigia que TODOS os valores fossem JSON e a tabela abria
+   crua. Agora basta um objeto/lista entre os valores; texto que PARECE JSON
+   e não parseia ainda recusa a coluna.
+4. **Seção aninhada** (`gt30 › monthly` do histórico do Pending, `focus ›
+   sessions` da User Home): as seções são procuradas descendo pelos objetos
+   de campos (`_section_paths`), chamadas pelo CAMINHO com ` › ` (o ponto
+   aparece em chave de verdade, como conta `73760.00-9`); a contagem na
+   visão geral leva o caminho (`Rows.path`), e o link abre a seção certa.
+5. **`__meta` de valor solto** (a dos cards do Control Panel: `result`,
+   `at`): o armazém grava cada valor como JSON (`"no_recipient"`) e a célula
+   saía com as aspas. `domain.json_scalars` decodifica quando TODOS os
+   valores da coluna `value`/`_raw` são JSON de valor solto.
+
+Ficam como estão: tabela vazia (nada a mostrar) e as colunas de texto comum.
+`check_db_explorer.py` ganhou as cinco (seção aninhada, `__meta` mista,
+escalar sem aspas, `_raw`/`_seq` escondidos, a célula/janela na tela).
