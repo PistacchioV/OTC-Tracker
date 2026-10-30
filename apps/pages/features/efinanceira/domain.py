@@ -260,6 +260,47 @@ def page_of(product, lob):
     return {'SWAP': 'kapital', 'OPTION': 'athena-fxo', 'NDF': 'athena-ndf'}.get(norm(product))
 
 
+# ── A entidade pelo texto da operação ───────────────────────────────────────
+# Os códigos com que a entidade aparece no Owner Legal Entity do Athena (equipe,
+# 30/10/2026: "BCO J.P. MORGAN S.A. 2768 - GEM BR - RATES" e o 0228 são JPM).
+# É a semente do cadastro `efin-declarant` (coluna ALIASES) — quem manda é o
+# cadastro; aqui só o que o `upgrade` põe em quem o gravou antes da coluna.
+ALIASES_INICIAIS = {'JPM': '2768; 0228'}
+
+
+def declarant_upgrade(rows):
+    """O cadastro gravado sem a coluna ALIASES ganha os códigos iniciais da
+    entidade (o seed só roda com o cadastro AUSENTE, §6). Linha que JÁ tem a
+    coluna — mesmo vazia — fica como a equipe a deixou."""
+    out = []
+    for r in rows or ():
+        r = dict(r or {})
+        if 'ALIASES' not in r:
+            r['ALIASES'] = ALIASES_INICIAIS.get(norm(r.get('LE')), '')
+        out.append(r)
+    return out
+
+
+def aliases_of(texto):
+    """Os aliases de uma célula do cadastro (`2768; 0228`), normalizados."""
+    return [norm(a) for a in re.split(r'[;,\n]', str(texto or '')) if norm(a)]
+
+
+def alias_hit(legal, aliases):
+    """O texto da entidade da operação contém um dos aliases? Código numérico
+    casa como PALAVRA inteira (o 0228 não casa com 102280); texto, como trecho
+    sem pontuação."""
+    palavras = set(re.findall(r'[A-Z0-9]+', norm(legal)))
+    corrido = alnum(legal)
+    for a in aliases:
+        if a.isdigit():
+            if a in palavras:
+                return True
+        elif alnum(a) and alnum(a) in corrido:
+            return True
+    return False
+
+
 # ── O evento ────────────────────────────────────────────────────────────────
 def kinds_of(settle_type, unwind=False):
     """Os tipos de um evento a partir do `Settlement Type` da tela ('Premium ·

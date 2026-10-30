@@ -37,7 +37,8 @@ def declarants():
         le = domain.norm(r.get('LE'))
         if le and le not in out:
             out[le] = {'ente': str(r.get('ENTE') or '').strip(), 'cnpj': domain.digits(r.get('CNPJ')),
-                       'name': str(r.get('NAME') or '').strip()}
+                       'name': str(r.get('NAME') or '').strip(),
+                       'aliases': domain.aliases_of(r.get('ALIASES'))}
     return out
 
 
@@ -50,7 +51,13 @@ def le_token(legal):
         return ''
     if s in ('JPM', 'MGT', 'LAWTON', 'ATACAMA'):
         return s
-    if s.startswith('BANCOJP'):
+    # o código/nome cadastrado da entidade no texto (`efin-declarant`, ALIASES)
+    for le, d in declarants().items():
+        if domain.alias_hit(legal, d.get('aliases') or ()):
+            return le
+    # "BANCO J.P. MORGAN" e a abreviação do Athena, "BCO J.P. MORGAN S.A. 2768
+    # - GEM BR - RATES" (o Owner Legal Entity do swap)
+    if s.startswith(('BANCOJP', 'BCOJP')):
         return 'JPM'
     if s.startswith('JPMORGANCHASE'):
         return 'MGT'
@@ -277,7 +284,8 @@ def ops_events(day, trades, closings, refdata=None):
         out.append(_ev(day, 'ops', len(out), legal=r.get('_legal'), account=r.get('_party_account'),
                        internal_id=r.get('internal_id'), b3_id=b3, product=product, lob=lob,
                        kinds=kinds, value=r.get('_settle_n'), b3_value=r.get('_b3_n'),
-                       counterparty=cpty, taxid=taxid, trade_date=r.get('_trade_date'),
+                       counterparty=cpty, taxid=taxid, cpty_account=r.get('_cpty_account'),
+                       trade_date=r.get('_trade_date'),
                        maturity=r.get('_maturity'), premium=domain.num(r.get('_premium')),
                        premium_date=r.get('_premium_date'),
                        holder=domain.holder_of(r.get('_premium_side')),
