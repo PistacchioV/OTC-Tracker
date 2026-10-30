@@ -156,6 +156,42 @@ def parse_date(v):
     return None
 
 
+_DMY_NO_TEXTO = re.compile(r'(?<!\d)(\d{1,2})[/.-](\d{1,2})[/.-](\d{4}|\d{2})(?!\d)')
+_YMD_NO_TEXTO = re.compile(r'(?<!\d)(\d{4})[/.-](\d{1,2})[/.-](\d{1,2})(?!\d)')
+_EXCEL_ZERO = date(1899, 12, 30)
+
+
+def cgd_date(v):
+    """A data do CGD como a equipe a cadastra — mais tolerante que `parse_date`
+    porque o valor é DIGITADO (ou veio de importação de planilha): dd/mm/aaaa,
+    dd-mm-aaaa, dd.mm.aaaa, aaaa-mm-dd, a data no meio de um texto ("CGD
+    03/06/2015 assinado") e o número de série do Excel (42158 = 03/06/2015).
+    None quando não há data (o "Sim", o "N/A")."""
+    d = parse_date(v)
+    if d:
+        return d
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        n = int(v)
+    else:
+        s = str(v or '').strip()
+        n = int(float(s)) if re.fullmatch(r'\d{5}(\.0+)?', s) else None
+        if n is None:
+            for rx, ordem in ((_YMD_NO_TEXTO, (0, 1, 2)), (_DMY_NO_TEXTO, (2, 1, 0))):
+                m = rx.search(s)
+                if not m:
+                    continue
+                a, mes, dia = (int(m.group(i + 1)) for i in ordem)
+                if a < 100:
+                    a += 2000 if a < 70 else 1900
+                try:
+                    return date(a, mes, dia)
+                except ValueError:
+                    continue
+            return None
+    # série do Excel entre 1954 e 2119 (fora disso o número não é data)
+    return _EXCEL_ZERO + timedelta(days=n) if 20000 <= n <= 80000 else None
+
+
 def iso(v):
     d = parse_date(v)
     return d.isoformat() if d else ''
@@ -534,6 +570,10 @@ def row_of(o):
         'CGD Date': dmy(o.get('cgd_date')),
         # de onde veio a data do CGD: refdata · trackdocs · edit (o tooltip)
         'cgd_src': o.get('cgd_src') or '',
+        # sem data: POR QUÊ (no_taxid · not_in_refdata · cgd_empty ·
+        # cgd_pending · cgd_not_date) e com o quê (spn, value, taxid)
+        'cgd_why': o.get('cgd_why') or '',
+        'cgd_why_params': o.get('cgd_why_params') or {},
         'PAG_TP': o.get('pag_tp') or '',
         'missing': o.get('missing') or [],
     }

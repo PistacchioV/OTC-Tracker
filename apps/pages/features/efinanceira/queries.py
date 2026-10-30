@@ -132,28 +132,50 @@ def _refdata_spns():
     return por_cnpj, por_nome
 
 
-def refdata_cgd_index():
-    """({CNPJ: data ISO}, {nome: data ISO}) — a data do CGD no Reference Data:
-    por SPN, o PRIMEIRO item Active do CGD da contraparte no Counterparty
-    Details cujo valor é uma data (a regra do `_conf_cgd_lookup`; o Pending do
-    maker/checker não vale). Banco ocupado SOBE (503), nunca vira "sem data"."""
+# O ESTADO do CGD de um SPN no Counterparty Details, do melhor para o pior:
+# com data; com valor que não é data; só Pending; sem CGD nenhum.
+_CGD_ORDEM = {'date': 0, 'cgd_not_date': 1, 'cgd_pending': 2, 'cgd_empty': 3}
+
+
+def _cpd_cgd():
+    """{SPN: (estado, valor)} do Counterparty Details do Reference Data: o 1º
+    item Active cujo valor é uma data (`date`, valor ISO — a regra do
+    `_conf_cgd_lookup` das confirmações); sem ele, o Active com texto
+    (`cgd_not_date`), o que só está Pending (`cgd_pending`) ou nada
+    (`cgd_empty`). Banco ocupado SOBE (503), nunca vira "sem data"."""
     R = _R()
-    por_spn = {}
+    out = {}
     for rec in R._cpd_load() or []:
         spn = R._norm_spn(rec.get('SPN'))
-        if not spn or spn in por_spn:
+        if not spn or spn in out:
             continue
-        for item in R._cgd_norm(rec.get('CGD')):
-            d = domain.parse_date(item.get('value')) if (item.get('status') or 'Active') == 'Active' else None
-            if d:
-                por_spn[spn] = d.isoformat()
-                break
+        itens = [i for i in R._cgd_norm(rec.get('CGD')) if str(i.get('value') or '').strip()]
+        ativos = [i for i in itens if (i.get('status') or 'Active') == 'Active']
+        d = next((domain.cgd_date(i['value']) for i in ativos if domain.cgd_date(i['value'])), None)
+        if d:
+            out[spn] = ('date', d.isoformat())
+        elif ativos:
+            out[spn] = ('cgd_not_date', str(ativos[0]['value']).strip())
+        elif itens:
+            out[spn] = ('cgd_pending', str(itens[0]['value']).strip())
+        else:
+            out[spn] = ('cgd_empty', '')
+    return out
+
+
+def refdata_cgd_index():
+    """({CNPJ: (estado, valor, SPN)}, {nome: (estado, valor, SPN)}) — o CGD de
+    cada contraparte do Reference Data, chegando pelo CNPJ ou pelo nome; com
+    mais de um SPN, o de MELHOR estado (o que tem data, primeiro). SPN sem
+    registro no Counterparty Details é `cgd_empty`."""
+    cpd = _cpd_cgd()
     por_cnpj, por_nome = _refdata_spns()
 
-    def data_de(spns):
-        return next((por_spn[x] for x in spns if x in por_spn), '')
-    return ({k: v for k, v in ((k, data_de(x)) for k, x in por_cnpj.items()) if v},
-            {k: v for k, v in ((k, data_de(x)) for k, x in por_nome.items()) if v})
+    def melhor(spns):
+        return min(((cpd.get(x) or ('cgd_empty', '')) + (x,) for x in spns),
+                   key=lambda c: _CGD_ORDEM[c[0]])
+    return ({k: melhor(v) for k, v in por_cnpj.items() if v},
+            {k: melhor(v) for k, v in por_nome.items() if v})
 
 
 def cgd_index():
@@ -167,7 +189,7 @@ def cgd_index():
             continue
         if cgd_docs.outcome(r) == 'cancelled':
             continue
-        d = next((domain.parse_date(r.get(c)) for c in CGD_DATE_COLUMNS if domain.parse_date(r.get(c))), None)
+        d = next((domain.cgd_date(r.get(c)) for c in CGD_DATE_COLUMNS if domain.cgd_date(r.get(c))), None)
         if not d:
             continue
         le = domain.norm(r.get('Legal Entity'))
@@ -370,14 +392,30 @@ _INV = {campo: col for col, (campo, _t) in domain.EDIT_COLS.items()}
 
 
 def cgd_of_op(o, rdcgd, cgd):
-    """(data ISO, fonte) do CGD da operação: o Reference Data pelo CNPJ e, sem
-    ele, pelo nome; depois o Tracking Docs. Fonte `refdata`/`trackdocs`/''."""
+    """(data ISO, fonte, motivo, parâmetros) do CGD da operação: o Reference
+    Data pelo CNPJ e, sem ele, pelo nome; depois o Tracking Docs. Sem data, o
+    MOTIVO, para a tela dizer o que corrigir e onde (equipe, 30/10/2026):
+
+      no_taxid       — a linha sem CNPJ e o nome fora do Reference Data;
+      not_in_refdata — o CNPJ (nem o nome) não está no Reference Data;
+      cgd_empty      — a contraparte (SPN) não tem CGD cadastrado;
+      cgd_pending    — o CGD está só Pending (falta o checker);
+      cgd_not_date   — o CGD Active tem um texto que não é data."""
     por_cnpj, por_nome = rdcgd
-    d = por_cnpj.get(domain.cnpj_key(o.get('taxid'))) or por_nome.get(domain.alnum(o.get('counterparty')))
-    if d:
-        return d, 'refdata'
+    ck = domain.cnpj_key(o.get('taxid'))
+    hit = por_cnpj.get(ck) if ck else None
+    if not hit or hit[0] != 'date':
+        nm = por_nome.get(domain.alnum(o.get('counterparty')))
+        if nm and (not hit or _CGD_ORDEM[nm[0]] < _CGD_ORDEM[hit[0]]):
+            hit = nm
+    if hit and hit[0] == 'date':
+        return hit[1], 'refdata', '', {}
     d = cgd_of(cgd, o.get('le'), o.get('taxid'))
-    return (d, 'trackdocs') if d else ('', '')
+    if d:
+        return d, 'trackdocs', '', {}
+    if hit:
+        return '', '', hit[0], {'spn': hit[2], 'value': hit[1]}
+    return '', '', ('not_in_refdata' if ck else 'no_taxid'), {'taxid': str(o.get('taxid') or '')}
 
 
 def operations(doc, ym, decl=None, cgd=None, rdcgd=None):
@@ -432,11 +470,12 @@ def operations(doc, ym, decl=None, cgd=None, rdcgd=None):
         o['orig'] = {c: o.get(c) for c in fields}
         domain.finish(o, fields)
         # digitada (a correção, o Add Row) vence; senão o Reference Data e,
-        # sem ele, o Tracking Docs — e a linha diz de onde veio
-        if 'cgd_date' in fields or o.get('cgd_date'):
-            o['cgd_src'] = 'edit' if o.get('cgd_date') else ''
+        # sem ele, o Tracking Docs — e a linha diz de onde veio, ou por que
+        # não veio. A correção que APAGA a data volta à busca automática.
+        if o.get('cgd_date'):
+            o['cgd_src'], o['cgd_why'], o['cgd_why_params'] = 'edit', '', {}
         else:
-            o['cgd_date'], o['cgd_src'] = cgd_of_op(o, rdcgd, cgd)
+            o['cgd_date'], o['cgd_src'], o['cgd_why'], o['cgd_why_params'] = cgd_of_op(o, rdcgd, cgd)
         o['review'] = e.get('status') or ''
         o['review_by'] = (e.get('checker_name') or e.get('checker') or e.get('maker_name') or e.get('maker') or '')
         o['review_at'] = e.get('checked_at') or e.get('at') or ''
