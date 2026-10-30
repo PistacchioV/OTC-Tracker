@@ -180,8 +180,9 @@ def _expandida(cols, valores, escolha, section=None):
     for i, n in enumerate(nomes):
         tipo = catalogo.get(n) if i < len(catalogo) else None
         kind = domain.kind_of(tipo) if tipo else None
-        if tipo is None and any(isinstance(l[i], domain.Rows) for l in linhas):
-            meta.append({'name': n, 'type': 'JSON', 'kind': 'section'})
+        marca = next((l[i] for l in linhas if isinstance(l[i], domain.Rows)), None) if tipo is None else None
+        if marca is not None:
+            meta.append({'name': n, 'type': 'JSON', 'kind': 'section', 'section': marca.path or n})
             continue
         if tipo is None or kind in ('text', None):
             achado = domain.infer_kind([l[i] for l in linhas])
@@ -237,10 +238,24 @@ def rows(rel, schema, table, limit, expand=None, section=None):
             out.update(columns=meta, rows=linhas, readonly=motivo or 'expanded')
             return out
         meta = [{'name': n, 'type': str(t), 'kind': domain.kind_of(t)} for n, t in cols]
+        # No dataset TIPADO do armazém, `_raw` é a linha inteira de novo em
+        # JSON e `_seq` só a ordem: nascem escondidas (o Columns as mostra).
+        if store and set(names) - set(domain.STORE_BOOKKEEPING):
+            for c in meta:
+                if c['name'] in domain.STORE_BOOKKEEPING:
+                    c['hidden'] = True
         if motivo is None:
             linhas = [[r[0], domain.row_hash(r[1:])] + [domain.cell(v) for v in r[1:]] for r in dados]
         else:
             linhas = [[None, None] + [domain.cell(v) for v in r] for r in dados]
+            # A `__meta` do armazém com só valores SOLTOS (`"no_recipient"`)
+            # grava cada um como JSON: sai o valor, não o texto com aspas.
+            if store:
+                for i, n in enumerate(names):
+                    escalares = domain.json_scalars([r[i] for r in valores]) if n in ('value', '_raw') else None
+                    if escalares is not None:
+                        for linha, v in zip(linhas, escalares):
+                            linha[i + 2] = domain.cell(v)
         out.update(columns=meta, rows=linhas, readonly=motivo)
         return out
     return _ler(path, fn)

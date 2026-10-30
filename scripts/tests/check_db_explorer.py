@@ -52,6 +52,7 @@ PAYREC = {
     'pending_payment': [],
     'branch': {'b2b_settlement': False, 'trades': None},
     'tags': ['x', 'y'],
+    'gt30': {'monthly': [{'m': '2026-09', 'n': 3}], 'note': 'x'},
 }
 
 LEDGER = {
@@ -181,14 +182,23 @@ def main():
     linha = [[0, json.dumps(PAYREC)]]
     check('as seções são as listas de registros, com a contagem',
           domain.sections(linha, 1) == [{'name': 'summary', 'rows': 2}, {'name': 'settled', 'rows': 2},
-                                         {'name': 'pending_payment', 'rows': 0}], domain.sections(linha, 1))
+                                         {'name': 'pending_payment', 'rows': 0},
+                                         {'name': 'gt30 › monthly', 'rows': 1}], domain.sections(linha, 1))
+    nomes, linhas, _ = domain.expand(['_seq', '_raw'], linha, 1, section='gt30 › monthly')
+    check('seção ANINHADA pelo caminho', nomes == ['m', 'n'] and linhas == [['2026-09', 3]], nomes)
     check('objeto de objetos (o ledger) não tem seção — já abre em linhas',
           domain.sections([[0, json.dumps(LEDGER)]], 1) == [])
     nomes, linhas, _ = domain.expand(['_seq', '_raw'], linha, 1)
     check('visão geral: os campos soltos, cada seção pela contagem (não o JSON)',
           nomes == ['success', 'recon_date', 'summary', 'settled', 'pending_payment', 'branch.b2b_settlement',
-                    'branch.trades', 'tags'] and linhas[0][2:5] == [2, 2, 0]
-          and isinstance(linhas[0][3], domain.Rows), nomes)
+                    'branch.trades', 'tags', 'gt30.monthly', 'gt30.note'] and linhas[0][2:5] == [2, 2, 0]
+          and isinstance(linhas[0][3], domain.Rows) and linhas[0][8].path == 'gt30 › monthly', nomes)
+    check('__meta com valor solto ao lado de objeto ainda é coluna JSON',
+          domain.json_columns(['key', 'value'], [['v', '3'], ['m', json.dumps({'a': 1})]]) == ['value'])
+    check('...texto que parece JSON e não é recusa', domain.json_columns(['x'], [['[abc'], [json.dumps([1])]]) == [])
+    check('JSON de valor solto decodifica (sem as aspas)',
+          domain.json_scalars(['"no_recipient"', '3', None]) == ['no_recipient', 3, None]
+          and domain.json_scalars(['"a"', '{"b": 1}']) is None and domain.json_scalars(['abc']) is None)
     nomes, linhas, _ = domain.expand(['_seq', '_raw'], linha, 1, section='settled')
     check('a seção pedida: uma linha por registro, os campos em colunas',
           nomes == ['client', 'jpm_value', 'manual_rows'] and [l[:2] for l in linhas] == [['MARAJO', 10.5], ['SUZANO', 7.25]],
@@ -332,6 +342,10 @@ def main():
     check('gravar no armazém: 409 readonly_store', r.status_code == 409 and r.get_json()['code'] == 'readonly_store')
 
     print('== 5. JSON em colunas pela API ==')
+    d = rows('bank_name', db='zz-armazem/teste.db').get_json()
+    check('dataset tipado do armazém: _seq e _raw nascem escondidas',
+          {c['name']: c.get('hidden') for c in d['columns']} == {'NAME': None, '_seq': True, '_raw': True}
+          and d['expanded'] is None, d['columns'])
     d = rows('ledger__meta', db='zz-armazem/teste.db').get_json()
     check('a __meta do armazém abre expandida', d['expanded'] == 'value' and d['readonly'] == 'store'
           and [c['name'] for c in d['columns']][:4] == ['key', 'value › key', 'name', 'due'], d.get('expanded'))
@@ -347,7 +361,7 @@ def main():
     d = rows('d_20261015__raw', db='zz-armazem/teste.db').get_json()
     check('o dia do Pay/Rec abre na visão geral, com as seções listadas',
           d['expanded'] == '_raw' and d['section'] is None and len(d['rows']) == 1
-          and [x['name'] for x in d['sections']] == ['summary', 'settled', 'pending_payment']
+          and [x['name'] for x in d['sections']] == ['summary', 'settled', 'pending_payment', 'gt30 › monthly']
           and [c['kind'] for c in d['columns'] if c['name'] in ('summary', 'settled')] == ['section', 'section'],
           [(c['name'], c['kind']) for c in d['columns']])
     d = m.post('/api/database-explorer/rows', json={'db': 'zz-armazem/teste.db', 'schema': 'main',
@@ -372,12 +386,16 @@ def main():
     tpl = open(os.path.join(ROOT, 'apps', 'templates', 'pages', 'database-explorer.html'), encoding='utf-8').read()
     js = open(os.path.join(ROOT, 'apps', 'static', 'js', 'pages', 'database-explorer.js'), encoding='utf-8').read()
     check('o seletor do dia na barra', 'id="dbxDay"' in tpl)
+    check('JSON na célula nunca sai cru: texto ou link que abre a janela com a tabela',
+          'function jsonCell(' in js and '.dbx-json-link' in js and 'id="dbxJsonModal"' in tpl
+          and "visible: !c.hidden" in js)
     check('o seletor da seção na barra, e a contagem abre a seção',
           'id="dbxSection"' in tpl and "section: S.section || null" in js and '.dbx-sec-link' in js)
     for lang in ('en', 'br', 'es'):
         tr = json.load(open(os.path.join(ROOT, 'apps', 'static', 'data', 'translations', lang + '.json'), encoding='utf-8'))
         check('textos da seção em %s' % lang, all(k in tr for k in (
-            'dbx-section-overview', 'dbx-section', 'dbx-sec-rows', 'dbx-expanded-section', 'dbx-expanded-overview')))
+            'dbx-section-overview', 'dbx-section', 'dbx-sec-rows', 'dbx-expanded-section', 'dbx-expanded-overview',
+            'dbx-json-items', 'dbx-json-fields', 'dbx-json-empty', 'dbx-json-back', 'dbx-json-close')))
     check('o filtro do dia é um ext.search próprio (o column().search() o funil zera)',
           'jQuery.fn.dataTable.ext.search.push' in js and 'row[S.dayCol + 2] === S.day' in js)
     check('a visão expandida por data abre ordenada pelo dia', "order: S.dayCol >= 0 ? [[off + S.dayCol, 'asc']] : []" in js)

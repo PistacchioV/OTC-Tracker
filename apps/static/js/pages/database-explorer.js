@@ -324,13 +324,64 @@
         if (typeof v === 'number' && c.kind === 'float') return v.toLocaleString('en-US', { maximumFractionDigits: 8 });
         return shown(c, v);
     }
+    // ── JSON dentro da célula: nunca o texto cru ────────────────────────────
+    // Lista de valores simples vira o texto deles separados por vírgula; lista
+    // de registros ou objeto vira um link ("3 rows ›", "5 fields ›") que abre a
+    // janela com a tabela. O Export segue com o JSON cru (é o dado gravado).
+    var JSON_MEMO = new Map();
+    function asJson(v) {
+        if (v !== null && typeof v === 'object') return v;
+        if (typeof v !== 'string') return undefined;
+        var s0 = v.charAt(0);
+        if (s0 !== '[' && s0 !== '{') return undefined;
+        if (JSON_MEMO.has(v)) return JSON_MEMO.get(v);
+        var out;
+        try { out = JSON.parse(v); } catch (e) { out = undefined; }
+        if (out !== null && typeof out !== 'object') out = undefined;
+        if (JSON_MEMO.size > 5000) JSON_MEMO.clear();
+        JSON_MEMO.set(v, out);
+        return out;
+    }
+    function nRows(n) {
+        return n === 1 ? t('dbx-sec-row', '1 row') : t('dbx-sec-rows', '{n} rows', { n: fmtInt(n) });
+    }
+    function isPlain(x) { return x === null || typeof x !== 'object'; }
+    // o texto curto que a célula mostra no lugar do JSON (e o funil compara)
+    function jsonLabel(j) {
+        if (Array.isArray(j)) {
+            if (!j.length) return t('dbx-json-empty', 'empty');
+            if (j.every(isPlain)) return j.map(function (x) { return x === null ? 'NULL' : String(x); }).join(', ');
+            if (j.every(function (x) { return x && typeof x === 'object' && !Array.isArray(x); })) {
+                return nRows(j.length);
+            }
+            return t('dbx-json-items', '{n} items', { n: fmtInt(j.length) });
+        }
+        var n = Object.keys(j).length;
+        return n ? t('dbx-json-fields', '{n} fields', { n: fmtInt(n) }) : t('dbx-json-empty', 'empty');
+    }
+    // abre na janela? (lista de valores simples e vazio já se leem na célula)
+    function jsonOpens(j) {
+        if (Array.isArray(j)) return j.length > 0 && !j.every(isPlain);
+        return Object.keys(j).length > 0;
+    }
+    function jsonCell(j, attrs) {
+        var lab = esc(jsonLabel(j));
+        if (!jsonOpens(j)) return '<span class="dbx-json-flat">' + lab + '</span>';
+        return '<a href="#" class="dbx-json-link" ' + attrs + '>' + lab + ' <i class="ti ti-chevron-right"></i></a>';
+    }
+
     function cellRender(c) {
-        return function (v, type) {
+        return function (v, type, _row, meta) {
             if (c.kind === 'section' && v != null) {
                 // a contagem da seção abre a seção (visão geral do objeto)
-                if (type === 'display') return '<a href="#" class="dbx-sec-link" data-sec="' + esc(c.name) + '">' +
-                    esc(t('dbx-sec-rows', '{n} rows', { n: fmtInt(v) })) + ' <i class="ti ti-chevron-right"></i></a>';
+                if (type === 'display') return '<a href="#" class="dbx-sec-link" data-sec="' + esc(c.section || c.name) + '">' +
+                    esc(nRows(v)) + ' <i class="ti ti-chevron-right"></i></a>';
                 return v;
+            }
+            var j = (type === 'display' || type === 'filter' || type === 'sort') ? asJson(v) : undefined;
+            if (j !== undefined) {
+                if (type !== 'display') return jsonLabel(j);
+                return jsonCell(j, 'data-r="' + meta.row + '" data-c="' + meta.col + '" data-name="' + esc(c.name) + '"');
             }
             if (type === 'display') {
                 if (v === null || v === undefined) return '<span class="dbx-null">NULL</span>';
@@ -376,7 +427,7 @@
     function colsMenu(off) {
         var items = S.data.columns.map(function (c, i) {
             return '<li class="dropdown-item"><div class="form-check">' +
-                '<input class="form-check-input dbx-colvis" type="checkbox" data-column="' + (i + off) + '" id="dbxCv' + i + '" checked>' +
+                '<input class="form-check-input dbx-colvis" type="checkbox" data-column="' + (i + off) + '" id="dbxCv' + i + '"' + (c.hidden ? '' : ' checked') + '>' +
                 '<label class="form-check-label fw-medium" for="dbxCv' + i + '">' + esc(c.name) + '</label></div></li>';
         }).join('');
         el('dbxColsSlot').innerHTML =
@@ -516,7 +567,7 @@
                         render: function (r, type) { return type === 'display' ? actions(r[0]) : ''; } });
         }
         d.columns.forEach(function (c, i) {
-            cols.push({ data: i + 2, render: cellRender(c), defaultContent: '' });
+            cols.push({ data: i + 2, render: cellRender(c), defaultContent: '', visible: !c.hidden });
         });
         S.dt = jQuery(tb).DataTable({
             data: d.rows,
@@ -753,6 +804,105 @@
     jQuery('#dbxTableWrap').on('click', '.dbx-del', function () { apaga([+this.getAttribute('data-rid')]); });
     el('dbxBatchEdit').addEventListener('click', function () { if (S.sel.size) openEdit('batch'); });
     el('dbxBatchDelete').addEventListener('click', function () { if (S.sel.size) apaga(Array.from(S.sel.keys())); });
+
+    // ── a janela do JSON: a tabela que mora numa célula ──────────────────────
+    // Uma pilha: o JSON dentro do JSON abre por cima, e o Back volta.
+    var JW = { stack: [], reg: [] };
+    function flatObj(o, prefix, out) {
+        Object.keys(o).forEach(function (k) {
+            var x = o[k], nome = prefix + k;
+            if (x && typeof x === 'object' && !Array.isArray(x) && Object.keys(x).length && !jsonOpensAsRows(x)) {
+                flatObj(x, nome + '.', out);
+            } else {
+                out[nome] = x;
+            }
+        });
+        return out;
+    }
+    function jsonOpensAsRows(o) {
+        var ks = Object.keys(o);
+        return ks.length > 0 && ks.every(function (k) { return o[k] && typeof o[k] === 'object' && !Array.isArray(o[k]); });
+    }
+    function jwCell(x) {
+        if (x === null || x === undefined) return '<span class="dbx-null">NULL</span>';
+        if (typeof x === 'object') {
+            if (!jsonOpens(x)) return esc(jsonLabel(x));
+            JW.reg.push(x);
+            return '<a href="#" class="dbx-json-link" data-j="' + (JW.reg.length - 1) + '">' + esc(jsonLabel(x)) +
+                ' <i class="ti ti-chevron-right"></i></a>';
+        }
+        if (typeof x === 'number') return esc(x.toLocaleString('en-US', { maximumFractionDigits: 8 }));
+        if (typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x)) return esc(dmy(x));
+        return esc(String(x));
+    }
+    // registros (lista de objetos, ou objeto de objetos com a chave na frente)
+    function jwRecords(recs, keyName) {
+        var campos = [], vistos = {};
+        var linhas = recs.map(function (r) {
+            var f = flatObj(r.rec, '', {});
+            Object.keys(f).forEach(function (k) { if (!vistos[k]) { vistos[k] = 1; campos.push(k); } });
+            return { key: r.key, f: f };
+        });
+        var head = (keyName ? '<th>' + esc(keyName) + '</th>' : '') + campos.map(function (k) { return '<th>' + esc(k) + '</th>'; }).join('');
+        var body = linhas.map(function (l) {
+            return '<tr>' + (keyName ? '<td>' + esc(l.key) + '</td>' : '') +
+                campos.map(function (k) { return '<td>' + jwCell(l.f[k]) + '</td>'; }).join('') + '</tr>';
+        }).join('');
+        return { head: head, body: body, n: linhas.length };
+    }
+    function jwTable(v) {
+        var t0;
+        if (Array.isArray(v)) {
+            if (v.every(function (x) { return x && typeof x === 'object' && !Array.isArray(x); })) {
+                t0 = jwRecords(v.map(function (x) { return { rec: x }; }), null);
+            } else {
+                t0 = { head: '<th>#</th><th>' + esc(t('dbx-json-value', 'value')) + '</th>', n: v.length,
+                       body: v.map(function (x, i) { return '<tr><td>' + (i + 1) + '</td><td>' + jwCell(x) + '</td></tr>'; }).join('') };
+            }
+        } else if (jsonOpensAsRows(v)) {
+            t0 = jwRecords(Object.keys(v).map(function (k) { return { key: k, rec: v[k] }; }), t('dbx-json-key', 'key'));
+        } else {
+            var f = flatObj(v, '', {});
+            t0 = { head: '<th>' + esc(t('dbx-json-field', 'field')) + '</th><th>' + esc(t('dbx-json-value', 'value')) + '</th>',
+                   n: Object.keys(f).length,
+                   body: Object.keys(f).map(function (k) { return '<tr><td class="text-start fw-semibold">' + esc(k) + '</td><td class="text-start">' + jwCell(f[k]) + '</td></tr>'; }).join('') };
+        }
+        return '<div class="otc-mini-table-wrap"><table class="otc-mini-table dbx-json-table"><thead><tr>' + t0.head +
+            '</tr></thead><tbody>' + t0.body + '</tbody></table></div>';
+    }
+    function jwPaint() {
+        var top = JW.stack[JW.stack.length - 1];
+        JW.reg = [];
+        el('dbxJsonTitle').textContent = JW.stack.map(function (s) { return s.title; }).join(' › ');
+        el('dbxJsonBody').innerHTML = jwTable(top.value);
+        el('dbxJsonBack').classList.toggle('d-none', JW.stack.length < 2);
+    }
+    function jwOpen(title, value, fresh) {
+        if (fresh) JW.stack = [];
+        JW.stack.push({ title: title, value: value });
+        jwPaint();
+        if (fresh) bootstrap.Modal.getOrCreateInstance(el('dbxJsonModal')).show();
+    }
+    jQuery('#dbxTableWrap').on('click', '.dbx-json-link', function (e) {
+        e.preventDefault();
+        var r = +this.getAttribute('data-r'), c = +this.getAttribute('data-c');
+        var row = S.dt && S.dt.row(r).data();
+        var col = S.dt && S.dt.settings()[0].aoColumns[c];
+        var j = row && col ? asJson(row[col.mData]) : undefined;
+        if (j === undefined) return;
+        var quem = S.table ? S.table.name : '';
+        jwOpen(quem + ' · ' + this.getAttribute('data-name'), j, true);
+    });
+    jQuery('#dbxJsonBody').on('click', '.dbx-json-link', function (e) {
+        e.preventDefault();
+        var x = JW.reg[+this.getAttribute('data-j')];
+        if (x === undefined) return;
+        var cel = this.closest('td'), th = cel && cel.closest('table').querySelectorAll('thead th')[cel.cellIndex];
+        jwOpen(th ? th.textContent : '…', x, false);
+    });
+    el('dbxJsonBack').addEventListener('click', function () {
+        if (JW.stack.length > 1) { JW.stack.pop(); jwPaint(); }
+    });
 
     // ── barra ────────────────────────────────────────────────────────────────
     el('dbxLoad').addEventListener('click', function () { loadRows(false); });
