@@ -57,6 +57,7 @@
 #efin-table td.efin-ell { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
 #efin-table td.efin-miss { box-shadow: inset 0 0 0 1px var(--otc-danger); color: var(--otc-danger); }
 #efin-table .efin-tag { margin-left: 4px; }
+#efin-table .efin-why { font-size: .72rem; font-weight: 600; white-space: nowrap; cursor: help; }
 #efinEditModal .efin-blk { padding: 12px 14px; border-radius: var(--otc-r-md); background: var(--otc-fill); box-shadow: inset 0 0 0 1px var(--otc-sep); }
 #efinEditModal .efin-blk h6 { font: 700 .72rem/1.2 var(--otc-font); letter-spacing: .06em; text-transform: uppercase; color: var(--otc-text-2); margin: 0 0 10px; }
 </style>
@@ -284,6 +285,11 @@
               lastFile: 'Last file:', noFile: 'No file generated for this month yet.', days: 'Days imported:',
               month: 'Month', incomplete: 'Incomplete', missingTip: 'Missing for the file: {fields}',
               cgdSrc_refdata: 'From the Reference Data (the counterparty\'s active CGD)', cgdSrc_trackdocs: 'From Onboarding › Track Docs (no CGD in the Reference Data)', cgdSrc_edit: 'Typed on this page',
+              cgdWhyS_no_taxid: 'No Tax ID', cgdWhyL_no_taxid: 'The row has no Tax ID and the counterparty name is not in the Reference Data — the CGD is found through them. Fix the counterparty in the Reference Data, or fill in the Tax ID (Edit).',
+              cgdWhyS_not_in_refdata: 'Not in Reference Data', cgdWhyL_not_in_refdata: 'The Tax ID {taxid} (and the counterparty name) is not in the Reference Data. Register the counterparty there, with its CGD.',
+              cgdWhyS_cgd_empty: 'No CGD in Reference Data', cgdWhyL_cgd_empty: 'The counterparty (SPN {spn}) has no CGD in the Reference Data. Register the CGD date there.',
+              cgdWhyS_cgd_pending: 'CGD pending approval', cgdWhyL_cgd_pending: 'The CGD of SPN {spn} ({value}) is still Pending in the Reference Data — another user approves it.',
+              cgdWhyS_cgd_not_date: 'CGD is not a date', cgdWhyL_cgd_not_date: 'The CGD of SPN {spn} in the Reference Data is "{value}", not a date. Edit it there with the date (dd/mm/yyyy).',
               editTip: 'Edit', confirmTip: 'Confirm the edit', deleteTip: 'Delete', cancel: 'Cancel',
               editDone: 'Row(s) edited — pending confirmation', approveDone: 'Edit confirmed', delDone: 'Row(s) deleted',
               delTitle: 'Delete {n} row(s)?', delText: 'The account leaves the month and a new import does not bring it back.', delOk: 'Delete',
@@ -319,6 +325,11 @@
               lastFile: 'Último arquivo:', noFile: 'Nenhum arquivo gerado neste mês ainda.', days: 'Dias importados:',
               month: 'Mês', incomplete: 'Incompleta', missingTip: 'Falta para o arquivo: {fields}',
               cgdSrc_refdata: 'Do Reference Data (o CGD ativo da contraparte)', cgdSrc_trackdocs: 'Do Onboarding › Track Docs (sem CGD no Reference Data)', cgdSrc_edit: 'Digitada nesta tela',
+              cgdWhyS_no_taxid: 'Sem Tax ID', cgdWhyL_no_taxid: 'A linha está sem Tax ID e o nome da contraparte não está no Reference Data — é por eles que o CGD é achado. Corrija a contraparte no Reference Data, ou preencha o Tax ID (Edit).',
+              cgdWhyS_not_in_refdata: 'Fora do Reference Data', cgdWhyL_not_in_refdata: 'O Tax ID {taxid} (e o nome da contraparte) não está no Reference Data. Cadastre a contraparte lá, com o CGD.',
+              cgdWhyS_cgd_empty: 'Sem CGD no Reference Data', cgdWhyL_cgd_empty: 'A contraparte (SPN {spn}) não tem CGD no Reference Data. Cadastre a data do CGD lá.',
+              cgdWhyS_cgd_pending: 'CGD aguardando aprovação', cgdWhyL_cgd_pending: 'O CGD do SPN {spn} ({value}) ainda está Pending no Reference Data — outro usuário aprova.',
+              cgdWhyS_cgd_not_date: 'CGD não é data', cgdWhyL_cgd_not_date: 'O CGD do SPN {spn} no Reference Data é "{value}", não uma data. Edite lá com a data (dd/mm/aaaa).',
               editTip: 'Editar', confirmTip: 'Confirmar a edição', deleteTip: 'Excluir', cancel: 'Cancelar',
               editDone: 'Linha(s) editada(s) — aguardando confirmação', approveDone: 'Edição confirmada', delDone: 'Linha(s) excluída(s)',
               delTitle: 'Excluir {n} linha(s)?', delText: 'A conta sai do mês e um novo import não a traz de volta.', delOk: 'Excluir',
@@ -354,6 +365,11 @@
               lastFile: 'Último archivo:', noFile: 'Ningún archivo generado en este mes todavía.', days: 'Días importados:',
               month: 'Mes', incomplete: 'Incompleta', missingTip: 'Falta para el archivo: {fields}',
               cgdSrc_refdata: 'Del Reference Data (el CGD activo de la contraparte)', cgdSrc_trackdocs: 'De Onboarding › Track Docs (sin CGD en el Reference Data)', cgdSrc_edit: 'Escrita en esta pantalla',
+              cgdWhyS_no_taxid: 'Sin Tax ID', cgdWhyL_no_taxid: 'La fila no tiene Tax ID y el nombre de la contraparte no está en el Reference Data — por ellos se encuentra el CGD. Corrija la contraparte en el Reference Data, o complete el Tax ID (Edit).',
+              cgdWhyS_not_in_refdata: 'Fuera del Reference Data', cgdWhyL_not_in_refdata: 'El Tax ID {taxid} (y el nombre de la contraparte) no está en el Reference Data. Registre la contraparte allí, con el CGD.',
+              cgdWhyS_cgd_empty: 'Sin CGD en el Reference Data', cgdWhyL_cgd_empty: 'La contraparte (SPN {spn}) no tiene CGD en el Reference Data. Registre la fecha del CGD allí.',
+              cgdWhyS_cgd_pending: 'CGD pendiente de aprobación', cgdWhyL_cgd_pending: 'El CGD del SPN {spn} ({value}) todavía está Pending en el Reference Data — otro usuario lo aprueba.',
+              cgdWhyS_cgd_not_date: 'El CGD no es fecha', cgdWhyL_cgd_not_date: 'El CGD del SPN {spn} en el Reference Data es "{value}", no una fecha. Edítelo allí con la fecha (dd/mm/aaaa).',
               editTip: 'Editar', confirmTip: 'Confirmar la edición', deleteTip: 'Eliminar', cancel: 'Cancelar',
               editDone: 'Fila(s) editada(s) — pendiente de confirmación', approveDone: 'Edición confirmada', delDone: 'Fila(s) eliminada(s)',
               delTitle: '¿Eliminar {n} fila(s)?', delText: 'La cuenta sale del mes y una nueva importación no la trae de vuelta.', delOk: 'Eliminar',
@@ -468,9 +484,14 @@
                     return statusPill(r);
                 }
                 if (type !== 'display') { return v; }
-                // a data do CGD diz de onde veio (Reference Data, Track Docs, digitada)
+                // a data do CGD diz de onde veio (Reference Data, Track Docs,
+                // digitada) — e, sem data, POR QUÊ e onde corrigir
                 if (c.name === 'CGD Date' && v && r.cgd_src) {
                     return '<span title="' + esc(t('cgdSrc_' + r.cgd_src)) + '">' + esc(v) + '</span>';
+                }
+                if (c.name === 'CGD Date' && !v && r.cgd_why) {
+                    return '<span class="efin-why" title="' + esc(fill(t('cgdWhyL_' + r.cgd_why), r.cgd_why_params)) +
+                           '"><i class="ti ti-alert-circle"></i> ' + esc(t('cgdWhyS_' + r.cgd_why)) + '</span>';
                 }
                 if (c.kind === 'ell') { return '<span title="' + esc(v) + '">' + esc(v) + '</span>'; }
                 return esc(v);

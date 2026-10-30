@@ -3042,7 +3042,11 @@ São **55**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   CGD *Active* com data do Counterparty Details, por SPN (a regra do
   `_conf_cgd_lookup` das confirmações), chegando pelo CNPJ e, sem ele, pelo
   nome — e só sem ela a do Tracking Docs (Signature Date, senão Emissão; o
-  mais antigo do CNPJ); a célula diz a fonte (`cgd_src`, §738). Correção em `edits` (4-olhos, o
+  mais antigo do CNPJ); a célula diz a fonte (`cgd_src`, §738) e, SEM data,
+  o motivo (`cgd_why`: no_taxid · not_in_refdata · cgd_empty · cgd_pending ·
+  cgd_not_date, §742). A data do CGD é lida por `domain.cgd_date` (dd-mm,
+  dd.mm, série do Excel, data no meio do texto), e a correção que APAGA a data
+  volta à busca automática. Correção em `edits` (4-olhos, o
   desenho do WHT §702); o arquivo RECUSA linha pendente ou incompleta (LE, B3
   ID, Tax ID, CGD Date). `check_efinanceira.py`.
 
