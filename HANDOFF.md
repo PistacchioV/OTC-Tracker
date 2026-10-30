@@ -31604,3 +31604,24 @@ da tabela, e nunca a refaz.
 `check_quotes.py`: as duas conferências antigas (a linha existe, montada antes
 do `.DataTable()`) viraram o contrário — a linha não existe e o JS não a
 procura.
+
+## §741 — Os botões do modal de Edit da E-Financeira e do WHT: squircle, não círculo (2026-10-30)
+
+**Pedido da equipe:** os botões do modal de Edit das páginas da E-Financeira
+tinham de seguir o padrão quadrado arredondado, não círculo.
+
+**O que havia:** o rodapé do modal (Cancel `ti-x` vermelho · Save
+`ti-device-floppy` verde) era `btn btn-icon rounded-circle` — o desenho do
+modal do WHT (§702), de onde o da E-Financeira (§736) foi copiado. O squircle
+da casa (32×32, raio 10px) é a regra do tema §6b, mas ela só alcança
+`table td .btn.btn-act`: fora da célula, o `btn-act` não tem forma — o Database
+Explorer e o Index B3, que já escreviam `btn-act` no rodapé dos seus modais,
+saíam em pílula.
+
+**Correção:** o tema ganhou `.modal-footer .btn.btn-act` com a mesma geometria
+das ações de linha, e os modais da E-Financeira e do WHT passaram a
+`btn btn-sm btn-danger btn-act` / `btn btn-sm btn-success btn-act`. De quebra,
+os rodapés do Database Explorer e do Index B3 ficam como já pretendiam. Medido
+no Chromium (o modal aberto pelo Add Row, claro e escuro): 32×32, raio 10px.
+`check_row_action_buttons.py` §8 prende a regra no SCSS e no CSS compilado e
+os dois rodapés (sem `rounded-circle`).

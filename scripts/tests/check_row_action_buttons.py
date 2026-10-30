@@ -184,5 +184,21 @@ check('Intrag DCE Option: Edit/info ti-edit · Delete/danger ti-trash · Approve
       re.findall(r'btn (btn-\w+) btn-sm rounded-circle btn-row-\w+" href="#" title="\w+"><i class="ti (ti-[\w-]+)"', DCE),
       [('btn-info', 'ti-edit'), ('btn-danger', 'ti-trash'), ('btn-success', 'ti-check'), ('btn-primary', 'ti-brand-telegram')])
 
+# O botao de ICONE do rodape de modal e o MESMO squircle (equipe, 30/10/2026:
+# "quadrado arredondado, nao circulo"), pela classe `btn-act` — a regra do
+# `table td` nao alcanca o rodape, e o modal do WHT/E-Financeira era circulo.
+print('\n== 8. o rodape de modal: squircle pelo btn-act ==')
+rodape = re.search(r'\.modal-footer \.btn\.btn-act \{(.*?)\n\}', VR, re.S)
+check('otc.scss: o rodape de modal tem a regra do squircle (32px, raio 10px)',
+      bool(rodape) and 'border-radius: 10px !important' in rodape.group(1)
+      and 'width: 32px !important' in rodape.group(1), True)
+check('otc.css compilado tem a regra', '.modal-footer .btn.btn-act' in read('apps/static/css/otc.css'), True)
+for tela, modal in (('efinanceira.html', 'efinEditModal'), ('wht.html', 'whtEditModal')):
+    corpo = read('apps/templates/pages/' + tela).split('id="%s"' % modal, 1)[1]
+    pe = corpo.split('class="modal-footer', 1)[1].split('</div>', 1)[0]
+    check('%s: Cancel/danger + Save/success com btn-act, sem rounded-circle' % tela,
+          (re.findall(r'class="btn btn-sm (btn-\w+) btn-act"', pe), 'rounded-circle' in pe),
+          (['btn-danger', 'btn-success'], False))
+
 print('\nFALHAS: %d' % len(fails))
 sys.exit(1 if fails else 0)
