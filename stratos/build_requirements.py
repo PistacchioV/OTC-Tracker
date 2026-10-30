@@ -21,23 +21,26 @@ RAIZ = os.path.dirname(AQUI)
 ORIGEM = os.path.join(RAIZ, 'requirements.txt')
 DESTINO = os.path.join(AQUI, 'requirements.txt')
 
-# Verbatim do template (requirements.txt do singing-moose-flask). Não mexa:
-# é o bloco que o pipeline do Stratos espera encontrar intacto.
+# O bloco do template (requirements.txt do singing-moose-flask). As marcas e as
+# linhas são as dele — é o bloco que o pipeline do Stratos espera encontrar —,
+# mas os PISOS sobem quando o scanner de dependências do pipeline os acusa
+# defasados (`*-outdated`, 30/10/2026): o pip já instalaria a versão nova com o
+# `>=`; o scanner cobra o piso perto da última versão do Artifactory.
 TEMPLATE = """\
 ########### DO NOT DELETE ###########
 --index-url=https://artifacts-read.gkp.jpmchase.net/artifactory/api/pypi/pypi/simple/
 
-setuptools>=70.0.0
+setuptools>=84.2.1
 stratos-config==1.0.12
-stratos-blocks>=1.3.19
+stratos-blocks>=1.6.31
 Flask==3.1.2
 werkzeug==3.1.6
 pytest==9.1.1
 pytest-cov==7.1.0
 # OpenTelemetry (sends traces to the ADOT sidecar on http://localhost:4318).
-opentelemetry-api>=1.29.0
-opentelemetry-sdk>=1.29.0
-opentelemetry-exporter-otlp-proto-http>=1.29.0
+opentelemetry-api>=1.45.2
+opentelemetry-sdk>=1.45.2
+opentelemetry-exporter-otlp-proto-http>=1.45.2
 opentelemetry-instrumentation-flask>=0.50b0
 opentelemetry-instrumentation-requests>=0.50b0
 json-log-formatter>=1.1
@@ -58,6 +61,32 @@ NAO_USADOS = {
     'python-dotenv': 'run.py da raiz',
     'gunicorn': 'servidor da instancia do time',
     'waitress': 'servidor da instancia do time',
+}
+
+
+# Os PISOS do Stratos para o que vem da raiz (30/10/2026, o mesmo scanner): o
+# requirements.txt da raiz é o da instância do time e fica como está; aqui a
+# linha é TROCADA pela do Stratos. Os números são as últimas versões do
+# Artifactory que o scanner apontou; os testes do Stratos (a prova das travas
+# com o portalocker 4 inclusive) rodaram com elas. Pacote que sai da raiz some
+# daqui sozinho (a troca só vale para o que a raiz declara).
+#
+# O DUCKDB FICA COM O TETO `<2` da raiz, mesmo com o scanner pedindo o 2.0: o
+# 2.0 lê e grava banco do 1.x sem estragá-lo, mas banco CRIADO pelo 2.0 não
+# abre no 1.x ("version number 999") — e o armazém cria `.db` o tempo todo.
+# Qualquer volta de banco do Stratos para a instância do time (backup, rollback
+# da virada) e o exporta_dados/recover da máquina do JPM leriam esses bancos
+# como ilegíveis. Subir o teto é decisão de todas as instâncias juntas (§651).
+STRATOS_PISOS = {
+    'jinja2': 'Jinja2>=3.1.6',
+    'pandas': 'pandas>=3.1.0',
+    'extract-msg': 'extract-msg>=0.56.1',
+    'portalocker': 'portalocker>=4.4.2',
+    'reportlab': 'reportlab>=5.0.1',
+    'cryptography': 'cryptography>=50.0.2',
+    'python-dateutil': 'python-dateutil>=3.0.0',
+    'rapidfuzz': 'rapidfuzz>=3.14.6',
+    'pypdf': 'pypdf>=6.21.2',
 }
 
 
@@ -88,7 +117,7 @@ def gera():
     for n, req in otc:
         if n in do_template or n in NAO_USADOS:
             continue
-        linhas.append(req)
+        linhas.append(STRATOS_PISOS.get(n, req))
     return TEMPLATE + '\n'.join(linhas) + '\n'
 
 

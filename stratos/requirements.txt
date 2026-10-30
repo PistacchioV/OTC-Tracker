@@ -1,17 +1,17 @@
 ########### DO NOT DELETE ###########
 --index-url=https://artifacts-read.gkp.jpmchase.net/artifactory/api/pypi/pypi/simple/
 
-setuptools>=70.0.0
+setuptools>=84.2.1
 stratos-config==1.0.12
-stratos-blocks>=1.3.19
+stratos-blocks>=1.6.31
 Flask==3.1.2
 werkzeug==3.1.6
 pytest==9.1.1
 pytest-cov==7.1.0
 # OpenTelemetry (sends traces to the ADOT sidecar on http://localhost:4318).
-opentelemetry-api>=1.29.0
-opentelemetry-sdk>=1.29.0
-opentelemetry-exporter-otlp-proto-http>=1.29.0
+opentelemetry-api>=1.45.2
+opentelemetry-sdk>=1.45.2
+opentelemetry-exporter-otlp-proto-http>=1.45.2
 opentelemetry-instrumentation-flask>=0.50b0
 opentelemetry-instrumentation-requests>=0.50b0
 json-log-formatter>=1.1
@@ -25,16 +25,16 @@ pywin32==311; sys_platform == 'win32'
 ########### ADD YOUR OTHER REQUIREMENTS HERE ###########
 # Gerado por stratos/build_requirements.py a partir do requirements.txt
 # da raiz do OTC Tracker. Nao edite a mao: rode o script.
-Jinja2>=3.1
-pandas>=2.0
+Jinja2>=3.1.6
+pandas>=3.1.0
 openpyxl>=3.1
 xlrd>=2.0.1
-extract-msg>=0.45
+extract-msg>=0.56.1
 duckdb>=0.10,<2
-portalocker==3.2.0
-reportlab>=4.0
-cryptography>=42.0
-python-dateutil>=2.8
-rapidfuzz>=3.0
+portalocker>=4.4.2
+reportlab>=5.0.1
+cryptography>=50.0.2
+python-dateutil>=3.0.0
+rapidfuzz>=3.14.6
 requests-negotiate-sspi>=0.5.2; sys_platform == "win32"
-pypdf>=4.0
+pypdf>=6.21.2
