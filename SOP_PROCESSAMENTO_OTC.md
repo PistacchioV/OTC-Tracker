@@ -317,7 +317,7 @@ Bate o IR das liquidações de cada decêndio (1–10, 11–20, 21–fim do mês
 
 #### E-Financeira — o arquivo mensal
 
-Quatro páginas, uma por sistema: **KAPITAL** (swap CEM/CEMHYB), **ATHENA-NDF** (NDF de moeda e de commodities), **ATHENA-FXO** (opção de moeda e de commodities) e **PYRAMID** (tudo da EDG). Escolha o mês, clique em **Import Settlements** (traz as liquidações e as opções vencidas do mês para as quatro páginas), confira os cartões e a comparação Interno × B3, complete as linhas **Incomplete** (LE, B3 ID, Tax ID, data do CGD) e clique em **Generate File**: o CSV do mês vai para `I:\Confirmation\Derivativos\OTC Tracker\Regulatory\E-Financeira\AAAA\MM. Mês`. O arquivo não sai com linha pendente de confirmação nem incompleta.
+Quatro páginas, uma por sistema: **KAPITAL** (swap CEM/CEMHYB), **ATHENA-NDF** (NDF de moeda e de commodities), **ATHENA-FXO** (opção de moeda e de commodities) e **PYRAMID** (tudo da EDG). Escolha o mês, clique em **Import Settlements** (traz as liquidações e as opções vencidas do mês para as quatro páginas), confira os cartões e a comparação Interno × B3, complete as linhas **Incomplete** (LE, B3 ID, Tax ID, data do CGD — a data e o CNPJ vêm do Reference Data: cadastre lá) e clique em **Generate File**: o CSV do mês vai para `I:\Confirmation\Derivativos\OTC Tracker\Regulatory\E-Financeira\AAAA\MM. Mês`. O arquivo não sai com linha pendente de confirmação nem incompleta.
 
 ![E-Financeira — ATHENA-FXO](docs/sop-screenshots/regulatory_e-financeira_athena-fxo.png)
 

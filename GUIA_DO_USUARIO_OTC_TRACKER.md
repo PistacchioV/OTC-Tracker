@@ -1778,7 +1778,7 @@ O valor que a liquidação **recebeu** do cliente não entra em coluna nenhuma d
 1. O **Reference month** abre no último dia do mês anterior — o mês que acabou de fechar. Troque a data para ver outro mês.
 2. Clique em **Import Settlements**. Ele roda em segundo plano e mostra quantos dias já leu: pode fechar a janela, a faixa acima da tabela acompanha e a tela se atualiza sozinha no fim. O aviso amarelo lista os dias do mês que ainda não foram importados.
 3. Confira os cartões — **Accounts**, **Closed in the month**, **With payment**, **Internal × B3 to check**, **Incomplete** e **Pending** (clicar num cartão filtra a tabela) — e os totais logo abaixo.
-4. Complete as linhas **Incomplete**: a célula que falta fica em vermelho (LE, B3 ID, Tax ID ou CGD Date). Use o **Edit**.
+4. Complete as linhas **Incomplete**: a célula que falta fica em vermelho (LE, B3 ID, Tax ID ou CGD Date). Para o **CGD Date** e o **Tax ID**, o certo é cadastrar na origem — o CNPJ e o CGD da contraparte no **Reference Data** (o CGD só vale depois de aprovado, *Active*) — e recarregar a página: a data passa a valer para todos os meses e para as confirmações. O **Edit** corrige só aquela linha, naquele mês.
 5. Clique em **Generate File**. O arquivo é gravado em `I:\Confirmation\Derivativos\OTC Tracker\Regulatory\E-Financeira\AAAA\MM. Mês` (substituindo o do mês, se já houver) e baixado. Ele **não sai** com linha **Pending** nem com linha incompleta — a mensagem diz quais.
 
 **Os status:**
