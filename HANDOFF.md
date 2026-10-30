@@ -31733,3 +31733,36 @@ tem meio-termo nem altura configurável.
 folga do DataTables = a barra real e a rolagem máxima do cabeçalho = a do corpo
 nas tabelas criadas antes e depois do helper (sem a correção do helper, três
 falhas).
+
+## §745 — O arquivo do Opt FXO volta a ser um só (2026-10-30)
+
+**Pedido da equipe:** "arquivo de opção FXO é tudo em um só, não precisa
+quebrar em dois arquivos das operações Banco e operações Lawton, já que o
+header é único."
+
+**O que havia:** o §646, ao pôr a conta da visão no nome dos arquivos da New,
+separou as Opções por visão — a linha do Lawton ia para o
+`00041007.FXO_Lawton.txt` e a do Banco para o `73760009.FXO_Banco.txt`. Mas o
+header do OPC é um só: o Participante (`Entidade que gerou o Arquivo`) é Fixed
+`JPMORGANBM` no template base E nas variantes, e o §646 já anotava isso. O
+arquivo do Lawton saía com o header do Banco.
+
+**Correção:** no `api_fxo_send_conecta` a chave do `out_files` é sempre a
+visão de quem gera o arquivo (`_OPC_FXO_FILE_VIEW = 'JPM'`, o Participante do
+header): as linhas do cliente, do Banco e do Lawton vão no mesmo
+`73760009.FXO_Banco.txt`, e o Opt FXO não pede mais a conta do Lawton no
+`b3-accounts`. O par de pernas segue escolhendo a VARIANTE de cada linha (as
+contas Fixed por par); só um `file_name` dado a uma variante no cadastro abriria
+outro arquivo, sempre na visão do header. Vale para a DCE FXO, que usa o mesmo
+endpoint (`73760009.FXO_DCE_Banco.txt`).
+
+**O que NÃO mudou:** o Opt Commodities segue com um arquivo por visão
+(`OPC_Banco.txt` e `00041007.OPC_Lawton.txt`) — o pedido foi só do FXO, e o
+header dele é o mesmo; se a equipe quiser o mesmo lá, é a mesma troca no
+`api_send_conecta`.
+
+`check_conecta_file_name.py` §3/§4: o Opt FXO num arquivo só (header do Banco
++ a linha do cliente + a do Lawton, cada uma com as suas contas), o preview
+com `FXO_Banco.txt`, o Opt FXO gravando sem a conta do Lawton e recusando sem a
+do Banco; o Opt Commodities em dois arquivos, e é ele que prova agora que a
+recusa vem antes do primeiro arquivo.
