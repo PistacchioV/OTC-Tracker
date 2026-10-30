@@ -3579,6 +3579,11 @@ São **55**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   desfazia a navegação no meio da digitação. Data futura é puxada para hoje (o
   `maxDate`), e texto pela metade volta à última data válida ao fechar — quem
   reescreve é o próprio plugin, no `hide`.
+- **A tabela não tem linha de filtro por coluna** (§740): ela é REFEITA a cada
+  busca, e o funil remove a linha do DOM na 1ª montagem (§597) — a 2ª busca a
+  limpava pelo id, estourava com `null` antes do fetch e deixava na tela as
+  linhas da moeda ANTERIOR, com o Search travado. Tela que refaz a DataTable
+  não referencia a linha de filtro por id. `check_quotes.py`.
 
 ### Save CETIP Files
 
@@ -3900,7 +3905,13 @@ São **55**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   trocar o DuckDB; troca de DuckDB é de todas as máquinas juntas. Por isso o
   `requirements.txt` diz **`duckdb>=0.10,<2`** (§653): o PyPI já entrega o
   2.0.0, e todo Python NOVO (o 3.13 que o `.bat` instala) faz `pip install`
-  do zero. Subir o teto é decisão de todas as instâncias juntas.
+  do zero. Subir o teto é decisão de todas as instâncias juntas. **A exceção
+  é o Stratos** (equipe, 30/10/2026, §739): a branch dele pede `duckdb>=2.0.0`
+  (`stratos/build_requirements.py`, `STRATOS_PISOS`; a raiz segue `<2`). O 2.0
+  lê, grava e refaz o WAL de banco do 1.x sem estragá-lo, então os pacotes do
+  share chegam e abrem; mas banco CRIADO lá não abre no 1.x — banco do Stratos
+  não volta à instância Windows (backup, rollback da virada) nem passa pelo
+  `exporta_dados`/`recover_duckdb_wal` de uma máquina no 1.x.
 
 ---
 
