@@ -156,6 +156,12 @@ def secao_dominio():
     check('Interno × B3 pela tolerância da tela de origem (NDF Summary 5,00)',
           o9['difference'] == 4.0 and o9['b3_check'] == 'OK', o9)
 
+    print('== 3b. a data do CGD como a equipe a cadastra ==')
+    cg = [D.cgd_date(x) for x in ('03/06/2015', '03-06-2015', '03.06.2015', '2015-06-03 00:00:00', '42158',
+                                  42158, 'CGD 03/06/2015 assinado', '3/6/15', 'Sim', 'N/A', '', '99999')]
+    check('dd/mm, dd-mm, dd.mm, ISO, série do Excel, data no texto, ano de 2 dígitos; texto sem data é None',
+          cg == [date(2015, 6, 3)] * 8 + [None] * 4, cg)
+
     print('== 4. o arquivo ==')
     exemplo_hdr = ('num_ente_declarante;cnpjdeclarante;num_ente_declarado;declarado_ni;anomescaixa;conta_tp;'
                    'conta_subtp;conta_tpnum;conta_agencia;conta_num;conta_reportpais;conta_notitulares;'
@@ -302,12 +308,33 @@ def secao_api():
         {'SPN': '00009002', 'CGD': [{'value': 'N/A', 'status': 'Active'},
                                     {'value': '2017-08-09', 'status': 'Active'}]},
         {'SPN': '9003', 'CGD': []},
+        {'SPN': '9004', 'CGD': [{'value': '10/10/2019', 'status': 'Pending'}]},
+        {'SPN': '9005', 'CGD': [{'value': 'Sim', 'status': 'Active'}]},
+        {'SPN': '9006', 'CGD': [{'value': '42158', 'status': 'Active', 'maker': 'IMPORT'}]},
     ]
-    Q._refdata_spns = lambda: ({'55555555000155': ['9001'], '33435231000187': ['9003']},
+    Q._refdata_spns = lambda: ({'55555555000155': ['9001'], '33435231000187': ['9003'],
+                                '10101010000110': ['9004'], '20202020000120': ['9005'],
+                                '30303030000130': ['9007', '9006'], '40404040000140': ['9008']},
                                {'CLIENTEUSA': ['9002']})
     rd = Q.refdata_cgd_index()
     check('Reference Data: o 1º CGD Active com data, por CNPJ e por nome (SPN sem zero à esquerda)',
-          rd == ({'55555555000155': '2016-03-15'}, {'CLIENTEUSA': '2017-08-09'}), rd)
+          (rd[0]['55555555000155'], rd[1]['CLIENTEUSA']) == (('date', '2016-03-15', '9001'),
+                                                            ('date', '2017-08-09', '9002')), rd)
+    check('a série do Excel importada vale; com dois SPNs, o que tem data', rd[0]['30303030000130']
+          == ('date', '2015-06-03', '9006'), rd[0].get('30303030000130'))
+
+    def porque(taxid, nome='NINGUEM'):
+        return Q.cgd_of_op({'taxid': taxid, 'counterparty': nome, 'le': 'JPM'}, rd, {})
+    check('sem data, o MOTIVO: CGD vazio, Pending, texto, SPN sem registro, fora do Reference Data, sem CNPJ',
+          [porque(t)[2:] for t in ('33.435.231/0001-87', '10.101.010/0001-10', '20.202.020/0001-20',
+                                   '40.404.040/0001-40', '99.999.999/0001-99', '')]
+          == [('cgd_empty', {'spn': '9003', 'value': ''}), ('cgd_pending', {'spn': '9004', 'value': '10/10/2019'}),
+              ('cgd_not_date', {'spn': '9005', 'value': 'Sim'}), ('cgd_empty', {'spn': '9008', 'value': ''}),
+              ('not_in_refdata', {'taxid': '99.999.999/0001-99'}), ('no_taxid', {'taxid': ''})],
+          [porque(t)[2:] for t in ('33.435.231/0001-87', '10.101.010/0001-10', '20.202.020/0001-20',
+                                   '40.404.040/0001-40', '99.999.999/0001-99', '')])
+    check('sem CNPJ, mas o NOME no Reference Data: acha pelo nome', porque('', 'Cliente U SA')[:2]
+          == ('2017-08-09', 'refdata'))
     idx = Q.cgd_index()
     check('CGD: a assinatura, senão a emissão; o mais antigo; cancelado e CSA de fora',
           (Q.cgd_of(idx, 'MGT', '33435231000187'), Q.cgd_of(idx, 'JPM', '22.222.222/0001-22'),
@@ -377,6 +404,8 @@ def secao_api():
     sf, at = py['26J08689634'], py['26J08689635']
     check('Banco Safra: Total Crédito, titular NO, sem CGD (o cancelado não vale) → incompleta',
           sf['Total Credit'] == 81192.50 and sf['Premium Holder'] == 'NO' and sf['missing'] == ['CGD Date'], sf)
+    check('...e a linha diz POR QUÊ: o CNPJ dela não está no Reference Data',
+          (sf['cgd_why'], sf['cgd_why_params']) == ('not_in_refdata', {'taxid': '58.160.789/0001-28'}), sf)
     check('Atacama: Total Débito e Pagamento, titular YES, Interno × B3 a conferir (42,50 > 20)',
           (at['Total Debit'], at['Accumulated Payment'], at['Premium Holder'], at['Difference'], at['b3_check'])
           == (81192.50, 81192.50, 'YES', -42.5, 'Check'), at)
@@ -441,6 +470,24 @@ def secao_api():
               == 'Approved', ok.get('error'))
     finally:
         Config.FOUR_EYES = False
+    # apagar a data digitada volta à busca automática (e ao motivo)
+    k_at = at['key']
+    cl.post('/api/efinanceira/pyramid/edit', json={'date': '2026-09-15', 'items': [
+        {'key': k_at, 'changes': {'CGD Date': '2001-01-01'}}]})
+    e2 = cl.post('/api/efinanceira/pyramid/edit', json={'date': '2026-09-15', 'items': [
+        {'key': k_at, 'changes': {'CGD Date': ''}}]}).get_json()
+    at2 = {x['key']: x for x in e2['rows']}[k_at]
+    check('apagar a data digitada devolve a do Track Docs (01/02/2019), não deixa em branco',
+          (at2['CGD Date'], at2['cgd_src']) == ('01/02/2019', 'trackdocs'), (at2['CGD Date'], at2['cgd_src']))
+    # quem editou foi o B000002: outra pessoa confirma (o 4-olhos)
+    Config.FOUR_EYES = True
+    try:
+        sessao('C000003')
+        ap = cl.post('/api/efinanceira/pyramid/approve', json={'date': '2026-09-15', 'items': [{'key': k_at}]})
+        check('...e outra pessoa confirma a correção', ap.status_code == 200, ap.get_json())
+    finally:
+        Config.FOUR_EYES = False
+        sessao('B000002')
     arq = cl.post('/api/efinanceira/pyramid/generate', json={'date': '2026-09-15'})
     corpo = arq.data.decode('cp1252')
     caminho = os.path.join(share, '2026', '09. September', 'PYRAMID_202609.csv')
