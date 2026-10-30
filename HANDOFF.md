@@ -31358,3 +31358,96 @@ varredura de TODAS as 716 tabelas dos 224 bancos da dev, pela mesma
 Ficam como estão: tabela vazia (nada a mostrar) e as colunas de texto comum.
 `check_db_explorer.py` ganhou as cinco (seção aninhada, `__meta` mista,
 escalar sem aspas, `_raw`/`_seq` escondidos, a célula/janela na tela).
+
+## §736 — Regulatory › E-financeira: as quatro páginas e o arquivo mensal (2026-10-30)
+
+**Pedido da equipe:** as páginas da E-Financeira (o menu já tinha os quatro
+itens, que davam 404) e a lógica do arquivo, pela especificação em imagens: a
+tabela da página, o layout do CSV (31 colunas, coluna a coluna), a página × o
+nome do arquivo × os produtos, e o caminho no share. No meio do trabalho, mais
+um pedido: um campo de valor para comparar **B3 × interno** na tabela.
+
+**Desenho:** `features/efinanceira`, uma vertical, um template, QUATRO páginas
+(`/regulatory/e-financeira/kapital|athena-ndf|athena-fxo|pyramid`), cada uma
+com as operações dela e o arquivo dela:
+
+| Página | Arquivo | Produtos |
+|---|---|---|
+| ATHENA-FXO | `ATHENA_FXO_EFINAN_AAAAMM.csv` | opção FX e de commodities |
+| ATHENA-NDF | `ATHENA_NDF_EFINAN_AAAAMM.csv` | NDF FX e de commodities |
+| KAPITAL | `KAPITAL_SWAP_EFINAN_AAAAMM.csv` | swap CEM/CEMHYB |
+| PYRAMID | `PYRAMID_AAAAMM.csv` | opção, NDF e swap da EDG |
+
+- **De onde vem o dado:** o molde do WHT (§692/§694) — as MESMAS linhas das
+  telas de liquidação, nunca uma segunda leitura dos arquivos. O Import
+  Settlements do MÊS (trabalho em segundo plano, dias em paralelo, um para as
+  quatro páginas) grava, por dia × fonte, os EVENTOS: `ndf` (o `email_trades`
+  do NDF Summary), `ops` (o Trade Level do Other Products) e `exp` (as opções
+  da posição que vencem no dia — a opção que expira sem caixa não aparece em
+  tela de liquidação nenhuma, e é ela que leva o Saldo do prêmio recebido e a
+  data de encerramento). A operação (a linha) é montada na LEITURA.
+- **As colunas do arquivo** (`domain.aggregate`/`finish`): Total Crédito =
+  prêmios RECEBIDOS no mês; Total Débito = prêmios PAGOS no mês; Pagamento
+  Acumulado = o que o banco pagou no mês, prêmio incluído (`pag_tp` FATCA504
+  com valor, 999 sem); Saldo = o prêmio recebido na VIDA, só quando a operação
+  ENCERROU no mês; Data de Encerramento = vencimento, exercício, expiração ou
+  recompra TOTAL. As cinco linhas do exemplo da equipe são o teste (§3).
+- **Ganchos aditivos nas telas de liquidação:** o `email_trades` ganhou
+  `maturity` e `b3_value`; as linhas do aviso de termo de mercadoria e de opção
+  ganharam vencimento, prêmio, quem paga o prêmio e a conta da parte, que o
+  Trade Level passa como `_maturity`/`_premium`/`_premium_date`/`_premium_side`/
+  `_party_account`/`_taxid`; o swap, `_maturity` (o `venc` que ele já
+  calculava). Nenhum consumidor existente lê essas chaves (conferido).
+- **Total × parcial da recompra:** `unwinds.commands.encerramentos(ref)` (Fase 1
+  e catálogo), pela MESMA `domain.recompra_total` do Termo e do Pending. Sem
+  resposta, a data de encerramento fica em branco e a tela avisa.
+- **A entidade:** pela CONTA da parte quando a linha a traz (`b3-accounts`) — o
+  nome da parte na posição de opção é o apelido `JPMORGANBM`, que nenhum
+  cadastro de nome reconhece; a guarda-chuva não responde (é do cliente).
+  Contraparte que é declarante = intragrupo, fora; LE fora do cadastro
+  `efin-declarant` (o Lawton do nosso lado), fora. Cada página avisa só o que
+  saiu DELA.
+- **B3 × Interno** (o pedido do meio): as colunas Internal Value, B3 Value e
+  Difference — a Diferença é o veredito, verde/âmbar, pela tolerância da tela de
+  origem (`_NDFSUM_TOL` 5,00, `_OPS_RECON_TOL` 20,00; o teste prende a
+  paridade).
+- **A data do CGD** (`conta_dtabertu`): o Tracking Docs (`cgd_docs.load_all`),
+  Doc Type CGD não cancelado, Signature Date e, sem ela, a Emissão; com vários,
+  o mais antigo (é a abertura do relacionamento); por LE × CNPJ, senão só CNPJ.
+- **Correção:** Edit/Confirm/Delete/lote/Add Row com o 4-olhos do WHT (§702),
+  em `edits` pela chave da operação (LE × B3 ID); sobrevive ao Import. O
+  arquivo RECUSA linha `Pending` e linha incompleta (LE, B3 ID, Tax ID, CGD
+  Date), dizendo quais; gerado, vai ao share (substitui o do mês) e ao
+  download, e as linhas dele ficam `Generated` até mudarem.
+
+**Decisões a confirmar com a equipe** (a especificação e o exemplo divergem, ou
+não dizem):
+
+1. `num_ente_declarado` e `conta_reportpais`: a especificação diz "não
+   preencher"; o exemplo traz `22244` e `BR`. Segui a especificação.
+2. A linha 5 do exemplo (opção CEM liquidada em 16/09) está sem Data de
+   Encerramento; pela regra ("apenas preencher se a operação foi encerrada"),
+   o app a preenche.
+3. `pag_totpgacum` com `pag_tp` 999 vai `0` (o mesmo zero dos `balanco_*` do
+   exemplo), não vazio.
+4. Operação sem nenhum valor nas colunas do arquivo (o cliente pagou o banco no
+   vencimento, ou o fluxo de swap que o banco recebeu) entra com zeros — e com
+   a data de encerramento quando encerra. Se não deve ir, é o Delete.
+5. Prêmio de SWAP pago em mês anterior ao início da E-Financeira no app: o
+   Saldo do swap só conhece o prêmio do mês (a posição não o traz de forma
+   confiável); a opção e o termo o tiram da posição.
+6. "Data do CGD" lida como a da assinatura (senão a emissão).
+7. Intragrupo Banco × MGT fica de fora; o fundo (Atacama, Lawton) como
+   contraparte entra (o exemplo traz a Atacama).
+
+`check_efinanceira.py` (novo, 99 conferências) e, sem regressão, os guardas
+(`check_soc_layers`, `check_notif_page_url`, `check_duck_writers`,
+`check_config_names`, `check_boot_lazy_paths`, `check_row_action_buttons`,
+`check_edit_modal`, `check_status_pill`, `check_table_center`,
+`check_export_padrao`, `check_theme_toggle`, `check_four_eyes`,
+`check_modal_standard`, `check_page_access_full`) e os testes das telas de
+liquidação tocadas (`check_wht`, `check_wht_edit`, `check_ops_trade_*`,
+`check_unwind_settlement/products/api/summary`, `check_ndfsum_*`,
+`check_ops_summary`, `check_ted_release`, `check_opb3_*`). O `check_ndf_advice`
+falha na dev por DADO local (o `ndfc-advice-split` do `db/` deste checkout sem
+a Mondelez); num checkout limpo passa.
