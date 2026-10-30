@@ -293,6 +293,21 @@ def secao_api():
          'CNPJ': '44.444.444/0001-44;55.555.555/0001-55;66.666.666/0001-66;77.777.777/0001-77',
          'Signature Date': '10/10/2018'},
     ]
+    # A data do CGD do REFERENCE DATA (Counterparty Details, por SPN) vem antes
+    # da do Track Docs: o Pending não vale, o texto que não é data é pulado, e
+    # sem o CNPJ no cadastro a contraparte é achada pelo nome.
+    R._cpd_load = lambda: [
+        {'SPN': '9001', 'CGD': [{'value': '01/01/2001', 'status': 'Pending'},
+                                {'value': '15/03/2016', 'status': 'Active'}]},
+        {'SPN': '00009002', 'CGD': [{'value': 'N/A', 'status': 'Active'},
+                                    {'value': '2017-08-09', 'status': 'Active'}]},
+        {'SPN': '9003', 'CGD': []},
+    ]
+    Q._refdata_spns = lambda: ({'55555555000155': ['9001'], '33435231000187': ['9003']},
+                               {'CLIENTEUSA': ['9002']})
+    rd = Q.refdata_cgd_index()
+    check('Reference Data: o 1º CGD Active com data, por CNPJ e por nome (SPN sem zero à esquerda)',
+          rd == ({'55555555000155': '2016-03-15'}, {'CLIENTEUSA': '2017-08-09'}), rd)
     idx = Q.cgd_index()
     check('CGD: a assinatura, senão a emissão; o mais antigo; cancelado e CSA de fora',
           (Q.cgd_of(idx, 'MGT', '33435231000187'), Q.cgd_of(idx, 'JPM', '22.222.222/0001-22'),
@@ -350,6 +365,10 @@ def secao_api():
     check('GE CELMA: LE MGT, Pagamento 16.395,26, encerramento e data do CGD',
           (g['LE'], g['Accumulated Payment'], g['Closing Date'], g['CGD Date'], g['Settlement Date'])
           == ('MGT', 16395.26, '15/09/2026', '03/06/2015', '15/09/2026'), g)
+    check('CGD pelo NOME no Reference Data quando o CNPJ não está lá (a recompra do CLIENTE U)',
+          (ndf['26J0UNW0002']['CGD Date'], ndf['26J0UNW0002']['cgd_src']) == ('09/08/2017', 'refdata'),
+          ndf['26J0UNW0002'])
+    check('sem CGD no Reference Data, o do Track Docs (a GE CELMA)', g['cgd_src'] == 'trackdocs', g)
     check('recompra parcial não encerra; a total encerra na data dela',
           ndf['26J0UNW0001']['Closing Date'] == '' and ndf['26J0UNW0002']['Closing Date'] == '11/09/2026')
 
@@ -375,6 +394,8 @@ def secao_api():
     check('exercida: Saldo 40.000 e Pagamento 63.000; a expiração não duplica',
           (o5['Balance'], o5['Accumulated Payment'], o5['Event'], o5['LOB'])
           == (40000.0, 63000.0, 'Settlement (Exercise)', 'CEM'), o5)
+    check('o Reference Data VENCE o Track Docs (15/03/2016 × 10/10/2018), e o Pending não vale',
+          (o5['CGD Date'], o5['cgd_src']) == ('15/03/2016', 'refdata'), (o5['CGD Date'], o5['cgd_src']))
     check('banco titular, vencida: encerra sem saldo; o CNPJ vem da posição',
           (o6['Balance'], o6['Closing Date'], o6['Tax ID'], o6['Premium Holder']) == (0.0, '16/09/2026',
                                                                                      '77.777.777/0001-77', 'YES'), o6)
@@ -398,7 +419,8 @@ def secao_api():
         {'key': sf['key'], 'changes': {'CGD Date': '2012-04-02'}}]}).get_json()
     sf2 = {x['B3 ID']: x for x in e['rows']}['26J08689634']
     check('Edit: a data do CGD corrigida, a linha Pending, completa', e['success'] and sf2['Status'] == 'Pending'
-          and sf2['CGD Date'] == '02/04/2012' and sf2['missing'] == [] and sf2['edited'] == ['CGD Date'], sf2)
+          and sf2['CGD Date'] == '02/04/2012' and sf2['missing'] == [] and sf2['edited'] == ['CGD Date']
+          and sf2['cgd_src'] == 'edit', sf2)
     ruim = cl.post('/api/efinanceira/pyramid/edit', json={'date': '2026-09-15', 'items': [
         {'key': sf['key'], 'changes': {'Total Credit': 'abc'}}]})
     check('Edit com número inválido: 400 por código', ruim.status_code == 400
