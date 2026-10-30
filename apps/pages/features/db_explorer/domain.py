@@ -341,19 +341,79 @@ def infer_kind(values):
     return 'text'
 
 
-def expand(names, rows, idx, cap=MAX_LIMIT):
+# ── SEÇÕES: as tabelas DENTRO do objeto ─────────────────────────────────────
+# O payload-objeto de uma rotina (o dia do Pay/Rec: `success`, `recon_date` e
+# as listas `summary`, `settled`, `pending_payment`…) é UM registro com várias
+# tabelas dentro. Aberto como um registro só, cada lista virava uma célula de
+# JSON cru — ilegível e sem filtro (equipe, 30/10/2026). Cada lista de
+# registros (ou objeto de objetos) é uma SEÇÃO: a tela escolhe qual abrir em
+# linhas e colunas, e a visão geral mostra os campos soltos com a contagem de
+# cada seção no lugar do JSON.
+
+
+class Rows(int):
+    """A contagem de uma seção na visão geral — um `int` para o JSON e para a
+    ordenação, marcado para a tela desenhar o link que abre a seção."""
+
+
+def _is_section(x):
+    if isinstance(x, list):
+        return all(isinstance(i, dict) for i in x)
+    return isinstance(x, dict) and bool(x) and all(isinstance(i, dict) for i in x.values())
+
+
+def _is_rowmap(v, depth=0):
+    """Objeto de objetos no topo — o `_records` já o abre em linhas (o ledger
+    por dia × contraparte), e aí ele não tem seções."""
+    return depth < EXPAND_DEPTH and isinstance(v, dict) and bool(v) and all(isinstance(x, dict) for x in v.values())
+
+
+def sections(rows, idx):
+    """[{name, rows}] das seções do JSON da coluna `idx`, na ordem em que
+    aparecem, com o total de registros somado entre as linhas da tabela."""
+    ordem, cont = [], {}
+    for r in rows:
+        v = parse_json(r[idx])
+        if not isinstance(v, dict) or _is_rowmap(v):
+            continue
+        for k, x in v.items():
+            if _is_section(x):
+                if k not in cont:
+                    cont[k] = 0
+                    ordem.append(k)
+                cont[k] += len(x)
+    return [{'name': k, 'rows': cont[k]} for k in ordem]
+
+
+def _overview(v):
+    """O objeto com cada seção trocada pela contagem dela."""
+    if not isinstance(v, dict) or _is_rowmap(v):
+        return v
+    return {k: (Rows(len(x)) if _is_section(x) else x) for k, x in v.items()}
+
+
+def expand(names, rows, idx, cap=MAX_LIMIT, section=None):
     """A visão expandida da coluna `idx`: (nomes, linhas, cortou?). As outras
     colunas da linha vão na frente (menos o `_seq`, que é só a ordem), depois
     as chaves do caminho (`<coluna> › key`) e os campos do registro, na ordem
     em que aparecem. Campo com o nome de outra coluna leva o prefixo da
     coluna expandida. Objeto vazio (o dia sem lançamento do ledger) não vira
     linha: era uma fileira de NULL para cada dia parado, e o que se procura
-    na visão expandida são os registros."""
-    alvo = names[idx]
+    na visão expandida são os registros.
+
+    `section`: a SEÇÃO do objeto a abrir (os registros dela viram as linhas);
+    sem ela, o objeto com seções sai como a visão geral (`_overview`)."""
+    alvo = section or names[idx]
     outros = [i for i, n in enumerate(names) if i != idx and n != '_seq']
     linhas, campos, vistos, nivel, cortou = [], [], set(), 0, False
     for r in rows:
         v = parse_json(r[idx])
+        if section:
+            if not isinstance(v, dict) or not _is_section(v.get(section)):
+                continue
+            v = v[section]
+        else:
+            v = _overview(v)
         for keys, rec in _records(v if v is not None else r[idx]):
             if not rec:
                 continue

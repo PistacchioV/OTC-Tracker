@@ -167,17 +167,22 @@ def tables(rel):
     return out
 
 
-def _expandida(cols, valores, escolha):
+def _expandida(cols, valores, escolha, section=None):
     """A visão EXPANDIDA (`domain.expand`) com a família de cada coluna: as
     da tabela mantêm a do catálogo (texto que é sempre data ISO vira data,
-    para a tela escrever dd/mm/aaaa), as que saíram do JSON pela dos valores."""
+    para a tela escrever dd/mm/aaaa), as que saíram do JSON pela dos valores.
+    A contagem de uma seção (visão geral) é a família `section`: a tela a
+    desenha como o link que abre a seção."""
     names = [n for n, _t in cols]
-    nomes, linhas, cortou = domain.expand(names, valores, names.index(escolha))
+    nomes, linhas, cortou = domain.expand(names, valores, names.index(escolha), section=section)
     catalogo = {n: t for n, t in cols if n != escolha and n != '_seq'}
     meta = []
     for i, n in enumerate(nomes):
         tipo = catalogo.get(n) if i < len(catalogo) else None
         kind = domain.kind_of(tipo) if tipo else None
+        if tipo is None and any(isinstance(l[i], domain.Rows) for l in linhas):
+            meta.append({'name': n, 'type': 'JSON', 'kind': 'section'})
+            continue
         if tipo is None or kind in ('text', None):
             achado = domain.infer_kind([l[i] for l in linhas])
             kind = achado if tipo is None or achado == 'date' else kind
@@ -185,14 +190,15 @@ def _expandida(cols, valores, escolha):
     return meta, [[None, None] + [domain.cell(v) for v in l] for l in linhas], cortou
 
 
-def rows(rel, schema, table, limit, expand=None):
+def rows(rel, schema, table, limit, expand=None, section=None):
     """As linhas para a grade: `[rowid, impressão, valores…]` numa tabela que
     se edita, `[None, None, valores…]` numa que não. A impressão é da linha
     INTEIRA, e é ela que a gravação confere.
 
     `expand`: a coluna JSON a abrir em linhas e colunas (`''` = como está
     gravado; `None` = o padrão, que no armazém abre a tabela "chave + JSON" já
-    expandida). A visão expandida é só leitura."""
+    expandida). A visão expandida é só leitura. `section`: a seção do objeto
+    (`domain.sections`) a abrir; fora da lista, a visão geral."""
     path = db_path(rel)
     limit = domain.clamp_limit(limit)
 
@@ -222,9 +228,12 @@ def rows(rel, schema, table, limit, expand=None):
             escolha = expand if expand in candidatos else None
         out = {'total': total, 'limit': limit, 'kind': alvo['kind'], 'store': store,
                'json_columns': candidatos, 'expanded': escolha, 'truncated': False,
-               'source_rows': len(dados)}
+               'source_rows': len(dados), 'sections': [], 'section': None}
         if escolha:
-            meta, linhas, out['truncated'] = _expandida(cols, valores, escolha)
+            secoes = domain.sections(valores, names.index(escolha))
+            sec = section if section in {s['name'] for s in secoes} else None
+            out.update(sections=secoes, section=sec)
+            meta, linhas, out['truncated'] = _expandida(cols, valores, escolha, sec)
             out.update(columns=meta, rows=linhas, readonly=motivo or 'expanded')
             return out
         meta = [{'name': n, 'type': str(t), 'kind': domain.kind_of(t)} for n, t in cols]

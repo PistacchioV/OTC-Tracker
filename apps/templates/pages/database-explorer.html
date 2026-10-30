@@ -31,6 +31,8 @@
 }
 #dbx-page .dbx-meta { min-height: 18px; margin-top: 6px; font-size: 12px; color: var(--otc-text-2); }
 #dbx-page .dbx-cell { display: inline-block; max-width: 320px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+#dbx-page .dbx-sec-link { font-weight: 600; text-decoration: none; white-space: nowrap; }
+#dbx-page .dbx-sec-link .ti { font-size: .8rem; vertical-align: -1px; }
 #dbx-page .dbx-null { color: var(--otc-text-3); font-style: italic; font-size: .72rem; }
 #dbx-page #dbxTable td { font-variant-numeric: tabular-nums; }
 #dbx-page #dbxTable tfoot th { font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; }
@@ -127,6 +129,8 @@
     <div class="d-flex flex-wrap align-items-center gap-2 mb-3 d-none" id="dbxToolbar">
         {# a coluna JSON aberta em linhas e colunas, ou a tabela como está gravada #}
         <select class="form-select form-select-sm w-auto d-none" id="dbxView" aria-label="View"></select>
+        {# o objeto com tabelas dentro (o dia do Pay/Rec): qual delas abrir em linhas e colunas #}
+        <select class="form-select form-select-sm w-auto d-none" id="dbxSection" aria-label="Section"></select>
         {# na visão expandida: um dia por vez, com a quebra inteira dele #}
         <select class="form-select form-select-sm w-auto d-none" id="dbxDay" aria-label="Day"></select>
         <span id="dbxColsSlot"></span>

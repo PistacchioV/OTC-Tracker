@@ -689,7 +689,12 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   "chave + JSON" do armazém (`__meta`, `__raw`, `_seq`/`_raw`) já abre assim, e
   o seletor View volta ao cru; com uma coluna de data ela abre ordenada pelo
   dia, o seletor Day mostra UM dia com a quebra inteira dele, e o rodapé soma
-  as colunas decimais do que está filtrado. A visão expandida é só leitura. Toda gravação
+  as colunas decimais do que está filtrado. **Objeto com TABELAS dentro** (o dia
+  do Pay/Rec: `summary`, `settled`, `pending_payment`…) tem SEÇÕES
+  (`domain.sections`, §735): toda lista de registros ou objeto de objetos de
+  um objeto misto. A visão geral mostra os campos soltos com a CONTAGEM de cada
+  seção (`domain.Rows`, um link que a abre) no lugar do JSON cru, e o seletor
+  Section abre a escolhida em linhas e colunas. A visão expandida é só leitura. Toda gravação
   loga `[db-explorer]` em WARNING com SID, banco, tabela e colunas.
 - **Maker/checker (4-olhos) só vale na PROD e no Stratos** (§553, §677):
   `Config.FOUR_EYES`, do bloco de ambiente (`_FOUR_EYES = False` na dev, onde
