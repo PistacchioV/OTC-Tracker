@@ -6431,6 +6431,14 @@ def _ndfadv_collect(ref, with_ir=True):
                 (_lcell(lrow, 'Data de Liquidacao do Premio'), 'Premium'),
                 (_lcell(lrow, 'Data de Vencimento'), 'Maturity')),
                 [x for x in opb3 if str(x.get('Título', '') or '').strip().upper() == titulo.upper()]),
+            # Da posição, para a E-Financeira (features/efinanceira): o
+            # vencimento (a data de encerramento), o prêmio e quem o paga (o
+            # saldo de quem encerra) e a conta da PARTE (a entidade declarante).
+            'maturity': _lcell(lrow, 'Data de Vencimento'),
+            'premium_value': _lcell(lrow, 'Valor do Premio'),
+            'premium_date': _lcell(lrow, 'Data de Liquidacao do Premio'),
+            'premium_payer': _lcell(lrow, 'Premio a ser pago pelo'),
+            'party_account': _lcell(lrow, 'Codigo da Parte'),
         })
     out.extend(_ndfadv_unwind_rows(ref, unw, opb3, spn_by_name, cpd))
     # O imposto é do BALDE da contraparte no mês, então só dá para calculá-lo
@@ -7040,6 +7048,14 @@ def _optadv_collect(ref, with_ir=True):
             'settle_type': _ops_settle_type_dates(ref, (
                 (_lcell(lrow, 'Data de Liquidação do Prêmio'), 'Premium'),
                 (_lcell(lrow, 'Data Vencimento'), 'Exercise')), mine),
+            # Da posição, para a E-Financeira (features/efinanceira): o
+            # vencimento, o prêmio total, a data dele e a posição da PARTE
+            # (Titular paga o prêmio, Lançador recebe) e a conta da parte.
+            'maturity': _lcell(lrow, 'Data Vencimento'),
+            'premium_value': _lcell(lrow, 'Valor financeiro total do prêmio'),
+            'premium_date': _lcell(lrow, 'Data de Liquidação do Prêmio'),
+            'position_side': _lcell(lrow, 'Posição da Parte'),
+            'party_account': _lcell(lrow, 'Parte (Conta)'),
         })
     out.extend(_optadv_unwind_rows(unw, opb3, spn_by_name, cpd))
     # O IR é do NET por contraparte, então só dá para calculá-lo com as linhas do
@@ -11142,6 +11158,11 @@ def _ndfsum_collect(ref):
                 'b3': b3,
                 'settle_type': settle_type,
                 'trade_date': trade_date,
+                # O vencimento da posição e o valor do lado B3: a E-Financeira
+                # (features/efinanceira) declara o encerramento do contrato e
+                # compara, operação a operação, o interno com a B3.
+                'maturity': settle_date,
+                'b3_value': b3_n,
                 'notional_fc': abs(_mtm_parse_num(row[ci['VL_NOTIONAL_FC']]) or 0.0),
                 'ccy': str(row[ci['CCY_NOTIONAL_FC']] or '').strip(),
                 'settlement': settle_n,
@@ -14352,6 +14373,23 @@ _MAPPING_DEFS = {
         ],
         'seed': [],
     },
+    # O DECLARANTE da E-Financeira por entidade nossa: o `num_ente_declarante`
+    # e o `cnpjdeclarante` do arquivo (features/efinanceira). Operação de uma
+    # entidade fora daqui não é declarada, e contraparte que está aqui é
+    # intragrupo — também fica de fora.
+    'efin-declarant': {
+        'label': 'E-Financeira — Declarant',
+        'columns': [
+            {'key': 'LE', 'label': 'Legal Entity', 'type': 'select', 'options': _MAP_LE_SPN_OPTIONS},
+            {'key': 'ENTE', 'label': 'Declarant Number (num_ente_declarante)'},
+            {'key': 'CNPJ', 'label': 'Declarant CNPJ (cnpjdeclarante)'},
+            {'key': 'NAME', 'label': 'Name'},
+        ],
+        'seed': [
+            {'LE': 'JPM', 'ENTE': '39', 'CNPJ': '33172537000198', 'NAME': 'Banco J.P. Morgan S.A.'},
+            {'LE': 'MGT', 'ENTE': '1315', 'CNPJ': '46518205000164', 'NAME': 'JPMorgan Chase Bank'},
+        ],
+    },
 }
 
 _mapping_cache = {}
@@ -15822,6 +15860,7 @@ from apps.pages.features.swap_strategy import entrypoint as _f_swap_strategy    
 from apps.pages.features.unwinds import entrypoint as _f_unwinds                # noqa: E402,F401
 _schedule_on_start('unwind-api', _f_unwinds.start_scheduler)
 from apps.pages.features.wht import entrypoint as _f_wht                      # noqa: E402,F401
+from apps.pages.features.efinanceira import entrypoint as _f_efinanceira      # noqa: E402,F401
 from apps.pages.features.projects import entrypoint as _f_projects            # noqa: E402,F401
 # os alertas das iniciativas, 08:00 BRT em dia útil (§701)
 _schedule_on_start('initiative-alerts', _f_projects.start_alerts_scheduler)

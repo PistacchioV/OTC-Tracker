@@ -1,0 +1,897 @@
+{% extends "layouts/vertical.html" %}
+
+{# E-Financeira — o arquivo mensal da Receita, uma página por sistema de origem
+   (KAPITAL, ATHENA-NDF, ATHENA-FXO, PYRAMID). Uma linha por OPERAÇÃO (a conta
+   é o B3 ID) com o que ela movimentou no mês. As colunas de DADO, na ordem da
+   tela, UMA vez: o <thead> (estático, para o I18nManager traduzir no load) e
+   o JS saem desta lista. `name` é a chave da linha que o servidor devolve;
+   `kind` diz como a célula se desenha. #}
+{% set EFIN_COLS = [
+    {'name': 'Status', 'lang': 'efin-col-status', 'kind': 'status'},
+    {'name': 'LE', 'lang': 'efin-col-le', 'kind': 'text'},
+    {'name': 'Internal ID', 'lang': 'efin-col-internal-id', 'kind': 'text'},
+    {'name': 'B3 ID', 'lang': 'efin-col-b3-id', 'kind': 'text'},
+    {'name': 'Counterparty', 'lang': 'efin-col-cpty', 'kind': 'ell'},
+    {'name': 'Tax ID', 'lang': 'efin-col-taxid', 'kind': 'text'},
+    {'name': 'Product', 'lang': 'efin-col-product', 'kind': 'text'},
+    {'name': 'LOB', 'lang': 'efin-col-lob', 'kind': 'text'},
+    {'name': 'Trade Date', 'lang': 'efin-col-trade-date', 'kind': 'text'},
+    {'name': 'Settlement Date', 'lang': 'efin-col-settle-date', 'kind': 'text'},
+    {'name': 'Premium', 'lang': 'efin-col-premium', 'kind': 'num'},
+    {'name': 'Premium Holder', 'lang': 'efin-col-holder', 'kind': 'text'},
+    {'name': 'Premium Payment Date', 'lang': 'efin-col-premium-date', 'kind': 'text'},
+    {'name': 'Event', 'lang': 'efin-col-event', 'kind': 'ell'},
+    {'name': 'Event Date', 'lang': 'efin-col-event-date', 'kind': 'text'},
+    {'name': 'Internal Value', 'lang': 'efin-col-internal', 'kind': 'num'},
+    {'name': 'B3 Value', 'lang': 'efin-col-b3', 'kind': 'num'},
+    {'name': 'Difference', 'lang': 'efin-col-diff', 'kind': 'diff'},
+    {'name': 'Total Debit', 'lang': 'efin-col-debit', 'kind': 'money'},
+    {'name': 'Total Credit', 'lang': 'efin-col-credit', 'kind': 'money'},
+    {'name': 'Balance', 'lang': 'efin-col-balance', 'kind': 'money'},
+    {'name': 'Accumulated Payment', 'lang': 'efin-col-payment', 'kind': 'money'},
+    {'name': 'Closing Date', 'lang': 'efin-col-closing', 'kind': 'text'},
+    {'name': 'CGD Date', 'lang': 'efin-col-cgd', 'kind': 'text'}
+] %}
+
+{% block title %}E-Financeira {{ page_label }}{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<style>
+{# Só o que é DESTA tela: o painel, os cards que filtram, a célula que falta
+   para o arquivo e o lote. Tabela, botões, funil e pílulas vêm do tema. #}
+#efin-page .efin-panel { padding: 1rem 1.1rem 1.15rem; }
+#efin-page .date-wrap { width: 132px; }
+#efin-page .efin-month { font-size: .74rem; color: var(--otc-text-2); }
+#efin-page .efin-month b { color: var(--otc-text); font-variant-numeric: tabular-nums; }
+#efin-page .efin-src { font-size: .72rem; color: var(--otc-text-2); }
+#efin-page .efin-src code { font-size: .72rem; }
+#efin-page .otc-stat[data-b] { cursor: pointer; }
+#efin-page .otc-stat.efin-on { box-shadow: 0 0 0 2px var(--otc-accent-ink), var(--otc-depth); }
+#efin-page .efin-cols-menu { max-height: 320px; overflow-y: auto; min-width: 14rem; font-size: .78rem; }
+#efin-page .efin-mass { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+#efin-page .efin-mass select, #efin-page .efin-mass input { width: auto; min-width: 150px; }
+#efin-table td.efin-num { font-variant-numeric: tabular-nums; }
+#efin-table td.efin-ell { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+#efin-table td.efin-miss { box-shadow: inset 0 0 0 1px var(--otc-danger); color: var(--otc-danger); }
+#efin-table .efin-tag { margin-left: 4px; }
+#efinEditModal .efin-blk { padding: 12px 14px; border-radius: var(--otc-r-md); background: var(--otc-fill); box-shadow: inset 0 0 0 1px var(--otc-sep); }
+#efinEditModal .efin-blk h6 { font: 700 .72rem/1.2 var(--otc-font); letter-spacing: .06em; text-transform: uppercase; color: var(--otc-text-2); margin: 0 0 10px; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" id="efin-page" data-page="{{ page }}">
+
+    <div class="page-title-head d-flex align-items-center mb-3">
+        <div class="flex-grow-1">
+            <h4 class="fs-xl fw-bold m-0"><span data-lang="efin-title">E-Financeira</span> · {{ page_label }}</h4>
+            <div class="otc-page-sub" data-lang="efin-subtitle">Monthly e-Financeira file by account (B3 ID): the premiums and settlements of the month</div>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="javascript: void(0);" data-lang="regulatory-title">Regulatory</a></li>
+                <li class="breadcrumb-item"><a href="javascript: void(0);" data-lang="nav-e-financeira">E-financeira</a></li>
+                <li class="breadcrumb-item active">{{ page_label }}</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="otc-page-bar">
+        <div class="otc-stats" id="efin-stats">
+            <div class="otc-stat otc-stat--total" style="--hue: var(--otc-accent)" data-b="">
+                <span class="otc-stat__label" data-lang="efin-k-total">Accounts</span>
+                <span class="otc-stat__value" id="efin-k-total">—</span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-teal)" data-b="closed">
+                <span class="otc-stat__label" data-lang="efin-k-closed">Closed in the month</span>
+                <span class="otc-stat__value" id="efin-k-closed">—</span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-indigo)" data-b="payments">
+                <span class="otc-stat__label" data-lang="efin-k-payments">With payment</span>
+                <span class="otc-stat__value" id="efin-k-payments">—</span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-orange)" data-b="b3_check">
+                <span class="otc-stat__label" data-lang="efin-k-check">Internal × B3 to check</span>
+                <span class="otc-stat__value" id="efin-k-b3_check">—</span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-danger)" data-b="missing">
+                <span class="otc-stat__label" data-lang="efin-k-missing">Incomplete</span>
+                <span class="otc-stat__value" id="efin-k-missing">—</span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-purple)" data-b="pending">
+                <span class="otc-stat__label" data-lang="efin-k-pending">Pending</span>
+                <span class="otc-stat__value" id="efin-k-pending">—</span>
+            </div>
+        </div>
+        <div class="otc-page-actions">
+            <button class="btn btn-sm btn-success bg-gradient btn-toolbar-all" id="efin-import">
+                <i class="ti ti-refresh me-1"></i><span data-lang="efin-btn-import">Import Settlements</span>
+            </button>
+            <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="efin-generate">
+                <i class="ti ti-file-export me-1"></i><span data-lang="efin-btn-generate">Generate File</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="otc-page-bar">
+        <div class="otc-stats">
+            <div class="otc-stat" style="--hue: var(--otc-green)">
+                <span class="otc-stat__label" data-lang="efin-k-credit">Total Credit</span>
+                <span class="otc-stat__value" id="efin-k-tot_credit">—</span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-danger)">
+                <span class="otc-stat__label" data-lang="efin-k-debit">Total Debit</span>
+                <span class="otc-stat__value" id="efin-k-tot_debit">—</span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-teal)">
+                <span class="otc-stat__label" data-lang="efin-k-balance">Balance</span>
+                <span class="otc-stat__value" id="efin-k-balance">—</span>
+            </div>
+            <div class="otc-stat" style="--hue: var(--otc-indigo)">
+                <span class="otc-stat__label" data-lang="efin-k-payment">Accumulated Payment</span>
+                <span class="otc-stat__value" id="efin-k-payment">—</span>
+            </div>
+        </div>
+        <div class="otc-page-actions efin-src" id="efin-src"></div>
+    </div>
+
+    <div class="efin-panel">
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+            <div class="d-flex align-items-center gap-2">
+                <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="efin-lbl-date">Reference month:</label>
+                <div class="date-wrap">
+                    <input type="text" id="efin-date" class="form-control form-control-sm otc-datefield" placeholder="dd/mm/aaaa" autocomplete="off" value="{{ ref_date }}">
+                </div>
+            </div>
+            <span class="efin-month" id="efin-month"></span>
+
+            <div class="dropdown">
+                <button class="btn btn-sm btn-soft-primary btn-toolbar-all dropdown-toggle" type="button"
+                        data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                    <i class="ti ti-columns me-1"></i><span data-lang="efin-btn-columns">Columns</span>
+                </button>
+                <div class="dropdown-menu p-2 efin-cols-menu" id="efin-cols-menu"></div>
+            </div>
+
+            <div class="dropdown">
+                <button class="btn btn-sm btn-info bg-gradient btn-toolbar-all dropdown-toggle"
+                        type="button" data-bs-toggle="dropdown">
+                    <i class="ti ti-download me-1"></i><span data-lang="efin-btn-export">Export</span>
+                </button>
+                <ul class="dropdown-menu" id="efin-export-menu">
+                    <li><a class="dropdown-item" href="#" data-exp="copy">Copy</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="csv">CSV</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="excel">Excel</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="print">Print</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="pdf">PDF</a></li>
+                </ul>
+            </div>
+
+            <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="efin-clear">
+                <i class="ti ti-filter-off me-1"></i><span data-lang="efin-btn-clear">Clear Filters</span>
+            </button>
+
+            <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="efin-add">
+                <i class="ti ti-plus me-1"></i><span data-lang="efin-btn-add">Add Row</span>
+            </button>
+
+            {# A edição e a exclusão EM LOTE: só com linha marcada. O campo do
+               valor muda de forma com a coluna escolhida (o molde do WHT). #}
+            <div class="efin-mass d-none" id="efin-mass">
+                <span class="fs-xs text-muted"><b id="efin-mass-n">0</b> <span data-lang="efin-mass-sel">selected</span></span>
+                <select id="efin-mass-col" class="form-select form-select-sm"></select>
+                <span id="efin-mass-val"></span>
+                <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="efin-mass-apply" disabled>
+                    <i class="ti ti-pencil-check me-1"></i><span data-lang="efin-mass-apply">Apply</span>
+                </button>
+                <button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all" id="efin-mass-delete">
+                    <i class="ti ti-trash me-1"></i><span data-lang="efin-mass-delete">Delete</span>
+                </button>
+            </div>
+
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <span style="font-size:.72rem;" data-lang="efin-show">Show</span>
+                <select id="efin-len" class="form-select form-select-sm"
+                        style="width:auto;font-size:.75rem;height:31px;">
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                    <option value="-1">All</option>
+                </select>
+                <span style="font-size:.72rem;" data-lang="efin-entries">entries</span>
+            </div>
+        </div>
+        <div id="efin-job"></div>
+        <div id="efin-warnings"></div>
+        <div class="table-responsive">
+            <table id="efin-table" class="table table-hover table-sm w-100 mb-0" data-export-name="E-Financeira {{ page_label }}">
+                <thead>
+                    <tr>
+                        <th class="efin-noexp"><input type="checkbox" id="efinAll" class="form-check-input"></th>
+                        <th class="efin-noexp" data-lang="efin-actions">Actions</th>
+                        {% for c in EFIN_COLS %}
+                        <th data-col="{{ c.name }}" data-lang="{{ c.lang }}">{{ c.name }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<!-- O Edit da linha: todos os campos que vão ao arquivo; vai só o que mudou -->
+<div class="modal fade" id="efinEditModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content liquid-glass">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6"><i class="ti ti-edit me-1"></i><span data-lang="efin-edit-title">Edit row — E-Financeira</span> <span id="efinEditRef" class="text-muted"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="fs-xs text-muted mb-3" id="efinEditSub" data-lang="efin-edit-sub">The correction is kept apart from the imported data and survives a new import. The row turns Pending until another user confirms it.</p>
+        <div class="efin-blk"><div class="row g-2" id="efinEditGrid"></div></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-danger btn-icon rounded-circle" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-success btn-icon rounded-circle" id="efinEditSave" title="Save"><i class="ti ti-device-floppy"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+{# jQuery ANTES do DataTables: o `vendors.min.js` do tema não o expõe. #}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script>
+(function () {   // registro síncrono do JSZip — sem ele o Excel não faz nada
+    var jz = window.JSZip || window.jszip;
+    if (jz && window.jQuery && jQuery.fn.dataTable && jQuery.fn.dataTable.Buttons &&
+        typeof jQuery.fn.dataTable.Buttons.jszip === 'function') {
+        jQuery.fn.dataTable.Buttons.jszip(jz);
+    }
+})();
+</script>
+{# SweetAlert2 LOCAL: a instância do JPM roda sem internet. #}
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+{# DEPOIS do buttons.html5 e com asset_v: o patch do Excel (§477) e o nome do arquivo. #}
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
+<script>
+(function ($) {
+    'use strict';
+
+    var _TRANS = {
+        en: { importProgress: '{done} of {total} day(s)', importBackground: 'You can close this window: the import goes on and the page refreshes when it ends.', close: 'Close',
+              importing: 'Importing the settlements of the month…',
+              importingTxt: 'Reading, for each business day of the month, what the NDF Summary and Other Products settled and the options that matured — for the four pages at once.',
+              imported: 'Settlements imported', importFail: 'Import failed',
+              importSummary: '{days} day(s), {rows} event(s).', failedDays: 'Not imported:',
+              empty: 'Nothing for this month yet — click Import Settlements.',
+              fileDone: 'File generated', fileFail: 'File not generated', fileSummary: '{n} account(s) in {name}, saved to {path}',
+              lastFile: 'Last file:', noFile: 'No file generated for this month yet.', days: 'Days imported:',
+              month: 'Month', incomplete: 'Incomplete', missingTip: 'Missing for the file: {fields}',
+              editTip: 'Edit', confirmTip: 'Confirm the edit', deleteTip: 'Delete', cancel: 'Cancel',
+              editDone: 'Row(s) edited — pending confirmation', approveDone: 'Edit confirmed', delDone: 'Row(s) deleted',
+              delTitle: 'Delete {n} row(s)?', delText: 'The account leaves the month and a new import does not bring it back.', delOk: 'Delete',
+              massCol: 'Select column to apply', massTitle: 'Apply to {n} row(s)?', massText: 'The column {col} of the selected rows becomes {v}. Each row turns Pending.', massOk: 'Apply',
+              editTitle: 'Edit row — E-Financeira', addTitle: 'Add row — E-Financeira',
+              addSub: 'An account the settlement screens did not bring. The totals you type go to the file as typed; the Balance, if left blank, comes from the premium (received and closed). The row is Pending until another user confirms it.',
+              addDone: 'Row added — pending confirmation',
+              w_missing_days: 'Business days of the month without imported settlements: {days} — click Import Settlements.',
+              w_missing_fields: '{n} row(s) cannot go to the file without: {fields}.',
+              w_no_lob: '{n} operation(s) without LOB — an EDG one belongs to PYRAMID: {sample}.',
+              w_mixed: '{n} operation(s) with premium and settlement in the same cash flow — the premium was not split out: {sample}.',
+              w_unwind_unknown: '{n} unwind(s) whose total/partial nature is unknown — the Closing Date was left blank: {sample}.',
+              w_no_value: '{n} operation(s) without the internal value in the Trade Level: {sample}.',
+              w_premium_unknown: '{n} closed option(s) without the premium in the position — the Balance stays zero: {sample}.',
+              w_intragroup: '{n} operation(s) between declaring entities (intragroup) were left out.',
+              w_not_declarant: 'Operations of an entity outside the E-Financeira — Declarant mapping were left out: {les}.',
+              e_edit_row_gone: 'The row {key} is no longer in the E-Financeira — reload the page.',
+              e_edit_bad_column: 'The column {col} cannot be edited.', e_edit_bad_number: '{col}: "{value}" is not a number.',
+              e_edit_negative: '{col}: the value cannot be negative.', e_edit_bad_date: '{col}: "{value}" is not a date.',
+              e_edit_bad_option: '{col}: "{value}" is not one of the options.',
+              e_approve_own: 'Whoever edited cannot confirm their own edit — another user confirms.',
+              e_approve_none: 'No pending edit in the chosen rows.', e_add_missing: 'Fill in: {cols}.',
+              e_file_empty: 'No operation on this page in the month.',
+              e_file_pending: 'Row(s) with a correction not yet confirmed: {ids}. Confirm them before the file.',
+              e_file_missing: '{n} incomplete row(s): {rows}. Fill them in (Edit) or delete them before the file.' },
+        br: { importProgress: '{done} de {total} dia(s)', importBackground: 'Pode fechar esta janela: o import continua e a tela se atualiza no fim.', close: 'Fechar',
+              importing: 'Importando as liquidações do mês…',
+              importingTxt: 'Lendo, em cada dia útil do mês, o que o NDF Summary e o Other Products liquidaram e as opções que venceram — para as quatro páginas de uma vez.',
+              imported: 'Liquidações importadas', importFail: 'A importação falhou',
+              importSummary: '{days} dia(s), {rows} evento(s).', failedDays: 'Não importado:',
+              empty: 'Nada neste mês ainda — clique em Import Settlements.',
+              fileDone: 'Arquivo gerado', fileFail: 'Arquivo não gerado', fileSummary: '{n} conta(s) em {name}, gravado em {path}',
+              lastFile: 'Último arquivo:', noFile: 'Nenhum arquivo gerado neste mês ainda.', days: 'Dias importados:',
+              month: 'Mês', incomplete: 'Incompleta', missingTip: 'Falta para o arquivo: {fields}',
+              editTip: 'Editar', confirmTip: 'Confirmar a edição', deleteTip: 'Excluir', cancel: 'Cancelar',
+              editDone: 'Linha(s) editada(s) — aguardando confirmação', approveDone: 'Edição confirmada', delDone: 'Linha(s) excluída(s)',
+              delTitle: 'Excluir {n} linha(s)?', delText: 'A conta sai do mês e um novo import não a traz de volta.', delOk: 'Excluir',
+              massCol: 'Selecione a coluna', massTitle: 'Aplicar em {n} linha(s)?', massText: 'A coluna {col} das linhas marcadas passa a {v}. Cada linha fica Pending.', massOk: 'Aplicar',
+              editTitle: 'Editar linha — E-Financeira', addTitle: 'Incluir linha — E-Financeira',
+              addSub: 'Uma conta que as telas de liquidação não trouxeram. Os totais digitados vão ao arquivo como digitados; o Saldo, em branco, sai do prêmio (recebido e encerrado). A linha fica Pending até outro usuário confirmar.',
+              addDone: 'Linha incluída — aguardando confirmação',
+              w_missing_days: 'Dias úteis do mês sem liquidação importada: {days} — clique em Import Settlements.',
+              w_missing_fields: '{n} linha(s) não vão ao arquivo sem: {fields}.',
+              w_no_lob: '{n} operação(ões) sem LOB — a da EDG é do PYRAMID: {sample}.',
+              w_mixed: '{n} operação(ões) com prêmio e liquidação no mesmo caixa — o prêmio não foi separado: {sample}.',
+              w_unwind_unknown: '{n} recompra(s) sem saber se é total ou parcial — a Data de Encerramento ficou em branco: {sample}.',
+              w_no_value: '{n} operação(ões) sem o valor interno no Trade Level: {sample}.',
+              w_premium_unknown: '{n} opção(ões) encerrada(s) sem o prêmio na posição — o Saldo fica zero: {sample}.',
+              w_intragroup: '{n} operação(ões) entre entidades declarantes (intragrupo) ficaram de fora.',
+              w_not_declarant: 'Operações de entidade fora do cadastro E-Financeira — Declarant ficaram de fora: {les}.',
+              e_edit_row_gone: 'A linha {key} não está mais na E-Financeira — recarregue a tela.',
+              e_edit_bad_column: 'A coluna {col} não se edita.', e_edit_bad_number: '{col}: "{value}" não é um número.',
+              e_edit_negative: '{col}: o valor não pode ser negativo.', e_edit_bad_date: '{col}: "{value}" não é uma data.',
+              e_edit_bad_option: '{col}: "{value}" não é uma das opções.',
+              e_approve_own: 'Quem editou não confirma a própria edição — outro usuário confirma.',
+              e_approve_none: 'Nenhuma edição pendente nas linhas escolhidas.', e_add_missing: 'Preencha: {cols}.',
+              e_file_empty: 'Nenhuma operação desta página no mês.',
+              e_file_pending: 'Linha(s) com correção ainda não confirmada: {ids}. Confirme antes do arquivo.',
+              e_file_missing: '{n} linha(s) incompleta(s): {rows}. Complete (Edit) ou exclua antes do arquivo.' },
+        es: { importProgress: '{done} de {total} día(s)', importBackground: 'Puede cerrar esta ventana: la importación sigue y la pantalla se actualiza al terminar.', close: 'Cerrar',
+              importing: 'Importando las liquidaciones del mes…',
+              importingTxt: 'Leyendo, en cada día hábil del mes, lo que el NDF Summary y el Other Products liquidaron y las opciones que vencieron — para las cuatro páginas a la vez.',
+              imported: 'Liquidaciones importadas', importFail: 'La importación falló',
+              importSummary: '{days} día(s), {rows} evento(s).', failedDays: 'No importado:',
+              empty: 'Nada en este mes todavía — haga clic en Import Settlements.',
+              fileDone: 'Archivo generado', fileFail: 'Archivo no generado', fileSummary: '{n} cuenta(s) en {name}, guardado en {path}',
+              lastFile: 'Último archivo:', noFile: 'Ningún archivo generado en este mes todavía.', days: 'Días importados:',
+              month: 'Mes', incomplete: 'Incompleta', missingTip: 'Falta para el archivo: {fields}',
+              editTip: 'Editar', confirmTip: 'Confirmar la edición', deleteTip: 'Eliminar', cancel: 'Cancelar',
+              editDone: 'Fila(s) editada(s) — pendiente de confirmación', approveDone: 'Edición confirmada', delDone: 'Fila(s) eliminada(s)',
+              delTitle: '¿Eliminar {n} fila(s)?', delText: 'La cuenta sale del mes y una nueva importación no la trae de vuelta.', delOk: 'Eliminar',
+              massCol: 'Seleccione la columna', massTitle: '¿Aplicar en {n} fila(s)?', massText: 'La columna {col} de las filas marcadas pasa a {v}. Cada fila queda Pending.', massOk: 'Aplicar',
+              editTitle: 'Editar fila — E-Financeira', addTitle: 'Agregar fila — E-Financeira',
+              addSub: 'Una cuenta que las pantallas de liquidación no trajeron. Los totales escritos van al archivo como se escribieron; el Saldo, en blanco, sale de la prima (recibida y cerrada). La fila queda Pending hasta que otro usuario la confirme.',
+              addDone: 'Fila agregada — pendiente de confirmación',
+              w_missing_days: 'Días hábiles del mes sin liquidación importada: {days} — haga clic en Import Settlements.',
+              w_missing_fields: '{n} fila(s) no van al archivo sin: {fields}.',
+              w_no_lob: '{n} operación(es) sin LOB — la de EDG es de PYRAMID: {sample}.',
+              w_mixed: '{n} operación(es) con prima y liquidación en el mismo flujo — la prima no se separó: {sample}.',
+              w_unwind_unknown: '{n} recompra(s) sin saber si es total o parcial — la Fecha de Cierre quedó en blanco: {sample}.',
+              w_no_value: '{n} operación(es) sin el valor interno en el Trade Level: {sample}.',
+              w_premium_unknown: '{n} opción(es) cerrada(s) sin la prima en la posición — el Saldo queda en cero: {sample}.',
+              w_intragroup: '{n} operación(es) entre entidades declarantes (intragrupo) quedaron afuera.',
+              w_not_declarant: 'Operaciones de entidad fuera del registro E-Financeira — Declarant quedaron afuera: {les}.',
+              e_edit_row_gone: 'La fila {key} ya no está en la E-Financeira — recargue la página.',
+              e_edit_bad_column: 'La columna {col} no se edita.', e_edit_bad_number: '{col}: "{value}" no es un número.',
+              e_edit_negative: '{col}: el valor no puede ser negativo.', e_edit_bad_date: '{col}: "{value}" no es una fecha.',
+              e_edit_bad_option: '{col}: "{value}" no es una de las opciones.',
+              e_approve_own: 'Quien editó no confirma su propia edición — otro usuario confirma.',
+              e_approve_none: 'Ninguna edición pendiente en las filas elegidas.', e_add_missing: 'Complete: {cols}.',
+              e_file_empty: 'Ninguna operación de esta página en el mes.',
+              e_file_pending: 'Fila(s) con corrección aún no confirmada: {ids}. Confírmelas antes del archivo.',
+              e_file_missing: '{n} fila(s) incompleta(s): {rows}. Complételas (Edit) o elimínelas antes del archivo.' }
+    };
+    function lang() {
+        try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) { return 'en'; }
+    }
+    function t(k) { return (_TRANS[lang()] || _TRANS.en)[k] || (_TRANS.en[k] || k); }
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+    function fill(tpl, params) {
+        return String(tpl).replace(/\{(\w+)\}/g, function (m, k) {
+            return (params && params[k] != null) ? String(params[k]) : '';
+        });
+    }
+    // Texto de servidor chega ESTRUTURADO — {code, params, text} — e é dito aqui,
+    // no idioma de quem usa; o `text` é só o fallback (§486).
+    function msgText(w, prefix) {
+        if (w == null) { return ''; }
+        if (typeof w === 'string') { return w; }
+        var tpl = w.code ? ((_TRANS[lang()] || {})[prefix + w.code] || _TRANS.en[prefix + w.code]) : '';
+        return tpl ? fill(tpl, w.params) : String(w.text || '');
+    }
+    function errText(j) {
+        if (j && j.error_code) { return msgText({ code: j.error_code, params: j.error_params, text: j.error }, 'e_'); }
+        return String((j && j.error) || 'error');
+    }
+
+    var PAGE = $('#efin-page').data('page');
+    var API = '/api/efinanceira/' + PAGE;
+    var COLS = {{ EFIN_COLS | tojson }};
+    var EDIT = {{ edit_cols | tojson }}, SELECTS = {{ edit_selects | tojson }}, ADD_REQ = {{ add_required | tojson }};
+    var STATUS = { 'Pending': 'text-bg-warning', 'New': 'text-bg-secondary', 'Approved': 'text-bg-info', 'Generated': 'text-bg-success' };
+    var FILTROS = {
+        closed: function (r) { return !!r['Closing Date']; },
+        payments: function (r) { return r.PAG_TP === 'FATCA504'; },
+        b3_check: function (r) { return r.b3_check === 'Check'; },
+        missing: function (r) { return (r.missing || []).length > 0; },
+        pending: function (r) { return r.Status === 'Pending'; }
+    };
+
+    var table = null, dados = [], bucket = '', hidden = {}, picked = {}, refIso = '', ultimo = {};
+
+    function fmt2(v) {
+        return (typeof v === 'number' && isFinite(v))
+            ? v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+    }
+    // O rótulo da coluna como a tela o mostra (já traduzido pelo I18nManager).
+    function rotulo(col) {
+        var th = $('#efin-page th[data-col="' + col + '"]').first();
+        return (th.text() || col).trim();
+    }
+    function statusPill(r) {
+        var html = '<span class="badge otc-status rounded-pill bg-gradient ' + (STATUS[r.Status] || 'text-bg-secondary') +
+                   '" title="' + esc((r.review_by || '') + ' ' + (r.review_at || '') +
+                   (r.edited && r.edited.length ? ' · ' + r.edited.join(', ') : '')) + '">' + esc(r.Status) + '</span>';
+        if ((r.missing || []).length) {
+            html += ' <span class="badge badge-soft-danger efin-tag" title="' +
+                    esc(fill(t('missingTip'), { fields: r.missing.join(', ') })) + '">' + esc(t('incomplete')) + '</span>';
+        }
+        return html;
+    }
+
+    function dataCol(c) {
+        return {
+            data: function (r) { var v = r[c.name]; return v == null ? '' : v; },
+            className: (c.kind === 'num' || c.kind === 'money' || c.kind === 'diff') ? 'efin-num' : (c.kind === 'ell' ? 'efin-ell' : ''),
+            visible: !hidden[c.name],
+            createdCell: function (td, v, r) {
+                if ((r.missing || []).indexOf(c.name) >= 0) { td.classList.add('efin-miss'); }
+            },
+            render: function (v, type, r) {
+                var n = r[c.name];
+                if (c.kind === 'num' || c.kind === 'money' || c.kind === 'diff') {
+                    if (type !== 'display' && type !== 'filter') { return n == null ? '' : n; }
+                    // zero nos totais do arquivo é o "-" da planilha da equipe
+                    if (c.kind === 'money' && !n) { return '-'; }
+                    if (c.kind === 'diff' && type === 'display' && n != null) {
+                        // a Diferença É o veredito (o desenho do Swap VCP, §459)
+                        var cls = r.b3_check === 'OK' ? 'badge-soft-success' : 'badge-soft-warning';
+                        return '<span class="badge ' + cls + '" title="' + esc(r.b3_check) + '">' + esc(fmt2(n)) + '</span>';
+                    }
+                    return fmt2(n);
+                }
+                if (c.kind === 'status') {
+                    if (type !== 'display') { return String(v) + ((r.missing || []).length ? ' ' + t('incomplete') : ''); }
+                    return statusPill(r);
+                }
+                if (type !== 'display') { return v; }
+                if (c.kind === 'ell') { return '<span title="' + esc(v) + '">' + esc(v) + '</span>'; }
+                return esc(v);
+            }
+        };
+    }
+
+    function desenha() {
+        var f = FILTROS[bucket];
+        var rows = f ? dados.filter(f) : dados;
+        if (table) { table.destroy(); $('#efin-table tbody').empty(); }
+        var columns = [{
+            data: null, orderable: false, searchable: false, className: 'efin-noexp',
+            render: function (d, type, r) {
+                return type === 'display'
+                    ? '<input type="checkbox" class="form-check-input efin-pick" value="' + esc(r.key) + '"' +
+                      (picked[r.key] ? ' checked' : '') + '>' : '';
+            }
+        }, {
+            // Confirm no lugar do Edit enquanto a correção espera outro usuário; o Delete sempre.
+            data: null, orderable: false, searchable: false, className: 'efin-noexp',
+            render: function (d, type, r) {
+                if (type !== 'display') { return ''; }
+                return '<div class="d-flex justify-content-center gap-1">' +
+                    (r.Status === 'Pending'
+                        ? '<button type="button" class="btn btn-success btn-sm rounded-circle btn-act btn-row-confirm" title="' + esc(t('confirmTip')) + '"><i class="ti ti-check"></i></button>'
+                        : '<button type="button" class="btn btn-info btn-sm rounded-circle btn-act btn-row-edit" title="' + esc(t('editTip')) + '"><i class="ti ti-edit"></i></button>') +
+                    '<button type="button" class="btn btn-danger btn-sm rounded-circle btn-act btn-row-delete" title="' + esc(t('deleteTip')) + '"><i class="ti ti-trash"></i></button>' +
+                    '</div>';
+            }
+        }].concat(COLS.map(dataCol));
+        table = $('#efin-table').DataTable({
+            data: rows, columns: columns,
+            paging: true, pageLength: parseInt($('#efin-len').val(), 10) || 50,
+            lengthChange: false, searching: true, info: true,
+            dom: "rt<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+            scrollX: true, autoWidth: true,
+            order: [],                       // a ordem do servidor: o que pede ação primeiro
+            language: { emptyTable: t('empty') }
+        });
+        table.on('draw.efin', function () { table.columns.adjust(); });
+        table.columns.adjust();
+        setTimeout(function () { table.columns.adjust().draw(false); }, 150);
+        $(window).off('resize.efin').on('resize.efin', function () { table.columns.adjust(); });
+        $(table.table().container()).off('click.efin').on('click.efin', '#efinAll', function () {
+            var on = this.checked;
+            table.rows({ search: 'applied' }).every(function () {
+                var k = this.data().key;
+                if (on) { picked[k] = true; } else { delete picked[k]; }
+            });
+            $('#efin-table .efin-pick').prop('checked', on);
+            massa();
+        });
+        botoes();
+        menuColunas();
+        massa();
+    }
+
+    function botoes() {
+        var comuns = {
+            exportOptions: {
+                columns: ':visible:not(.efin-noexp)',
+                // Com linhas marcadas, exporta SÓ as marcadas; sem nenhuma, tudo
+                // o que os filtros deixam passar.
+                rows: function (idx, data) { return !Object.keys(picked).length || !!picked[data.key]; },
+                modifier: { page: 'all', search: 'applied', order: 'applied' }
+            }
+        };
+        new $.fn.dataTable.Buttons(table, { buttons: [
+            $.extend({ extend: 'copyHtml5', name: 'copy' }, comuns),
+            $.extend({ extend: 'csvHtml5', name: 'csv', fieldSeparator: ';', bom: true }, comuns),
+            $.extend({ extend: 'excelHtml5', name: 'excel' }, comuns),
+            $.extend({ extend: 'print', name: 'print' }, comuns),
+            $.extend({ extend: 'pdfHtml5', name: 'pdf', orientation: 'landscape', pageSize: 'A3' }, comuns)
+        ] });
+        $('#efin-export-menu').off('click.efin').on('click.efin', 'a[data-exp]', function (e) {
+            e.preventDefault();
+            table.button($(this).data('exp') + ':name').trigger();
+        });
+    }
+
+    function menuColunas() {
+        $('#efin-cols-menu').html(COLS.map(function (c) {
+            return '<label class="dropdown-item d-flex align-items-center gap-2 mb-0">' +
+                '<input type="checkbox" class="form-check-input m-0" data-colname="' + esc(c.name) + '"' +
+                (hidden[c.name] ? '' : ' checked') + '> ' + esc(rotulo(c.name)) + '</label>';
+        }).join(''));
+    }
+    $(document).on('change', '#efin-cols-menu input[data-colname]', function () {
+        var n = $(this).data('colname');
+        if (this.checked) { delete hidden[n]; } else { hidden[n] = true; }
+        var i = -1;
+        COLS.forEach(function (c, k) { if (c.name === n) { i = k + 2; } });
+        if (table && i > 0) { table.column(i).visible(this.checked); table.columns.adjust(); }
+    });
+    $(document).on('change', '#efin-table .efin-pick', function () {
+        if (this.checked) { picked[this.value] = true; } else { delete picked[this.value]; }
+        massa();
+    });
+
+    /* ══ Edit, Confirm, Delete e Add Row ═════════════════════════════════
+       A correção vai ao servidor pela CHAVE da operação; a tela manda só o
+       que mudou e se redesenha com a página que volta. As colunas editáveis e
+       as opções saem do servidor (`domain.EDIT_COLS`). */
+    function opcoes(col) {
+        if (col === 'LE') { return (ultimo.le_options || []).slice(); }
+        return (SELECTS[col] || []).slice();
+    }
+    function linhaPor(k) { return dados.filter(function (r) { return r.key === k; })[0]; }
+    function isoDe(dmy) {
+        var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(dmy || ''));
+        return m ? m[3] + '-' + m[2] + '-' + m[1] : String(dmy || '');
+    }
+    function valorDe(r, col, kind) {
+        var v = r[col];
+        if (v == null) { return ''; }
+        if (kind === 'date') { return isoDe(v); }
+        if (kind === 'num') { return (typeof v === 'number') ? v.toFixed(2) : String(v); }
+        return String(v);
+    }
+    // O campo de um valor no FORMATO da coluna: lista, data, número ou texto
+    function campo(col, kind, valor, id) {
+        var a = ' id="' + id + '" data-col="' + esc(col) + '" data-kind="' + kind + '" data-orig="' + esc(valor) + '"';
+        if (kind === 'select') {
+            var ops = opcoes(col);
+            if (valor && ops.indexOf(valor) < 0) { ops.unshift(valor); }
+            if (ops.indexOf('') < 0) { ops.unshift(''); }
+            return '<select class="form-select form-select-sm"' + a + '>' + ops.map(function (o) {
+                return '<option value="' + esc(o) + '"' + (o === valor ? ' selected' : '') + '>' + esc(o || '—') + '</option>'; }).join('') + '</select>';
+        }
+        if (kind === 'num') {
+            return '<input type="text" inputmode="decimal" class="form-control form-control-sm text-end" placeholder="0.00"' + a + ' value="' + esc(valor) + '">';
+        }
+        var dt = kind === 'date';
+        return '<input type="text" class="form-control form-control-sm' + (dt ? ' efin-date-f' : '') + '"' + a +
+               (dt ? ' placeholder="dd/mm/aaaa" autocomplete="off"' : '') + ' value="' + esc(valor) + '">';
+    }
+    function liga(box) {
+        if (window.otcDateField) {
+            box.querySelectorAll('input.efin-date-f').forEach(function (el) { otcDateField(el); });
+        }
+    }
+    function lido(el) {
+        if (el.getAttribute('data-kind') === 'date' && el._flatpickr && el._flatpickr.selectedDates[0]) {
+            var d = el._flatpickr.selectedDates[0];
+            return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        }
+        return String(el.value || '').trim();
+    }
+    function envia(acao, items, okMsg) {
+        return fetch(API + '/' + acao, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                                         body: JSON.stringify({ date: dataAtual(), items: items }) })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (!j || !j.success) { falha('E-Financeira', esc(errText(j))); return false; }
+                pinta(j);
+                if (window.otcToast) { otcToast(okMsg + ' · ' + (j.count || 0)); }
+                return true;
+            })
+            .catch(function (e) { falha('E-Financeira', esc(String(e && e.message || e))); return false; });
+    }
+
+    var editKey = null, modo = 'edit';
+    function abreModal(r) {
+        modo = r ? 'edit' : 'add';
+        editKey = r ? r.key : null;
+        $('#efinEditModal .modal-title [data-lang]').text(t(r ? 'editTitle' : 'addTitle'));
+        if (!$('#efinEditSub').data('edit')) { $('#efinEditSub').data('edit', $('#efinEditSub').text()); }
+        $('#efinEditSub').text(r ? $('#efinEditSub').data('edit') : t('addSub'));
+        var grid = document.getElementById('efinEditGrid');
+        grid.innerHTML = Object.keys(EDIT).map(function (col, i) {
+            var kind = EDIT[col][1], id = 'efin-e-' + i;
+            var req = !r && ADD_REQ.indexOf(col) >= 0 ? ' *' : '';
+            return '<div class="col-6 col-md-3"><label class="form-label fs-xs text-muted mb-1" for="' + id + '">' +
+                   esc(rotulo(col)) + req + '</label>' + campo(col, kind, r ? valorDe(r, col, kind) : '', id) + '</div>';
+        }).join('');
+        liga(grid);
+        document.getElementById('efinEditRef').textContent = r ? '· ' + (r['B3 ID'] || r['Internal ID'] || r.key) : '';
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('efinEditModal')).show();
+    }
+    function fechaModal() { bootstrap.Modal.getInstance(document.getElementById('efinEditModal')).hide(); }
+    $('#efinEditSave').on('click', function () {
+        if (modo === 'add') {
+            var f = {};
+            document.querySelectorAll('#efinEditGrid [data-col]').forEach(function (el) { f[el.getAttribute('data-col')] = lido(el); });
+            var falta = ADD_REQ.filter(function (c) { return !String(f[c] || '').trim(); });
+            if (falta.length) { falha('E-Financeira', esc(fill(t('e_add_missing'), { cols: falta.map(rotulo).join(', ') }))); return; }
+            envia('add', [{ fields: f }], t('addDone')).then(function (ok) { if (ok) { fechaModal(); } });
+            return;
+        }
+        var r = linhaPor(editKey);
+        if (!r) { return; }
+        var ch = {};
+        document.querySelectorAll('#efinEditGrid [data-col]').forEach(function (el) {
+            var v = lido(el);
+            if (v !== (el.getAttribute('data-orig') || '')) { ch[el.getAttribute('data-col')] = v; }
+        });
+        if (!Object.keys(ch).length) { fechaModal(); return; }
+        envia('edit', [{ key: r.key, changes: ch }], t('editDone')).then(function (ok) { if (ok) { fechaModal(); } });
+    });
+    $('#efin-add').on('click', function () { abreModal(null); });
+
+    function linhaDoBotao(btn) {
+        var tr = $(btn).closest('tr')[0];
+        return table && tr ? table.row(tr).data() : null;
+    }
+    $(document).on('click', '#efin-table .btn-row-edit', function (e) {
+        e.preventDefault(); var r = linhaDoBotao(this); if (r) { abreModal(r); }
+    });
+    $(document).on('click', '#efin-table .btn-row-confirm', function (e) {
+        e.preventDefault(); var r = linhaDoBotao(this);
+        if (r) { envia('approve', [{ key: r.key }], t('approveDone')); }
+    });
+    function apaga(linhas) {
+        if (!linhas.length || !window.Swal) { return; }
+        Swal.fire({ icon: 'warning', title: fill(t('delTitle'), { n: linhas.length }), text: t('delText'),
+                    showCancelButton: true, confirmButtonText: t('delOk'), cancelButtonText: t('cancel'),
+                    confirmButtonColor: '#dc3545' }).then(function (res) {
+            if (!res.isConfirmed) { return; }
+            envia('delete', linhas.map(function (r) { return { key: r.key }; }), t('delDone'));
+        });
+    }
+    $(document).on('click', '#efin-table .btn-row-delete', function (e) {
+        e.preventDefault(); var r = linhaDoBotao(this); if (r) { apaga([r]); }
+    });
+
+    // ── O lote: a coluna, o valor no formato dela, Apply e Delete ──
+    function marcadas() { return dados.filter(function (r) { return picked[r.key]; }); }
+    function massa() {
+        var n = marcadas().length;
+        $('#efin-mass').toggleClass('d-none', !n);
+        $('#efin-mass-n').text(n);
+        var sel = document.getElementById('efin-mass-col');
+        if (sel && !sel.options.length) {
+            sel.innerHTML = '<option value="">' + esc(t('massCol')) + '</option>' +
+                Object.keys(EDIT).map(function (c) { return '<option value="' + esc(c) + '">' + esc(rotulo(c)) + '</option>'; }).join('');
+        }
+    }
+    $(document).on('change', '#efin-mass-col', function () {
+        var col = this.value, box = document.getElementById('efin-mass-val');
+        box.innerHTML = col ? campo(col, EDIT[col][1], '', 'efin-mass-input') : '';
+        liga(box);
+        $('#efin-mass-apply').prop('disabled', !col);
+    });
+    $('#efin-mass-apply').on('click', function () {
+        var col = $('#efin-mass-col').val(), el = document.getElementById('efin-mass-input');
+        if (!col || !el) { return; }
+        var v = lido(el), alvo = marcadas();
+        Swal.fire({ icon: 'question', title: fill(t('massTitle'), { n: alvo.length }),
+                    html: esc(fill(t('massText'), { col: rotulo(col), v: v || '—' })),
+                    showCancelButton: true, confirmButtonText: t('massOk'), cancelButtonText: t('cancel'),
+                    confirmButtonColor: '#0066cc' }).then(function (res) {
+            if (!res.isConfirmed) { return; }
+            var ch = {}; ch[col] = v;
+            envia('edit', alvo.map(function (r) { return { key: r.key, changes: ch }; }), t('editDone'));
+        });
+    });
+    $('#efin-mass-delete').on('click', function () { apaga(marcadas()); });
+
+    // ── Os cards: contagens (clicar filtra) e os totais do arquivo ──
+    function cards(c) {
+        c = c || {};
+        ['total', 'closed', 'payments', 'b3_check', 'missing', 'pending'].forEach(function (k) {
+            $('#efin-k-' + k).text(c[k] == null ? '—' : c[k]);
+        });
+        ['tot_credit', 'tot_debit', 'balance', 'payment'].forEach(function (k) {
+            $('#efin-k-' + k).text(c[k] == null ? '—' : fmt2(c[k]));
+        });
+        $('#efin-stats .otc-stat').each(function () {
+            $(this).toggleClass('efin-on', !!bucket && String($(this).data('b') || '') === bucket);
+        });
+    }
+    $(document).on('click', '#efin-stats .otc-stat[data-b]', function () {
+        var b = String($(this).data('b') || '');
+        bucket = (bucket === b || !b) ? '' : b;
+        cards(ultimo.counts);
+        desenha();
+    });
+
+    function pinta(j) {
+        ultimo = j || {};
+        dados = j.rows || [];
+        picked = {};
+        var m = j.month || {};
+        $('#efin-month').html(m.key ? '<b>' + esc(t('month')) + ' ' + esc(m.label) + '</b> · ' + esc(m.start_fmt) + ' – ' +
+                              esc(m.end_fmt) + ' · <code>' + esc(j.file_name || '') + '</code>' : '');
+        var lf = j.last_file;
+        $('#efin-src').html('<div><i class="ti ti-file-check"></i> ' + (lf
+                ? esc(t('lastFile')) + ' <code>' + esc(lf.name) + '</code> · ' + esc(lf.at) + ' · ' + esc(lf.sid) + ' · ' + esc(lf.n)
+                : esc(t('noFile'))) + '</div>' +
+            '<div><i class="ti ti-calendar"></i> ' + esc(t('days')) + ' ' +
+            esc((j.imported_days || []).map(function (x) { return x.slice(8, 10) + '/' + x.slice(5, 7); }).join(', ') || '—') + '</div>');
+        $('#efin-warnings').html((j.warnings || []).length
+            ? '<div class="otc-banner mb-2">' + (j.warnings || []).map(function (w) {
+                  return '<div>• ' + esc(msgText(w, 'w_')) + '</div>'; }).join('') + '</div>'
+            : '');
+        if (j.ref) { refIso = j.ref; poeData(j.ref); }
+        if (j.import_job && j.import_job.state === 'running') { acompanha(j.import_job); } else { faixa(null); }
+        cards(j.counts);
+        desenha();
+    }
+
+    function dataAtual() {
+        return $('#efin-date').val() || refIso || (window.otcLinkIso && window.otcLinkIso()) || '';
+    }
+    function carrega() {
+        var d = dataAtual();
+        fetch(API + '/data' + (d ? '?date=' + encodeURIComponent(d) : ''), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (j && j.success) { pinta(j); }
+                else { falha('E-Financeira', esc(errText(j))); }
+            });
+    }
+    function falha(titulo, html) {
+        if (window.Swal) { Swal.fire({ icon: 'error', title: titulo, html: html, confirmButtonColor: '#0066cc' }); }
+    }
+
+    // ── Import Settlements: um TRABALHO em segundo plano (o mês inteiro) ──
+    var acompanhando = null, janelaAberta = false;
+    function progressoTxt(job) { return fill(t('importProgress'), { done: job.done || 0, total: job.total || 0 }); }
+    function faixa(job) {
+        $('#efin-job').html(job && job.state === 'running'
+            ? '<div class="otc-banner mb-2"><i class="ti ti-loader-2 ti-spin me-1"></i>' +
+              esc(t('importing')) + ' ' + esc(progressoTxt(job)) + '</div>' : '');
+    }
+    function fimDoImport(job) {
+        faixa(null);
+        carrega();
+        var falhas = job.failed || [];
+        var html = esc(fill(t('importSummary'), { days: job.done || 0, rows: job.rows || 0 }));
+        if (job.error) { html += '<div class="text-start mt-2 fs-xs text-danger">' + esc(job.error) + '</div>'; }
+        if (falhas.length) {
+            html += '<div class="text-start mt-2 fs-xs text-danger"><b>' + esc(t('failedDays')) + '</b><br>' +
+                falhas.map(function (f) { return esc(f.day + ' · ' + f.source + ' — ' + f.error); }).join('<br>') + '</div>';
+        }
+        if (janelaAberta && window.Swal) {
+            Swal.fire({ icon: (falhas.length || job.error) ? 'warning' : 'success', title: t('imported'), html: html,
+                        showConfirmButton: !!(falhas.length || job.error),
+                        timer: (falhas.length || job.error) ? undefined : 3000 });
+        } else if (window.otcToast) {
+            otcToast(t('imported') + ': ' + fill(t('importSummary'), { days: job.done || 0, rows: job.rows || 0 }));
+        }
+        janelaAberta = false;
+    }
+    function acompanha(job) {
+        if (!job) { return; }
+        if (job.state !== 'running') { fimDoImport(job); return; }
+        faixa(job);
+        var el = document.getElementById('efin-job-prog');
+        if (el) { el.textContent = progressoTxt(job); }
+        clearTimeout(acompanhando);
+        acompanhando = setTimeout(function () {
+            fetch('/api/efinanceira/import-status?date=' + encodeURIComponent(dataAtual()), { credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (j) { acompanha(j && j.job); })
+                .catch(function () { acompanha(job); });
+        }, 2500);
+    }
+    $('#efin-import').on('click', function () {
+        fetch('/api/efinanceira/import-settlements', {
+            method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: dataAtual() })
+        }).then(function (r) { return r.json(); }).then(function (j) {
+            if (!j || !j.success) { throw new Error(errText(j)); }
+            janelaAberta = true;
+            if (window.Swal) {
+                Swal.fire({ title: t('importing'),
+                            html: '<div class="spinner-border text-primary mb-2" role="status"></div><div>' +
+                                  esc(t('importingTxt')) + '</div><div class="mt-2 fw-semibold" id="efin-job-prog">' +
+                                  esc(progressoTxt(j.job)) + '</div><div class="mt-1 fs-xs text-muted">' +
+                                  esc(t('importBackground')) + '</div>',
+                            showConfirmButton: true, confirmButtonText: t('close'), confirmButtonColor: '#0066cc' })
+                    .then(function () { janelaAberta = false; });
+            }
+            acompanha(j.job);
+        }).catch(function (e) { falha(t('importFail'), esc(String(e && e.message || e))); });
+    });
+
+    // ── Generate File: o arquivo do mês desta página (share + download) ──
+    $('#efin-generate').on('click', function () {
+        fetch(API + '/generate', {
+            method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: dataAtual() })
+        }).then(function (r) {
+            var tipo = r.headers.get('Content-Type') || '';
+            if (!r.ok || tipo.indexOf('application/json') >= 0) {
+                return r.json().then(function (j) { throw new Error(errText(j)); });
+            }
+            var nome = r.headers.get('X-EFIN-Name') || 'EFINAN.csv';
+            var n = r.headers.get('X-EFIN-Count') || '';
+            var caminho = r.headers.get('X-EFIN-Path') || '';
+            return r.blob().then(function (b) {
+                var a = document.createElement('a');
+                a.href = URL.createObjectURL(b);
+                a.download = nome;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+                if (window.otcToast) { otcToast(t('fileDone') + ': ' + fill(t('fileSummary'), { n: n, name: nome, path: caminho })); }
+                carrega();
+            });
+        }).catch(function (e) { falha(t('fileFail'), esc(String(e && e.message || e))); });
+    });
+
+    $('#efin-len').on('change', function () {
+        if (table) { table.page.len(parseInt(this.value, 10)).draw(); }
+    });
+    $('#efin-clear').on('click', function () {
+        bucket = '';
+        if (table) { table.search('').columns().search(''); }
+        cards(ultimo.counts);
+        desenha();
+    });
+    $('#efin-date').on('change', function () { bucket = ''; refIso = ''; carrega(); });
+
+    // A data que o servidor respondeu volta ao campo pelo PICKER, sem disparar
+    // o `change` (que recarregaria a página).
+    function poeData(iso) {
+        var el = document.getElementById('efin-date');
+        if (el && el._flatpickr) { el._flatpickr.setDate(iso, false); }
+        else if (el) { el.value = iso; }
+    }
+    if (window.otcDateField) { otcDateField('#efin-date'); }
+    var doLink = window.otcLinkIso && window.otcLinkIso();
+    if (doLink) { poeData(doLink); }
+
+    $(carrega);
+})(jQuery);
+</script>
+{% endblock extra_javascript %}

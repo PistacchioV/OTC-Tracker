@@ -851,6 +851,8 @@ def _ops_swap_trade_rows(settle_ref):
             '_no_advice': bool(eq) and _ops_is_internal_cpty(counterparty, eq.get('spn', '')),
             # a data da operação de onde saiu o prazo do `_tax_n` (o WHT a mostra)
             '_trade_date': op_dt,
+            # o vencimento na posição (a E-Financeira declara o encerramento)
+            '_maturity': venc,
         })
     out.extend(_ops_swap_unwind_trade_row(u, by_titulo) for u in unw)
     return out
@@ -955,6 +957,14 @@ def _ops_ndfc_trade_rows(settle_ref):
             '_b3_n': b3,
             '_legal': r.get('legal', ''),
             '_trade_date': _ops_row_trade_date(r),
+            # Da posição, para a E-Financeira (features/efinanceira): o
+            # vencimento, o prêmio, a conta da parte e o CNPJ da contraparte.
+            '_maturity': r.get('maturity', ''),
+            '_premium': r.get('premium_value', ''),
+            '_premium_date': r.get('premium_date', ''),
+            '_premium_side': r.get('premium_payer', ''),
+            '_party_account': r.get('party_account', ''),
+            '_taxid': r.get('taxid', ''),
         })
     return out
 
@@ -1008,6 +1018,15 @@ def _ops_opt_trade_rows(settle_ref):
             # só do documento e da TED (mesa, 21/10/2026 — vai para a Intrag).
             '_no_advice': bool(r.get('no_advice')),
             '_trade_date': _ops_row_trade_date(r),
+            # Da posição, para a E-Financeira (features/efinanceira): o
+            # vencimento, o prêmio, quem o paga (a posição da PARTE), a conta
+            # da parte e o CNPJ da contraparte.
+            '_maturity': r.get('maturity', ''),
+            '_premium': r.get('premium_value', ''),
+            '_premium_date': r.get('premium_date', ''),
+            '_premium_side': r.get('position_side', ''),
+            '_party_account': r.get('party_account', ''),
+            '_taxid': r.get('taxid', ''),
         })
     return out
 
