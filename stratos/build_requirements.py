@@ -71,13 +71,16 @@ NAO_USADOS = {
 # com o portalocker 4 inclusive) rodaram com elas. Pacote que sai da raiz some
 # daqui sozinho (a troca só vale para o que a raiz declara).
 #
-# O DUCKDB FICA COM O TETO `<2` da raiz, mesmo com o scanner pedindo o 2.0: o
-# 2.0 lê e grava banco do 1.x sem estragá-lo, mas banco CRIADO pelo 2.0 não
-# abre no 1.x ("version number 999") — e o armazém cria `.db` o tempo todo.
-# Qualquer volta de banco do Stratos para a instância do time (backup, rollback
-# da virada) e o exporta_dados/recover da máquina do JPM leriam esses bancos
-# como ilegíveis. Subir o teto é decisão de todas as instâncias juntas (§651).
+# O DUCKDB vai ao 2.0 SÓ AQUI (decisão da equipe, 30/10/2026, §739) — a raiz
+# segue `<2`. O que foi conferido: o 2.0 lê e grava banco do 1.x sem estragá-lo
+# (o 1.x continua abrindo), refaz o WAL que o 1.x deixou (o deploy com processo
+# morto), e a suíte do app e a do Stratos passam com ele. O que se paga: banco
+# CRIADO pelo 2.0 não abre no 1.x ("version number 999"), e o armazém cria `.db`
+# o tempo todo — banco do Stratos não volta à instância Windows (backup,
+# rollback da virada) nem passa pelo exporta_dados/recover da máquina do JPM
+# sem a máquina estar no 2.0 também. Os pacotes do share (1.x) chegam e abrem.
 STRATOS_PISOS = {
+    'duckdb': 'duckdb>=2.0.0',
     'jinja2': 'Jinja2>=3.1.6',
     'pandas': 'pandas>=3.1.0',
     'extract-msg': 'extract-msg>=0.56.1',
