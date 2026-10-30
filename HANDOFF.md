@@ -31529,3 +31529,78 @@ da contraparte; se o nome não casa, a linha fica sem CNPJ e sem CGD juntos).
 
 `check_efinanceira.py` ganhou os quatro casos (o Pending ignorado, o texto
 pulado, o Reference Data vencendo o Track Docs, o achado pelo nome).
+
+## §739 — Stratos: o DuckDB vai ao 2.0 só na branch dele (2026-10-30)
+
+**Pedido da equipe:** o scanner de dependências do pipeline do Stratos acusou
+o `duckdb>=0.10,<2` (27 versões atrás do 2.0.0, "your constraint does not
+allow 2.0.0"); no commit `f90fd30c` da branch, no mesmo dia, os outros catorze
+pisos subiram e o DuckDB ficou com o teto pela regra do §651. A equipe decidiu
+subir também o DuckDB — só no Stratos.
+
+**O que foi feito:** `stratos/build_requirements.py` ganhou `'duckdb':
+'duckdb>=2.0.0'` em `STRATOS_PISOS` (a troca da linha que vem da raiz); o
+`requirements.txt` da raiz segue `duckdb>=0.10,<2` — é o da instância do time,
+e lá a regra do §651 vale como antes.
+
+**O que foi conferido antes** (venv 3.12 com o 2.0.0 e as outras versões
+novas):
+
+- a suíte do app (236 testes) passa nos mesmos 232 que com o 1.5.4 — as 4
+  falhas (`check_b3_pattern`, `check_export_advanced`, `check_req_cache`,
+  `check_swap_bullet`) são as mesmas nos dois; os testes do Stratos (a prova
+  das travas e a exportação dos bancos inclusive) dão 0 falha;
+- banco criado pelo 1.x: o 2.0 o lê, grava nele e o 1.x CONTINUA abrindo (o
+  formato do arquivo existente é mantido);
+- WAL deixado pelo 1.x (processo morto sem checkpoint — o deploy): o 2.0 refaz
+  o replay inteiro;
+- banco CRIADO pelo 2.0: o 1.x NÃO abre ("version number 999, but we can only
+  read 64-68").
+
+**O que isso quer dizer:** os pacotes que sobem do share (`exporta_dados` →
+`envia_dados`, feitos no 1.x) chegam e abrem no Stratos. O caminho de volta
+não existe sem conversão: um banco que o Stratos criar — e o armazém cria
+`.db` o tempo todo (dia novo, produto novo) — não abre na instância Windows
+nem no `exporta_dados`/`recover_duckdb_wal` de uma máquina no 1.x. Hoje nada
+leva banco do Stratos para o share (a ponte é espelho share → Stratos e os
+bancos não estão na lista `PASTAS`); quem planejar backup do Stratos no share
+ou rollback da virada precisa da máquina de destino no 2.0.
+
+## §740 — Quotes: a segunda consulta mostrava a cotação da primeira (2026-10-30)
+
+**Relato da equipe:** na Quotes, consultar a PTAX de uma moeda e depois a de
+outra não trazia a segunda corretamente.
+
+**Reproduzido** (Chromium, `/api/quotes/ptax` respondido com dados fixos por
+moeda): a 1ª consulta (USD) sai certa; na 2ª (EUR) a página estoura com
+`Cannot set properties of null (setting 'innerHTML')`, a tabela CONTINUA com as
+linhas do USD — o dado errado na tela, sem aviso — e o botão Search fica
+desabilitado até recarregar a página.
+
+**Causa:** a Quotes refaz a DataTable a cada busca (as colunas vêm do servidor)
+e montava a antiga linha de filtro por coluna, `<tr id="qtFilterRow">`. Desde
+o §597 o funil de Excel (`excel-filter.js`) REMOVE essa linha do DOM na
+primeira montagem. Na busca seguinte o `clearTable()` — chamado antes do
+`fetch`, com o Search já desabilitado — fazia
+`getElementById('qtFilterRow').innerHTML = ''` sobre `null`: a exceção parava a
+busca antes de pedir os dados e antes de limpar o corpo da tabela, e o botão
+nunca voltava. O mesmo acontecia ao trocar o tipo de cotação depois de uma
+busca (o `selectKind` chama o mesmo `clearTable`).
+
+**Correção:** a linha de filtro saiu da Quotes (template e JS: a montagem dos
+campos, o `keyup`, o `orderCellsTop`) — o CLAUDE.md já a chama de dívida morta;
+o filtro é o funil do cabeçalho, com o "(Vazias)" no lugar do `blank` antigo.
+O Clear Filters limpa os funis pelo `data-lang` (o excel-filter o reconhece) e
+a busca que sobrar na tabela. Reproduzido de novo: USD → EUR → GBP → USD, cada
+uma com a sua cotação e sem erro.
+
+**Varredura:** dezessete arquivos ainda têm código de linha de filtro; só a
+Quotes combinava as duas coisas que quebram — tabela REFEITA e acesso por id a
+uma linha que o funil removeu. As outras reescrevem o `<thead>` inteiro (que
+nunca sai) ou usam `querySelectorAll`/jQuery, que com a linha removida não
+fazem nada; a Intrag DCE Swap tem linhas com id, mas as monta uma vez, antes
+da tabela, e nunca a refaz.
+
+`check_quotes.py`: as duas conferências antigas (a linha existe, montada antes
+do `.DataTable()`) viraram o contrário — a linha não existe e o JS não a
+procura.
