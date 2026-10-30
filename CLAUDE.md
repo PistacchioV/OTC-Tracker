@@ -874,6 +874,15 @@ São **55**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   (`_ter_file_header`, LE sem Nome Simplificado levanta erro); `MESSAGING`
   Consider/Disregard (intragrupo chega pelos dois arquivos; conta fora do
   cadastro GERA). Estar no cadastro é ser conta INTERNA.
+- **`efin-declarant`** (§736, §743) — LE → `num_ente_declarante` e
+  `cnpjdeclarante` da E-Financeira, e a coluna **ALIASES**: os códigos/nomes
+  com que a entidade aparece no texto da operação (o Owner Legal Entity do
+  Athena, "BCO J.P. MORGAN S.A. 2768 - GEM BR - RATES"); código NUMÉRICO casa
+  como palavra inteira (o 0228 não casa com 102280), texto como trecho. LE fora
+  do cadastro não é declarada e contraparte que está nele é intragrupo. A
+  JPM nasce com `2768; 0228`, e o `upgrade` (`domain.declarant_upgrade`) os
+  põe em quem gravou o cadastro antes da coluna — linha com a coluna, mesmo
+  vazia, fica como a equipe a deixou.
 - **`tools-swap-index`** — curva da posição → indexador do Swap Calculator;
   `Exact` vence `Contains`, token mais longo vence; VCP resolve pelo `Nome
   Tipo/Classe`, que é a SEGUNDA pergunta em toda curva; sem linha o índice fica
