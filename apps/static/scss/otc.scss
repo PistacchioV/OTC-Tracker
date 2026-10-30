@@ -628,6 +628,25 @@ kbd {
 *::-webkit-scrollbar-thumb { background: var(--otc-fill-2); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
 *::-webkit-scrollbar-track { background: transparent; }
 
+// a rolagem HORIZONTAL das tabelas é mais grossa (equipe, 30/10/2026, §744):
+// a grade larga se percorre por ela, e a barra fina do resto da casca era
+// difícil de pegar. No Chromium o `scrollbar-width` desliga o
+// `::-webkit-scrollbar` (Chrome 121+) e o `thin` não tem meio-termo — por isso
+// o par volta a `auto` só nos scrollports de tabela, onde a altura é a deste
+// bloco; o Firefox (sem o seletor) fica com a barra normal, mais larga que a
+// `thin`, nas cores da casa.
+$otc-table-scrollports: '.dt-scroll-body, .table-responsive, .otc-mini-table-wrap, .dataTables_scrollBody';
+:is(#{$otc-table-scrollports}) { scrollbar-width: auto; }
+@supports selector(::-webkit-scrollbar) {
+  :is(#{$otc-table-scrollports}) {
+    scrollbar-width: auto; scrollbar-color: auto;
+    &::-webkit-scrollbar { height: 14px; }
+    &::-webkit-scrollbar-thumb:horizontal { border-width: 3px; }
+    &::-webkit-scrollbar-thumb:horizontal:hover { border-width: 2px; background-color: var(--otc-text-3); }
+    &::-webkit-scrollbar-corner { background: transparent; }
+  }
+}
+
 // a troca de tema não anima centenas de cores de uma vez (a página engasga);
 // quem dá a transição é o View Transition (otc.js)
 html.otc-theme-switching *,

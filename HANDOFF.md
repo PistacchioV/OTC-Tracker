@@ -31695,3 +31695,41 @@ importação nova. Reimportar não desfaz correção nem exclusão.
 `check_efinanceira.py`: o "BCO J.P. MORGAN…", o swap sem nome pela conta, o
 intragrupo pela conta da contraparte, os aliases (palavra inteira e trecho) e
 o upgrade pelo leitor de verdade dos cadastros.
+
+## §744 — A rolagem horizontal das tabelas, mais grossa (2026-10-30)
+
+**Pedido da equipe:** "aumente um pouco a largura do scroll horizontal das
+tabelas" — a barra das grades largas era difícil de pegar.
+
+**O que havia:** a casca inteira tem `* { scrollbar-width: thin; scrollbar-color: … }`
+e, ao lado, um `*::-webkit-scrollbar` de 10 px com polegar de 4 px. Desde o
+Chrome 121 o `scrollbar-width`/`scrollbar-color` de um elemento DESLIGA o
+`::-webkit-scrollbar` dele: o bloco webkit não valia em lugar nenhum no
+Chromium (só no Safari), e o que se via era a barra `thin` do sistema — que não
+tem meio-termo nem altura configurável.
+
+**Correção:**
+
+- no `otc.scss`, os scrollports de tabela (`.dt-scroll-body`,
+  `.table-responsive`, `.otc-mini-table-wrap`, `.dataTables_scrollBody`)
+  devolvem o par a `auto` dentro de `@supports selector(::-webkit-scrollbar)`
+  e ganham a barra horizontal de **14 px com polegar de 8 px** (10 px no
+  hover, mais escuro), e o canto transparente (o padrão do webkit é um
+  quadrado branco no escuro). O Firefox, sem o seletor, fica com a barra
+  `auto` — a normal, mais larga que a `thin` — nas cores da casa. Fora das
+  tabelas nada mudou;
+- o efeito colateral: no Chromium isso muda também a barra VERTICAL do corpo
+  (10 px, a do bloco webkit), e o DataTables, com `scrollY`, dá ao cabeçalho um
+  `padding-right` do tamanho da barra que ele MEDIU num `<div>` solto — que tem
+  a barra `thin` da casca (0 px no Mac, overlay). Com a folga menor que a barra,
+  no fim da rolagem horizontal o cabeçalho parava 10 px atrás das colunas (33
+  telas usam `scrollY`; medido no Reference Data e no Pending Confirmation). O
+  `excel-filter.js` mede a barra numa sonda com a classe `dt-scroll-body` e
+  corrige o `oScroll.iBarWidth` de toda DataTable — as que já existem quando ele
+  carrega e as que nascem depois (`init.dt`) —, reajustando as colunas.
+
+`check_table_scrollbar.py` (novo, Chromium): a barra de 14 px no
+`.dt-scroll-body` e no `.table-responsive`, o `<div>` comum segue `thin`, a
+folga do DataTables = a barra real e a rolagem máxima do cabeçalho = a do corpo
+nas tabelas criadas antes e depois do helper (sem a correção do helper, três
+falhas).

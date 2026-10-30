@@ -13863,6 +13863,29 @@ kbd {
   background: transparent;
 }
 
+:is(.dt-scroll-body, .table-responsive, .otc-mini-table-wrap, .dataTables_scrollBody) {
+  scrollbar-width: auto;
+}
+
+@supports selector(::-webkit-scrollbar) {
+  :is(.dt-scroll-body, .table-responsive, .otc-mini-table-wrap, .dataTables_scrollBody) {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+  :is(.dt-scroll-body, .table-responsive, .otc-mini-table-wrap, .dataTables_scrollBody)::-webkit-scrollbar {
+    height: 14px;
+  }
+  :is(.dt-scroll-body, .table-responsive, .otc-mini-table-wrap, .dataTables_scrollBody)::-webkit-scrollbar-thumb:horizontal {
+    border-width: 3px;
+  }
+  :is(.dt-scroll-body, .table-responsive, .otc-mini-table-wrap, .dataTables_scrollBody)::-webkit-scrollbar-thumb:horizontal:hover {
+    border-width: 2px;
+    background-color: var(--otc-text-3);
+  }
+  :is(.dt-scroll-body, .table-responsive, .otc-mini-table-wrap, .dataTables_scrollBody)::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
 html.otc-theme-switching *,
 html.otc-theme-switching *::before,
 html.otc-theme-switching *::after {
