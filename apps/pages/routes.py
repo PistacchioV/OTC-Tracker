@@ -12164,6 +12164,13 @@ def _swap_bullet_curve_upgrade(rows):
                                if r['DT CURVE'].upper() not in tem]
 
 
+def _efin_declarant_upgrade(rows):
+    """O `efin-declarant` gravado antes da coluna ALIASES ganha os códigos da
+    entidade (a regra é da E-Financeira: `features/efinanceira/domain`)."""
+    from apps.pages.features.efinanceira import domain as _efin_dom
+    return _efin_dom.declarant_upgrade(rows)
+
+
 def _wht_codes_upgrade(rows):
     """O `wht-codes` gravado com `NDF COMM`/`OPTION COMM` → produto × LOB
     COMMODITIES (a regra é do WHT: `features/wht/domain.wht_codes_upgrade`)."""
@@ -14384,11 +14391,19 @@ _MAPPING_DEFS = {
             {'key': 'ENTE', 'label': 'Declarant Number (num_ente_declarante)'},
             {'key': 'CNPJ', 'label': 'Declarant CNPJ (cnpjdeclarante)'},
             {'key': 'NAME', 'label': 'Name'},
+            # Os códigos/nomes que identificam a entidade no texto da operação
+            # (o Owner Legal Entity do Athena: "BCO J.P. MORGAN S.A. 2768 - GEM
+            # BR - RATES"), separados por `;`. Código numérico casa como palavra
+            # inteira; texto, como trecho.
+            {'key': 'ALIASES', 'label': 'Aliases in the trade (codes or names, ; separated)'},
         ],
         'seed': [
-            {'LE': 'JPM', 'ENTE': '39', 'CNPJ': '33172537000198', 'NAME': 'Banco J.P. Morgan S.A.'},
-            {'LE': 'MGT', 'ENTE': '1315', 'CNPJ': '46518205000164', 'NAME': 'JPMorgan Chase Bank'},
+            {'LE': 'JPM', 'ENTE': '39', 'CNPJ': '33172537000198', 'NAME': 'Banco J.P. Morgan S.A.',
+             'ALIASES': '2768; 0228'},
+            {'LE': 'MGT', 'ENTE': '1315', 'CNPJ': '46518205000164', 'NAME': 'JPMorgan Chase Bank',
+             'ALIASES': ''},
         ],
+        'upgrade': _efin_declarant_upgrade,
     },
 }
 
