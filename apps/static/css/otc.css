@@ -16331,6 +16331,27 @@ table td .btn.btn-act > i {
   line-height: 1;
 }
 
+.modal-footer .btn.btn-act {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  max-width: 32px !important;
+  min-height: 32px !important;
+  max-height: 32px !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  border-radius: 10px !important;
+  line-height: 1 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-footer .btn.btn-act > i {
+  font-size: 16px !important;
+  font-size: 1rem !important;
+  line-height: 1;
+}
+
 .btn-row-edit, .btn-row-delete, .btn-row-confirm, .btn-row-send, .btn-row-approve, .btn-row-b2b,
 .acc-act-edit, .acc-act-send, .acc-act-del, .ops-row-del,
 .ar-confirm, .ar-edit, .ar-delete, .btn-rd-edit, .btn-rd-confirm, .btn-rd-delete {
