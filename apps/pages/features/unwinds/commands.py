@@ -1741,6 +1741,42 @@ def settlement_rows(ref):
     return out
 
 
+def encerramentos(ref):
+    """{contrato da B3 (maiúsculas): True | False | None} — as recompras que
+    LIQUIDAM em `ref` encerram o contrato? É a pergunta da E-Financeira
+    (features/efinanceira): a data de encerramento da conta só vai na recompra
+    TOTAL. A resposta é a MESMA `domain.recompra_total` do Termo e do Pending
+    (o saldo depois da recompra zera); `None` quando falta uma parcela do
+    saldo. A NDF FX (Fase 1) e as recompras do catálogo com liquidação; o
+    mesmo contrato com duas recompras no dia encerra se alguma encerra."""
+    from datetime import timedelta
+    alvo = _R()._parse_date_any(ref) or _hoje()
+    try:
+        alvo = alvo.date()
+    except AttributeError:
+        pass
+    out = {}
+
+    def poe(contrato, total):
+        c = str(contrato or '').strip().upper()
+        if c and out.get(c) is not True and (total is not None or c not in out):
+            out[c] = total
+
+    inicio = alvo - timedelta(days=SETTLEMENT_LOOKBACK_DIAS)
+    for l in queries.entries(date_from=inicio.strftime('%Y-%m-%d'), date_to=alvo.strftime('%Y-%m-%d')):
+        liq = _R()._parse_date_any(l.get('SettlementDate'))
+        try:
+            liq = liq.date()
+        except AttributeError:
+            pass
+        if liq == alvo:
+            poe(l.get('Contract'), domain.recompra_total(l))
+    from apps.pages.features.unwinds.product import commands as produto
+    for c, total in produto.encerramentos(alvo).items():
+        poe(c, total)
+    return out
+
+
 def commodity_settlement_rows(ref):
     """As recompras de NDF de Commodities que liquidam em `ref` — o que o
     Settlement Advice de NDF de mercadoria (`_ndfadv_collect`) soma, e com ele

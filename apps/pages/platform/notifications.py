@@ -97,6 +97,11 @@ _NOTIF_PAGE_URL = {
     'Initiatives': '/initiatives',
     'Intraday Monitor': '/intraday-monitor',
     'WHT': '/regulatory/wht',
+    # a E-Financeira: um rótulo por sistema de origem (features/efinanceira)
+    'E-Financeira KAPITAL': '/regulatory/e-financeira/kapital',
+    'E-Financeira ATHENA-NDF': '/regulatory/e-financeira/athena-ndf',
+    'E-Financeira ATHENA-FXO': '/regulatory/e-financeira/athena-fxo',
+    'E-Financeira PYRAMID': '/regulatory/e-financeira/pyramid',
     'User Home': '/user-home',
     # Nove páginas gravavam notificação SEM entrada aqui — o aviso aparecia no
     # sino e o clique não ia a lugar nenhum (o TED Release do Other Products

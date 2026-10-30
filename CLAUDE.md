@@ -810,7 +810,7 @@ escolhido, os outros dois se preenchem). **`file`** aponta para um JSON já
 existente (o `swap-index` edita o mesmo `SwapIndex.json` do Index Results —
 declare as colunas extras, senão o POST as derruba).
 
-São **54**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currency-base`, `interbook-ndf`, `interbook-fxo`, `commodities-b3`,
+São **55**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currency-base`, `interbook-ndf`, `interbook-fxo`, `commodities-b3`,
 `publisher-ndf`, `le-accronym`, `le-spn`, `bank-name`, `fxo-conv-rate`,
 `ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`,
 `manual-conf-validation`, `manual-conf-sla`, `fxo-internal-cpty`,
@@ -820,7 +820,7 @@ São **54**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 `swap-funcionalidade`, `swap-amortizacao`, `swap-code-labels`,
 `quotes-equity`, `quotes-commodity`, `mt300`, `settlement-exception`,
 `gdt-codes`, `equity-leg-prefix`, os sete `dce-*` e o `dce-position-codes`, os quatro `cgd-*` e os três `wht-*`
-(`wht-codes`, `wht-company`, `wht-non-resident`).
+(`wht-codes`, `wht-company`, `wht-non-resident`) e o `efin-declarant`.
 
 ### Regras fáceis de quebrar pela tela
 
@@ -3004,6 +3004,33 @@ São **54**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   `_ops_swap_ir_rate`). A recompra é sempre `UNWIND` (`domain.event_of`, também
   na leitura). O status sai em caixa alta pelo `data-case="upper"` da pílula
   (o `otc.js` pula o Proper nela, no funil e no export).
+- **Regulatory › E-financeira são QUATRO páginas, uma por sistema** (equipe,
+  30/10/2026, §736; `features/efinanceira`, `/regulatory/e-financeira/<página>`,
+  um template): KAPITAL (swap CEM/CEMHYB), ATHENA-NDF (NDF FX e de
+  commodities), ATHENA-FXO (opção FX e de commodities) e PYRAMID (tudo da EDG) —
+  quem decide é `domain.page_of(produto, LOB)`, e cada uma gera o SEU arquivo
+  (`KAPITAL_SWAP_EFINAN_AAAAMM.csv`…) em `Regulatory\E-Financeira\AAAA\MM. Month`
+  do share. Uma linha por OPERAÇÃO no mês (a `conta_num` é o B3 ID), montada na
+  LEITURA a partir dos EVENTOS que o Import Settlements do mês grava por dia ×
+  fonte (`efin/efin_AAAAMM.json`): o `email_trades` do NDF Summary, o Trade Level
+  do Other Products e as opções que VENCEM no dia na posição (a que vence sem
+  caixa só a posição vê — é ela que leva o Saldo). As regras: Total Crédito =
+  prêmio RECEBIDO no mês; Total Débito = prêmio PAGO; Pagamento Acumulado = o
+  que o banco pagou (prêmio incluído), e o `pag_tp` é FATCA504 com valor, 999
+  sem; Saldo = o prêmio recebido na VIDA, só de quem encerrou; Data de
+  Encerramento = vencimento, exercício, expiração ou recompra TOTAL (a
+  `encerramentos` da vertical de Unwinds, a mesma `recompra_total` do Termo) —
+  fluxo de swap só o do vencimento. O prêmio de quem não pagou no mês vem da
+  POSIÇÃO (chaves aditivas nas linhas do `_optadv_collect`/`_ndfadv_collect`, que
+  o Trade Level passa como `_premium`/`_premium_side`/`_maturity`/`_party_account`).
+  A LE sai da CONTA da parte quando há (o nome na posição de opção é apelido,
+  `JPMORGANBM`); contraparte que é declarante (`efin-declarant`) é intragrupo e
+  sai; LE fora do cadastro também. O **Valor Interno × Valor B3** de cada
+  operação usa a tolerância da tela de origem (5,00 NDF Summary, 20,00 Trade
+  Level). A data do CGD (`conta_dtabertu`) é a do Tracking Docs (Signature Date,
+  senão Emissão; o CGD mais antigo do CNPJ). Correção em `edits` (4-olhos, o
+  desenho do WHT §702); o arquivo RECUSA linha pendente ou incompleta (LE, B3
+  ID, Tax ID, CGD Date). `check_efinanceira.py`.
 
 ### Esteira de confirmação manual
 

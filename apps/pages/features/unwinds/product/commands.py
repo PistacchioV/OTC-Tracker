@@ -784,6 +784,33 @@ def termo_carimbar(chaves, ref_date, doc_path, pdf_path, link='', sid=''):
     return achadas
 
 
+def encerramentos(ref):
+    """{contrato (maiúsculas): True | False | None} das recompras do catálogo
+    que LIQUIDAM em `ref` — a recompra encerra o contrato? Pela linha no
+    formato da Fase 1 (`para_o_termo`) e a MESMA `recompra_total` do Termo.
+    Quem pergunta é o `commands.encerramentos` da Fase 1 (a E-Financeira)."""
+    from datetime import timedelta
+    from apps.pages.features.unwinds import domain as fase1_dom
+    alvo = _dia(ref)
+    out = {}
+    for page in paginas_com_esteira():
+        for n in range(SETTLEMENT_LOOKBACK_DIAS + 1):
+            dia = alvo - timedelta(days=n)
+            for l in queries.entries(page, dia.strftime('%Y-%m-%d')):
+                liq = _R()._parse_date_any(l.get('SettlementDate'))
+                try:
+                    liq = liq.date()
+                except AttributeError:
+                    pass
+                c = str(l.get('Contract') or '').strip().upper()
+                if liq != alvo or not c:
+                    continue
+                total = fase1_dom.recompra_total(para_o_termo(page, l))
+                if out.get(c) is not True and (total is not None or c not in out):
+                    out[c] = total
+    return out
+
+
 def settlement_rows(ref, dirs=None):
     """As recompras do catálogo que LIQUIDAM em `ref` (a regra da Fase 1:
     entram desde o IMPORT; sem resultado ou sem direção apurada ficam de fora,
