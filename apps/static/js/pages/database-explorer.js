@@ -26,7 +26,8 @@
         dbs: [], db: null, dbInfo: null, tables: [], table: null,
         data: null, dt: null, sig: null, byRid: new Map(), sel: new Map(),
         edit: null, pedido: 0, dayCol: -1, day: '',
-        expand: undefined    // undefined = o padrão do servidor; '' = como está gravado
+        expand: undefined,   // undefined = o padrão do servidor; '' = como está gravado
+        section: ''          // a seção do objeto aberta na visão expandida ('' = visão geral)
     };
 
     function el(id) { return document.getElementById(id); }
@@ -232,6 +233,7 @@
     function pickTable(x) {
         S.table = x;
         S.expand = undefined;
+        S.section = '';
         el('dbxLoad').disabled = false;
         tblMeta();
         loadRows(false);
@@ -267,7 +269,7 @@
         setBusy(true);
         return api('POST', '/rows', {
             db: S.db, schema: S.table.schema, table: S.table.name, limit: +el('dbxLimit').value,
-            expand: S.expand
+            expand: S.expand, section: S.section || null
         }).then(function (j) {
             if (meu !== S.pedido) return;
             S.data = j;
@@ -283,7 +285,15 @@
         if (d.readonly && d.readonly !== 'expanded') {
             partes.push('<i class="ti ti-lock me-1"></i>' + t('dbx-ro-' + d.readonly, 'Read-only.'));
         }
-        if (d.expanded) {
+        if (d.expanded && d.section) {
+            partes.push('<i class="ti ti-table me-1"></i>' + t('dbx-expanded-section',
+                'Section <b>{sec}</b> of the JSON in <b>{col}</b>: {n} rows. Read-only — pick another one in Section, or "Overview" to see the fields.',
+                { sec: esc(d.section), col: esc(d.expanded), n: fmtInt(d.rows.length) }));
+        } else if (d.expanded && (d.sections || []).length) {
+            partes.push('<i class="ti ti-table me-1"></i>' + t('dbx-expanded-overview',
+                'The JSON in <b>{col}</b> has {n} tables inside it. Pick one in Section — or click the row count in its column — to see it as a table.',
+                { col: esc(d.expanded), n: fmtInt(d.sections.length) }));
+        } else if (d.expanded) {
             partes.push('<i class="ti ti-table me-1"></i>' + t('dbx-expanded',
                 'The JSON in <b>{col}</b> is shown as a table: {n} rows from {m} records. Read-only — pick "As stored" in View to see the column as saved.',
                 { col: esc(d.expanded), n: fmtInt(d.rows.length), m: fmtInt(d.source_rows) }));
@@ -308,13 +318,20 @@
         if (typeof v === 'boolean') return v ? 'true' : 'false';
         return String(v);
     }
-    // número decimal com separador de milhar NA TELA; o Export leva o cru
+    // número decimal com separador de milhar NA TELA, até 8 casas (o resto é
+    // o ruído do float: 230927.6600000002); o Export leva o cru
     function disp(c, v) {
-        if (typeof v === 'number' && c.kind === 'float') return v.toLocaleString('en-US', { maximumFractionDigits: 10 });
+        if (typeof v === 'number' && c.kind === 'float') return v.toLocaleString('en-US', { maximumFractionDigits: 8 });
         return shown(c, v);
     }
     function cellRender(c) {
         return function (v, type) {
+            if (c.kind === 'section' && v != null) {
+                // a contagem da seção abre a seção (visão geral do objeto)
+                if (type === 'display') return '<a href="#" class="dbx-sec-link" data-sec="' + esc(c.name) + '">' +
+                    esc(t('dbx-sec-rows', '{n} rows', { n: fmtInt(v) })) + ' <i class="ti ti-chevron-right"></i></a>';
+                return v;
+            }
             if (type === 'display') {
                 if (v === null || v === undefined) return '<span class="dbx-null">NULL</span>';
                 var s = disp(c, v);
@@ -379,6 +396,24 @@
         sel.value = d.expanded || '';
     }
 
+    // ── visão expandida: a SEÇÃO ─────────────────────────────────────────────
+    // O objeto de uma rotina (o dia do Pay/Rec) tem várias tabelas dentro
+    // (summary, settled, pending_payment…): cada uma é uma seção, aberta em
+    // linhas e colunas. "Visão geral" são os campos soltos com a contagem de
+    // cada seção.
+    function sectionSelect(d) {
+        var sel = el('dbxSection'), secs = d.sections || [];
+        sel.classList.toggle('d-none', !d.expanded || !secs.length);
+        sel.innerHTML = '<option value="">' + esc(t('dbx-section-overview', 'Section: overview (fields)')) + '</option>' +
+            secs.map(function (s) {
+                return '<option value="' + esc(s.name) + '">' + esc(t('dbx-section', 'Section: {sec} — {n} rows',
+                    { sec: s.name, n: fmtInt(s.rows) })) + '</option>';
+            }).join('');
+        S.section = d.section || '';
+        sel.value = S.section;
+    }
+    function openSection(name) { S.section = name || ''; S.day = ''; loadRows(false); }
+
     // ── visão expandida: o DIA e o total ─────────────────────────────────────
     // O ledger (e todo JSON por data) se lê UM DIA POR VEZ: o seletor mostra
     // cada dia com quantas linhas ele tem, e a grade fica só com a quebra dele.
@@ -433,6 +468,7 @@
         var d = S.data;
         var editable = !d.readonly;
         viewSelect(d);
+        sectionSelect(d);
         daySelect(d, keep);
         S.byRid = new Map();
         if (editable) d.rows.forEach(function (r) { S.byRid.set(r[0], r); });
@@ -721,7 +757,9 @@
     // ── barra ────────────────────────────────────────────────────────────────
     el('dbxLoad').addEventListener('click', function () { loadRows(false); });
     el('dbxLimit').addEventListener('change', function () { if (S.table) loadRows(true); });
-    el('dbxView').addEventListener('change', function () { S.expand = this.value; loadRows(false); });
+    el('dbxView').addEventListener('change', function () { S.expand = this.value; S.section = ''; loadRows(false); });
+    el('dbxSection').addEventListener('change', function () { openSection(this.value); });
+    jQuery('#dbxTableWrap').on('click', '.dbx-sec-link', function (e) { e.preventDefault(); openSection(this.getAttribute('data-sec')); });
     el('dbxDay').addEventListener('change', function () { S.day = this.value; if (S.dt) S.dt.draw(); });
     el('dbxRefresh').addEventListener('click', function () { loadRows(true); });
     // o funil limpa sozinho (excel-filter.js reconhece o botão); aqui a busca

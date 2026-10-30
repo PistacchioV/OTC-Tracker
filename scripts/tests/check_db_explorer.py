@@ -43,6 +43,17 @@ import duckdb  # noqa: E402
 
 FALHAS = []
 # a forma do ledger de IR do NDF Summary (`ndf-ir-ledger_AAAAMM.json`)
+# O dia do Pay/Rec: UM objeto com tabelas dentro (§735).
+PAYREC = {
+    'success': True, 'recon_date': '2026-10-15',
+    'summary': [{'pay_receive': 'Pay', 'jpm_qty': 14}, {'pay_receive': 'Receive', 'jpm_qty': 3}],
+    'settled': [{'client': 'MARAJO', 'jpm_value': 10.5, 'manual_rows': [{'a': 1}]},
+                {'client': 'SUZANO', 'jpm_value': 7.25, 'manual_rows': []}],
+    'pending_payment': [],
+    'branch': {'b2b_settlement': False, 'trades': None},
+    'tags': ['x', 'y'],
+}
+
 LEDGER = {
     '2026-10-01': {'ebazar ltda': {'name': 'EBAZAR', 'due': 10.5, 'withheld': 0.0, 'carry_in': 0.0, 'carry_after': 10.5}},
     '2026-10-02': {},
@@ -83,6 +94,8 @@ def semear():
     con.executemany('INSERT INTO ledger__meta VALUES (?, ?)', [[k, json.dumps(v)] for k, v in LEDGER.items()])
     con.execute('CREATE TABLE ledger__raw (_seq BIGINT, _raw VARCHAR)')
     con.execute('INSERT INTO ledger__raw VALUES (0, ?)', [json.dumps(LEDGER)])
+    con.execute('CREATE TABLE d_20261015__raw (_seq BIGINT, _raw VARCHAR)')
+    con.execute('INSERT INTO d_20261015__raw VALUES (0, ?)', [json.dumps(PAYREC)])
     con.close()
     lite = sqlite3.connect(os.path.join(DBDIR, 'comitentes.db'))
     lite.execute('CREATE TABLE t (a INTEGER)')
@@ -164,6 +177,23 @@ def main():
     check('o teto corta e diz que cortou', domain.expand(['key', 'value'], meta, 1, cap=2)[2] is True)
     check('armazém "chave + JSON" abre expandido', domain.default_expand(['key', 'value'], ['value'], True) == 'value'
           and domain.default_expand(['_seq', '_raw'], ['_raw'], True) == '_raw')
+    print('== 1c. seções: as tabelas dentro do objeto ==')
+    linha = [[0, json.dumps(PAYREC)]]
+    check('as seções são as listas de registros, com a contagem',
+          domain.sections(linha, 1) == [{'name': 'summary', 'rows': 2}, {'name': 'settled', 'rows': 2},
+                                         {'name': 'pending_payment', 'rows': 0}], domain.sections(linha, 1))
+    check('objeto de objetos (o ledger) não tem seção — já abre em linhas',
+          domain.sections([[0, json.dumps(LEDGER)]], 1) == [])
+    nomes, linhas, _ = domain.expand(['_seq', '_raw'], linha, 1)
+    check('visão geral: os campos soltos, cada seção pela contagem (não o JSON)',
+          nomes == ['success', 'recon_date', 'summary', 'settled', 'pending_payment', 'branch.b2b_settlement',
+                    'branch.trades', 'tags'] and linhas[0][2:5] == [2, 2, 0]
+          and isinstance(linhas[0][3], domain.Rows), nomes)
+    nomes, linhas, _ = domain.expand(['_seq', '_raw'], linha, 1, section='settled')
+    check('a seção pedida: uma linha por registro, os campos em colunas',
+          nomes == ['client', 'jpm_value', 'manual_rows'] and [l[:2] for l in linhas] == [['MARAJO', 10.5], ['SUZANO', 7.25]],
+          nomes)
+    check('seção vazia: nenhuma linha', domain.expand(['_seq', '_raw'], linha, 1, section='pending_payment')[1] == [])
     check('...dataset tipado e banco de plataforma, não',
           domain.default_expand(['NAME', '_seq', '_raw'], ['_raw'], True) is None
           and domain.default_expand(['key', 'value'], ['value'], False) is None)
@@ -314,6 +344,19 @@ def main():
           and d['json_columns'] == ['value'])
     d = rows('ledger__raw', db='zz-armazem/teste.db').get_json()
     check('o __raw do mês inteiro também', d['expanded'] == '_raw' and len(d['rows']) == 3)
+    d = rows('d_20261015__raw', db='zz-armazem/teste.db').get_json()
+    check('o dia do Pay/Rec abre na visão geral, com as seções listadas',
+          d['expanded'] == '_raw' and d['section'] is None and len(d['rows']) == 1
+          and [x['name'] for x in d['sections']] == ['summary', 'settled', 'pending_payment']
+          and [c['kind'] for c in d['columns'] if c['name'] in ('summary', 'settled')] == ['section', 'section'],
+          [(c['name'], c['kind']) for c in d['columns']])
+    d = m.post('/api/database-explorer/rows', json={'db': 'zz-armazem/teste.db', 'schema': 'main',
+                                                    'table': 'd_20261015__raw', 'section': 'settled'}).get_json()
+    check('...a seção pedida vira a tabela', d['section'] == 'settled' and len(d['rows']) == 2
+          and [c['name'] for c in d['columns']][:2] == ['client', 'jpm_value'] and d['columns'][1]['kind'] == 'float')
+    d = m.post('/api/database-explorer/rows', json={'db': 'zz-armazem/teste.db', 'schema': 'main',
+                                                    'table': 'd_20261015__raw', 'section': 'nao-existe'}).get_json()
+    check('...seção desconhecida volta à visão geral', d['section'] is None and len(d['rows']) == 1)
     d = rows('prefs').get_json()
     check('tabela editável com JSON não expande sozinha', d['expanded'] is None and d['readonly'] is None
           and d['json_columns'] == ['doc'])
@@ -329,6 +372,12 @@ def main():
     tpl = open(os.path.join(ROOT, 'apps', 'templates', 'pages', 'database-explorer.html'), encoding='utf-8').read()
     js = open(os.path.join(ROOT, 'apps', 'static', 'js', 'pages', 'database-explorer.js'), encoding='utf-8').read()
     check('o seletor do dia na barra', 'id="dbxDay"' in tpl)
+    check('o seletor da seção na barra, e a contagem abre a seção',
+          'id="dbxSection"' in tpl and "section: S.section || null" in js and '.dbx-sec-link' in js)
+    for lang in ('en', 'br', 'es'):
+        tr = json.load(open(os.path.join(ROOT, 'apps', 'static', 'data', 'translations', lang + '.json'), encoding='utf-8'))
+        check('textos da seção em %s' % lang, all(k in tr for k in (
+            'dbx-section-overview', 'dbx-section', 'dbx-sec-rows', 'dbx-expanded-section', 'dbx-expanded-overview')))
     check('o filtro do dia é um ext.search próprio (o column().search() o funil zera)',
           'jQuery.fn.dataTable.ext.search.push' in js and 'row[S.dayCol + 2] === S.day' in js)
     check('a visão expandida por data abre ordenada pelo dia', "order: S.dayCol >= 0 ? [[off + S.dayCol, 'asc']] : []" in js)

@@ -72,8 +72,9 @@ def api_dbx_rows():
     p = request.get_json(silent=True) or {}
     try:
         expand = p.get('expand')
+        section = p.get('section')
         out = queries.rows(p.get('db'), str(p.get('schema') or ''), str(p.get('table') or ''), p.get('limit'),
-                           None if expand is None else str(expand))
+                           None if expand is None else str(expand), str(section) if section else None)
         return jsonify({'success': True, **out})
     except domain.ExplorerError as e:
         return _erro(e)
