@@ -2071,6 +2071,14 @@ textarea.form-control { min-height: 84px; }
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
 }
+// A LISTA aberta de um <select> nativo é desenhada pelo sistema — no Windows,
+// com o fundo do próprio select —, e o fundo dos campos aqui é TRANSLÚCIDO
+// (`--otc-fill`): no tema escuro ela saía cinza-claro com o texto claro do
+// tema, ilegível (o mês e o ano do daterangepicker do Other Products Summary,
+// 30/10/2026; o mesmo valia para o "Show N entries" e todo .form-select). Em
+// TODO select as opções levam o fundo SÓLIDO do menu e a cor do texto. O mês
+// do flatpickr já tinha a regra dele (lá o select é `transparent !important`).
+select option, select optgroup { background-color: var(--otc-menu-bg); color: var(--otc-text); }
 .form-label, .col-form-label { font: 600 12.5px/1.45 var(--otc-font); color: var(--otc-text-2); margin-bottom: 6px; }
 .form-text { color: var(--otc-text-3); font-size: 12.5px; }
 .input-group {
