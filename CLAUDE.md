@@ -1221,6 +1221,17 @@ São **55**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   `select option, select optgroup` mora no `otc.scss` (§6f); página nova não
   escreve nada. O headless não fotografa a lista nativa: mede-se o
   `getComputedStyle` da `<option>`. `check_theme_toggle.py` §6.
+- **A rolagem HORIZONTAL das tabelas é mais grossa que a da casca** (equipe,
+  30/10/2026, §744): 14 px com polegar de 8 px nos scrollports de tabela
+  (`$otc-table-scrollports` no `otc.scss`: `.dt-scroll-body`,
+  `.table-responsive`…); o resto segue `thin`. No Chromium 121+ o
+  `scrollbar-width`/`scrollbar-color` DESLIGA o `::-webkit-scrollbar` do mesmo
+  elemento — por isso o par volta a `auto` ali, e o `*::-webkit-scrollbar` da
+  casca não vale em lugar nenhum fora deles. Isso muda também a barra VERTICAL
+  do corpo, e o DataTables mede a barra num `<div>` solto: o `excel-filter.js`
+  corrige a folga do cabeçalho (`oScroll.iBarWidth`) pela barra real, senão,
+  com `scrollY`, o cabeçalho parava atrás das colunas no fim da rolagem.
+  Scrollport de tabela novo entra na lista. `check_table_scrollbar.py`.
 - **O `<style>` da página carrega ANTES do `otc.css`** — é a regra que explica
   quase todo "minha regra não pegou". Regra da tela precisa de peso de id ou
   de classe (`#ops-page .x`) para vencer componente do tema; e o tema, ao
@@ -3970,7 +3981,7 @@ São **55**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (235 scripts)
+### `scripts/tests/` (237 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

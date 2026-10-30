@@ -776,6 +776,39 @@
         if (e.namespace === 'dt') settlePoke(settings);
     });
 
+    // ── A folga do cabeçalho é a barra REAL do corpo (§744) ───────────────
+    // Com `scrollY` o DataTables dá ao cabeçalho um `padding-right` do tamanho
+    // da barra vertical, para ele rolar até o fim junto com o corpo — e mede a
+    // barra num <div> solto, que tem a barra do resto da casca. O corpo tem a
+    // dos scrollports de tabela (otc.scss: a rolagem horizontal mais grossa
+    // muda as duas no Chromium), e a folga saía menor que a barra: no fim da
+    // rolagem horizontal o cabeçalho parava 10 px atrás do corpo. A medida
+    // aqui é numa sonda com a classe do corpo.
+    var BODY_BAR = (function () {
+        try {
+            var p = document.createElement('div');
+            p.className = 'dt-scroll-body';
+            p.style.cssText = 'position:absolute;top:-9999px;left:-9999px;width:100px;height:100px;overflow:scroll';
+            document.body.appendChild(p);
+            var bar = p.offsetWidth - p.clientWidth;
+            p.remove();
+            return bar;
+        } catch (e) { return null; }
+    })();
+    function fixBarWidth(settings) {
+        if (BODY_BAR == null || !settings || !settings.oScroll) return;
+        if (settings.oScroll.iBarWidth === BODY_BAR) return;
+        settings.oScroll.iBarWidth = BODY_BAR;
+        if (settings.oBrowser) settings.oBrowser.barWidth = BODY_BAR;
+        if (settings.oScroll.sY) {
+            try { new DT.Api(settings).columns.adjust(); } catch (e) { /* tabela ainda sem corpo */ }
+        }
+    }
+    $(document).on('init.dt.oxfb', function (e, settings) { if (e.namespace === 'dt') fixBarWidth(settings); });
+    DT.tables().forEach(function (node) {
+        try { fixBarWidth($(node).DataTable().settings()[0]); } catch (e) { /* não é DataTable */ }
+    });
+
     $(document).on('init.dt.oxf', function (e, settings) {
         if (e.namespace !== 'dt') return;
         var node = settings && settings.nTable;
