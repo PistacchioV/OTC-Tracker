@@ -31625,3 +31625,34 @@ os rodapés do Database Explorer e do Index B3 ficam como já pretendiam. Medido
 no Chromium (o modal aberto pelo Add Row, claro e escuro): 32×32, raio 10px.
 `check_row_action_buttons.py` §8 prende a regra no SCSS e no CSS compilado e
 os dois rodapés (sem `rounded-circle`).
+
+## §742 — E-Financeira: a linha sem data do CGD diz por quê (2026-10-30)
+
+**Pedido da equipe:** depois do §738 (a data do CGD pelo Reference Data),
+saber, na própria tela, por que uma linha continua sem data — em vez de
+investigar caso a caso.
+
+**O que mudou:**
+
+- **O motivo na célula.** `queries.cgd_of_op` devolve, além da data e da
+  fonte, o MOTIVO de não haver data, e a célula vazia da *CGD Date* o mostra em
+  curto (o tooltip diz o que corrigir e onde, com o SPN, o valor ou o CNPJ):
+  `no_taxid` (a linha sem CNPJ e o nome fora do Reference Data),
+  `not_in_refdata` (o CNPJ — nem o nome — não está no Reference Data),
+  `cgd_empty` (o SPN sem CGD, ou sem registro no Counterparty Details),
+  `cgd_pending` (o CGD só `Pending`: falta o checker) e `cgd_not_date` (o CGD
+  `Active` é um texto, "Sim", "N/A"). O estado de cada SPN sai do
+  `_cpd_cgd()`; com mais de um SPN para o mesmo CNPJ, vale o de melhor estado.
+- **A data lida com tolerância** (`domain.cgd_date`): além de dd/mm/aaaa e ISO,
+  dd-mm-aaaa, dd.mm.aaaa, ano com 2 dígitos, a data no meio de um texto ("CGD
+  03/06/2015 assinado") e o número de série do Excel (42158 = 03/06/2015) — o
+  CGD é digitado ou veio de importação de planilha. Vale também para o
+  Tracking Docs.
+- **Apagar a data digitada volta à busca automática.** Antes, a correção com
+  a data em branco deixava a linha sem data para sempre (a correção vencia, e
+  vazia).
+
+A captura do Guia (a tabela com as colunas do arquivo) foi refeita: a linha
+incompleta mostra o motivo. `check_efinanceira.py`: os cinco motivos, os
+formatos de data, a série do Excel com dois SPNs e a data apagada que volta à
+do Track Docs (110 conferências).

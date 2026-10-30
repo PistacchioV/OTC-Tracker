@@ -1769,7 +1769,7 @@ Cada linha é **uma operação** — a conta da e-Financeira é o **B3 ID** — 
 
 ![E-Financeira — as colunas do arquivo e o Interno × B3 (ATHENA-FXO, com as colunas de identificação escondidas pelo **Columns**)](docs/sop-screenshots/regulatory_e-financeira_athena-fxo_columns.png)
 
-Na imagem: a primeira linha está **Pending** (uma correção esperando confirmação); a segunda está **Incomplete** — falta a data do CGD, e a célula fica em vermelho; a terceira é uma opção que **venceu sem pagamento** (o Saldo é o prêmio recebido em 2025); a quarta foi **exercida** contra o banco (Pagamento Acumulado e Saldo) e o valor da B3 difere do interno em 35,40 — acima dos R$ 20,00, a Diferença fica em âmbar.
+Na imagem: a primeira linha está **Pending** (uma correção esperando confirmação); a segunda está **Incomplete** — falta a data do CGD, e a célula diz por quê (*Not in Reference Data*: o CNPJ dela não está no Reference Data); a terceira é uma opção que **venceu sem pagamento** (o Saldo é o prêmio recebido em 2025); a quarta foi **exercida** contra o banco (Pagamento Acumulado e Saldo) e o valor da B3 difere do interno em 35,40 — acima dos R$ 20,00, a Diferença fica em âmbar.
 
 O valor que a liquidação **recebeu** do cliente não entra em coluna nenhuma do arquivo — ele aparece no **Internal Value**. Ao lado, o **B3 Value** e a **Difference**, para comparar o interno com a B3: verde quando batem (até R$ 5,00 nas operações do NDF Summary e R$ 20,00 nas do Other Products), âmbar quando não.
 
@@ -1778,7 +1778,7 @@ O valor que a liquidação **recebeu** do cliente não entra em coluna nenhuma d
 1. O **Reference month** abre no último dia do mês anterior — o mês que acabou de fechar. Troque a data para ver outro mês.
 2. Clique em **Import Settlements**. Ele roda em segundo plano e mostra quantos dias já leu: pode fechar a janela, a faixa acima da tabela acompanha e a tela se atualiza sozinha no fim. O aviso amarelo lista os dias do mês que ainda não foram importados.
 3. Confira os cartões — **Accounts**, **Closed in the month**, **With payment**, **Internal × B3 to check**, **Incomplete** e **Pending** (clicar num cartão filtra a tabela) — e os totais logo abaixo.
-4. Complete as linhas **Incomplete**: a célula que falta fica em vermelho (LE, B3 ID, Tax ID ou CGD Date). Para o **CGD Date** e o **Tax ID**, o certo é cadastrar na origem — o CNPJ e o CGD da contraparte no **Reference Data** (o CGD só vale depois de aprovado, *Active*) — e recarregar a página: a data passa a valer para todos os meses e para as confirmações. O **Edit** corrige só aquela linha, naquele mês.
+4. Complete as linhas **Incomplete**: a célula que falta fica em vermelho (LE, B3 ID, Tax ID ou CGD Date). Sem a data do CGD, a própria célula diz **por quê** — *No Tax ID*, *Not in Reference Data*, *No CGD in Reference Data*, *CGD pending approval* (falta o checker) ou *CGD is not a date* (o valor cadastrado é um texto) — e o mouse sobre ela explica o que corrigir. Para o **CGD Date** e o **Tax ID**, o certo é cadastrar na origem — o CNPJ e o CGD da contraparte no **Reference Data** (o CGD só vale depois de aprovado, *Active*) — e recarregar a página: a data passa a valer para todos os meses e para as confirmações. O **Edit** corrige só aquela linha, naquele mês.
 5. Clique em **Generate File**. O arquivo é gravado em `I:\Confirmation\Derivativos\OTC Tracker\Regulatory\E-Financeira\AAAA\MM. Mês` (substituindo o do mês, se já houver) e baixado. Ele **não sai** com linha **Pending** nem com linha incompleta — a mensagem diz quais.
 
 **Os status:**
