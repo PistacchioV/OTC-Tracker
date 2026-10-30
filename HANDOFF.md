@@ -31241,3 +31241,12 @@ da instância não dá para dizer se elas mudaram de status ou foram apagadas:
 `scripts/diag_pending_missing.py` responde isso por Trade Number (NA FILA /
 RESOLVIDA com o status de agora / BACKLOG / FORA DO LUGAR / AUSENTE, e se
 estava na foto das 11:30).
+
+**O resultado na instância (29/10/2026, 20:57):** das 491 operações da planilha
+das 10:45, 108 seguem NA FILA, **368 foram RESOLVIDAS** (364 `Signed
+Digitally`, 3 `Concluded`, 1 `Exception FepWeb`) e 15 estão AUSENTES dos três
+bancos — e já não estavam na foto das 11:30, então saíram entre as 10:45 e as
+11:30 (Delete ou Trade Number editado na tela). Não há defeito: a tela mostra
+a fila de AGORA, e a equipe deu baixa nas assinaturas digitais depois da
+gravação da planilha. Pedido seguinte da equipe: o card da planilha ganhou o
+liga/desliga do §722 (`pendingspreadsheet` no `auto_send.CARDS`).

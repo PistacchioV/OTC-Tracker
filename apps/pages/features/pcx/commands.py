@@ -10,6 +10,7 @@ from datetime import timedelta
 
 from apps.pages.features.pcx import domain, queries
 from apps.pages.features.pcx.infra import persistence
+from apps.pages.platform import auto_send
 
 
 def _routes():
@@ -34,12 +35,21 @@ def run_manual(ref=None):
 
 
 def fire_slot(slot, fired):
-    """Grava a planilha do slot, se ninguém já gravou e o dia é útil ANBIMA."""
+    """Grava a planilha do slot, se ninguém já gravou e o dia é útil ANBIMA.
+
+    Com o interruptor do card DESLIGADO (§722) o horário é reservado, o status
+    diz `disabled` e a planilha do share fica como está; o Run manual segue
+    valendo."""
     R = _routes()
     if not R._pcx_is_bizday(fired):
         return False
+    ligado = auto_send.ligado('pendingspreadsheet')   # §722; levanta → o laço tenta de novo
     if not persistence.claim_slot(slot):
         return False
+    if not ligado:
+        R.log.info('[pending-spreadsheet] %s: gravação automática desligada no card — pulada', slot)
+        persistence.write_status(slot, auto_send.DESLIGADO, fired)
+        return True
     try:
         n, fp = save()
         R.log.info('[pending-spreadsheet] %s: %d linha(s) → %s', slot, n, fp)

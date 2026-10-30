@@ -23,7 +23,10 @@ from apps.pages import data_store as _store
 # Card novo com laço que manda e-mail entra aqui E chama `ligado()` no
 # disparo (o `check_cp_auto_send.py` varre os laços).
 CARDS = ('intradaytasks', 'confescalation', 'initiativealerts',
-         'manualdealsea', 'baccea', 'mt300')
+         'manualdealsea', 'baccea', 'mt300',
+         # não manda e-mail: GRAVA a planilha do Pending no share às 10:45 —
+         # entrou pelo mesmo interruptor a pedido da equipe (29/10/2026)
+         'pendingspreadsheet')
 
 # O desfecho gravado no status do card quando o horário caiu desligado.
 DESLIGADO = 'disabled'
