@@ -694,7 +694,14 @@ direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
   (`domain.sections`, §735): toda lista de registros ou objeto de objetos de
   um objeto misto. A visão geral mostra os campos soltos com a CONTAGEM de cada
   seção (`domain.Rows`, um link que a abre) no lugar do JSON cru, e o seletor
-  Section abre a escolhida em linhas e colunas. A visão expandida é só leitura. Toda gravação
+  Section abre a escolhida em linhas e colunas — a seção ANINHADA também, pelo
+  caminho (`gt30 › monthly`). **Nenhuma célula mostra JSON cru, em banco
+  nenhum** (equipe, 30/10/2026): lista de valores soltos vira o texto separado
+  por vírgula, lista de registros e objeto viram um link ("3 rows ›", "5 fields
+  ›") que abre a JANELA com a tabela (e o de dentro por cima, com Back); o
+  Export segue com o JSON gravado. No dataset tipado do armazém, `_raw` e
+  `_seq` nascem escondidas (`STORE_BOOKKEEPING`; o Columns as mostra), e a
+  `__meta` de valor solto sai sem as aspas do JSON (`json_scalars`). A visão expandida é só leitura. Toda gravação
   loga `[db-explorer]` em WARNING com SID, banco, tabela e colunas.
 - **Maker/checker (4-olhos) só vale na PROD e no Stratos** (§553, §677):
   `Config.FOUR_EYES`, do bloco de ambiente (`_FOUR_EYES = False` na dev, onde

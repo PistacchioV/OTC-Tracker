@@ -31,9 +31,12 @@
 }
 #dbx-page .dbx-meta { min-height: 18px; margin-top: 6px; font-size: 12px; color: var(--otc-text-2); }
 #dbx-page .dbx-cell { display: inline-block; max-width: 320px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
-#dbx-page .dbx-sec-link { font-weight: 600; text-decoration: none; white-space: nowrap; }
-#dbx-page .dbx-sec-link .ti { font-size: .8rem; vertical-align: -1px; }
-#dbx-page .dbx-null { color: var(--otc-text-3); font-style: italic; font-size: .72rem; }
+#dbx-page .dbx-sec-link, .dbx-json-link { font-weight: 600; text-decoration: none; white-space: nowrap; }
+#dbx-page .dbx-sec-link .ti, .dbx-json-link .ti { font-size: .8rem; vertical-align: -1px; }
+#dbx-page .dbx-json-flat { display: inline-block; max-width: 320px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+#dbxJsonModal .dbx-json-table th, #dbxJsonModal .dbx-json-table td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+#dbxJsonModal .otc-mini-table-wrap { max-height: 70vh; overflow: auto; }
+#dbx-page .dbx-null, #dbxJsonModal .dbx-null { color: var(--otc-text-3); font-style: italic; font-size: .72rem; }
 #dbx-page #dbxTable td { font-variant-numeric: tabular-nums; }
 #dbx-page #dbxTable tfoot th { font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; }
 #dbx-page .dbx-cols-menu { max-height: 60vh; overflow: auto; }
@@ -177,6 +180,26 @@
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-sm btn-danger btn-act" data-bs-dismiss="modal" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Cancel" data-bs-custom-class="tooltip-danger"><i class="ti ti-x"></i></button>
                 <button type="button" class="btn btn-sm btn-success btn-act" id="dbxEditSave" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Save" data-bs-custom-class="tooltip-success"><i class="ti ti-device-floppy"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- O JSON de uma célula como TABELA (lista de registros, objeto); o de dentro abre por cima -->
+<div class="modal fade" id="dbxJsonModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content liquid-glass">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fs-6"><i class="ti ti-table me-1"></i><span id="dbxJsonTitle"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="dbxJsonBody"></div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="dbxJsonBack">
+                    <i class="ti ti-arrow-left me-1"></i><span data-lang="dbx-json-back">Back</span>
+                </button>
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
+                    <i class="ti ti-x me-1"></i><span data-lang="dbx-json-close">Close</span>
+                </button>
             </div>
         </div>
     </div>

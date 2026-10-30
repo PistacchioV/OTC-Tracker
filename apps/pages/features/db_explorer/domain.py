@@ -240,6 +240,9 @@ JSON_SAMPLE = 50              # valores olhados para dizer que a coluna é JSON
 # Colunas que não dizem nada fora do JSON: com só elas ao lado, a tabela do
 # armazém abre já expandida (`_seq` é a ordem, `key` a chave da `__meta`).
 _BOOKKEEPING = {'_seq', 'key'}
+# As colunas de serviço de um dataset tipado do armazém: a ordem e a linha
+# inteira repetida em JSON. Ao lado das colunas tipadas, nascem escondidas.
+STORE_BOOKKEEPING = ('_seq', '_raw')
 _ISO_DATE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
 
@@ -258,23 +261,48 @@ def parse_json(v):
 
 
 def json_columns(names, rows):
-    """As colunas cujos valores (os primeiros `JSON_SAMPLE` não nulos) são
-    todos objeto ou lista JSON — as que a tela oferece expandir."""
+    """As colunas com objeto ou lista JSON entre os primeiros `JSON_SAMPLE`
+    valores não nulos — as que a tela oferece expandir. O resto pode ser
+    valor SOLTO (a `__meta` guarda `version: 3` ao lado de objetos, e exigir
+    só JSON a deixava crua); texto que parece JSON e não é recusa a coluna."""
     out = []
     for i, nome in enumerate(names):
-        vistos, ok = 0, True
+        vistos, olhados, ok = 0, 0, True
         for r in rows:
             v = r[i]
             if v is None:
                 continue
             if parse_json(v) is None:
-                ok = False
-                break
-            vistos += 1
-            if vistos >= JSON_SAMPLE:
+                if isinstance(v, str) and v.strip()[:1] in ('{', '['):
+                    ok = False
+                    break
+            else:
+                vistos += 1
+            olhados += 1
+            if olhados >= JSON_SAMPLE:
                 break
         if ok and vistos:
             out.append(nome)
+    return out
+
+
+def json_scalars(values):
+    """Os valores decodificados, se TODOS são JSON de valor solto (texto entre
+    aspas, número, booleano, null); senão None."""
+    out = []
+    for v in values:
+        if v is None:
+            out.append(None)
+            continue
+        if not isinstance(v, str):
+            return None
+        try:
+            x = json.loads(v)
+        except ValueError:
+            return None
+        if isinstance(x, (dict, list)):
+            return None
+        out.append(x)
     return out
 
 
@@ -351,9 +379,21 @@ def infer_kind(values):
 # cada seção no lugar do JSON.
 
 
+# A seção aninhada (`gt30` › `monthly` no histórico do Pending, `focus` ›
+# `sessions` na User Home) é chamada pelo CAMINHO, com este separador — o
+# ponto não serve, ele aparece em chave de verdade (conta `73760.00-9`).
+SECTION_SEP = ' › '
+
+
 class Rows(int):
     """A contagem de uma seção na visão geral — um `int` para o JSON e para a
-    ordenação, marcado para a tela desenhar o link que abre a seção."""
+    ordenação, marcado (com o caminho da seção) para a tela desenhar o link
+    que a abre."""
+
+    def __new__(cls, n, path=''):
+        o = int.__new__(cls, n)
+        o.path = path
+        return o
 
 
 def _is_section(x):
@@ -368,28 +408,60 @@ def _is_rowmap(v, depth=0):
     return depth < EXPAND_DEPTH and isinstance(v, dict) and bool(v) and all(isinstance(x, dict) for x in v.values())
 
 
+def _section_paths(v, prefix=(), depth=0):
+    """(caminho, valor) de cada seção do objeto `v`, descendo pelos objetos
+    que não são seção (um objeto de campos pode ter uma tabela dentro)."""
+    for k, x in v.items():
+        path = prefix + (str(k),)
+        if _is_section(x):
+            yield path, x
+        elif isinstance(x, dict) and x and depth < EXPAND_DEPTH:
+            for sub in _section_paths(x, path, depth + 1):
+                yield sub
+
+
 def sections(rows, idx):
     """[{name, rows}] das seções do JSON da coluna `idx`, na ordem em que
-    aparecem, com o total de registros somado entre as linhas da tabela."""
+    aparecem, com o total de registros somado entre as linhas da tabela. A
+    seção aninhada se chama pelo caminho (`gt30 › monthly`)."""
     ordem, cont = [], {}
     for r in rows:
         v = parse_json(r[idx])
         if not isinstance(v, dict) or _is_rowmap(v):
             continue
-        for k, x in v.items():
-            if _is_section(x):
-                if k not in cont:
-                    cont[k] = 0
-                    ordem.append(k)
-                cont[k] += len(x)
+        for path, x in _section_paths(v):
+            k = SECTION_SEP.join(path)
+            if k not in cont:
+                cont[k] = 0
+                ordem.append(k)
+            cont[k] += len(x)
     return [{'name': k, 'rows': cont[k]} for k in ordem]
 
 
-def _overview(v):
-    """O objeto com cada seção trocada pela contagem dela."""
+def _section_of(v, name):
+    """O valor da seção `name` dentro do objeto `v`, ou None."""
     if not isinstance(v, dict) or _is_rowmap(v):
+        return None
+    for path, x in _section_paths(v):
+        if SECTION_SEP.join(path) == name:
+            return x
+    return None
+
+
+def _overview(v, prefix=(), depth=0):
+    """O objeto com cada seção trocada pela contagem dela (em qualquer nível)."""
+    if not isinstance(v, dict) or (depth == 0 and _is_rowmap(v)):
         return v
-    return {k: (Rows(len(x)) if _is_section(x) else x) for k, x in v.items()}
+    out = {}
+    for k, x in v.items():
+        path = prefix + (str(k),)
+        if _is_section(x):
+            out[k] = Rows(len(x), SECTION_SEP.join(path))
+        elif isinstance(x, dict) and x and depth < EXPAND_DEPTH:
+            out[k] = _overview(x, path, depth + 1)
+        else:
+            out[k] = x
+    return out
 
 
 def expand(names, rows, idx, cap=MAX_LIMIT, section=None):
@@ -409,9 +481,9 @@ def expand(names, rows, idx, cap=MAX_LIMIT, section=None):
     for r in rows:
         v = parse_json(r[idx])
         if section:
-            if not isinstance(v, dict) or not _is_section(v.get(section)):
+            v = _section_of(v, section)
+            if v is None:
                 continue
-            v = v[section]
         else:
             v = _overview(v)
         for keys, rec in _records(v if v is not None else r[idx]):
