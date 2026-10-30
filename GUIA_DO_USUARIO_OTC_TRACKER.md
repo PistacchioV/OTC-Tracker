@@ -1799,7 +1799,9 @@ O valor que a liquidação **recebeu** do cliente não entra em coluna nenhuma d
 5. **Em lote:** marque as linhas — a barra mostra a coluna a alterar, o valor, **Apply** e **Delete**.
 6. **Add Row** inclui uma conta que as telas de liquidação não trouxeram. Obrigatórios: **LE**, **B3 ID**, **Counterparty**, **Product** e **LOB**. Os totais digitados vão ao arquivo como digitados; o **Balance** em branco sai do prêmio (recebido, e a operação encerrada). A linha nasce **Pending**.
 
-**O cadastro** (tela **Mapping**): **E-Financeira — Declarant** — o número do ente e o CNPJ de cada entidade declarante (JPM 39, MGT 1315). A operação de uma entidade fora dele não é declarada, e a contraparte que está nele é tratada como intragrupo.
+**O cadastro** (tela **Mapping**): **E-Financeira — Declarant** — o número do ente e o CNPJ de cada entidade declarante (JPM 39, MGT 1315) e, na coluna **Aliases**, os códigos com que a entidade aparece nas operações (o texto da entidade que vem do Athena, como "BCO J.P. MORGAN S.A. 2768 - GEM BR - RATES": a JPM nasce com `2768; 0228`). A operação de uma entidade fora dele não é declarada, e a contraparte que está nele é tratada como intragrupo.
+
+Se aparecer o aviso **"Operations of an entity outside the E-Financeira — Declarant mapping were left out"** com um nome que é nosso, cadastre o código dele em **Aliases** e recarregue a página. Se o nome vier como **"—"** (a operação veio sem entidade), rode o **Import Settlements** do mês de novo: a importação passa a trazer a conta da operação, de onde a entidade sai.
 
 ---
 

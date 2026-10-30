@@ -31656,3 +31656,42 @@ A captura do Guia (a tabela com as colunas do arquivo) foi refeita: a linha
 incompleta mostra o motivo. `check_efinanceira.py`: os cinco motivos, os
 formatos de data, a série do Excel com dois SPNs e a data apagada que volta à
 do Track Docs (110 conferências).
+
+## §743 — E-Financeira: o swap "fora do cadastro" que era da JPM (2026-10-30)
+
+**Relato da equipe (print da KAPITAL):** o aviso "Operations of an entity
+outside the E-Financeira — Declarant mapping were left out: BCO J.P. MORGAN
+S.A. 2768 - GEM BR - RATES (27), — (21)" — "essa LE é JPM", e "0228 é JPM
+também".
+
+**Causa:** no swap, a entidade da operação é o `Owner Legal Entity` do Swap
+Athena (`_legal` do Trade Level), e ele vem ABREVIADO — "BCO J.P. MORGAN S.A.
+2768 - GEM BR - RATES". A leitura por nome (`le_token`, a mesma do WHT) só
+reconhecia "BANCO JP…" e "JPMORGAN CHASE…": as 27 operações viraram uma
+entidade desconhecida e saíram do arquivo. As 21 de "—" são os swaps SEM linha
+no Swap Athena (o elo pelo CETIP ID não casou): o `_legal` vem vazio, e a linha
+de swap não trazia conta nenhuma de onde tirar a entidade.
+
+**Correção:**
+
+- a linha de swap do Trade Level leva a conta da PARTE e a da CONTRAPARTE do
+  Operations B3 (`_party_account`/`_cpty_account`, a recompra de swap a sua
+  `PartyAccount`) — a E-Financeira tira a entidade da conta pelo
+  `b3-accounts` antes do nome (a guarda-chuva não responde), e o intragrupo
+  Banco × MGT sai pela conta da contraparte, sem depender do nome;
+- pelo nome, "BCO JP…" também é JPM;
+- e o código da entidade no texto é CADASTRO: a coluna **ALIASES** do
+  `efin-declarant` (a JPM nasce com `2768; 0228`; código numérico casa como
+  palavra inteira — o 0228 não casa com 102280). O seed só roda com o cadastro
+  ausente e a instância já o tem: o `upgrade` (`domain.declarant_upgrade`) põe
+  os códigos em quem gravou o cadastro antes da coluna, e não mexe em quem já a
+  tem, mesmo vazia.
+
+**Na instância:** as 27 ficam certas ao recarregar a página (o texto da
+entidade já está gravado nos eventos do mês); as 21 sem entidade precisam de
+um novo **Import Settlements** do mês — a conta só passa a vir com a
+importação nova. Reimportar não desfaz correção nem exclusão.
+
+`check_efinanceira.py`: o "BCO J.P. MORGAN…", o swap sem nome pela conta, o
+intragrupo pela conta da contraparte, os aliases (palavra inteira e trecho) e
+o upgrade pelo leitor de verdade dos cadastros.
