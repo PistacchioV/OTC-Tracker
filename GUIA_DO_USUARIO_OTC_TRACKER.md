@@ -150,7 +150,7 @@ O menu é em **níveis**: um item com **›** à direita tem submenu. Clicar nel
 | **PRODUCTS › New Deals** | COE *(em construção)* · **DCE** (Deliverable Forward · NDF · Option · Swap — abrem as telas da Intrag › DCE, capítulo 11) |
 | **PRODUCTS › Unwinds** | **Swap** (CEM · EDG) · **NDF** (FX · Commodities) · **Options** (FXO · Commodities · EDG) · COE · **DCE** (Deliverable Forward · NDF · Option · Swap) *(NDF › FX e NDF › Commodities com o ciclo completo; as demais importam, conferem e enviam à B3 — ver 5.11)* |
 | **PRODUCTS › Intrag** | NDF · Option · Swap · Unwind · **DCE** (Option · Swap · NDF · DFW) |
-| **REGULATORY** | e-Financeira (KAPITAL · ATHENA-NDF · ATHENA-FXO · PYRAMID) *(em construção)* · Accrual · MtM · **WHT** |
+| **REGULATORY** | **e-Financeira** (KAPITAL · ATHENA-NDF · ATHENA-FXO · PYRAMID) · Accrual · MtM · **WHT** |
 | **DATA BASE** | Reference Data · Index B3 · Mapping · **Database Explorer** *(só o master)* · **Users** (Roles · Page Access) · **Support Center** (Tickets List · Ticket Details) |
 
 > Os itens marcados **(em construção)** aparecem no menu mas ainda não têm tela: clicar neles devolve uma página de "não encontrado". Os marcados **(tela pronta; importação em construção)** abrem normalmente, com a grade e as colunas do produto, mas ainda não importam nem enviam — a tela avisa isso em vez de falhar. A lista completa está no anexo 18.3.
@@ -1685,6 +1685,8 @@ No **MtM** há ainda o botão **New Mapping**, para cadastrar um de-para novo se
 
 **Menu › REGULATORY › WHT**
 
+![WHT — o decêndio, OTC × HUB](docs/sop-screenshots/regulatory_wht.png)
+
 **Para que serve:** conferir o IR das liquidações de cada **decêndio** com o relatório de tributos do HUB (*Posição de Tributos*, do EasyTributos). O imposto é recolhido por decêndio — dias **1 a 10**, **11 a 20** e **21 ao fim do mês** —, no primeiro dia útil depois do fim de cada um. A tela mostra o decêndio da *Reference date* e a data do recolhimento.
 
 **De onde vêm os dois lados:**
@@ -1732,6 +1734,72 @@ No topo, o **resumo por código** soma, para cada código de imposto, as operaç
 **Exemplo:** 0,60 em 02/10, 0,35 em 11/10 e 0,10 em 15/10. A de 02/10 fica com 0,00 no 1º decêndio. No 2º, a de 11/10 leva 0,35 e a de 15/10 leva 0,70 (os 0,10 dela mais os 0,60 de 02/10).
 
 **Os cadastros** (tela **Mapping**): **WHT — Tax Codes** (o código de imposto, o tributo e o prefixo do documento de cada produto, tributável ou isento), **WHT — Company** (a empresa e a filial de cada entidade no EasyTributos) e **WHT — Non-Resident Counterparties** (as contrapartes não residentes, que vão no DARF 5286).
+
+### 12.2. E-Financeira — o arquivo mensal, por conta
+
+**Menu › REGULATORY › e-Financeira › KAPITAL · ATHENA-NDF · ATHENA-FXO · PYRAMID**
+
+![E-Financeira — a página ATHENA-FXO](docs/sop-screenshots/regulatory_e-financeira_athena-fxo.png)
+
+**Para que serve:** montar e gerar o arquivo mensal da e-Financeira. São **quatro páginas, uma por sistema de origem**, cada uma com as suas operações e o seu arquivo:
+
+| Página | Produtos | Arquivo |
+|---|---|---|
+| **KAPITAL** | Swap CEM e CEMHYB | `KAPITAL_SWAP_EFINAN_AAAAMM.csv` |
+| **ATHENA-NDF** | NDF de moeda e NDF de commodities | `ATHENA_NDF_EFINAN_AAAAMM.csv` |
+| **ATHENA-FXO** | Opção de moeda e opção de commodities | `ATHENA_FXO_EFINAN_AAAAMM.csv` |
+| **PYRAMID** | Tudo da EDG (opção, NDF e swap) | `PYRAMID_AAAAMM.csv` |
+
+Cada linha é **uma operação** — a conta da e-Financeira é o **B3 ID** — com o que ela movimentou no mês.
+
+**De onde vêm as linhas:** o botão **Import Settlements** lê, em cada dia útil do mês, o que o **NDF Summary** e o **Other Products** liquidaram, e as **opções que venceram** naquele dia na posição — a opção que vence sem pagamento não aparece em tela de liquidação nenhuma, e é ela que leva o Saldo do prêmio recebido. Um clique alimenta as **quatro páginas** de uma vez. Ficam de fora, com aviso na página: a operação **entre entidades nossas** (Banco × MGT) e a de entidade fora do cadastro **E-Financeira — Declarant** (a visão do Lawton, por exemplo).
+
+**As colunas que vão para o arquivo:**
+
+| Coluna da tela | Campo do arquivo | O que entra |
+|---|---|---|
+| **Total Credit** | `balanco_totcred` | Os prêmios que o banco **recebeu** no mês |
+| **Total Debit** | `balanco_totdeb` | Os prêmios que o banco **pagou** no mês |
+| **Accumulated Payment** | `pag_totpgacum` | O que o banco **pagou ao cliente** no mês, prêmio incluído. Com valor, o `pag_tp` vai **FATCA504**; sem valor, **999** |
+| **Balance** | `balanco_vlrultdia` | O prêmio **recebido durante a vida** da operação — só quando ela **encerrou** no mês |
+| **Closing Date** | `conta_dtencerr` | A data do vencimento, do exercício ou da **recompra total**. Recompra parcial e fluxo de swap no meio da vida ficam em branco |
+| **B3 ID** | `conta_num` | O código da operação na B3 |
+| **Tax ID** | `declarado_ni` | O CNPJ da contraparte (só os números, no arquivo) |
+| **CGD Date** | `conta_dtabertu` | A data do CGD da contraparte no **Track Docs** (a da assinatura; sem ela, a da emissão) |
+
+![E-Financeira — as colunas do arquivo e o Interno × B3 (ATHENA-FXO, com as colunas de identificação escondidas pelo **Columns**)](docs/sop-screenshots/regulatory_e-financeira_athena-fxo_columns.png)
+
+Na imagem: a primeira linha está **Pending** (uma correção esperando confirmação); a segunda está **Incomplete** — falta a data do CGD, e a célula fica em vermelho; a terceira é uma opção que **venceu sem pagamento** (o Saldo é o prêmio recebido em 2025); a quarta foi **exercida** contra o banco (Pagamento Acumulado e Saldo) e o valor da B3 difere do interno em 35,40 — acima dos R$ 20,00, a Diferença fica em âmbar.
+
+O valor que a liquidação **recebeu** do cliente não entra em coluna nenhuma do arquivo — ele aparece no **Internal Value**. Ao lado, o **B3 Value** e a **Difference**, para comparar o interno com a B3: verde quando batem (até R$ 5,00 nas operações do NDF Summary e R$ 20,00 nas do Other Products), âmbar quando não.
+
+**Passo a passo:**
+
+1. O **Reference month** abre no último dia do mês anterior — o mês que acabou de fechar. Troque a data para ver outro mês.
+2. Clique em **Import Settlements**. Ele roda em segundo plano e mostra quantos dias já leu: pode fechar a janela, a faixa acima da tabela acompanha e a tela se atualiza sozinha no fim. O aviso amarelo lista os dias do mês que ainda não foram importados.
+3. Confira os cartões — **Accounts**, **Closed in the month**, **With payment**, **Internal × B3 to check**, **Incomplete** e **Pending** (clicar num cartão filtra a tabela) — e os totais logo abaixo.
+4. Complete as linhas **Incomplete**: a célula que falta fica em vermelho (LE, B3 ID, Tax ID ou CGD Date). Use o **Edit**.
+5. Clique em **Generate File**. O arquivo é gravado em `I:\Confirmation\Derivativos\OTC Tracker\Regulatory\E-Financeira\AAAA\MM. Mês` (substituindo o do mês, se já houver) e baixado. Ele **não sai** com linha **Pending** nem com linha incompleta — a mensagem diz quais.
+
+**Os status:**
+
+| Status | O que quer dizer |
+|---|---|
+| **New** | A linha como veio da importação |
+| **Pending** | Corrigida ou incluída à mão, esperando outra pessoa confirmar |
+| **Approved** | A correção foi confirmada |
+| **Generated** | A linha está no último arquivo gerado, sem mudança desde então. Se ela mudar (um novo import, uma correção), volta ao status de antes — gere o arquivo de novo |
+
+**Corrigir, incluir e apagar linhas** — como no WHT (12.1):
+
+1. **Edit** abre a janela com todos os campos que vão ao arquivo; vai só o que você mudou. A linha fica **Pending** e o **Edit** vira **Confirm**.
+2. **Confirm** é de **outra pessoa** — quem editou não confirma a própria edição.
+3. A correção fica guardada à parte: um novo **Import Settlements** não a desfaz.
+4. **Delete** tira a conta do mês, e uma nova importação não a traz de volta.
+5. **Em lote:** marque as linhas — a barra mostra a coluna a alterar, o valor, **Apply** e **Delete**.
+6. **Add Row** inclui uma conta que as telas de liquidação não trouxeram. Obrigatórios: **LE**, **B3 ID**, **Counterparty**, **Product** e **LOB**. Os totais digitados vão ao arquivo como digitados; o **Balance** em branco sai do prêmio (recebido, e a operação encerrada). A linha nasce **Pending**.
+
+**O cadastro** (tela **Mapping**): **E-Financeira — Declarant** — o número do ente e o CNPJ de cada entidade declarante (JPM 39, MGT 1315). A operação de uma entidade fora dele não é declarada, e a contraparte que está nele é tratada como intragrupo.
 
 ---
 
@@ -2448,7 +2516,6 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 - **New Deals › COE**
 - **Intrag › DCE › DFW** (e **New Deals › DCE › Deliverable Forward**, que abre a mesma tela) — a tela abre e diz que está em construção
 - **New Deals › Options › EDG** — *a tela já abre*, mas ainda **não importa nem envia** (capítulo 5.11)
-- **Regulatory › e-Financeira** — Kapital · Athena NDF · Athena FXO · Pyramid
 
 ### 19.4. Problemas comuns
 
