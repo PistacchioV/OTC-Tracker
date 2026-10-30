@@ -1201,6 +1201,13 @@ São **55**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   antes do `otc.css` (§701): carregado no fim da página ele vence o tema, e o
   calendário sai branco com o texto claro no escuro (era o Pay/Rec).
   `check_theme_toggle.py` recusa.
+- **A lista ABERTA de um `<select>` nativo tem fundo sólido pelo tema** (§737):
+  o Windows a desenha com o fundo do select, e o dos campos aqui é translúcido
+  (`--otc-fill`) — sem cor nas `<option>`, o mês/ano do daterangepicker e todo
+  `.form-select` saíam texto claro sobre cinza claro no escuro. A regra
+  `select option, select optgroup` mora no `otc.scss` (§6f); página nova não
+  escreve nada. O headless não fotografa a lista nativa: mede-se o
+  `getComputedStyle` da `<option>`. `check_theme_toggle.py` §6.
 - **O `<style>` da página carrega ANTES do `otc.css`** — é a regra que explica
   quase todo "minha regra não pegou". Regra da tela precisa de peso de id ou
   de classe (`#ops-page .x`) para vencer componente do tema; e o tema, ao

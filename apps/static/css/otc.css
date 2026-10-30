@@ -17364,6 +17364,11 @@ textarea.form-control {
   background-repeat: no-repeat;
 }
 
+select option, select optgroup {
+  background-color: var(--otc-menu-bg);
+  color: var(--otc-text);
+}
+
 .form-label, .col-form-label {
   font: 600 12.5px/1.45 var(--otc-font);
   color: var(--otc-text-2);

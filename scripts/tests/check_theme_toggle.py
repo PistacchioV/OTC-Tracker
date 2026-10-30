@@ -118,5 +118,16 @@ for raiz, _d, arqs in os.walk(os.path.join(ROOT, 'apps', 'templates', 'pages')):
                 tardios.append(a)
 check('CSS de calendário só no extra_css (antes do tema)', sorted(set(tardios)), [])
 
+# A lista ABERTA de um <select> nativo o Windows desenha com o fundo do select,
+# e o dos campos do tema é translúcido: sem cor nas <option>, o mês e o ano do
+# daterangepicker (e todo .form-select) saíam texto claro sobre cinza claro no
+# tema escuro (30/10/2026). A regra é do TEMA, para todo select — e compilada.
+print('\n== 6. a lista do <select> nativo tem fundo sólido ==')
+REGRA = 'select option, select optgroup { background-color: var(--otc-menu-bg); color: var(--otc-text); }'
+check('o tema dá às <option> o fundo sólido do menu e a cor do texto', REGRA in read('apps/static/scss/otc.scss'), True)
+check('e o otc.css compilado tem a regra',
+      bool(re.search(r'select option, select optgroup \{\s*background-color: var\(--otc-menu-bg\);\s*color: var\(--otc-text\);',
+                     read('apps/static/css/otc.css'))), True)
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)
