@@ -306,8 +306,10 @@ exista no módulo (`__module__` mente sob `functools.wraps`; quem diz é o
   `routes._conecta_file_name(visão, nome)`, a conta PRÓPRIA da LE no
   `b3-accounts` (aceita a LE, o balde `BANCO` e o par `MGT x CLI`). Os nomes
   saem TODOS antes do primeiro arquivo (visão sem conta recusa o lote), um
-  arquivo é de UMA visão só (as Opções juntavam Banco e Lawton no
-  `FXO_Banco.txt`) e o download do preview fica sem a conta — MENOS nos
+  arquivo é de UMA visão só (o `OPC_Lawton.txt` à parte do `OPC_Banco.txt`) —
+  MENOS no **Opt FXO** (e na DCE FXO): ali o arquivo é UM, Banco e Lawton sob o
+  mesmo header, com a conta de quem o gera, o Banco (equipe, 30/10/2026, §745)
+  — e o download do preview fica sem a conta — MENOS nos
   SWAPS (Bullet, Cashflow, Cetes; equipe, 26/10/2026, §698): ali o Send com
   download e o Export do preview levam a conta como a New (o arquivo baixado é
   o que vai ao Conecta); no preview a visão sem conta fica com o nome de

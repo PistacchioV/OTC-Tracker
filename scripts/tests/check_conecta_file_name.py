@@ -10,8 +10,9 @@ O que este teste prende:
      `b3-accounts` — em qualquer vocabulário dos geradores (a LE, o balde
      `BANCO`, o par de pernas `MGT x CLI`) — e não de um de-para no código;
   2. visão sem conta própria cadastrada RECUSA dizendo qual;
-  3. o Opt FXO, que juntava as linhas do Banco e do Lawton num FXO_Banco.txt,
-     sai com UM arquivo por visão, cada um com a sua conta;
+  3. o Opt FXO junta as linhas do Banco e do Lawton num arquivo SÓ (equipe,
+     30/10/2026, §745: o header do OPC é um só), com a conta de quem o gera —
+     o Banco; o Opt Commodities segue com UM arquivo por visão;
   4. a recusa vem ANTES do primeiro arquivo: nada é gravado pela metade;
   5. todo código que usa a `CONECTA_NEW_PATH` passa pelo nome com a conta —
      gerador novo que grave na New com o nome cru cai aqui.
@@ -100,7 +101,7 @@ try:
 finally:
     R._mapping_rows = orig_rows
 
-print('\n== 3. Opt FXO: um arquivo por visão ==')
+print('\n== 3. Opt FXO: um arquivo só; Opt Commodities: um por visão ==')
 tmp = tempfile.mkdtemp(prefix='check-conecta-')
 orig = (R.CONECTA_NEW_PATH, R._create_notification)
 R.CONECTA_NEW_PATH = tmp
@@ -113,37 +114,60 @@ _NDE._nd_conferir_envio = lambda *a, **k: []
 _NDE._nd_marcar_enviados = lambda *a, **k: ([], [])
 DEALS = [{'Deal': 'D1', 'Client': 'CLIENTE QUALQUER SA', 'TradeDate': '2026-10-20'},
          {'Deal': 'D2', 'Client': 'BANCO J.P MORGAN S.A', 'TradeDate': '2026-10-20'}]
+
+
+def _linhas(nome):
+    return open(os.path.join(tmp, nome), encoding='utf-8').read().split('\n')
+
+
 try:
     R._mapping_rows = _rows(CONTAS)
     c = cliente()
     r = c.post('/api/new-deals/opt-fxo/send-conecta', json={'deals': DEALS})
     d = r.get_json() or {}
     check('o envio responde 200', (r.status_code, d.get('ok')), (200, True))
-    check('as linhas do Banco e as do Lawton em arquivos separados, cada um com a sua conta',
-          sorted(os.listdir(tmp)), ['00041007.FXO_Lawton.txt', '73760009.FXO_Banco.txt'])
-    check('a resposta diz os nomes da New', sorted(d.get('files') or []),
-          ['00041007.FXO_Lawton.txt', '73760009.FXO_Banco.txt'])
-    linhas = {n: open(os.path.join(tmp, n), encoding='utf-8').read().split('\n') for n in os.listdir(tmp)}
-    check('cada arquivo: header + a linha da sua visão',
-          {n: len(v) for n, v in linhas.items()},
-          {'00041007.FXO_Lawton.txt': 2, '73760009.FXO_Banco.txt': 2})
-    t = linhas['00041007.FXO_Lawton.txt'][1].split(';')
+    check('as linhas do Banco e as do Lawton no MESMO arquivo, com a conta do Banco',
+          sorted(os.listdir(tmp)), ['73760009.FXO_Banco.txt'])
+    check('a resposta diz o nome da New', d.get('files'), ['73760009.FXO_Banco.txt'])
+    linhas = _linhas('73760009.FXO_Banco.txt')
+    partes = [l.split(';') for l in linhas]
+    check('um header só (tipo 0) e as duas linhas (tipo 1)', [p[1] for p in partes], ['0', '1', '1'])
+    check('o header é o do Banco (quem gera o arquivo)', partes[0][2].strip(), 'JPMORGANBM')
+    partes = partes[1:]
+    check('a linha do cliente tem o Banco como parte (campo 4)', partes[0][3], '73760009')
     check('a linha do Lawton tem o Lawton como parte (campo 4) e o Banco como contraparte (7)',
-          (t[3], t[6]), ('00041007', '73760009'))
+          (partes[1][3], partes[1][6]), ('00041007', '73760009'))
     r = c.post('/api/new-deals/opt-fxo/send-conecta', json={'deals': DEALS, 'download': True})
     check('o download (preview) segue com o nome do documento, sem a conta',
-          sorted(f['filename'] for f in (r.get_json() or {}).get('files', [])),
-          ['FXO_Banco.txt', 'FXO_Lawton.txt'])
+          [f['filename'] for f in (r.get_json() or {}).get('files', [])], ['FXO_Banco.txt'])
+
+    shutil.rmtree(tmp)
+    os.makedirs(tmp)
+    r = c.post('/api/new-deals/opt-commodities/send-conecta', json={'deals': DEALS})
+    d = r.get_json() or {}
+    check('Opt Commodities: responde 200', (r.status_code, d.get('ok')), (200, True))
+    check('Opt Commodities: um arquivo por visão, cada um com a sua conta',
+          sorted(os.listdir(tmp)), ['00041007.OPC_Lawton.txt', '73760009.OPC_Banco.txt'])
 
     print('\n== 4. a recusa vem antes do primeiro arquivo ==')
     shutil.rmtree(tmp)
     os.makedirs(tmp)
     R._mapping_rows = _rows([c for c in CONTAS if c['LE'] != 'LAWTON'])
-    r = c.post('/api/new-deals/opt-fxo/send-conecta', json={'deals': DEALS})
+    r = c.post('/api/new-deals/opt-commodities/send-conecta', json={'deals': DEALS})
     d = r.get_json() or {}
     check('o lote é recusado dizendo o Lawton', (r.status_code, "'LAWTON'" in str(d.get('error'))),
           (500, True))
     check('e nem o arquivo do Banco foi gravado', os.listdir(tmp), [])
+    r = c.post('/api/new-deals/opt-fxo/send-conecta', json={'deals': DEALS})
+    check('o Opt FXO não precisa da conta do Lawton (o arquivo é do Banco)',
+          ((r.get_json() or {}).get('ok'), os.listdir(tmp)), (True, ['73760009.FXO_Banco.txt']))
+    shutil.rmtree(tmp)
+    os.makedirs(tmp)
+    R._mapping_rows = _rows([c for c in CONTAS if c['LE'] != 'JPM'])
+    r = c.post('/api/new-deals/opt-fxo/send-conecta', json={'deals': DEALS})
+    d = r.get_json() or {}
+    check('sem a conta do Banco o Opt FXO recusa dizendo o JPM, sem gravar',
+          (r.status_code, "'JPM'" in str(d.get('error')), os.listdir(tmp)), (500, True, []))
 finally:
     R._mapping_rows = orig_rows
     R.CONECTA_NEW_PATH, R._create_notification = orig
