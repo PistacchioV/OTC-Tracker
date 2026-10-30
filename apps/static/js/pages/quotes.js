@@ -9,9 +9,11 @@
  * toolbar, o filtro por coluna e o cell-copy — três cópias da mesma coisa para
  * mostrar uma de cada vez.
  *
- * ⚠️ A linha de filtro por coluna é montada ANTES do `.DataTable()`, com
- * `orderCellsTop: true` (CLAUDE.md §7): montada no `initComplete`, ela ficaria
- * no DOM e invisível.
+ * O filtro é o funil "de Excel" do cabeçalho (`excel-filter.js`, que se liga
+ * sozinho a cada DataTable). Não há mais linha de filtro por coluna: o funil a
+ * REMOVE do DOM na primeira montagem (§597), e a busca seguinte, que a limpava
+ * pelo id, estourava com `null` antes do fetch — a tabela ficava com as linhas
+ * da moeda ANTERIOR e o botão de busca travado (30/10/2026).
  */
 (function () {
   'use strict';
@@ -222,7 +224,6 @@
   function clearTable(msg) {
     if (dt) { dt.destroy(); dt = null; }
     document.getElementById('qtHead').innerHTML = '';
-    document.getElementById('qtFilterRow').innerHTML = '';
     document.querySelector('#quotes-table tbody').innerHTML = '';
     document.getElementById('qtCount').textContent = '0';
     var empty = document.getElementById('qtEmpty');
@@ -238,26 +239,11 @@
     document.getElementById('qtEmpty').style.display = 'none';
 
     var head = document.getElementById('qtHead');
-    var filt = document.getElementById('qtFilterRow');
     head.innerHTML = '';
-    filt.innerHTML = '';
-    cols.forEach(function (c, i) {
+    cols.forEach(function (c) {
       var th = document.createElement('th');
       th.textContent = c;
       head.appendChild(th);
-      // Filtro por coluna: input pequeno, centralizado, placeholder = o nome da
-      // coluna. O CSS do centro vem do visual-refresh.css (regra estrutural).
-      var tf = document.createElement('th');
-      var inp = document.createElement('input');
-      inp.type = 'text';
-      inp.className = 'form-control form-control-sm qt-col-filter';
-      inp.setAttribute('data-col', String(i));
-      inp.placeholder = c;
-      inp.title = 'blank = empty cells';
-      inp.style.fontSize = '12px';
-      inp.style.height = '28px';
-      tf.appendChild(inp);
-      filt.appendChild(tf);
     });
 
     var tbody = document.querySelector('#quotes-table tbody');
@@ -266,7 +252,7 @@
     dt = jQuery('#quotes-table').DataTable({
       data: rows,
       columns: cols.map(function () { return {}; }),
-      scrollX: false, autoWidth: true, orderCellsTop: true, deferRender: true,
+      scrollX: false, autoWidth: true, deferRender: true,
       pageLength: parseInt(document.getElementById('qtPageLen').value, 10) || 50,
       lengthMenu: [[25, 50, 100, -1], [25, 50, 100, 'All']],
       order: [],
@@ -298,19 +284,6 @@
     // Seleção de célula + Ctrl/Cmd+C (table-std.js). Sem `skip`: aqui não há
     // checkbox nem coluna de ações.
     if (window.otcCellCopy) window.otcCellCopy('#quotes-table', {});
-
-    jQuery('#quotes-table thead').off('keyup.qt change.qt')
-      .on('keyup.qt change.qt', '.qt-col-filter', function () {
-        var col = +this.getAttribute('data-col');
-        var v = this.value || '';
-        // `blank` procura a célula VAZIA — é o único jeito de procurar a
-        // ausência, e o smart search precisa sair para a regex casar.
-        if (v.trim().toLowerCase() === 'blank') {
-          dt.column(col).search('^\\s*$', true, false).draw();
-        } else if (dt.column(col).search() !== v) {
-          dt.column(col).search(v).draw();
-        }
-      });
 
     document.getElementById('qtCount').textContent = String(rows.length);
     buildColumnsMenu();
@@ -489,9 +462,10 @@
   document.getElementById('qtPageLen').addEventListener('change', function () {
     if (dt) { dt.page.len(parseInt(this.value, 10)).draw(); adjust(); }
   });
+  // Os funis o próprio excel-filter.js limpa (ele reconhece o botão pelo
+  // `data-lang` …clear-filters); aqui sai a busca que sobrar na tabela.
   document.getElementById('qtClearFilters').addEventListener('click', function () {
-    page.querySelectorAll('.qt-col-filter').forEach(function (i) { i.value = ''; });
-    if (dt) dt.columns().search('').draw();
+    if (dt) dt.search('').columns().search('').draw();
   });
   page.querySelectorAll('[data-export]').forEach(function (a) {
     a.addEventListener('click', function (ev) {

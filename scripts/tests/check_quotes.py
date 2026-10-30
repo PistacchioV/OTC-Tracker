@@ -542,7 +542,11 @@ check('combobox de instrumento NASCE desabilitado', 'id="qt-instrument"' in html
 check('o Search nasce desabilitado junto', 'id="qtSearch" disabled' in html, True)
 check('nao usa .card para o widget proprio (CLAUDE.md §7)',
       'class="card' in html, False)
-check('a linha de filtro por coluna existe no thead', 'id="qtFilterRow"' in html, True)
+# A linha de filtro por coluna SAIU (30/10/2026): o funil do excel-filter.js a
+# removia do DOM na 1ª montagem (§597), e a busca seguinte, que a limpava pelo
+# id, estourava com `null` antes do fetch — a 2ª moeda consultada mostrava as
+# linhas da 1ª e o Search ficava travado. O filtro é o funil do cabeçalho.
+check('sem linha de filtro por coluna no thead (o filtro e o funil)', 'qtFilterRow' in html, False)
 check('toolbar com mb-3, nao mb-2', 'gap-2 mb-3' in html, True)
 check('export completo: Copy, CSV, Excel, Print, PDF',
       [t in html for t in ('data-export="copy"', 'data-export="csv"', 'data-export="excel"',
@@ -552,9 +556,8 @@ check('carrega o table-std.js (selecao de celula para copiar)',
       'js/table-std.js' in html, True)
 
 js = read('apps/static/js/pages/quotes.js')
-check('a linha de filtro e montada ANTES do .DataTable(), com orderCellsTop',
-      js.index('filt.appendChild(tf)') < js.index(".DataTable({") and 'orderCellsTop: true' in js,
-      True)
+check('o JS nao procura a linha que o funil remove (a 2a busca estourava)',
+      ['qtFilterRow' in js, 'qt-col-filter' in js], [False, False])
 check('autoWidth: true (senao o cabecalho e o corpo medem larguras diferentes)',
       'autoWidth: true' in js, True)
 check('columns.adjust() depois do draw, com o segundo passe atrasado',
