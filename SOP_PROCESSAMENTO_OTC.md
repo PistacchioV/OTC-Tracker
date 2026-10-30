@@ -309,6 +309,18 @@ Marcação a mercado (MtM) de Swap e COE. Importa o arquivo de posição e os ar
 
 ![MtM — Swap](docs/sop-screenshots/mtm-swap.png)
 
+#### WHT — IR retido, por decêndio
+
+Bate o IR das liquidações de cada decêndio (1–10, 11–20, 21–fim do mês) com o relatório "Posição de Tributos" do HUB. **Import Settlements** traz o lado OTC (o que o banco pagou, pelo NDF Summary e pelo Other Products); o relatório do HUB entra pelo dropzone (**Import HUB**). Confira os status (Matched, Partial, Unmatched OTC, Unmatched HUB) e gere o **HUB File** com o que o HUB não tem. Correções pela linha (Edit), confirmadas por outro usuário.
+
+![WHT — o decêndio, OTC × HUB](docs/sop-screenshots/regulatory_wht.png)
+
+#### E-Financeira — o arquivo mensal
+
+Quatro páginas, uma por sistema: **KAPITAL** (swap CEM/CEMHYB), **ATHENA-NDF** (NDF de moeda e de commodities), **ATHENA-FXO** (opção de moeda e de commodities) e **PYRAMID** (tudo da EDG). Escolha o mês, clique em **Import Settlements** (traz as liquidações e as opções vencidas do mês para as quatro páginas), confira os cartões e a comparação Interno × B3, complete as linhas **Incomplete** (LE, B3 ID, Tax ID, data do CGD) e clique em **Generate File**: o CSV do mês vai para `I:\Confirmation\Derivativos\OTC Tracker\Regulatory\E-Financeira\AAAA\MM. Mês`. O arquivo não sai com linha pendente de confirmação nem incompleta.
+
+![E-Financeira — ATHENA-FXO](docs/sop-screenshots/regulatory_e-financeira_athena-fxo.png)
+
 ### Produtos — New Deals (Products)
 
 #### New Deals — NDF Vanilla
@@ -491,10 +503,10 @@ Os módulos abaixo estão previstos no menu lateral mas **ainda não foram desen
 
 **Regulatório (Regulatory)**
 
-- [ ] **KAPITAL** — `/regulatory/e-financeira/kapital`
-- [ ] **ATHENA-NDF** — `/regulatory/e-financeira/athena-ndf`
-- [ ] **ATHENA-FXO** — `/regulatory/e-financeira/athena-fxo`
-- [ ] **PYRAMID** — `/regulatory/e-financeira/pyramid`
+- [x] **KAPITAL** — `/regulatory/e-financeira/kapital` — *implementado* (swap CEM/CEMHYB)
+- [x] **ATHENA-NDF** — `/regulatory/e-financeira/athena-ndf` — *implementado* (NDF de moeda e de commodities)
+- [x] **ATHENA-FXO** — `/regulatory/e-financeira/athena-fxo` — *implementado* (opção de moeda e de commodities)
+- [x] **PYRAMID** — `/regulatory/e-financeira/pyramid` — *implementado* (opção, NDF e swap da EDG). As quatro: o arquivo mensal da e-Financeira por conta (B3 ID) — prêmios recebidos e pagos, pagamento acumulado, saldo e encerramento —, gravado no share; Interno × B3 por operação; correção com confirmação de outro usuário; HANDOFF §736
 - [x] **WHT** — `/regulatory/wht` — *implementado* (o IR das liquidações por decêndio — NDF Summary + Other Products — batido com o relatório "Posição de Tributos" do HUB; o arquivo para o HUB inserir o que falta; a correção de linha, em lote, a exclusão e a inclusão manual (Add Row) com confirmação de outro usuário, o Trade Date (OTC_TD) separado da data do evento (OTC_ET/HUB_ET); HANDOFF §692, §702)
 
 **Produtos — New Deals (Products)**
