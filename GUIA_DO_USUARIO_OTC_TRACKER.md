@@ -1765,7 +1765,7 @@ Cada linha é **uma operação** — a conta da e-Financeira é o **B3 ID** — 
 | **Closing Date** | `conta_dtencerr` | A data do vencimento, do exercício ou da **recompra total**. Recompra parcial e fluxo de swap no meio da vida ficam em branco |
 | **B3 ID** | `conta_num` | O código da operação na B3 |
 | **Tax ID** | `declarado_ni` | O CNPJ da contraparte (só os números, no arquivo) |
-| **CGD Date** | `conta_dtabertu` | A data do CGD da contraparte no **Track Docs** (a da assinatura; sem ela, a da emissão) |
+| **CGD Date** | `conta_dtabertu` | A data do CGD da contraparte no **Reference Data** (o CGD *Active* do cadastro da contraparte — o mesmo que as confirmações usam). Sem CGD lá, a do **Track Docs** (a da assinatura; sem ela, a da emissão). Passe o mouse sobre a data para ver de onde ela veio |
 
 ![E-Financeira — as colunas do arquivo e o Interno × B3 (ATHENA-FXO, com as colunas de identificação escondidas pelo **Columns**)](docs/sop-screenshots/regulatory_e-financeira_athena-fxo_columns.png)
 

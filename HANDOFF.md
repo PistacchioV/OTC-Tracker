@@ -31493,3 +31493,39 @@ O mês do flatpickr (as 37 telas com `otcDateField`) já estava certo. Nenhuma
 página estiliza `<option>` por conta própria, então a regra global não briga
 com ninguém. `check_theme_toggle.py` §6 prende a regra no SCSS e no CSS
 compilado.
+
+## §738 — E-Financeira: a data do CGD vem do Reference Data (2026-10-30)
+
+**Relato da equipe:** linhas da E-Financeira apontadas como **Incomplete**
+(sem *CGD Date*) de contrapartes que TÊM a data do CGD no Reference Data.
+
+**Causa:** a `conta_dtabertu` saía só do **Tracking Docs** (a lista de CGDs do
+Onboarding, `cgd_docs`). A data que a equipe cadastra e confere fica no
+**Counterparty Details** do Reference Data — a lista `CGD` de cada contraparte,
+por SPN, com maker/checker —, e é dela que as confirmações já tiram a data que
+imprimem (`platform/confirmations._conf_cgd_lookup`). Contraparte com o CGD só
+no Reference Data (o caso comum: o Tracking Docs só tem o que passou pelo
+Onboarding no app) ficava sem data.
+
+**Correção** (`efinanceira/queries.refdata_cgd_index`, `cgd_of_op`): a data é,
+pela ordem,
+
+1. a **digitada** na tela (Edit / Add Row);
+2. a do **Reference Data**: o 1º item `Active` do CGD da contraparte cujo
+   valor é uma data — a regra das confirmações; o `Pending` do maker/checker
+   não vale, e texto que não é data é pulado. A linha traz CNPJ e nome, não o
+   SPN: a ponte é o Reference Data (CNPJ → SPN e, sem ele, nome/acrônimo →
+   SPN), e o mesmo CNPJ com mais de um SPN vale o primeiro que tiver CGD;
+3. só então a do **Tracking Docs** (assinatura, senão emissão).
+
+A célula diz de onde a data veio (tooltip: Reference Data · Track Docs ·
+digitada; `cgd_src` na linha). Banco do Reference Data ocupado SOBE (503),
+nunca vira "sem data".
+
+Operação que continua sem data depois disto é de contraparte sem CGD *Active*
+no Reference Data (só `Pending`, ou o campo com texto) e fora do Tracking
+Docs — ou de swap sem CNPJ (o Tax ID do swap vem do Reference Data pelo NOME
+da contraparte; se o nome não casa, a linha fica sem CNPJ e sem CGD juntos).
+
+`check_efinanceira.py` ganhou os quatro casos (o Pending ignorado, o texto
+pulado, o Reference Data vencendo o Track Docs, o achado pelo nome).

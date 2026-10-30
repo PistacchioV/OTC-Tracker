@@ -532,6 +532,8 @@ def row_of(o):
         'Accumulated Payment': _money(o.get('payment')),
         'Closing Date': dmy(o.get('closing')),
         'CGD Date': dmy(o.get('cgd_date')),
+        # de onde veio a data do CGD: refdata · trackdocs · edit (o tooltip)
+        'cgd_src': o.get('cgd_src') or '',
         'PAG_TP': o.get('pag_tp') or '',
         'missing': o.get('missing') or [],
     }

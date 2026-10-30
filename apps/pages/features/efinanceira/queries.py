@@ -101,9 +101,59 @@ def _refdata_index():
     return out
 
 
-# A data do CGD: a da ASSINATURA e, sem ela, a da emissão (equipe, 30/10/2026:
-# `conta_dtabertu` = "data do CGD da contraparte").
+# A data do CGD (`conta_dtabertu`, "data do CGD da contraparte"): a do
+# REFERENCE DATA primeiro — o CGD Active da contraparte no Counterparty Details,
+# o mesmo que as confirmações imprimem (`_conf_cgd_lookup`) —, e só sem ele a
+# do Tracking Docs (equipe, 30/10/2026: linhas sem data com a data no Reference
+# Data). No Tracking Docs, a da ASSINATURA e, sem ela, a da emissão.
 CGD_DATE_COLUMNS = ('Signature Date', 'Emissão')
+
+
+def _refdata_spns():
+    """({CNPJ: [SPN…]}, {nome/acrônimo sem pontuação: [SPN…]}) do Reference
+    Data: a ponte da linha (que traz CNPJ e nome, não o SPN) até o Counterparty
+    Details, que é por SPN. O mesmo CNPJ pode ter mais de um registro."""
+    R = _R()
+    try:
+        from apps.pages import duck_read
+        data = duck_read.refdata_rows() or []
+    except Exception:                                       # noqa: BLE001
+        data = []
+    por_cnpj, por_nome = {}, {}
+    for rec in data if isinstance(data, list) else []:
+        spn = R._norm_spn(rec.get('SPN'))
+        if not spn:
+            continue
+        chaves = [(por_cnpj, domain.cnpj_key(rec.get('TAX ID')))] + [
+            (por_nome, domain.alnum(rec.get(c))) for c in ('COUNTERPARTY', 'COMMODITIES ACCRONYM', 'FX CASH ACCRONYM')]
+        for alvo, k in chaves:
+            if k and spn not in alvo.setdefault(k, []):
+                alvo[k].append(spn)
+    return por_cnpj, por_nome
+
+
+def refdata_cgd_index():
+    """({CNPJ: data ISO}, {nome: data ISO}) — a data do CGD no Reference Data:
+    por SPN, o PRIMEIRO item Active do CGD da contraparte no Counterparty
+    Details cujo valor é uma data (a regra do `_conf_cgd_lookup`; o Pending do
+    maker/checker não vale). Banco ocupado SOBE (503), nunca vira "sem data"."""
+    R = _R()
+    por_spn = {}
+    for rec in R._cpd_load() or []:
+        spn = R._norm_spn(rec.get('SPN'))
+        if not spn or spn in por_spn:
+            continue
+        for item in R._cgd_norm(rec.get('CGD')):
+            d = domain.parse_date(item.get('value')) if (item.get('status') or 'Active') == 'Active' else None
+            if d:
+                por_spn[spn] = d.isoformat()
+                break
+    por_cnpj, por_nome = _refdata_spns()
+
+    def data_de(spns):
+        return next((por_spn[x] for x in spns if x in por_spn), '')
+    return ({k: v for k, v in ((k, data_de(x)) for k, x in por_cnpj.items()) if v},
+            {k: v for k, v in ((k, data_de(x)) for k, x in por_nome.items()) if v})
 
 
 def cgd_index():
@@ -319,13 +369,25 @@ def bizdays(ini, fim):
 _INV = {campo: col for col, (campo, _t) in domain.EDIT_COLS.items()}
 
 
-def operations(doc, ym, decl=None, cgd=None):
+def cgd_of_op(o, rdcgd, cgd):
+    """(data ISO, fonte) do CGD da operação: o Reference Data pelo CNPJ e, sem
+    ele, pelo nome; depois o Tracking Docs. Fonte `refdata`/`trackdocs`/''."""
+    por_cnpj, por_nome = rdcgd
+    d = por_cnpj.get(domain.cnpj_key(o.get('taxid'))) or por_nome.get(domain.alnum(o.get('counterparty')))
+    if d:
+        return d, 'refdata'
+    d = cgd_of(cgd, o.get('le'), o.get('taxid'))
+    return (d, 'trackdocs') if d else ('', '')
+
+
+def operations(doc, ym, decl=None, cgd=None, rdcgd=None):
     """As operações do mês, TODAS as páginas, fechadas e com o status — a leitura
     da tela, da correção e do arquivo, uma só. → (operações, excluídas), com
     `excluídas` = {página: {'intragroup': {chave}, 'not_declarant': {LE: {chave}}}}
     — cada página avisa só o que saiu DELA."""
     decl = declarants() if decl is None else decl
     cgd = cgd_index() if cgd is None else cgd
+    rdcgd = refdata_cgd_index() if rdcgd is None else rdcgd
     eventos, excl = [], {}
     les, cps = {}, {}
     for _dia, fatias in sorted((doc.get('days') or {}).items()):
@@ -369,9 +431,12 @@ def operations(doc, ym, decl=None, cgd=None):
         fields = e.get('fields') or {}
         o['orig'] = {c: o.get(c) for c in fields}
         domain.finish(o, fields)
-        # a do Tracking Docs, quando ninguém a deu (a correção, o Add Row)
-        if 'cgd_date' not in fields and not o.get('cgd_date'):
-            o['cgd_date'] = cgd_of(cgd, o.get('le'), o.get('taxid'))
+        # digitada (a correção, o Add Row) vence; senão o Reference Data e,
+        # sem ele, o Tracking Docs — e a linha diz de onde veio
+        if 'cgd_date' in fields or o.get('cgd_date'):
+            o['cgd_src'] = 'edit' if o.get('cgd_date') else ''
+        else:
+            o['cgd_date'], o['cgd_src'] = cgd_of_op(o, rdcgd, cgd)
         o['review'] = e.get('status') or ''
         o['review_by'] = (e.get('checker_name') or e.get('checker') or e.get('maker_name') or e.get('maker') or '')
         o['review_at'] = e.get('checked_at') or e.get('at') or ''
