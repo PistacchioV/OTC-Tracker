@@ -3824,7 +3824,10 @@ São **54**: `swap-bullet-curve`, `swap-termo-index`, `swap-cetes-leg`, `currenc
   sujo só lista, o `apply` recusa. Leva também o `requirements.txt`, que mora na
   RAIZ do repositório e não em `apps\` (§731) — o `start-otc-tracker.bat`
   compara o requirements com o retrato da última instalação, então o pip roda
-  sozinho na subida seguinte. **O `run.py` NUNCA vai**: o da pasta da versão é
+  sozinho na subida seguinte. E o `GUIA_DO_USUARIO_OTC_TRACKER.docx`, também
+  da raiz, vai para a pasta `otc-source` (ao lado das versões, onde a equipe o
+  abre), comparado pelo CONTEÚDO (`fc /b`) — pela data, todo pull o copiaria
+  (§734). **O `run.py` NUNCA vai**: o da pasta da versão é
   PRÓPRIO da instância (sem o pacote `apps`), e o do repositório copiado por
   cima derruba a subida para todos (`No module named 'apps'`, §731). A correção nasce no repositório (dev → prod
   pelo merge), nunca editada no checkout da máquina.
