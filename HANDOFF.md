@@ -31451,3 +31451,45 @@ liquidação tocadas (`check_wht`, `check_wht_edit`, `check_ops_trade_*`,
 `check_ops_summary`, `check_ted_release`, `check_opb3_*`). O `check_ndf_advice`
 falha na dev por DADO local (o `ndfc-advice-split` do `db/` deste checkout sem
 a Mondelez); num checkout limpo passa.
+
+## §737 — A lista do `<select>` nativo ilegível no tema escuro (2026-10-30)
+
+**Relato da equipe (print):** no Other Products Summary, tema escuro, o
+seletor de MÊS do calendário do Reference date abria uma lista cinza-clara com
+os nomes quase invisíveis — só o mês marcado se lia.
+
+**Causa:** o calendário daquela tela é o daterangepicker com `showDropdowns`
+(mês e ano em `<select>` NATIVO). A lista aberta de um select nativo não é
+HTML: o Chrome do Windows a desenha com o fundo do próprio select, e o tema
+pinta os campos com `--otc-fill`, um branco TRANSLÚCIDO
+(`rgba(150,150,175,.16)`) — composto sobre a janela branca, vira cinza-claro,
+e o texto vem com a cor do tema, clara. O flatpickr já tinha a correção (as
+`<option>` com o fundo sólido do menu, §6 do tema), o daterangepicker não; e
+o mesmo valia, latente, para TODO select do app (`.form-select`, o "Show N
+entries" do DataTables, o select do Swal).
+
+**Correção na raiz** (`otc.scss` §6f): `select option, select optgroup` com
+`background-color: var(--otc-menu-bg)` (sólido nos dois temas e no modo opaco)
+e `color: var(--otc-text)`. Medido no Chromium, Other Products Summary com o
+calendário aberto: as opções do mês/ano e do "Show N entries" saem
+`rgb(30,30,36)` / `rgb(245,245,247)` no escuro com vidro, `rgb(28,28,32)` no
+modo opaco das máquinas do JPM e `rgb(250,251,254)` / `rgb(15,16,23)` no claro.
+O headless não fotografa a lista nativa; a prova é o estilo calculado da
+`<option>`, que é o que o Chrome do Windows usa para pintá-la.
+
+**Varredura** — onde o defeito aparecia:
+
+- o calendário com mês/ano em select (daterangepicker `showDropdowns`): NDF
+  Summary, Other Products Summary (e as telas de Other Products que usam o JS
+  do Swap Characteristics: Swap Athena, Events, VCP, Kapital Hybrids, Settlement
+  Advices de swap/NDF/opção, Latam Desk Position), Accrual, MtM, Intraday
+  Monitor, Live Position (NDF, Option, Swap Characteristics/Cashflow/Premium,
+  DCE), Dashboard, NDF Other Publisher, NDF Cockpit, Pay/Rec, OTM Settlements,
+  Operations B3, Electronic Inventory, Quotes e Cognos;
+- todo `<select>` nativo das 76 páginas que têm um (o "Show N entries" das
+  tabelas, os selects dos modais de Edit, os filtros).
+
+O mês do flatpickr (as 37 telas com `otcDateField`) já estava certo. Nenhuma
+página estiliza `<option>` por conta própria, então a regra global não briga
+com ninguém. `check_theme_toggle.py` §6 prende a regra no SCSS e no CSS
+compilado.
